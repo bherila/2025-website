@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 
 function Demo() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-white text-gray-900">
+    <div className="max-w-7xl mx-auto px-4 py-6">
       <div className="space-x-2">
         <Button>Button</Button>
         <Button variant="destructive">Destructive</Button>
