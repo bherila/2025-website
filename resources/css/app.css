@@ -100,7 +100,11 @@
   }
   
   /* Default paragraph color (theme-aware, shadcn-compatible) */
-  p {
+  p, li {
     @apply text-muted-foreground;
+  }
+
+  a {
+    @apply text-primary hover:underline;
   }
 }

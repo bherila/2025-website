@@ -1,4 +1,3 @@
-<!-- Shared App Layout -->
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
   <head>
@@ -16,8 +15,10 @@
         } catch (e) { /* no-op */ }
       })();
     </script>
+    @viteReactRefresh
     @vite(['resources/css/app.css', 'resources/js/navbar.tsx'])
     @stack('head')
+    <script>(_=>{let a})()</script>
   </head>
   <body class="min-h-screen">
     <header class="site-header border-b border-gray-200 dark:border-[#3E3E3A] h-14">
