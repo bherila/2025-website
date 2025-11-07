@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\FinanceAccountsController;
 use App\Http\Controllers\LoginController;
 
 Route::get('/', function () {
@@ -26,9 +27,8 @@ Route::middleware('auth')->group(function () {
         return view('finance.payslips');
     });
 
-    Route::get('/finance/accounts', function () {
-        return view('finance.accounts');
-    });
+    Route::get('/finance/accounts', [FinanceAccountsController::class, 'index']);
+    Route::get('/finance/{account_id}/summary', [FinanceAccountsController::class, 'summary']);
 });
 
 Route::get('/tools/license-manager', function () {

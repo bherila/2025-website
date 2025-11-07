@@ -42,6 +42,7 @@ return new class extends Migration
             $table->id('acct_id');
             $table->string('acct_owner', 50);
             $table->string('acct_name', 50);
+            $table->timestamps();
             $table->softDeletes('when_deleted');
             $table->string('acct_last_balance', 20)->default('0');
             $table->timestamp('acct_last_balance_date')->nullable();
