@@ -19,6 +19,8 @@ Route::get('/tools/maxmin', function () {
 });
 
 Route::middleware('auth')->group(function () {
+    Route::get('/dashboard', [App\Http\Controllers\DashboardController::class, 'index']);
+
     Route::get('/finance/rsu', function () {
         return view('finance.rsu');
     });

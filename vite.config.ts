@@ -15,7 +15,11 @@ export default defineConfig({
         'resources/js/finance-account-maintenance.tsx',
         'resources/js/home.tsx',
         'resources/js/recipes.tsx',
-        'resources/js/projects.tsx'
+        'resources/js/projects.tsx',
+        'resources/js/dashboard.tsx',
+        'resources/js/user/api-key.tsx',
+        'resources/js/user/update-email.tsx',
+        'resources/js/user/update-password.tsx'
       ],
       refresh: true,
     }),
