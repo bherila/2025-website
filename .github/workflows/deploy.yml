@@ -57,7 +57,7 @@ jobs:
 
       - name: Deploy with rsync
         run: |
-          sshpass -p "${{ secrets.SSH_PASSWORD }}" rsync -av --delete \
+          sshpass -p "${{ secrets.SSH_PASSWORD }}" rsync -av --delete --exclude='.env' \
             -e "ssh -o StrictHostKeyChecking=no" \
             app \
             bootstrap \
@@ -65,8 +65,10 @@ jobs:
             database \
             public \
             routes \
+            storage \
             vendor \
             artisan \
             composer.json \
             composer.lock \
+            phpunit.xml \
             ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:~/bwh-php/
