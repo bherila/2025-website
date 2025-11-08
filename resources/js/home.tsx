@@ -76,7 +76,8 @@ function Home() {
           ,{' '}
           <CustomLink href="/projects/marisol/" rel="noopener">
             Marisol
-          </CustomLink>
+          </CustomLink>,
+          {' '}and{' '}
           <CustomLink href="/projects/">more</CustomLink>.
         </Line>
         <CTAs />
