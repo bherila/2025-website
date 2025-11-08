@@ -58,6 +58,12 @@ class FinanceApiController extends Controller
                 'acct_last_balance_date' => now(),
             ]);
 
+        DB::table('fin_account_balance_snapshot')->insert([
+            'acct_id' => $request->acct_id,
+            'balance' => $request->balance,
+            'when_added' => now(),
+        ]);
+
         return response()->json(['success' => true]);
     }
 
