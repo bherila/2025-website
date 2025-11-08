@@ -13,7 +13,8 @@ export default defineConfig({
         'resources/js/navbar.tsx',
         'resources/js/finance.tsx',
         'resources/js/home.tsx',
-        'resources/js/recipes.tsx'
+        'resources/js/recipes.tsx',
+        'resources/js/projects.tsx'
       ],
       refresh: true,
     }),

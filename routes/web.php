@@ -48,3 +48,7 @@ Route::get('/tools/irs-f461', function () {
 
 Route::get('/recipes', [App\Http\Controllers\RecipeController::class, 'index'])->name('recipes.index');
 Route::get('/recipes/{slug}', [App\Http\Controllers\RecipeController::class, 'show'])->name('recipes.show');
+
+Route::get('/projects', function () {
+    return view('projects');
+})->name('projects');
