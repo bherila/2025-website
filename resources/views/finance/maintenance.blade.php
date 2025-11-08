@@ -9,4 +9,5 @@
 
 @push('scripts')
   @vite('resources/js/finance.tsx')
+  @vite('resources/js/finance-account-maintenance.tsx')
 @endpush

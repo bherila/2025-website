@@ -12,6 +12,7 @@ export default defineConfig({
         'resources/js/app.jsx',
         'resources/js/navbar.tsx',
         'resources/js/finance.tsx',
+        'resources/js/finance-account-maintenance.tsx',
         'resources/js/home.tsx',
         'resources/js/recipes.tsx',
         'resources/js/projects.tsx'
@@ -26,4 +27,25 @@ export default defineConfig({
       '@': path.resolve(__dirname, 'resources/js'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          'ui-core': ['@radix-ui/react-slot', 'class-variance-authority', 'clsx', 'tailwind-merge'],
+          'ui-components': [
+            '@radix-ui/react-dialog',
+            '@radix-ui/react-alert-dialog',
+            '@radix-ui/react-popover',
+            '@radix-ui/react-tabs',
+            '@radix-ui/react-label',
+            '@radix-ui/react-checkbox'
+          ],
+          utils: ['lucide-react', 'date-fns', 'currency.js', 'zod'],
+          charts: ['recharts'],
+          markdown: ['react-markdown']
+        }
+      }
+    }
+  }
 });
