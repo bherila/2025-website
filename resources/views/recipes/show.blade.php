@@ -2,6 +2,7 @@
 
 @section('content')
     <div id="recipe-show-root"
+        class="animate__animated animate__fadeIn"
          data-data="{{ json_encode($data) }}"
          data-content="{{ $content }}"
          data-related-recipes="{{ json_encode($relatedRecipes) }}"
