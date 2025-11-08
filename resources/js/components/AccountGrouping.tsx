@@ -45,7 +45,7 @@ export default function AccountGrouping({ title, accounts, onUpdate }: { title: 
         </TableHeader>
         <TableBody>
           {accounts.map((account) => (
-            <TableRow key={account.acct_id}>
+            <TableRow key={account.acct_id} className="border-b-0 py-1">
               <TableCell>
                 <Link href={`/finance/${account.acct_id}`}>{account.acct_name}</Link>
                 {isAccountClosed(account) ? (

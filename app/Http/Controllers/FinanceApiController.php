@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use App\Models\FinAccounts;
 
 class FinanceApiController extends Controller
@@ -79,5 +80,63 @@ class FinanceApiController extends Controller
         ]);
 
         return response()->json(['success' => true]);
+    }
+
+    public function chartData(Request $request)
+    {
+        $uid = Auth::id();
+
+        $accounts = FinAccounts::where('acct_owner', $uid)
+            ->whereNull('when_deleted')
+            ->whereNull('when_closed')
+            ->get();
+
+        // Get balance history for active accounts
+        $balanceHistory = DB::table('fin_account_balance_snapshot')
+            ->whereIn('acct_id', $accounts->pluck('acct_id')->toArray())
+            ->orderBy('when_added', 'asc')
+            ->get();
+
+        // Group snapshots by quarter and account, keeping only the latest balance per quarter
+        $quarterlyBalances = [];
+        foreach ($balanceHistory as $snapshot) {
+            $date = $snapshot->when_added;
+            $quarter = date('Y', strtotime($date)) . '-Q' . ceil(date('n', strtotime($date)) / 3);
+
+            if (!isset($quarterlyBalances[$quarter])) {
+                $quarterlyBalances[$quarter] = [];
+            }
+
+            // Always update the balance since we're iterating in chronological order
+            $quarterlyBalances[$quarter][$snapshot->acct_id] = $snapshot->balance;
+        }
+
+        // Sort quarters chronologically
+        ksort($quarterlyBalances);
+        $sortedQuarters = array_keys($quarterlyBalances);
+
+        // Convert to array format needed by chart, carrying forward previous balances
+        $chartDataArray = [];
+        foreach ($sortedQuarters as $index => $quarter) {
+            $currentBalances = $quarterlyBalances[$quarter];
+            $previousQuarter = $index > 0 ? $sortedQuarters[$index - 1] : null;
+            $previousBalances = $previousQuarter ? $quarterlyBalances[$previousQuarter] : [];
+
+            $row = [$quarter];
+            foreach ($accounts as $account) {
+                // Use current balance if available, otherwise use previous quarter's balance, or '0' if no previous
+                $balance = $currentBalances[$account->acct_id] ?? $previousBalances[$account->acct_id] ?? '0';
+                // Negate balance for liability accounts
+                $row[] = $account->acct_is_debt ? '-' . $balance : $balance;
+            }
+            $chartDataArray[] = $row;
+        }
+
+        return response()->json([
+            'data' => $chartDataArray,
+            'labels' => $accounts->pluck('acct_name')->toArray(),
+            'isNegative' => $accounts->pluck('acct_is_debt')->toArray(),
+            'isRetirement' => $accounts->pluck('acct_is_retirement')->toArray(),
+        ]);
     }
 }

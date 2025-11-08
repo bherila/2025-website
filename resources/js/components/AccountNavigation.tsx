@@ -59,7 +59,7 @@ export default function AccountNavigation({
         <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem>
-              <BreadcrumbLink href="/finance">Accounts</BreadcrumbLink>
+              <BreadcrumbLink href="/finance/accounts">Accounts</BreadcrumbLink>
             </BreadcrumbItem>
             <BreadcrumbSeparator />
             <BreadcrumbItem>

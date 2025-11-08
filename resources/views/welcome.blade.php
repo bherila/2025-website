@@ -5,5 +5,5 @@
 @endsection
 
 @push('scripts')
-  @vite(['resources/js/home.jsx'])
+  @vite(['resources/js/home.tsx'])
 @endpush

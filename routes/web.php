@@ -28,7 +28,7 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::get('/finance/accounts', [FinanceAccountsController::class, 'index']);
-    Route::get('/finance/{account_id}/summary', [FinanceAccountsController::class, 'summary']);
+    Route::get('/finance/{account_id}', [FinanceAccountsController::class, 'summary']);
 });
 
 Route::get('/tools/license-manager', function () {

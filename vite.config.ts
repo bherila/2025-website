@@ -7,7 +7,13 @@ import path from 'path';
 export default defineConfig({
   plugins: [
     laravel({
-      input: ['resources/css/app.css', 'resources/js/app.jsx', 'resources/js/navbar.tsx', 'resources/js/finance.tsx'],
+      input: [
+        'resources/css/app.css',
+        'resources/js/app.jsx',
+        'resources/js/navbar.tsx',
+        'resources/js/finance.tsx',
+        'resources/js/home.tsx'
+      ],
       refresh: true,
     }),
     react(),

@@ -68,7 +68,7 @@ export default function EditBalanceDisplay({ acct_id, defaultBalance, onUpdate }
       ) : (
         <div>
           {balance}{' '}
-          <Button onClick={handleClick} variant="outline">
+          <Button onClick={handleClick} variant="outline" size="sm">
             <Edit className="cursor-pointer" />
           </Button>
         </div>

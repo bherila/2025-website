@@ -104,6 +104,7 @@ return new class extends Migration
             $table->index('t_account');
             $table->index('parent_t_id');
             $table->foreign('parent_t_id')->references('t_id')->on('fin_account_line_items')->onDelete('set null');
+            $table->foreign('t_account')->references('acct_id')->on('fin_accounts');
         });
 
         Schema::create('fin_account_line_item_tag_map', function (Blueprint $table) {

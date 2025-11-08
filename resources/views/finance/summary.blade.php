@@ -7,4 +7,6 @@
 </div>
 @endsection
 
-@vite('resources/js/finance.tsx')
+@push('scripts')
+  @vite('resources/js/finance.tsx')
+@endpush

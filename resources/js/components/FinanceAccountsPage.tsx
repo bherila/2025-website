@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import Link from './link'
 import AccountGrouping from './AccountGrouping'
 import NewAccountForm from './NewAccountForm'
+import StackedBalanceChart from './StackedBalanceChart'
 import { Skeleton } from '@/components/ui/skeleton'
 
 interface Account {
@@ -21,9 +22,15 @@ export default function FinanceAccountsPage() {
     retirementAccounts: Account[]
     activeChartAccounts: Account[]
   } | null>(null)
+  const [chartData, setChartData] = useState<{
+    data: (string | number)[][]
+    labels: string[]
+    isNegative: boolean[]
+    isRetirement: boolean[]
+  } | null>(null)
 
   const fetchData = async () => {
-    const response = await fetch('/api/finance/accounts', { credentials: 'same-origin' })
+    const response = await fetch('/api/finance/accounts')
     if (response.ok) {
       const json = await response.json()
       // Parse dates
@@ -41,8 +48,17 @@ export default function FinanceAccountsPage() {
     }
   }
 
+  const fetchChartData = async () => {
+    const response = await fetch('/api/finance/chart')
+    if (response.ok) {
+      const json = await response.json()
+      setChartData(json)
+    }
+  }
+
   useEffect(() => {
     fetchData()
+    fetchChartData()
   }, [])
 
   if (!data) {
@@ -90,16 +106,15 @@ export default function FinanceAccountsPage() {
         </Button>
       </div>
       <div className="mb-8">
-        {/* Placeholder for chart */}
-        <div>Chart coming soon</div>
+        {chartData && <StackedBalanceChart {...chartData} />}
       </div>
       <div className="w-full flex flex-col sm:flex-row sm:justify-between sm:space-x-4 space-y-4 sm:space-y-0">
         <div className="w-full space-y-4">
-          <AccountGrouping title="Assets" accounts={data.assetAccounts} onUpdate={fetchData} />
-          <AccountGrouping title="Liabilities" accounts={data.liabilityAccounts} onUpdate={fetchData} />
-          <AccountGrouping title="Retirement" accounts={data.retirementAccounts} onUpdate={fetchData} />
+          <AccountGrouping title="Assets" accounts={data.assetAccounts} onUpdate={() => { fetchData(); fetchChartData(); }} />
+          <AccountGrouping title="Liabilities" accounts={data.liabilityAccounts} onUpdate={() => { fetchData(); fetchChartData(); }} />
+          <AccountGrouping title="Retirement" accounts={data.retirementAccounts} onUpdate={() => { fetchData(); fetchChartData(); }} />
         </div>
-        <NewAccountForm onUpdate={fetchData} />
+        <NewAccountForm onUpdate={() => { fetchData(); fetchChartData(); }} />
       </div>
     </div>
   )
