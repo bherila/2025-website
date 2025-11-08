@@ -2,7 +2,7 @@ import { createRoot } from 'react-dom/client'
 import AccountNavigation from './components/AccountNavigation'
 import SummaryClient from './components/SummaryClient'
 import FinanceAccountsPage from './components/FinanceAccountsPage'
-import FinanceAccountIndexPage from './components/FinanceAccountIndexPage'
+import FinanceAccountTransactionsPage from './components/FinanceAccountTransactionsPage'
 import FinanceAccountBalanceHistoryPage from './components/FinanceAccountBalanceHistoryPage'
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -35,10 +35,10 @@ document.addEventListener('DOMContentLoaded', () => {
     root.render(<FinanceAccountsPage />)
   }
 
-  const accountIndexDiv = document.getElementById('FinanceAccountIndexPage')
+  const accountIndexDiv = document.getElementById('FinanceAccountTransactionsPage')
   if (accountIndexDiv) {
     const root = createRoot(accountIndexDiv)
-    root.render(<FinanceAccountIndexPage id={parseInt(accountIndexDiv.dataset.accountId!)} />)
+    root.render(<FinanceAccountTransactionsPage id={parseInt(accountIndexDiv.dataset.accountId!)} />)
   }
 
   const balanceHistoryDiv = document.getElementById('FinanceAccountBalanceHistoryPage')

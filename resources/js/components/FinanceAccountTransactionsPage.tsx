@@ -6,7 +6,7 @@ import type { AccountLineItem } from './AccountLineItem'
 import { Spinner } from './ui/spinner'
 import { Button } from './ui/button'
 
-export default function FinanceAccountIndexPage({ id }: { id: number }) {
+export default function FinanceAccountTransactionsPage({ id }: { id: number }) {
   const [data, setData] = useState<AccountLineItem[] | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [fetchKey, setFetchKey] = useState(0)
