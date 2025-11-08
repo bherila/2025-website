@@ -1,6 +1,7 @@
+import './bootstrap';
 import CustomLink from '@/components/link';
 import MainTitle from '@/components/main-title';
-import './bootstrap';
+import { CTAs } from './components/ctas';
 import { createRoot } from 'react-dom/client';
 import React from 'react';
 
@@ -76,9 +77,9 @@ function Home() {
           <CustomLink href="/projects/marisol/" rel="noopener">
             Marisol
           </CustomLink>
-          , and <CustomLink href="/projects/">more</CustomLink>.
+          <CustomLink href="/projects/">more</CustomLink>.
         </Line>
-        {/* <CTAs /> */}
+        <CTAs />
       </div>
     )
 }
