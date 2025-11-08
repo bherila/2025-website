@@ -7,6 +7,7 @@
         "dev": "vite"
     },
     "devDependencies": {
+        "@tailwindcss/typography": "^0.5.19",
         "@tailwindcss/vite": "^4.0.0",
         "@types/react": "^19.2.2",
         "@types/react-dom": "^19.2.2",
@@ -43,6 +44,7 @@
         "react-day-picker": "^9.11.1",
         "react-dom": "^19.2.0",
         "react-hook-form": "^7.66.0",
+        "react-markdown": "^10.1.0",
         "react-responsive-masonry": "^2.7.1",
         "recharts": "^3.3.0",
         "tailwind-merge": "^3.3.1",

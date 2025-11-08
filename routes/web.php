@@ -45,3 +45,6 @@ Route::get('/tools/bingo', function () {
 Route::get('/tools/irs-f461', function () {
     return view('tools.irs-f461');
 });
+
+Route::get('/recipes', [App\Http\Controllers\RecipeController::class, 'index'])->name('recipes.index');
+Route::get('/recipes/{slug}', [App\Http\Controllers\RecipeController::class, 'show'])->name('recipes.show');

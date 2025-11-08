@@ -12,7 +12,8 @@ export default defineConfig({
         'resources/js/app.jsx',
         'resources/js/navbar.tsx',
         'resources/js/finance.tsx',
-        'resources/js/home.tsx'
+        'resources/js/home.tsx',
+        'resources/js/recipes.tsx'
       ],
       refresh: true,
     }),
