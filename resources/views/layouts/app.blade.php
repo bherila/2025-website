@@ -22,12 +22,12 @@
     @stack('head')
     <script>(_=>{let a})()</script>
   </head>
-  <body class="min-h-screen">
+  <body class="min-h-screen flex flex-col">
     <header class="site-header border-b border-gray-200 dark:border-[#3E3E3A] h-14">
       <div id="navbar" data-authenticated="{{ auth()->check() ? 'true' : 'false' }}" />
     </header>
 
-    <main class="min-h-[70vh]">
+    <main class="flex-1">
       @yield('content')
     </main>
 
