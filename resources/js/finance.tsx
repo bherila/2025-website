@@ -2,6 +2,9 @@ import { createRoot } from 'react-dom/client'
 import AccountNavigation from './components/AccountNavigation'
 import SummaryClient from './components/SummaryClient'
 import FinanceAccountsPage from './components/FinanceAccountsPage'
+import FinanceAccountIndexPage from './components/FinanceAccountIndexPage'
+import FinanceAccountBalanceHistoryPage from './components/FinanceAccountBalanceHistoryPage'
+import FinanceAccountMaintenancePage from './components/FinanceAccountMaintenancePage'
 
 document.addEventListener('DOMContentLoaded', () => {
   const navDiv = document.getElementById('AccountNavigation')
@@ -31,5 +34,29 @@ document.addEventListener('DOMContentLoaded', () => {
   if (accountsDiv) {
     const root = createRoot(accountsDiv)
     root.render(<FinanceAccountsPage />)
+  }
+
+  const accountIndexDiv = document.getElementById('FinanceAccountIndexPage')
+  if (accountIndexDiv) {
+    const root = createRoot(accountIndexDiv)
+    root.render(<FinanceAccountIndexPage id={parseInt(accountIndexDiv.dataset.accountId!)} />)
+  }
+
+  const balanceHistoryDiv = document.getElementById('FinanceAccountBalanceHistoryPage')
+  if (balanceHistoryDiv) {
+    const root = createRoot(balanceHistoryDiv)
+    root.render(<FinanceAccountBalanceHistoryPage id={parseInt(balanceHistoryDiv.dataset.accountId!)} />)
+  }
+
+  const maintenanceDiv = document.getElementById('FinanceAccountMaintenancePage')
+  if (maintenanceDiv) {
+    const root = createRoot(maintenanceDiv)
+    root.render(<FinanceAccountMaintenancePage
+      accountId={parseInt(maintenanceDiv.dataset.accountId!)}
+      accountName={maintenanceDiv.dataset.accountName!}
+      whenClosed={maintenanceDiv.dataset.whenClosed || null}
+      isDebt={maintenanceDiv.dataset.isDebt === '1'}
+      isRetirement={maintenanceDiv.dataset.isRetirement === '1'}
+    />)
   }
 })

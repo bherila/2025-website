@@ -3,14 +3,12 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class FinAccountLineItems extends Model
 {
     protected $table = 'fin_account_line_items';
-
     protected $primaryKey = 't_id';
+    public $timestamps = false;
 
     protected $fillable = [
         't_account',
@@ -20,6 +18,7 @@ class FinAccountLineItems extends Model
         't_schc_category',
         't_amt',
         't_symbol',
+        't_cusip',
         't_qty',
         't_price',
         't_commission',
@@ -35,33 +34,17 @@ class FinAccountLineItems extends Model
         't_from',
         't_to',
         't_interest_rate',
-        't_cusip',
         't_harvested_amount',
-        'when_added',
-        'when_deleted',
+        'parent_t_id',
     ];
 
-    protected function casts(): array
-    {
-        return [
-            't_amt' => 'decimal:4',
-            't_price' => 'decimal:4',
-            't_commission' => 'decimal:4',
-            't_fee' => 'decimal:4',
-            'opt_strike' => 'decimal:4',
-            't_harvested_amount' => 'decimal:4',
-            'when_added' => 'datetime',
-            'when_deleted' => 'datetime',
-        ];
-    }
-
-    public function account(): BelongsTo
+    public function account()
     {
         return $this->belongsTo(FinAccounts::class, 't_account', 'acct_id');
     }
 
-    public function tags(): HasMany
+    public function tags()
     {
-        return $this->hasMany(FinAccountLineItemTagMap::class, 't_id');
+        return $this->belongsToMany(FinAccountTag::class, 'fin_account_line_item_tag_map', 't_id', 'tag_id');
     }
 }

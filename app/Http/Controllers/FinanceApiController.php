@@ -6,6 +6,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use App\Models\FinAccounts;
+use App\Models\FinAccountLineItems;
+use App\Models\FinAccountTag;
+use App\Models\FinAccountLineItemTagMap;
 
 class FinanceApiController extends Controller
 {
@@ -144,5 +147,198 @@ class FinanceApiController extends Controller
             'isNegative' => $accounts->pluck('acct_is_debt')->toArray(),
             'isRetirement' => $accounts->pluck('acct_is_retirement')->toArray(),
         ]);
+    }
+
+    public function getLineItems(Request $request, $account_id)
+    {
+        $uid = Auth::id();
+        $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+
+        $lineItems = FinAccountLineItems::where('t_account', $account->acct_id)
+            ->with('tags')
+            ->orderBy('t_date', 'desc')
+            ->get();
+
+        return response()->json($lineItems);
+    }
+
+    public function deleteLineItem(Request $request, $account_id)
+    {
+        $uid = Auth::id();
+        $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+
+        $request->validate([
+            't_id' => 'required|integer',
+        ]);
+
+        FinAccountLineItems::where('t_id', $request->t_id)
+            ->where('t_account', $account->acct_id)
+            ->delete();
+
+        return response()->json(['success' => true]);
+    }
+
+    public function getUserTags(Request $request)
+    {
+        $uid = Auth::id();
+
+        $tags = FinAccountTag::where('tag_userid', $uid)
+            ->whereNull('when_deleted')
+            ->get(['tag_id', 'tag_label', 'tag_color']);
+
+        return response()->json($tags);
+    }
+
+    public function applyTagToTransactions(Request $request)
+    {
+        $uid = Auth::id();
+
+        $request->validate([
+            'tag_id' => 'required|integer',
+            'transaction_ids' => 'required|string',
+        ]);
+
+        $tag = FinAccountTag::where('tag_id', $request->tag_id)
+            ->where('tag_userid', $uid)
+            ->firstOrFail();
+
+        $transaction_ids = explode(',', $request->transaction_ids);
+
+        foreach ($transaction_ids as $transaction_id) {
+            FinAccountLineItemTagMap::updateOrCreate(
+                [
+                    't_id' => $transaction_id,
+                    'tag_id' => $tag->tag_id,
+                ],
+                [
+                    'when_deleted' => null,
+                ]
+            );
+        }
+
+        return response()->json(['success' => true]);
+    }
+
+    public function updateTransactionComment(Request $request, $transaction_id)
+    {
+        $uid = Auth::id();
+
+        $request->validate([
+            'comment' => 'nullable|string',
+        ]);
+
+        $lineItem = FinAccountLineItems::where('t_id', $transaction_id)
+            ->whereHas('account', function ($query) use ($uid) {
+                $query->where('acct_owner', $uid);
+            })
+            ->firstOrFail();
+
+        $lineItem->update(['t_comment' => $request->comment]);
+
+        return response()->json(['success' => true]);
+    }
+
+    public function getBalanceTimeseries(Request $request, $account_id)
+    {
+        $uid = Auth::id();
+        $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+
+        $balances = DB::table('fin_account_balance_snapshot')
+            ->where('acct_id', $account->acct_id)
+            ->orderBy('when_added', 'asc')
+            ->select('when_added', 'balance')
+            ->get();
+
+        return response()->json($balances);
+    }
+
+    public function deleteBalanceSnapshot(Request $request, $account_id)
+    {
+        $uid = Auth::id();
+        $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+
+        $request->validate([
+            'when_added' => 'required|string',
+            'balance' => 'required|string',
+        ]);
+
+        DB::table('fin_account_balance_snapshot')
+            ->where('acct_id', $account->acct_id)
+            ->where('when_added', $request->when_added)
+            ->where('balance', $request->balance)
+            ->delete();
+
+        return response()->json(['success' => true]);
+    }
+
+    public function renameAccount(Request $request, $account_id)
+    {
+        $request->validate([
+            'newName' => 'required|string',
+        ]);
+
+        $uid = Auth::id();
+
+        FinAccounts::where('acct_id', $account_id)
+            ->where('acct_owner', $uid)
+            ->firstOrFail()
+            ->update(['acct_name' => $request->newName]);
+
+        return response()->json(['success' => true]);
+    }
+
+    public function updateAccountClosed(Request $request, $account_id)
+    {
+        $request->validate([
+            'closedDate' => 'nullable|date',
+        ]);
+
+        $uid = Auth::id();
+
+        FinAccounts::where('acct_id', $account_id)
+            ->where('acct_owner', $uid)
+            ->firstOrFail()
+            ->update(['when_closed' => $request->closedDate]);
+
+        return response()->json(['success' => true]);
+    }
+
+    public function updateAccountFlags(Request $request, $account_id)
+    {
+        $request->validate([
+            'isDebt' => 'boolean',
+            'isRetirement' => 'boolean',
+        ]);
+
+        $uid = Auth::id();
+
+        $account = FinAccounts::where('acct_id', $account_id)
+            ->where('acct_owner', $uid)
+            ->firstOrFail();
+
+        $account->update([
+            'acct_is_debt' => $request->has('isDebt') ? $request->isDebt : $account->acct_is_debt,
+            'acct_is_retirement' => $request->has('isRetirement') ? $request->isRetirement : $account->acct_is_retirement,
+        ]);
+
+        return response()->json(['success' => true]);
+    }
+
+    public function deleteAccount(Request $request, $account_id)
+    {
+        $uid = Auth::id();
+
+        $account = FinAccounts::where('acct_id', $account_id)
+            ->where('acct_owner', $uid)
+            ->firstOrFail();
+
+        DB::transaction(function () use ($account) {
+            FinAccountLineItems::where('t_account', $account->acct_id)
+                ->update(['when_deleted' => now()]);
+
+            $account->update(['when_deleted' => now()]);
+        });
+
+        return response()->json(['success' => true]);
     }
 }

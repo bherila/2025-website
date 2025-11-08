@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils'
-import { type ReactNode } from 'react'
+import { ReactNode } from 'react'
 
 export default function MainTitle({ children, className }: { children: ReactNode; className?: string }) {
   return (
