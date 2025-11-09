@@ -1,4 +1,5 @@
 'use client'
+import currency from 'currency.js'
 import { useEffect, useMemo, useState } from 'react'
 import type { AccountLineItem } from './AccountLineItem'
 import { Badge } from './ui/badge'
@@ -32,6 +33,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
   const [memoFilter, setMemoFilter] = useState('')
   const [tagFilter, setTagFilter] = useState('')
   const [amountFilter, setAmountFilter] = useState('')
+  const [qtyFilter, setQtyFilter] = useState('')
   const [availableTags, setAvailableTags] = useState<
     {
       tag_id: number
@@ -140,6 +142,10 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
         (row.t_amt || '0')
           .toString()
           .includes(amountFilter)) &&
+      (!qtyFilter ||
+        (row.t_qty || '0')
+          .toString()
+          .includes(qtyFilter)) &&
       (!postDateFilter || row.t_date_posted?.includes(postDateFilter)),
   )
 
@@ -154,14 +160,14 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
 
   const [totalAmount, totalPositives, totalNegatives] = sortedData.reduce(
     ([total, positives, negatives], row) => {
-        const amount = parseFloat(row.t_amt || '0');
+        const amount = currency(row.t_amt || '0');
         return [
-            total + amount,
-            amount > 0 ? positives + amount : positives,
-            amount < 0 ? negatives + amount : negatives,
+            total.add(amount),
+            amount.value > 0 ? positives.add(amount) : positives,
+            amount.value < 0 ? negatives.add(amount) : negatives,
         ]
     },
-    [0,0,0],
+    [currency(0), currency(0), currency(0)],
   )
 
   const handleUpdateTransactionComment = async (comment: string) => {
@@ -194,12 +200,12 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
             </th>
             {!isTagsColumnEmpty && <th>Tags</th>}
             {!isQtyColumnEmpty && (
-              <th className="clickable" onClick={() => handleSort('t_qty')}>
+              <th className="clickable text-right" onClick={() => handleSort('t_qty')}>
                 Qty {sortField === 't_qty' && (sortDirection === 'asc' ? '↑' : '↓')}
               </th>
             )}
             {!isPriceColumnEmpty && (
-              <th className="clickable" onClick={() => handleSort('t_price')}>
+              <th className="clickable text-right" onClick={() => handleSort('t_price')}>
                 Price {sortField === 't_price' && (sortDirection === 'asc' ? '↑' : '↓')}
               </th>
             )}
@@ -209,11 +215,11 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
               </th>
             )}
             {!isFeeColumnEmpty && (
-              <th className="clickable" onClick={() => handleSort('t_fee')}>
+              <th className="clickable text-right" onClick={() => handleSort('t_fee')}>
                 Fee {sortField === 't_fee' && (sortDirection === 'asc' ? '↑' : '↓')}
               </th>
             )}
-            <th className="clickable" onClick={() => handleSort('t_amt')}>
+            <th className="clickable text-right" onClick={() => handleSort('t_amt')}>
               Amount {sortField === 't_amt' && (sortDirection === 'asc' ? '↑' : '↓')}
             </th>
             {!isCategoryColumnEmpty && (
@@ -256,7 +262,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
           <tr>
             <th className="position-relative dateCol">
               <input
-                className="w-full"
+                style={{ width: '100%', maxWidth: '150px' }}
                 type="text"
                 placeholder="Filter date..."
                 value={dateFilter}
@@ -267,7 +273,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
             {!isPostDateColumnEmpty && (
               <th className="position-relative dateCol">
                 <input
-                  className="w-full"
+                  style={{ width: '100%', maxWidth: '150px' }}
                   type="text"
                   placeholder="Filter post date..."
                   value={postDateFilter}
@@ -278,8 +284,21 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                 )}
               </th>
             )}
+            {!isTypeColumnEmpty && (
+              <th className="position-relative">
+                <input
+                  style={{ width: '100%', maxWidth: '150px' }}
+                  type="text"
+                  placeholder="Filter type..."
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value)}
+                />
+                {typeFilter && <ClearFilterButton onClick={() => setTypeFilter('')} ariaLabel="Clear type filter" />}
+              </th>
+            )}
             <th className="position-relative descriptionCol">
               <input
+                style={{ width: '100%', maxWidth: '150px' }}
                 type="text"
                 placeholder="Filter description..."
                 value={descriptionFilter}
@@ -292,6 +311,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
             {!isTagsColumnEmpty && (
               <th className="position-relative">
                 <input
+                  style={{ width: '100%', maxWidth: '150px' }}
                   type="text"
                   placeholder="Filter tags..."
                   value={tagFilter}
@@ -300,12 +320,24 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                 {tagFilter && <ClearFilterButton onClick={() => setTagFilter('')} ariaLabel="Clear tag filter" />}
               </th>
             )}
-            {!isQtyColumnEmpty && <th></th>}
+            {!isQtyColumnEmpty && (
+              <th className="position-relative" style={{ width: '80px' }}>
+                <input
+                  style={{ width: '100%', maxWidth: '150px' }}
+                  type="text"
+                  placeholder="Filter qty..."
+                  value={qtyFilter}
+                  onChange={(e) => setQtyFilter(e.target.value)}
+                />
+                {qtyFilter && <ClearFilterButton onClick={() => setQtyFilter('')} ariaLabel="Clear qty filter" />}
+              </th>
+            )}
             {!isPriceColumnEmpty && <th></th>}
             {!isCommissionColumnEmpty && <th></th>}
             {!isFeeColumnEmpty && <th></th>}
-            <th className="position-relative">
+            <th className="position-relative" style={{ width: '100px' }}>
               <input
+                style={{ width: '100%', maxWidth: '150px' }}
                 type="text"
                 placeholder="Filter amount..."
                 value={amountFilter}
@@ -316,6 +348,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
             {!isCategoryColumnEmpty && (
               <th className="position-relative" style={{ width: '140px' }}>
                 <input
+                  style={{ width: '100%', maxWidth: '150px' }}
                   type="text"
                   placeholder="Filter category..."
                   value={categoryFilter}
@@ -329,6 +362,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
             {!isCusipColumnEmpty && (
               <th className="position-relative" style={{ width: '100px' }}>
                 <input
+                  style={{ width: '100%', maxWidth: '150px' }}
                   type="text"
                   placeholder="Filter CUSIP..."
                   value={cusipFilter}
@@ -340,6 +374,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
             {!isSymbolColumnEmpty && (
               <th className="position-relative" style={{ width: '100px' }}>
                 <input
+                  style={{ width: '100%', maxWidth: '150px' }}
                   type="text"
                   placeholder="Filter symbol..."
                   value={symbolFilter}
@@ -351,6 +386,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
             {!isOptionExpiryColumnEmpty && (
               <th className="position-relative" style={{ width: '100px' }}>
                 <input
+                  style={{ width: '100%', maxWidth: '150px' }}
                   type="text"
                   placeholder="Filter option expiry..."
                   value={optExpirationFilter}
@@ -364,6 +400,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
             {!isOptionTypeColumnEmpty && (
               <th className="position-relative" style={{ width: '100px' }}>
                 <input
+                  style={{ width: '100%', maxWidth: '150px' }}
                   type="text"
                   placeholder="Filter option type..."
                   value={optTypeFilter}
@@ -378,6 +415,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
             {!isMemoColumnEmpty && (
               <th className="position-relative" style={{ width: '200px' }}>
                 <input
+                  style={{ width: '100%', maxWidth: '200px' }}
                   type="text"
                   placeholder="Filter memo..."
                   value={memoFilter}
@@ -447,9 +485,23 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                 {row.t_description}
               </td>
               {!isTagsColumnEmpty && <td className="tagsCol">{renderTransactionTags(row)}</td>}
-              {!isQtyColumnEmpty && <td className={'numericCol'}>{row.t_qty != null ? row.t_qty.toLocaleString() : ''}</td>}
+              {!isQtyColumnEmpty && (
+                <td
+                  className={'numericCol text-right clickable'}
+                  onClick={() => {
+                    const qty = row.t_qty?.toString() || '0';
+                    if (qtyFilter === qty) {
+                      setQtyFilter('')
+                    } else {
+                      setQtyFilter(qty)
+                    }
+                  }}
+                >
+                  {row.t_qty != null ? row.t_qty.toLocaleString() : ''}
+                </td>
+              )}
               {!isPriceColumnEmpty && (
-                <td className={'numericCol'}>
+                <td className={'numericCol text-right'}>
                   {row.t_price != null ? row.t_price : ''}
                 </td>
               )}
@@ -459,12 +511,12 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                 </td>
               )}
               {!isFeeColumnEmpty && (
-                <td className={'numericCol'}>
+                <td className={'numericCol text-right'}>
                   {row.t_fee != null ? row.t_fee : ''}
                 </td>
               )}
               <td
-                className={'numericCol clickable'}
+                className={'numericCol clickable text-right'}
                 style={{
                   color: Number(row.t_amt) >= 0 ? 'green' : 'red',
                   whiteSpace: 'nowrap',
@@ -582,14 +634,15 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
             {!isPostDateColumnEmpty && <TotalCell />}
             <TotalCell />
             {!isTypeColumnEmpty && <TotalCell />}
+            {!isTagsColumnEmpty && <TotalCell />}
             {!isQtyColumnEmpty && <TotalCell />}
             {!isPriceColumnEmpty && <TotalCell />}
             {!isCommissionColumnEmpty && <TotalCell />}
             {!isFeeColumnEmpty && <TotalCell />}
-            <td className="totalCell numericCol">
+            <td className="totalCell numericCol text-right">
               <strong>
-                {totalPositives} (Credits) <br />
-                {totalNegatives} (Debits) <br />= {totalAmount} (Net)
+                {totalPositives.format()} (Credits) <br />
+                {totalNegatives.format()} (Debits) <br />= {totalAmount.format()} (Net)
               </strong>
             </td>
             {!isCategoryColumnEmpty && <TotalCell />}
