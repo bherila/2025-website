@@ -271,6 +271,25 @@ class FinanceApiController extends Controller
         return response()->json(['success' => true]);
     }
 
+    public function addBalanceSnapshot(Request $request, $account_id)
+    {
+        $uid = Auth::id();
+        $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+
+        $request->validate([
+            'balance' => 'required|string',
+            'when_added' => 'required|date',
+        ]);
+
+        DB::table('fin_account_balance_snapshot')->insert([
+            'acct_id' => $account->acct_id,
+            'balance' => $request->balance,
+            'when_added' => $request->when_added,
+        ]);
+
+        return response()->json(['success' => true]);
+    }
+
     public function renameAccount(Request $request, $account_id)
     {
         $request->validate([

@@ -13,6 +13,13 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from './ui/alert-dialog'
+import {
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from './ui/dialog'
 import { Button } from './ui/button'
 import { Trash2 as Delete } from 'lucide-react'
 
@@ -25,6 +32,10 @@ export default function FinanceAccountBalanceHistoryPage({ id }: { id: number })
   const [balances, setBalances] = useState<BalanceSnapshot[] | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [fetchKey, setFetchKey] = useState(0); // Used to trigger re-fetch
+  const [newBalance, setNewBalance] = useState('')
+  const [newDate, setNewDate] = useState('')
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [isAddingSnapshot, setIsAddingSnapshot] = useState(false)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -68,6 +79,33 @@ export default function FinanceAccountBalanceHistoryPage({ id }: { id: number })
     }
   };
 
+  const handleAddSnapshot = async () => {
+    if (!newDate || !newBalance || isAddingSnapshot) return;
+    setIsAddingSnapshot(true);
+    try {
+      await fetchWrapper.post(`/api/finance/${id}/balance-timeseries`, { balance: newBalance, when_added: newDate });
+      setFetchKey(prev => prev + 1); // Trigger re-fetch
+      setNewBalance('');
+      setNewDate('');
+      setIsAddModalOpen(false);
+    } catch (error) {
+      console.error('Error adding balance snapshot:', error);
+    } finally {
+      setIsAddingSnapshot(false);
+    }
+  };
+
+  const handleDownloadCSV = () => {
+    const csvContent = 'Date,Balance\n' + balanceHistory.map(row => `${row.date.toISOString().split('T')[0]},${row.balance}`).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${id}_balances.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (isLoading) {
     return (
       <div className="d-flex justify-content-center">
@@ -88,60 +126,120 @@ export default function FinanceAccountBalanceHistoryPage({ id }: { id: number })
   return (
     <>
       <AccountBalanceHistory balanceHistory={balances.map((balance) => [new Date(balance.when_added).valueOf(), parseFloat(balance.balance)])} />
-      <Table className="container mx-auto w-[500px]">
-        <TableHeader>
-          <TableRow>
-            <TableCell className="text-right">Date</TableCell>
-            <TableCell className="text-right">Balance</TableCell>
-            <TableCell className="text-right">Change</TableCell>
-            <TableCell className="text-right">% Change</TableCell>
-            <TableCell className="text-center">Actions</TableCell>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {balanceHistory.map((row, index) => (
-            <TableRow key={row.when_added + '-' + row.balance + '-' + index}>
-              <TableCell className="text-right">
-                {row.date.toLocaleString('en-US', {
-                  year: 'numeric',
-                  month: 'short',
-                  day: 'numeric',
-                })}
-              </TableCell>
-              <TableCell className="text-right">{row.balance.toFixed(2)}</TableCell>
-              <TableCell className="text-right" style={{ color: row.change < 0 ? 'red' : undefined }}>
-                {row.change.toFixed(2)}
-              </TableCell>
-              <TableCell className="text-right" style={{ color: row.percentChange < 0 ? 'red' : undefined }}>
-                {row.percentChange.toFixed(2)}%
+      <div className="relative">
+        <Button onClick={handleDownloadCSV} variant="outline" className="absolute top-0 right-0 z-10">
+          Download CSV
+        </Button>
+        <Table className="container mx-auto w-[500px]">
+          <TableHeader>
+            <TableRow>
+              <TableCell className="text-right">Date</TableCell>
+              <TableCell className="text-right">Balance</TableCell>
+              <TableCell className="text-right">Change</TableCell>
+              <TableCell className="text-right">% Change</TableCell>
+              <TableCell className="text-center">Actions</TableCell>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {balanceHistory.map((row, index) => (
+              <TableRow key={row.when_added + '-' + row.balance + '-' + index}>
+                <TableCell className="text-right">
+                  {row.date.toLocaleString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                  })}
+                </TableCell>
+                <TableCell className="text-right">{row.balance.toFixed(2)}</TableCell>
+                <TableCell className="text-right" style={{ color: row.change < 0 ? 'red' : undefined }}>
+                  {row.change.toFixed(2)}
+                </TableCell>
+                <TableCell className="text-right" style={{ color: row.percentChange < 0 ? 'red' : undefined }}>
+                  {row.percentChange.toFixed(2)}%
+                </TableCell>
+                <TableCell className="text-center">
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive" size="sm">
+                        <Delete className="h-4 w-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Are you sure you want to delete this balance snapshot? This action cannot be undone.
+                      </AlertDialogDescription>
+                      <div className="flex justify-end gap-4 mt-6">
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction asChild>
+                          <Button variant="destructive" onClick={() => handleDeleteSnapshot(row.when_added, row.originalBalance)}>
+                            Delete
+                          </Button>
+                        </AlertDialogAction>
+                      </div>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </TableCell>
+              </TableRow>
+            ))}
+            <TableRow>
+              <TableCell colSpan={4} className="text-center font-semibold">
+                Add New Snapshot
               </TableCell>
               <TableCell className="text-center">
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="destructive" size="sm">
-                      <Delete className="h-4 w-4" />
+                <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      Add
                     </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Are you sure you want to delete this balance snapshot? This action cannot be undone.
-                    </AlertDialogDescription>
-                    <div className="flex justify-end gap-4 mt-6">
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction asChild>
-                        <Button variant="destructive" onClick={() => handleDeleteSnapshot(row.when_added, row.originalBalance)}>
-                          Delete
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogTitle>Add New Balance Snapshot</DialogTitle>
+                    <DialogDescription id="add-snapshot-description">
+                      Enter the date and balance for the new snapshot. Both fields are required.
+                    </DialogDescription>
+                    <div className="space-y-4 mt-4">
+                      <div className="flex items-center gap-4">
+                        <label htmlFor="balance-date" className="w-16">Date:</label>
+                        <input
+                          id="balance-date"
+                          type="date"
+                          value={newDate}
+                          onChange={(e) => setNewDate(e.target.value)}
+                          className="border p-2 rounded flex-1"
+                          required
+                        />
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <label htmlFor="balance-amount" className="w-16">Balance:</label>
+                        <input
+                          id="balance-amount"
+                          type="number"
+                          step="0.01"
+                          value={newBalance}
+                          onChange={(e) => setNewBalance(e.target.value)}
+                          placeholder="Balance"
+                          className="border p-2 rounded flex-1"
+                          required
+                        />
+                      </div>
+                      <div className="flex justify-end">
+                        <Button 
+                          onClick={handleAddSnapshot} 
+                          disabled={!newDate || !newBalance || isAddingSnapshot}
+                          aria-describedby="add-snapshot-description"
+                        >
+                          {isAddingSnapshot ? 'Adding...' : 'Add Snapshot'}
                         </Button>
-                      </AlertDialogAction>
+                      </div>
                     </div>
-                  </AlertDialogContent>
-                </AlertDialog>
+                  </DialogContent>
+                </Dialog>
               </TableCell>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableBody>
+        </Table>
+      </div>
     </>
   )
 }
