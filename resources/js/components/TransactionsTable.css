@@ -1,0 +1,29 @@
+.transactions-table-container {
+  max-height: 400px; /* Adjust as needed */
+  overflow-y: auto;
+  border: 1px solid #ccc;
+  margin-top: 1rem;
+}
+
+.transactions-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.transactions-table th,
+.transactions-table td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: left;
+}
+
+.transactions-table th {
+  background-color: #f2f2f2;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.duplicate-row {
+  background-color: #ff8888;
+}

@@ -10,6 +10,7 @@ Route::middleware(['web', 'auth'])->post('/finance/accounts/balance', [FinanceAp
 Route::middleware(['web', 'auth'])->get('/finance/chart', [FinanceApiController::class, 'chartData']);
 
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/line_items', [FinanceApiController::class, 'getLineItems']);
+Route::middleware(['web', 'auth'])->post('/finance/{account_id}/line_items', [FinanceApiController::class, 'importLineItems']);
 Route::middleware(['web', 'auth'])->delete('/finance/{account_id}/line_items', [FinanceApiController::class, 'deleteLineItem']);
 Route::middleware(['web', 'auth'])->get('/finance/tags', [FinanceApiController::class, 'getUserTags']);
 Route::middleware(['web', 'auth'])->post('/finance/tags/apply', [FinanceApiController::class, 'applyTagToTransactions']);

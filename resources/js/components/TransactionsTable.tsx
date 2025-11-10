@@ -1,10 +1,12 @@
 'use client'
+import './TransactionsTable.css'
 import currency from 'currency.js'
 import { useEffect, useMemo, useState } from 'react'
 import type { AccountLineItem } from './AccountLineItem'
 import { Badge } from './ui/badge'
 import { Spinner } from './ui/spinner'
 import { Button } from './ui/button'
+import { cn } from '@/lib/utils'
 
 import { Table } from './ui/table'
 import { ClearFilterButton } from './ClearFilterButton'
@@ -17,9 +19,10 @@ interface Props {
   onDeleteTransaction?: (transactionId: string) => Promise<void>
   enableTagging?: boolean
   refreshFn?: () => void
+  duplicates?: AccountLineItem[]
 }
 
-export default function TransactionsTable({ data, onDeleteTransaction, enableTagging = false, refreshFn }: Props) {
+export default function TransactionsTable({ data, onDeleteTransaction, enableTagging = false, refreshFn, duplicates }: Props) {
   const [sortField, setSortField] = useState<keyof AccountLineItem>('t_date')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
   const [descriptionFilter, setDescriptionFilter] = useState('')
@@ -45,6 +48,20 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
   const [selectedTransactions, setSelectedTransactions] = useState<string[]>([])
   const [selectedTransaction, setSelectedTransaction] = useState<AccountLineItem | null>(null)
   const [postDateFilter, setPostDateFilter] = useState('')
+
+  const isDuplicate = (item: AccountLineItem) => {
+    if (!duplicates) {
+      return false
+    }
+    return duplicates.some(
+      (dup) =>
+        dup.t_date === item.t_date &&
+        (dup.t_type ?? '').includes(item.t_type ?? '') &&
+        (dup.t_description ?? '').includes(item.t_description ?? '') &&
+        (dup.t_qty ?? 0) === (item.t_qty ?? 0) &&
+        dup.t_amt === item.t_amt,
+    )
+  }
 
   useEffect(() => {
     if (!enableTagging) return
@@ -429,7 +446,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
         </thead>
         <tbody>
           {sortedData.map((row, i) => (
-            <tr key={row.t_id + ':' + i}>
+            <tr key={row.t_id + ':' + i} className={cn({ 'duplicate-row': isDuplicate(row) })}>
               <td
                 className="dateCol"
                 onClick={() => {

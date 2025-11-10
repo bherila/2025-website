@@ -154,10 +154,15 @@ class FinanceApiController extends Controller
         $uid = Auth::id();
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
 
-        $lineItems = FinAccountLineItems::where('t_account', $account->acct_id)
+        $query = FinAccountLineItems::where('t_account', $account->acct_id)
             ->with('tags')
-            ->orderBy('t_date', 'desc')
-            ->get();
+            ->orderBy('t_date', 'desc');
+
+        if ($request->has('start_date') && $request->has('end_date')) {
+            $query->whereBetween('t_date', [$request->start_date, $request->end_date]);
+        }
+
+        $lineItems = $query->get();
 
         return response()->json($lineItems);
     }
@@ -359,5 +364,50 @@ class FinanceApiController extends Controller
         });
 
         return response()->json(['success' => true]);
+    }
+
+    public function importLineItems(Request $request, $account_id)
+    {
+        $uid = Auth::id();
+        $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+
+        $lineItems = $request->json()->all();
+        $importedCount = 0;
+
+        foreach ($lineItems as $item) {
+            FinAccountLineItems::create([
+                't_account' => $account->acct_id,
+                't_date' => $item['t_date'],
+                't_date_posted' => $item['t_date_posted'] ?? null,
+                't_type' => $item['t_type'] ?? null,
+                't_schc_category' => $item['t_schc_category'] ?? null,
+                't_amt' => $item['t_amt'] ?? null,
+                't_symbol' => $item['t_symbol'] ?? null,
+                't_cusip' => $item['t_cusip'] ?? null,
+                't_qty' => $item['t_qty'] ?? 0,
+                't_price' => $item['t_price'] ?? '0',
+                't_commission' => $item['t_commission'] ?? '0',
+                't_fee' => $item['t_fee'] ?? '0',
+                't_method' => $item['t_method'] ?? null,
+                't_source' => $item['t_source'] ?? 'import',
+                't_origin' => $item['t_origin'] ?? null,
+                'opt_expiration' => $item['opt_expiration'] ?? null,
+                'opt_type' => $item['opt_type'] ?? null,
+                'opt_strike' => $item['opt_strike'] ?? '0',
+                't_description' => $item['t_description'] ?? null,
+                't_comment' => $item['t_comment'] ?? null,
+                't_from' => $item['t_from'] ?? null,
+                't_to' => $item['t_to'] ?? null,
+                't_interest_rate' => $item['t_interest_rate'] ?? null,
+                't_harvested_amount' => $item['t_harvested_amount'] ?? null,
+                'parent_t_id' => $item['parent_t_id'] ?? null,
+            ]);
+            $importedCount++;
+        }
+
+        return response()->json([
+            'success' => true,
+            'imported' => $importedCount,
+        ]);
     }
 }

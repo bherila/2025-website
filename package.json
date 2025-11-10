@@ -37,6 +37,7 @@
         "clsx": "^2.1.1",
         "currency.js": "^2.0.4",
         "date-fns": "^4.1.0",
+        "dayjs": "^1.11.19",
         "decimal.js": "^10.6.0",
         "lucide-react": "^0.552.0",
         "prop-types": "^15.8.1",

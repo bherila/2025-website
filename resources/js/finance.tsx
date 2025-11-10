@@ -4,6 +4,7 @@ import SummaryClient from './components/SummaryClient'
 import FinanceAccountsPage from './components/FinanceAccountsPage'
 import FinanceAccountTransactionsPage from './components/FinanceAccountTransactionsPage'
 import FinanceAccountBalanceHistoryPage from './components/FinanceAccountBalanceHistoryPage'
+import ImportTransactionsClient from './components/ImportTransactionsClient'
 
 document.addEventListener('DOMContentLoaded', () => {
   const navDiv = document.getElementById('AccountNavigation')
@@ -45,5 +46,14 @@ document.addEventListener('DOMContentLoaded', () => {
   if (balanceHistoryDiv) {
     const root = createRoot(balanceHistoryDiv)
     root.render(<FinanceAccountBalanceHistoryPage id={parseInt(balanceHistoryDiv.dataset.accountId!)} />)
+  }
+
+  const importTransactionsDiv = document.getElementById('ImportTransactionsClient')
+  if (importTransactionsDiv) {
+    const root = createRoot(importTransactionsDiv)
+    root.render(<ImportTransactionsClient
+      id={parseInt(importTransactionsDiv.dataset.accountId!)}
+      accountName={importTransactionsDiv.dataset.accountName!}
+    />)
   }
 })

@@ -34,6 +34,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/finance/{account_id}/summary', [FinanceAccountsController::class, 'summary']);
     Route::get('/finance/{account_id}/balance-timeseries', [FinanceAccountsController::class, 'balanceTimeseries']);
     Route::get('/finance/{account_id}/maintenance', [FinanceAccountsController::class, 'maintenance']);
+    Route::get('/finance/{account_id}/import-transactions', [FinanceAccountsController::class, 'showImportTransactionsPage']);
 });
 
 Route::get('/tools/license-manager', function () {
