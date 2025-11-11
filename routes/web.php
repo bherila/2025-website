@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\FinanceAccountsController;
 use App\Http\Controllers\LoginController;
+use App\Http\Controllers\PayslipController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -25,9 +26,7 @@ Route::middleware('auth')->group(function () {
         return view('finance.rsu');
     });
 
-    Route::get('/finance/payslips', function () {
-        return view('finance.payslips');
-    });
+    Route::get('/finance/payslips', [PayslipController::class, 'index']);
 
     Route::get('/finance/accounts', [FinanceAccountsController::class, 'index']);
     Route::get('/finance/{account_id}', [FinanceAccountsController::class, 'show']);

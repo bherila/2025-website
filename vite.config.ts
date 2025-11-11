@@ -19,7 +19,8 @@ export default defineConfig({
         'resources/js/dashboard.tsx',
         'resources/js/user/api-key.tsx',
         'resources/js/user/update-email.tsx',
-        'resources/js/user/update-password.tsx'
+        'resources/js/user/update-password.tsx',
+        'resources/js/payslip.tsx'
       ],
       refresh: true,
     }),

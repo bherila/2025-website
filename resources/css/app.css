@@ -107,4 +107,8 @@
   a {
     @apply text-primary hover:underline;
   }
+
+  .table tr {
+    border: none;
+  }
 }
