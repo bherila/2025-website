@@ -87,23 +87,35 @@ function renderValueCellContents(row: fin_payslip, col: fin_payslip_col, data: f
 export function PayslipTable(props: Props) {
   const { data, cols, onRowEdited } = props
   const [isLoading, setIsLoading] = useState<{ [key: string]: boolean }>({})
+  const [estimatedOverrides, setEstimatedOverrides] = useState<Record<string, boolean>>({})
 
   const handleEstimatedToggle = async (row: fin_payslip) => {
     if (!row.payslip_id) return
 
     const key = row.payslip_id.toString()
+    const currentChecked = estimatedOverrides[key] ?? row.ps_is_estimated ?? false
+    const newChecked = !currentChecked
+
     setIsLoading((prev) => ({ ...prev, [key]: true }))
 
-    try {
-      await updatePayslipEstimatedStatus(row.payslip_id, !row.ps_is_estimated)
+    // Optimistic update
+    setEstimatedOverrides(prev => ({ ...prev, [key]: newChecked }))
+    if (onRowEdited) {
+      onRowEdited({ ...row, ps_is_estimated: newChecked })
+    }
 
-      if (onRowEdited) {
-        onRowEdited({
-          ...row,
-          ps_is_estimated: !row.ps_is_estimated,
-        })
-      }
+    try {
+      await updatePayslipEstimatedStatus(row.payslip_id, newChecked)
     } catch (error) {
+      // Revert on failure
+      setEstimatedOverrides(prev => {
+        const newPrev = { ...prev }
+        delete newPrev[key]
+        return newPrev
+      })
+      if (onRowEdited) {
+        onRowEdited({ ...row, ps_is_estimated: currentChecked })
+      }
       console.error('Failed to update estimated status:', error)
     } finally {
       setIsLoading((prev) => ({ ...prev, [key]: false }))
@@ -144,7 +156,7 @@ export function PayslipTable(props: Props) {
       <TableBody>
         {_.orderBy(data, 'period_end').map((row: fin_payslip, rid: number) => {
           const key = row.payslip_id?.toString() ?? rid.toString()
-          const isEstimated = row.ps_is_estimated ?? false
+          const isEstimated = estimatedOverrides[key] ?? row.ps_is_estimated ?? false
           return (
             <TableRow key={rid} className={classnames(isEstimated && 'text-orange-600', 'border-none', 'p-0', 'm-0')}>
               {filteredCols
@@ -154,7 +166,7 @@ export function PayslipTable(props: Props) {
                     return (
                       <TableCell key={c.title}>
                         <Checkbox
-                          checked={row.ps_is_estimated ?? false}
+                          checked={isEstimated}
                           onCheckedChange={() => handleEstimatedToggle(row)}
                           disabled={isLoading[key]}
                         />
