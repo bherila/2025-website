@@ -89,18 +89,13 @@ export function PayslipTable(props: Props) {
   const [isLoading, setIsLoading] = useState<{ [key: string]: boolean }>({})
 
   const handleEstimatedToggle = async (row: fin_payslip) => {
-    if (!row.period_start || !row.period_end || !row.pay_date) return
+    if (!row.payslip_id) return
 
-    const key = `${row.period_start}-${row.period_end}-${row.pay_date}`
+    const key = row.payslip_id.toString()
     setIsLoading((prev) => ({ ...prev, [key]: true }))
 
     try {
-      await updatePayslipEstimatedStatus({
-        period_start: row.period_start,
-        period_end: row.period_end,
-        pay_date: row.pay_date,
-        ps_is_estimated: !row.ps_is_estimated,
-      })
+      await updatePayslipEstimatedStatus(row.payslip_id, !row.ps_is_estimated)
 
       if (onRowEdited) {
         onRowEdited({
@@ -148,7 +143,7 @@ export function PayslipTable(props: Props) {
       </TableHeader>
       <TableBody>
         {_.orderBy(data, 'period_end').map((row: fin_payslip, rid: number) => {
-          const key = `${row.period_start}-${row.period_end}-${row.pay_date}`
+          const key = row.payslip_id?.toString() ?? rid.toString()
           const isEstimated = row.ps_is_estimated ?? false
           return (
             <TableRow key={rid} className={classnames(isEstimated && 'text-orange-600', 'border-none', 'p-0', 'm-0')}>
@@ -195,7 +190,7 @@ export function PayslipTable(props: Props) {
                 <TableCell>
                   <Button variant="outline" size="sm" asChild>
                     <a
-                      href={`/payslip/entry?period_start=${row.period_start}&period_end=${row.period_end}&pay_date=${row.pay_date}`}
+                      href={`/finance/payslips/entry?id=${row.payslip_id}`}
                     >
                       <Edit className="h-4 w-4" />
                     </a>

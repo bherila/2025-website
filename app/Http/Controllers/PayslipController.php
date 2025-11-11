@@ -14,26 +14,36 @@ class PayslipController extends Controller
         return view('payslip');
     }
 
+    public function entry()
+    {
+        return view('payslip-entry');
+    }
+
     public function fetchPayslipYears()
     {
-        $uid = Auth::id();
+        try {
+            $uid = Auth::id();
 
-        $years = FinPayslips::where('uid', $uid)
-            ->selectRaw('DISTINCT SUBSTRING(pay_date, 1, 4) as year')
-            ->orderBy('year', 'asc')
-            ->get()
-            ->pluck('year')
-            ->toArray();
+            $years = FinPayslips::where('uid', $uid)
+                ->where('pay_date', 'like', '20%')
+                ->selectRaw('DISTINCT SUBSTRING(pay_date, 1, 4) as year')
+                ->orderBy('year', 'asc')
+                ->get()
+                ->pluck('year')
+                ->toArray();
 
-        // Add current year if not present
-        $currentYear = (string)date('Y');
-        if (!in_array($currentYear, $years)) {
-            $years[] = $currentYear;
+            // Add current year if not present
+            $currentYear = (string)date('Y');
+            if (!in_array($currentYear, $years)) {
+                $years[] = $currentYear;
+            }
+
+            rsort($years); // Sort in descending order
+
+            return response()->json($years);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to fetch payslip years: ' . $e->getMessage()], 500);
         }
-
-        rsort($years); // Sort in descending order
-
-        return response()->json($years);
     }
 
     public function fetchPayslips(Request $request)
@@ -69,6 +79,7 @@ class PayslipController extends Controller
         $uid = Auth::id();
 
         $validator = Validator::make($request->all(), [
+            'payslip_id' => 'nullable|integer',
             'period_start' => 'required|date_format:Y-m-d',
             'period_end' => 'required|date_format:Y-m-d',
             'pay_date' => 'required|date_format:Y-m-d',
@@ -101,9 +112,6 @@ class PayslipController extends Controller
             'ps_pretax_dental' => 'numeric|nullable',
             'ps_pretax_vision' => 'numeric|nullable',
             'other' => 'nullable', // Will be handled manually
-            'originalPeriodStart' => 'date_format:Y-m-d|nullable',
-            'originalPeriodEnd' => 'date_format:Y-m-d|nullable',
-            'originalPayDate' => 'date_format:Y-m-d|nullable',
         ]);
 
         if ($validator->fails()) {
@@ -119,74 +127,38 @@ class PayslipController extends Controller
             $validatedData['other'] = null;
         }
 
-        $lookupDates = [
-            'period_start' => $validatedData['originalPeriodStart'] ?? $validatedData['period_start'],
-            'period_end' => $validatedData['originalPeriodEnd'] ?? $validatedData['period_end'],
-            'pay_date' => $validatedData['originalPayDate'] ?? $validatedData['pay_date'],
-        ];
+        $payslipId = $validatedData['payslip_id'] ?? null;
+        unset($validatedData['payslip_id']);
 
-        unset($validatedData['originalPeriodStart']);
-        unset($validatedData['originalPeriodEnd']);
-        unset($validatedData['originalPayDate']);
-
-        FinPayslips::updateOrCreate(
-            [
-                'uid' => $uid,
-                'period_start' => $lookupDates['period_start'],
-                'period_end' => $lookupDates['period_end'],
-                'pay_date' => $lookupDates['pay_date'],
-            ],
-            $validatedData
-        );
+        if ($payslipId) {
+            FinPayslips::where('payslip_id', $payslipId)
+                ->where('uid', $uid)
+                ->update($validatedData);
+        } else {
+            $validatedData['uid'] = $uid;
+            FinPayslips::create($validatedData);
+        }
 
         return response()->json(['success' => true]);
     }
 
-    public function deletePayslip(Request $request)
+    public function deletePayslip(Request $request, $payslip_id)
     {
         $uid = Auth::id();
 
-        $validator = Validator::make($request->all(), [
-            'period_start' => 'required|date_format:Y-m-d',
-            'period_end' => 'required|date_format:Y-m-d',
-            'pay_date' => 'required|date_format:Y-m-d',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
-
-        $validatedData = $validator->validated();
-
-        FinPayslips::where('uid', $uid)
-            ->where('period_start', $validatedData['period_start'])
-            ->where('period_end', $validatedData['period_end'])
-            ->where('pay_date', $validatedData['pay_date'])
+        FinPayslips::where('payslip_id', $payslip_id)
+            ->where('uid', $uid)
             ->delete();
 
         return response()->json(['success' => true]);
     }
 
-    public function fetchPayslipByDetails(Request $request)
+    public function fetchPayslipById(Request $request, $payslip_id)
     {
         $uid = Auth::id();
 
-        $validator = Validator::make($request->all(), [
-            'period_start' => 'required|date_format:Y-m-d',
-            'period_end' => 'required|date_format:Y-m-d',
-            'pay_date' => 'required|date_format:Y-m-d',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
-
-        $validatedData = $validator->validated();
-
-        $payslip = FinPayslips::where('uid', $uid)
-            ->where('period_start', $validatedData['period_start'])
-            ->where('period_end', $validatedData['period_end'])
-            ->where('pay_date', $validatedData['pay_date'])
+        $payslip = FinPayslips::where('payslip_id', $payslip_id)
+            ->where('uid', $uid)
             ->firstOrFail();
 
         // Decode 'other' field
@@ -197,14 +169,11 @@ class PayslipController extends Controller
         return response()->json($payslip);
     }
 
-    public function updatePayslipEstimatedStatus(Request $request)
+    public function updatePayslipEstimatedStatus(Request $request, $payslip_id)
     {
         $uid = Auth::id();
 
         $validator = Validator::make($request->all(), [
-            'period_start' => 'required|date_format:Y-m-d',
-            'period_end' => 'required|date_format:Y-m-d',
-            'pay_date' => 'required|date_format:Y-m-d',
             'ps_is_estimated' => 'required|boolean',
         ]);
 
@@ -214,10 +183,8 @@ class PayslipController extends Controller
 
         $validatedData = $validator->validated();
 
-        FinPayslips::where('uid', $uid)
-            ->where('period_start', $validatedData['period_start'])
-            ->where('period_end', $validatedData['period_end'])
-            ->where('pay_date', $validatedData['pay_date'])
+        FinPayslips::where('payslip_id', $payslip_id)
+            ->where('uid', $uid)
             ->update(['ps_is_estimated' => $validatedData['ps_is_estimated']]);
 
         return response()->json(['success' => true]);

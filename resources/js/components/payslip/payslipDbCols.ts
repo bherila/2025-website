@@ -8,6 +8,7 @@ const maybeNum = z.coerce.number().default(0)
 
 export const fin_payslip_schema = z
   .object({
+    payslip_id: z.number().optional(),
     period_start: z
       .string({
         required_error: 'Period start date is required',
@@ -58,6 +59,14 @@ export const fin_payslip_schema = z
     ps_salary: maybeNum,
     ps_vacation_payout: maybeNum,
     other: z.any(),
+  })
+  .refine((data) => data.period_start <= data.period_end, {
+    message: 'Period start date must be before or equal to period end date',
+    path: ['period_start'],
+  })
+  .refine((data) => data.pay_date >= data.period_end, {
+    message: 'Pay date must be after or equal to period end date',
+    path: ['pay_date'],
   })
   .refine(
     (data) => {

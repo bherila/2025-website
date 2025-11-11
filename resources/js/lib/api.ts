@@ -1,5 +1,7 @@
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 
+const csrfToken = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content;
+
 export async function fetchPayslipYears(): Promise<string[]> {
   const response = await fetch('/api/payslips/years')
   if (!response.ok) {
@@ -19,16 +21,14 @@ export async function fetchPayslips(year?: string): Promise<fin_payslip[]> {
 
 export async function savePayslip(
   payslipData: fin_payslip & {
-    originalPeriodStart?: string
-    originalPeriodEnd?: string
-    originalPayDate?: string
+    payslip_id?: number;
   },
 ): Promise<void> {
   const response = await fetch('/api/payslips', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-CSRF-TOKEN': (window as any).CSRF_TOKEN, // Assuming CSRF token is available globally
+      'X-CSRF-TOKEN': csrfToken || '',
     },
     body: JSON.stringify(payslipData),
   })
@@ -39,15 +39,14 @@ export async function savePayslip(
 }
 
 export async function deletePayslip(
-  payslipData: Pick<fin_payslip, 'period_start' | 'period_end' | 'pay_date'>,
+  payslip_id: number,
 ): Promise<void> {
-  const response = await fetch('/api/payslips', {
+  const response = await fetch(`/api/payslips/${payslip_id}`, {
     method: 'DELETE',
     headers: {
       'Content-Type': 'application/json',
-      'X-CSRF-TOKEN': (window as any).CSRF_TOKEN,
+      'X-CSRF-TOKEN': csrfToken || '',
     },
-    body: JSON.stringify(payslipData),
   })
   if (!response.ok) {
     const error = await response.json()
@@ -55,11 +54,10 @@ export async function deletePayslip(
   }
 }
 
-export async function fetchPayslipByDetails(
-  payslipDetails: Pick<fin_payslip, 'period_start' | 'period_end' | 'pay_date'>,
+export async function fetchPayslipById(
+  payslip_id: number,
 ): Promise<fin_payslip> {
-  const params = new URLSearchParams(payslipDetails).toString()
-  const response = await fetch(`/api/payslips/details?${params}`)
+  const response = await fetch(`/api/payslips/${payslip_id}`)
   if (!response.ok) {
     throw new Error('Failed to fetch payslip by details')
   }
@@ -67,18 +65,25 @@ export async function fetchPayslipByDetails(
 }
 
 export async function updatePayslipEstimatedStatus(
-  payslipDetails: Pick<fin_payslip, 'period_start' | 'period_end' | 'pay_date' | 'ps_is_estimated'>,
+  payslip_id: number,
+  ps_is_estimated: boolean,
 ): Promise<void> {
-  const response = await fetch('/api/payslips/estimated-status', {
+  const response = await fetch(`/api/payslips/${payslip_id}/estimated-status`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-CSRF-TOKEN': (window as any).CSRF_TOKEN,
+      'X-CSRF-TOKEN': csrfToken || '',
     },
-    body: JSON.stringify(payslipDetails),
+    body: JSON.stringify({ ps_is_estimated }),
   })
   if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.message || 'Failed to update payslip estimated status')
+    const errorText = await response.text();
+    try {
+        const error = JSON.parse(errorText);
+        throw new Error(error.message || 'Failed to update payslip estimated status');
+    } catch (e) {
+        console.error('Failed to parse error response as JSON:', errorText);
+        throw new Error('Failed to update payslip estimated status and received a non-JSON response.');
+    }
   }
 }

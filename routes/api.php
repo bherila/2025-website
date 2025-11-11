@@ -27,9 +27,9 @@ Route::middleware(['web', 'auth'])->delete('/finance/{account_id}', [FinanceApiC
 Route::middleware(['web', 'auth'])->get('/payslips/years', [PayslipController::class, 'fetchPayslipYears']);
 Route::middleware(['web', 'auth'])->get('/payslips', [PayslipController::class, 'fetchPayslips']);
 Route::middleware(['web', 'auth'])->post('/payslips', [PayslipController::class, 'savePayslip']);
-Route::middleware(['web', 'auth'])->delete('/payslips', [PayslipController::class, 'deletePayslip']);
-Route::middleware(['web', 'auth'])->get('/payslips/details', [PayslipController::class, 'fetchPayslipByDetails']);
-Route::middleware(['web', 'auth'])->post('/payslips/estimated-status', [PayslipController::class, 'updatePayslipEstimatedStatus']);
+Route::middleware(['web', 'auth'])->delete('/payslips/{payslip_id}', [PayslipController::class, 'deletePayslip']);
+Route::middleware(['web', 'auth'])->get('/payslips/{payslip_id}', [PayslipController::class, 'fetchPayslipById']);
+Route::middleware(['web', 'auth'])->post('/payslips/{payslip_id}/estimated-status', [PayslipController::class, 'updatePayslipEstimatedStatus']);
 
 Route::middleware(['web', 'auth'])->get('/user', [App\Http\Controllers\UserApiController::class, 'getUser']);
 Route::middleware(['web', 'auth'])->post('/user/update-email', [App\Http\Controllers\UserApiController::class, 'updateEmail']);

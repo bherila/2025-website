@@ -43,7 +43,7 @@ export default function PayslipClient({ selectedYear, initialData, initialYears 
     <div className="flex flex-col items-center justify-center space-y-4 py-16 text-center">
       <div className="text-muted-foreground">No payslips found for the selected year</div>
       <Button asChild>
-        <a href={`/payslip/entry?year=${selectedYear}`}>
+        <a href={`/finance/payslips/entry?year=${selectedYear}`}>
           <PlusCircle className="mr-2" /> Add Payslip
         </a>
       </Button>
@@ -64,7 +64,7 @@ export default function PayslipClient({ selectedYear, initialData, initialYears 
           </div>
           <div className="flex gap-2">
             <Button asChild variant="outline">
-              <a href={`/payslip/entry?year=${selectedYear}`}>
+              <a href={`/finance/payslips/entry?year=${selectedYear}`}>
                 <PlusCircle className="mr-2" /> Add Payslip
               </a>
             </Button>
