@@ -5,9 +5,10 @@ import { PlusCircle, FileSpreadsheet } from 'lucide-react'
 import { PayslipTable } from './PayslipTable'
 import { cols } from './config/payslipColumnsConfig'
 import Container from '@/components/container'
-import { savePayslip } from '@/lib/api'
+import { savePayslip, fetchPayslips, fetchPayslipYears } from '@/lib/api'
 import TotalsTable from './TotalsTable.client'
-import React from 'react'
+import React, { useState, useEffect } from 'react'
+import { PayslipImportDialog } from './PayslipImportDialog' // Import the new dialog
 
 interface PayslipClientProps {
   selectedYear: string
@@ -15,21 +16,39 @@ interface PayslipClientProps {
   initialYears: string[]
 }
 
-export default function PayslipClient({ selectedYear, initialData, initialYears }: PayslipClientProps): React.ReactElement {
+export default function PayslipClient({ selectedYear: initialSelectedYear, initialData: initialPayslipData, initialYears: initialAvailableYears }: PayslipClientProps): React.ReactElement {
+  const [selectedYear, setSelectedYear] = useState(initialSelectedYear);
+  const [payslipData, setPayslipData] = useState(initialPayslipData);
+  const [availableYears, setAvailableYears] = useState(initialAvailableYears);
+
+  useEffect(() => {
+    setSelectedYear(initialSelectedYear);
+    setPayslipData(initialPayslipData);
+    setAvailableYears(initialAvailableYears);
+  }, [initialSelectedYear, initialPayslipData, initialAvailableYears]);
+
+  const refreshPayslips = async () => {
+    const newPayslipData = await fetchPayslips(selectedYear);
+    const newAvailableYears = await fetchPayslipYears();
+    setPayslipData(newPayslipData);
+    setAvailableYears(newAvailableYears);
+  };
+
   const editRow = async (row: fin_payslip) => {
     await savePayslip(row)
+    refreshPayslips(); // Refresh data after editing
   }
 
-  const data = initialData.filter(
+  const data = payslipData.filter(
     (r: fin_payslip) => r.pay_date! > `${selectedYear}-01-01` && r.pay_date! < `${selectedYear + 1}-01-01`,
   )
-  const dataThroughQ1 = initialData.filter(
+  const dataThroughQ1 = payslipData.filter(
     (r: fin_payslip) => r.pay_date! > `${selectedYear}-01-01` && r.pay_date! < `${selectedYear}-04-01`,
   )
-  const dataThroughQ2 = initialData.filter(
+  const dataThroughQ2 = payslipData.filter(
     (r: fin_payslip) => r.pay_date! > `${selectedYear}-01-01` && r.pay_date! < `${selectedYear}-07-01`,
   )
-  const dataThroughQ3 = initialData.filter(
+  const dataThroughQ3 = payslipData.filter(
     (r: fin_payslip) => r.pay_date! > `${selectedYear}-01-01` && r.pay_date! < `${selectedYear}-10-01`,
   )
   const dataSeries = [
@@ -56,7 +75,7 @@ export default function PayslipClient({ selectedYear, initialData, initialYears 
         <div className="flex justify-between items-center px-4">
           <div className="flex gap-2 items-center">
             <span>Tax Year:</span>
-            {initialYears.map((year) => (
+            {availableYears.map((year) => (
               <Button asChild key={year} variant={year === selectedYear ? 'default' : 'outline'}>
                 <a href={`?year=${year}`}>{year}</a>
               </Button>
@@ -76,6 +95,7 @@ export default function PayslipClient({ selectedYear, initialData, initialYears 
                 <FileSpreadsheet className="mr-2" /> Import TSV
               </a>
             </Button>
+            <PayslipImportDialog onImportSuccess={refreshPayslips} />
           </div>
         </div>
 

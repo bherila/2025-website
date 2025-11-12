@@ -20,9 +20,7 @@ export async function fetchPayslips(year?: string): Promise<fin_payslip[]> {
 }
 
 export async function savePayslip(
-  payslipData: fin_payslip & {
-    payslip_id?: number;
-  },
+  payslipData: fin_payslip,
 ): Promise<void> {
   const response = await fetch('/api/payslips', {
     method: 'POST',
@@ -87,3 +85,31 @@ export async function updatePayslipEstimatedStatus(
     }
   }
 }
+
+export async function importPayslips(files: File[]): Promise<{ success: boolean; message?: string; error?: string }> {
+  const formData = new FormData();
+  files.forEach(file => {
+    formData.append('files[]', file);
+  });
+
+  const response = await fetch('/api/payslips/import', {
+    method: 'POST',
+    headers: {
+      'X-CSRF-TOKEN': csrfToken || '',
+    },
+    body: formData,
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    // Handle specific error codes like 429 for rate limiting
+    if (response.status === 429) {
+      return { success: false, error: data.error || 'API rate limit exceeded. Please wait and try again.' };
+    }
+    return { success: false, error: data.message || data.error || 'Failed to import payslips.' };
+  }
+
+  return { success: true, message: data.message };
+}
+

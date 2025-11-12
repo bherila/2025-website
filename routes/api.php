@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\FinanceApiController;
 use App\Http\Controllers\PayslipController;
+use App\Http\Controllers\PayslipImportController;
 
 Route::middleware(['web', 'auth'])->get('/finance/accounts', [FinanceApiController::class, 'accounts']);
 Route::middleware(['web', 'auth'])->post('/finance/accounts', [FinanceApiController::class, 'createAccount']);
@@ -27,6 +28,7 @@ Route::middleware(['web', 'auth'])->delete('/finance/{account_id}', [FinanceApiC
 Route::middleware(['web', 'auth'])->get('/payslips/years', [PayslipController::class, 'fetchPayslipYears']);
 Route::middleware(['web', 'auth'])->get('/payslips', [PayslipController::class, 'fetchPayslips']);
 Route::middleware(['web', 'auth'])->post('/payslips', [PayslipController::class, 'savePayslip']);
+Route::middleware(['web', 'auth'])->post('/payslips/import', [PayslipImportController::class, 'import']);
 Route::middleware(['web', 'auth'])->delete('/payslips/{payslip_id}', [PayslipController::class, 'deletePayslip']);
 Route::middleware(['web', 'auth'])->get('/payslips/{payslip_id}', [PayslipController::class, 'fetchPayslipById']);
 Route::middleware(['web', 'auth'])->post('/payslips/{payslip_id}/estimated-status', [PayslipController::class, 'updatePayslipEstimatedStatus']);
