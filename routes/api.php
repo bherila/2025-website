@@ -5,11 +5,15 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\FinanceApiController;
 use App\Http\Controllers\PayslipController;
 use App\Http\Controllers\PayslipImportController;
+use App\Http\Controllers\RsuController;
 
 Route::middleware(['web', 'auth'])->get('/finance/accounts', [FinanceApiController::class, 'accounts']);
 Route::middleware(['web', 'auth'])->post('/finance/accounts', [FinanceApiController::class, 'createAccount']);
 Route::middleware(['web', 'auth'])->post('/finance/accounts/balance', [FinanceApiController::class, 'updateBalance']);
 Route::middleware(['web', 'auth'])->get('/finance/chart', [FinanceApiController::class, 'chartData']);
+Route::middleware(['web', 'auth'])->get('/rsu', [RsuController::class, 'getRsuData']);
+Route::middleware(['web', 'auth'])->post('/rsu', [RsuController::class, 'addRsuGrants']);
+
 
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/line_items', [FinanceApiController::class, 'getLineItems']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/line_items', [FinanceApiController::class, 'importLineItems']);

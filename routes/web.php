@@ -26,6 +26,10 @@ Route::middleware('auth')->group(function () {
         return view('finance.rsu');
     });
 
+    Route::get('/finance/rsu/add-grant', function () {
+        return view('finance.rsu-add-grant');
+    });
+
     Route::get('/finance/payslips', [PayslipController::class, 'index']);
     Route::get('/finance/payslips/entry', [PayslipController::class, 'entry']);
 
