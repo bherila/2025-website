@@ -15,6 +15,9 @@ class PayslipImportController extends Controller
 {
     public function import(Request $request)
     {
+        // Set execution time limit to 5 minutes to handle multiple API requests
+        set_time_limit(300);
+        
         $validator = Validator::make($request->all(), [
             'files' => 'required|array|max:10',
             'files.*' => 'required|file|max:10240', // 10MB max
@@ -52,17 +55,7 @@ class PayslipImportController extends Controller
                                         ['text' => $prompt],
                                         [
                                             'inline_data' => [
-                                                'mime_type' => (function($file) {
-                                                    $filename = $file->getClientOriginalName();
-                                                    $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-                                                    if ($extension === 'xlsx') {
-                                                        return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-                                                    } elseif ($extension === 'pdf') {
-                                                        return 'application/pdf';
-                                                    } else {
-                                                        return $file->getMimeType();
-                                                    }
-                                                })($file),
+                                                'mime_type' => 'application/pdf',
                                                 'data' => base64_encode($file->get()),
                                             ],
                                         ],
@@ -140,7 +133,7 @@ class PayslipImportController extends Controller
     private function getPrompt()
     {
         return <<<PROMPT
-Analyze the provided payslip document (PDF or XLSX) and extract the following fields in JSON format.
+Analyze the provided payslip PDF document and extract the following fields in JSON format.
 
 **JSON Fields:**
 - `period_start`: Pay period start date (YYYY-MM-DD)
@@ -152,7 +145,7 @@ Analyze the provided payslip document (PDF or XLSX) and extract the following fi
 - `earnings_rsu`: Value of Restricted Stock Units (RSUs) vested, if any (numeric)
 - `imp_other`: Imputed income, if any (numeric)
 - `imp_legal`: Imputed income for legal services, if any (numeric)
-- `imp_fitness`: Imputed income for fitness benefits, if any (numeric)
+- `imp_fitness`: Imputed income for fitness benefits, including "Life@ Choice" if any (numeric)
 - `imp_ltd`: Imputed income for long-term disability, if any (numeric)
 - `ps_oasdi`: Employee OASDI (Social Security) tax (numeric)
 - `ps_medicare`: Employee Medicare tax (numeric)

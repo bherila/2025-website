@@ -24,11 +24,11 @@ export function PayslipImportDialog({ onImportSuccess }: PayslipImportDialogProp
       const newFiles = Array.from(event.target.files)
       const allowedFiles = newFiles.filter(file => {
         const fileType = file.type
-        return fileType === 'application/pdf' || fileType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        return fileType === 'application/pdf'
       })
 
       if (allowedFiles.length !== newFiles.length) {
-        toast.error('Only PDF and XLSX files are allowed.')
+        toast.error('Only PDF files are allowed.')
       }
 
       if (files.length + allowedFiles.length > 10) {
@@ -73,14 +73,14 @@ export function PayslipImportDialog({ onImportSuccess }: PayslipImportDialogProp
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline">
-          <Upload className="mr-2 h-4 w-4" /> Import PDF/XLSX
+          <Upload className="mr-2 h-4 w-4" /> Import PDF
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Import Payslips</DialogTitle>
           <DialogDescription>
-            Upload up to 10 PDF or XLSX files. The system will use AI to extract data.
+            Upload up to 10 PDF files. The system will use AI to extract data.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
@@ -90,7 +90,7 @@ export function PayslipImportDialog({ onImportSuccess }: PayslipImportDialogProp
               id="payslip-files"
               type="file"
               multiple
-              accept=".pdf,.xlsx"
+              accept=".pdf"
               onChange={handleFileChange}
               ref={fileInputRef}
               disabled={isUploading}
