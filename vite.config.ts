@@ -24,7 +24,8 @@ export default defineConfig({
         'resources/js/payslip-entry.tsx',
         'resources/js/rsu.tsx',
         'resources/js/add-grant.tsx',
-        'resources/js/bingo/index.tsx'
+        'resources/js/bingo/index.tsx',
+        'resources/js/irsf461/irsf461.tsx'
       ],
       refresh: true,
     }),
