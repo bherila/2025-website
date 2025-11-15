@@ -23,7 +23,8 @@ export default defineConfig({
         'resources/js/payslip.tsx',
         'resources/js/payslip-entry.tsx',
         'resources/js/rsu.tsx',
-        'resources/js/add-grant.tsx'
+        'resources/js/add-grant.tsx',
+        'resources/js/bingo/index.tsx'
       ],
       refresh: true,
     }),

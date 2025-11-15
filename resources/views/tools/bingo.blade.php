@@ -1,8 +1,10 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="max-w-7xl mx-auto px-4 py-8">
-    <h1 class="text-3xl font-bold mb-4">Bingo Card Generator</h1>
-    <p>The tool is temporarily unavailable.</p>
-</div>
+    <div id="bingo-root"></div>
 @endsection
+
+@push('scripts')
+    @viteReactRefresh
+    @vite('resources/js/bingo/index.tsx')
+@endpush

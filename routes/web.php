@@ -45,9 +45,7 @@ Route::get('/tools/license-manager', function () {
     return view('tools.license-manager');
 });
 
-Route::get('/tools/bingo', function () {
-    return view('tools.bingo');
-});
+Route::get('/tools/bingo', [App\Http\Controllers\BingoController::class, 'index']);
 
 Route::get('/tools/irs-f461', function () {
     return view('tools.irs-f461');
