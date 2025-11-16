@@ -63,6 +63,9 @@
   --accent-foreground: 240 5.9% 10%;
   --card: 0 0% 100%;
   --card-foreground: 240 10% 3.9%;
+  /* softer border colors for tables */
+  --border: 0 0% 80%; /* #ccc equivalent */
+  --color-border: #ccc;
 }
 
 .dark {
@@ -88,6 +91,9 @@
   --accent-foreground: 0 0% 98%;
   --card: 240 10% 3.9%;
   --card-foreground: 0 0% 98%;
+  /* softer border colors for tables */
+  --border: 0 0% 20%; /* #333 equivalent */
+  --color-border: #333;
 }
 
 /* Apply globally so individual pages/components don't repeat classes */
@@ -108,7 +114,13 @@
     @apply text-primary hover:underline;
   }
 
-  .table tr {
-    border: none;
+  /* Ensure Tailwind `border-b` and other border utilities use our theme variable for tables */
+  table,
+  thead,
+  tbody,
+  tr,
+  th,
+  td {
+    border-color: var(--color-border);
   }
 }

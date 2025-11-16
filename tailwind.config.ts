@@ -5,7 +5,11 @@ export default {
     './resources/css/**/*.css',
   ],
   theme: {
-    extend: {},
+    extend: {
+      borderColor: {
+        DEFAULT: 'hsl(var(--border))',
+      },
+    },
   },
   plugins: [require('@tailwindcss/typography')],
 };
