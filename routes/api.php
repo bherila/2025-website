@@ -38,6 +38,12 @@ Route::middleware(['web', 'auth'])->get('/payslips/{payslip_id}', [PayslipContro
 Route::middleware(['web', 'auth'])->post('/payslips/{payslip_id}/estimated-status', [PayslipController::class, 'updatePayslipEstimatedStatus']);
 
 Route::middleware(['web', 'auth'])->get('/user', [App\Http\Controllers\UserApiController::class, 'getUser']);
+
+Route::middleware(['web', 'auth'])->get('/license-keys', [App\Http\Controllers\LicenseKeyController::class, 'index']);
+Route::middleware(['web', 'auth'])->put('/license-keys/{id}', [App\Http\Controllers\LicenseKeyController::class, 'update']);
+Route::middleware(['web', 'auth'])->delete('/license-keys/{id}', [App\Http\Controllers\LicenseKeyController::class, 'destroy']);
+Route::middleware(['web', 'auth'])->post('/license-keys', [App\Http\Controllers\LicenseKeyController::class, 'store']);
+Route::middleware(['web', 'auth'])->post('/license-keys/import', [App\Http\Controllers\LicenseKeyController::class, 'import']);
 Route::middleware(['web', 'auth'])->post('/user/update-email', [App\Http\Controllers\UserApiController::class, 'updateEmail']);
 Route::middleware(['web', 'auth'])->post('/user/update-password', [App\Http\Controllers\UserApiController::class, 'updatePassword']);
 Route::middleware(['web', 'auth'])->post('/user/update-api-key', [App\Http\Controllers\UserApiController::class, 'updateApiKey']);

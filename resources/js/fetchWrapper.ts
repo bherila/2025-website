@@ -1,10 +1,10 @@
 
 function getCsrfToken() {
-    const meta = document.querySelector('meta[name="csrf-token"]');
-    if (meta) {
-        return meta.getAttribute('content');
-    }
-    return null;
+  const meta = document.querySelector('meta[name="csrf-token"]');
+  if (meta) {
+    return meta.getAttribute('content');
+  }
+  return null;
 }
 
 export const fetchWrapper = {
@@ -17,6 +17,7 @@ export const fetchWrapper = {
 function get(url: string) {
   const requestOptions = {
     method: 'GET',
+    credentials: 'include' as RequestCredentials,
   }
   return fetch(url, requestOptions).then(handleResponse)
 }
@@ -25,7 +26,7 @@ function post(url: string, body: any) {
   const requestOptions: RequestInit = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() || '' },
-    credentials: 'include',
+    credentials: 'include' as RequestCredentials,
     body: JSON.stringify(body),
   }
   return fetch(url, requestOptions).then(handleResponse)
@@ -35,6 +36,7 @@ function put(url: string, body: any) {
   const requestOptions: RequestInit = {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() || '' },
+    credentials: 'include' as RequestCredentials,
     body: JSON.stringify(body),
   }
   return fetch(url, requestOptions).then(handleResponse)
@@ -48,6 +50,7 @@ function _delete(url: string, body: any) {
       'Content-Type': 'application/json',
       'X-CSRF-TOKEN': getCsrfToken() || ''
     },
+    credentials: 'include',
     body: JSON.stringify(body),
   }
   return fetch(url, requestOptions).then(handleResponse)
@@ -56,7 +59,15 @@ function _delete(url: string, body: any) {
 // helper functions
 function handleResponse(response: Response) {
   return response.text().then((text) => {
-    const data = text && JSON.parse(text)
+    let data: any = null
+    if (text) {
+      try {
+        data = JSON.parse(text)
+      } catch (e) {
+        // response wasn't JSON (could be an HTML redirect to login), keep raw text
+        data = text
+      }
+    }
 
     if (!response.ok) {
       const error = (data && data.message) || response.statusText
