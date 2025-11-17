@@ -41,10 +41,11 @@
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
     "skipLibCheck": true,
+    "esModuleInterop": true,
     "baseUrl": ".",
     "paths": {
       "@/*": ["resources/js/*"]
     }
   },
-  "include": ["resources/js"]
+  "include": ["resources/js", "tests-ts", "jest.config.ts"]
 }

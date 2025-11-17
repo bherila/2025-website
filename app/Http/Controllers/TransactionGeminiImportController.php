@@ -79,7 +79,7 @@ class TransactionGeminiImportController extends Controller
     {
         return <<<PROMPT
 Analyze the provided bank statement PDF and extract all transactions.
-Return the data as a CSV with the following headers: date, time, description, amount, memo.
+Return the data as a CSV with the following headers: date, time, description, amount, type.
 
 **Instructions:**
 1.  The output must be only CSV data.
@@ -88,13 +88,13 @@ Return the data as a CSV with the following headers: date, time, description, am
 4.  The time format should be HH:MM:SS. If the time is not available, use 00:00:00.
 5.  The amount should be a number. Positive for deposits, negative for withdrawals.
 6.  The description should be a short text describing the transaction.
-7.  The memo can be a longer description if available.
+7.  The 'type' column should be one of: 'deposit', 'withdrawal', 'transfer', or other short description of the transaction type.
 
 **Example Output:**
-date,time,description,amount,memo
-2025-01-01,10:00:00,DEPOSIT,1000.00,Initial deposit
-2025-01-02,14:30:00,GROCERY STORE,-75.50,Groceries for the week
-2025-01-03,00:00:00,ONLINE PAYMENT,-25.00,
+date,time,description,amount,type
+2025-01-01,10:00:00,DEPOSIT,1000.00,deposit
+2025-01-02,14:30:00,GROCERY STORE,-75.50,withdrawal
+2025-01-03,00:00:00,ONLINE PAYMENT,-25.00,withdrawal
 PROMPT;
     }
 }

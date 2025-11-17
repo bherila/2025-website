@@ -209,7 +209,7 @@ function parseData(text: string): { data: AccountLineItem[] | null; parseError: 
       descriptionColIndex = getColumnIndex('Description', 'Desc', 'description')
       amountColIndex = getColumnIndex('Amount', 'Amt', 'amount')
       commentColIndex = getColumnIndex('Comment', 'Memo', 'memo')
-      typeColIndex = getColumnIndex('Type')
+      typeColIndex = getColumnIndex('Type', 'type')
       categoryColIndex = getColumnIndex('Category')
     }
     if (dateColIndex == null) {
