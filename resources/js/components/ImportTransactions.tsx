@@ -10,6 +10,8 @@ import { splitDelimitedText } from '@/lib/splitDelimitedText'
 import { parseWealthfrontHAR } from '@/data/finance/parseWealthfrontHAR'
 import { parseFidelityCsv } from '@/data/finance/parseFidelityCsv'
 import { DateContainer, parseDate } from '@/lib/DateHelper'
+import { fetchWrapper } from '@/fetchWrapper'
+import { Spinner } from '@/components/ui/spinner'
 
 export default function ImportTransactions(props: {
   onImportClick: (data: AccountLineItem[]) => void
@@ -18,6 +20,7 @@ export default function ImportTransactions(props: {
   const [text, setText] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
+  const [loading, setLoading] = useState(false)
 
   const handleTextareaChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     setText(event.target.value)
@@ -25,8 +28,22 @@ export default function ImportTransactions(props: {
 
   const handleFileRead = useCallback(async (file: File) => {
     try {
-      const text = await file.text()
-      setText(text)
+      if (file.type === 'application/pdf') {
+        setLoading(true)
+        const formData = new FormData()
+        formData.append('file', file)
+        try {
+          const response = await fetchWrapper.post('/api/finance/transactions/import-gemini', formData)
+          setText(response)
+        } catch (e) {
+          setError(`Error processing PDF: ${e instanceof Error ? e.message : String(e)}`)
+        } finally {
+          setLoading(false)
+        }
+      } else {
+        const text = await file.text()
+        setText(text)
+      }
       setError(null)
     } catch (err) {
       setError(`Error reading file: ${err instanceof Error ? err.message : String(err)}`)
@@ -82,13 +99,20 @@ export default function ImportTransactions(props: {
       {error && <div style={{ color: 'red' }}>{error}</div>}
       {parseError && <div style={{ color: 'red' }}>{parseError}</div>}
 
-      <textarea
-        value={text}
-        onChange={handleTextareaChange}
-        placeholder="date, [time], [settlement date|post date|as of[ date]], [description | desc], amount, [comment | memo, type, category]"
-        rows={5}
-        style={{ width: '100%' }}
-      />
+      {loading ? (
+        <div className="flex justify-center items-center h-40">
+          <Spinner />
+          <p className="ml-2">Processing PDF...</p>
+        </div>
+      ) : (
+        <textarea
+          value={text}
+          onChange={handleTextareaChange}
+          placeholder="date, [time], [settlement date|post date|as of[ date]], [description | desc], amount, [comment | memo, type, category]"
+          rows={5}
+          style={{ width: '100%' }}
+        />
+      )}
 
       {props.duplicates.length > 0 && (
         <div className="my-2 text-red-500">
@@ -179,12 +203,12 @@ function parseData(text: string): { data: AccountLineItem[] | null; parseError: 
         }
         return null
       }
-      dateColIndex = getColumnIndex('Date', 'Transaction Date')
+      dateColIndex = getColumnIndex('Date', 'Transaction Date', 'date')
       postDateColIndex = getColumnIndex('Post Date', 'As of', 'As of Date', 'Settlement Date', 'Date Settled', 'Settled')
-      timeColIndex = getColumnIndex('Time')
-      descriptionColIndex = getColumnIndex('Description', 'Desc')
-      amountColIndex = getColumnIndex('Amount', 'Amt')
-      commentColIndex = getColumnIndex('Comment', 'Memo')
+      timeColIndex = getColumnIndex('Time', 'time')
+      descriptionColIndex = getColumnIndex('Description', 'Desc', 'description')
+      amountColIndex = getColumnIndex('Amount', 'Amt', 'amount')
+      commentColIndex = getColumnIndex('Comment', 'Memo', 'memo')
       typeColIndex = getColumnIndex('Type')
       categoryColIndex = getColumnIndex('Category')
     }

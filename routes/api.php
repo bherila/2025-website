@@ -46,4 +46,5 @@ Route::middleware(['web', 'auth'])->post('/license-keys', [App\Http\Controllers\
 Route::middleware(['web', 'auth'])->post('/license-keys/import', [App\Http\Controllers\LicenseKeyController::class, 'import']);
 Route::middleware(['web', 'auth'])->post('/user/update-email', [App\Http\Controllers\UserApiController::class, 'updateEmail']);
 Route::middleware(['web', 'auth'])->post('/user/update-password', [App\Http\Controllers\UserApiController::class, 'updatePassword']);
+Route::middleware(['web', 'auth'])->post('/finance/transactions/import-gemini', [App\Http\Controllers\TransactionGeminiImportController::class, 'import']);
 Route::middleware(['web', 'auth'])->post('/user/update-api-key', [App\Http\Controllers\UserApiController::class, 'updateApiKey']);
