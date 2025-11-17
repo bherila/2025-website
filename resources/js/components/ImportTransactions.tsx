@@ -41,7 +41,9 @@ export default function ImportTransactions(props: {
       const files = event.dataTransfer?.files
       if (files && files.length > 0) {
         const file = files[0]
-        handleFileRead(file)
+        if (file) {
+          handleFileRead(file)
+        }
       }
     },
     [handleFileRead],
@@ -166,9 +168,9 @@ function parseData(text: string): { data: AccountLineItem[] | null; parseError: 
     let commentColIndex: number | null = null
     let typeColIndex: number | null = null
     let categoryColIndex: number | null = null
-    if (lines.length > 0) {
+    if (lines.length > 0 && lines[0]) {
       const getColumnIndex = (...headers: string[]) => {
-        const firstLine = lines[0].map((cell) => cell.trim())
+        const firstLine = lines[0]!.map((cell) => cell.trim())
         for (const header of headers) {
           const index = firstLine.indexOf(header.trim())
           if (index !== -1) {
@@ -196,7 +198,7 @@ function parseData(text: string): { data: AccountLineItem[] | null; parseError: 
       throw new Error('Amount column not found')
     }
     for (const row of lines) {
-      if (row[dateColIndex] === 'Date' || row[dateColIndex] === 'Transaction Date') {
+      if (row[dateColIndex]?.trim().toLowerCase() === 'date' || row[dateColIndex]?.trim().toLowerCase() === 'transaction date') {
         continue
       }
       data.push(

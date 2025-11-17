@@ -16,7 +16,6 @@ export default function ImportTransactionsClient({ id, accountName }: { id: numb
 
   return (
     <Container fluid className="px-4">
-      <AccountNavigation accountId={id} accountName={accountName} activeTab="import" />
       <p className="text-sm my-4">
         You can paste or drag/drop: CSV from bank/brokerage, QFX (limited), or HAR (Wealthfront)
       </p>
@@ -34,8 +33,9 @@ export default function ImportTransactionsClient({ id, accountName }: { id: numb
           z.array(AccountLineItemSchema).parse(data)
           setLoading(true)
 
-          const earliestDate = data.reduce((min, p) => (dayjs(p.t_date).isBefore(dayjs(min)) ? p.t_date : min), data[0].t_date)
-          const latestDate = data.reduce((max, p) => (dayjs(p.t_date).isAfter(dayjs(max)) ? p.t_date : max), data[0].t_date)
+          const dates = data.map(p => p.t_date)
+          const earliestDate = dates.reduce((min, d) => dayjs(d).isBefore(dayjs(min)) ? d : min)
+          const latestDate = dates.reduce((max, d) => dayjs(d).isAfter(dayjs(max)) ? d : max)
 
           const existingTransactions = await fetchWrapper.get(
             `/api/finance/${id}/line_items?start_date=${earliestDate}&end_date=${latestDate}`,

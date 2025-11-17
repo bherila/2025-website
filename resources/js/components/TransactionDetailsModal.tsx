@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog'
 import { Textarea } from './ui/textarea'
 import { Button } from './ui/button'
-import type { AccountLineItem } from './AccountLineItem'
+import type { AccountLineItem } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '../fetchWrapper'
 
 interface TransactionDetailsModalProps {

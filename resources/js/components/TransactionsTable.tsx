@@ -2,7 +2,7 @@
 import './TransactionsTable.css'
 import currency from 'currency.js'
 import { useEffect, useMemo, useState } from 'react'
-import type { AccountLineItem } from './AccountLineItem'
+import type { AccountLineItem } from '@/data/finance/AccountLineItem'
 import { Badge } from './ui/badge'
 import { Spinner } from './ui/spinner'
 import { Button } from './ui/button'
