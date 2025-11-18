@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { fetchWrapper } from '../../../fetchWrapper'
 import { Spinner } from '../../ui/spinner'
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '../../ui/table'
-import AccountBalanceHistory from './AccountBalanceHistory'
+import AccountStatementsChart from './AccountStatementsChart'
 import {
   AlertDialog,
   AlertDialogTrigger,
@@ -21,15 +21,16 @@ import {
   DialogDescription,
 } from '../../ui/dialog'
 import { Button } from '../../ui/button'
-import { Trash2 as Delete } from 'lucide-react'
+import { Trash2 as Delete, Paperclip } from 'lucide-react'
 
-interface BalanceSnapshot {
+interface StatementSnapshot {
+  snapshot_id: number;
   when_added: string;
   balance: string;
 }
 
-export default function FinanceAccountBalanceHistoryPage({ id }: { id: number }) {
-  const [balances, setBalances] = useState<BalanceSnapshot[] | null>(null)
+export default function FinanceAccountStatementsPage({ id }: { id: number }) {
+  const [statements, setStatements] = useState<StatementSnapshot[] | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [fetchKey, setFetchKey] = useState(0); // Used to trigger re-fetch
   const [newBalance, setNewBalance] = useState('')
@@ -41,30 +42,31 @@ export default function FinanceAccountBalanceHistoryPage({ id }: { id: number })
     const fetchData = async () => {
       try {
         const fetchedData = await fetchWrapper.get(`/api/finance/${id}/balance-timeseries`)
-        setBalances(fetchedData)
+        setStatements(fetchedData)
         setIsLoading(false)
       } catch (error) {
-        console.error('Error fetching balance history:', error)
-        setBalances([])
+        console.error('Error fetching statements:', error)
+        setStatements([])
         setIsLoading(false)
       }
     }
     fetchData()
   }, [id, fetchKey])
 
-  const balanceHistory = balances?.map((balance, index) => {
-    const prev = balances[index - 1]
-    const currentBalance = parseFloat(balance.balance);
+  const statementHistory = statements?.map((statement, index) => {
+    const prev = statements[index - 1]
+    const currentBalance = parseFloat(statement.balance);
     const prevBalance = prev ? parseFloat(prev.balance) : 0;
 
     const change = currentBalance - prevBalance;
     const percentChange = prevBalance !== 0 ? (change / prevBalance) * 100 : 0;
 
     return {
-      when_added: balance.when_added,
-      date: new Date(balance.when_added),
+      snapshot_id: statement.snapshot_id,
+      when_added: statement.when_added,
+      date: new Date(statement.when_added),
       balance: currentBalance,
-      originalBalance: balance.balance,
+      originalBalance: statement.balance,
       change: change,
       percentChange: percentChange,
     }
@@ -96,12 +98,12 @@ export default function FinanceAccountBalanceHistoryPage({ id }: { id: number })
   };
 
   const handleDownloadCSV = () => {
-    const csvContent = 'Date,Balance\n' + balanceHistory.map(row => `${row.date.toISOString().split('T')[0]},${row.balance}`).join('\n');
+    const csvContent = 'Date,Balance\n' + statementHistory.map(row => `${row.date.toISOString().split('T')[0]},${row.balance}`).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${id}_balances.csv`;
+    a.download = `${id}_statements.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -114,18 +116,18 @@ export default function FinanceAccountBalanceHistoryPage({ id }: { id: number })
     )
   }
 
-  if (!balances || balances.length === 0) {
+  if (!statements || statements.length === 0) {
     return (
       <div className="text-center p-8 bg-muted rounded-lg">
-        <h2 className="text-xl font-semibold mb-4">No Balance History Found</h2>
-        <p className="mb-6">This account doesn't have any balance snapshots yet.</p>
+        <h2 className="text-xl font-semibold mb-4">No Statements Found</h2>
+        <p className="mb-6">This account doesn't have any statements yet.</p>
       </div>
     )
   }
 
   return (
     <>
-      <AccountBalanceHistory balanceHistory={balances.map((balance) => [new Date(balance.when_added).valueOf(), parseFloat(balance.balance)])} />
+      <AccountStatementsChart balanceHistory={statements.map((balance) => [new Date(balance.when_added).valueOf(), parseFloat(balance.balance)])} />
       <div className="relative">
         <Button onClick={handleDownloadCSV} variant="outline" className="absolute top-0 right-0 z-10">
           Download CSV
@@ -141,7 +143,7 @@ export default function FinanceAccountBalanceHistoryPage({ id }: { id: number })
             </TableRow>
           </TableHeader>
           <TableBody>
-            {balanceHistory.map((row, index) => (
+            {statementHistory.map((row, index) => (
               <TableRow key={row.when_added + '-' + row.balance + '-' + index}>
                 <TableCell className="text-right">
                   {row.date.toLocaleString('en-US', {
@@ -158,6 +160,11 @@ export default function FinanceAccountBalanceHistoryPage({ id }: { id: number })
                   {row.percentChange.toFixed(2)}%
                 </TableCell>
                 <TableCell className="text-center">
+                  <Button variant="outline" size="sm" asChild>
+                    <a href={`/finance/statement/${row.snapshot_id}`}>
+                      <Paperclip className="h-4 w-4" />
+                    </a>
+                  </Button>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button variant="destructive" size="sm">

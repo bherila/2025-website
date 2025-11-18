@@ -31,9 +31,9 @@ const NAV_ITEMS = [
     href: (accountId: number) => `/finance/${accountId}/summary`,
   },
   {
-    value: 'balance-timeseries',
-    title: 'Balance History',
-    href: (accountId: number) => `/finance/${accountId}/balance-timeseries`,
+    value: 'statements',
+    title: 'Statements',
+    href: (accountId: number) => `/finance/${accountId}/statements`,
   },
   {
     value: 'maintenance',

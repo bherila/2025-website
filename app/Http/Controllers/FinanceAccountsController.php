@@ -73,7 +73,7 @@ class FinanceAccountsController extends Controller
         return view('finance.summary', compact('totals', 'symbolSummary', 'monthSummary', 'account_id', 'accountName'));
     }
 
-    public function balanceTimeseries(Request $request, $account_id)
+    public function statements(Request $request, $account_id)
     {
         $uid = Auth::id();
 
@@ -85,7 +85,7 @@ class FinanceAccountsController extends Controller
             abort(404, 'Account not found');
         }
 
-        return view('finance.balance-timeseries', ['account_id' => $account_id, 'accountName' => $account->acct_name]);
+        return view('finance.statements', ['account_id' => $account_id, 'accountName' => $account->acct_name]);
     }
 
     public function maintenance(Request $request, $account_id)

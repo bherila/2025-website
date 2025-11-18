@@ -2,7 +2,7 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { format } from 'date-fns'
 
-export default function AccountBalanceHistory({ balanceHistory }: { balanceHistory: [number, number][] }) {
+export default function AccountStatementsChart({ balanceHistory }: { balanceHistory: [number, number][] }) {
   const data = balanceHistory.map(([date, balance]) => ({
     date: date,
     balance: balance,

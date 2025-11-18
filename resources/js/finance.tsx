@@ -3,7 +3,7 @@ import AccountNavigation from './components/finance/AccountNavigation'
 import SummaryClient from './components/finance/SummaryClient'
 import FinanceAccountsPage from './components/finance/FinanceAccountsPage'
 import FinanceAccountTransactionsPage from './components/finance/FinanceAccountTransactionsPage'
-import FinanceAccountBalanceHistoryPage from './components/finance/balance-history/FinanceAccountBalanceHistoryPage'
+import FinanceAccountStatementsPage from './components/finance/statements/FinanceAccountStatementsPage'
 import ImportTransactionsClient from './components/finance/ImportTransactionsClient'
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -42,10 +42,10 @@ document.addEventListener('DOMContentLoaded', () => {
     root.render(<FinanceAccountTransactionsPage id={parseInt(accountIndexDiv.dataset.accountId!)} />)
   }
 
-  const balanceHistoryDiv = document.getElementById('FinanceAccountBalanceHistoryPage')
+  const balanceHistoryDiv = document.getElementById('FinanceAccountStatementsPage')
   if (balanceHistoryDiv) {
     const root = createRoot(balanceHistoryDiv)
-    root.render(<FinanceAccountBalanceHistoryPage id={parseInt(balanceHistoryDiv.dataset.accountId!)} />)
+    root.render(<FinanceAccountStatementsPage id={parseInt(balanceHistoryDiv.dataset.accountId!)} />)
   }
 
   const importTransactionsDiv = document.getElementById('ImportTransactionsClient')
