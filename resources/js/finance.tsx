@@ -1,10 +1,10 @@
 import { createRoot } from 'react-dom/client'
-import AccountNavigation from './components/AccountNavigation'
-import SummaryClient from './components/SummaryClient'
-import FinanceAccountsPage from './components/FinanceAccountsPage'
-import FinanceAccountTransactionsPage from './components/FinanceAccountTransactionsPage'
-import FinanceAccountBalanceHistoryPage from './components/FinanceAccountBalanceHistoryPage'
-import ImportTransactionsClient from './components/ImportTransactionsClient'
+import AccountNavigation from './components/finance/AccountNavigation'
+import SummaryClient from './components/finance/SummaryClient'
+import FinanceAccountsPage from './components/finance/FinanceAccountsPage'
+import FinanceAccountTransactionsPage from './components/finance/FinanceAccountTransactionsPage'
+import FinanceAccountBalanceHistoryPage from './components/finance/balance-history/FinanceAccountBalanceHistoryPage'
+import ImportTransactionsClient from './components/finance/ImportTransactionsClient'
 
 document.addEventListener('DOMContentLoaded', () => {
   const navDiv = document.getElementById('AccountNavigation')

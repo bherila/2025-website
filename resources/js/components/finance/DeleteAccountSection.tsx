@@ -1,6 +1,6 @@
 'use client'
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
-import { Button } from './ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
+import { Button } from '../ui/button'
 import {
   AlertDialog,
   AlertDialogTrigger,
@@ -9,11 +9,11 @@ import {
   AlertDialogDescription,
   AlertDialogCancel,
   AlertDialogAction,
-} from './ui/alert-dialog'
+} from '../ui/alert-dialog'
 import { Trash2 as Delete } from 'lucide-react'
 import { useState } from 'react'
-import { Alert } from './ui/alert'
-import { fetchWrapper } from '../fetchWrapper'
+import { Alert } from '../ui/alert'
+import { fetchWrapper } from '../../fetchWrapper'
 
 export const DeleteAccountSection = ({ accountId }: { accountId: number | string }) => {
   const [error, setError] = useState<string>('')

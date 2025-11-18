@@ -1,16 +1,16 @@
 'use client'
 import { useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
-import { Button } from './ui/button'
-import { Input } from './ui/input'
-import { Label } from './ui/label'
-import { Checkbox } from './ui/checkbox'
-import { Calendar } from './ui/calendar'
-import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
+import { Button } from '../ui/button'
+import { Input } from '../ui/input'
+import { Label } from '../ui/label'
+import { Checkbox } from '../ui/checkbox'
+import { Calendar } from '../ui/calendar'
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
 import { format } from 'date-fns'
 import { CalendarIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { fetchWrapper } from '../fetchWrapper'
+import { fetchWrapper } from '../../fetchWrapper'
 
 interface Props {
   accountId: number
@@ -18,7 +18,7 @@ interface Props {
   whenClosed: string | null
 }
 
-export default function MaintenanceClient({ accountId, accountName, whenClosed: initialWhenClosed }: Props) {
+export default function AccountMaintenanceClient({ accountId, accountName, whenClosed: initialWhenClosed }: Props) {
   const [newName, setNewName] = useState(accountName)
   const [error, setError] = useState('')
   const [whenClosed, setWhenClosed] = useState<Date | null>(initialWhenClosed ? new Date(initialWhenClosed) : null)

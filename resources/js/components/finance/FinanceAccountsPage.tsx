@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import MainTitle from './MainTitle'
+import MainTitle from '../MainTitle'
 import { Button } from '@/components/ui/button'
-import Link from './link'
+import Link from '../link'
 import AccountGrouping from './AccountGrouping'
 import NewAccountForm from './NewAccountForm'
-import StackedBalanceChart from './StackedBalanceChart'
+import StackedBalanceChart from '../StackedBalanceChart'
 import { Skeleton } from '@/components/ui/skeleton'
 
 interface Account {

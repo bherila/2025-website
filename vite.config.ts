@@ -40,6 +40,7 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
+      external: (id) => /\.test\.[tj]sx?$/.test(id) || id.includes('/__tests__/'),
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom'],

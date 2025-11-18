@@ -1,10 +1,10 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
-import { fetchWrapper } from '../fetchWrapper'
-import TransactionsTable from './TransactionsTable'
+import { fetchWrapper } from '../../fetchWrapper'
+import TransactionsTable from '../TransactionsTable'
 import type { AccountLineItem } from './AccountLineItem'
-import { Spinner } from './ui/spinner'
-import { Button } from './ui/button'
+import { Spinner } from '../ui/spinner'
+import { Button } from '../ui/button'
 
 export default function FinanceAccountTransactionsPage({ id }: { id: number }) {
   const [data, setData] = useState<AccountLineItem[] | null>(null)

@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback } from 'react'
 import { ZodError } from 'zod'
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
-import TransactionsTable from './TransactionsTable'
+import TransactionsTable from '../TransactionsTable'
 import { parseEtradeCsv } from '@/data/finance/parseEtradeCsv'
 
 import { parseQuickenQFX } from '@/data/finance/parseQuickenQFX'

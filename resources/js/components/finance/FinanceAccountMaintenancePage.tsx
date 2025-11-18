@@ -1,7 +1,7 @@
 'use client'
-import MainTitle from './MainTitle'
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
-import MaintenanceClient from './MaintenanceClient'
+import MainTitle from '../MainTitle'
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
+import AccountMaintenanceClient from './AccountMaintenanceClient'
 import { EditAccountFlags } from './EditAccountFlags'
 import { DeleteAccountSection } from './DeleteAccountSection'
 
@@ -23,7 +23,7 @@ export default function FinanceAccountMaintenancePage({
       <MainTitle>Account Maintenance</MainTitle>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
         <div className="lg:col-span-2">
-          <MaintenanceClient accountId={accountId} accountName={accountName} whenClosed={whenClosed} />
+          <AccountMaintenanceClient accountId={accountId} accountName={accountName} whenClosed={whenClosed} />
         </div>
         <div>
           <EditAccountFlags accountId={accountId.toString()} isDebt={isDebt} isRetirement={isRetirement} />

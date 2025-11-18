@@ -47,5 +47,5 @@
       "@/*": ["resources/js/*"]
     }
   },
-  "include": ["resources/js", "tests-ts", "jest.config.ts"]
+  "include": ["resources/js", "tests-ts"]
 }
