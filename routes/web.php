@@ -37,6 +37,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/finance/{account_id}', [FinanceAccountsController::class, 'show']);
     Route::get('/finance/{account_id}/summary', [FinanceAccountsController::class, 'summary']);
     Route::get('/finance/{account_id}/statements', [FinanceAccountsController::class, 'statements']);
+    Route::get('/finance/statement/{snapshot_id}', [FinanceAccountsController::class, 'statementDetail']);
     Route::get('/finance/{account_id}/maintenance', [FinanceAccountsController::class, 'maintenance']);
     Route::get('/finance/{account_id}/import-transactions', [FinanceAccountsController::class, 'showImportTransactionsPage']);
 

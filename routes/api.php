@@ -47,4 +47,6 @@ Route::middleware(['web', 'auth'])->post('/license-keys/import', [App\Http\Contr
 Route::middleware(['web', 'auth'])->post('/user/update-email', [App\Http\Controllers\UserApiController::class, 'updateEmail']);
 Route::middleware(['web', 'auth'])->post('/user/update-password', [App\Http\Controllers\UserApiController::class, 'updatePassword']);
 Route::middleware(['web', 'auth'])->post('/finance/transactions/import-gemini', [App\Http\Controllers\TransactionGeminiImportController::class, 'import']);
+Route::middleware(['web', 'auth'])->get('/finance/statement/{snapshot_id}/details', [App\Http\Controllers\StatementImportController::class, 'getDetails']);
+Route::middleware(['web', 'auth'])->post('/finance/statement/{snapshot_id}/import', [App\Http\Controllers\StatementImportController::class, 'import']);
 Route::middleware(['web', 'auth'])->post('/user/update-api-key', [App\Http\Controllers\UserApiController::class, 'updateApiKey']);
