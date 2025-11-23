@@ -24,7 +24,8 @@ import { Button } from '../../ui/button'
 import { Trash2 as Delete, Paperclip, Pencil } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../ui/tooltip'
 
-import StatementDetailModal from './StatementDetailModal'
+import StatementDetailModal from './StatementDetailModal';
+import AllStatementsModal from './AllStatementsModal';
 
 interface StatementSnapshot {
   snapshot_id: number;
@@ -48,6 +49,7 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
   const [currentBalance, setCurrentBalance] = useState('');
   const [currentDate, setCurrentDate] = useState('');
   const [statementDetailModal, setStatementDetailModal] = useState<StatementDetailModalState>({ isOpen: false, snapshotId: null });
+  const [isAllStatementsModalOpen, setIsAllStatementsModalOpen] = useState(false);
 
 
   useEffect(() => {
@@ -158,9 +160,14 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
     <TooltipProvider>
       <AccountStatementsChart balanceHistory={statements.map((balance) => [new Date(balance.when_added).valueOf(), parseFloat(balance.balance)])} />
       <div className="relative">
-        <Button onClick={handleDownloadCSV} variant="outline" className="absolute top-0 right-0 z-10">
-          Download CSV
-        </Button>
+        <div className="absolute top-0 right-0 z-10 flex gap-2">
+          <Button onClick={() => setIsAllStatementsModalOpen(true)} variant="outline">
+            View All Statements
+          </Button>
+          <Button onClick={handleDownloadCSV} variant="outline">
+            Download CSV
+          </Button>
+        </div>
         <Table className="container mx-auto">
           <TableHeader>
             <TableRow>
@@ -305,6 +312,13 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
             snapshotId={statementDetailModal.snapshotId}
             isOpen={statementDetailModal.isOpen}
             onClose={() => setStatementDetailModal({ isOpen: false, snapshotId: null })}
+          />
+        )}
+        {isAllStatementsModalOpen && (
+          <AllStatementsModal
+            accountId={id}
+            isOpen={isAllStatementsModalOpen}
+            onClose={() => setIsAllStatementsModalOpen(false)}
           />
         )}
       </div>

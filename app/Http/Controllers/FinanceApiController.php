@@ -445,4 +445,52 @@ class FinanceApiController extends Controller
             'imported' => $importedCount,
         ]);
     }
+
+    public function getAllStatementDetails(Request $request, $account_id)
+    {
+        $uid = Auth::id();
+        $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+
+        $details = DB::table('fin_statement_details as fsd')
+            ->join('fin_account_balance_snapshot as fabs', 'fsd.snapshot_id', '=', 'fabs.snapshot_id')
+            ->where('fabs.acct_id', $account->acct_id)
+            ->select(
+                'fabs.when_added',
+                'fsd.section',
+                'fsd.line_item',
+                'fsd.statement_period_value',
+                'fsd.is_percentage'
+            )
+            ->orderBy('fabs.when_added', 'asc')
+            ->orderBy('fsd.id', 'asc')
+            ->get();
+
+        $dates = array_unique(array_map(function ($detail) {
+            return substr($detail->when_added, 0, 10);
+        }, $details->toArray()));
+        sort($dates);
+
+        $groupedData = [];
+        foreach ($details as $detail) {
+            $date = substr($detail->when_added, 0, 10);
+            $section = $detail->section;
+            $lineItem = $detail->line_item;
+
+            if (!isset($groupedData[$section])) {
+                $groupedData[$section] = [];
+            }
+            if (!isset($groupedData[$section][$lineItem])) {
+                $groupedData[$section][$lineItem] = [
+                    'is_percentage' => (bool)$detail->is_percentage,
+                    'values' => [],
+                ];
+            }
+            $groupedData[$section][$lineItem]['values'][$date] = (float)$detail->statement_period_value;
+        }
+
+        return response()->json([
+            'dates' => $dates,
+            'groupedData' => $groupedData,
+        ]);
+    }
 }
