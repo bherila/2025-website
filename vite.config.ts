@@ -13,7 +13,6 @@ export default defineConfig({
         'resources/js/navbar.tsx',
         'resources/js/finance.tsx',
         'resources/js/finance-account-maintenance.tsx',
-        'resources/js/finance-statement-detail.tsx',
         'resources/js/home.tsx',
         'resources/js/recipes.tsx',
         'resources/js/projects.tsx',

@@ -88,27 +88,6 @@ class FinanceAccountsController extends Controller
         return view('finance.statements', ['account_id' => $account_id, 'accountName' => $account->acct_name]);
     }
 
-    public function statementDetail(Request $request, $snapshot_id)
-    {
-        $uid = Auth::id();
-
-        $snapshot = \App\Models\FinAccountBalanceSnapshot::find($snapshot_id);
-
-        if (!$snapshot) {
-            abort(404, 'Snapshot not found');
-        }
-
-        $account = FinAccounts::where('acct_id', $snapshot->acct_id)
-            ->where('acct_owner', $uid)
-            ->first();
-
-        if (!$account) {
-            abort(404, 'Account not found');
-        }
-
-        return view('finance.statement-detail', ['snapshot_id' => $snapshot_id, 'accountName' => $account->acct_name, 'accountId' => $account->acct_id]);
-    }
-
     public function maintenance(Request $request, $account_id)
     {
         $uid = Auth::id();

@@ -248,10 +248,12 @@ class FinanceApiController extends Controller
         $uid = Auth::id();
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
 
-        $balances = DB::table('fin_account_balance_snapshot')
-            ->where('acct_id', $account->acct_id)
-            ->orderBy('when_added', 'asc')
-            ->select('when_added', 'balance')
+        $balances = DB::table('fin_account_balance_snapshot as fabs')
+            ->leftJoin('fin_statement_details as fsd', 'fabs.snapshot_id', '=', 'fsd.snapshot_id')
+            ->where('fabs.acct_id', $account->acct_id)
+            ->select('fabs.snapshot_id', 'fabs.when_added', 'fabs.balance', DB::raw('count(fsd.id) as lineItemCount'))
+            ->groupBy('fabs.snapshot_id', 'fabs.when_added', 'fabs.balance')
+            ->orderBy('fabs.when_added', 'asc')
             ->get();
 
         return response()->json($balances);
@@ -291,6 +293,39 @@ class FinanceApiController extends Controller
             'balance' => $request->balance,
             'when_added' => $request->when_added,
         ]);
+
+        return response()->json(['success' => true]);
+    }
+
+    public function updateBalanceSnapshot(Request $request, $snapshot_id)
+    {
+        $uid = Auth::id();
+
+        $request->validate([
+            'balance' => 'required|string',
+        ]);
+
+        $snapshot = DB::table('fin_account_balance_snapshot')
+            ->where('snapshot_id', $snapshot_id)
+            ->first();
+
+        if (!$snapshot) {
+            return response()->json(['error' => 'Snapshot not found'], 404);
+        }
+
+        $account = FinAccounts::where('acct_id', $snapshot->acct_id)
+            ->where('acct_owner', $uid)
+            ->first();
+
+        if (!$account) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        DB::table('fin_account_balance_snapshot')
+            ->where('snapshot_id', $snapshot_id)
+            ->update([
+                'balance' => $request->balance,
+            ]);
 
         return response()->json(['success' => true]);
     }

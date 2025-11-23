@@ -21,22 +21,34 @@ import {
   DialogDescription,
 } from '../../ui/dialog'
 import { Button } from '../../ui/button'
-import { Trash2 as Delete, Paperclip } from 'lucide-react'
+import { Trash2 as Delete, Paperclip, Pencil } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../ui/tooltip'
+
+import StatementDetailModal from './StatementDetailModal'
 
 interface StatementSnapshot {
   snapshot_id: number;
   when_added: string;
   balance: string;
+  lineItemCount: number;
+}
+
+interface StatementDetailModalState {
+  isOpen: boolean;
+  snapshotId: number | null;
 }
 
 export default function FinanceAccountStatementsPage({ id }: { id: number }) {
   const [statements, setStatements] = useState<StatementSnapshot[] | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [fetchKey, setFetchKey] = useState(0); // Used to trigger re-fetch
-  const [newBalance, setNewBalance] = useState('')
-  const [newDate, setNewDate] = useState('')
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
-  const [isAddingSnapshot, setIsAddingSnapshot] = useState(false)
+  const [modalOpen, setModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedStatement, setSelectedStatement] = useState<StatementSnapshot | null>(null);
+  const [currentBalance, setCurrentBalance] = useState('');
+  const [currentDate, setCurrentDate] = useState('');
+  const [statementDetailModal, setStatementDetailModal] = useState<StatementDetailModalState>({ isOpen: false, snapshotId: null });
+
 
   useEffect(() => {
     const fetchData = async () => {
@@ -69,8 +81,22 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
       originalBalance: statement.balance,
       change: change,
       percentChange: percentChange,
+      lineItemCount: statement.lineItemCount,
+      original: statement,
     }
   }) || [];
+
+  const handleOpenModal = (statement: StatementSnapshot | null = null) => {
+    setSelectedStatement(statement);
+    if (statement) {
+      setCurrentBalance(statement.balance);
+      setCurrentDate(statement.when_added.split(' ')[0]);
+    } else {
+      setCurrentBalance('');
+      setCurrentDate('');
+    }
+    setModalOpen(true);
+  };
 
   const handleDeleteSnapshot = async (when_added: string, balance: string) => {
     try {
@@ -81,19 +107,22 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
     }
   };
 
-  const handleAddSnapshot = async () => {
-    if (!newDate || !newBalance || isAddingSnapshot) return;
-    setIsAddingSnapshot(true);
+  const handleFormSubmit = async () => {
+    if (!currentDate || !currentBalance || isSubmitting) return;
+    setIsSubmitting(true);
+    const url = selectedStatement
+      ? `/api/finance/balance-timeseries/${selectedStatement.snapshot_id}`
+      : `/api/finance/${id}/balance-timeseries`;
+    const method = selectedStatement ? 'put' : 'post';
+
     try {
-      await fetchWrapper.post(`/api/finance/${id}/balance-timeseries`, { balance: newBalance, when_added: newDate });
-      setFetchKey(prev => prev + 1); // Trigger re-fetch
-      setNewBalance('');
-      setNewDate('');
-      setIsAddModalOpen(false);
+      await fetchWrapper[method](url, { balance: currentBalance, when_added: currentDate });
+      setFetchKey(prev => prev + 1);
+      setModalOpen(false);
     } catch (error) {
-      console.error('Error adding balance snapshot:', error);
+      console.error(`Error ${selectedStatement ? 'updating' : 'adding'} balance snapshot:`, error);
     } finally {
-      setIsAddingSnapshot(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -126,13 +155,13 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
   }
 
   return (
-    <>
+    <TooltipProvider>
       <AccountStatementsChart balanceHistory={statements.map((balance) => [new Date(balance.when_added).valueOf(), parseFloat(balance.balance)])} />
       <div className="relative">
         <Button onClick={handleDownloadCSV} variant="outline" className="absolute top-0 right-0 z-10">
           Download CSV
         </Button>
-        <Table className="container mx-auto w-[500px]">
+        <Table className="container mx-auto">
           <TableHeader>
             <TableRow>
               <TableCell className="text-right">Date</TableCell>
@@ -160,17 +189,44 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
                   {row.percentChange.toFixed(2)}%
                 </TableCell>
                 <TableCell className="text-center">
-                  <Button variant="outline" size="sm" asChild>
-                    <a href={`/finance/statement/${row.snapshot_id}`}>
-                      <Paperclip className="h-4 w-4" />
-                    </a>
-                  </Button>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="destructive" size="sm">
-                        <Delete className="h-4 w-4" />
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="outline" size="sm" onClick={() => handleOpenModal(row.original)}>
+                        <Pencil className="h-4 w-4" />
                       </Button>
-                    </AlertDialogTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Edit Balance</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant={row.lineItemCount > 0 ? 'default' : 'outline'}
+                        className={row.lineItemCount > 0 ? 'bg-green-500 text-white hover:bg-green-600' : ''}
+                        size="sm"
+                        onClick={() => setStatementDetailModal({ isOpen: true, snapshotId: row.snapshot_id })}
+                      >
+                        <Paperclip className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Statement Details</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <AlertDialog>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="destructive" size="sm">
+                            <Delete className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Delete</p>
+                      </TooltipContent>
+                    </Tooltip>
                     <AlertDialogContent>
                       <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
                       <AlertDialogDescription>
@@ -194,59 +250,64 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
                 Add New Snapshot
               </TableCell>
               <TableCell className="text-center">
-                <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-                  <DialogTrigger asChild>
-                    <Button variant="outline" size="sm">
-                      Add
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogTitle>Add New Balance Snapshot</DialogTitle>
-                    <DialogDescription id="add-snapshot-description">
-                      Enter the date and balance for the new snapshot. Both fields are required.
-                    </DialogDescription>
-                    <div className="space-y-4 mt-4">
-                      <div className="flex items-center gap-4">
-                        <label htmlFor="balance-date" className="w-16">Date:</label>
-                        <input
-                          id="balance-date"
-                          type="date"
-                          value={newDate}
-                          onChange={(e) => setNewDate(e.target.value)}
-                          className="border p-2 rounded flex-1"
-                          required
-                        />
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <label htmlFor="balance-amount" className="w-16">Balance:</label>
-                        <input
-                          id="balance-amount"
-                          type="number"
-                          step="0.01"
-                          value={newBalance}
-                          onChange={(e) => setNewBalance(e.target.value)}
-                          placeholder="Balance"
-                          className="border p-2 rounded flex-1"
-                          required
-                        />
-                      </div>
-                      <div className="flex justify-end">
-                        <Button 
-                          onClick={handleAddSnapshot} 
-                          disabled={!newDate || !newBalance || isAddingSnapshot}
-                          aria-describedby="add-snapshot-description"
-                        >
-                          {isAddingSnapshot ? 'Adding...' : 'Add Snapshot'}
-                        </Button>
-                      </div>
-                    </div>
-                  </DialogContent>
-                </Dialog>
+                <Button variant="outline" size="sm" onClick={() => handleOpenModal()}>
+                  Add
+                </Button>
               </TableCell>
             </TableRow>
           </TableBody>
         </Table>
+        <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+          <DialogContent>
+            <DialogTitle>{selectedStatement ? 'Edit' : 'Add New'} Balance Snapshot</DialogTitle>
+            <DialogDescription>
+              {selectedStatement ? 'Update the balance for the snapshot.' : 'Enter the date and balance for the new snapshot. Both fields are required.'}
+            </DialogDescription>
+            <div className="space-y-4 mt-4">
+              <div className="flex items-center gap-4">
+                <label htmlFor="balance-date" className="w-16">Date:</label>
+                <input
+                  id="balance-date"
+                  type="date"
+                  value={currentDate}
+                  onChange={(e) => setCurrentDate(e.target.value)}
+                  className="border p-2 rounded flex-1"
+                  required
+                  disabled={!!selectedStatement}
+                />
+              </div>
+              <div className="flex items-center gap-4">
+                <label htmlFor="balance-amount" className="w-16">Balance:</label>
+                <input
+                  id="balance-amount"
+                  type="number"
+                  step="0.01"
+                  value={currentBalance}
+                  onChange={(e) => setCurrentBalance(e.target.value)}
+                  placeholder="Balance"
+                  className="border p-2 rounded flex-1"
+                  required
+                />
+              </div>
+              <div className="flex justify-end">
+                <Button 
+                  onClick={handleFormSubmit} 
+                  disabled={!currentDate || !currentBalance || isSubmitting}
+                >
+                  {isSubmitting ? 'Submitting...' : (selectedStatement ? 'Update Snapshot' : 'Add Snapshot')}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+        {statementDetailModal.isOpen && statementDetailModal.snapshotId && (
+          <StatementDetailModal
+            snapshotId={statementDetailModal.snapshotId}
+            isOpen={statementDetailModal.isOpen}
+            onClose={() => setStatementDetailModal({ isOpen: false, snapshotId: null })}
+          />
+        )}
       </div>
-    </>
+    </TooltipProvider>
   )
 }

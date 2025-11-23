@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\FinStatementDetail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
@@ -16,7 +17,14 @@ class StatementImportController extends Controller
     public function getDetails(Request $request, $snapshot_id)
     {
         $details = FinStatementDetail::where('snapshot_id', $snapshot_id)->get();
-        return response()->json($details);
+        $snapshot = DB::table('fin_account_balance_snapshot')->where('snapshot_id', $snapshot_id)->first();
+        $account = DB::table('fin_accounts')->where('acct_id', $snapshot->acct_id)->first(); // Fetch account details
+
+        return response()->json([
+            'details' => $details,
+            'account_id' => $snapshot->acct_id,
+            'account_name' => $account->acct_name, // Add account name
+        ]);
     }
 
     public function import(Request $request, $snapshot_id)
@@ -44,7 +52,7 @@ class StatementImportController extends Controller
         $prompt = $this->getPrompt();
 
         try {
-            $response = Http::withHeaders([
+            $response = Http::timeout(300)->withHeaders([
                 'x-goog-api-key' => $apiKey,
                 'Content-Type' => 'application/json',
             ])->post('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', [
@@ -77,10 +85,10 @@ class StatementImportController extends Controller
                     foreach ($statementItems as $itemData) {
                         $itemData['snapshot_id'] = $snapshot_id;
 
-                        // Remove null values to rely on database defaults
-                        $itemData = array_filter($itemData, function ($value) {
-                            return $value !== null;
-                        });
+                        // Set defaults for required fields if missing
+                        $itemData['statement_period_value'] = $itemData['statement_period_value'] ?? 0;
+                        $itemData['ytd_value'] = $itemData['ytd_value'] ?? 0;
+                        $itemData['is_percentage'] = $itemData['is_percentage'] ?? false;
 
                         FinStatementDetail::create($itemData);
                     }

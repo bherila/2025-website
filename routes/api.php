@@ -24,6 +24,7 @@ Route::middleware(['web', 'auth'])->post('/finance/transactions/{transaction_id}
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/balance-timeseries', [FinanceApiController::class, 'getBalanceTimeseries']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/balance-timeseries', [FinanceApiController::class, 'addBalanceSnapshot']);
 Route::middleware(['web', 'auth'])->delete('/finance/{account_id}/balance-timeseries', [FinanceApiController::class, 'deleteBalanceSnapshot']);
+Route::middleware(['web', 'auth'])->put('/finance/balance-timeseries/{snapshot_id}', [FinanceApiController::class, 'updateBalanceSnapshot']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/rename', [FinanceApiController::class, 'renameAccount']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/update-closed', [FinanceApiController::class, 'updateAccountClosed']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/update-flags', [FinanceApiController::class, 'updateAccountFlags']);

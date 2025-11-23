@@ -23,11 +23,12 @@ function get(url: string) {
 }
 
 function post(url: string, body: any) {
+  const isFormData = body instanceof FormData;
   const requestOptions: RequestInit = {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() || '' },
+    headers: isFormData ? { 'X-CSRF-TOKEN': getCsrfToken() || '' } : { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() || '' },
     credentials: 'include' as RequestCredentials,
-    body: JSON.stringify(body),
+    body: isFormData ? body : JSON.stringify(body),
   }
   return fetch(url, requestOptions).then(handleResponse)
 }
