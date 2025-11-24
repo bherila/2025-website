@@ -6,6 +6,8 @@ use App\Http\Controllers\FinanceApiController;
 use App\Http\Controllers\PayslipController;
 use App\Http\Controllers\PayslipImportController;
 use App\Http\Controllers\RsuController;
+use App\Http\Controllers\StatementController;
+use App\Http\Controllers\StatementImportGeminiController;
 
 Route::middleware(['web', 'auth'])->get('/finance/accounts', [FinanceApiController::class, 'accounts']);
 Route::middleware(['web', 'auth'])->post('/finance/accounts', [FinanceApiController::class, 'createAccount']);
@@ -22,9 +24,9 @@ Route::middleware(['web', 'auth'])->get('/finance/tags', [FinanceApiController::
 Route::middleware(['web', 'auth'])->post('/finance/tags/apply', [FinanceApiController::class, 'applyTagToTransactions']);
 Route::middleware(['web', 'auth'])->post('/finance/transactions/{transaction_id}/comment');
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/balance-timeseries', [FinanceApiController::class, 'getBalanceTimeseries']);
-Route::middleware(['web', 'auth'])->post('/finance/{account_id}/balance-timeseries', [FinanceApiController::class, 'addBalanceSnapshot']);
+Route::middleware(['web', 'auth'])->post('/finance/{account_id}/balance-timeseries', [StatementController::class, 'addFinAccountStatement']);
 Route::middleware(['web', 'auth'])->delete('/finance/{account_id}/balance-timeseries', [FinanceApiController::class, 'deleteBalanceSnapshot']);
-Route::middleware(['web', 'auth'])->put('/finance/balance-timeseries/{snapshot_id}', [FinanceApiController::class, 'updateBalanceSnapshot']);
+Route::middleware(['web', 'auth'])->put('/finance/balance-timeseries/{snapshot_id}', [StatementController::class, 'updateFinAccountStatement']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/rename', [FinanceApiController::class, 'renameAccount']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/update-closed', [FinanceApiController::class, 'updateAccountClosed']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/update-flags', [FinanceApiController::class, 'updateAccountFlags']);
@@ -48,7 +50,7 @@ Route::middleware(['web', 'auth'])->post('/license-keys/import', [App\Http\Contr
 Route::middleware(['web', 'auth'])->post('/user/update-email', [App\Http\Controllers\UserApiController::class, 'updateEmail']);
 Route::middleware(['web', 'auth'])->post('/user/update-password', [App\Http\Controllers\UserApiController::class, 'updatePassword']);
 Route::middleware(['web', 'auth'])->post('/finance/transactions/import-gemini', [App\Http\Controllers\TransactionGeminiImportController::class, 'import']);
-Route::middleware(['web', 'auth'])->get('/finance/statement/{snapshot_id}/details', [App\Http\Controllers\StatementImportController::class, 'getDetails']);
-Route::middleware(['web', 'auth'])->get('/finance/{account_id}/all-statement-details', [FinanceApiController::class, 'getAllStatementDetails']);
-Route::middleware(['web', 'auth'])->post('/finance/statement/{snapshot_id}/import', [App\Http\Controllers\StatementImportController::class, 'import']);
+Route::middleware(['web', 'auth'])->get('/finance/statement/{snapshot_id}/details', [StatementController::class, 'getDetails']);
+Route::middleware(['web', 'auth'])->get('/finance/{account_id}/all-statement-details', [StatementController::class, 'getFinStatementDetails']);
+Route::middleware(['web', 'auth'])->post('/finance/statement/{snapshot_id}/import', [StatementImportGeminiController::class, 'import']);
 Route::middleware(['web', 'auth'])->post('/user/update-api-key', [App\Http\Controllers\UserApiController::class, 'updateApiKey']);

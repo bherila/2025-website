@@ -5,28 +5,13 @@ namespace App\Http\Controllers;
 use App\Models\FinStatementDetail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Http\Client\Pool;
 use Throwable;
 
-class StatementImportController extends Controller
+class StatementImportGeminiController extends Controller
 {
-    public function getDetails(Request $request, $snapshot_id)
-    {
-        $details = FinStatementDetail::where('snapshot_id', $snapshot_id)->get();
-        $snapshot = DB::table('fin_account_balance_snapshot')->where('snapshot_id', $snapshot_id)->first();
-        $account = DB::table('fin_accounts')->where('acct_id', $snapshot->acct_id)->first(); // Fetch account details
-
-        return response()->json([
-            'details' => $details,
-            'account_id' => $snapshot->acct_id,
-            'account_name' => $account->acct_name, // Add account name
-        ]);
-    }
-
     public function import(Request $request, $snapshot_id)
     {
         // Set execution time limit to 5 minutes to handle multiple API requests
