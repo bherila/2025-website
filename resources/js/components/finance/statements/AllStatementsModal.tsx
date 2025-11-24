@@ -26,6 +26,7 @@ interface GroupedData {
         [line_item: string]: {
             is_percentage: boolean;
             values: { [date: string]: number };
+            last_ytd_value: number;
         };
     };
 }
@@ -63,15 +64,16 @@ export default function AllStatementsModal({ isOpen, onClose, accountId }: AllSt
                     {new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </TableHead>
                 ))}
+                <TableHead className="text-right">Last YTD</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {Object.entries(groupedData).map(([section, lineItems]) => (
                 <>
                   <TableRow key={section} className="bg-muted/50">
-                    <TableCell colSpan={dates.length + 1} className="font-bold">{section}</TableCell>
+                    <TableCell colSpan={dates.length + 2} className="font-bold">{section}</TableCell>
                   </TableRow>
-                  {Object.entries(lineItems).map(([lineItem, { is_percentage, values }]) => (
+                  {Object.entries(lineItems).map(([lineItem, { is_percentage, values, last_ytd_value }]) => (
                     <TableRow key={lineItem}>
                       <TableCell>{lineItem}</TableCell>
                       {dates.map(date => (
@@ -79,6 +81,9 @@ export default function AllStatementsModal({ isOpen, onClose, accountId }: AllSt
                           {values[date] !== undefined ? (is_percentage ? `${values[date].toFixed(2)}%` : currency(values[date]).format()) : '-'}
                         </TableCell>
                       ))}
+                      <TableCell className="text-right">
+                        {is_percentage ? `${last_ytd_value.toFixed(2)}%` : currency(last_ytd_value).format()}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </>

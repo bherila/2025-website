@@ -94,6 +94,7 @@ class StatementController extends Controller
                 'fsd.section',
                 'fsd.line_item',
                 'fsd.statement_period_value',
+                'fsd.ytd_value',
                 'fsd.is_percentage'
             )
             ->orderBy('fabs.when_added', 'desc')
@@ -105,7 +106,7 @@ class StatementController extends Controller
         $dates = array_unique(array_map(function ($detail) {
             return substr($detail->when_added, 0, 10);
         }, $details->toArray()));
-        rsort($dates);
+        sort($dates);
 
         $groupedData = [];
         foreach ($details as $detail) {
@@ -120,6 +121,7 @@ class StatementController extends Controller
                 $groupedData[$section][$lineItem] = [
                     'is_percentage' => (bool)$detail->is_percentage,
                     'values' => [],
+                    'last_ytd_value' => (float)$detail->ytd_value,
                 ];
             }
             $groupedData[$section][$lineItem]['values'][$date] = (float)$detail->statement_period_value;
