@@ -355,10 +355,10 @@ class FinanceApiController extends Controller
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
 
         $lineItems = $request->json()->all();
-        $importedCount = 0;
+        $dataToInsert = [];
 
         foreach ($lineItems as $item) {
-            FinAccountLineItems::create([
+            $dataToInsert[] = [
                 't_account' => $account->acct_id,
                 't_date' => $item['t_date'],
                 't_date_posted' => $item['t_date_posted'] ?? null,
@@ -385,13 +385,16 @@ class FinanceApiController extends Controller
                 't_harvested_amount' => $item['t_harvested_amount'] ?? null,
                 'parent_t_id' => $item['parent_t_id'] ?? null,
                 't_account_balance' => $item['t_account_balance'] ?? null,
-            ]);
-            $importedCount++;
+            ];
+        }
+
+        if (!empty($dataToInsert)) {
+            FinAccountLineItems::insert($dataToInsert);
         }
 
         return response()->json([
             'success' => true,
-            'imported' => $importedCount,
+            'imported' => count($dataToInsert),
         ]);
     }
 }
