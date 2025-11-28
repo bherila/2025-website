@@ -1,6 +1,6 @@
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { parseDate } from '@/lib/DateHelper'
-import { z } from 'zod'
+import { splitDelimitedText } from '@/lib/splitDelimitedText'
 
 interface FidelityColumnMapping {
   dateCol: number
@@ -14,107 +14,231 @@ interface FidelityColumnMapping {
   amountCol: number
   settlementDateCol: number
   cashBalanceCol?: number
+  typeCol?: number
 }
 
-function parseHeader(header: string): FidelityColumnMapping | null {
-  const columns = header.split(',').map((col) => col.trim())
+function parseHeader(columns: string[]): FidelityColumnMapping | null {
+  const trimmedCols = columns.map((col) => col.trim())
 
-  // Find the date column (accept both "Run Date" and "Date")
-  const dateCol = columns.findIndex((col) => col === 'Run Date' || col === 'Date')
-  if (dateCol === -1) return null
-
-  // Find other required columns
-  const actionCol = columns.findIndex((col) => col === 'Action')
-  const symbolCol = columns.findIndex((col) => col === 'Symbol')
-  const descriptionCol = columns.findIndex((col) => col === 'Security Description' || col === 'Description')
-  const quantityCol = columns.findIndex((col) => col === 'Quantity')
-  const priceCol = columns.findIndex((col) => col === 'Price ($)')
-  const commissionCol = columns.findIndex((col) => col === 'Commission ($)')
-  const feesCol = columns.findIndex((col) => col === 'Fees ($)')
-  const amountCol = columns.findIndex((col) => col === 'Amount ($)')
-  const settlementDateCol = columns.findIndex((col) => col === 'Settlement Date')
-  const cashBalanceCol = columns.findIndex((col) => col === 'Cash Balance ($)')
-
-  // Validate required columns exist
-  if (actionCol === -1 || amountCol === -1) return null
-
-  const mapping: FidelityColumnMapping = {
-    dateCol,
-    actionCol,
-    symbolCol,
-    descriptionCol,
-    quantityCol,
-    priceCol,
-    commissionCol,
-    feesCol,
-    amountCol,
-    settlementDateCol,
+  const columnMap: Record<keyof FidelityColumnMapping, string[]> = {
+    dateCol: ["Run Date", "Date"],
+    actionCol: ["Action"],
+    symbolCol: ["Symbol"],
+    descriptionCol: ["Security Description", "Description"],
+    quantityCol: ["Quantity"],
+    priceCol: ["Price ($)", "Price"],
+    commissionCol: ["Commission ($)", "Commission"],
+    feesCol: ["Fees ($)", "Fees"],
+    amountCol: ["Amount ($)", "Amount"],
+    settlementDateCol: ["Settlement Date"],
+    cashBalanceCol: ["Cash Balance ($)", "Cash Balance"],
+    typeCol: ["Type"]
   }
 
-  if (cashBalanceCol !== -1) {
-    mapping.cashBalanceCol = cashBalanceCol
+  const mapping: Partial<FidelityColumnMapping> = {}
+  for (const [key, names] of Object.entries(columnMap)) {
+    const idx = trimmedCols.findIndex((col) => names.includes(col))
+    if (idx !== -1) {
+      (mapping as any)[key] = idx
+    }
   }
 
-  return mapping
+  // Validate required columns
+  if (mapping.dateCol === undefined || mapping.actionCol === undefined || mapping.amountCol === undefined) {
+    return null
+  }
+
+  return mapping as FidelityColumnMapping
 }
-
-import { splitDelimitedText } from '@/lib/splitDelimitedText'
 
 export function parseFidelityCsv(text: string): AccountLineItem[] {
-  const data: AccountLineItem[] = []
-
-  // Use the robust CSV parser, which handles quoted fields and newlines
   const rows = splitDelimitedText(text, ',')
+  if (rows.length < 2 || !rows[0]) return []
 
-  if (rows.length < 2 || !rows[0]) {
-    return data
-  }
+  const mapping = parseHeader(rows[0])
+  if (!mapping) return []
 
-  // The header needs to be a string for parseHeader
-  const mapping = parseHeader(rows[0].join(','))
-  if (!mapping) {
-    return data
-  }
+  const data: AccountLineItem[] = []
+  const getCol = (cols: string[], idx?: number) =>
+    idx !== undefined && idx !== -1 ? cols[idx] || undefined : undefined
+
+  let blankCount = 0
+
+  // Footer patterns that indicate end of data
+  const footerPatterns = [
+    /^date downloaded/i,
+    /^"?the data and information/i,
+    /^"?brokerage services are provided/i,
+    /^"?informational purposes only/i,
+  ]
 
   for (let i = 1; i < rows.length; i++) {
     const columns = rows[i]
-    if (!columns) {
+
+    // Detect blank line (all empty or undefined)
+    const isBlank = !columns || columns.every((c) => !c || c.trim() === "")
+    if (isBlank) {
+      blankCount++
+      if (blankCount >= 3) {
+        break // stop parsing after 3 consecutive blank lines
+      }
+      continue
+    } else {
+      blankCount = 0 // reset counter if non-blank line
+    }
+
+    // Check for footer patterns (stop parsing if we hit one)
+    const firstCol = columns[0]?.trim() || ''
+    const rowText = columns.join(' ')
+    if (footerPatterns.some(pattern => pattern.test(firstCol) || pattern.test(rowText))) {
+      break
+    }
+
+    if (columns.length < Math.max(mapping.dateCol, mapping.actionCol, mapping.amountCol)) {
       continue
     }
 
-    // Basic validation to skip malformed/disclaimer lines that don't have enough columns
-    if (columns.length < Math.max(mapping.dateCol, mapping.actionCol, mapping.amountCol)) {
-        continue;
-    }
-
     try {
-      const settlementDate = mapping.settlementDateCol !== -1 ? columns[mapping.settlementDateCol] : undefined
-      const cashBalance = mapping.cashBalanceCol !== undefined ? columns[mapping.cashBalanceCol] : undefined
+      const { transactionDescription, transactionType, rest } = splitTransactionString(columns[mapping.actionCol] || '')
 
+      const settlementDate = getCol(columns, mapping.settlementDateCol)
+      const cashBalance = getCol(columns, mapping.cashBalanceCol)
+
+      // Note: The Type column contains account type (Cash/Margin/Shares), not transaction type
+      // So we only use transactionType from splitTransactionString
+      const qtyStr = getCol(columns, mapping.quantityCol)
+      const qtyNum = qtyStr ? parseFloat(qtyStr) : undefined
       const item = AccountLineItemSchema.parse({
         t_date: parseDate(columns[mapping.dateCol])?.formatYMD() ?? columns[mapping.dateCol],
-        t_type: columns[mapping.actionCol],
-        t_symbol: mapping.symbolCol !== -1 ? columns[mapping.symbolCol] || undefined : undefined,
-        t_description: mapping.descriptionCol !== -1 ? columns[mapping.descriptionCol] : undefined,
-        t_qty: mapping.quantityCol !== -1 && columns[mapping.quantityCol] ? parseFloat(columns[mapping.quantityCol]) || undefined : undefined,
-        t_price: mapping.priceCol !== -1 ? columns[mapping.priceCol] : undefined,
-        t_commission: mapping.commissionCol !== -1 ? columns[mapping.commissionCol] : undefined,
-        t_fee: mapping.feesCol !== -1 ? columns[mapping.feesCol] : undefined,
-        t_amt: columns[mapping.amountCol],
+        t_type: transactionType,
+        t_symbol: getCol(columns, mapping.symbolCol),
+        t_description: transactionDescription,
+        t_qty: qtyNum !== undefined && !isNaN(qtyNum) ? qtyNum : undefined,
+        t_price: getCol(columns, mapping.priceCol),
+        t_commission: getCol(columns, mapping.commissionCol),
+        t_fee: getCol(columns, mapping.feesCol),
+        t_amt: getCol(columns, mapping.amountCol),
         t_account_balance: cashBalance,
-        t_date_posted: settlementDate && settlementDate !== 'Processing' ? (parseDate(settlementDate)?.formatYMD() ?? settlementDate) : undefined,
+        t_date_posted: settlementDate && settlementDate !== 'Processing'
+          ? parseDate(settlementDate)?.formatYMD() ?? settlementDate
+          : undefined,
+        t_comment: rest,
       })
       data.push(item)
-    } catch (e) {
-      // The Zod schema is now robust enough to handle most bad data, but we'll log errors for debugging.
-      if (e instanceof z.ZodError) {
-        // console.error(`Error parsing line ${i + 1} (potential malformed data or unexpected disclaimer): ${columns.join(',')}`, e.errors)
-      } else {
-        // console.error(`Error parsing line ${i + 1} (potential malformed data or unexpected disclaimer): ${columns.join(',')}`, e)
-      }
+    } catch {
       continue
     }
   }
 
   return data
+}
+
+
+// Map of transaction description prefixes -> simple transaction type
+// Longer prefixes first to avoid mis-categorization
+const typeMap: Record<string, string> = {
+  // Buy/Sell actions
+  "YOU SOLD SHORT SALE AVERAGE PRICE TRADE": "Sell",
+  "YOU SOLD SHORT SALE": "Sell",
+  "YOU SOLD AVERAGE PRICE TRADE": "Sell",
+  "YOU BOUGHT AVERAGE PRICE TRADE": "Buy",
+  "YOU BOUGHT SHORT COVER": "Buy",
+  "YOU SOLD": "Sell",
+  "YOU BOUGHT": "Buy",
+  "BOUGHT": "Buy",
+  "SOLD": "Sell",
+
+  // Dividends (single category)
+  "DIVIDEND RECEIVED": "Dividend",
+  "DIVIDEND CHARGED": "Dividend",
+
+  // Interest
+  "INTEREST SHORT SALE REBATE": "Interest",
+
+  // Journal entries
+  "JOURNALED GOODWILL": "Journal",
+  "JOURNALED": "Journal",
+
+  // Other base actions
+  "SHORT VS MARGIN MARK TO MARKET": "MISC",
+  "DISTRIBUTION": "MISC",
+  "IN LIEU OF FRX SHARE SPINOFF": "MISC",
+
+  // Cash movement actions
+  "WIRE TRANSFER FROM BANK": "Wire",
+  "WIRE TRANSFER TO BANK": "Wire",
+  "ELECTRONIC FUNDS TRANSFER RECEIVED": "Deposit",
+  "ELECTRONIC FUNDS TRANSFER PAID": "Withdrawal",
+  "DIRECT DEPOSIT": "Deposit",
+  "DIRECT DEBIT": "Withdrawal",
+  "CHECK RECEIVED": "Deposit",
+  "CHECK PAID": "Withdrawal",
+
+  // Other actions
+  "REDEMPTION FROM CORE ACCOUNT": "Redeem",
+  "REDEMPTION PAYOUT": "Redeem",
+  "REINVESTMENT": "Reinvest",
+  "TRANSFERRED TO VS": "Transfer",
+  "TRANSFERRED FROM VS": "Transfer",
+  "BILL PAYMENT": "Payment",
+  "ASSET/ACCT FEE": "Fee"
+};
+
+// Keyword fallback map -> simple transaction type
+const keywordMap: Record<string, string> = {
+  "DIVIDEND": "Dividend",
+  "REINVEST": "Reinvest",
+  "TRANSFER": "Transfer",
+  "CHECK": "Deposit", // default assumption
+  "PAYMENT": "Payment",
+  "DEPOSIT": "Deposit",
+  "DEBIT": "Withdrawal",
+  "WITHDRAWAL": "Withdrawal",
+  "WIRE": "Wire",
+  "REDEMPTION": "Redeem",
+  "BOUGHT": "Buy",
+  "SOLD": "Sell",
+  "FEE": "Fee",
+  "INTEREST": "Interest",
+  "JOURNAL": "Journal"
+};
+
+/**
+ * Split transaction string into description, type, and rest (case-insensitive).
+ */
+export function splitTransactionString(description: string): {
+  transactionDescription: string;
+  transactionType: string;
+  rest: string;
+} {
+  if (!description) {
+    return { transactionDescription: "", transactionType: "MISC", rest: "" };
+  }
+
+  const descUpper = description.toUpperCase().trim();
+
+  // Exact prefix match, longest first
+  for (const prefix of Object.keys(typeMap).sort((a, b) => b.length - a.length)) {
+    if (descUpper.startsWith(prefix)) {
+      return {
+        transactionDescription: prefix.toUpperCase(),
+        transactionType: typeMap[prefix] || "MISC",
+        rest: descUpper.substring(prefix.length).trim(),
+      };
+    }
+  }
+
+  // Fallback: keyword search
+  for (const [keyword, type] of Object.entries(keywordMap)) {
+    if (descUpper.includes(keyword)) {
+      return {
+        transactionDescription: descUpper,
+        transactionType: type,
+        rest: description.trim(),
+      };
+    }
+  }
+
+  // No match found
+  return { transactionDescription: descUpper, transactionType: "MISC", rest: "" };
 }
