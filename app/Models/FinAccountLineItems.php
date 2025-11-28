@@ -36,6 +36,7 @@ class FinAccountLineItems extends Model
         't_interest_rate',
         't_harvested_amount',
         'parent_t_id',
+        't_account_balance',
     ];
 
     public function account()
