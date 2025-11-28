@@ -2,11 +2,64 @@ import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/Acco
 import { parseDate } from '@/lib/DateHelper'
 import { z } from 'zod'
 
+interface FidelityColumnMapping {
+  dateCol: number
+  actionCol: number
+  symbolCol: number
+  descriptionCol: number
+  quantityCol: number
+  priceCol: number
+  commissionCol: number
+  feesCol: number
+  amountCol: number
+  settlementDateCol: number
+}
+
+function parseHeader(header: string): FidelityColumnMapping | null {
+  const columns = header.split(',').map((col) => col.trim())
+
+  // Find the date column (accept both "Run Date" and "Date")
+  const dateCol = columns.findIndex((col) => col === 'Run Date' || col === 'Date')
+  if (dateCol === -1) return null
+
+  // Find other required columns
+  const actionCol = columns.findIndex((col) => col === 'Action')
+  const symbolCol = columns.findIndex((col) => col === 'Symbol')
+  const descriptionCol = columns.findIndex((col) => col === 'Security Description' || col === 'Description')
+  const quantityCol = columns.findIndex((col) => col === 'Quantity')
+  const priceCol = columns.findIndex((col) => col === 'Price ($)')
+  const commissionCol = columns.findIndex((col) => col === 'Commission ($)')
+  const feesCol = columns.findIndex((col) => col === 'Fees ($)')
+  const amountCol = columns.findIndex((col) => col === 'Amount ($)')
+  const settlementDateCol = columns.findIndex((col) => col === 'Settlement Date')
+
+  // Validate required columns exist
+  if (actionCol === -1 || amountCol === -1) return null
+
+  return {
+    dateCol,
+    actionCol,
+    symbolCol,
+    descriptionCol,
+    quantityCol,
+    priceCol,
+    commissionCol,
+    feesCol,
+    amountCol,
+    settlementDateCol,
+  }
+}
+
 export function parseFidelityCsv(text: string): AccountLineItem[] {
   const lines = text.split('\n')
   const data: AccountLineItem[] = []
 
-  if (lines.length < 2 || !lines[0].startsWith('Run Date,Account,Action,Symbol,Security Description,Security Type,Quantity,Price ($),Commission ($),Fees ($),Accrued Interest ($),Amount ($),Settlement Date')) {
+  if (lines.length < 2 || !lines[0]) {
+    return data
+  }
+
+  const mapping = parseHeader(lines[0])
+  if (!mapping) {
     return data
   }
 
@@ -17,22 +70,20 @@ export function parseFidelityCsv(text: string): AccountLineItem[] {
     }
 
     const columns = line.split(',').map((col) => col.replace(/"/g, '').trim())
-    if (columns.length < 13) {
-      continue
-    }
 
     try {
+      const settlementDate = mapping.settlementDateCol !== -1 ? columns[mapping.settlementDateCol] : undefined
       const item = AccountLineItemSchema.parse({
-        t_date: parseDate(columns[0])?.formatYMD() ?? columns[0],
-        t_type: columns[2],
-        t_symbol: columns[3],
-        t_description: columns[4],
-        t_qty: parseFloat(columns[6]) || undefined,
-        t_price: columns[7],
-        t_commission: columns[8],
-        t_fee: columns[9],
-        t_amt: columns[11],
-        t_date_posted: parseDate(columns[12])?.formatYMD() ?? columns[12],
+        t_date: parseDate(columns[mapping.dateCol])?.formatYMD() ?? columns[mapping.dateCol],
+        t_type: columns[mapping.actionCol],
+        t_symbol: mapping.symbolCol !== -1 ? columns[mapping.symbolCol] || undefined : undefined,
+        t_description: mapping.descriptionCol !== -1 ? columns[mapping.descriptionCol] : undefined,
+        t_qty: mapping.quantityCol !== -1 ? parseFloat(columns[mapping.quantityCol]) || undefined : undefined,
+        t_price: mapping.priceCol !== -1 ? columns[mapping.priceCol] : undefined,
+        t_commission: mapping.commissionCol !== -1 ? columns[mapping.commissionCol] : undefined,
+        t_fee: mapping.feesCol !== -1 ? columns[mapping.feesCol] : undefined,
+        t_amt: columns[mapping.amountCol],
+        t_date_posted: settlementDate && settlementDate !== 'Processing' ? (parseDate(settlementDate)?.formatYMD() ?? settlementDate) : undefined,
       })
       data.push(item)
     } catch (e) {
