@@ -13,6 +13,7 @@ interface FidelityColumnMapping {
   feesCol: number
   amountCol: number
   settlementDateCol: number
+  cashBalanceCol?: number
 }
 
 function parseHeader(header: string): FidelityColumnMapping | null {
@@ -32,6 +33,7 @@ function parseHeader(header: string): FidelityColumnMapping | null {
   const feesCol = columns.findIndex((col) => col === 'Fees ($)')
   const amountCol = columns.findIndex((col) => col === 'Amount ($)')
   const settlementDateCol = columns.findIndex((col) => col === 'Settlement Date')
+  const cashBalanceCol = columns.findIndex((col) => col === 'Cash Balance ($)')
 
   // Validate required columns exist
   if (actionCol === -1 || amountCol === -1) return null
@@ -47,14 +49,31 @@ function parseHeader(header: string): FidelityColumnMapping | null {
     feesCol,
     amountCol,
     settlementDateCol,
+    cashBalanceCol: cashBalanceCol !== -1 ? cashBalanceCol : undefined,
   }
 }
 
 export function parseFidelityCsv(text: string): AccountLineItem[] {
-  const lines = text.split('\n')
+  let lines = text.split('\n')
   const data: AccountLineItem[] = []
 
-  if (lines.length < 2 || !lines[0]) {
+  // Find the effective end of the data lines by looking for known disclaimer patterns from the end.
+  let effectiveEndIndex = lines.length
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim()
+    if (line.startsWith('Date downloaded')) {
+      effectiveEndIndex = i
+    } else if (line.includes('The data and information in this spreadsheet is provided to you solely for your use')) {
+      effectiveEndIndex = i
+      break // Once this is found, all data must be above this point.
+    }
+  }
+  lines = lines.slice(0, effectiveEndIndex)
+
+  // Filter out any blank lines after disclaimer removal
+  lines = lines.filter(line => line.trim().length > 0)
+
+  if (lines.length < 2) {
     return data
   }
 
@@ -65,10 +84,6 @@ export function parseFidelityCsv(text: string): AccountLineItem[] {
 
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i]
-    if (!line.trim()) {
-      continue
-    }
-
     const columns = line.split(',').map((col) => col.replace(/"/g, '').trim())
 
     try {
@@ -83,15 +98,17 @@ export function parseFidelityCsv(text: string): AccountLineItem[] {
         t_commission: mapping.commissionCol !== -1 ? columns[mapping.commissionCol] : undefined,
         t_fee: mapping.feesCol !== -1 ? columns[mapping.feesCol] : undefined,
         t_amt: columns[mapping.amountCol],
+        t_account_balance: mapping.cashBalanceCol ? columns[mapping.cashBalanceCol] : undefined,
         t_date_posted: settlementDate && settlementDate !== 'Processing' ? (parseDate(settlementDate)?.formatYMD() ?? settlementDate) : undefined,
       })
       data.push(item)
     } catch (e) {
       if (e instanceof z.ZodError) {
-        console.error(`Error parsing line ${i + 1}: ${line}`, e.errors)
+        console.error(`Error parsing line ${i + 1} (potential malformed data or unexpected disclaimer): ${line}`, e.errors)
       } else {
-        console.error(`Error parsing line ${i + 1}: ${line}`, e)
+        console.error(`Error parsing line ${i + 1} (potential malformed data or unexpected disclaimer): ${line}`, e)
       }
+      continue
     }
   }
 

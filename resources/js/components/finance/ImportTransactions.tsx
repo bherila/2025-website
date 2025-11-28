@@ -34,7 +34,7 @@ export default function ImportTransactions(props: {
         formData.append('file', file)
         try {
           const response = await fetchWrapper.post('/api/finance/transactions/import-gemini', formData)
-          setText(response)
+          setText(response.trimStart())
         } catch (e) {
           setError(`Error processing PDF: ${e instanceof Error ? e.message : String(e)}`)
         } finally {
@@ -42,7 +42,7 @@ export default function ImportTransactions(props: {
         }
       } else {
         const text = await file.text()
-        setText(text)
+        setText(text.trimStart())
       }
       setError(null)
     } catch (err) {
@@ -211,6 +211,7 @@ function parseData(text: string): { data: AccountLineItem[] | null; parseError: 
       commentColIndex = getColumnIndex('Comment', 'Memo', 'memo')
       typeColIndex = getColumnIndex('Type', 'type')
       categoryColIndex = getColumnIndex('Category')
+      accountBalanceColIndex = getColumnIndex('Cash Balance ($)')
     }
     if (dateColIndex == null) {
       throw new Error('Date column not found')
@@ -231,6 +232,7 @@ function parseData(text: string): { data: AccountLineItem[] | null; parseError: 
           t_date_posted: postDateColIndex ? parseDate(row[postDateColIndex])?.formatYMD() : null,
           t_description: row[descriptionColIndex],
           t_amt: row[amountColIndex], // Pass raw string for t_amt, letting Zod handle the parsing
+          t_account_balance: accountBalanceColIndex ? row[accountBalanceColIndex] : undefined,
           t_comment: commentColIndex ? row[commentColIndex] : null,
           t_type: typeColIndex ? row[typeColIndex] : null,
           t_schc_category: categoryColIndex ? row[categoryColIndex] : null,

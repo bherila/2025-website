@@ -51,6 +51,7 @@ describe('parseFidelityCsv function', () => {
         t_description: 'No Description',
         t_price: '0.000',
         t_amt: '4473.68',
+        t_account_balance: undefined,
       })
     })
 
@@ -111,13 +112,28 @@ value1,value2,value3`
       expect(result).toEqual([])
     })
 
-    it('skips empty lines', () => {
-      const csvWithEmptyLines = `Date,Action,Symbol,Description,Type,Quantity,Price ($),Commission ($),Fees ($),Accrued Interest ($),Amount ($),Cash Balance ($),Settlement Date
-11/21/2025,"DIVIDEND RECEIVED APA CORPORATION COM (APA) (Margin)",APA,"APA CORPORATION COM",Margin,,0.000,,,,4,Processing,
+    it('strips disclaimer rows from the end of the file', () => {
+      const csvWithDisclaimer = `Run Date,Account,Action,Symbol,Security Description,Security Type,Quantity,Price ($),Commission ($),Fees ($),Accrued Interest ($),Amount ($),Settlement Date
+01/15/2025,12345,BOUGHT,AAPL,APPLE INC,Stock,10,150.00,0.00,0.00,0.00,-1500.00,01/17/2025
+01/16/2025,12345,SOLD,AAPL,APPLE INC,Stock,5,155.00,0.00,0.00,0.00,775.00,01/18/2025
 
-11/21/2025,"SHORT VS MARGIN MARK TO MARKET (Margin)",,"No Description",Margin,,0.000,,,,4473.68,Processing,`
-      const result = parseFidelityCsv(csvWithEmptyLines)
+
+
+"The data and information in this spreadsheet is provided to you solely for your use and is not for distribution. The spreadsheet is provided for"
+"informational purposes only, and is not intended to provide advice, nor should it be construed as an offer to sell, a solicitation of an offer to buy or a"
+"recommendation for any security or insurance product by Fidelity or any third party. Data and information shown is based on information known to Fidelity as of the date it was"
+"exported and is subject to change. It should not be used in place of your account statements or trade confirmations and is not intended for tax reporting"
+"purposes. For more information on the data included in this spreadsheet, including any limitations thereof, go to Fidelity.com."
+
+"Brokerage services are provided by Fidelity Brokeration Services LLC (FBS), 900 Salem Street, Smithfield, RI 02917. Custody and other services provided by National"
+"Financial Services LLC (NFS). Both are Fidelity Investment companies and members SIPC, NYSE. Insurance products at Fidelity are distributed by"
+"Fidelity Insurance Agency, Inc., and, for certain products, by Fidelity Brokerage Services, Member NYSE, SIPC."
+
+Date downloaded 11/21/2025 12:54 am`
+      const result = parseFidelityCsv(csvWithDisclaimer)
       expect(result.length).toBe(2)
+      expect(result[0]?.t_symbol).toBe('AAPL')
+      expect(result[1]?.t_symbol).toBe('AAPL')
     })
   })
 })

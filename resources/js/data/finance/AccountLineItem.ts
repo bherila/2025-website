@@ -20,6 +20,10 @@ export const AccountLineItemSchema = z.object({
   t_type: z.string().optional().nullable(),
   t_schc_category: z.string().nullable().optional(),
   t_amt: z.string().optional(),
+  t_account_balance: z.preprocess(
+    (val) => (String(val).trim() === '' || isNaN(Number(String(val).replace(/,/g, '')))) ? undefined : String(val).replace(/,/g, ''),
+    z.coerce.number().optional()
+  ),
   t_symbol: z.string().max(20).nullable().optional(),
   t_cusip: z.string().max(20).nullable().optional(),
   t_qty: z.coerce.number().default(0).optional(),

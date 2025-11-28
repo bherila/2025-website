@@ -384,6 +384,7 @@ class FinanceApiController extends Controller
                 't_interest_rate' => $item['t_interest_rate'] ?? null,
                 't_harvested_amount' => $item['t_harvested_amount'] ?? null,
                 'parent_t_id' => $item['parent_t_id'] ?? null,
+                't_account_balance' => $item['t_account_balance'] ?? null,
             ]);
             $importedCount++;
         }
