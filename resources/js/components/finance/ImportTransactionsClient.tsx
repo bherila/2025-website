@@ -6,7 +6,6 @@ import { type AccountLineItem } from '@/data/finance/AccountLineItem'
 import { Button } from '@/components/ui/button'
 
 export default function ImportTransactionsClient({ id, accountName }: { id: number; accountName: string }) {
-  const [duplicates, setDuplicates] = useState<AccountLineItem[]>([])
   const [importFinished, setImportFinished] = useState(false)
 
   return (
@@ -24,7 +23,6 @@ export default function ImportTransactionsClient({ id, accountName }: { id: numb
       )}
       <ImportTransactions
         accountId={id}
-        duplicates={duplicates}
         onImportFinished={() => setImportFinished(true)}
       />
     </Container>

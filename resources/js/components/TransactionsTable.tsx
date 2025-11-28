@@ -48,6 +48,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
   const [selectedTransactions, setSelectedTransactions] = useState<string[]>([])
   const [selectedTransaction, setSelectedTransaction] = useState<AccountLineItem | null>(null)
   const [postDateFilter, setPostDateFilter] = useState('')
+  const [cashBalanceFilter, setCashBalanceFilter] = useState('')
 
   const isDuplicate = (item: AccountLineItem) => {
     if (!duplicates) {
@@ -134,6 +135,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
   const isStrikeColumnEmpty = useMemo(() => data.every((row) => !row.opt_strike || Number(row.opt_strike) === 0), [data])
   const isTagsColumnEmpty = useMemo(() => data.every((row) => !row.tags || row.tags.length === 0), [data])
   const isPostDateColumnEmpty = useMemo(() => data.every((row) => !row.t_date_posted), [data])
+  const isCashBalanceColumnEmpty = useMemo(() => data.every((row) => !row.t_account_balance), [data])
 
   const filteredData = data.filter(
     (row) =>
@@ -163,7 +165,11 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
         (row.t_qty || '0')
           .toString()
           .includes(qtyFilter)) &&
-      (!postDateFilter || row.t_date_posted?.includes(postDateFilter)),
+      (!postDateFilter || row.t_date_posted?.includes(postDateFilter)) &&
+      (!cashBalanceFilter ||
+        (row.t_account_balance || '0')
+          .toString()
+          .includes(cashBalanceFilter)),
   )
 
   const sortedData = [...filteredData].sort((a, b) => {
@@ -239,6 +245,11 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
             <th className="clickable text-right" onClick={() => handleSort('t_amt')}>
               Amount {sortField === 't_amt' && (sortDirection === 'asc' ? '↑' : '↓')}
             </th>
+            {!isCashBalanceColumnEmpty && (
+              <th className="clickable text-right" onClick={() => handleSort('t_account_balance')}>
+                Cash Balance {sortField === 't_account_balance' && (sortDirection === 'asc' ? '↑' : '↓')}
+              </th>
+            )}
             {!isCategoryColumnEmpty && (
               <th className="clickable" onClick={() => handleSort('t_schc_category')}>
                 Category {sortField === 't_schc_category' && (sortDirection === 'asc' ? '↑' : '↓')}
@@ -362,6 +373,18 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
               />
               {amountFilter && <ClearFilterButton onClick={() => setAmountFilter('')} ariaLabel="Clear amount filter" />}
             </th>
+            {!isCashBalanceColumnEmpty && (
+              <th className="position-relative" style={{ width: '100px' }}>
+                <input
+                  style={{ width: '100%', maxWidth: '150px' }}
+                  type="text"
+                  placeholder="Filter balance..."
+                  value={cashBalanceFilter}
+                  onChange={(e) => setCashBalanceFilter(e.target.value)}
+                />
+                {cashBalanceFilter && <ClearFilterButton onClick={() => setCashBalanceFilter('')} ariaLabel="Clear balance filter" />}
+              </th>
+            )}
             {!isCategoryColumnEmpty && (
               <th className="position-relative" style={{ width: '140px' }}>
                 <input
@@ -549,6 +572,11 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
               >
                 {row.t_amt || '0'}
               </td>
+              {!isCashBalanceColumnEmpty && (
+                <td className={'numericCol text-right'}>
+                  {row.t_account_balance != null ? currency(row.t_account_balance).format() : ''}
+                </td>
+              )}
               {!isCategoryColumnEmpty && (
                 <td
                   onClick={() => {
@@ -662,6 +690,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                 {totalNegatives.format()} (Debits) <br />= {totalAmount.format()} (Net)
               </strong>
             </td>
+            {!isCashBalanceColumnEmpty && <TotalCell />}
             {!isCategoryColumnEmpty && <TotalCell />}
             {!isCusipColumnEmpty && <TotalCell />}
             {!isSymbolColumnEmpty && <TotalCell />}

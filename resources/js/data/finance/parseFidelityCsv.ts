@@ -38,7 +38,7 @@ function parseHeader(header: string): FidelityColumnMapping | null {
   // Validate required columns exist
   if (actionCol === -1 || amountCol === -1) return null
 
-  return {
+  const mapping: FidelityColumnMapping = {
     dateCol,
     actionCol,
     symbolCol,
@@ -49,8 +49,13 @@ function parseHeader(header: string): FidelityColumnMapping | null {
     feesCol,
     amountCol,
     settlementDateCol,
-    cashBalanceCol: cashBalanceCol !== -1 ? cashBalanceCol : undefined,
   }
+
+  if (cashBalanceCol !== -1) {
+    mapping.cashBalanceCol = cashBalanceCol
+  }
+
+  return mapping
 }
 
 import { splitDelimitedText } from '@/lib/splitDelimitedText'
@@ -73,6 +78,9 @@ export function parseFidelityCsv(text: string): AccountLineItem[] {
 
   for (let i = 1; i < rows.length; i++) {
     const columns = rows[i]
+    if (!columns) {
+      continue
+    }
 
     // Basic validation to skip malformed/disclaimer lines that don't have enough columns
     if (columns.length < Math.max(mapping.dateCol, mapping.actionCol, mapping.amountCol)) {
@@ -88,7 +96,7 @@ export function parseFidelityCsv(text: string): AccountLineItem[] {
         t_type: columns[mapping.actionCol],
         t_symbol: mapping.symbolCol !== -1 ? columns[mapping.symbolCol] || undefined : undefined,
         t_description: mapping.descriptionCol !== -1 ? columns[mapping.descriptionCol] : undefined,
-        t_qty: mapping.quantityCol !== -1 ? parseFloat(columns[mapping.quantityCol]) || undefined : undefined,
+        t_qty: mapping.quantityCol !== -1 && columns[mapping.quantityCol] ? parseFloat(columns[mapping.quantityCol]) || undefined : undefined,
         t_price: mapping.priceCol !== -1 ? columns[mapping.priceCol] : undefined,
         t_commission: mapping.commissionCol !== -1 ? columns[mapping.commissionCol] : undefined,
         t_fee: mapping.feesCol !== -1 ? columns[mapping.feesCol] : undefined,

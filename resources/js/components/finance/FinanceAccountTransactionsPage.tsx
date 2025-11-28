@@ -2,7 +2,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fetchWrapper } from '../../fetchWrapper'
 import TransactionsTable from '../TransactionsTable'
-import type { AccountLineItem } from './AccountLineItem'
+import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
+import { z } from 'zod'
 import { Spinner } from '../ui/spinner'
 import { Button } from '../ui/button'
 
@@ -15,7 +16,8 @@ export default function FinanceAccountTransactionsPage({ id }: { id: number }) {
     const fetchData = async () => {
       try {
         const fetchedData = await fetchWrapper.get(`/api/finance/${id}/line_items`)
-        setData(fetchedData.filter(Boolean))
+        const parsedData = z.array(AccountLineItemSchema).parse(fetchedData)
+        setData(parsedData.filter(Boolean))
         setIsLoading(false)
       } catch (error) {
         console.error('Error fetching transactions:', error)

@@ -59,7 +59,7 @@ export const AccountLineItemSchema = z.object({
   t_method: z.string().max(20).nullable().optional(),
   t_source: z.string().max(20).nullable().optional(),
   t_origin: z.string().max(20).nullable().optional(),
-  opt_expiration: z.string().optional(),
+  opt_expiration: z.string().nullable().optional(),
   opt_type: z.enum(['call', 'put']).nullable().optional(),
   opt_strike: z.coerce.string().default('0').nullable().optional(),
   t_description: z.string().max(255).nullable().optional(),

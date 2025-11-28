@@ -72,7 +72,7 @@ function ImportProgressDialog({
   )
 }
 
-export default function ImportTransactions({ accountId, duplicates, onImportFinished }: { accountId: number, duplicates: AccountLineItem[], onImportFinished: () => void }) {
+export default function ImportTransactions({ accountId, onImportFinished }: { accountId: number, onImportFinished: () => void }) {
   const [text, setText] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
@@ -81,6 +81,7 @@ export default function ImportTransactions({ accountId, duplicates, onImportFini
   const [importProgress, setImportProgress] = useState({ processed: 0, total: 0 })
   const [importError, setImportError] = useState<string | null>(null)
   const [dataToImport, setDataToImport] = useState<AccountLineItem[]>([])
+  const [currentDuplicates, setCurrentDuplicates] = useState<AccountLineItem[]>([])
 
   const processChunks = useCallback(async (chunks: AccountLineItem[][], chunkIndex: number) => {
     if (chunkIndex >= chunks.length) {
@@ -90,6 +91,13 @@ export default function ImportTransactions({ accountId, duplicates, onImportFini
     }
 
     const chunk = chunks[chunkIndex]
+    if (!chunk) {
+      // Should not happen if logic is correct, but satisfies TypeScript
+      setIsImporting(false)
+      window.location.href = `/finance/${accountId}`
+      return
+    }
+
     try {
       await fetchWrapper.post(`/api/finance/${accountId}/line_items`, chunk)
       setImportProgress((prev) => ({ ...prev, processed: prev.processed + chunk.length }))
@@ -125,6 +133,8 @@ export default function ImportTransactions({ accountId, duplicates, onImportFini
       ),
     )
     
+    setCurrentDuplicates(currentDuplicates)
+
     const newTransactions = data.filter(
       (item) =>
         !currentDuplicates.some(
@@ -254,9 +264,9 @@ export default function ImportTransactions({ accountId, duplicates, onImportFini
         />
       )}
 
-      {duplicates.length > 0 && (
+      {currentDuplicates.length > 0 && (
         <div className="my-2 text-red-500">
-          <p>{duplicates.length} duplicate transactions were found and will not be imported. They are highlighted in the table below.</p>
+          <p>{currentDuplicates.length} duplicate transactions were found and will not be imported. They are highlighted in the table below.</p>
         </div>
       )}
 
@@ -279,7 +289,7 @@ export default function ImportTransactions({ accountId, duplicates, onImportFini
               Clear
             </Button>
           </div>
-          <TransactionsTable data={data} duplicates={duplicates} />
+          <TransactionsTable data={data} duplicates={currentDuplicates} />
         </>
       )}
     </div>
