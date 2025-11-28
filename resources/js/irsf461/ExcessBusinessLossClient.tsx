@@ -55,27 +55,38 @@ export default function ExcessBusinessLossClient() {
   ) => {
     setInputValues((prev) => {
       const copy = [...prev]
-      copy[idx] = { ...copy[idx], [field]: value }
+      const existing = copy[idx]
+      if (existing) {
+        copy[idx] = { ...existing, [field]: value }
+      }
       return copy
     })
   }
 
   // Commit value to main state onBlur
   const handleInputBlur = (idx: number, field: 'w2' | 'personalCapGain' | 'capGain' | 'businessNetIncome') => {
+    const currentInputValue = inputValues[idx]
+    if (!currentInputValue) return
     setRows((prev) => {
       const copy = [...prev]
-      copy[idx] = {
-        ...copy[idx],
-        [field]: parseCurrency(inputValues[idx][field]),
+      const existing = copy[idx]
+      if (existing) {
+        copy[idx] = {
+          ...existing,
+          [field]: parseCurrency(currentInputValue[field]),
+        }
       }
       return copy
     })
     // Optionally, reformat the input value after blur
     setInputValues((prev) => {
       const copy = [...prev]
-      copy[idx] = {
-        ...copy[idx],
-        [field]: currency(parseCurrency(inputValues[idx][field])).format(),
+      const existing = copy[idx]
+      if (existing) {
+        copy[idx] = {
+          ...existing,
+          [field]: currency(parseCurrency(currentInputValue[field])).format(),
+        }
       }
       return copy
     })
@@ -125,17 +136,19 @@ export default function ExcessBusinessLossClient() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {tableRows.map((row, idx) => (
+          {tableRows.map((row, idx) => {
+            const inputVal = inputValues[idx] ?? { w2: '', personalCapGain: '', capGain: '', businessNetIncome: '' }
+            return (
             <TableRow key={row.year}>
               <TableCell>{row.year}</TableCell>
               <TableCell>
                 <Input
                   type="text"
-                  value={inputValues[idx].w2}
+                  value={inputVal.w2}
                   onChange={(e) => handleInputChange(idx, 'w2', e.target.value)}
                   onBlur={() => handleInputBlur(idx, 'w2')}
                   onFocus={(e) => {
-                    handleInputChange(idx, 'w2', String(currency(inputValues[idx].w2).value))
+                    handleInputChange(idx, 'w2', String(currency(inputVal.w2).value))
                     e.target.select()
                   }}
                   className="w-32"
@@ -155,11 +168,11 @@ export default function ExcessBusinessLossClient() {
               <TableCell>
                 <Input
                   type="text"
-                  value={inputValues[idx].personalCapGain}
+                  value={inputVal.personalCapGain}
                   onChange={(e) => handleInputChange(idx, 'personalCapGain', e.target.value)}
                   onBlur={() => handleInputBlur(idx, 'personalCapGain')}
                   onFocus={(e) => {
-                    handleInputChange(idx, 'personalCapGain', String(currency(inputValues[idx].personalCapGain).value))
+                    handleInputChange(idx, 'personalCapGain', String(currency(inputVal.personalCapGain).value))
                     e.target.select()
                   }}
                   className="w-32"
@@ -179,11 +192,11 @@ export default function ExcessBusinessLossClient() {
               <TableCell>
                 <Input
                   type="text"
-                  value={inputValues[idx].capGain}
+                  value={inputVal.capGain}
                   onChange={(e) => handleInputChange(idx, 'capGain', e.target.value)}
                   onBlur={() => handleInputBlur(idx, 'capGain')}
                   onFocus={(e) => {
-                    handleInputChange(idx, 'capGain', String(currency(inputValues[idx].capGain).value))
+                    handleInputChange(idx, 'capGain', String(currency(inputVal.capGain).value))
                     e.target.select()
                   }}
                   className="w-32"
@@ -203,11 +216,11 @@ export default function ExcessBusinessLossClient() {
               <TableCell>
                 <Input
                   type="text"
-                  value={inputValues[idx].businessNetIncome}
+                  value={inputVal.businessNetIncome}
                   onChange={(e) => handleInputChange(idx, 'businessNetIncome', e.target.value)}
                   onBlur={() => handleInputBlur(idx, 'businessNetIncome')}
                   onFocus={(e) => {
-                    handleInputChange(idx, 'businessNetIncome', String(currency(inputValues[idx].businessNetIncome).value))
+                    handleInputChange(idx, 'businessNetIncome', String(currency(inputVal.businessNetIncome).value))
                     e.target.select()
                   }}
                   className="w-32"
@@ -234,7 +247,7 @@ export default function ExcessBusinessLossClient() {
                 <DialogSchedule1View data={row.f1040.schedule1} taxYear={row.year} />
               </TableCell>
             </TableRow>
-          ))}
+          )})}
           {/* Set All row */}
           <TableRow>
             <TableCell className="font-semibold">Set all:</TableCell>

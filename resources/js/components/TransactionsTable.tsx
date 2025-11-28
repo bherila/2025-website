@@ -539,7 +539,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                   whiteSpace: 'nowrap',
                 }}
                 onClick={() => {
-                  const amt = row.t_amt || '0';
+                  const amt = String(row.t_amt ?? '0');
                   if (amountFilter === amt) {
                     setAmountFilter('')
                   } else {

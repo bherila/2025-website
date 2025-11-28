@@ -14,13 +14,13 @@ export function splitDelimitedText(text: string, delimiter?: string): string[][]
 
   // Auto-detect delimiter from first line
   if (!delimiter) {
-    const firstLine = text.split('\n')[0]
+    const firstLine = text.split('\n')[0] ?? ''
     // Check for delimiters outside of quoted sections
     let inQuotes = false
     let foundDelimiter = ''
 
     for (let i = 0; i < firstLine.length; i++) {
-      const char = firstLine[i]
+      const char = firstLine[i]!
       if (char === '"') {
         inQuotes = !inQuotes
         continue

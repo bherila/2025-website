@@ -10,20 +10,20 @@ describe('parseEtradeCsv function', () => {
     for (const row of result) {
       expect(typeof row.t_date).toBe('string')
       expect(row.t_date.length).toBeGreaterThan(0)
-      expect(row.t_amt === undefined || typeof row.t_amt === 'string').toBe(true)
+      expect(row.t_amt === undefined || typeof row.t_amt === 'number').toBe(true)
     }
   })
 
   it('parses internal transfer rows', () => {
     const result = parseEtradeCsv(exampleCsv)
-    const transfer = result.find((r) => r.t_description === 'INTERNAL FUND TRANSFER' && r.t_amt === '1901.1')
+    const transfer = result.find((r) => r.t_description === 'INTERNAL FUND TRANSFER' && r.t_amt === 1901.1)
     expect(transfer).toBeTruthy()
     expect(transfer).toMatchObject({
       t_date: '2024-12-04',
       t_type: '0',
       t_qty: 0,
-      t_price: '0',
-      t_commission: '0',
+      t_price: 0,
+      t_commission: 0,
     })
   })
 
@@ -35,9 +35,9 @@ describe('parseEtradeCsv function', () => {
       t_date: '2024-11-29',
       t_type: '0',
       t_qty: -0.08,
-      t_amt: '0.08',
-      t_price: '0',
-      t_commission: '0',
+      t_amt: 0.08,
+      t_price: 0,
+      t_commission: 0,
     })
   })
 
@@ -47,8 +47,8 @@ describe('parseEtradeCsv function', () => {
     const nvda = result.find((r) => r.t_symbol === 'NVDA')
     const tsla = result.find((r) => r.t_symbol === 'TSLA')
     expect(nvda).toBeTruthy()
-    expect(nvda).toMatchObject({ t_qty: -5, t_price: '7.95', t_commission: '2.68' })
+    expect(nvda).toMatchObject({ t_qty: -5, t_price: 7.95, t_commission: 2.68 })
     expect(tsla).toBeTruthy()
-    expect(tsla).toMatchObject({ t_qty: -1, t_price: '3.55', t_commission: '0.52' })
+    expect(tsla).toMatchObject({ t_qty: -1, t_price: 3.55, t_commission: 0.52 })
   })
 })

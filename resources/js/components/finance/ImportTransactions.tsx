@@ -192,6 +192,7 @@ function parseData(text: string): { data: AccountLineItem[] | null; parseError: 
     let commentColIndex: number | null = null
     let typeColIndex: number | null = null
     let categoryColIndex: number | null = null
+    let accountBalanceColIndex: number | null = null
     if (lines.length > 0 && lines[0]) {
       const getColumnIndex = (...headers: string[]) => {
         const firstLine = lines[0]!.map((cell) => cell.trim())

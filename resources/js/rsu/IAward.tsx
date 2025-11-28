@@ -1,10 +1,10 @@
 import currency from 'currency.js'
 export interface IAward {
-  award_id?: string
-  grant_date?: string
-  vest_date?: string
-  share_count?: currency | number
-  symbol?: string
-  vest_price?: number // price per share at vest date
-  grant_price?: number // price per share at grant date
+  award_id?: string | undefined
+  grant_date?: string | undefined
+  vest_date?: string | undefined
+  share_count?: currency | number | undefined
+  symbol?: string | undefined
+  vest_price?: number | undefined // price per share at vest date
+  grant_price?: number | undefined // price per share at grant date
 }

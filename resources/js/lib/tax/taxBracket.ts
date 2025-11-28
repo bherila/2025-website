@@ -113,13 +113,14 @@ function parseTaxTable(csvString: string): TaxTableRow[] {
   // Skip header row so i=1
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i]
+    if (!row) continue
     taxTable.push({
-      state: row[0],
-      year: parseInt(row[1]),
-      filingStatus: row[2],
-      minIncome: currency(row[3]),
-      maxIncome: currency(row[4]),
-      taxRate: currency(row[5]),
+      state: row[0] ?? '',
+      year: parseInt(row[1] ?? '0'),
+      filingStatus: row[2] ?? '',
+      minIncome: currency(row[3] ?? '0'),
+      maxIncome: currency(row[4] ?? '0'),
+      taxRate: currency(row[5] ?? '0'),
     })
   }
 

@@ -13,6 +13,7 @@ export function parseOptionDescription(description: string): Option | null {
   const match1 = description.replace('\t', ' ').match(regex1)
   if (match1) {
     const [, symbol, month, day, year, strikePrice, optionType] = match1
+    if (!symbol || !month || !optionType || !strikePrice) return null
     const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
     // TODO: Handle dates before 1999
     const maturityDate = `20${year}-${(months.indexOf(month.toLowerCase()) + 1).toString().padStart(2, '0')}-${day}`
@@ -30,6 +31,7 @@ export function parseOptionDescription(description: string): Option | null {
   const match2 = description.match(regex2)
   if (match2) {
     const [, optionType, symbol, expiration, strikePrice] = match2
+    if (!symbol || !optionType || !expiration || !strikePrice) return null
     const [month, day, year] = expiration.split('/')
     // TODO: Handle dates before 1999
     const maturityDate = `20${year}-${month}-${day}`
@@ -47,6 +49,7 @@ export function parseOptionDescription(description: string): Option | null {
   const match3 = description.match(regex3)
   if (match3) {
     const [, optionType, symbol, expiration, strikePrice] = match3
+    if (!symbol || !optionType || !expiration || !strikePrice) return null
     const [month, day, year] = expiration.split('/')
     // TODO: Handle dates before 1999
     const maturityDate = `20${year}-${month}-${day}`

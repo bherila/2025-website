@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fetchWrapper } from '../../fetchWrapper'
 import TransactionsTable from '../TransactionsTable'
-import type { AccountLineItem } from './AccountLineItem'
+import type { AccountLineItem } from '@/data/finance/AccountLineItem'
 import { Spinner } from '../ui/spinner'
 import { Button } from '../ui/button'
 

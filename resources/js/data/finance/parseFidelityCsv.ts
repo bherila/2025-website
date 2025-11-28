@@ -13,7 +13,7 @@ interface FidelityColumnMapping {
   feesCol: number
   amountCol: number
   settlementDateCol: number
-  cashBalanceCol?: number
+  cashBalanceCol?: number | undefined
 }
 
 function parseHeader(header: string): FidelityColumnMapping | null {
@@ -73,6 +73,7 @@ export function parseFidelityCsv(text: string): AccountLineItem[] {
 
   for (let i = 1; i < rows.length; i++) {
     const columns = rows[i]
+    if (!columns) continue
 
     // Basic validation to skip malformed/disclaimer lines that don't have enough columns
     if (columns.length < Math.max(mapping.dateCol, mapping.actionCol, mapping.amountCol)) {
@@ -84,11 +85,11 @@ export function parseFidelityCsv(text: string): AccountLineItem[] {
       const cashBalance = mapping.cashBalanceCol !== undefined ? columns[mapping.cashBalanceCol] : undefined
 
       const item = AccountLineItemSchema.parse({
-        t_date: parseDate(columns[mapping.dateCol])?.formatYMD() ?? columns[mapping.dateCol],
+        t_date: parseDate(columns[mapping.dateCol] ?? '')?.formatYMD() ?? columns[mapping.dateCol],
         t_type: columns[mapping.actionCol],
         t_symbol: mapping.symbolCol !== -1 ? columns[mapping.symbolCol] || undefined : undefined,
         t_description: mapping.descriptionCol !== -1 ? columns[mapping.descriptionCol] : undefined,
-        t_qty: mapping.quantityCol !== -1 ? parseFloat(columns[mapping.quantityCol]) || undefined : undefined,
+        t_qty: mapping.quantityCol !== -1 ? parseFloat(columns[mapping.quantityCol] ?? '') || undefined : undefined,
         t_price: mapping.priceCol !== -1 ? columns[mapping.priceCol] : undefined,
         t_commission: mapping.commissionCol !== -1 ? columns[mapping.commissionCol] : undefined,
         t_fee: mapping.feesCol !== -1 ? columns[mapping.feesCol] : undefined,

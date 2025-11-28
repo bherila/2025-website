@@ -24,6 +24,7 @@ export function RsuByAward(props: { rsu: IAward[] }) {
       <TableBody>
         {Object.keys(grouped).map((k, i) => {
           const lRSU = grouped[k]
+          if (!lRSU) return null
           const minDate = _.min(lRSU.map((x) => x.vest_date))
           const maxDate = _.max(lRSU.map((x) => x.vest_date))
           let totalVested = 0

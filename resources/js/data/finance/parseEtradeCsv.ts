@@ -85,7 +85,7 @@ export function parseEtradeCsv(text: string): AccountLineItem[] {
       }
     } catch (e) {
       if (e instanceof z.ZodError) {
-        console.error(`Error parsing line ${headerIndex + 2 + offset}: ${rawLine}`, e.errors)
+        console.error(`Error parsing line ${headerIndex + 2 + offset}: ${rawLine}`, e.issues)
       } else {
         console.error(`Error parsing line ${headerIndex + 2 + offset}: ${rawLine}`, e)
       }

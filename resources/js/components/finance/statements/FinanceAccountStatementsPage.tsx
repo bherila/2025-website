@@ -92,7 +92,7 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
     setSelectedStatement(statement);
     if (statement) {
       setCurrentBalance(statement.balance);
-      setCurrentDate(statement.when_added.split(' ')[0]);
+      setCurrentDate(statement.when_added.split(' ')[0] ?? '');
     } else {
       setCurrentBalance('');
       setCurrentDate('');

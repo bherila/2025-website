@@ -29,7 +29,7 @@ export function parseQuickenQFX(text: string): AccountLineItem[] {
         data.push(item)
       } catch (e) {
         if (e instanceof z.ZodError) {
-          console.error('Error parsing QFX transaction:', e.errors)
+          console.error('Error parsing QFX transaction:', e.issues)
         } else {
           console.error('Error parsing QFX transaction:', e)
         }

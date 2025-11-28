@@ -34,7 +34,7 @@ const PayslipFormSection = ({
   title: string
   fields: string[]
   control: any
-  initialValues?: Partial<fin_payslip>
+  initialValues?: Partial<fin_payslip> | undefined
 }) => (
   <div className="border p-4 rounded-md">
     <h3 className="text-lg font-semibold mb-4">{title}</h3>
@@ -69,7 +69,7 @@ const PayslipFormSection = ({
 )
 
 interface PayslipDetailClientProps {
-  initialPayslip?: fin_payslip
+  initialPayslip?: fin_payslip | undefined
 }
 
 export default function PayrollForm({ initialPayslip }: PayslipDetailClientProps) {
@@ -102,7 +102,7 @@ export default function PayrollForm({ initialPayslip }: PayslipDetailClientProps
   }, [initialPayslip])
 
   const form = useForm<fin_payslip>({
-    resolver: zodResolver(fin_payslip_schema),
+    resolver: zodResolver(fin_payslip_schema) as any,
     defaultValues: prepareInitialValues,
   })
 
@@ -123,7 +123,7 @@ export default function PayrollForm({ initialPayslip }: PayslipDetailClientProps
     setIsSubmitting(true)
     setApiError(null)
     try {
-      const payslipToSave: fin_payslip & { payslip_id?: number } = { ...data };
+      const payslipToSave = { ...data } as fin_payslip & { payslip_id?: number | undefined };
       if (saveMode === 'edit' && initialPayslip) {
         payslipToSave.payslip_id = initialPayslip.payslip_id;
       }
@@ -181,7 +181,7 @@ export default function PayrollForm({ initialPayslip }: PayslipDetailClientProps
       )}
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+        <form onSubmit={form.handleSubmit(onSubmit as any)} className="space-y-8">
           <div className="grid grid-cols-4 gap-4 border p-4 rounded-md">
             <FormField
               control={form.control}

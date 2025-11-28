@@ -54,9 +54,9 @@ function generateTSV({
   groupByAccount,
 }: {
   data: (string | number)[][]
-  labels?: string[]
-  isNegative?: boolean[]
-  isRetirement?: boolean[]
+  labels?: string[] | undefined
+  isNegative?: boolean[] | undefined
+  isRetirement?: boolean[] | undefined
   includeLiabilities: boolean
   includeRetirement: boolean
   groupByAccount: boolean

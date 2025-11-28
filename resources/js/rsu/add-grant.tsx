@@ -31,7 +31,7 @@ export default function AddGrantPage() {
           award_id: awardId,
           grant_date: grantDate,
           vest_date: cols[0],
-          share_count: currency(cols[1]),
+          share_count: currency(cols[1] ?? '0'),
           symbol,
         }
       } catch {

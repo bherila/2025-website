@@ -21,7 +21,7 @@ const BingoForm = (props: { onSubmit: (data: BingoData) => void }) => {
     handleSubmit,
     formState: { errors },
   } = useForm<BingoData>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema) as any,
     defaultValues: {
       itemsList: Array.from({ length: 99 }, (_, i) => i.toString()).join('\n'),
       activateFreeSpace: false,
@@ -34,7 +34,7 @@ const BingoForm = (props: { onSubmit: (data: BingoData) => void }) => {
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 mx-auto">
+    <form onSubmit={handleSubmit(onSubmit as any)} className="space-y-6 mx-auto">
       <Controller
         name="activateFreeSpace"
         control={control}
