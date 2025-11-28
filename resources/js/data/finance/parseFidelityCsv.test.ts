@@ -1,19 +1,19 @@
 import { parseFidelityCsv } from './parseFidelityCsv'
 
 describe('parseFidelityCsv function', () => {
-  describe('old format (Run Date,Account,...)', () => {
-    const oldFormatCsv = `Run Date,Account,Action,Symbol,Security Description,Security Type,Quantity,Price ($),Commission ($),Fees ($),Accrued Interest ($),Amount ($),Settlement Date
+  describe('format with Account column (Run Date,Account,...)', () => {
+    const csvWithAccount = `Run Date,Account,Action,Symbol,Security Description,Security Type,Quantity,Price ($),Commission ($),Fees ($),Accrued Interest ($),Amount ($),Settlement Date
 01/15/2025,12345,BOUGHT,AAPL,APPLE INC,Stock,10,150.00,0.00,0.00,0.00,-1500.00,01/17/2025
 01/16/2025,12345,SOLD,AAPL,APPLE INC,Stock,5,155.00,0.00,0.00,0.00,775.00,01/18/2025`
 
-    it('parses old format CSV with correct number of rows', () => {
-      const result = parseFidelityCsv(oldFormatCsv)
+    it('parses CSV with Account column correctly', () => {
+      const result = parseFidelityCsv(csvWithAccount)
       expect(Array.isArray(result)).toBe(true)
       expect(result.length).toBe(2)
     })
 
-    it('parses old format CSV fields correctly', () => {
-      const result = parseFidelityCsv(oldFormatCsv)
+    it('parses CSV fields correctly', () => {
+      const result = parseFidelityCsv(csvWithAccount)
       expect(result[0]).toMatchObject({
         t_date: '2025-01-15',
         t_type: 'BOUGHT',
@@ -29,20 +29,20 @@ describe('parseFidelityCsv function', () => {
     })
   })
 
-  describe('new format (Date,Action,Symbol,Description,...)', () => {
-    const newFormatCsv = `Date,Action,Symbol,Description,Type,Quantity,Price ($),Commission ($),Fees ($),Accrued Interest ($),Amount ($),Cash Balance ($),Settlement Date
+  describe('format without Account column (Date,Action,...)', () => {
+    const csvWithoutAccount = `Date,Action,Symbol,Description,Type,Quantity,Price ($),Commission ($),Fees ($),Accrued Interest ($),Amount ($),Cash Balance ($),Settlement Date
 11/21/2025,"SHORT VS MARGIN MARK TO MARKET (Margin)",,"No Description",Margin,,0.000,,,,4473.68,Processing,
 11/21/2025,"SHORT VS MARGIN MARK TO MARKET (Short)",,"No Description",Short,,0.000,,,,-4473.68,Processing,
 11/21/2025,"DIVIDEND RECEIVED APA CORPORATION COM (APA) (Margin)",APA,"APA CORPORATION COM",Margin,,0.000,,,,4,Processing,`
 
-    it('parses new format CSV with correct number of rows', () => {
-      const result = parseFidelityCsv(newFormatCsv)
+    it('parses CSV without Account column correctly', () => {
+      const result = parseFidelityCsv(csvWithoutAccount)
       expect(Array.isArray(result)).toBe(true)
       expect(result.length).toBe(3)
     })
 
-    it('parses new format margin mark to market row correctly', () => {
-      const result = parseFidelityCsv(newFormatCsv)
+    it('parses margin mark to market row correctly', () => {
+      const result = parseFidelityCsv(csvWithoutAccount)
       const marginRow = result.find((r) => r.t_type === 'SHORT VS MARGIN MARK TO MARKET (Margin)')
       expect(marginRow).toBeTruthy()
       expect(marginRow).toMatchObject({
@@ -54,8 +54,8 @@ describe('parseFidelityCsv function', () => {
       })
     })
 
-    it('parses new format dividend row correctly', () => {
-      const result = parseFidelityCsv(newFormatCsv)
+    it('parses dividend row correctly', () => {
+      const result = parseFidelityCsv(csvWithoutAccount)
       const dividendRow = result.find((r) => r.t_symbol === 'APA')
       expect(dividendRow).toBeTruthy()
       expect(dividendRow).toMatchObject({
@@ -68,9 +68,27 @@ describe('parseFidelityCsv function', () => {
     })
 
     it('handles Processing settlement date correctly', () => {
-      const result = parseFidelityCsv(newFormatCsv)
+      const result = parseFidelityCsv(csvWithoutAccount)
       // When settlement date is "Processing", t_date_posted should be undefined
       expect(result[0]?.t_date_posted).toBeUndefined()
+    })
+  })
+
+  describe('interchangeable Date headers', () => {
+    it('accepts "Run Date" as date column', () => {
+      const csvWithRunDate = `Run Date,Action,Symbol,Description,Quantity,Price ($),Commission ($),Fees ($),Amount ($),Settlement Date
+01/15/2025,BOUGHT,AAPL,APPLE INC,10,150.00,0.00,0.00,-1500.00,01/17/2025`
+      const result = parseFidelityCsv(csvWithRunDate)
+      expect(result.length).toBe(1)
+      expect(result[0]?.t_date).toBe('2025-01-15')
+    })
+
+    it('accepts "Date" as date column', () => {
+      const csvWithDate = `Date,Action,Symbol,Description,Quantity,Price ($),Commission ($),Fees ($),Amount ($),Settlement Date
+01/15/2025,BOUGHT,AAPL,APPLE INC,10,150.00,0.00,0.00,-1500.00,01/17/2025`
+      const result = parseFidelityCsv(csvWithDate)
+      expect(result.length).toBe(1)
+      expect(result[0]?.t_date).toBe('2025-01-15')
     })
   })
 
