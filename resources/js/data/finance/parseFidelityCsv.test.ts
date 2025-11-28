@@ -1,0 +1,105 @@
+import { parseFidelityCsv } from './parseFidelityCsv'
+
+describe('parseFidelityCsv function', () => {
+  describe('old format (Run Date,Account,...)', () => {
+    const oldFormatCsv = `Run Date,Account,Action,Symbol,Security Description,Security Type,Quantity,Price ($),Commission ($),Fees ($),Accrued Interest ($),Amount ($),Settlement Date
+01/15/2025,12345,BOUGHT,AAPL,APPLE INC,Stock,10,150.00,0.00,0.00,0.00,-1500.00,01/17/2025
+01/16/2025,12345,SOLD,AAPL,APPLE INC,Stock,5,155.00,0.00,0.00,0.00,775.00,01/18/2025`
+
+    it('parses old format CSV with correct number of rows', () => {
+      const result = parseFidelityCsv(oldFormatCsv)
+      expect(Array.isArray(result)).toBe(true)
+      expect(result.length).toBe(2)
+    })
+
+    it('parses old format CSV fields correctly', () => {
+      const result = parseFidelityCsv(oldFormatCsv)
+      expect(result[0]).toMatchObject({
+        t_date: '2025-01-15',
+        t_type: 'BOUGHT',
+        t_symbol: 'AAPL',
+        t_description: 'APPLE INC',
+        t_qty: 10,
+        t_price: '150.00',
+        t_commission: '0.00',
+        t_fee: '0.00',
+        t_amt: '-1500.00',
+        t_date_posted: '2025-01-17',
+      })
+    })
+  })
+
+  describe('new format (Date,Action,Symbol,Description,...)', () => {
+    const newFormatCsv = `Date,Action,Symbol,Description,Type,Quantity,Price ($),Commission ($),Fees ($),Accrued Interest ($),Amount ($),Cash Balance ($),Settlement Date
+11/21/2025,"SHORT VS MARGIN MARK TO MARKET (Margin)",,"No Description",Margin,,0.000,,,,4473.68,Processing,
+11/21/2025,"SHORT VS MARGIN MARK TO MARKET (Short)",,"No Description",Short,,0.000,,,,-4473.68,Processing,
+11/21/2025,"DIVIDEND RECEIVED APA CORPORATION COM (APA) (Margin)",APA,"APA CORPORATION COM",Margin,,0.000,,,,4,Processing,`
+
+    it('parses new format CSV with correct number of rows', () => {
+      const result = parseFidelityCsv(newFormatCsv)
+      expect(Array.isArray(result)).toBe(true)
+      expect(result.length).toBe(3)
+    })
+
+    it('parses new format margin mark to market row correctly', () => {
+      const result = parseFidelityCsv(newFormatCsv)
+      const marginRow = result.find((r) => r.t_type === 'SHORT VS MARGIN MARK TO MARKET (Margin)')
+      expect(marginRow).toBeTruthy()
+      expect(marginRow).toMatchObject({
+        t_date: '2025-11-21',
+        t_type: 'SHORT VS MARGIN MARK TO MARKET (Margin)',
+        t_description: 'No Description',
+        t_price: '0.000',
+        t_amt: '4473.68',
+      })
+    })
+
+    it('parses new format dividend row correctly', () => {
+      const result = parseFidelityCsv(newFormatCsv)
+      const dividendRow = result.find((r) => r.t_symbol === 'APA')
+      expect(dividendRow).toBeTruthy()
+      expect(dividendRow).toMatchObject({
+        t_date: '2025-11-21',
+        t_type: 'DIVIDEND RECEIVED APA CORPORATION COM (APA) (Margin)',
+        t_symbol: 'APA',
+        t_description: 'APA CORPORATION COM',
+        t_amt: '4',
+      })
+    })
+
+    it('handles Processing settlement date correctly', () => {
+      const result = parseFidelityCsv(newFormatCsv)
+      // When settlement date is "Processing", t_date_posted should be undefined
+      expect(result[0]?.t_date_posted).toBeUndefined()
+    })
+  })
+
+  describe('edge cases', () => {
+    it('returns empty array for empty text', () => {
+      const result = parseFidelityCsv('')
+      expect(result).toEqual([])
+    })
+
+    it('returns empty array for unrecognized format', () => {
+      const unknownFormat = `Column1,Column2,Column3
+value1,value2,value3`
+      const result = parseFidelityCsv(unknownFormat)
+      expect(result).toEqual([])
+    })
+
+    it('returns empty array for header only', () => {
+      const headerOnly = `Date,Action,Symbol,Description,Type,Quantity,Price ($),Commission ($),Fees ($),Accrued Interest ($),Amount ($),Cash Balance ($),Settlement Date`
+      const result = parseFidelityCsv(headerOnly)
+      expect(result).toEqual([])
+    })
+
+    it('skips empty lines', () => {
+      const csvWithEmptyLines = `Date,Action,Symbol,Description,Type,Quantity,Price ($),Commission ($),Fees ($),Accrued Interest ($),Amount ($),Cash Balance ($),Settlement Date
+11/21/2025,"DIVIDEND RECEIVED APA CORPORATION COM (APA) (Margin)",APA,"APA CORPORATION COM",Margin,,0.000,,,,4,Processing,
+
+11/21/2025,"SHORT VS MARGIN MARK TO MARKET (Margin)",,"No Description",Margin,,0.000,,,,4473.68,Processing,`
+      const result = parseFidelityCsv(csvWithEmptyLines)
+      expect(result.length).toBe(2)
+    })
+  })
+})
