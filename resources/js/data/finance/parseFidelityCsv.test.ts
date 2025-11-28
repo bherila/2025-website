@@ -20,10 +20,10 @@ describe('parseFidelityCsv function', () => {
         t_symbol: 'AAPL',
         t_description: 'APPLE INC',
         t_qty: 10,
-        t_price: '150.00',
-        t_commission: '0.00',
-        t_fee: '0.00',
-        t_amt: '-1500.00',
+        t_price: 150.00,
+        t_commission: 0.00,
+        t_fee: 0.00,
+        t_amt: -1500.00,
         t_date_posted: '2025-01-17',
       })
     })
@@ -49,8 +49,8 @@ describe('parseFidelityCsv function', () => {
         t_date: '2025-11-21',
         t_type: 'SHORT VS MARGIN MARK TO MARKET (Margin)',
         t_description: 'No Description',
-        t_price: '0.000',
-        t_amt: '4473.68',
+        t_price: 0.000,
+        t_amt: 4473.68,
         t_account_balance: undefined,
       })
     })
@@ -64,7 +64,8 @@ describe('parseFidelityCsv function', () => {
         t_type: 'DIVIDEND RECEIVED APA CORPORATION COM (APA) (Margin)',
         t_symbol: 'APA',
         t_description: 'APA CORPORATION COM',
-        t_amt: '4',
+        t_amt: 4,
+        t_price: 0.000,
       })
     })
 
@@ -82,6 +83,10 @@ describe('parseFidelityCsv function', () => {
       const result = parseFidelityCsv(csvWithRunDate)
       expect(result.length).toBe(1)
       expect(result[0]?.t_date).toBe('2025-01-15')
+      expect(result[0]?.t_amt).toBe(-1500.00)
+      expect(result[0]?.t_price).toBe(150.00)
+      expect(result[0]?.t_commission).toBe(0.00)
+      expect(result[0]?.t_fee).toBe(0.00)
     })
 
     it('accepts "Date" as date column', () => {
@@ -90,6 +95,10 @@ describe('parseFidelityCsv function', () => {
       const result = parseFidelityCsv(csvWithDate)
       expect(result.length).toBe(1)
       expect(result[0]?.t_date).toBe('2025-01-15')
+      expect(result[0]?.t_amt).toBe(-1500.00)
+      expect(result[0]?.t_price).toBe(150.00)
+      expect(result[0]?.t_commission).toBe(0.00)
+      expect(result[0]?.t_fee).toBe(0.00)
     })
   })
 
@@ -132,8 +141,20 @@ value1,value2,value3`
 Date downloaded 11/21/2025 12:54 am`
       const result = parseFidelityCsv(csvWithDisclaimer)
       expect(result.length).toBe(2)
-      expect(result[0]?.t_symbol).toBe('AAPL')
-      expect(result[1]?.t_symbol).toBe('AAPL')
+      expect(result[0]).toMatchObject({
+        t_symbol: 'AAPL',
+        t_amt: -1500.00,
+        t_price: 150.00,
+        t_commission: 0.00,
+        t_fee: 0.00,
+      })
+      expect(result[1]).toMatchObject({
+        t_symbol: 'AAPL',
+        t_amt: 775.00,
+        t_price: 155.00,
+        t_commission: 0.00,
+        t_fee: 0.00,
+      })
     })
   })
 })

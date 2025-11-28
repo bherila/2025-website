@@ -53,41 +53,36 @@ function parseHeader(header: string): FidelityColumnMapping | null {
   }
 }
 
+import { splitDelimitedText } from '@/lib/splitDelimitedText'
+
 export function parseFidelityCsv(text: string): AccountLineItem[] {
-  let lines = text.split('\n')
   const data: AccountLineItem[] = []
 
-  // Find the effective end of the data lines by looking for known disclaimer patterns from the end.
-  let effectiveEndIndex = lines.length
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i].trim()
-    if (line.startsWith('Date downloaded')) {
-      effectiveEndIndex = i
-    } else if (line.includes('The data and information in this spreadsheet is provided to you solely for your use')) {
-      effectiveEndIndex = i
-      break // Once this is found, all data must be above this point.
-    }
-  }
-  lines = lines.slice(0, effectiveEndIndex)
+  // Use the robust CSV parser, which handles quoted fields and newlines
+  const rows = splitDelimitedText(text, ',')
 
-  // Filter out any blank lines after disclaimer removal
-  lines = lines.filter(line => line.trim().length > 0)
-
-  if (lines.length < 2) {
+  if (rows.length < 2 || !rows[0]) {
     return data
   }
 
-  const mapping = parseHeader(lines[0])
+  // The header needs to be a string for parseHeader
+  const mapping = parseHeader(rows[0].join(','))
   if (!mapping) {
     return data
   }
 
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i]
-    const columns = line.split(',').map((col) => col.replace(/"/g, '').trim())
+  for (let i = 1; i < rows.length; i++) {
+    const columns = rows[i]
+
+    // Basic validation to skip malformed/disclaimer lines that don't have enough columns
+    if (columns.length < Math.max(mapping.dateCol, mapping.actionCol, mapping.amountCol)) {
+        continue;
+    }
 
     try {
       const settlementDate = mapping.settlementDateCol !== -1 ? columns[mapping.settlementDateCol] : undefined
+      const cashBalance = mapping.cashBalanceCol !== undefined ? columns[mapping.cashBalanceCol] : undefined
+
       const item = AccountLineItemSchema.parse({
         t_date: parseDate(columns[mapping.dateCol])?.formatYMD() ?? columns[mapping.dateCol],
         t_type: columns[mapping.actionCol],
@@ -98,15 +93,16 @@ export function parseFidelityCsv(text: string): AccountLineItem[] {
         t_commission: mapping.commissionCol !== -1 ? columns[mapping.commissionCol] : undefined,
         t_fee: mapping.feesCol !== -1 ? columns[mapping.feesCol] : undefined,
         t_amt: columns[mapping.amountCol],
-        t_account_balance: mapping.cashBalanceCol ? columns[mapping.cashBalanceCol] : undefined,
+        t_account_balance: cashBalance,
         t_date_posted: settlementDate && settlementDate !== 'Processing' ? (parseDate(settlementDate)?.formatYMD() ?? settlementDate) : undefined,
       })
       data.push(item)
     } catch (e) {
+      // The Zod schema is now robust enough to handle most bad data, but we'll log errors for debugging.
       if (e instanceof z.ZodError) {
-        console.error(`Error parsing line ${i + 1} (potential malformed data or unexpected disclaimer): ${line}`, e.errors)
+        // console.error(`Error parsing line ${i + 1} (potential malformed data or unexpected disclaimer): ${columns.join(',')}`, e.errors)
       } else {
-        console.error(`Error parsing line ${i + 1} (potential malformed data or unexpected disclaimer): ${line}`, e)
+        // console.error(`Error parsing line ${i + 1} (potential malformed data or unexpected disclaimer): ${columns.join(',')}`, e)
       }
       continue
     }

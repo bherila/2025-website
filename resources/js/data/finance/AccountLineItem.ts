@@ -1,7 +1,36 @@
 import { z } from 'zod'
 import dayjs from 'dayjs'
 import customParseFormat from 'dayjs/plugin/customParseFormat'
+import currency from 'currency.js'
 dayjs.extend(customParseFormat)
+
+// Helper function to create a Zod schema for currency fields
+function createCurrencySchema(defaultValue?: number) {
+  const schema = z.preprocess(
+    (val) => {
+      const strVal = String(val).trim()
+      if (strVal === '') {
+        return undefined
+      }
+      try {
+        const currencyVal = currency(strVal)
+        // if the value is 0 but the string is not a representation of 0, it's likely invalid
+        if (currencyVal.value === 0 && !['0', '0.00', '-0'].includes(strVal)) {
+          return undefined
+        }
+        return currencyVal.value
+      } catch (e) {
+        return undefined
+      }
+    },
+    z.number().optional()
+  );
+
+  if (defaultValue !== undefined) {
+    return schema.default(defaultValue);
+  }
+  return schema;
+}
 
 // Schema for a tag
 export const AccountLineItemTagSchema = z.object({
@@ -19,17 +48,14 @@ export const AccountLineItemSchema = z.object({
   t_date_posted: z.string().nullable().optional(),
   t_type: z.string().optional().nullable(),
   t_schc_category: z.string().nullable().optional(),
-  t_amt: z.string().optional(),
-  t_account_balance: z.preprocess(
-    (val) => (String(val).trim() === '' || isNaN(Number(String(val).replace(/,/g, '')))) ? undefined : String(val).replace(/,/g, ''),
-    z.coerce.number().optional()
-  ),
+  t_amt: createCurrencySchema(),
+  t_account_balance: createCurrencySchema(),
   t_symbol: z.string().max(20).nullable().optional(),
   t_cusip: z.string().max(20).nullable().optional(),
   t_qty: z.coerce.number().default(0).optional(),
-  t_price: z.string().default('0').optional(),
-  t_commission: z.string().default('0').optional(),
-  t_fee: z.coerce.string().default('0').optional(),
+  t_price: createCurrencySchema(0),
+  t_commission: createCurrencySchema(0),
+  t_fee: createCurrencySchema(0),
   t_method: z.string().max(20).nullable().optional(),
   t_source: z.string().max(20).nullable().optional(),
   t_origin: z.string().max(20).nullable().optional(),
