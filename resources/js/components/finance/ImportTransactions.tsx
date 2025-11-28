@@ -1,26 +1,158 @@
-import { useMemo, useState, useCallback } from 'react'
-import { ZodError } from 'zod'
+import { useMemo, useState, useCallback, useEffect } from 'react'
+import { ZodError, z } from 'zod'
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import TransactionsTable from '../TransactionsTable'
 import { parseEtradeCsv } from '@/data/finance/parseEtradeCsv'
-
 import { parseQuickenQFX } from '@/data/finance/parseQuickenQFX'
 import { Button } from '@/components/ui/button'
 import { splitDelimitedText } from '@/lib/splitDelimitedText'
 import { parseWealthfrontHAR } from '@/data/finance/parseWealthfrontHAR'
 import { parseFidelityCsv } from '@/data/finance/parseFidelityCsv'
-import { DateContainer, parseDate } from '@/lib/DateHelper'
+import { parseDate } from '@/lib/DateHelper'
 import { fetchWrapper } from '@/fetchWrapper'
 import { Spinner } from '@/components/ui/spinner'
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from '@/components/ui/alert-dialog'
+import dayjs from 'dayjs'
 
-export default function ImportTransactions(props: {
-  onImportClick: (data: AccountLineItem[]) => void
-  duplicates: AccountLineItem[]
+const CHUNK_SIZE = 100
+
+function ImportProgressDialog({
+  open,
+  progress,
+  error,
+  onRetry,
+  onCancel,
+}: {
+  open: boolean
+  progress: { processed: number; total: number }
+  error: string | null
+  onRetry: () => void
+  onCancel: () => void
 }) {
+  const percentage = progress.total > 0 ? (progress.processed / progress.total) * 100 : 0
+
+  return (
+    <AlertDialog open={open}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{error ? 'Import Failed' : 'Importing Transactions'}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {error ? (
+              <div className="text-red-500">{error}</div>
+            ) : (
+              `Please wait while the transactions are being imported. Do not close this window.`
+            )}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {!error && (
+          <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+            <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${percentage}%` }}></div>
+            <p className="text-sm text-center mt-2">
+              {progress.processed} of {progress.total} transactions imported.
+            </p>
+          </div>
+        )}
+        {error && (
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={onCancel}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={onRetry}>Retry</AlertDialogAction>
+          </AlertDialogFooter>
+        )}
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
+export default function ImportTransactions({ accountId, duplicates, onImportFinished }: { accountId: number, duplicates: AccountLineItem[], onImportFinished: () => void }) {
   const [text, setText] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [isImporting, setIsImporting] = useState(false)
+  const [importProgress, setImportProgress] = useState({ processed: 0, total: 0 })
+  const [importError, setImportError] = useState<string | null>(null)
+  const [dataToImport, setDataToImport] = useState<AccountLineItem[]>([])
+
+  const processChunks = useCallback(async (chunks: AccountLineItem[][], chunkIndex: number) => {
+    if (chunkIndex >= chunks.length) {
+      setIsImporting(false)
+      window.location.href = `/finance/${accountId}`
+      return
+    }
+
+    const chunk = chunks[chunkIndex]
+    try {
+      await fetchWrapper.post(`/api/finance/${accountId}/line_items`, chunk)
+      setImportProgress((prev) => ({ ...prev, processed: prev.processed + chunk.length }))
+      await processChunks(chunks, chunkIndex + 1)
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : String(e)
+      setImportError(`Failed to import chunk ${chunkIndex + 1}: ${errorMessage}`)
+    }
+  }, [accountId])
+
+  const handleImport = useCallback(async (data: AccountLineItem[]) => {
+    z.array(AccountLineItemSchema).parse(data)
+    setLoading(true)
+    setIsImporting(true)
+    setImportError(null)
+    
+    const dates = data.map(p => p.t_date)
+    const earliestDate = dates.reduce((min, d) => dayjs(d).isBefore(dayjs(min)) ? d : min)
+    const latestDate = dates.reduce((max, d) => dayjs(d).isAfter(dayjs(max)) ? d : max)
+
+    const existingTransactions = await fetchWrapper.get(
+      `/api/finance/${accountId}/line_items?start_date=${earliestDate}&end_date=${latestDate}`,
+    )
+
+    const currentDuplicates = data.filter((item) =>
+      existingTransactions.some(
+        (dup: AccountLineItem) =>
+          dup.t_date === item.t_date &&
+          (dup.t_type ?? '').includes(item.t_type ?? '') &&
+          (dup.t_description ?? '').includes(item.t_description ?? '') &&
+          (dup.t_qty ?? 0) === (item.t_qty ?? 0) &&
+          dup.t_amt === item.t_amt,
+      ),
+    )
+    
+    const newTransactions = data.filter(
+      (item) =>
+        !currentDuplicates.some(
+          (dup) =>
+            dup.t_date === item.t_date &&
+            (dup.t_type ?? '').includes(item.t_type ?? '') &&
+            (dup.t_description ?? '').includes(item.t_description ?? '') &&
+            (dup.t_qty ?? 0) === (item.t_qty ?? 0) &&
+            dup.t_amt === item.t_amt,
+        ),
+    )
+    
+    setLoading(false)
+
+    if (newTransactions.length > 0) {
+      setDataToImport(newTransactions)
+      setImportProgress({ processed: 0, total: newTransactions.length })
+      const chunks = []
+      for (let i = 0; i < newTransactions.length; i += CHUNK_SIZE) {
+        chunks.push(newTransactions.slice(i, i + CHUNK_SIZE))
+      }
+      await processChunks(chunks, 0)
+    } else {
+      setIsImporting(false)
+      onImportFinished()
+    }
+  }, [accountId, processChunks, onImportFinished])
+
 
   const handleTextareaChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     setText(event.target.value)
@@ -54,13 +186,9 @@ export default function ImportTransactions(props: {
     (event: React.DragEvent<HTMLDivElement>) => {
       event.preventDefault()
       setIsDragOver(false)
-
       const files = event.dataTransfer?.files
       if (files && files.length > 0) {
-        const file = files[0]
-        if (file) {
-          handleFileRead(file)
-        }
+        handleFileRead(files[0]!)
       }
     },
     [handleFileRead],
@@ -77,46 +205,58 @@ export default function ImportTransactions(props: {
   }, [])
 
   const { data, parseError } = useMemo((): { data: AccountLineItem[] | null; parseError: string | null } => {
-    // If text is empty, return null data and no parse error
     if (!text.trim()) {
       return { data: null, parseError: null }
     }
     return parseData(text)
   }, [text])
 
+  const retryImport = () => {
+    setImportError(null);
+    const chunks = []
+    for (let i = 0; i < dataToImport.length; i += CHUNK_SIZE) {
+      chunks.push(dataToImport.slice(i, i + CHUNK_SIZE))
+    }
+    const failedChunkIndex = Math.floor(importProgress.processed / CHUNK_SIZE)
+    processChunks(chunks, failedChunkIndex)
+  }
+
   return (
     <div
       onDrop={handleDrop}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
-      style={{
-        border: isDragOver ? '2px dashed #007bff' : '2px dashed #ced4da',
-        padding: '20px',
-        textAlign: 'center',
-        transition: 'border-color 0.3s',
-      }}
+      className={`border-2 p-5 text-center transition-colors ${isDragOver ? 'border-blue-500' : 'border-gray-300'}`}
     >
-      {error && <div style={{ color: 'red' }}>{error}</div>}
-      {parseError && <div style={{ color: 'red' }}>{parseError}</div>}
+      <ImportProgressDialog
+        open={isImporting}
+        progress={importProgress}
+        error={importError}
+        onRetry={retryImport}
+        onCancel={() => setIsImporting(false)}
+      />
+
+      {error && <div className="text-red-500">{error}</div>}
+      {parseError && <div className="text-red-500">{parseError}</div>}
 
       {loading ? (
         <div className="flex justify-center items-center h-40">
           <Spinner />
-          <p className="ml-2">Processing PDF...</p>
+          <p className="ml-2">Processing...</p>
         </div>
       ) : (
         <textarea
           value={text}
           onChange={handleTextareaChange}
-          placeholder="date, [time], [settlement date|post date|as of[ date]], [description | desc], amount, [comment | memo, type, category]"
+          placeholder="Paste CSV, QFX, or HAR data here, or drag and drop a file."
           rows={5}
-          style={{ width: '100%' }}
+          className="w-full"
         />
       )}
 
-      {props.duplicates.length > 0 && (
+      {duplicates.length > 0 && (
         <div className="my-2 text-red-500">
-          <p>{props.duplicates.length} duplicate transactions were found and will not be imported. They are highlighted in the table below.</p>
+          <p>{duplicates.length} duplicate transactions were found and will not be imported. They are highlighted in the table below.</p>
         </div>
       )}
 
@@ -127,17 +267,19 @@ export default function ImportTransactions(props: {
               className="mx-1"
               onClick={(e) => {
                 e.preventDefault()
-                data && props.onImportClick(data)
+                if (data) {
+                  handleImport(data)
+                }
               }}
+              disabled={loading || isImporting}
             >
               Import {data.length}
             </Button>
-            <Button className="mx-1" onClick={() => setText('')}>
+            <Button className="mx-1" onClick={() => setText('')} disabled={loading || isImporting}>
               Clear
             </Button>
           </div>
-
-          <TransactionsTable data={data} duplicates={props.duplicates} />
+          <TransactionsTable data={data} duplicates={duplicates} />
         </>
       )}
     </div>
@@ -148,102 +290,69 @@ function parseData(text: string): { data: AccountLineItem[] | null; parseError: 
   // Try parsing as ETrade CSV
   const eTradeData = parseEtradeCsv(text)
   if (eTradeData.length > 0) {
-    return {
-      data: eTradeData,
-      parseError: null,
-    }
+    return { data: eTradeData, parseError: null }
   }
 
   // Try parsing as QFX
   const qfxData = parseQuickenQFX(text)
   if (qfxData.length > 0) {
-    return {
-      data: qfxData,
-      parseError: null,
-    }
+    return { data: qfxData, parseError: null }
   }
+
   // Try parsing as Wealthfront HAR
-  const Wealthfront = parseWealthfrontHAR(text)
-  if (Wealthfront.length > 0) {
-    return {
-      data: Wealthfront,
-      parseError: null,
-    }
+  const wealthfrontData = parseWealthfrontHAR(text)
+  if (wealthfrontData.length > 0) {
+    return { data: wealthfrontData, parseError: null }
   }
 
   // Try parsing as Fidelity
-  const Fidelity = parseFidelityCsv(text)
-  if (Fidelity.length > 0) {
-    return {
-      data: Fidelity,
-      parseError: null,
-    }
+  const fidelityData = parseFidelityCsv(text)
+  if (fidelityData.length > 0) {
+    return { data: fidelityData, parseError: null }
   }
 
   const data: AccountLineItem[] = []
   let parseError: string | null = null
   try {
     const lines = splitDelimitedText(text)
-    let dateColIndex: number | null = null
-    let postDateColIndex: number | null = null
-    let timeColIndex: number | null = null
-    let descriptionColIndex: number | null = null
-    let amountColIndex: number | null = null
-    let commentColIndex: number | null = null
-    let typeColIndex: number | null = null
-    let categoryColIndex: number | null = null
-    if (lines.length > 0 && lines[0]) {
+    if (lines.length > 1 && lines[0]) {
       const getColumnIndex = (...headers: string[]) => {
         const firstLine = lines[0]!.map((cell) => cell.trim())
-        for (const header of headers) {
-          const index = firstLine.indexOf(header.trim())
-          if (index !== -1) {
-            return index
+        const index = firstLine.findIndex(h => headers.includes(h))
+        return index !== -1 ? index : null
+      }
+
+      const dateColIndex = getColumnIndex('Date', 'Transaction Date', 'date')
+      const postDateColIndex = getColumnIndex('Post Date', 'As of', 'As of Date', 'Settlement Date', 'Date Settled', 'Settled')
+      const descriptionColIndex = getColumnIndex('Description', 'Desc', 'description')
+      const amountColIndex = getColumnIndex('Amount', 'Amt', 'amount')
+      const commentColIndex = getColumnIndex('Comment', 'Memo', 'memo')
+      const typeColIndex = getColumnIndex('Type', 'type')
+      const categoryColIndex = getColumnIndex('Category')
+      const accountBalanceColIndex = getColumnIndex('Cash Balance ($)')
+
+      if (dateColIndex !== null && descriptionColIndex !== null && amountColIndex !== null) {
+        for (let i = 1; i < lines.length; i++) {
+          const row = lines[i]
+          if (row && row[dateColIndex]) {
+            data.push(
+              AccountLineItemSchema.parse({
+                t_date: parseDate(row[dateColIndex]!)?.formatYMD() ?? row[dateColIndex]!,
+                t_date_posted: postDateColIndex !== null && row[postDateColIndex] ? parseDate(row[postDateColIndex]!)?.formatYMD() : undefined,
+                t_description: row[descriptionColIndex]!,
+                t_amt: row[amountColIndex]!,
+                t_account_balance: accountBalanceColIndex !== null ? row[accountBalanceColIndex] : undefined,
+                t_comment: commentColIndex !== null ? row[commentColIndex] : undefined,
+                t_type: typeColIndex !== null ? row[typeColIndex] : undefined,
+                t_schc_category: categoryColIndex !== null ? row[categoryColIndex] : undefined,
+              }),
+            )
           }
         }
-        return null
       }
-      dateColIndex = getColumnIndex('Date', 'Transaction Date', 'date')
-      postDateColIndex = getColumnIndex('Post Date', 'As of', 'As of Date', 'Settlement Date', 'Date Settled', 'Settled')
-      timeColIndex = getColumnIndex('Time', 'time')
-      descriptionColIndex = getColumnIndex('Description', 'Desc', 'description')
-      amountColIndex = getColumnIndex('Amount', 'Amt', 'amount')
-      commentColIndex = getColumnIndex('Comment', 'Memo', 'memo')
-      typeColIndex = getColumnIndex('Type', 'type')
-      categoryColIndex = getColumnIndex('Category')
-      accountBalanceColIndex = getColumnIndex('Cash Balance ($)')
-    }
-    if (dateColIndex == null) {
-      throw new Error('Date column not found')
-    }
-    if (descriptionColIndex == null) {
-      throw new Error('Description column not found')
-    }
-    if (amountColIndex == null) {
-      throw new Error('Amount column not found')
-    }
-    for (const row of lines) {
-      if (row[dateColIndex]?.trim().toLowerCase() === 'date' || row[dateColIndex]?.trim().toLowerCase() === 'transaction date') {
-        continue
-      }
-      data.push(
-        AccountLineItemSchema.parse({
-          t_date: parseDate(row[dateColIndex])?.formatYMD() ?? row[dateColIndex],
-          t_date_posted: postDateColIndex ? parseDate(row[postDateColIndex])?.formatYMD() : null,
-          t_description: row[descriptionColIndex],
-          t_amt: row[amountColIndex], // Pass raw string for t_amt, letting Zod handle the parsing
-          t_account_balance: accountBalanceColIndex ? row[accountBalanceColIndex] : undefined,
-          t_comment: commentColIndex ? row[commentColIndex] : null,
-          t_type: typeColIndex ? row[typeColIndex] : null,
-          t_schc_category: categoryColIndex ? row[categoryColIndex] : null,
-        }),
-      )
     }
   } catch (e) {
-    parseError = e instanceof ZodError ? e.message : (e?.toString() ?? null)
+    parseError = e instanceof ZodError ? e.message : (e as Error).toString()
   }
-  return {
-    data: data.length > 0 ? data : null,
-    parseError,
-  }
+  return { data: data.length > 0 ? data : null, parseError }
 }
