@@ -52,70 +52,63 @@ export default function NewAccountForm({ onUpdate }: { onUpdate: () => void }) {
   }
 
   return (
-    <Card className="sm:w-full md:w-1/3">
-      <CardHeader>
-        <CardTitle>Create New Account</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="accountName"
-              render={({ field }) => (
-                <FormItem>
-                  <Label>Account Name</Label>
-                  <FormControl>
-                    <Input placeholder="Enter account name" {...field} autoComplete="off" />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="isDebt"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-start space-x-3 space-y-0 p-4">
-                  <FormControl>
-                    <Checkbox checked={field.value ?? false} onCheckedChange={field.onChange} />
-                  </FormControl>
-                  <div className="space-y-1 leading-none">
-                    <FormLabel>Account is a Liability (e.g., Credit Card)</FormLabel>
-                    <FormDescription>Check this box if the account represents a debt or liability</FormDescription>
-                  </div>
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="isRetirement"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-start space-x-3 space-y-0 p-4">
-                  <FormControl>
-                    <Checkbox checked={field.value ?? false} onCheckedChange={field.onChange} />
-                  </FormControl>
-                  <div className="space-y-1 leading-none">
-                    <FormLabel>Account is a Retirement Account</FormLabel>
-                    <FormDescription>
-                      Check this box if the account is a retirement account (e.g., 401k, IRA)
-                    </FormDescription>
-                  </div>
-                </FormItem>
-              )}
-            />
-            {form.formState.errors.accountName && (
-              <Alert variant="destructive">
-                <AlertTitle>Error</AlertTitle>
-                <AlertDescription>{form.formState.errors.accountName.message}</AlertDescription>
-              </Alert>
-            )}
-            <CardFooter className="flex justify-end p-0 pt-4">
-              <Button type="submit">{form.formState.isSubmitting ? 'Creating...' : 'Create Account'}</Button>
-            </CardFooter>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <FormField
+          control={form.control}
+          name="accountName"
+          render={({ field }) => (
+            <FormItem>
+              <Label>Account Name</Label>
+              <FormControl>
+                <Input placeholder="Enter account name" {...field} autoComplete="off" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="isDebt"
+          render={({ field }) => (
+            <FormItem className="flex flex-row items-start space-x-3 space-y-0 p-4">
+              <FormControl>
+                <Checkbox checked={field.value ?? false} onCheckedChange={field.onChange} />
+              </FormControl>
+              <div className="space-y-1 leading-none">
+                <FormLabel>Account is a Liability (e.g., Credit Card)</FormLabel>
+                <FormDescription>Check this box if the account represents a debt or liability</FormDescription>
+              </div>
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="isRetirement"
+          render={({ field }) => (
+            <FormItem className="flex flex-row items-start space-x-3 space-y-0 p-4">
+              <FormControl>
+                <Checkbox checked={field.value ?? false} onCheckedChange={field.onChange} />
+              </FormControl>
+              <div className="space-y-1 leading-none">
+                <FormLabel>Account is a Retirement Account</FormLabel>
+                <FormDescription>
+                  Check this box if the account is a retirement account (e.g., 401k, IRA)
+                </FormDescription>
+              </div>
+            </FormItem>
+          )}
+        />
+        {form.formState.errors.accountName && (
+          <Alert variant="destructive">
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{form.formState.errors.accountName.message}</AlertDescription>
+          </Alert>
+        )}
+        <CardFooter className="flex justify-end p-0 pt-4">
+          <Button type="submit">{form.formState.isSubmitting ? 'Creating...' : 'Create Account'}</Button>
+        </CardFooter>
+      </form>
+    </Form>
   )
 }

@@ -6,6 +6,7 @@ import AccountGrouping from './AccountGrouping'
 import NewAccountForm from './NewAccountForm'
 import StackedBalanceChart from '../StackedBalanceChart'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 interface Account {
   acct_id: number
@@ -28,6 +29,7 @@ export default function FinanceAccountsPage() {
     isNegative: boolean[]
     isRetirement: boolean[]
   } | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
   const fetchData = async () => {
     const response = await fetch('/api/finance/accounts')
@@ -101,21 +103,29 @@ export default function FinanceAccountsPage() {
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center">
         <MainTitle>Accounting</MainTitle>
-        <Button asChild>
-          <Link href="/finance/tags">Manage Tags</Link>
-        </Button>
+        <div className="flex space-x-2">
+          <Button onClick={() => setIsModalOpen(true)}>New Account</Button>
+          <Button asChild>
+            <Link href="/finance/tags">Manage Tags</Link>
+          </Button>
+        </div>
       </div>
       <div className="mb-8">
         {chartData && <StackedBalanceChart {...chartData} />}
       </div>
-      <div className="w-full flex flex-col sm:flex-row sm:justify-between sm:space-x-4 space-y-4 sm:space-y-0">
-        <div className="w-full space-y-4">
-          <AccountGrouping title="Assets" accounts={data.assetAccounts} onUpdate={() => { fetchData(); fetchChartData(); }} />
-          <AccountGrouping title="Liabilities" accounts={data.liabilityAccounts} onUpdate={() => { fetchData(); fetchChartData(); }} />
-          <AccountGrouping title="Retirement" accounts={data.retirementAccounts} onUpdate={() => { fetchData(); fetchChartData(); }} />
-        </div>
-        <NewAccountForm onUpdate={() => { fetchData(); fetchChartData(); }} />
+      <div className="w-full space-y-4">
+        <AccountGrouping title="Assets" accounts={data.assetAccounts} onUpdate={() => { fetchData(); fetchChartData(); }} />
+        <AccountGrouping title="Liabilities" accounts={data.liabilityAccounts} onUpdate={() => { fetchData(); fetchChartData(); }} />
+        <AccountGrouping title="Retirement" accounts={data.retirementAccounts} onUpdate={() => { fetchData(); fetchChartData(); }} />
       </div>
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>New Account</DialogTitle>
+          </DialogHeader>
+          <NewAccountForm onUpdate={() => { fetchData(); fetchChartData(); setIsModalOpen(false); }} />
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
