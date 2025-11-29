@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog'
 import { Button } from './ui/button'
 import { Spinner } from './ui/spinner'
@@ -39,13 +39,37 @@ export default function TransactionLinkModal({
   const [linkableTransactions, setLinkableTransactions] = useState<LinkedTransaction[]>([])
   const [error, setError] = useState<string | null>(null)
 
+  // Calculate if linked transactions sum to zero (balanced)
+  const isBalanced = useMemo(() => {
+    const currentAmt = currency(transaction.t_amt || 0)
+    let totalLinkedAmt = currency(0)
+    
+    if (parentTransaction) {
+      totalLinkedAmt = totalLinkedAmt.add(currency(parentTransaction.t_amt))
+    }
+    for (const child of childTransactions) {
+      totalLinkedAmt = totalLinkedAmt.add(currency(child.t_amt))
+    }
+    
+    // Sum is balanced if current + all linked equals zero
+    return currentAmt.add(totalLinkedAmt).value === 0
+  }, [transaction.t_amt, parentTransaction, childTransactions])
+
   // Load link data when modal opens
   useEffect(() => {
     if (isOpen && transaction.t_id) {
       loadLinkData()
-      loadLinkableTransactions()
     }
   }, [isOpen, transaction.t_id])
+
+  // Only load linkable transactions if not already balanced
+  useEffect(() => {
+    if (isOpen && transaction.t_id && !isLoading && !isBalanced) {
+      loadLinkableTransactions()
+    } else if (isBalanced) {
+      setLinkableTransactions([])
+    }
+  }, [isOpen, transaction.t_id, isLoading, isBalanced])
 
   const loadLinkData = async () => {
     try {
@@ -99,9 +123,8 @@ export default function TransactionLinkModal({
         child_t_id: childId,
       })
 
-      // Reload link data
+      // Reload link data (linkable transactions will be updated via useEffect based on balanced state)
       await loadLinkData()
-      await loadLinkableTransactions()
       
       if (onLinkChanged) {
         onLinkChanged()
@@ -124,9 +147,8 @@ export default function TransactionLinkModal({
         linked_t_id: linkedTId,
       })
 
-      // Reload link data
+      // Reload link data (linkable transactions will be updated via useEffect based on balanced state)
       await loadLinkData()
-      await loadLinkableTransactions()
       
       if (onLinkChanged) {
         onLinkChanged()
@@ -139,11 +161,56 @@ export default function TransactionLinkModal({
     }
   }
 
-  const navigateToTransaction = (accountId: number, transactionId: number) => {
-    window.location.href = `/finance/${accountId}#t_id=${transactionId}`
+  const navigateToTransaction = (accountId: number, transactionId: number, transactionDate?: string) => {
+    // Extract year from transaction date for year selector compatibility
+    const year = transactionDate ? new Date(transactionDate).getFullYear() : null
+    const yearParam = year ? `?year=${year}` : ''
+    window.location.href = `/finance/${accountId}${yearParam}#t_id=${transactionId}`
   }
 
   const hasExistingLinks = parentTransaction || childTransactions.length > 0
+
+  // Reusable component for displaying a linked transaction
+  const LinkedTransactionCard = ({ 
+    linkedTx, 
+    label, 
+    unlinkType 
+  }: { 
+    linkedTx: LinkedTransaction
+    label: string
+    unlinkType: 'parent' | 'child'
+  }) => (
+    <div className="mb-2">
+      <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">{label}:</p>
+      <div className="border rounded p-3">
+        <div className="flex justify-between items-start">
+          <div className="text-sm">
+            <p><strong>Account:</strong> {linkedTx.acct_name}</p>
+            <p><strong>Date:</strong> {linkedTx.t_date}</p>
+            <p><strong>Description:</strong> {linkedTx.t_description}</p>
+            <p><strong>Amount:</strong> {currency(linkedTx.t_amt).format()}</p>
+          </div>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => navigateToTransaction(linkedTx.t_account, linkedTx.t_id, linkedTx.t_date)}
+            >
+              Go to
+            </Button>
+            <Button 
+              variant="destructive" 
+              size="sm"
+              onClick={() => handleUnlink(linkedTx.t_id, unlinkType)}
+              disabled={isLinking}
+            >
+              Unlink
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -178,71 +245,29 @@ export default function TransactionLinkModal({
               
               {/* Parent Transaction */}
               {parentTransaction && (
-                <div className="mb-4">
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Parent Transaction (source of transfer):</p>
-                  <div className="border rounded p-3">
-                    <div className="flex justify-between items-start">
-                      <div className="text-sm">
-                        <p><strong>Account:</strong> {parentTransaction.acct_name}</p>
-                        <p><strong>Date:</strong> {parentTransaction.t_date}</p>
-                        <p><strong>Description:</strong> {parentTransaction.t_description}</p>
-                        <p><strong>Amount:</strong> {currency(parentTransaction.t_amt).format()}</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => navigateToTransaction(parentTransaction.t_account, parentTransaction.t_id)}
-                        >
-                          Go to
-                        </Button>
-                        <Button 
-                          variant="destructive" 
-                          size="sm"
-                          onClick={() => handleUnlink(parentTransaction.t_id, 'parent')}
-                          disabled={isLinking}
-                        >
-                          Unlink
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <LinkedTransactionCard 
+                  linkedTx={parentTransaction}
+                  label="Parent Transaction (source of transfer)"
+                  unlinkType="parent"
+                />
               )}
 
               {/* Child Transactions */}
-              {childTransactions.length > 0 && (
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Child Transactions (destination of transfer):</p>
-                  {childTransactions.map((child) => (
-                    <div key={child.t_id} className="border rounded p-3 mb-2">
-                      <div className="flex justify-between items-start">
-                        <div className="text-sm">
-                          <p><strong>Account:</strong> {child.acct_name}</p>
-                          <p><strong>Date:</strong> {child.t_date}</p>
-                          <p><strong>Description:</strong> {child.t_description}</p>
-                          <p><strong>Amount:</strong> {currency(child.t_amt).format()}</p>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => navigateToTransaction(child.t_account, child.t_id)}
-                          >
-                            Go to
-                          </Button>
-                          <Button 
-                            variant="destructive" 
-                            size="sm"
-                            onClick={() => handleUnlink(child.t_id, 'child')}
-                            disabled={isLinking}
-                          >
-                            Unlink
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+              {childTransactions.map((child) => (
+                <LinkedTransactionCard 
+                  key={child.t_id}
+                  linkedTx={child}
+                  label="Child Transaction (destination of transfer)"
+                  unlinkType="child"
+                />
+              ))}
+
+              {/* Show balanced status */}
+              {isBalanced && (
+                <div className="mt-4 p-3 bg-green-100 dark:bg-green-900 rounded border border-green-300 dark:border-green-700">
+                  <p className="text-sm text-green-800 dark:text-green-200">
+                    ✓ Linked transactions are balanced (sum to $0.00)
+                  </p>
                 </div>
               )}
             </div>
@@ -250,62 +275,64 @@ export default function TransactionLinkModal({
             <p className="text-sm text-gray-500">No linked transactions.</p>
           )}
 
-          {/* Linkable Transactions Section */}
-          <div>
-            <h4 className="font-semibold mb-2">
-              Available Transactions to Link
-              <span className="text-sm font-normal text-gray-500 ml-2">
-                (±7 days, ±5% amount)
-              </span>
-            </h4>
-            
-            {linkableTransactions.length > 0 ? (
-              <div className="max-h-[300px] overflow-y-auto">
-                <Table style={{ fontSize: '85%' }}>
-                  <thead>
-                    <tr>
-                      <th>Account</th>
-                      <th>Date</th>
-                      <th>Description</th>
-                      <th className="text-right">Amount</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {linkableTransactions.map((linkable) => (
-                      <tr key={linkable.t_id}>
-                        <td className="text-sm">{linkable.acct_name}</td>
-                        <td className="text-sm">{linkable.t_date}</td>
-                        <td className="text-sm max-w-[200px] truncate" title={linkable.t_description}>
-                          {linkable.t_description}
-                        </td>
-                        <td 
-                          className="text-sm text-right"
-                          style={{ color: Number(linkable.t_amt) >= 0 ? 'green' : 'red' }}
-                        >
-                          {currency(linkable.t_amt).format()}
-                        </td>
-                        <td>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => handleLink(linkable.t_id)}
-                            disabled={isLinking}
-                          >
-                            Link
-                          </Button>
-                        </td>
+          {/* Linkable Transactions Section - only show if not balanced */}
+          {!isBalanced && (
+            <div>
+              <h4 className="font-semibold mb-2">
+                Available Transactions to Link
+                <span className="text-sm font-normal text-gray-500 ml-2">
+                  (±7 days, ±5% amount)
+                </span>
+              </h4>
+              
+              {linkableTransactions.length > 0 ? (
+                <div className="max-h-[300px] overflow-y-auto">
+                  <Table style={{ fontSize: '85%' }}>
+                    <thead>
+                      <tr>
+                        <th>Account</th>
+                        <th>Date</th>
+                        <th>Description</th>
+                        <th className="text-right">Amount</th>
+                        <th></th>
                       </tr>
-                    ))}
-                  </tbody>
-                </Table>
-              </div>
-            ) : (
-              <p className="text-sm text-gray-500">
-                No matching transactions found in other accounts.
-              </p>
-            )}
-          </div>
+                    </thead>
+                    <tbody>
+                      {linkableTransactions.map((linkable) => (
+                        <tr key={linkable.t_id}>
+                          <td className="text-sm">{linkable.acct_name}</td>
+                          <td className="text-sm">{linkable.t_date}</td>
+                          <td className="text-sm max-w-[200px] truncate" title={linkable.t_description}>
+                            {linkable.t_description}
+                          </td>
+                          <td 
+                            className="text-sm text-right"
+                            style={{ color: Number(linkable.t_amt) >= 0 ? 'green' : 'red' }}
+                          >
+                            {currency(linkable.t_amt).format()}
+                          </td>
+                          <td>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleLink(linkable.t_id)}
+                              disabled={isLinking}
+                            >
+                              Link
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">
+                  No matching transactions found in other accounts.
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         <DialogFooter>

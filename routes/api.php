@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\FinanceApiController;
+use App\Http\Controllers\FinanceTransactionsApiController;
 use App\Http\Controllers\PayslipController;
 use App\Http\Controllers\PayslipImportController;
 use App\Http\Controllers\RsuController;
@@ -16,18 +17,18 @@ Route::middleware(['web', 'auth'])->get('/finance/chart', [FinanceApiController:
 Route::middleware(['web', 'auth'])->get('/rsu', [RsuController::class, 'getRsuData']);
 Route::middleware(['web', 'auth'])->post('/rsu', [RsuController::class, 'addRsuGrants']);
 
-
-Route::middleware(['web', 'auth'])->get('/finance/{account_id}/line_items', [FinanceApiController::class, 'getLineItems']);
-Route::middleware(['web', 'auth'])->post('/finance/{account_id}/line_items', [FinanceApiController::class, 'importLineItems']);
-Route::middleware(['web', 'auth'])->delete('/finance/{account_id}/line_items', [FinanceApiController::class, 'deleteLineItem']);
+// Transaction routes (FinanceTransactionsApiController)
+Route::middleware(['web', 'auth'])->get('/finance/{account_id}/line_items', [FinanceTransactionsApiController::class, 'getLineItems']);
+Route::middleware(['web', 'auth'])->post('/finance/{account_id}/line_items', [FinanceTransactionsApiController::class, 'importLineItems']);
+Route::middleware(['web', 'auth'])->delete('/finance/{account_id}/line_items', [FinanceTransactionsApiController::class, 'deleteLineItem']);
+Route::middleware(['web', 'auth'])->get('/finance/{account_id}/transaction-years', [FinanceTransactionsApiController::class, 'getTransactionYears']);
 Route::middleware(['web', 'auth'])->get('/finance/tags', [FinanceApiController::class, 'getUserTags']);
 Route::middleware(['web', 'auth'])->post('/finance/tags/apply', [FinanceApiController::class, 'applyTagToTransactions']);
-Route::middleware(['web', 'auth'])->post('/finance/transactions/{transaction_id}/comment');
-Route::middleware(['web', 'auth'])->post('/finance/transactions/{transaction_id}/update', [FinanceApiController::class, 'updateTransaction']);
-Route::middleware(['web', 'auth'])->get('/finance/transactions/{transaction_id}/links', [FinanceApiController::class, 'getTransactionLinks']);
-Route::middleware(['web', 'auth'])->get('/finance/transactions/{transaction_id}/linkable', [FinanceApiController::class, 'findLinkableTransactions']);
-Route::middleware(['web', 'auth'])->post('/finance/transactions/link', [FinanceApiController::class, 'linkTransactions']);
-Route::middleware(['web', 'auth'])->post('/finance/transactions/{transaction_id}/unlink', [FinanceApiController::class, 'unlinkTransaction']);
+Route::middleware(['web', 'auth'])->post('/finance/transactions/{transaction_id}/update', [FinanceTransactionsApiController::class, 'updateTransaction']);
+Route::middleware(['web', 'auth'])->get('/finance/transactions/{transaction_id}/links', [FinanceTransactionsApiController::class, 'getTransactionLinks']);
+Route::middleware(['web', 'auth'])->get('/finance/transactions/{transaction_id}/linkable', [FinanceTransactionsApiController::class, 'findLinkableTransactions']);
+Route::middleware(['web', 'auth'])->post('/finance/transactions/link', [FinanceTransactionsApiController::class, 'linkTransactions']);
+Route::middleware(['web', 'auth'])->post('/finance/transactions/{transaction_id}/unlink', [FinanceTransactionsApiController::class, 'unlinkTransaction']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/balance-timeseries', [FinanceApiController::class, 'getBalanceTimeseries']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/balance-timeseries', [StatementController::class, 'addFinAccountStatement']);
 Route::middleware(['web', 'auth'])->delete('/finance/{account_id}/balance-timeseries', [FinanceApiController::class, 'deleteBalanceSnapshot']);

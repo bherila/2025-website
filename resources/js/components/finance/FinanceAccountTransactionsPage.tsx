@@ -11,11 +11,57 @@ export default function FinanceAccountTransactionsPage({ id }: { id: number }) {
   const [data, setData] = useState<AccountLineItem[] | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [fetchKey, setFetchKey] = useState(0)
+  const [availableYears, setAvailableYears] = useState<number[]>([])
+  const [selectedYear, setSelectedYear] = useState<number | 'all' | null>(null)
+  const [yearsLoaded, setYearsLoaded] = useState(false)
+
+  // Parse year from URL query parameter
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const yearParam = urlParams.get('year')
+    if (yearParam) {
+      const parsedYear = parseInt(yearParam, 10)
+      if (!isNaN(parsedYear)) {
+        setSelectedYear(parsedYear)
+      }
+    }
+  }, [])
+
+  // Fetch available years on mount
+  useEffect(() => {
+    const fetchYears = async () => {
+      try {
+        const years = await fetchWrapper.get(`/api/finance/${id}/transaction-years`)
+        const parsedYears = z.array(z.number()).parse(years)
+        setAvailableYears(parsedYears)
+        // Default to the most recent year if no year from URL
+        if (selectedYear === null && parsedYears.length > 0 && parsedYears[0] !== undefined) {
+          setSelectedYear(parsedYears[0])
+        } else if (selectedYear === null) {
+          setSelectedYear('all')
+        }
+        setYearsLoaded(true)
+      } catch (error) {
+        console.error('Error fetching years:', error)
+        setAvailableYears([])
+        if (selectedYear === null) {
+          setSelectedYear('all')
+        }
+        setYearsLoaded(true)
+      }
+    }
+    fetchYears()
+  }, [id])
 
   useEffect(() => {
+    // Only fetch once years are loaded and selectedYear is set
+    if (!yearsLoaded || selectedYear === null) return
+
     const fetchData = async () => {
       try {
-        const fetchedData = await fetchWrapper.get(`/api/finance/${id}/line_items`)
+        setIsLoading(true)
+        const yearParam = selectedYear !== 'all' ? `?year=${selectedYear}` : ''
+        const fetchedData = await fetchWrapper.get(`/api/finance/${id}/line_items${yearParam}`)
         const parsedData = z.array(AccountLineItemSchema).parse(fetchedData)
         setData(parsedData.filter(Boolean))
         setIsLoading(false)
@@ -26,7 +72,7 @@ export default function FinanceAccountTransactionsPage({ id }: { id: number }) {
       }
     }
     fetchData()
-  }, [id, fetchKey])
+  }, [id, fetchKey, selectedYear, yearsLoaded])
 
   // Handle URL hash to scroll to specific transaction
   useEffect(() => {
@@ -67,7 +113,30 @@ export default function FinanceAccountTransactionsPage({ id }: { id: number }) {
     }
   }
 
-  if (isLoading) {
+  const YearSelector = () => (
+    <div className="flex gap-1 mb-4 items-center flex-wrap">
+      <span className="text-sm text-muted-foreground mr-2">Year:</span>
+      <Button
+        variant={selectedYear === 'all' ? 'default' : 'outline'}
+        size="sm"
+        onClick={() => setSelectedYear('all')}
+      >
+        All
+      </Button>
+      {availableYears.map((year) => (
+        <Button
+          key={year}
+          variant={selectedYear === year ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setSelectedYear(year)}
+        >
+          {year}
+        </Button>
+      ))}
+    </div>
+  )
+
+  if (isLoading && !data) {
     return (
       <div className="d-flex justify-content-center">
         <Spinner />
@@ -77,23 +146,33 @@ export default function FinanceAccountTransactionsPage({ id }: { id: number }) {
 
   if (!data || data.length === 0) {
     return (
-      <div className="text-center p-8 bg-muted rounded-lg">
-        <h2 className="text-xl font-semibold mb-4">No Transactions Found</h2>
-        <p className="mb-6">This account doesn't have any transactions yet.</p>
-        <a href={`/finance/${id}/import-transactions`}>
-          <Button>Import Transactions</Button>
-        </a>
+      <div>
+        <YearSelector />
+        <div className="text-center p-8 bg-muted rounded-lg">
+          <h2 className="text-xl font-semibold mb-4">No Transactions Found</h2>
+          <p className="mb-6">
+            {selectedYear === 'all'
+              ? "This account doesn't have any transactions yet."
+              : `No transactions found for ${selectedYear}.`}
+          </p>
+          <a href={`/finance/${id}/import-transactions`}>
+            <Button>Import Transactions</Button>
+          </a>
+        </div>
       </div>
     )
   }
 
   return (
-    <TransactionsTable
-      enableTagging
-      enableLinking
-      data={data}
-      onDeleteTransaction={handleDeleteTransaction}
-      refreshFn={() => setFetchKey(fetchKey + 1)}
-    />
+    <div>
+      <YearSelector />
+      <TransactionsTable
+        enableTagging
+        enableLinking
+        data={data}
+        onDeleteTransaction={handleDeleteTransaction}
+        refreshFn={() => setFetchKey(fetchKey + 1)}
+      />
+    </div>
   )
 }

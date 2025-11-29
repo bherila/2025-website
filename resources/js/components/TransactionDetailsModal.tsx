@@ -17,23 +17,32 @@ interface TransactionDetailsModalProps {
 }
 
 export default function TransactionDetailsModal({ transaction, isOpen, onClose, onSave }: TransactionDetailsModalProps) {
+  const [isSaving, setIsSaving] = useState(false)
+
+  // Helper to format numeric value for form input
+  const formatNumericValue = (value: number | string | null | undefined): string => {
+    if (value === null || value === undefined) return ''
+    const num = typeof value === 'string' ? parseFloat(value) : value
+    if (isNaN(num) || num === 0) return ''
+    return num.toString()
+  }
+
   const [comment, setComment] = useState(transaction.t_comment || '')
   const [description, setDescription] = useState(transaction.t_description || '')
-  const [qty, setQty] = useState(transaction.t_qty?.toString() || '')
-  const [price, setPrice] = useState(transaction.t_price?.toString() || '')
-  const [commission, setCommission] = useState(transaction.t_commission?.toString() || '')
-  const [fee, setFee] = useState(transaction.t_fee?.toString() || '')
+  const [qty, setQty] = useState(formatNumericValue(transaction.t_qty))
+  const [price, setPrice] = useState(formatNumericValue(transaction.t_price))
+  const [commission, setCommission] = useState(formatNumericValue(transaction.t_commission))
+  const [fee, setFee] = useState(formatNumericValue(transaction.t_fee))
   const [symbol, setSymbol] = useState(transaction.t_symbol || '')
-  const [isSaving, setIsSaving] = useState(false)
 
   // Reset form when transaction changes
   useEffect(() => {
     setComment(transaction.t_comment || '')
     setDescription(transaction.t_description || '')
-    setQty(transaction.t_qty?.toString() || '')
-    setPrice(transaction.t_price?.toString() || '')
-    setCommission(transaction.t_commission?.toString() || '')
-    setFee(transaction.t_fee?.toString() || '')
+    setQty(formatNumericValue(transaction.t_qty))
+    setPrice(formatNumericValue(transaction.t_price))
+    setCommission(formatNumericValue(transaction.t_commission))
+    setFee(formatNumericValue(transaction.t_fee))
     setSymbol(transaction.t_symbol || '')
   }, [transaction])
 

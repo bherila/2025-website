@@ -13,6 +13,16 @@ import { ClearFilterButton } from './ClearFilterButton'
 import { TagApplyButton } from './TagApplyButton'
 import TransactionDetailsModal from './TransactionDetailsModal'
 import TransactionLinkModal from './TransactionLinkModal'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from './ui/alert-dialog'
 import { fetchWrapper } from '../fetchWrapper'
 import { isDuplicateTransaction } from '@/data/finance/isDuplicateTransaction'
 
@@ -53,6 +63,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
   const [linkTransaction, setLinkTransaction] = useState<AccountLineItem | null>(null)
   const [postDateFilter, setPostDateFilter] = useState('')
   const [cashBalanceFilter, setCashBalanceFilter] = useState('')
+  const [deleteConfirmTransaction, setDeleteConfirmTransaction] = useState<AccountLineItem | null>(null)
 
   const isDuplicate = (item: AccountLineItem) => {
     if (!duplicates || duplicates.length === 0) {
@@ -679,10 +690,9 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
               )}
               <td>
                 <Button 
-                  variant={row.t_comment ? "default" : "outline"} 
+                  variant="outline" 
                   size="sm" 
                   onClick={() => setSelectedTransaction(row)}
-                  className={row.t_comment ? "bg-green-600 hover:bg-green-700 text-white" : ""}
                 >
                   Details
                 </Button>
@@ -690,7 +700,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
               {onDeleteTransaction && (
                 <td style={{ textAlign: 'center' }}>
                   <button
-                    onClick={() => onDeleteTransaction(row.t_id?.toString() || '')}
+                    onClick={() => setDeleteConfirmTransaction(row)}
                     className="btn btn-link p-0"
                     aria-label="Delete transaction"
                   >
@@ -783,6 +793,38 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
           }}
         />
       )}
+
+      <AlertDialog open={!!deleteConfirmTransaction} onOpenChange={() => setDeleteConfirmTransaction(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Transaction?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this transaction? This action cannot be undone.
+              {deleteConfirmTransaction && (
+                <div className="mt-3 p-3 bg-gray-100 dark:bg-gray-800 rounded text-sm">
+                  <p><strong>Date:</strong> {deleteConfirmTransaction.t_date}</p>
+                  <p><strong>Description:</strong> {deleteConfirmTransaction.t_description}</p>
+                  <p><strong>Amount:</strong> {currency(deleteConfirmTransaction.t_amt || 0).format()}</p>
+                </div>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => {
+                if (deleteConfirmTransaction && onDeleteTransaction) {
+                  onDeleteTransaction(deleteConfirmTransaction.t_id?.toString() || '')
+                  setDeleteConfirmTransaction(null)
+                }
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }
