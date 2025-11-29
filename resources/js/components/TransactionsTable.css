@@ -27,3 +27,16 @@
 .duplicate-row {
   background-color: #ff8888;
 }
+
+.highlight-transaction {
+  animation: highlight-fade 3s ease-out;
+}
+
+@keyframes highlight-fade {
+  0% {
+    background-color: #fef08a;
+  }
+  100% {
+    background-color: transparent;
+  }
+}

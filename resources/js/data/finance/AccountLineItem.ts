@@ -40,6 +40,16 @@ export const AccountLineItemTagSchema = z.object({
   tag_label: z.string().max(50),
 })
 
+// Schema for linked transaction info
+export const LinkedTransactionSchema = z.object({
+  t_id: z.number(),
+  t_account: z.number(),
+  acct_name: z.string().nullable().optional(),
+  t_date: z.string(),
+  t_description: z.string().nullable().optional(),
+  t_amt: z.union([z.number(), z.string()]),
+})
+
 // Schema validation for the account_line_items table
 export const AccountLineItemSchema = z.object({
   t_id: z.number().optional(),
@@ -69,8 +79,12 @@ export const AccountLineItemSchema = z.object({
   t_interest_rate: z.string().max(20).nullable().optional(),
   t_harvested_amount: z.string().optional().nullable(),
   parent_t_id: z.number().nullable().optional(),
+  parent_of_t_ids: z.array(z.number()).optional(),
+  parent_transaction: LinkedTransactionSchema.nullable().optional(),
+  child_transactions: z.array(LinkedTransactionSchema).optional(),
   tags: z.array(AccountLineItemTagSchema).optional(),
 })
 
 export type AccountLineItemTag = z.infer<typeof AccountLineItemTagSchema>
+export type LinkedTransaction = z.infer<typeof LinkedTransactionSchema>
 export type AccountLineItem = z.infer<typeof AccountLineItemSchema>

@@ -12,6 +12,7 @@ import { Table } from './ui/table'
 import { ClearFilterButton } from './ClearFilterButton'
 import { TagApplyButton } from './TagApplyButton'
 import TransactionDetailsModal from './TransactionDetailsModal'
+import TransactionLinkModal from './TransactionLinkModal'
 import { fetchWrapper } from '../fetchWrapper'
 import { isDuplicateTransaction } from '@/data/finance/isDuplicateTransaction'
 
@@ -21,9 +22,10 @@ interface Props {
   enableTagging?: boolean
   refreshFn?: () => void
   duplicates?: AccountLineItem[]
+  enableLinking?: boolean
 }
 
-export default function TransactionsTable({ data, onDeleteTransaction, enableTagging = false, refreshFn, duplicates }: Props) {
+export default function TransactionsTable({ data, onDeleteTransaction, enableTagging = false, refreshFn, duplicates, enableLinking = false }: Props) {
   const [sortField, setSortField] = useState<keyof AccountLineItem>('t_date')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
   const [descriptionFilter, setDescriptionFilter] = useState('')
@@ -48,6 +50,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
   const [isLoadingTags, setIsLoadingTags] = useState(false)
   const [selectedTransactions, setSelectedTransactions] = useState<string[]>([])
   const [selectedTransaction, setSelectedTransaction] = useState<AccountLineItem | null>(null)
+  const [linkTransaction, setLinkTransaction] = useState<AccountLineItem | null>(null)
   const [postDateFilter, setPostDateFilter] = useState('')
   const [cashBalanceFilter, setCashBalanceFilter] = useState('')
 
@@ -56,6 +59,12 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
       return false
     }
     return isDuplicateTransaction(item, duplicates)
+  }
+
+  const hasLinks = (item: AccountLineItem) => {
+    return item.parent_t_id !== null && item.parent_t_id !== undefined || 
+           (item.parent_of_t_ids && item.parent_of_t_ids.length > 0) ||
+           (item.child_transactions && item.child_transactions.length > 0)
   }
 
   useEffect(() => {
@@ -87,7 +96,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
         <Badge
           key={tag.tag_id}
           variant="outline"
-          className={`bg-${tag.tag_color}-200 text-${tag.tag_color}-800 cursor-pointer hover:opacity-80`}
+          className={`bg-${tag.tag_color}-200 text-${tag.tag_color}-800 dark:bg-${tag.tag_color}-800 dark:text-${tag.tag_color}-200 cursor-pointer hover:opacity-80`}
           onClick={(e) => {
             e.stopPropagation()
             if (tagFilter === tag.tag_label) {
@@ -278,6 +287,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                 Cash Balance {sortField === 't_account_balance' && (sortDirection === 'asc' ? '↑' : '↓')}
               </th>
             )}
+            {enableLinking && <th className="text-center">Link</th>}
             <th className="text-center">Details</th>
             {onDeleteTransaction && <th className="text-center">🗑️</th>}
           </tr>
@@ -458,13 +468,18 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                 {cashBalanceFilter && <ClearFilterButton onClick={() => setCashBalanceFilter('')} ariaLabel="Clear balance filter" />}
               </th>
             )}
+            {enableLinking && <th></th>}
             <th></th>
             {onDeleteTransaction && <th></th>}
           </tr>
         </thead>
         <tbody>
           {sortedData.map((row, i) => (
-            <tr key={row.t_id + ':' + i} className={cn({ 'duplicate-row': isDuplicate(row) })}>
+            <tr 
+              key={row.t_id + ':' + i} 
+              className={cn({ 'duplicate-row': isDuplicate(row) })}
+              data-transaction-id={row.t_id}
+            >
               <td
                 className="dateCol"
                 onClick={() => {
@@ -649,6 +664,19 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                   {row.t_account_balance != null ? currency(row.t_account_balance).format() : ''}
                 </td>
               )}
+              {enableLinking && (
+                <td>
+                  <Button 
+                    variant={hasLinks(row) ? "default" : "outline"} 
+                    size="sm" 
+                    onClick={() => setLinkTransaction(row)}
+                    className={hasLinks(row) ? "bg-green-600 hover:bg-green-700 text-white" : ""}
+                    title={hasLinks(row) ? "View linked transactions" : "Link transaction"}
+                  >
+                    🔗
+                  </Button>
+                </td>
+              )}
               <td>
                 <Button 
                   variant={row.t_comment ? "default" : "outline"} 
@@ -698,6 +726,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
             {!isStrikeColumnEmpty && <TotalCell />}
             {!isMemoColumnEmpty && <TotalCell />}
             {!isCashBalanceColumnEmpty && <TotalCell />}
+            {enableLinking && <TotalCell />}
             <TotalCell />
             {onDeleteTransaction && <TotalCell />}
           </tr>
@@ -739,6 +768,19 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
           isOpen={!!selectedTransaction}
           onClose={() => setSelectedTransaction(null)}
           onSave={handleUpdateTransaction}
+        />
+      )}
+
+      {linkTransaction && (
+        <TransactionLinkModal
+          transaction={linkTransaction}
+          isOpen={!!linkTransaction}
+          onClose={() => setLinkTransaction(null)}
+          onLinkChanged={() => {
+            if (typeof refreshFn === 'function') {
+              refreshFn()
+            }
+          }}
         />
       )}
     </>

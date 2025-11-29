@@ -28,6 +28,28 @@ export default function FinanceAccountTransactionsPage({ id }: { id: number }) {
     fetchData()
   }, [id, fetchKey])
 
+  // Handle URL hash to scroll to specific transaction
+  useEffect(() => {
+    if (!data || data.length === 0) return
+    
+    const hash = window.location.hash
+    if (hash && hash.startsWith('#t_id=')) {
+      const targetId = hash.replace('#t_id=', '')
+      // Small delay to ensure DOM is rendered
+      setTimeout(() => {
+        const element = document.querySelector(`tr[data-transaction-id="${targetId}"]`)
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          // Highlight the row temporarily
+          element.classList.add('highlight-transaction')
+          setTimeout(() => {
+            element.classList.remove('highlight-transaction')
+          }, 3000)
+        }
+      }, 100)
+    }
+  }, [data])
+
   const handleDeleteTransaction = async (t_id: string) => {
     try {
       // Optimistic update
@@ -68,6 +90,7 @@ export default function FinanceAccountTransactionsPage({ id }: { id: number }) {
   return (
     <TransactionsTable
       enableTagging
+      enableLinking
       data={data}
       onDeleteTransaction={handleDeleteTransaction}
       refreshFn={() => setFetchKey(fetchKey + 1)}

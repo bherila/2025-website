@@ -23,6 +23,11 @@ Route::middleware(['web', 'auth'])->delete('/finance/{account_id}/line_items', [
 Route::middleware(['web', 'auth'])->get('/finance/tags', [FinanceApiController::class, 'getUserTags']);
 Route::middleware(['web', 'auth'])->post('/finance/tags/apply', [FinanceApiController::class, 'applyTagToTransactions']);
 Route::middleware(['web', 'auth'])->post('/finance/transactions/{transaction_id}/comment');
+Route::middleware(['web', 'auth'])->post('/finance/transactions/{transaction_id}/update', [FinanceApiController::class, 'updateTransaction']);
+Route::middleware(['web', 'auth'])->get('/finance/transactions/{transaction_id}/links', [FinanceApiController::class, 'getTransactionLinks']);
+Route::middleware(['web', 'auth'])->get('/finance/transactions/{transaction_id}/linkable', [FinanceApiController::class, 'findLinkableTransactions']);
+Route::middleware(['web', 'auth'])->post('/finance/transactions/link', [FinanceApiController::class, 'linkTransactions']);
+Route::middleware(['web', 'auth'])->post('/finance/transactions/{transaction_id}/unlink', [FinanceApiController::class, 'unlinkTransaction']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/balance-timeseries', [FinanceApiController::class, 'getBalanceTimeseries']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/balance-timeseries', [StatementController::class, 'addFinAccountStatement']);
 Route::middleware(['web', 'auth'])->delete('/finance/{account_id}/balance-timeseries', [FinanceApiController::class, 'deleteBalanceSnapshot']);

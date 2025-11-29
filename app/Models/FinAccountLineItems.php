@@ -48,4 +48,20 @@ class FinAccountLineItems extends Model
     {
         return $this->belongsToMany(FinAccountTag::class, 'fin_account_line_item_tag_map', 't_id', 'tag_id');
     }
+
+    /**
+     * Get the parent transaction (if this transaction is a child/linked transaction)
+     */
+    public function parentTransaction()
+    {
+        return $this->belongsTo(FinAccountLineItems::class, 'parent_t_id', 't_id');
+    }
+
+    /**
+     * Get all child transactions (transactions linked to this one as parent)
+     */
+    public function childTransactions()
+    {
+        return $this->hasMany(FinAccountLineItems::class, 'parent_t_id', 't_id');
+    }
 }
