@@ -70,6 +70,13 @@ class FinanceTransactionsApiController extends Controller
             // Remove the raw relationship data
             unset($itemArray['parent_transaction_raw']);
             unset($itemArray['child_transactions_raw']);
+
+            if (!$item->t_schc_category) {
+                unset($itemArray['t_schc_category']);
+            }
+            if (empty($itemArray['parent_of_t_ids'])) {
+                unset($itemArray['parent_of_t_ids']);
+            }
             
             return $itemArray;
         });
