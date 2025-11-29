@@ -123,4 +123,19 @@ class FinanceAccountsController extends Controller
 
         return view('finance.import-transactions', ['account_id' => $account_id, 'accountName' => $account->acct_name]);
     }
+
+    public function duplicates(Request $request, $account_id)
+    {
+        $uid = Auth::id();
+
+        $account = FinAccounts::where('acct_id', $account_id)
+            ->where('acct_owner', $uid)
+            ->first();
+
+        if (!$account) {
+            abort(404, 'Account not found');
+        }
+
+        return view('finance.duplicates', ['account_id' => $account_id, 'accountName' => $account->acct_name]);
+    }
 }

@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\FinanceApiController;
 use App\Http\Controllers\FinanceTransactionsApiController;
+use App\Http\Controllers\FinanceTransactionsDedupeApiController;
 use App\Http\Controllers\PayslipController;
 use App\Http\Controllers\PayslipImportController;
 use App\Http\Controllers\RsuController;
@@ -60,3 +61,5 @@ Route::middleware(['web', 'auth'])->get('/finance/statement/{snapshot_id}/detail
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/all-statement-details', [StatementController::class, 'getFinStatementDetails']);
 Route::middleware(['web', 'auth'])->post('/finance/statement/{snapshot_id}/import', [StatementImportGeminiController::class, 'import']);
 Route::middleware(['web', 'auth'])->post('/user/update-api-key', [App\Http\Controllers\UserApiController::class, 'updateApiKey']);
+Route::middleware(['web', 'auth'])->get('/finance/{account_id}/duplicates', [FinanceTransactionsDedupeApiController::class, 'findDuplicates']);
+Route::middleware(['web', 'auth'])->post('/finance/{account_id}/merge-duplicates', [FinanceTransactionsDedupeApiController::class, 'mergeDuplicates']);
