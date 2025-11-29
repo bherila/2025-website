@@ -7,7 +7,11 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@
 import Masonry from '@/components/ui/masonry'
 import { Spinner } from '@/components/ui/spinner'
 import { fetchWrapper } from '@/fetchWrapper'
-import { getStoredYear, type YearSelection } from './AccountYearSelector'
+import { 
+  getEffectiveYear, 
+  YEAR_CHANGED_EVENT,
+  type YearSelection 
+} from '@/lib/financeRouteBuilder'
 
 interface Totals {
   total_volume: number
@@ -37,26 +41,27 @@ export default function SummaryClient({ id }: { id: number }) {
   const [selectedYear, setSelectedYear] = useState<YearSelection | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  // Get year from sessionStorage on mount and listen for changes
+  // Get year from URL/sessionStorage on mount and listen for changes
   useEffect(() => {
     const updateYear = () => {
-      const stored = getStoredYear(id)
-      setSelectedYear(stored ?? 'all')
+      const effective = getEffectiveYear(id)
+      setSelectedYear(effective)
     }
     
     // Initial load
     updateYear()
     
-    // Listen for storage changes (from other components)
-    window.addEventListener('storage', updateYear)
-    
-    // Custom event for same-page updates
-    const handleYearChange = () => updateYear()
-    window.addEventListener('accountYearChange', handleYearChange)
+    // Listen for year changes from year selector
+    const handleYearChange = (e: Event) => {
+      const customEvent = e as CustomEvent<{ accountId: number; year: YearSelection }>
+      if (customEvent.detail.accountId === id) {
+        setSelectedYear(customEvent.detail.year)
+      }
+    }
+    window.addEventListener(YEAR_CHANGED_EVENT, handleYearChange)
     
     return () => {
-      window.removeEventListener('storage', updateYear)
-      window.removeEventListener('accountYearChange', handleYearChange)
+      window.removeEventListener(YEAR_CHANGED_EVENT, handleYearChange)
     }
   }, [id])
 

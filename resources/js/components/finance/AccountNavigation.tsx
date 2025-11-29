@@ -1,4 +1,5 @@
 'use client'
+import { useState, useEffect } from 'react'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import {
@@ -9,57 +10,30 @@ import {
   BreadcrumbSeparator,
   BreadcrumbPage,
 } from '@/components/ui/breadcrumb'
-import AccountYearSelector, { type YearSelection } from './AccountYearSelector'
+import AccountYearSelector from './AccountYearSelector'
+import { 
+  getTabUrl, 
+  importUrl, 
+  maintenanceUrl, 
+  accountsUrl,
+  getEffectiveYear,
+  type YearSelection 
+} from '@/lib/financeRouteBuilder'
 import { Upload, Settings } from 'lucide-react'
 
 // Tabs that show year selector
 const TAB_ITEMS = [
-  {
-    value: 'transactions',
-    title: 'Transactions',
-    href: (accountId: number) => `/finance/${accountId}`,
-    showYearSelector: true,
-  },
-  {
-    value: 'duplicates',
-    title: 'Duplicates',
-    href: (accountId: number) => `/finance/${accountId}/duplicates`,
-    showYearSelector: true,
-  },
-  {
-    value: 'linker',
-    title: 'Linker',
-    href: (accountId: number) => `/finance/${accountId}/linker`,
-    showYearSelector: true,
-  },
-  {
-    value: 'statements',
-    title: 'Statements',
-    href: (accountId: number) => `/finance/${accountId}/statements`,
-    showYearSelector: true,
-  },
-  {
-    value: 'summary',
-    title: 'Summary',
-    href: (accountId: number) => `/finance/${accountId}/summary`,
-    showYearSelector: true,
-  },
+  { value: 'transactions', title: 'Transactions', showYearSelector: true },
+  { value: 'duplicates', title: 'Duplicates', showYearSelector: true },
+  { value: 'linker', title: 'Linker', showYearSelector: true },
+  { value: 'statements', title: 'Statements', showYearSelector: true },
+  { value: 'summary', title: 'Summary', showYearSelector: true },
 ]
 
-// Button actions (no year selector)
+// Button actions (no year selector needed in URL)
 const ACTION_ITEMS = [
-  {
-    value: 'import',
-    title: 'Import',
-    href: (accountId: number) => `/finance/${accountId}/import-transactions`,
-    icon: Upload,
-  },
-  {
-    value: 'maintenance',
-    title: 'Maintenance',
-    href: (accountId: number) => `/finance/${accountId}/maintenance`,
-    icon: Settings,
-  },
+  { value: 'import', title: 'Import', icon: Upload },
+  { value: 'maintenance', title: 'Maintenance', icon: Settings },
 ]
 
 const ALL_NAV_ITEMS = [...TAB_ITEMS, ...ACTION_ITEMS]
@@ -75,6 +49,20 @@ export default function AccountNavigation({
   activeTab?: string
   onYearChange?: (year: YearSelection) => void
 }) {
+  const [selectedYear, setSelectedYear] = useState<YearSelection>(() => getEffectiveYear(accountId))
+  
+  // Update selected year when it changes via URL or selector
+  useEffect(() => {
+    const handleYearChange = (e: Event) => {
+      const customEvent = e as CustomEvent<{ accountId: number; year: YearSelection }>
+      if (customEvent.detail.accountId === accountId) {
+        setSelectedYear(customEvent.detail.year)
+      }
+    }
+    window.addEventListener('financeYearChange', handleYearChange)
+    return () => window.removeEventListener('financeYearChange', handleYearChange)
+  }, [accountId])
+  
   const activeTabTitle = ALL_NAV_ITEMS.find((item) => item.value === activeTab)?.title || ''
   const activeTabItem = TAB_ITEMS.find((item) => item.value === activeTab)
   const showYearSelector = activeTabItem?.showYearSelector ?? false
@@ -85,7 +73,7 @@ export default function AccountNavigation({
         <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem>
-              <BreadcrumbLink href="/finance/accounts">Accounts</BreadcrumbLink>
+              <BreadcrumbLink href={accountsUrl()}>Accounts</BreadcrumbLink>
             </BreadcrumbItem>
             <BreadcrumbSeparator />
             <BreadcrumbItem>
@@ -109,7 +97,7 @@ export default function AccountNavigation({
             <TabsList>
               {TAB_ITEMS.map((item) => (
                 <TabsTrigger key={item.value} value={item.value} asChild>
-                  <a href={item.href(accountId)}>{item.title}</a>
+                  <a href={getTabUrl(item.value, accountId, selectedYear)}>{item.title}</a>
                 </TabsTrigger>
               ))}
             </TabsList>
@@ -131,7 +119,7 @@ export default function AccountNavigation({
               size="sm"
               asChild
             >
-              <a href={item.href(accountId)} className="flex items-center gap-1">
+              <a href={item.value === 'import' ? importUrl(accountId) : maintenanceUrl(accountId)} className="flex items-center gap-1">
                 <item.icon className="h-4 w-4" />
                 {item.title}
               </a>

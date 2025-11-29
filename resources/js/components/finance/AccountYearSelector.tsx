@@ -4,43 +4,22 @@ import { useEffect, useState, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { fetchWrapper } from '@/fetchWrapper'
 import { z } from 'zod'
+import { 
+  getEffectiveYear, 
+  getStoredYear,
+  updateYearInUrl, 
+  YEAR_CHANGED_EVENT,
+  type YearSelection 
+} from '@/lib/financeRouteBuilder'
 
-export type YearSelection = number | 'all'
+// Re-export types and functions for convenience (backwards compatibility)
+export type { YearSelection } from '@/lib/financeRouteBuilder'
+export { getStoredYear, setStoredYear, getEffectiveYear } from '@/lib/financeRouteBuilder'
 
 interface AccountYearSelectorProps {
   accountId: number
   onYearChange?: ((year: YearSelection) => void) | undefined
   className?: string
-}
-
-const STORAGE_KEY_PREFIX = 'finance_year_'
-
-function getStorageKey(accountId: number): string {
-  return `${STORAGE_KEY_PREFIX}${accountId}`
-}
-
-export function getStoredYear(accountId: number): YearSelection | null {
-  try {
-    const stored = sessionStorage.getItem(getStorageKey(accountId))
-    if (stored === 'all') return 'all'
-    if (stored) {
-      const parsed = parseInt(stored, 10)
-      if (!isNaN(parsed)) return parsed
-    }
-  } catch {
-    // sessionStorage not available
-  }
-  return null
-}
-
-export function setStoredYear(accountId: number, year: YearSelection): void {
-  try {
-    sessionStorage.setItem(getStorageKey(accountId), String(year))
-    // Dispatch custom event for same-page updates
-    window.dispatchEvent(new CustomEvent('accountYearChange', { detail: { accountId, year } }))
-  } catch {
-    // sessionStorage not available
-  }
 }
 
 export function useAccountYear(accountId: number): {
@@ -53,12 +32,22 @@ export function useAccountYear(accountId: number): {
   const [availableYears, setAvailableYears] = useState<number[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  // Load from sessionStorage on mount
+  // Load from URL or sessionStorage on mount
   useEffect(() => {
-    const stored = getStoredYear(accountId)
-    if (stored !== null) {
-      setSelectedYearState(stored)
+    const effective = getEffectiveYear(accountId)
+    setSelectedYearState(effective)
+  }, [accountId])
+
+  // Listen for year changes from other components
+  useEffect(() => {
+    const handleYearChange = (e: Event) => {
+      const customEvent = e as CustomEvent<{ accountId: number; year: YearSelection }>
+      if (customEvent.detail.accountId === accountId) {
+        setSelectedYearState(customEvent.detail.year)
+      }
     }
+    window.addEventListener(YEAR_CHANGED_EVENT, handleYearChange)
+    return () => window.removeEventListener(YEAR_CHANGED_EVENT, handleYearChange)
   }, [accountId])
 
   // Fetch available years
@@ -69,23 +58,21 @@ export function useAccountYear(accountId: number): {
         const parsedYears = z.array(z.number()).parse(years)
         setAvailableYears(parsedYears)
         
-        // If no year stored yet, default to most recent year
-        const stored = getStoredYear(accountId)
-        if (stored === null) {
-          const defaultYear = parsedYears.length > 0 && parsedYears[0] !== undefined 
-            ? parsedYears[0] 
-            : 'all'
-          setSelectedYearState(defaultYear)
-          setStoredYear(accountId, defaultYear)
+        // If no year determined yet, default to most recent year
+        const effective = getEffectiveYear(accountId)
+        if (effective === 'all' && parsedYears.length > 0 && parsedYears[0] !== undefined) {
+          // Only auto-select if user hasn't explicitly chosen 'all'
+          const stored = getStoredYear(accountId)
+          if (stored === null) {
+            const defaultYear = parsedYears[0]
+            setSelectedYearState(defaultYear)
+            updateYearInUrl(accountId, defaultYear)
+          }
         }
         setIsLoading(false)
       } catch (error) {
         console.error('Error fetching years:', error)
         setAvailableYears([])
-        if (getStoredYear(accountId) === null) {
-          setSelectedYearState('all')
-          setStoredYear(accountId, 'all')
-        }
         setIsLoading(false)
       }
     }
@@ -94,7 +81,7 @@ export function useAccountYear(accountId: number): {
 
   const setSelectedYear = useCallback((year: YearSelection) => {
     setSelectedYearState(year)
-    setStoredYear(accountId, year)
+    updateYearInUrl(accountId, year)
   }, [accountId])
 
   return { selectedYear, setSelectedYear, availableYears, isLoading }

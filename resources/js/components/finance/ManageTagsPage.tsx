@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { fetchWrapper } from '@/fetchWrapper'
+import { accountsUrl } from '@/lib/financeRouteBuilder'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -374,7 +375,7 @@ export default function ManageTagsPage() {
 
       {/* Back to accounts link */}
       <div className="mt-8 pt-4 border-t">
-        <a href="/finance/accounts" className="text-blue-600 hover:underline">
+        <a href={accountsUrl()} className="text-blue-600 hover:underline">
           ← Back to Accounts
         </a>
       </div>

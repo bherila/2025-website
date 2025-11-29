@@ -8,6 +8,7 @@ import { Table } from './ui/table'
 import type { AccountLineItem } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '../fetchWrapper'
 import currency from 'currency.js'
+import { goToTransaction } from '@/lib/financeRouteBuilder'
 
 interface LinkedTransaction {
   t_id: number
@@ -162,9 +163,8 @@ export default function TransactionLinkModal({
 
   const navigateToTransaction = (accountId: number, transactionId: number, transactionDate?: string) => {
     // Extract year from transaction date for year selector compatibility
-    const year = transactionDate ? new Date(transactionDate).getFullYear() : null
-    const yearParam = year ? `?year=${year}` : ''
-    window.location.href = `/finance/${accountId}${yearParam}#t_id=${transactionId}`
+    const year = transactionDate ? new Date(transactionDate).getFullYear() : undefined
+    goToTransaction(accountId, transactionId, year)
   }
 
   const hasExistingLinks = parentTransaction || childTransactions.length > 0
