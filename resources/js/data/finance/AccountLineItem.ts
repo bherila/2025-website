@@ -78,7 +78,6 @@ export const AccountLineItemSchema = z.object({
   t_to: z.string().nullable().optional(),
   t_interest_rate: z.string().max(20).nullable().optional(),
   t_harvested_amount: z.string().optional().nullable(),
-  parent_t_id: z.number().nullable().optional(),
   parent_of_t_ids: z.array(z.number()).optional(),
   parent_transaction: LinkedTransactionSchema.nullable().optional(),
   child_transactions: z.array(LinkedTransactionSchema).optional(),

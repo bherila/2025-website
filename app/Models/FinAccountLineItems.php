@@ -35,7 +35,6 @@ class FinAccountLineItems extends Model
         't_to',
         't_interest_rate',
         't_harvested_amount',
-        'parent_t_id',
         't_account_balance',
     ];
 
@@ -50,11 +49,21 @@ class FinAccountLineItems extends Model
     }
 
     /**
-     * Get the parent transaction (if this transaction is a child/linked transaction)
+     * Get links where this transaction is the parent
      */
-    public function parentTransaction()
+    public function childLinks()
     {
-        return $this->belongsTo(FinAccountLineItems::class, 'parent_t_id', 't_id');
+        return $this->hasMany(FinAccountLineItemLink::class, 'parent_t_id', 't_id')
+            ->whereNull('when_deleted');
+    }
+
+    /**
+     * Get links where this transaction is the child
+     */
+    public function parentLinks()
+    {
+        return $this->hasMany(FinAccountLineItemLink::class, 'child_t_id', 't_id')
+            ->whereNull('when_deleted');
     }
 
     /**
@@ -62,6 +71,28 @@ class FinAccountLineItems extends Model
      */
     public function childTransactions()
     {
-        return $this->hasMany(FinAccountLineItems::class, 'parent_t_id', 't_id');
+        return $this->belongsToMany(
+            FinAccountLineItems::class,
+            'fin_account_line_item_links',
+            'parent_t_id',
+            'child_t_id',
+            't_id',
+            't_id'
+        )->wherePivotNull('when_deleted');
+    }
+
+    /**
+     * Get all parent transactions (transactions this one is linked to as child)
+     */
+    public function parentTransactions()
+    {
+        return $this->belongsToMany(
+            FinAccountLineItems::class,
+            'fin_account_line_item_links',
+            'child_t_id',
+            'parent_t_id',
+            't_id',
+            't_id'
+        )->wherePivotNull('when_deleted');
     }
 }

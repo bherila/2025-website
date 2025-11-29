@@ -6,6 +6,7 @@ import FinanceAccountTransactionsPage from './components/finance/FinanceAccountT
 import FinanceAccountStatementsPage from './components/finance/statements/FinanceAccountStatementsPage'
 import ImportTransactionsClient from './components/finance/ImportTransactionsClient'
 import DuplicatesPage from './components/finance/DuplicatesPage'
+import ManageTagsPage from './components/finance/ManageTagsPage'
 
 document.addEventListener('DOMContentLoaded', () => {
   const navDiv = document.getElementById('AccountNavigation')
@@ -62,5 +63,11 @@ document.addEventListener('DOMContentLoaded', () => {
   if (duplicatesDiv) {
     const root = createRoot(duplicatesDiv)
     root.render(<DuplicatesPage id={parseInt(duplicatesDiv.dataset.accountId!)} />)
+  }
+
+  const manageTagsDiv = document.getElementById('ManageTagsPage')
+  if (manageTagsDiv) {
+    const root = createRoot(manageTagsDiv)
+    root.render(<ManageTagsPage />)
   }
 })

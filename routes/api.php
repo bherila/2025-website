@@ -24,6 +24,9 @@ Route::middleware(['web', 'auth'])->post('/finance/{account_id}/line_items', [Fi
 Route::middleware(['web', 'auth'])->delete('/finance/{account_id}/line_items', [FinanceTransactionsApiController::class, 'deleteLineItem']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/transaction-years', [FinanceTransactionsApiController::class, 'getTransactionYears']);
 Route::middleware(['web', 'auth'])->get('/finance/tags', [FinanceApiController::class, 'getUserTags']);
+Route::middleware(['web', 'auth'])->post('/finance/tags', [FinanceApiController::class, 'createTag']);
+Route::middleware(['web', 'auth'])->put('/finance/tags/{tag_id}', [FinanceApiController::class, 'updateTag']);
+Route::middleware(['web', 'auth'])->delete('/finance/tags/{tag_id}', [FinanceApiController::class, 'deleteTag']);
 Route::middleware(['web', 'auth'])->post('/finance/tags/apply', [FinanceApiController::class, 'applyTagToTransactions']);
 Route::middleware(['web', 'auth'])->post('/finance/transactions/{transaction_id}/update', [FinanceTransactionsApiController::class, 'updateTransaction']);
 Route::middleware(['web', 'auth'])->get('/finance/transactions/{transaction_id}/links', [FinanceTransactionsApiController::class, 'getTransactionLinks']);

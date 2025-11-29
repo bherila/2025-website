@@ -110,6 +110,23 @@ CREATE TABLE `fin_account_balance_snapshot` (
   CONSTRAINT `fin_account_balance_snapshot_acct_id_foreign` FOREIGN KEY (`acct_id`) REFERENCES `fin_accounts` (`acct_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_account_line_item_links`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_account_line_item_links` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `parent_t_id` bigint(20) unsigned NOT NULL COMMENT 'The parent transaction ID (typically the source/withdrawal)',
+  `child_t_id` bigint(20) unsigned NOT NULL COMMENT 'The child transaction ID (typically the destination/deposit)',
+  `when_added` timestamp NOT NULL DEFAULT current_timestamp(),
+  `when_deleted` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `fin_account_line_item_links_parent_t_id_child_t_id_unique` (`parent_t_id`,`child_t_id`),
+  KEY `fin_account_line_item_links_parent_t_id_index` (`parent_t_id`),
+  KEY `fin_account_line_item_links_child_t_id_index` (`child_t_id`),
+  CONSTRAINT `fin_account_line_item_links_child_t_id_foreign` FOREIGN KEY (`child_t_id`) REFERENCES `fin_account_line_items` (`t_id`) ON DELETE CASCADE,
+  CONSTRAINT `fin_account_line_item_links_parent_t_id_foreign` FOREIGN KEY (`parent_t_id`) REFERENCES `fin_account_line_items` (`t_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_account_line_item_tag_map`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -139,7 +156,7 @@ CREATE TABLE `fin_account_line_items` (
   `t_schc_category` varchar(255) DEFAULT NULL,
   `t_amt` decimal(13,4) DEFAULT NULL,
   `t_symbol` varchar(20) DEFAULT NULL,
-  `t_qty` double NOT NULL DEFAULT 0,
+  `t_qty` double DEFAULT 0,
   `t_price` decimal(13,4) DEFAULT NULL,
   `t_commission` decimal(13,4) DEFAULT NULL,
   `t_fee` decimal(13,4) DEFAULT NULL,
@@ -154,16 +171,14 @@ CREATE TABLE `fin_account_line_items` (
   `t_from` varchar(10) DEFAULT NULL,
   `t_to` varchar(10) DEFAULT NULL,
   `t_interest_rate` varchar(20) DEFAULT NULL,
-  `parent_t_id` bigint(20) unsigned DEFAULT NULL,
   `t_cusip` varchar(20) DEFAULT NULL,
   `when_added` timestamp NULL DEFAULT NULL,
   `when_deleted` timestamp NULL DEFAULT NULL,
   `t_harvested_amount` decimal(13,4) DEFAULT NULL,
   `t_date_posted` varchar(10) DEFAULT NULL,
+  `t_account_balance` decimal(13,4) DEFAULT NULL,
   PRIMARY KEY (`t_id`),
-  KEY `fin_account_line_items_t_account_index` (`t_account`),
-  KEY `fin_account_line_items_parent_t_id_index` (`parent_t_id`),
-  CONSTRAINT `fin_account_line_items_parent_t_id_foreign` FOREIGN KEY (`parent_t_id`) REFERENCES `fin_account_line_items` (`t_id`) ON DELETE SET NULL
+  KEY `fin_account_line_items_t_account_index` (`t_account`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_account_tag`;
@@ -582,3 +597,8 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (9,'0001_01_01_0000
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (11,'2025_11_08_222740_add_gemini_api_key_to_users_table',3);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (12,'2025_11_11_084311_add_timestamps_to_fin_payslip_table',4);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (13,'2025_11_18_075245_create_fin_statement_details_table',5);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (14,'2025_11_28_072001_add_t_account_balance_to_fin_account_line_items_table',6);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (15,'2025_11_28_072150_add_t_account_balance_to_fin_account_line_items_table',6);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (16,'2025_11_29_185525_create_fin_account_line_item_links_table',7);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (17,'2025_11_29_185549_migrate_parent_t_id_to_links_table',7);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (18,'2025_11_29_185611_remove_parent_t_id_from_fin_account_line_items',7);

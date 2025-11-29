@@ -73,9 +73,9 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
   }
 
   const hasLinks = (item: AccountLineItem) => {
-    return item.parent_t_id !== null && item.parent_t_id !== undefined || 
-           (item.parent_of_t_ids && item.parent_of_t_ids.length > 0) ||
-           (item.child_transactions && item.child_transactions.length > 0)
+    return (item.parent_of_t_ids && item.parent_of_t_ids.length > 0) ||
+           (item.child_transactions && item.child_transactions.length > 0) ||
+           (item.parent_transaction !== null && item.parent_transaction !== undefined)
   }
 
   useEffect(() => {

@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use App\Models\FinAccounts;
 use App\Models\FinAccountLineItems;
+use App\Models\FinAccountLineItemLink;
 
 class FinanceTransactionsApiController extends Controller
 {
@@ -19,7 +20,7 @@ class FinanceTransactionsApiController extends Controller
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
 
         $query = FinAccountLineItems::where('t_account', $account->acct_id)
-            ->with(['tags', 'parentTransaction.account', 'childTransactions.account'])
+            ->with(['tags', 'parentTransactions.account', 'childTransactions.account'])
             ->orderBy('t_date', 'desc');
 
         if ($request->has('start_date') && $request->has('end_date')) {
@@ -41,15 +42,16 @@ class FinanceTransactionsApiController extends Controller
             // Add parent_of_t_ids array (IDs of child transactions)
             $itemArray['parent_of_t_ids'] = $item->childTransactions->pluck('t_id')->toArray();
             
-            // Add parent transaction info if exists
-            if ($item->parentTransaction) {
+            // Add parent transaction info if exists (using the new many-to-many relationship)
+            $parentTransaction = $item->parentTransactions->first();
+            if ($parentTransaction) {
                 $itemArray['parent_transaction'] = [
-                    't_id' => $item->parentTransaction->t_id,
-                    't_account' => $item->parentTransaction->t_account,
-                    'acct_name' => $item->parentTransaction->account?->acct_name,
-                    't_date' => $item->parentTransaction->t_date,
-                    't_description' => $item->parentTransaction->t_description,
-                    't_amt' => $item->parentTransaction->t_amt,
+                    't_id' => $parentTransaction->t_id,
+                    't_account' => $parentTransaction->t_account,
+                    'acct_name' => $parentTransaction->account?->acct_name,
+                    't_date' => $parentTransaction->t_date,
+                    't_description' => $parentTransaction->t_description,
+                    't_amt' => $parentTransaction->t_amt,
                 ];
             }
             
@@ -68,8 +70,7 @@ class FinanceTransactionsApiController extends Controller
             }
             
             // Remove the raw relationship data
-            unset($itemArray['parent_transaction_raw']);
-            unset($itemArray['child_transactions_raw']);
+            unset($itemArray['parent_transactions']);
 
             if (!$item->t_schc_category) {
                 unset($itemArray['t_schc_category']);
@@ -140,7 +141,6 @@ class FinanceTransactionsApiController extends Controller
                 't_to' => $item['t_to'] ?? null,
                 't_interest_rate' => $item['t_interest_rate'] ?? null,
                 't_harvested_amount' => $item['t_harvested_amount'] ?? null,
-                'parent_t_id' => $item['parent_t_id'] ?? null,
                 't_account_balance' => $item['t_account_balance'] ?? null,
             ];
         }
@@ -266,7 +266,7 @@ class FinanceTransactionsApiController extends Controller
             ->whereBetween('t_date', [$startDate, $endDate])
             ->where('t_id', '!=', $transaction_id) // Exclude the source transaction
             ->where('t_account', '!=', $sourceTransaction->t_account) // Exclude same account
-            ->whereNull('parent_t_id') // Exclude already-linked child transactions
+            ->whereDoesntHave('parentTransactions') // Exclude already-linked child transactions
             ->whereDoesntHave('childTransactions') // Exclude transactions that are already parents
             ->where(function ($query) use ($minAmount, $maxAmount) {
                 // Match on absolute amount within range
@@ -305,7 +305,7 @@ class FinanceTransactionsApiController extends Controller
     }
 
     /**
-     * Link two transactions (set parent-child relationship)
+     * Link two transactions (set parent-child relationship via links table)
      */
     public function linkTransactions(Request $request)
     {
@@ -325,16 +325,30 @@ class FinanceTransactionsApiController extends Controller
             ->firstOrFail();
 
         $childTransaction = FinAccountLineItems::where('t_id', $request->child_t_id)
+            ->with('parentTransactions')
             ->whereHas('account', function ($query) use ($uid) {
                 $query->where('acct_owner', $uid);
             })
             ->firstOrFail();
 
         // Check if the child is not already linked
-        if ($childTransaction->parent_t_id !== null) {
+        if ($childTransaction->parentTransactions->count() > 0) {
             return response()->json([
                 'success' => false,
                 'error' => 'Child transaction is already linked to another parent.',
+            ], 400);
+        }
+
+        // Check if this link already exists
+        $existingLink = FinAccountLineItemLink::where('parent_t_id', $request->parent_t_id)
+            ->where('child_t_id', $request->child_t_id)
+            ->whereNull('when_deleted')
+            ->first();
+
+        if ($existingLink) {
+            return response()->json([
+                'success' => false,
+                'error' => 'These transactions are already linked.',
             ], 400);
         }
 
@@ -355,8 +369,11 @@ class FinanceTransactionsApiController extends Controller
             ], 400);
         }
 
-        // Set the link
-        $childTransaction->update(['parent_t_id' => $parentTransaction->t_id]);
+        // Create the link
+        FinAccountLineItemLink::create([
+            'parent_t_id' => $parentTransaction->t_id,
+            'child_t_id' => $childTransaction->t_id,
+        ]);
 
         return response()->json([
             'success' => true,
@@ -368,7 +385,7 @@ class FinanceTransactionsApiController extends Controller
     }
 
     /**
-     * Unlink a transaction (remove parent-child relationship)
+     * Unlink a transaction (remove parent-child relationship from links table)
      */
     public function unlinkTransaction(Request $request, $transaction_id)
     {
@@ -388,23 +405,36 @@ class FinanceTransactionsApiController extends Controller
 
         if ($request->unlink_type === 'parent') {
             // We want to unlink this transaction from its parent
-            if ($transaction->parent_t_id != $request->linked_t_id) {
+            // The current transaction is the child, so we delete the link where child_t_id = transaction_id
+            $link = FinAccountLineItemLink::where('child_t_id', $transaction_id)
+                ->where('parent_t_id', $request->linked_t_id)
+                ->whereNull('when_deleted')
+                ->first();
+
+            if (!$link) {
                 return response()->json([
                     'success' => false,
                     'error' => 'Transaction is not linked to the specified parent.',
                 ], 400);
             }
-            $transaction->update(['parent_t_id' => null]);
+
+            $link->update(['when_deleted' => now()]);
         } else {
             // We want to unlink a child from this transaction
-            $childTransaction = FinAccountLineItems::where('t_id', $request->linked_t_id)
-                ->where('parent_t_id', $transaction_id)
-                ->whereHas('account', function ($query) use ($uid) {
-                    $query->where('acct_owner', $uid);
-                })
-                ->firstOrFail();
+            // The current transaction is the parent, so we delete the link where parent_t_id = transaction_id
+            $link = FinAccountLineItemLink::where('parent_t_id', $transaction_id)
+                ->where('child_t_id', $request->linked_t_id)
+                ->whereNull('when_deleted')
+                ->first();
 
-            $childTransaction->update(['parent_t_id' => null]);
+            if (!$link) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Child transaction is not linked to this parent.',
+                ], 400);
+            }
+
+            $link->update(['when_deleted' => now()]);
         }
 
         return response()->json(['success' => true]);
@@ -418,7 +448,7 @@ class FinanceTransactionsApiController extends Controller
         $uid = Auth::id();
 
         $transaction = FinAccountLineItems::where('t_id', $transaction_id)
-            ->with(['parentTransaction.account', 'childTransactions.account'])
+            ->with(['parentTransactions.account', 'childTransactions.account'])
             ->whereHas('account', function ($query) use ($uid) {
                 $query->where('acct_owner', $uid);
             })
@@ -432,27 +462,29 @@ class FinanceTransactionsApiController extends Controller
         $parentAmount = abs(floatval($transaction->t_amt));
         $linkingAllowed = $linkedAmount < $parentAmount;
 
+        // Get parent transaction (first one since we're transitioning from single parent)
+        $parentTransaction = $transaction->parentTransactions->first();
+
         $result = [
             't_id' => $transaction->t_id,
             't_account' => $transaction->t_account,
             't_date' => $transaction->t_date,
             't_description' => $transaction->t_description,
             't_amt' => $transaction->t_amt,
-            'parent_t_id' => $transaction->parent_t_id,
             'parent_transaction' => null,
             'child_transactions' => [],
             'linked_amount' => $linkedAmount,
             'linking_allowed' => $linkingAllowed,
         ];
 
-        if ($transaction->parentTransaction) {
+        if ($parentTransaction) {
             $result['parent_transaction'] = [
-                't_id' => $transaction->parentTransaction->t_id,
-                't_account' => $transaction->parentTransaction->t_account,
-                'acct_name' => $transaction->parentTransaction->account?->acct_name,
-                't_date' => $transaction->parentTransaction->t_date,
-                't_description' => $transaction->parentTransaction->t_description,
-                't_amt' => $transaction->parentTransaction->t_amt,
+                't_id' => $parentTransaction->t_id,
+                't_account' => $parentTransaction->t_account,
+                'acct_name' => $parentTransaction->account?->acct_name,
+                't_date' => $parentTransaction->t_date,
+                't_description' => $parentTransaction->t_description,
+                't_amt' => $parentTransaction->t_amt,
             ];
         }
 

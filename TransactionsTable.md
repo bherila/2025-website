@@ -11,6 +11,7 @@ The **TransactionsTable** component is a comprehensive, feature-rich table for d
 - **Frontend Component**: `resources/js/components/TransactionsTable.tsx`
 - **CSS Styles**: `resources/js/components/TransactionsTable.css`
 - **Primary Usage**: `resources/js/components/finance/FinanceAccountTransactionsPage.tsx`
+- **Type Definitions**: `resources/js/data/finance/AccountLineItem.ts`
 
 ---
 
@@ -81,6 +82,7 @@ When `enableLinking` is true:
 - Opens `TransactionLinkModal` for managing links
 - Links connect related transactions across accounts (e.g., transfers)
 - **Balanced Detection**: When linked transactions sum to $0.00, the modal shows a green "balanced" indicator and hides the "Available Transactions to Link" section
+- Uses `fin_account_line_item_links` table for many-to-many relationships
 
 ### 6. Transaction Details Modal
 
@@ -103,49 +105,7 @@ When `enableTagging` is true:
 - Tags are displayed as colored badges
 - "Apply Tag" button to apply tags to filtered transactions
 - Fetches available tags from `/api/finance/tags`
-
----
-
-## Data Schema
-
-```typescript
-interface AccountLineItem {
-  t_id?: number
-  t_account?: number
-  t_date?: string
-  t_date_posted?: string | null
-  t_type?: string | null
-  t_schc_category?: string | null
-  t_description?: string | null
-  t_symbol?: string | null
-  t_cusip?: string | null
-  t_qty?: number | null
-  t_price?: number | string | null
-  t_commission?: number | string | null
-  t_fee?: number | string | null
-  t_amt?: number | string | null
-  t_comment?: string | null
-  t_account_balance?: number | string | null
-  parent_t_id?: number | null
-  parent_of_t_ids?: number[]
-  parent_transaction?: LinkedTransaction | null
-  child_transactions?: LinkedTransaction[]
-  tags?: Tag[]
-  // Option fields
-  opt_expiration?: string | null
-  opt_type?: string | null
-  opt_strike?: number | string | null
-}
-
-interface LinkedTransaction {
-  t_id: number
-  t_account: number
-  acct_name?: string
-  t_date: string
-  t_description?: string
-  t_amt: number | string
-}
-```
+- "Manage Tags" button links to `/finance/tags` for tag CRUD
 
 ---
 
@@ -176,6 +136,10 @@ interface LinkedTransaction {
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/finance/tags` | Get user's tags |
+| GET | `/api/finance/tags?include_counts=true` | Get tags with transaction counts |
+| POST | `/api/finance/tags` | Create a new tag |
+| PUT | `/api/finance/tags/{tag_id}` | Update a tag |
+| DELETE | `/api/finance/tags/{tag_id}` | Delete a tag (soft delete) |
 | POST | `/api/finance/tags/apply` | Apply tag to transactions |
 
 ---
@@ -201,6 +165,17 @@ Modal for managing transaction links:
 - Finds potential matches within ±7 days and ±5% of amount
 - Linking is disabled when linked amounts equal or exceed parent amount
 
+### ManageTagsPage
+
+**Location**: `resources/js/components/finance/ManageTagsPage.tsx`
+
+Page for managing user's tags:
+- Create new tags with label and color
+- Edit existing tags
+- Delete tags (with confirmation)
+- Shows transaction count per tag
+- Route: `/finance/tags`
+
 ### FinanceAccountTransactionsPage
 
 **Location**: `resources/js/components/finance/FinanceAccountTransactionsPage.tsx`
@@ -214,21 +189,81 @@ Main page component that:
 
 ---
 
-## CSS Styling
+## Backend Controllers
 
-### TransactionsTable.css
+### FinanceTransactionsApiController
 
-```css
-/* Highlight animation for navigated-to transactions */
-@keyframes highlight-pulse {
-  0%, 100% { background-color: transparent; }
-  50% { background-color: rgb(254 243 199); }
+**Location**: `app/Http/Controllers/FinanceTransactionsApiController.php`
+
+| Method | Description |
+|--------|-------------|
+| `getLineItems` | Get transactions with year filtering |
+| `deleteLineItem` | Delete a transaction |
+| `importLineItems` | Bulk import transactions |
+| `updateTransaction` | Update transaction fields |
+| `getTransactionYears` | Get distinct years for year selector |
+| `findLinkableTransactions` | Find potential link targets |
+| `linkTransactions` | Create parent-child link |
+| `unlinkTransaction` | Remove parent-child link |
+| `getTransactionLinks` | Get link details for a transaction |
+
+### FinanceApiController (Tag Methods)
+
+**Location**: `app/Http/Controllers/FinanceApiController.php`
+
+| Method | Description |
+|--------|-------------|
+| `getUserTags` | Get user's tags (optionally with counts) |
+| `createTag` | Create a new tag |
+| `updateTag` | Update tag label/color |
+| `deleteTag` | Soft delete a tag and its mappings |
+| `applyTagToTransactions` | Bulk apply tag to transactions |
+
+### Linking Logic
+
+- Parent transaction: typically the withdrawal (source of transfer)
+- Child transaction: typically the deposit (destination of transfer)
+- Linking is prevented when linked child amounts >= parent amount
+- API returns `linking_allowed` boolean for UI control
+
+---
+
+## Eloquent Models
+
+### FinAccountLineItems
+
+**Location**: `app/Models/FinAccountLineItems.php`
+
+```php
+// Relationships
+public function childTransactions()
+{
+    return $this->belongsToMany(
+        FinAccountLineItems::class,
+        'fin_account_line_item_links',
+        'parent_t_id',
+        'child_t_id'
+    )->wherePivotNull('when_deleted');
 }
 
-.highlight-transaction {
-  animation: highlight-pulse 1s ease-in-out 3;
+public function parentTransactions()
+{
+    return $this->belongsToMany(
+        FinAccountLineItems::class,
+        'fin_account_line_item_links',
+        'child_t_id',
+        'parent_t_id'
+    )->wherePivotNull('when_deleted');
 }
 ```
+
+### FinAccountLineItemLink
+
+**Location**: `app/Models/FinAccountLineItemLink.php`
+
+Link table model for transaction parent-child relationships:
+- Supports soft deletion via `when_deleted` timestamp
+- Foreign keys to `fin_account_line_items` for both parent and child
 
 ---
 
@@ -266,76 +301,19 @@ Main page component that:
 
 ---
 
-## Backend Controller
+## CSS Styling
 
-**Location**: `app/Http/Controllers/FinanceTransactionsApiController.php`
+### TransactionsTable.css
 
-Extracted from `FinanceApiController.php` for better separation of concerns.
-
-### Methods
-
-| Method | Description |
-|--------|-------------|
-| `getLineItems` | Get transactions with year filtering |
-| `deleteLineItem` | Delete a transaction |
-| `importLineItems` | Bulk import transactions |
-| `updateTransaction` | Update transaction fields |
-| `getTransactionYears` | Get distinct years for year selector |
-| `findLinkableTransactions` | Find potential link targets |
-| `linkTransactions` | Create parent-child link |
-| `unlinkTransaction` | Remove parent-child link |
-| `getTransactionLinks` | Get link details for a transaction |
-
-### Linking Logic
-
-- Parent transaction: typically the withdrawal (source of transfer)
-- Child transaction: typically the deposit (destination of transfer)
-- Linking is prevented when linked child amounts >= parent amount
-- API returns `linking_allowed` boolean for UI control
-
----
-
-## Database Schema
-
-### fin_account_line_items
-
-```sql
-t_id INT PRIMARY KEY AUTO_INCREMENT
-t_account INT NOT NULL (FK to fin_accounts)
-t_date DATE
-t_date_posted DATE
-t_type VARCHAR(50)
-t_schc_category VARCHAR(50)
-t_description VARCHAR(255)
-t_symbol VARCHAR(20)
-t_cusip VARCHAR(20)
-t_qty DECIMAL(15,6)
-t_price DECIMAL(15,6)
-t_commission DECIMAL(15,2)
-t_fee DECIMAL(15,2)
-t_amt DECIMAL(15,2)
-t_comment TEXT
-t_account_balance DECIMAL(15,2)
-parent_t_id INT (FK to fin_account_line_items for linking)
-opt_expiration DATE
-opt_type VARCHAR(10)
-opt_strike DECIMAL(15,2)
-```
-
-### Eloquent Model
-
-**Location**: `app/Models/FinAccountLineItems.php`
-
-```php
-// Relationships
-public function parentTransaction()
-{
-    return $this->belongsTo(FinAccountLineItems::class, 'parent_t_id', 't_id');
+```css
+/* Highlight animation for navigated-to transactions */
+@keyframes highlight-pulse {
+  0%, 100% { background-color: transparent; }
+  50% { background-color: rgb(254 243 199); }
 }
 
-public function childTransactions()
-{
-    return $this->hasMany(FinAccountLineItems::class, 'parent_t_id', 't_id');
+.highlight-transaction {
+  animation: highlight-pulse 1s ease-in-out 3;
 }
 ```
 
@@ -345,53 +323,4 @@ public function childTransactions()
 
 **Location**: `resources/js/data/finance/parseFidelityCsv.ts`
 
-### Field Mapping
-
-When parsing Fidelity CSV exports, the Action column is parsed by `splitTransactionString()`:
-
-| Action Column Example | Description (t_description) | Memo (t_comment) | Type (t_type) |
-|----------------------|---------------------------|------------------|---------------|
-| `BOUGHT` | `BOUGHT` | *(empty)* | `Buy` |
-| `DIVIDEND RECEIVED APA CORPORATION COM (APA) (Margin)` | `APA CORPORATION COM (APA) (MARGIN)` | `DIVIDEND RECEIVED` | `Dividend` |
-| `TRANSFER OF ASSETS ACAT RECEIVE BROADCOM INC COM (AVGO)` | `ACAT RECEIVE BROADCOM INC COM (AVGO)` | `TRANSFER OF ASSETS` | `Transfer` |
-| `MERGER MER PAYOUT #REORCM00516... (WBA) (Cash)` | `MER PAYOUT #REORCM00516... (WBA) (CASH)` | `MERGER` | `Merger` |
-| `FOREIGN TAX PAID NXP SEMICONDUCTORS NV (NXPI)` | `NXP SEMICONDUCTORS NV (NXPI)` | `FOREIGN TAX PAID` | `Tax` |
-| `INTEREST EARNED FIMM TREASURY ONLY PORTFOLIO (FSIXX)` | `FIMM TREASURY ONLY PORTFOLIO (FSIXX)` | `INTEREST EARNED` | `Interest` |
-| `INTEREST SHORT SALE REBATE TESLA INC (TSLA)` | `TESLA INC (TSLA)` | `INTEREST SHORT SALE REBATE` | `Interest` |
-| `MARGIN INTEREST CHARGED (Margin)` | `CHARGED (MARGIN)` | `MARGIN INTEREST` | `Interest` |
-
-### Logic
-
-1. The function matches known prefixes (e.g., `DIVIDEND RECEIVED`, `TRANSFER OF ASSETS`, `MARGIN INTEREST`)
-2. **Description** (`t_description`) = The "rest" after the prefix (more specific details)
-3. **Memo** (`t_comment`) = The matched prefix (the transaction action category)
-4. If no "rest" exists (e.g., simple `BOUGHT` or `SOLD`), description is the prefix and memo is empty
-
-### Supported Transaction Types
-
-| Prefix | Type |
-|--------|------|
-| `YOU BOUGHT`, `BOUGHT` | `Buy` |
-| `YOU SOLD`, `SOLD` | `Sell` |
-| `DIVIDEND RECEIVED`, `DIVIDEND CHARGED` | `Dividend` |
-| `INTEREST EARNED`, `INTEREST SHORT SALE REBATE`, `MARGIN INTEREST` | `Interest` |
-| `TRANSFER OF ASSETS`, `TRANSFERRED TO VS`, `TRANSFERRED FROM VS` | `Transfer` |
-| `MERGER` | `Merger` |
-| `FOREIGN TAX PAID` | `Tax` |
-| `WIRE TRANSFER FROM BANK`, `WIRE TRANSFER TO BANK` | `Wire` |
-| `DIRECT DEPOSIT`, `ELECTRONIC FUNDS TRANSFER RECEIVED`, `CHECK RECEIVED` | `Deposit` |
-| `DIRECT DEBIT`, `ELECTRONIC FUNDS TRANSFER PAID`, `CHECK PAID` | `Withdrawal` |
-| `REINVESTMENT` | `Reinvest` |
-| `REDEMPTION FROM CORE ACCOUNT`, `REDEMPTION PAYOUT` | `Redeem` |
-| `JOURNALED`, `JOURNALED GOODWILL` | `Journal` |
-| `ASSET/ACCT FEE` | `Fee` |
-| `BILL PAYMENT` | `Payment` |
-| `YOU SOLD SHORT SALE...` | `Sell Short` |
-
-### Test Coverage
-
-**Location**: `resources/js/data/finance/parseFidelityCsv.test.ts`
-
-- 63 test cases covering all supported transaction types
-- Tests both `splitTransactionString()` function and full CSV parsing
-- Validates description/memo field assignment
+See function `splitTransactionString()` for Action column parsing logic. Test coverage in `resources/js/data/finance/parseFidelityCsv.test.ts`.
