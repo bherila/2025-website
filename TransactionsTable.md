@@ -6,6 +6,40 @@ The **TransactionsTable** component is a comprehensive, feature-rich table for d
 
 ---
 
+## Account-Level Navigation
+
+The finance module uses a tabbed navigation system at the account level with a shared year selector.
+
+### Account Navigation Component
+
+**Location**: `resources/js/components/finance/AccountNavigation.tsx`
+
+The navigation bar displays:
+- **Tabs** (left side): Transactions, Duplicates, Statements, Linker
+- **Year Selector** (inline): Shared across all tabs
+- **Utility Buttons** (right side): Import, Maintenance
+
+### Year Selection
+
+**Location**: `resources/js/components/finance/AccountYearSelector.tsx`
+
+The year selector is shared across all tabs:
+- Persisted to `sessionStorage` with key `finance_year_${accountId}`
+- Dispatches `yearChanged` custom event when changed
+- Special values: `all` (all transactions), `latest` (most recent year)
+- Components listen for the event to refresh data when year changes
+
+```typescript
+// Get stored year
+import { getStoredYear, YEAR_CHANGED_EVENT } from './AccountYearSelector'
+const year = getStoredYear(accountId)
+
+// Listen for year changes
+window.addEventListener(YEAR_CHANGED_EVENT, handleYearChange)
+```
+
+---
+
 ## Component Location
 
 - **Frontend Component**: `resources/js/components/TransactionsTable.tsx`
@@ -121,6 +155,8 @@ When `enableTagging` is true:
 | DELETE | `/api/finance/{account_id}/line_items` | Delete transaction |
 | POST | `/api/finance/transactions/{id}/update` | Update transaction fields |
 | GET | `/api/finance/{account_id}/transaction-years` | Get available years |
+| GET | `/api/finance/{account_id}/summary` | Get account summary (optionally filtered by year) |
+| GET | `/api/finance/{account_id}/duplicates` | Find duplicate transactions (optionally filtered by year) |
 
 ### Transaction Linking
 
@@ -130,6 +166,7 @@ When `enableTagging` is true:
 | GET | `/api/finance/transactions/{id}/linkable` | Find linkable transactions |
 | POST | `/api/finance/transactions/link` | Create link between transactions |
 | POST | `/api/finance/transactions/{id}/unlink` | Remove link |
+| GET | `/api/finance/{account_id}/linkable-pairs` | Find unlinked transactions with potential matches |
 
 ### Tagging
 
@@ -176,6 +213,29 @@ Page for managing user's tags:
 - Shows transaction count per tag
 - Route: `/finance/tags`
 
+### LinkerPage
+
+**Location**: `resources/js/components/finance/LinkerPage.tsx`
+
+Bulk transaction linking tool:
+- Finds unlinked transactions with potential matches in other accounts
+- Shows source transactions on the left with potential matches on the right
+- Checkbox selection for batch linking multiple transactions
+- "Link All Selected" button to create multiple links at once
+- Supports unlinking existing links
+- Route: `/finance/{account_id}/linker`
+
+### DuplicatesPage
+
+**Location**: `resources/js/components/finance/DuplicatesPage.tsx`
+
+Duplicate transaction finder and remover:
+- Finds potential duplicate transactions within the selected year
+- Groups duplicates by matching criteria (date, amount, description)
+- Allows selecting specific duplicates to delete
+- Respects the shared year selector
+- Route: `/finance/{account_id}/duplicates`
+
 ### FinanceAccountTransactionsPage
 
 **Location**: `resources/js/components/finance/FinanceAccountTransactionsPage.tsx`
@@ -202,14 +262,22 @@ Main page component that:
 | `importLineItems` | Bulk import transactions |
 | `updateTransaction` | Update transaction fields |
 | `getTransactionYears` | Get distinct years for year selector |
-| `findLinkableTransactions` | Find potential link targets |
-| `linkTransactions` | Create parent-child link |
-| `unlinkTransaction` | Remove parent-child link |
+
+### FinanceTransactionLinkingApiController
+
+**Location**: `app/Http/Controllers/FinanceTransactionLinkingApiController.php`
+
+| Method | Description |
+|--------|-------------|
+| `findLinkableTransactions` | Find potential link targets for a single transaction |
+| `linkTransactions` | Create link between two transactions (normalizes direction) |
+| `unlinkTransaction` | Remove link between transactions |
 | `getTransactionLinks` | Get link details for a transaction |
+| `findLinkablePairs` | Find unlinked transactions with potential matches (for Linker tab) |
 
-### FinanceApiController (Tag Methods)
+### FinanceTransactionTaggingApiController
 
-**Location**: `app/Http/Controllers/FinanceApiController.php`
+**Location**: `app/Http/Controllers/FinanceTransactionTaggingApiController.php`
 
 | Method | Description |
 |--------|-------------|
@@ -219,11 +287,28 @@ Main page component that:
 | `deleteTag` | Soft delete a tag and its mappings |
 | `applyTagToTransactions` | Bulk apply tag to transactions |
 
+### FinanceTransactionsDedupeApiController
+
+**Location**: `app/Http/Controllers/FinanceTransactionsDedupeApiController.php`
+
+| Method | Description |
+|--------|-------------|
+| `findDuplicates` | Find potential duplicate transactions (with year filtering) |
+
+### FinanceApiController
+
+**Location**: `app/Http/Controllers/FinanceApiController.php`
+
+| Method | Description |
+|--------|-------------|
+| `getAccountSummary` | Get account summary with optional year filtering |
+
 ### Linking Logic
 
-- Parent transaction: typically the withdrawal (source of transfer)
-- Child transaction: typically the deposit (destination of transfer)
-- Linking is prevented when linked child amounts >= parent amount
+- Links are normalized: lower t_id is always `a_t_id`, higher is `b_t_id`
+- When dates differ, older transaction is `a_t_id`, newer is `b_t_id`
+- Same-date transactions use t_id as tie-breaker
+- Linking is prevented when linked amounts >= original amount
 - API returns `linking_allowed` boolean for UI control
 
 ---
@@ -235,24 +320,24 @@ Main page component that:
 **Location**: `app/Models/FinAccountLineItems.php`
 
 ```php
-// Relationships
-public function childTransactions()
+// Relationships - transactions can link to each other in either direction
+public function linkedTransactionsAsA()
 {
     return $this->belongsToMany(
         FinAccountLineItems::class,
         'fin_account_line_item_links',
-        'parent_t_id',
-        'child_t_id'
+        'a_t_id',
+        'b_t_id'
     )->wherePivotNull('when_deleted');
 }
 
-public function parentTransactions()
+public function linkedTransactionsAsB()
 {
     return $this->belongsToMany(
         FinAccountLineItems::class,
         'fin_account_line_item_links',
-        'child_t_id',
-        'parent_t_id'
+        'b_t_id',
+        'a_t_id'
     )->wherePivotNull('when_deleted');
 }
 ```
@@ -261,9 +346,11 @@ public function parentTransactions()
 
 **Location**: `app/Models/FinAccountLineItemLink.php`
 
-Link table model for transaction parent-child relationships:
+Link table model for transaction relationships:
+- `a_t_id`: The transaction with lower t_id (or older date)
+- `b_t_id`: The transaction with higher t_id (or newer date)
 - Supports soft deletion via `when_deleted` timestamp
-- Foreign keys to `fin_account_line_items` for both parent and child
+- Foreign keys to `fin_account_line_items` for both sides
 
 ---
 
