@@ -137,13 +137,12 @@ export default function TransactionLinkModal({
     }
   }
 
-  const handleUnlink = async (linkedTId: number, unlinkType: 'parent' | 'child') => {
+  const handleUnlink = async (linkedTId: number) => {
     try {
       setIsLinking(true)
       setError(null)
       
       await fetchWrapper.post(`/api/finance/transactions/${transaction.t_id}/unlink`, {
-        unlink_type: unlinkType,
         linked_t_id: linkedTId,
       })
 
@@ -174,11 +173,9 @@ export default function TransactionLinkModal({
   const LinkedTransactionCard = ({ 
     linkedTx, 
     label, 
-    unlinkType 
   }: { 
     linkedTx: LinkedTransaction
     label: string
-    unlinkType: 'parent' | 'child'
   }) => (
     <div className="mb-2">
       <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">{label}:</p>
@@ -201,7 +198,7 @@ export default function TransactionLinkModal({
             <Button 
               variant="destructive" 
               size="sm"
-              onClick={() => handleUnlink(linkedTx.t_id, unlinkType)}
+              onClick={() => handleUnlink(linkedTx.t_id)}
               disabled={isLinking}
             >
               Unlink
@@ -247,8 +244,7 @@ export default function TransactionLinkModal({
               {parentTransaction && (
                 <LinkedTransactionCard 
                   linkedTx={parentTransaction}
-                  label="Parent Transaction (source of transfer)"
-                  unlinkType="parent"
+                  label="Linked Transaction (source of transfer)"
                 />
               )}
 
@@ -257,8 +253,7 @@ export default function TransactionLinkModal({
                 <LinkedTransactionCard 
                   key={child.t_id}
                   linkedTx={child}
-                  label="Child Transaction (destination of transfer)"
-                  unlinkType="child"
+                  label="Linked Transaction (destination of transfer)"
                 />
               ))}
 

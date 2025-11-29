@@ -11,6 +11,46 @@ use App\Models\FinAccountLineItemLink;
 class FinanceTransactionLinkingApiController extends Controller
 {
     /**
+     * Normalize link direction: older transaction is always 'a' (parent), newer is 'b' (child).
+     * If dates are equal, lower t_id is 'a'.
+     * 
+     * @param FinAccountLineItems $transaction1
+     * @param FinAccountLineItems $transaction2
+     * @return array ['a' => FinAccountLineItems, 'b' => FinAccountLineItems]
+     */
+    private function normalizeLink(FinAccountLineItems $transaction1, FinAccountLineItems $transaction2): array
+    {
+        $date1 = strtotime($transaction1->t_date);
+        $date2 = strtotime($transaction2->t_date);
+
+        // Older date is 'a', if equal, lower t_id is 'a'
+        if ($date1 < $date2 || ($date1 === $date2 && $transaction1->t_id < $transaction2->t_id)) {
+            return ['a' => $transaction1, 'b' => $transaction2];
+        }
+
+        return ['a' => $transaction2, 'b' => $transaction1];
+    }
+
+    /**
+     * Find an existing link between two transactions (checks both directions for safety)
+     * 
+     * @param int $t_id_1
+     * @param int $t_id_2
+     * @return FinAccountLineItemLink|null
+     */
+    private function findExistingLink(int $t_id_1, int $t_id_2): ?FinAccountLineItemLink
+    {
+        return FinAccountLineItemLink::where(function ($query) use ($t_id_1, $t_id_2) {
+                $query->where('parent_t_id', $t_id_1)->where('child_t_id', $t_id_2);
+            })
+            ->orWhere(function ($query) use ($t_id_1, $t_id_2) {
+                $query->where('parent_t_id', $t_id_2)->where('child_t_id', $t_id_1);
+            })
+            ->whereNull('when_deleted')
+            ->first();
+    }
+
+    /**
      * Find potential transactions to link based on date and amount criteria
      */
     public function findLinkableTransactions(Request $request, $transaction_id)
@@ -92,6 +132,8 @@ class FinanceTransactionLinkingApiController extends Controller
 
     /**
      * Link two transactions (set parent-child relationship via links table)
+     * Links are normalized: older transaction is 'a' (parent), newer is 'b' (child).
+     * If dates are equal, lower t_id is 'a'.
      */
     public function linkTransactions(Request $request)
     {
@@ -103,33 +145,25 @@ class FinanceTransactionLinkingApiController extends Controller
         ]);
 
         // Verify both transactions belong to the user
-        $parentTransaction = FinAccountLineItems::where('t_id', $request->parent_t_id)
-            ->with('childTransactions')
+        $transaction1 = FinAccountLineItems::where('t_id', $request->parent_t_id)
             ->whereHas('account', function ($query) use ($uid) {
                 $query->where('acct_owner', $uid);
             })
             ->firstOrFail();
 
-        $childTransaction = FinAccountLineItems::where('t_id', $request->child_t_id)
-            ->with('parentTransactions')
+        $transaction2 = FinAccountLineItems::where('t_id', $request->child_t_id)
             ->whereHas('account', function ($query) use ($uid) {
                 $query->where('acct_owner', $uid);
             })
             ->firstOrFail();
 
-        // Check if the child is not already linked
-        if ($childTransaction->parentTransactions->count() > 0) {
-            return response()->json([
-                'success' => false,
-                'error' => 'Child transaction is already linked to another parent.',
-            ], 400);
-        }
+        // Normalize link direction: older transaction is 'a' (parent), newer is 'b' (child)
+        $normalized = $this->normalizeLink($transaction1, $transaction2);
+        $parentTransaction = $normalized['a'];
+        $childTransaction = $normalized['b'];
 
-        // Check if this link already exists
-        $existingLink = FinAccountLineItemLink::where('parent_t_id', $request->parent_t_id)
-            ->where('child_t_id', $request->child_t_id)
-            ->whereNull('when_deleted')
-            ->first();
+        // Check if this link already exists (in either direction)
+        $existingLink = $this->findExistingLink($transaction1->t_id, $transaction2->t_id);
 
         if ($existingLink) {
             return response()->json([
@@ -138,24 +172,7 @@ class FinanceTransactionLinkingApiController extends Controller
             ], 400);
         }
 
-        // Calculate total amount of existing linked transactions
-        $linkedAmount = $parentTransaction->childTransactions->sum(function ($child) {
-            return abs(floatval($child->t_amt));
-        });
-
-        // Add the new child's amount
-        $newLinkedAmount = $linkedAmount + abs(floatval($childTransaction->t_amt));
-        $parentAmount = abs(floatval($parentTransaction->t_amt));
-
-        // Check if linking would exceed or equal the parent amount
-        if ($linkedAmount >= $parentAmount) {
-            return response()->json([
-                'success' => false,
-                'error' => 'Cannot link more transactions. Linked amount already equals or exceeds the parent transaction amount.',
-            ], 400);
-        }
-
-        // Create the link
+        // Create the link with normalized direction
         FinAccountLineItemLink::create([
             'parent_t_id' => $parentTransaction->t_id,
             'child_t_id' => $childTransaction->t_id,
@@ -165,63 +182,46 @@ class FinanceTransactionLinkingApiController extends Controller
             'success' => true,
             'parent_t_id' => $parentTransaction->t_id,
             'child_t_id' => $childTransaction->t_id,
-            'linked_amount' => $newLinkedAmount,
-            'parent_amount' => $parentAmount,
         ]);
     }
 
     /**
-     * Unlink a transaction (remove parent-child relationship from links table)
+     * Unlink a transaction (remove link from links table)
+     * With normalized links, we need to check both directions since the caller
+     * might not know which transaction ended up as parent vs child.
      */
     public function unlinkTransaction(Request $request, $transaction_id)
     {
         $uid = Auth::id();
 
         $request->validate([
-            'unlink_type' => 'required|in:parent,child',
             'linked_t_id' => 'required|integer',
         ]);
 
-        // Verify the transaction belongs to the user
+        // Verify both transactions belong to the user
         $transaction = FinAccountLineItems::where('t_id', $transaction_id)
             ->whereHas('account', function ($query) use ($uid) {
                 $query->where('acct_owner', $uid);
             })
             ->firstOrFail();
 
-        if ($request->unlink_type === 'parent') {
-            // We want to unlink this transaction from its parent
-            // The current transaction is the child, so we delete the link where child_t_id = transaction_id
-            $link = FinAccountLineItemLink::where('child_t_id', $transaction_id)
-                ->where('parent_t_id', $request->linked_t_id)
-                ->whereNull('when_deleted')
-                ->first();
+        FinAccountLineItems::where('t_id', $request->linked_t_id)
+            ->whereHas('account', function ($query) use ($uid) {
+                $query->where('acct_owner', $uid);
+            })
+            ->firstOrFail();
 
-            if (!$link) {
-                return response()->json([
-                    'success' => false,
-                    'error' => 'Transaction is not linked to the specified parent.',
-                ], 400);
-            }
+        // Find the link between these two transactions (in either direction)
+        $link = $this->findExistingLink($transaction_id, $request->linked_t_id);
 
-            $link->update(['when_deleted' => now()]);
-        } else {
-            // We want to unlink a child from this transaction
-            // The current transaction is the parent, so we delete the link where parent_t_id = transaction_id
-            $link = FinAccountLineItemLink::where('parent_t_id', $transaction_id)
-                ->where('child_t_id', $request->linked_t_id)
-                ->whereNull('when_deleted')
-                ->first();
-
-            if (!$link) {
-                return response()->json([
-                    'success' => false,
-                    'error' => 'Child transaction is not linked to this parent.',
-                ], 400);
-            }
-
-            $link->update(['when_deleted' => now()]);
+        if (!$link) {
+            return response()->json([
+                'success' => false,
+                'error' => 'These transactions are not linked.',
+            ], 400);
         }
+
+        $link->update(['when_deleted' => now()]);
 
         return response()->json(['success' => true]);
     }
