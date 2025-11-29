@@ -21,21 +21,44 @@ The navigation bar displays:
 
 ### Year Selection
 
-**Location**: `resources/js/components/finance/AccountYearSelector.tsx`
+**Location**: `resources/js/lib/financeRouteBuilder.ts`
 
-The year selector is shared across all tabs:
-- Persisted to `sessionStorage` with key `finance_year_${accountId}`
-- Dispatches `yearChanged` custom event when changed
-- Special values: `all` (all transactions), `latest` (most recent year)
-- Components listen for the event to refresh data when year changes
+The year selector uses URL query strings for shareable, bookmarkable links:
+- URL parameter: `?year=2024` or `?year=all`
+- Also synced to `sessionStorage` for persistence
+- Dispatches `financeYearChange` custom event when changed
+- Special values: `all` (all transactions)
 
 ```typescript
-// Get stored year
-import { getStoredYear, YEAR_CHANGED_EVENT } from './AccountYearSelector'
-const year = getStoredYear(accountId)
+// Import from financeRouteBuilder
+import { 
+  getEffectiveYear,      // Get year from URL or sessionStorage
+  updateYearInUrl,       // Update URL without navigation
+  YEAR_CHANGED_EVENT,    // Event name for year changes
+  transactionsUrl,       // Build transactions page URL
+  goToTransaction,       // Navigate to specific transaction
+  type YearSelection 
+} from '@/lib/financeRouteBuilder'
+
+// Get effective year (URL > sessionStorage > 'all')
+const year = getEffectiveYear(accountId)
+
+// Update year in URL and storage
+updateYearInUrl(accountId, 2024)
 
 // Listen for year changes
-window.addEventListener(YEAR_CHANGED_EVENT, handleYearChange)
+window.addEventListener(YEAR_CHANGED_EVENT, (e) => {
+  const { accountId, year } = (e as CustomEvent).detail
+  // Handle year change
+})
+
+// Build URL with year
+const url = transactionsUrl(accountId, { year: 2024 })
+// Result: /finance/123?year=2024
+
+// Navigate to a transaction with year
+goToTransaction(accountId, transactionId, 2024)
+// Navigates to: /finance/123?year=2024#t_id=456
 ```
 
 ---

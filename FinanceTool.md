@@ -24,11 +24,32 @@ The finance module uses a tabbed navigation system with a shared year selector a
 
 ### Year Selector
 
-The year selector is shared across all tabs:
-- Displayed inline on the navigation bar
-- Persisted to `sessionStorage` with key `finance_year_${accountId}`
-- Dispatches `yearChanged` custom event when changed
-- Special values: `all` (all transactions), `latest` (most recent year)
+The year selector uses URL query strings for shareable, bookmarkable links:
+- URL parameter: `?year=2024` or `?year=all`
+- Also synced to `sessionStorage` for persistence  
+- All tab navigation preserves the year selection
+- Uses `financeRouteBuilder.ts` for centralized URL construction
+
+### Route Builder
+
+**Location**: `resources/js/lib/financeRouteBuilder.ts`
+
+Centralized URL construction and navigation for the finance module:
+
+```typescript
+import { 
+  transactionsUrl,     // /finance/{id}?year=X
+  duplicatesUrl,       // /finance/{id}/duplicates?year=X
+  linkerUrl,           // /finance/{id}/linker?year=X
+  statementsUrl,       // /finance/{id}/statements?year=X
+  summaryUrl,          // /finance/{id}/summary?year=X
+  importUrl,           // /finance/{id}/import-transactions
+  maintenanceUrl,      // /finance/{id}/maintenance
+  goToTransaction,     // Navigate to specific transaction
+  getEffectiveYear,    // Get year from URL or sessionStorage
+  updateYearInUrl,     // Update URL without navigation
+} from '@/lib/financeRouteBuilder'
+```
 
 ## Transaction Import
 
@@ -59,9 +80,12 @@ Links are stored in a normalized direction:
 
 The Linker tab provides a bulk linking interface:
 - Finds unlinked transactions within the selected year
-- Shows potential matches (±7 days, ±5% amount) from other accounts
+- Shows potential matches with **exact amount** and ±5 day date window
+- Uses in-memory matching for efficiency (reduces SQL roundtrips)
 - Checkbox selection for batch linking multiple transactions
 - One-click "Link All Selected" for efficient bulk operations
+
+Note: For single-transaction linking (via TransactionLinkModal), the criteria is more relaxed (±7 days, ±5% amount).
 
 ### Link Balance Detection
 
