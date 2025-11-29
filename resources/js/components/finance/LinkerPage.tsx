@@ -180,9 +180,9 @@ export default function LinkerPage({ id }: { id: number }) {
     <div className="p-4 max-w-6xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Transaction Linker</h1>
       
-      <p className="text-gray-600 mb-4">
+      <p className="text-gray-600 dark:text-gray-300 mb-4">
         Find and link related transactions across different accounts.
-        This tool identifies potential transfer pairs based on similar amounts (±5%) and dates (±7 days).
+        This tool identifies potential transfer pairs based on exact amounts and similar dates (±5 days).
       </p>
 
       {error && (
@@ -192,15 +192,15 @@ export default function LinkerPage({ id }: { id: number }) {
       )}
 
       {successMessage && (
-        <Alert className="mb-4 bg-green-50 border-green-200">
-          <AlertDescription className="text-green-800">{successMessage}</AlertDescription>
+        <Alert className="mb-4 bg-green-50 dark:bg-green-900 border-green-200 dark:border-green-800">
+          <AlertDescription className="text-green-800 dark:text-green-200">{successMessage}</AlertDescription>
         </Alert>
       )}
 
       {linkablePairs.length === 0 ? (
-        <div className="text-center py-8 bg-gray-50 rounded-lg">
-          <p className="text-gray-600">No linkable transaction pairs found for {selectedYear === 'all' ? 'all years' : selectedYear}.</p>
-          <p className="text-gray-500 text-sm mt-2">
+        <div className="text-center py-8 bg-gray-50 dark:bg-gray-800 rounded-lg">
+          <p className="text-gray-600 dark:text-gray-300">No linkable transaction pairs found for {selectedYear === 'all' ? 'all years' : selectedYear}.</p>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mt-2">
             Transactions may already be linked, or there are no matching pairs.
           </p>
         </div>
@@ -219,7 +219,7 @@ export default function LinkerPage({ id }: { id: number }) {
               </Button>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-500">
+              <span className="text-sm text-gray-500 dark:text-gray-400">
                 {selectedPairs.size} of {linkablePairs.length} pairs selected
               </span>
               <Button 
@@ -240,7 +240,7 @@ export default function LinkerPage({ id }: { id: number }) {
                 <div 
                   key={pairKey}
                   className={`border rounded-lg p-4 cursor-pointer transition-colors ${
-                    isSelected ? 'bg-blue-50 border-blue-300' : 'hover:bg-gray-50'
+                    isSelected ? 'bg-blue-50 dark:bg-blue-900 border-blue-300 dark:border-blue-700' : 'hover:bg-gray-50 dark:hover:bg-gray-800 dark:border-gray-700'
                   }`}
                   onClick={() => toggleSelection(pairKey)}
                 >
@@ -255,7 +255,7 @@ export default function LinkerPage({ id }: { id: number }) {
                     <div className="flex-1 grid grid-cols-2 gap-4">
                       {/* Transaction A */}
                       <div className="space-y-1">
-                        <div className="font-medium text-sm text-gray-500">
+                        <div className="font-medium text-sm text-gray-500 dark:text-gray-400">
                           {pair.transaction_a.acct_name}
                         </div>
                         <div className="text-sm">
@@ -264,7 +264,7 @@ export default function LinkerPage({ id }: { id: number }) {
                           {pair.transaction_a.t_description}
                         </div>
                         <div className={`font-mono ${
-                          parseFloat(String(pair.transaction_a.t_amt)) < 0 ? 'text-red-600' : 'text-green-600'
+                          parseFloat(String(pair.transaction_a.t_amt)) < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'
                         }`}>
                           {currency(pair.transaction_a.t_amt).format()}
                         </div>
@@ -272,7 +272,7 @@ export default function LinkerPage({ id }: { id: number }) {
 
                       {/* Transaction B */}
                       <div className="space-y-1">
-                        <div className="font-medium text-sm text-gray-500">
+                        <div className="font-medium text-sm text-gray-500 dark:text-gray-400">
                           {pair.transaction_b.acct_name}
                         </div>
                         <div className="text-sm">
@@ -281,16 +281,16 @@ export default function LinkerPage({ id }: { id: number }) {
                           {pair.transaction_b.t_description}
                         </div>
                         <div className={`font-mono ${
-                          parseFloat(String(pair.transaction_b.t_amt)) < 0 ? 'text-red-600' : 'text-green-600'
+                          parseFloat(String(pair.transaction_b.t_amt)) < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'
                         }`}>
                           {currency(pair.transaction_b.t_amt).format()}
                         </div>
                       </div>
                     </div>
 
-                    <div className="text-right text-xs text-gray-500 space-y-1">
+                    <div className="text-right text-xs text-gray-500 dark:text-gray-400 space-y-1">
                       {pair.are_opposite_signs && (
-                        <div className="text-green-600 font-medium">
+                        <div className="text-green-600 dark:text-green-400 font-medium">
                           ✓ Opposite signs
                         </div>
                       )}

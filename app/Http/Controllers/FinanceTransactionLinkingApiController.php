@@ -293,6 +293,10 @@ class FinanceTransactionLinkingApiController extends Controller
     /**
      * Find all unlinked transactions for an account and suggest linkable pairs
      * with transactions from other accounts.
+     * 
+     * Uses in-memory processing for efficiency (SQL roundtrip latency > memory cost).
+     * For bulk linking: requires EXACT amount match, but allows ±5 day date offset
+     * to accommodate weekends and holidays.
      */
     public function findLinkablePairs(Request $request, $account_id)
     {
@@ -301,60 +305,93 @@ class FinanceTransactionLinkingApiController extends Controller
 
         // Build query for unlinked transactions in this account
         $query = FinAccountLineItems::where('t_account', $account_id)
-            ->whereDoesntHave('parentTransactions') // Not a child of another transaction
-            ->whereDoesntHave('childTransactions') // Not a parent of another transaction
+            ->whereDoesntHave('parentTransactions')
+            ->whereDoesntHave('childTransactions')
             ->whereNull('when_deleted')
-            ->with('account:acct_id,acct_name')
-            ->orderBy('t_date', 'desc')
-            ->orderBy('t_id', 'desc');
+            ->with('account:acct_id,acct_name');
 
         // Filter by year if provided
+        $yearFilter = null;
         if ($request->has('year') && $request->year !== 'all') {
-            $year = intval($request->year);
-            $query->whereYear('t_date', $year);
+            $yearFilter = intval($request->year);
+            $query->whereYear('t_date', $yearFilter);
         }
 
-        $unlinkedTransactions = $query->limit(200)->get();
+        $unlinkedTransactions = $query->get();
 
-        // For each unlinked transaction, find potential matches
+        // Skip if no transactions to process
+        if ($unlinkedTransactions->isEmpty()) {
+            return response()->json(['pairs' => [], 'total' => 0]);
+        }
+
+        // Calculate date range for potential matches (min/max from source transactions ±5 days)
+        $dates = $unlinkedTransactions->pluck('t_date')->toArray();
+        $minDate = min($dates);
+        $maxDate = max($dates);
+        $startDate = date('Y-m-d', strtotime($minDate . ' -5 days'));
+        $endDate = date('Y-m-d', strtotime($maxDate . ' +5 days'));
+
+        // Fetch all potential matches from OTHER accounts in one query
+        // This is more efficient than N queries (one per transaction)
+        $potentialMatches = FinAccountLineItems::whereHas('account', function ($q) use ($uid) {
+                $q->where('acct_owner', $uid);
+            })
+            ->where('t_account', '!=', $account_id)
+            ->whereDoesntHave('parentTransactions')
+            ->whereDoesntHave('childTransactions')
+            ->whereNull('when_deleted')
+            ->whereBetween('t_date', [$startDate, $endDate])
+            ->with('account:acct_id,acct_name')
+            ->get();
+
+        // Index potential matches by absolute amount for O(1) lookup
+        // Key: rounded absolute amount (to 2 decimal places)
+        // Value: array of transactions with that amount
+        $matchesByAmount = [];
+        foreach ($potentialMatches as $match) {
+            $absAmt = round(abs(floatval($match->t_amt)), 2);
+            $key = (string) $absAmt;
+            if (!isset($matchesByAmount[$key])) {
+                $matchesByAmount[$key] = [];
+            }
+            $matchesByAmount[$key][] = $match;
+        }
+
+        // Find linkable pairs using in-memory matching
         $linkablePairs = [];
         $seenPairs = [];
 
         foreach ($unlinkedTransactions as $transaction) {
-            $sourceDate = $transaction->t_date;
             $sourceAmount = abs(floatval($transaction->t_amt));
 
-            // Skip if amount is 0
+            // Skip zero amounts
             if ($sourceAmount == 0) {
                 continue;
             }
 
-            // Calculate date range (+/- 7 days)
-            $startDate = date('Y-m-d', strtotime($sourceDate . ' -7 days'));
-            $endDate = date('Y-m-d', strtotime($sourceDate . ' +7 days'));
+            // Look up exact matches by amount
+            $amountKey = (string) round($sourceAmount, 2);
+            if (!isset($matchesByAmount[$amountKey])) {
+                continue;
+            }
 
-            // Calculate amount range (+/- 5%)
-            $minAmount = $sourceAmount * 0.95;
-            $maxAmount = $sourceAmount * 1.05;
+            $sourceDate = strtotime($transaction->t_date);
 
-            // Find matching transactions from other accounts
-            $potentialMatches = FinAccountLineItems::whereHas('account', function ($q) use ($uid) {
-                    $q->where('acct_owner', $uid);
-                })
-                ->where('t_account', '!=', $account_id) // Different account
-                ->whereDoesntHave('parentTransactions')
-                ->whereDoesntHave('childTransactions')
-                ->whereNull('when_deleted')
-                ->whereBetween('t_date', [$startDate, $endDate])
-                ->whereRaw('ABS(t_amt) BETWEEN ? AND ?', [$minAmount, $maxAmount])
-                ->with('account:acct_id,acct_name')
-                ->limit(5)
-                ->get();
+            foreach ($matchesByAmount[$amountKey] as $match) {
+                // Skip if same transaction (shouldn't happen, but be safe)
+                if ($match->t_id === $transaction->t_id) {
+                    continue;
+                }
 
-            foreach ($potentialMatches as $match) {
-                // Create a unique key for the pair to avoid duplicates
+                // Check date is within ±5 days
+                $matchDate = strtotime($match->t_date);
+                $dateDiff = abs($sourceDate - $matchDate) / 86400; // days
+                if ($dateDiff > 5) {
+                    continue;
+                }
+
+                // Create unique pair key to avoid duplicates
                 $pairKey = min($transaction->t_id, $match->t_id) . '-' . max($transaction->t_id, $match->t_id);
-                
                 if (isset($seenPairs[$pairKey])) {
                     continue;
                 }
@@ -385,8 +422,8 @@ class FinanceTransactionLinkingApiController extends Controller
                         't_type' => $match->t_type,
                     ],
                     'are_opposite_signs' => $areOppositeSigns,
-                    'amount_diff' => abs($sourceAmount - abs(floatval($match->t_amt))),
-                    'date_diff' => abs(strtotime($sourceDate) - strtotime($match->t_date)) / 86400,
+                    'amount_diff' => 0.0, // Exact match
+                    'date_diff' => $dateDiff,
                 ];
 
                 // Limit total pairs
@@ -396,14 +433,14 @@ class FinanceTransactionLinkingApiController extends Controller
             }
         }
 
-        // Sort pairs: prioritize opposite signs, then by smallest amount difference
+        // Sort pairs: prioritize opposite signs, then by smallest date difference
         usort($linkablePairs, function ($a, $b) {
             // Opposite signs first
             if ($a['are_opposite_signs'] !== $b['are_opposite_signs']) {
                 return $a['are_opposite_signs'] ? -1 : 1;
             }
-            // Then by amount difference
-            return $a['amount_diff'] <=> $b['amount_diff'];
+            // Then by date difference
+            return $a['date_diff'] <=> $b['date_diff'];
         });
 
         return response()->json([
