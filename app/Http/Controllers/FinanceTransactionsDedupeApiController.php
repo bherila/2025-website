@@ -40,11 +40,12 @@ class FinanceTransactionsDedupeApiController extends Controller
             $qty = $this->normalizeValue($transaction->t_qty);
             $amt = $this->normalizeValue($transaction->t_amt);
             $symbol = strtoupper(trim($transaction->t_symbol ?? ''));
+            $balance = $this->normalizeValue($transaction->t_account_balance);
 
             $groupKey = "{$date}|{$qty}|{$amt}|{$symbol}";
 
             // Find other transactions with the same key
-            $duplicates = $transactions->filter(function ($t) use ($transaction, $date, $qty, $amt, $symbol, $seenIds) {
+            $duplicates = $transactions->filter(function ($t) use ($transaction, $date, $qty, $amt, $symbol, $balance, $seenIds) {
                 if ($t->t_id === $transaction->t_id || in_array($t->t_id, $seenIds)) {
                     return false;
                 }
@@ -53,8 +54,9 @@ class FinanceTransactionsDedupeApiController extends Controller
                 $tQty = $this->normalizeValue($t->t_qty);
                 $tAmt = $this->normalizeValue($t->t_amt);
                 $tSymbol = strtoupper(trim($t->t_symbol ?? ''));
+                $tBalance = $this->normalizeValue($t->t_account_balance);
 
-                if ($tDate !== $date || $tQty !== $qty || $tAmt !== $amt || $tSymbol !== $symbol) {
+                if ($tDate !== $date || $tQty !== $qty || $tAmt !== $amt || $tSymbol !== $symbol || $tBalance !== $balance) {
                     return false;
                 }
 
@@ -113,7 +115,7 @@ class FinanceTransactionsDedupeApiController extends Controller
                     'deleteIds' => $deleteIds,
                 ];
 
-                // Limit to 100 groups
+                // Limit to 150 groups
                 if (count($groups) >= 150) {
                     break;
                 }
