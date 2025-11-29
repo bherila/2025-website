@@ -19,11 +19,11 @@ interface TransactionDetailsModalProps {
 export default function TransactionDetailsModal({ transaction, isOpen, onClose, onSave }: TransactionDetailsModalProps) {
   const [isSaving, setIsSaving] = useState(false)
 
-  // Helper to format numeric value for form input
+  // Helper to format numeric value for form input (as text)
   const formatNumericValue = (value: number | string | null | undefined): string => {
-    if (value === null || value === undefined) return ''
+    if (value === null || value === undefined || value === '') return ''
     const num = typeof value === 'string' ? parseFloat(value) : value
-    if (isNaN(num) || num === 0) return ''
+    if (isNaN(num)) return ''
     return num.toString()
   }
 
@@ -109,7 +109,7 @@ export default function TransactionDetailsModal({ transaction, isOpen, onClose, 
             </Label>
             <Input
               id="qty"
-              type="number"
+              type="text"
               value={qty}
               onChange={(e) => setQty(e.target.value)}
               className="col-span-3"
@@ -121,8 +121,7 @@ export default function TransactionDetailsModal({ transaction, isOpen, onClose, 
             </Label>
             <Input
               id="price"
-              type="number"
-              step="0.01"
+              type="text"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
               className="col-span-3"
@@ -134,8 +133,7 @@ export default function TransactionDetailsModal({ transaction, isOpen, onClose, 
             </Label>
             <Input
               id="commission"
-              type="number"
-              step="0.01"
+              type="text"
               value={commission}
               onChange={(e) => setCommission(e.target.value)}
               className="col-span-3"
@@ -147,8 +145,7 @@ export default function TransactionDetailsModal({ transaction, isOpen, onClose, 
             </Label>
             <Input
               id="fee"
-              type="number"
-              step="0.01"
+              type="text"
               value={fee}
               onChange={(e) => setFee(e.target.value)}
               className="col-span-3"

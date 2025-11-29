@@ -180,8 +180,13 @@ const typeMap: Record<string, string> = {
   "REINVESTMENT": "Reinvest",
   "TRANSFERRED TO VS": "Transfer",
   "TRANSFERRED FROM VS": "Transfer",
+  "TRANSFER OF ASSETS": "Transfer",
   "BILL PAYMENT": "Payment",
-  "ASSET/ACCT FEE": "Fee"
+  "ASSET/ACCT FEE": "Fee",
+  
+  // Corporate actions
+  "MERGER": "Merger",
+  "FOREIGN TAX PAID": "Tax",
 };
 
 // Keyword fallback map -> simple transaction type
@@ -200,7 +205,9 @@ const keywordMap: Record<string, string> = {
   "SOLD": "Sell",
   "FEE": "Fee",
   "INTEREST": "Interest",
-  "JOURNAL": "Journal"
+  "JOURNAL": "Journal",
+  "MERGER": "Merger",
+  "TAX": "Tax",
 };
 
 /**

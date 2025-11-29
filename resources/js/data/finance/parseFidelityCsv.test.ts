@@ -400,4 +400,62 @@ Date downloaded 11/28/2025 11:07 am`
       expect(feeRow?.t_type).toBe('Fee')
     })
   })
+
+  describe('TRANSFER OF ASSETS, MERGER, and FOREIGN TAX PAID', () => {
+    describe('splitTransactionString for special transaction types', () => {
+      it('extracts TRANSFER OF ASSETS correctly', () => {
+        const result = splitTransactionString('TRANSFER OF ASSETS ACAT RECEIVE BROADCOM INC COM (AVGO) (Margin)')
+        expect(result.transactionType).toBe('Transfer')
+        expect(result.transactionDescription).toBe('TRANSFER OF ASSETS')
+        expect(result.rest).toBe('ACAT RECEIVE BROADCOM INC COM (AVGO) (MARGIN)')
+      })
+
+      it('extracts MERGER correctly', () => {
+        const result = splitTransactionString('MERGER MER PAYOUT #REORCM0051678340000 WALGREENS BOOTS ALLIANCE INC (WBA) (Cash)')
+        expect(result.transactionType).toBe('Merger')
+        expect(result.transactionDescription).toBe('MERGER')
+        expect(result.rest).toBe('MER PAYOUT #REORCM0051678340000 WALGREENS BOOTS ALLIANCE INC (WBA) (CASH)')
+      })
+
+      it('extracts FOREIGN TAX PAID correctly', () => {
+        const result = splitTransactionString('FOREIGN TAX PAID NXP SEMICONDUCTORS NV (NXPI) (Margin)')
+        expect(result.transactionType).toBe('Tax')
+        expect(result.transactionDescription).toBe('FOREIGN TAX PAID')
+        expect(result.rest).toBe('NXP SEMICONDUCTORS NV (NXPI) (MARGIN)')
+      })
+    })
+
+    const csvWithSpecialTypes = `Run Date,Action,Symbol,Description,Type,Exchange Quantity,Exchange Currency,Quantity,Currency,Price,Exchange Rate,Commission,Fees,Accrued Interest,Amount,Cash Balance,Settlement Date
+11/15/2025,"TRANSFER OF ASSETS ACAT RECEIVE BROADCOM INC COM (AVGO) (Margin)",AVGO,"BROADCOM INC COM",Margin,0,,USD,10,0.000,0,,,,0,150000.00,11/15/2025
+11/10/2025,"MERGER MER PAYOUT #REORCM0051678340000 WALGREENS BOOTS ALLIANCE INC (WBA) (Cash)",WBA,"WALGREENS BOOTS ALLIANCE INC",Cash,0,,USD,,0.000,0,,,,125.50,150125.50,11/10/2025
+11/05/2025,"FOREIGN TAX PAID NXP SEMICONDUCTORS NV (NXPI) (Margin)",NXPI,"NXP SEMICONDUCTORS NV",Margin,0,,USD,,0.000,0,,,,-15.25,150000.00,11/05/2025`
+
+    it('parses TRANSFER OF ASSETS as Transfer type', () => {
+      const result = parseFidelityCsv(csvWithSpecialTypes)
+      const transferRow = result.find((r) => r.t_symbol === 'AVGO')
+      expect(transferRow).toBeTruthy()
+      expect(transferRow?.t_type).toBe('Transfer')
+      expect(transferRow?.t_description).toBe('TRANSFER OF ASSETS')
+      expect(transferRow?.t_comment).toBe('ACAT RECEIVE BROADCOM INC COM (AVGO) (MARGIN)')
+    })
+
+    it('parses MERGER as Merger type', () => {
+      const result = parseFidelityCsv(csvWithSpecialTypes)
+      const mergerRow = result.find((r) => r.t_symbol === 'WBA')
+      expect(mergerRow).toBeTruthy()
+      expect(mergerRow?.t_type).toBe('Merger')
+      expect(mergerRow?.t_description).toBe('MERGER')
+      expect(mergerRow?.t_comment).toBe('MER PAYOUT #REORCM0051678340000 WALGREENS BOOTS ALLIANCE INC (WBA) (CASH)')
+    })
+
+    it('parses FOREIGN TAX PAID as Tax type', () => {
+      const result = parseFidelityCsv(csvWithSpecialTypes)
+      const taxRow = result.find((r) => r.t_symbol === 'NXPI')
+      expect(taxRow).toBeTruthy()
+      expect(taxRow?.t_type).toBe('Tax')
+      expect(taxRow?.t_description).toBe('FOREIGN TAX PAID')
+      expect(taxRow?.t_comment).toBe('NXP SEMICONDUCTORS NV (NXPI) (MARGIN)')
+      expect(taxRow?.t_amt).toBe(-15.25)
+    })
+  })
 })
