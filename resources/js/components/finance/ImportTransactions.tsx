@@ -269,7 +269,7 @@ export default function ImportTransactions({ accountId, onImportFinished }: { ac
       )}
 
       {data && data.length > 0 && (
-        <>
+        <div style={{textAlign: 'left'}}>
           <div className="my-2">
             <Button
               className="mx-1"
@@ -288,7 +288,7 @@ export default function ImportTransactions({ accountId, onImportFinished }: { ac
             </Button>
           </div>
           <TransactionsTable data={data} duplicates={currentDuplicates} />
-        </>
+        </div>
       )}
     </div>
   )

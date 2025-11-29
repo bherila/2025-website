@@ -241,26 +241,26 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
               </th>
             )}
             {!isQtyColumnEmpty && (
-              <th className="clickable text-right" onClick={() => handleSort('t_qty')}>
+              <th className="clickable text-right pr-1" onClick={() => handleSort('t_qty')}>
                 Qty {sortField === 't_qty' && (sortDirection === 'asc' ? '↑' : '↓')}
               </th>
             )}
             {!isPriceColumnEmpty && (
-              <th className="clickable text-right" onClick={() => handleSort('t_price')}>
+              <th className="clickable text-right pr-1" onClick={() => handleSort('t_price')}>
                 Price {sortField === 't_price' && (sortDirection === 'asc' ? '↑' : '↓')}
               </th>
             )}
             {!isCommissionColumnEmpty && (
-              <th className="clickable" onClick={() => handleSort('t_commission')}>
+              <th className="clickable text-right pr-1" onClick={() => handleSort('t_commission')}>
                 Comm. {sortField === 't_commission' && (sortDirection === 'asc' ? '↑' : '↓')}
               </th>
             )}
             {!isFeeColumnEmpty && (
-              <th className="clickable text-right" onClick={() => handleSort('t_fee')}>
+              <th className="clickable text-right pr-1" onClick={() => handleSort('t_fee')}>
                 Fee {sortField === 't_fee' && (sortDirection === 'asc' ? '↑' : '↓')}
               </th>
             )}
-            <th className="clickable text-right" onClick={() => handleSort('t_amt')}>
+            <th className="clickable text-right pr-1" onClick={() => handleSort('t_amt')}>
               Amount {sortField === 't_amt' && (sortDirection === 'asc' ? '↑' : '↓')}
             </th>
             {!isCategoryColumnEmpty && (
@@ -576,22 +576,22 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                 </td>
               )}
               {!isPriceColumnEmpty && (
-                <td className={'numericCol text-right'}>
-                  {row.t_price != null ? row.t_price : ''}
+                <td className={'numericCol text-right pr-1'}>
+                  {row.t_price != null && Number(row.t_price) !== 0 ? row.t_price : ''}
                 </td>
               )}
               {!isCommissionColumnEmpty && (
-                <td className={'numericCol'}>
-                  {row.t_commission != null ? row.t_commission : ''}
+                <td className={'numericCol text-right pr-1'}>
+                  {row.t_commission != null && Number(row.t_commission) !== 0 ? row.t_commission : ''}
                 </td>
               )}
               {!isFeeColumnEmpty && (
-                <td className={'numericCol text-right'}>
-                  {row.t_fee != null ? row.t_fee : ''}
+                <td className={'numericCol text-right pr-1'}>
+                  {row.t_fee != null && Number(row.t_fee) !== 0 ? row.t_fee : ''}
                 </td>
               )}
               <td
-                className={'numericCol clickable text-right'}
+                className={'numericCol clickable text-right pr-1'}
                 style={{
                   color: Number(row.t_amt) >= 0 ? 'green' : 'red',
                   whiteSpace: 'nowrap',

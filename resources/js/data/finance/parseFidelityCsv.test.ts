@@ -413,8 +413,8 @@ Date downloaded 11/28/2025 11:07 am`
       it('extracts TRANSFER OF ASSETS correctly', () => {
         const result = splitTransactionString('TRANSFER OF ASSETS ACAT RECEIVE BROADCOM INC COM (AVGO) (Margin)')
         expect(result.transactionType).toBe('Transfer')
-        expect(result.transactionDescription).toBe('TRANSFER OF ASSETS')
-        expect(result.rest).toBe('ACAT RECEIVE BROADCOM INC COM (AVGO) (MARGIN)')
+        expect(result.transactionDescription).toBe('TRANSFER OF ASSETS ACAT RECEIVE')
+        expect(result.rest).toBe('BROADCOM INC COM (AVGO) (MARGIN)')
       })
 
       it('extracts MERGER correctly', () => {
@@ -442,8 +442,8 @@ Date downloaded 11/28/2025 11:07 am`
       const transferRow = result.find((r) => r.t_symbol === 'AVGO')
       expect(transferRow).toBeTruthy()
       expect(transferRow?.t_type).toBe('Transfer')
-      expect(transferRow?.t_description).toBe('ACAT RECEIVE BROADCOM INC COM (AVGO) (MARGIN)')
-      expect(transferRow?.t_comment).toBe('TRANSFER OF ASSETS')
+      expect(transferRow?.t_description).toBe('BROADCOM INC COM (AVGO) (MARGIN)')
+      expect(transferRow?.t_comment).toBe('TRANSFER OF ASSETS ACAT RECEIVE')
     })
 
     it('parses MERGER as Merger type', () => {
@@ -522,6 +522,85 @@ Date downloaded 11/28/2025 11:07 am`
       expect(interestRow?.t_type).toBe('Interest')
       expect(interestRow?.t_description).toBe('CHARGED (MARGIN)')
       expect(interestRow?.t_comment).toBe('MARGIN INTEREST')
+    })
+  })
+
+  describe('Short sale and extended prefixes', () => {
+    describe('splitTransactionString for short sale and extended prefixes', () => {
+      it('extracts YOU SOLD SHORT SALE EXEC ON MULT EXCHG as Sell Short type', () => {
+        const result = splitTransactionString('YOU SOLD SHORT SALE EXEC ON MULT EXCHG DETAILS ON REQUEST WYNDHAM HOTELS &RESORTS INC COM (WH) (Short)')
+        expect(result.transactionType).toBe('Sell Short')
+        expect(result.transactionDescription).toBe('YOU SOLD SHORT SALE EXEC ON MULT EXCHG DETAILS ON REQUEST')
+        expect(result.rest).toBe('WYNDHAM HOTELS &RESORTS INC COM (WH) (SHORT)')
+      })
+
+      it('extracts YOU SOLD SHORT SALE AVERAGE PRICE TRADE as Sell Short type', () => {
+        const result = splitTransactionString('YOU SOLD SHORT SALE AVERAGE PRICE TRADE TESLA INC (TSLA) (Short)')
+        expect(result.transactionType).toBe('Sell Short')
+        expect(result.transactionDescription).toBe('YOU SOLD SHORT SALE AVERAGE PRICE TRADE')
+        expect(result.rest).toBe('TESLA INC (TSLA) (SHORT)')
+      })
+
+      it('extracts YOU SOLD SHORT SALE as Sell Short type', () => {
+        const result = splitTransactionString('YOU SOLD SHORT SALE APPLE INC (AAPL) (Short)')
+        expect(result.transactionType).toBe('Sell Short')
+        expect(result.transactionDescription).toBe('YOU SOLD SHORT SALE')
+        expect(result.rest).toBe('APPLE INC (AAPL) (SHORT)')
+      })
+
+      it('extracts TRANSFER OF ASSETS ACAT RECEIVE correctly', () => {
+        const result = splitTransactionString('TRANSFER OF ASSETS ACAT RECEIVE BROADCOM INC COM (AVGO) (Margin)')
+        expect(result.transactionType).toBe('Transfer')
+        expect(result.transactionDescription).toBe('TRANSFER OF ASSETS ACAT RECEIVE')
+        expect(result.rest).toBe('BROADCOM INC COM (AVGO) (MARGIN)')
+      })
+
+      it('extracts YOU BOUGHT EXEC ON MULT EXCHG DETAILS ON REQUEST AVERAGE PRICE TRADE correctly', () => {
+        const result = splitTransactionString('YOU BOUGHT EXEC ON MULT EXCHG DETAILS ON REQUEST AVERAGE PRICE TRADE NVIDIA CORP (NVDA) (Cash)')
+        expect(result.transactionType).toBe('Buy')
+        expect(result.transactionDescription).toBe('YOU BOUGHT EXEC ON MULT EXCHG DETAILS ON REQUEST AVERAGE PRICE TRADE')
+        expect(result.rest).toBe('NVIDIA CORP (NVDA) (CASH)')
+      })
+
+      it('extracts YOU BOUGHT AVERAGE PRICE TRADE DETAILS ON REQUEST correctly', () => {
+        const result = splitTransactionString('YOU BOUGHT AVERAGE PRICE TRADE DETAILS ON REQUEST MICROSOFT CORP (MSFT) (Cash)')
+        expect(result.transactionType).toBe('Buy')
+        expect(result.transactionDescription).toBe('YOU BOUGHT AVERAGE PRICE TRADE DETAILS ON REQUEST')
+        expect(result.rest).toBe('MICROSOFT CORP (MSFT) (CASH)')
+      })
+    })
+
+    const csvWithShortSales = `Run Date,Action,Symbol,Description,Type,Quantity,Price ($),Commission ($),Fees ($),Accrued Interest ($),Amount ($),Cash Balance ($),Settlement Date
+10/08/2025,"YOU SOLD SHORT SALE EXEC ON MULT EXCHG DETAILS ON REQUEST WYNDHAM HOTELS &RESORTS INC COM (WH) (Short)",WH,"WYNDHAM HOTELS &RESORTS INC COM",Short,-16,79.26,0.05,,,1268.18,-600372.87,10/09/2025
+10/07/2025,"TRANSFER OF ASSETS ACAT RECEIVE BROADCOM INC COM (AVGO) (Margin)",AVGO,"BROADCOM INC COM",Margin,10,0.000,,,,,150000.00,10/07/2025
+10/06/2025,"YOU BOUGHT EXEC ON MULT EXCHG DETAILS ON REQUEST AVERAGE PRICE TRADE NVIDIA CORP (NVDA) (Cash)",NVDA,"NVIDIA CORP",Cash,5,150.00,0.05,,,,-750.05,149249.95,10/08/2025`
+
+    it('parses YOU SOLD SHORT SALE EXEC ON MULT EXCHG as Sell Short type', () => {
+      const result = parseFidelityCsv(csvWithShortSales)
+      const shortSaleRow = result.find((r) => r.t_symbol === 'WH')
+      expect(shortSaleRow).toBeTruthy()
+      expect(shortSaleRow?.t_type).toBe('Sell Short')
+      expect(shortSaleRow?.t_description).toBe('WYNDHAM HOTELS &RESORTS INC COM (WH) (SHORT)')
+      expect(shortSaleRow?.t_comment).toBe('YOU SOLD SHORT SALE EXEC ON MULT EXCHG DETAILS ON REQUEST')
+      expect(shortSaleRow?.t_amt).toBe(1268.18)
+    })
+
+    it('parses TRANSFER OF ASSETS ACAT RECEIVE correctly', () => {
+      const result = parseFidelityCsv(csvWithShortSales)
+      const transferRow = result.find((r) => r.t_symbol === 'AVGO')
+      expect(transferRow).toBeTruthy()
+      expect(transferRow?.t_type).toBe('Transfer')
+      expect(transferRow?.t_description).toBe('BROADCOM INC COM (AVGO) (MARGIN)')
+      expect(transferRow?.t_comment).toBe('TRANSFER OF ASSETS ACAT RECEIVE')
+    })
+
+    it('parses YOU BOUGHT EXEC ON MULT EXCHG DETAILS ON REQUEST AVERAGE PRICE TRADE correctly', () => {
+      const result = parseFidelityCsv(csvWithShortSales)
+      const buyRow = result.find((r) => r.t_symbol === 'NVDA')
+      expect(buyRow).toBeTruthy()
+      expect(buyRow?.t_type).toBe('Buy')
+      expect(buyRow?.t_description).toBe('NVIDIA CORP (NVDA) (CASH)')
+      expect(buyRow?.t_comment).toBe('YOU BOUGHT EXEC ON MULT EXCHG DETAILS ON REQUEST AVERAGE PRICE TRADE')
     })
   })
 })

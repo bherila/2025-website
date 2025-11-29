@@ -386,11 +386,12 @@ When parsing Fidelity CSV exports, the Action column is parsed by `splitTransact
 | `JOURNALED`, `JOURNALED GOODWILL` | `Journal` |
 | `ASSET/ACCT FEE` | `Fee` |
 | `BILL PAYMENT` | `Payment` |
+| `YOU SOLD SHORT SALE...` | `Sell Short` |
 
 ### Test Coverage
 
 **Location**: `resources/js/data/finance/parseFidelityCsv.test.ts`
 
-- 54 test cases covering all supported transaction types
+- 63 test cases covering all supported transaction types
 - Tests both `splitTransactionString()` function and full CSV parsing
 - Validates description/memo field assignment

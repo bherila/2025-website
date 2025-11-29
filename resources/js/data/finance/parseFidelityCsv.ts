@@ -137,10 +137,14 @@ export function parseFidelityCsv(text: string): AccountLineItem[] {
 // Map of transaction description prefixes -> simple transaction type
 // Longer prefixes first to avoid mis-categorization
 const typeMap: Record<string, string> = {
-  // Buy/Sell actions
-  "YOU SOLD SHORT SALE AVERAGE PRICE TRADE": "Sell",
-  "YOU SOLD SHORT SALE": "Sell",
+  // Buy/Sell actions (longest first)
+  "YOU SOLD SHORT SALE EXEC ON MULT EXCHG DETAILS ON REQUEST": "Sell Short",
+  "YOU SOLD SHORT SALE AVERAGE PRICE TRADE": "Sell Short",
+  "YOU SOLD SHORT SALE": "Sell Short",
   "YOU SOLD AVERAGE PRICE TRADE": "Sell",
+  "YOU SOLD EXEC ON MULT EXCHG DETAILS ON REQUEST": "Sell",
+  "YOU BOUGHT EXEC ON MULT EXCHG DETAILS ON REQUEST AVERAGE PRICE TRADE": "Buy",
+  "YOU BOUGHT AVERAGE PRICE TRADE DETAILS ON REQUEST": "Buy",
   "YOU BOUGHT AVERAGE PRICE TRADE": "Buy",
   "YOU BOUGHT SHORT COVER": "Buy",
   "YOU SOLD": "Sell",
@@ -182,6 +186,7 @@ const typeMap: Record<string, string> = {
   "REINVESTMENT": "Reinvest",
   "TRANSFERRED TO VS": "Transfer",
   "TRANSFERRED FROM VS": "Transfer",
+  "TRANSFER OF ASSETS ACAT RECEIVE": "Transfer",
   "TRANSFER OF ASSETS": "Transfer",
   "BILL PAYMENT": "Payment",
   "ASSET/ACCT FEE": "Fee",
