@@ -338,3 +338,59 @@ public function childTransactions()
     return $this->hasMany(FinAccountLineItems::class, 'parent_t_id', 't_id');
 }
 ```
+
+---
+
+## CSV Parsing (Fidelity Format)
+
+**Location**: `resources/js/data/finance/parseFidelityCsv.ts`
+
+### Field Mapping
+
+When parsing Fidelity CSV exports, the Action column is parsed by `splitTransactionString()`:
+
+| Action Column Example | Description (t_description) | Memo (t_comment) | Type (t_type) |
+|----------------------|---------------------------|------------------|---------------|
+| `BOUGHT` | `BOUGHT` | *(empty)* | `Buy` |
+| `DIVIDEND RECEIVED APA CORPORATION COM (APA) (Margin)` | `APA CORPORATION COM (APA) (MARGIN)` | `DIVIDEND RECEIVED` | `Dividend` |
+| `TRANSFER OF ASSETS ACAT RECEIVE BROADCOM INC COM (AVGO)` | `ACAT RECEIVE BROADCOM INC COM (AVGO)` | `TRANSFER OF ASSETS` | `Transfer` |
+| `MERGER MER PAYOUT #REORCM00516... (WBA) (Cash)` | `MER PAYOUT #REORCM00516... (WBA) (CASH)` | `MERGER` | `Merger` |
+| `FOREIGN TAX PAID NXP SEMICONDUCTORS NV (NXPI)` | `NXP SEMICONDUCTORS NV (NXPI)` | `FOREIGN TAX PAID` | `Tax` |
+| `INTEREST EARNED FIMM TREASURY ONLY PORTFOLIO (FSIXX)` | `FIMM TREASURY ONLY PORTFOLIO (FSIXX)` | `INTEREST EARNED` | `Interest` |
+| `INTEREST SHORT SALE REBATE TESLA INC (TSLA)` | `TESLA INC (TSLA)` | `INTEREST SHORT SALE REBATE` | `Interest` |
+| `MARGIN INTEREST CHARGED (Margin)` | `CHARGED (MARGIN)` | `MARGIN INTEREST` | `Interest` |
+
+### Logic
+
+1. The function matches known prefixes (e.g., `DIVIDEND RECEIVED`, `TRANSFER OF ASSETS`, `MARGIN INTEREST`)
+2. **Description** (`t_description`) = The "rest" after the prefix (more specific details)
+3. **Memo** (`t_comment`) = The matched prefix (the transaction action category)
+4. If no "rest" exists (e.g., simple `BOUGHT` or `SOLD`), description is the prefix and memo is empty
+
+### Supported Transaction Types
+
+| Prefix | Type |
+|--------|------|
+| `YOU BOUGHT`, `BOUGHT` | `Buy` |
+| `YOU SOLD`, `SOLD` | `Sell` |
+| `DIVIDEND RECEIVED`, `DIVIDEND CHARGED` | `Dividend` |
+| `INTEREST EARNED`, `INTEREST SHORT SALE REBATE`, `MARGIN INTEREST` | `Interest` |
+| `TRANSFER OF ASSETS`, `TRANSFERRED TO VS`, `TRANSFERRED FROM VS` | `Transfer` |
+| `MERGER` | `Merger` |
+| `FOREIGN TAX PAID` | `Tax` |
+| `WIRE TRANSFER FROM BANK`, `WIRE TRANSFER TO BANK` | `Wire` |
+| `DIRECT DEPOSIT`, `ELECTRONIC FUNDS TRANSFER RECEIVED`, `CHECK RECEIVED` | `Deposit` |
+| `DIRECT DEBIT`, `ELECTRONIC FUNDS TRANSFER PAID`, `CHECK PAID` | `Withdrawal` |
+| `REINVESTMENT` | `Reinvest` |
+| `REDEMPTION FROM CORE ACCOUNT`, `REDEMPTION PAYOUT` | `Redeem` |
+| `JOURNALED`, `JOURNALED GOODWILL` | `Journal` |
+| `ASSET/ACCT FEE` | `Fee` |
+| `BILL PAYMENT` | `Payment` |
+
+### Test Coverage
+
+**Location**: `resources/js/data/finance/parseFidelityCsv.test.ts`
+
+- 54 test cases covering all supported transaction types
+- Tests both `splitTransactionString()` function and full CSV parsing
+- Validates description/memo field assignment

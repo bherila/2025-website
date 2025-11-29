@@ -25,8 +25,8 @@ describe('parseFidelityCsv function', () => {
         t_fee: 0.00,
         t_amt: -1500.00,
         t_date_posted: '2025-01-17',
-        t_comment: '',
       })
+      expect(result[0]?.t_comment).toBeUndefined()
     })
   })
 
@@ -44,16 +44,16 @@ describe('parseFidelityCsv function', () => {
 
     it('parses margin mark to market row correctly', () => {
       const result = parseFidelityCsv(csvWithoutAccount)
-      const marginRow = result.find((r) => r.t_description === 'SHORT VS MARGIN MARK TO MARKET' && r.t_amt === 4473.68)
+      const marginRow = result.find((r) => r.t_comment === 'SHORT VS MARGIN MARK TO MARKET' && r.t_amt === 4473.68)
       expect(marginRow).toBeTruthy()
       expect(marginRow).toMatchObject({
         t_date: '2025-11-21',
         t_type: 'MISC',
-        t_description: 'SHORT VS MARGIN MARK TO MARKET',
+        t_description: '(MARGIN)',
         t_price: 0.000,
         t_amt: 4473.68,
         t_account_balance: undefined,
-        t_comment: '(MARGIN)',
+        t_comment: 'SHORT VS MARGIN MARK TO MARKET',
       })
     })
 
@@ -65,10 +65,10 @@ describe('parseFidelityCsv function', () => {
         t_date: '2025-11-21',
         t_type: 'Dividend',
         t_symbol: 'APA',
-        t_description: 'DIVIDEND RECEIVED',
+        t_description: 'APA CORPORATION COM (APA) (MARGIN)',
         t_amt: 4,
         t_price: 0.000,
-        t_comment: 'APA CORPORATION COM (APA) (MARGIN)',
+        t_comment: 'DIVIDEND RECEIVED',
       })
     })
 
@@ -92,7 +92,7 @@ describe('parseFidelityCsv function', () => {
       expect(result[0]?.t_fee).toBe(0.00)
       expect(result[0]?.t_type).toBe('Buy')
       expect(result[0]?.t_description).toBe('BOUGHT')
-      expect(result[0]?.t_comment).toBe('')
+      expect(result[0]?.t_comment).toBeUndefined()
     })
 
     it('accepts "Date" as date column', () => {
@@ -107,7 +107,7 @@ describe('parseFidelityCsv function', () => {
       expect(result[0]?.t_fee).toBe(0.00)
       expect(result[0]?.t_type).toBe('Buy')
       expect(result[0]?.t_description).toBe('BOUGHT')
-      expect(result[0]?.t_comment).toBe('')
+      expect(result[0]?.t_comment).toBeUndefined()
     })
   })
 
@@ -158,8 +158,8 @@ Date downloaded 11/21/2025 12:54 am`
         t_fee: 0.00,
         t_type: 'Buy',
         t_description: 'BOUGHT',
-        t_comment: '',
       })
+      expect(result[0]?.t_comment).toBeUndefined()
       expect(result[1]).toMatchObject({
         t_symbol: 'AAPL',
         t_amt: 775.00,
@@ -168,8 +168,8 @@ Date downloaded 11/21/2025 12:54 am`
         t_fee: 0.00,
         t_type: 'Sell',
         t_description: 'SOLD',
-        t_comment: '',
       })
+      expect(result[1]?.t_comment).toBeUndefined()
     })
   })
 
@@ -196,7 +196,8 @@ Date downloaded 11/28/2025 11:07 am`
       const debitRow = result.find((r) => r.t_amt === -0.57)
       expect(debitRow).toBeTruthy()
       expect(debitRow?.t_type).toBe('Withdrawal')
-      expect(debitRow?.t_description).toBe('DIRECT DEBIT')
+      expect(debitRow?.t_description).toBe('JPMORGAN CHASEACCTVERIFY (CASH)')
+      expect(debitRow?.t_comment).toBe('DIRECT DEBIT')
     })
 
     it('parses DIRECT DEPOSIT as Deposit type', () => {
@@ -204,7 +205,8 @@ Date downloaded 11/28/2025 11:07 am`
       const depositRow = result.find((r) => r.t_amt === 1000)
       expect(depositRow).toBeTruthy()
       expect(depositRow?.t_type).toBe('Deposit')
-      expect(depositRow?.t_description).toBe('DIRECT DEPOSIT')
+      expect(depositRow?.t_description).toBe('ALLY BANK P2P BENJAMIN W HERIWEB (CASH)')
+      expect(depositRow?.t_comment).toBe('DIRECT DEPOSIT')
     })
 
     it('parses WIRE TRANSFER FROM BANK as Wire type', () => {
@@ -212,7 +214,8 @@ Date downloaded 11/28/2025 11:07 am`
       const wireInRow = result.find((r) => r.t_amt === 196648.75)
       expect(wireInRow).toBeTruthy()
       expect(wireInRow?.t_type).toBe('Wire')
-      expect(wireInRow?.t_description).toBe('WIRE TRANSFER FROM BANK')
+      expect(wireInRow?.t_description).toBe('(CASH)')
+      expect(wireInRow?.t_comment).toBe('WIRE TRANSFER FROM BANK')
     })
 
     it('parses WIRE TRANSFER TO BANK as Wire type', () => {
@@ -220,7 +223,8 @@ Date downloaded 11/28/2025 11:07 am`
       const wireOutRow = result.find((r) => r.t_amt === -200000)
       expect(wireOutRow).toBeTruthy()
       expect(wireOutRow?.t_type).toBe('Wire')
-      expect(wireOutRow?.t_description).toBe('WIRE TRANSFER TO BANK')
+      expect(wireOutRow?.t_description).toBe('(CASH)')
+      expect(wireOutRow?.t_comment).toBe('WIRE TRANSFER TO BANK')
     })
 
     it('parses YOU BOUGHT as Buy type', () => {
@@ -228,13 +232,14 @@ Date downloaded 11/28/2025 11:07 am`
       const buyRow = result.find((r) => r.t_amt === -54150)
       expect(buyRow).toBeTruthy()
       expect(buyRow?.t_type).toBe('Buy')
-      expect(buyRow?.t_description).toBe('YOU BOUGHT')
+      expect(buyRow?.t_description).toBe('PROSPECTUS UNDER SEPARATE COVER FIMM TREASURY ONLY PORTFOLIO: CL I (FSIXX) (CASH)')
+      expect(buyRow?.t_comment).toBe('YOU BOUGHT')
       expect(buyRow?.t_symbol).toBe('FSIXX')
     })
 
     it('parses DIVIDEND RECEIVED as Dividend type', () => {
       const result = parseFidelityCsv(csvNewFormat)
-      const dividendRows = result.filter((r) => r.t_description === 'DIVIDEND RECEIVED')
+      const dividendRows = result.filter((r) => r.t_comment === 'DIVIDEND RECEIVED')
       expect(dividendRows.length).toBe(2)
       dividendRows.forEach((r) => {
         expect(r.t_type).toBe('Dividend')
@@ -243,7 +248,7 @@ Date downloaded 11/28/2025 11:07 am`
 
     it('parses REINVESTMENT as Reinvest type', () => {
       const result = parseFidelityCsv(csvNewFormat)
-      const reinvestRow = result.find((r) => r.t_description === 'REINVESTMENT')
+      const reinvestRow = result.find((r) => r.t_comment === 'REINVESTMENT')
       expect(reinvestRow).toBeTruthy()
       expect(reinvestRow?.t_type).toBe('Reinvest')
     })
@@ -375,7 +380,8 @@ Date downloaded 11/28/2025 11:07 am`
       const transferFromRow = result.find((r) => r.t_amt === 370000)
       expect(transferFromRow).toBeTruthy()
       expect(transferFromRow?.t_type).toBe('Transfer')
-      expect(transferFromRow?.t_description).toBe('TRANSFERRED FROM VS')
+      expect(transferFromRow?.t_description).toBe('637-768451-1 FIMM TREASURY ONLY PORTFOLIO: CL I (FSIXX) (CASH)')
+      expect(transferFromRow?.t_comment).toBe('TRANSFERRED FROM VS')
     })
 
     it('parses TRANSFERRED TO VS as Transfer type', () => {
@@ -383,7 +389,8 @@ Date downloaded 11/28/2025 11:07 am`
       const transferToRow = result.find((r) => r.t_amt === -2020.96)
       expect(transferToRow).toBeTruthy()
       expect(transferToRow?.t_type).toBe('Transfer')
-      expect(transferToRow?.t_description).toBe('TRANSFERRED TO VS')
+      expect(transferToRow?.t_description).toBe('637-768451-2 SALESFORCE INC COM (CRM) (MARGIN)')
+      expect(transferToRow?.t_comment).toBe('TRANSFERRED TO VS')
     })
 
     it('parses JOURNALED GOODWILL as Journal type', () => {
@@ -435,8 +442,8 @@ Date downloaded 11/28/2025 11:07 am`
       const transferRow = result.find((r) => r.t_symbol === 'AVGO')
       expect(transferRow).toBeTruthy()
       expect(transferRow?.t_type).toBe('Transfer')
-      expect(transferRow?.t_description).toBe('TRANSFER OF ASSETS')
-      expect(transferRow?.t_comment).toBe('ACAT RECEIVE BROADCOM INC COM (AVGO) (MARGIN)')
+      expect(transferRow?.t_description).toBe('ACAT RECEIVE BROADCOM INC COM (AVGO) (MARGIN)')
+      expect(transferRow?.t_comment).toBe('TRANSFER OF ASSETS')
     })
 
     it('parses MERGER as Merger type', () => {
@@ -444,8 +451,8 @@ Date downloaded 11/28/2025 11:07 am`
       const mergerRow = result.find((r) => r.t_symbol === 'WBA')
       expect(mergerRow).toBeTruthy()
       expect(mergerRow?.t_type).toBe('Merger')
-      expect(mergerRow?.t_description).toBe('MERGER')
-      expect(mergerRow?.t_comment).toBe('MER PAYOUT #REORCM0051678340000 WALGREENS BOOTS ALLIANCE INC (WBA) (CASH)')
+      expect(mergerRow?.t_description).toBe('MER PAYOUT #REORCM0051678340000 WALGREENS BOOTS ALLIANCE INC (WBA) (CASH)')
+      expect(mergerRow?.t_comment).toBe('MERGER')
     })
 
     it('parses FOREIGN TAX PAID as Tax type', () => {
@@ -453,9 +460,68 @@ Date downloaded 11/28/2025 11:07 am`
       const taxRow = result.find((r) => r.t_symbol === 'NXPI')
       expect(taxRow).toBeTruthy()
       expect(taxRow?.t_type).toBe('Tax')
-      expect(taxRow?.t_description).toBe('FOREIGN TAX PAID')
-      expect(taxRow?.t_comment).toBe('NXP SEMICONDUCTORS NV (NXPI) (MARGIN)')
+      expect(taxRow?.t_description).toBe('NXP SEMICONDUCTORS NV (NXPI) (MARGIN)')
+      expect(taxRow?.t_comment).toBe('FOREIGN TAX PAID')
       expect(taxRow?.t_amt).toBe(-15.25)
+    })
+  })
+
+  describe('Interest transaction types', () => {
+    describe('splitTransactionString for interest types', () => {
+      it('extracts INTEREST EARNED correctly', () => {
+        const result = splitTransactionString('INTEREST EARNED FIMM TREASURY ONLY PORTFOLIO: CL I (FSIXX) (Cash)')
+        expect(result.transactionType).toBe('Interest')
+        expect(result.transactionDescription).toBe('INTEREST EARNED')
+        expect(result.rest).toBe('FIMM TREASURY ONLY PORTFOLIO: CL I (FSIXX) (CASH)')
+      })
+
+      it('extracts INTEREST SHORT SALE REBATE correctly', () => {
+        const result = splitTransactionString('INTEREST SHORT SALE REBATE TESLA INC (TSLA) (Margin)')
+        expect(result.transactionType).toBe('Interest')
+        expect(result.transactionDescription).toBe('INTEREST SHORT SALE REBATE')
+        expect(result.rest).toBe('TESLA INC (TSLA) (MARGIN)')
+      })
+
+      it('extracts MARGIN INTEREST correctly', () => {
+        const result = splitTransactionString('MARGIN INTEREST CHARGED (Margin)')
+        expect(result.transactionType).toBe('Interest')
+        expect(result.transactionDescription).toBe('MARGIN INTEREST')
+        expect(result.rest).toBe('CHARGED (MARGIN)')
+      })
+    })
+
+    const csvWithInterestTypes = `Run Date,Action,Symbol,Description,Type,Exchange Quantity,Exchange Currency,Quantity,Currency,Price,Exchange Rate,Commission,Fees,Accrued Interest,Amount,Cash Balance,Settlement Date
+11/15/2025,"INTEREST EARNED FIMM TREASURY ONLY PORTFOLIO: CL I (FSIXX) (Cash)",FSIXX,"FIMM TREASURY ONLY PORTFOLIO: CL I",Cash,0,,USD,,0.000,0,,,,45.67,150045.67,11/15/2025
+11/10/2025,"INTEREST SHORT SALE REBATE TESLA INC (TSLA) (Margin)",TSLA,"TESLA INC",Margin,0,,USD,,0.000,0,,,,12.34,150058.01,11/10/2025
+11/05/2025,"MARGIN INTEREST CHARGED (Margin)",,"No Description",Margin,0,,USD,,0.000,0,,,,-89.50,149968.51,11/05/2025`
+
+    it('parses INTEREST EARNED as Interest type', () => {
+      const result = parseFidelityCsv(csvWithInterestTypes)
+      const interestRow = result.find((r) => r.t_symbol === 'FSIXX')
+      expect(interestRow).toBeTruthy()
+      expect(interestRow?.t_type).toBe('Interest')
+      expect(interestRow?.t_description).toBe('FIMM TREASURY ONLY PORTFOLIO: CL I (FSIXX) (CASH)')
+      expect(interestRow?.t_comment).toBe('INTEREST EARNED')
+      expect(interestRow?.t_amt).toBe(45.67)
+    })
+
+    it('parses INTEREST SHORT SALE REBATE as Interest type', () => {
+      const result = parseFidelityCsv(csvWithInterestTypes)
+      const interestRow = result.find((r) => r.t_symbol === 'TSLA')
+      expect(interestRow).toBeTruthy()
+      expect(interestRow?.t_type).toBe('Interest')
+      expect(interestRow?.t_description).toBe('TESLA INC (TSLA) (MARGIN)')
+      expect(interestRow?.t_comment).toBe('INTEREST SHORT SALE REBATE')
+      expect(interestRow?.t_amt).toBe(12.34)
+    })
+
+    it('parses MARGIN INTEREST as Interest type', () => {
+      const result = parseFidelityCsv(csvWithInterestTypes)
+      const interestRow = result.find((r) => r.t_amt === -89.50)
+      expect(interestRow).toBeTruthy()
+      expect(interestRow?.t_type).toBe('Interest')
+      expect(interestRow?.t_description).toBe('CHARGED (MARGIN)')
+      expect(interestRow?.t_comment).toBe('MARGIN INTEREST')
     })
   })
 })

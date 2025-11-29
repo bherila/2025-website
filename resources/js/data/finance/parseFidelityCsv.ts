@@ -112,7 +112,7 @@ export function parseFidelityCsv(text: string): AccountLineItem[] {
         t_date: parseDate(columns[mapping.dateCol])?.formatYMD() ?? columns[mapping.dateCol],
         t_type: transactionType,
         t_symbol: getCol(columns, mapping.symbolCol),
-        t_description: transactionDescription,
+        t_description: rest || transactionDescription,
         t_qty: qtyNum !== undefined && !isNaN(qtyNum) ? qtyNum : undefined,
         t_price: getCol(columns, mapping.priceCol),
         t_commission: getCol(columns, mapping.commissionCol),
@@ -122,7 +122,7 @@ export function parseFidelityCsv(text: string): AccountLineItem[] {
         t_date_posted: settlementDate && settlementDate !== 'Processing'
           ? parseDate(settlementDate)?.formatYMD() ?? settlementDate
           : undefined,
-        t_comment: rest,
+        t_comment: rest ? transactionDescription : undefined,
       })
       data.push(item)
     } catch {
@@ -153,7 +153,9 @@ const typeMap: Record<string, string> = {
   "DIVIDEND CHARGED": "Dividend",
 
   // Interest
+  "INTEREST EARNED": "Interest",
   "INTEREST SHORT SALE REBATE": "Interest",
+  "MARGIN INTEREST": "Interest",
 
   // Journal entries
   "JOURNALED GOODWILL": "Journal",
