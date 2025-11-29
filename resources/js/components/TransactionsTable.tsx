@@ -13,6 +13,7 @@ import { ClearFilterButton } from './ClearFilterButton'
 import { TagApplyButton } from './TagApplyButton'
 import TransactionDetailsModal from './TransactionDetailsModal'
 import { fetchWrapper } from '../fetchWrapper'
+import { isDuplicateTransaction } from '@/data/finance/isDuplicateTransaction'
 
 interface Props {
   data: AccountLineItem[]
@@ -51,17 +52,10 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
   const [cashBalanceFilter, setCashBalanceFilter] = useState('')
 
   const isDuplicate = (item: AccountLineItem) => {
-    if (!duplicates) {
+    if (!duplicates || duplicates.length === 0) {
       return false
     }
-    return duplicates.some(
-      (dup) =>
-        dup.t_date === item.t_date &&
-        (dup.t_type ?? '').includes(item.t_type ?? '') &&
-        (dup.t_description ?? '').includes(item.t_description ?? '') &&
-        (dup.t_qty ?? 0) === (item.t_qty ?? 0) &&
-        dup.t_amt === item.t_amt,
-    )
+    return isDuplicateTransaction(item, duplicates)
   }
 
   useEffect(() => {
@@ -193,8 +187,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
     [currency(0), currency(0), currency(0)],
   )
 
-  const handleUpdateTransactionComment = async (comment: string) => {
-    console.log('Updating transaction comment', comment)
+  const handleUpdateTransaction = async () => {
     if (typeof refreshFn === 'function') {
       refreshFn()
     }
@@ -222,6 +215,11 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
               Description {sortField === 't_description' && (sortDirection === 'asc' ? '↑' : '↓')}
             </th>
             {!isTagsColumnEmpty && <th>Tags</th>}
+            {!isSymbolColumnEmpty && (
+              <th className="clickable" onClick={() => handleSort('t_symbol')}>
+                Symbol {sortField === 't_symbol' && (sortDirection === 'asc' ? '↑' : '↓')}
+              </th>
+            )}
             {!isQtyColumnEmpty && (
               <th className="clickable text-right" onClick={() => handleSort('t_qty')}>
                 Qty {sortField === 't_qty' && (sortDirection === 'asc' ? '↑' : '↓')}
@@ -245,11 +243,6 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
             <th className="clickable text-right" onClick={() => handleSort('t_amt')}>
               Amount {sortField === 't_amt' && (sortDirection === 'asc' ? '↑' : '↓')}
             </th>
-            {!isCashBalanceColumnEmpty && (
-              <th className="clickable text-right" onClick={() => handleSort('t_account_balance')}>
-                Cash Balance {sortField === 't_account_balance' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </th>
-            )}
             {!isCategoryColumnEmpty && (
               <th className="clickable" onClick={() => handleSort('t_schc_category')}>
                 Category {sortField === 't_schc_category' && (sortDirection === 'asc' ? '↑' : '↓')}
@@ -258,11 +251,6 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
             {!isCusipColumnEmpty && (
               <th className="clickable" onClick={() => handleSort('t_cusip')}>
                 CUSIP {sortField === 't_cusip' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </th>
-            )}
-            {!isSymbolColumnEmpty && (
-              <th className="clickable" onClick={() => handleSort('t_symbol')}>
-                Symbol {sortField === 't_symbol' && (sortDirection === 'asc' ? '↑' : '↓')}
               </th>
             )}
             {!isOptionExpiryColumnEmpty && (
@@ -285,6 +273,12 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                 Memo {sortField === 't_comment' && (sortDirection === 'asc' ? '↑' : '↓')}
               </th>
             )}
+            {!isCashBalanceColumnEmpty && (
+              <th className="clickable text-right" onClick={() => handleSort('t_account_balance')}>
+                Cash Balance {sortField === 't_account_balance' && (sortDirection === 'asc' ? '↑' : '↓')}
+              </th>
+            )}
+            <th className="text-center">Details</th>
             {onDeleteTransaction && <th className="text-center">🗑️</th>}
           </tr>
           <tr>
@@ -348,6 +342,18 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                 {tagFilter && <ClearFilterButton onClick={() => setTagFilter('')} ariaLabel="Clear tag filter" />}
               </th>
             )}
+            {!isSymbolColumnEmpty && (
+              <th className="position-relative" style={{ width: '100px' }}>
+                <input
+                  style={{ width: '100%', maxWidth: '150px' }}
+                  type="text"
+                  placeholder="Filter symbol..."
+                  value={symbolFilter}
+                  onChange={(e) => setSymbolFilter(e.target.value)}
+                />
+                {symbolFilter && <ClearFilterButton onClick={() => setSymbolFilter('')} ariaLabel="Clear symbol filter" />}
+              </th>
+            )}
             {!isQtyColumnEmpty && (
               <th className="position-relative" style={{ width: '80px' }}>
                 <input
@@ -373,18 +379,6 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
               />
               {amountFilter && <ClearFilterButton onClick={() => setAmountFilter('')} ariaLabel="Clear amount filter" />}
             </th>
-            {!isCashBalanceColumnEmpty && (
-              <th className="position-relative" style={{ width: '100px' }}>
-                <input
-                  style={{ width: '100%', maxWidth: '150px' }}
-                  type="text"
-                  placeholder="Filter balance..."
-                  value={cashBalanceFilter}
-                  onChange={(e) => setCashBalanceFilter(e.target.value)}
-                />
-                {cashBalanceFilter && <ClearFilterButton onClick={() => setCashBalanceFilter('')} ariaLabel="Clear balance filter" />}
-              </th>
-            )}
             {!isCategoryColumnEmpty && (
               <th className="position-relative" style={{ width: '140px' }}>
                 <input
@@ -409,18 +403,6 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                   onChange={(e) => setCusipFilter(e.target.value)}
                 />
                 {cusipFilter && <ClearFilterButton onClick={() => setCusipFilter('')} ariaLabel="Clear CUSIP filter" />}
-              </th>
-            )}
-            {!isSymbolColumnEmpty && (
-              <th className="position-relative" style={{ width: '100px' }}>
-                <input
-                  style={{ width: '100%', maxWidth: '150px' }}
-                  type="text"
-                  placeholder="Filter symbol..."
-                  value={symbolFilter}
-                  onChange={(e) => setSymbolFilter(e.target.value)}
-                />
-                {symbolFilter && <ClearFilterButton onClick={() => setSymbolFilter('')} ariaLabel="Clear symbol filter" />}
               </th>
             )}
             {!isOptionExpiryColumnEmpty && (
@@ -464,6 +446,19 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                 {memoFilter && <ClearFilterButton onClick={() => setMemoFilter('')} ariaLabel="Clear memo filter" />}
               </th>
             )}
+            {!isCashBalanceColumnEmpty && (
+              <th className="position-relative" style={{ width: '100px' }}>
+                <input
+                  style={{ width: '100%', maxWidth: '150px' }}
+                  type="text"
+                  placeholder="Filter balance..."
+                  value={cashBalanceFilter}
+                  onChange={(e) => setCashBalanceFilter(e.target.value)}
+                />
+                {cashBalanceFilter && <ClearFilterButton onClick={() => setCashBalanceFilter('')} ariaLabel="Clear balance filter" />}
+              </th>
+            )}
+            <th></th>
             {onDeleteTransaction && <th></th>}
           </tr>
         </thead>
@@ -525,6 +520,20 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                 {row.t_description}
               </td>
               {!isTagsColumnEmpty && <td className="tagsCol">{renderTransactionTags(row)}</td>}
+              {!isSymbolColumnEmpty && (
+                <td
+                  className={'numericCol'}
+                  onClick={() => {
+                    if (symbolFilter === row.t_symbol) {
+                      setSymbolFilter('')
+                    } else {
+                      setSymbolFilter(row.t_symbol || '')
+                    }
+                  }}
+                >
+                  {row.t_symbol}
+                </td>
+              )}
               {!isQtyColumnEmpty && (
                 <td
                   className={'numericCol text-right clickable'}
@@ -562,7 +571,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                   whiteSpace: 'nowrap',
                 }}
                 onClick={() => {
-                  const amt = row.t_amt || '0';
+                  const amt = row.t_amt?.toString() || '0';
                   if (amountFilter === amt) {
                     setAmountFilter('')
                   } else {
@@ -572,11 +581,6 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
               >
                 {row.t_amt || '0'}
               </td>
-              {!isCashBalanceColumnEmpty && (
-                <td className={'numericCol text-right'}>
-                  {row.t_account_balance != null ? currency(row.t_account_balance).format() : ''}
-                </td>
-              )}
               {!isCategoryColumnEmpty && (
                 <td
                   onClick={() => {
@@ -603,20 +607,6 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                   }}
                 >
                   {row.t_cusip}
-                </td>
-              )}
-              {!isSymbolColumnEmpty && (
-                <td
-                  className={'numericCol'}
-                  onClick={() => {
-                    if (symbolFilter === row.t_symbol) {
-                      setSymbolFilter('')
-                    } else {
-                      setSymbolFilter(row.t_symbol || '')
-                    }
-                  }}
-                >
-                  {row.t_symbol}
                 </td>
               )}
               {!isOptionExpiryColumnEmpty && (
@@ -654,6 +644,21 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                 </td>
               )}
               {!isMemoColumnEmpty && <td>{row.t_comment}</td>}
+              {!isCashBalanceColumnEmpty && (
+                <td className={'numericCol text-right'}>
+                  {row.t_account_balance != null ? currency(row.t_account_balance).format() : ''}
+                </td>
+              )}
+              <td>
+                <Button 
+                  variant={row.t_comment ? "default" : "outline"} 
+                  size="sm" 
+                  onClick={() => setSelectedTransaction(row)}
+                  className={row.t_comment ? "bg-green-600 hover:bg-green-700 text-white" : ""}
+                >
+                  Details
+                </Button>
+              </td>
               {onDeleteTransaction && (
                 <td style={{ textAlign: 'center' }}>
                   <button
@@ -665,11 +670,6 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                   </button>
                 </td>
               )}
-              <td>
-                <Button variant="outline" size="sm" onClick={() => setSelectedTransaction(row)}>
-                  Details
-                </Button>
-              </td>
             </tr>
           ))}
         </tbody>
@@ -677,9 +677,10 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
           <tr>
             <TotalCell />
             {!isPostDateColumnEmpty && <TotalCell />}
-            <TotalCell />
             {!isTypeColumnEmpty && <TotalCell />}
+            <TotalCell />
             {!isTagsColumnEmpty && <TotalCell />}
+            {!isSymbolColumnEmpty && <TotalCell />}
             {!isQtyColumnEmpty && <TotalCell />}
             {!isPriceColumnEmpty && <TotalCell />}
             {!isCommissionColumnEmpty && <TotalCell />}
@@ -690,14 +691,14 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                 {totalNegatives.format()} (Debits) <br />= {totalAmount.format()} (Net)
               </strong>
             </td>
-            {!isCashBalanceColumnEmpty && <TotalCell />}
             {!isCategoryColumnEmpty && <TotalCell />}
             {!isCusipColumnEmpty && <TotalCell />}
-            {!isSymbolColumnEmpty && <TotalCell />}
             {!isOptionExpiryColumnEmpty && <TotalCell />}
             {!isOptionTypeColumnEmpty && <TotalCell />}
             {!isStrikeColumnEmpty && <TotalCell />}
             {!isMemoColumnEmpty && <TotalCell />}
+            {!isCashBalanceColumnEmpty && <TotalCell />}
+            <TotalCell />
             {onDeleteTransaction && <TotalCell />}
           </tr>
         </tfoot>
@@ -737,7 +738,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
           transaction={selectedTransaction}
           isOpen={!!selectedTransaction}
           onClose={() => setSelectedTransaction(null)}
-          onSave={handleUpdateTransactionComment}
+          onSave={handleUpdateTransaction}
         />
       )}
     </>

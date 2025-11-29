@@ -21,7 +21,7 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
 } from '@/components/ui/alert-dialog'
-import dayjs from 'dayjs'
+import { findDuplicateTransactions, filterOutDuplicates } from '@/data/finance/isDuplicateTransaction'
 
 const CHUNK_SIZE = 100
 
@@ -82,6 +82,24 @@ export default function ImportTransactions({ accountId, onImportFinished }: { ac
   const [importError, setImportError] = useState<string | null>(null)
   const [dataToImport, setDataToImport] = useState<AccountLineItem[]>([])
   const [currentDuplicates, setCurrentDuplicates] = useState<AccountLineItem[]>([])
+  const [existingTransactions, setExistingTransactions] = useState<AccountLineItem[]>([])
+  const [loadingExisting, setLoadingExisting] = useState(true)
+
+  // Load all existing transactions upfront
+  useEffect(() => {
+    const loadExistingTransactions = async () => {
+      try {
+        setLoadingExisting(true)
+        const transactions = await fetchWrapper.get(`/api/finance/${accountId}/line_items`)
+        setExistingTransactions(transactions)
+      } catch (e) {
+        console.error('Failed to load existing transactions:', e)
+      } finally {
+        setLoadingExisting(false)
+      }
+    }
+    loadExistingTransactions()
+  }, [accountId])
 
   const processChunks = useCallback(async (chunks: AccountLineItem[][], chunkIndex: number) => {
     if (chunkIndex >= chunks.length) {
@@ -114,38 +132,8 @@ export default function ImportTransactions({ accountId, onImportFinished }: { ac
     setIsImporting(true)
     setImportError(null)
     
-    const dates = data.map(p => p.t_date)
-    const earliestDate = dates.reduce((min, d) => dayjs(d).isBefore(dayjs(min)) ? d : min)
-    const latestDate = dates.reduce((max, d) => dayjs(d).isAfter(dayjs(max)) ? d : max)
-
-    const existingTransactions = await fetchWrapper.get(
-      `/api/finance/${accountId}/line_items?start_date=${earliestDate}&end_date=${latestDate}`,
-    )
-
-    const currentDuplicates = data.filter((item) =>
-      existingTransactions.some(
-        (dup: AccountLineItem) =>
-          dup.t_date === item.t_date &&
-          (dup.t_type ?? '').includes(item.t_type ?? '') &&
-          (dup.t_description ?? '').includes(item.t_description ?? '') &&
-          (dup.t_qty ?? 0) === (item.t_qty ?? 0) &&
-          dup.t_amt === item.t_amt,
-      ),
-    )
-    
-    setCurrentDuplicates(currentDuplicates)
-
-    const newTransactions = data.filter(
-      (item) =>
-        !currentDuplicates.some(
-          (dup) =>
-            dup.t_date === item.t_date &&
-            (dup.t_type ?? '').includes(item.t_type ?? '') &&
-            (dup.t_description ?? '').includes(item.t_description ?? '') &&
-            (dup.t_qty ?? 0) === (item.t_qty ?? 0) &&
-            dup.t_amt === item.t_amt,
-        ),
-    )
+    // Use the preloaded existing transactions to filter out duplicates
+    const newTransactions = filterOutDuplicates(data, existingTransactions)
     
     setLoading(false)
 
@@ -161,7 +149,7 @@ export default function ImportTransactions({ accountId, onImportFinished }: { ac
       setIsImporting(false)
       onImportFinished()
     }
-  }, [accountId, processChunks, onImportFinished])
+  }, [existingTransactions, processChunks, onImportFinished])
 
 
   const handleTextareaChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -220,6 +208,16 @@ export default function ImportTransactions({ accountId, onImportFinished }: { ac
     }
     return parseData(text)
   }, [text])
+
+  // Flag duplicates as soon as the file is parsed
+  useEffect(() => {
+    if (data && data.length > 0 && existingTransactions.length > 0) {
+      const duplicates = findDuplicateTransactions(data, existingTransactions)
+      setCurrentDuplicates(duplicates)
+    } else {
+      setCurrentDuplicates([])
+    }
+  }, [data, existingTransactions])
 
   const retryImport = () => {
     setImportError(null);
