@@ -1,61 +1,45 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { fetchWrapper } from '../../fetchWrapper'
 import TransactionsTable from '../TransactionsTable'
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { z } from 'zod'
 import { Spinner } from '../ui/spinner'
 import { Button } from '../ui/button'
+import { getStoredYear, type YearSelection } from './AccountYearSelector'
 
 export default function FinanceAccountTransactionsPage({ id }: { id: number }) {
   const [data, setData] = useState<AccountLineItem[] | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [fetchKey, setFetchKey] = useState(0)
-  const [availableYears, setAvailableYears] = useState<number[]>([])
-  const [selectedYear, setSelectedYear] = useState<number | 'all' | null>(null)
-  const [yearsLoaded, setYearsLoaded] = useState(false)
+  const [selectedYear, setSelectedYear] = useState<YearSelection | null>(null)
 
-  // Parse year from URL query parameter
+  // Get year from sessionStorage on mount and listen for changes
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search)
-    const yearParam = urlParams.get('year')
-    if (yearParam) {
-      const parsedYear = parseInt(yearParam, 10)
-      if (!isNaN(parsedYear)) {
-        setSelectedYear(parsedYear)
-      }
+    const updateYear = () => {
+      const stored = getStoredYear(id)
+      setSelectedYear(stored ?? 'all')
     }
-  }, [])
-
-  // Fetch available years on mount
-  useEffect(() => {
-    const fetchYears = async () => {
-      try {
-        const years = await fetchWrapper.get(`/api/finance/${id}/transaction-years`)
-        const parsedYears = z.array(z.number()).parse(years)
-        setAvailableYears(parsedYears)
-        // Default to the most recent year if no year from URL
-        if (selectedYear === null && parsedYears.length > 0 && parsedYears[0] !== undefined) {
-          setSelectedYear(parsedYears[0])
-        } else if (selectedYear === null) {
-          setSelectedYear('all')
-        }
-        setYearsLoaded(true)
-      } catch (error) {
-        console.error('Error fetching years:', error)
-        setAvailableYears([])
-        if (selectedYear === null) {
-          setSelectedYear('all')
-        }
-        setYearsLoaded(true)
-      }
+    
+    // Initial load
+    updateYear()
+    
+    // Listen for storage changes (from other components)
+    window.addEventListener('storage', updateYear)
+    
+    // Custom event for same-page updates
+    const handleYearChange = () => updateYear()
+    window.addEventListener('accountYearChange', handleYearChange)
+    
+    return () => {
+      window.removeEventListener('storage', updateYear)
+      window.removeEventListener('accountYearChange', handleYearChange)
     }
-    fetchYears()
   }, [id])
 
   useEffect(() => {
-    // Only fetch once years are loaded and selectedYear is set
-    if (!yearsLoaded || selectedYear === null) return
+    // Only fetch once selectedYear is set
+    if (selectedYear === null) return
 
     const fetchData = async () => {
       try {
@@ -72,7 +56,7 @@ export default function FinanceAccountTransactionsPage({ id }: { id: number }) {
       }
     }
     fetchData()
-  }, [id, fetchKey, selectedYear, yearsLoaded])
+  }, [id, fetchKey, selectedYear])
 
   // Handle URL hash to scroll to specific transaction
   useEffect(() => {
@@ -113,29 +97,6 @@ export default function FinanceAccountTransactionsPage({ id }: { id: number }) {
     }
   }
 
-  const YearSelector = () => (
-    <div className="flex gap-1 mb-4 items-center flex-wrap">
-      <span className="text-sm text-muted-foreground mr-2">Year:</span>
-      <Button
-        variant={selectedYear === 'all' ? 'default' : 'outline'}
-        size="sm"
-        onClick={() => setSelectedYear('all')}
-      >
-        All
-      </Button>
-      {availableYears.map((year) => (
-        <Button
-          key={year}
-          variant={selectedYear === year ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setSelectedYear(year)}
-        >
-          {year}
-        </Button>
-      ))}
-    </div>
-  )
-
   if (isLoading && !data) {
     return (
       <div className="d-flex justify-content-center">
@@ -146,26 +107,22 @@ export default function FinanceAccountTransactionsPage({ id }: { id: number }) {
 
   if (!data || data.length === 0) {
     return (
-      <div>
-        <YearSelector />
-        <div className="text-center p-8 bg-muted rounded-lg">
-          <h2 className="text-xl font-semibold mb-4">No Transactions Found</h2>
-          <p className="mb-6">
-            {selectedYear === 'all'
-              ? "This account doesn't have any transactions yet."
-              : `No transactions found for ${selectedYear}.`}
-          </p>
-          <a href={`/finance/${id}/import-transactions`}>
-            <Button>Import Transactions</Button>
-          </a>
-        </div>
+      <div className="text-center p-8 bg-muted rounded-lg">
+        <h2 className="text-xl font-semibold mb-4">No Transactions Found</h2>
+        <p className="mb-6">
+          {selectedYear === 'all'
+            ? "This account doesn't have any transactions yet."
+            : `No transactions found for ${selectedYear}.`}
+        </p>
+        <a href={`/finance/${id}/import-transactions`}>
+          <Button>Import Transactions</Button>
+        </a>
       </div>
     )
   }
 
   return (
     <div>
-      <YearSelector />
       <TransactionsTable
         enableTagging
         enableLinking

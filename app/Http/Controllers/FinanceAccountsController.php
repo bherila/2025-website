@@ -42,35 +42,9 @@ class FinanceAccountsController extends Controller
             abort(404, 'Account not found');
         }
 
-        $lineItemsQuery = FinAccountLineItems::where('t_account', $account_id)
-            ->whereNull('when_deleted');
-
-        $totals = [
-            'total_volume' => $lineItemsQuery->sum(DB::raw('ABS(t_amt)')),
-            'total_commission' => $lineItemsQuery->sum('t_commission'),
-            'total_fee' => $lineItemsQuery->sum('t_fee'),
-        ];
-
-        $symbolSummary = FinAccountLineItems::where('t_account', $account_id)
-            ->whereNull('when_deleted')
-            ->whereNotNull('t_symbol')
-            ->select('t_symbol', DB::raw('SUM(t_amt) as total_amount'))
-            ->groupBy('t_symbol')
-            ->orderByRaw('SUM(t_amt) DESC')
-            ->get()
-            ->toArray();
-
-        $monthSummary = FinAccountLineItems::where('t_account', $account_id)
-            ->whereNull('when_deleted')
-            ->select(DB::raw("DATE_FORMAT(t_date, '%Y-%m') as month"), DB::raw('SUM(t_amt) as total_amount'))
-            ->groupBy(DB::raw("DATE_FORMAT(t_date, '%Y-%m')"))
-            ->orderBy('month', 'desc')
-            ->get()
-            ->toArray();
-
         $accountName = $account->acct_name;
 
-        return view('finance.summary', compact('totals', 'symbolSummary', 'monthSummary', 'account_id', 'accountName'));
+        return view('finance.summary', compact('account_id', 'accountName'));
     }
 
     public function statements(Request $request, $account_id)

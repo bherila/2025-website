@@ -6,6 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Spinner } from '@/components/ui/spinner'
 import { fetchWrapper } from '@/fetchWrapper'
+import { getStoredYear, type YearSelection } from './AccountYearSelector'
 
 interface Transaction {
   t_id: number
@@ -35,12 +36,39 @@ export default function DuplicatesPage({ id }: { id: number }) {
   const [isMerging, setIsMerging] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [selectedYear, setSelectedYear] = useState<YearSelection | null>(null)
+
+  // Get year from sessionStorage on mount and listen for changes
+  useEffect(() => {
+    const updateYear = () => {
+      const stored = getStoredYear(id)
+      setSelectedYear(stored ?? 'all')
+    }
+    
+    // Initial load
+    updateYear()
+    
+    // Listen for storage changes (from other components)
+    window.addEventListener('storage', updateYear)
+    
+    // Custom event for same-page updates
+    const handleYearChange = () => updateYear()
+    window.addEventListener('accountYearChange', handleYearChange)
+    
+    return () => {
+      window.removeEventListener('storage', updateYear)
+      window.removeEventListener('accountYearChange', handleYearChange)
+    }
+  }, [id])
 
   const fetchDuplicates = useCallback(async () => {
+    if (selectedYear === null) return
+    
     setIsLoading(true)
     setError(null)
     try {
-      const data = await fetchWrapper.get(`/api/finance/${id}/duplicates`)
+      const yearParam = selectedYear !== 'all' ? `?year=${selectedYear}` : ''
+      const data = await fetchWrapper.get(`/api/finance/${id}/duplicates${yearParam}`)
       setDuplicateGroups(data.groups || [])
       
       // Pre-select all suggested deletions
@@ -56,11 +84,13 @@ export default function DuplicatesPage({ id }: { id: number }) {
     } finally {
       setIsLoading(false)
     }
-  }, [id])
+  }, [id, selectedYear])
 
   useEffect(() => {
-    fetchDuplicates()
-  }, [fetchDuplicates])
+    if (selectedYear !== null) {
+      fetchDuplicates()
+    }
+  }, [fetchDuplicates, selectedYear])
 
   const toggleSelection = (tId: number) => {
     setSelectedForDeletion(prev => {

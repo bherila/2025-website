@@ -20,12 +20,20 @@ class FinanceTransactionsDedupeApiController extends Controller
         $uid = Auth::id();
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
 
-        // Get all transactions for the account, sorted by date
-        $transactions = FinAccountLineItems::where('t_account', $account->acct_id)
+        // Build query for transactions
+        $query = FinAccountLineItems::where('t_account', $account->acct_id)
             ->with(['tags'])
             ->orderBy('t_date', 'asc')
-            ->orderBy('t_id', 'asc')
-            ->get();
+            ->orderBy('t_id', 'asc');
+
+        // Filter by year if provided
+        if ($request->has('year') && $request->year !== 'all') {
+            $year = intval($request->year);
+            $query->whereYear('t_date', $year);
+        }
+
+        // Get all transactions for the account, sorted by date
+        $transactions = $query->get();
 
         $groups = [];
         $seenIds = [];

@@ -22,14 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const summaryDiv = document.getElementById('AccountSummaryClient')
   if (summaryDiv) {
     const root = createRoot(summaryDiv)
-    const totals = JSON.parse(summaryDiv.dataset.totals!)
-    const symbolSummary = JSON.parse(summaryDiv.dataset.symbolSummary!)
-    const monthSummary = JSON.parse(summaryDiv.dataset.monthSummary!)
-    root.render(<SummaryClient
-      totals={totals}
-      symbolSummary={symbolSummary}
-      monthSummary={monthSummary}
-    />)
+    root.render(<SummaryClient id={parseInt(summaryDiv.dataset.accountId!)} />)
   }
 
   const accountsDiv = document.getElementById('FinanceAccountsPage')

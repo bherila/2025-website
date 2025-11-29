@@ -163,6 +163,64 @@ class FinanceApiController extends Controller
         return response()->json($balances);
     }
 
+    public function getSummary(Request $request, $account_id)
+    {
+        $uid = Auth::id();
+        $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+
+        $lineItemsQuery = FinAccountLineItems::where('t_account', $account_id)
+            ->whereNull('when_deleted');
+
+        // Filter by year if provided
+        if ($request->has('year') && $request->year !== 'all') {
+            $year = intval($request->year);
+            $lineItemsQuery->whereYear('t_date', $year);
+        }
+
+        $totals = [
+            'total_volume' => (clone $lineItemsQuery)->sum(DB::raw('ABS(t_amt)')),
+            'total_commission' => (clone $lineItemsQuery)->sum('t_commission'),
+            'total_fee' => (clone $lineItemsQuery)->sum('t_fee'),
+        ];
+
+        $symbolQuery = FinAccountLineItems::where('t_account', $account_id)
+            ->whereNull('when_deleted')
+            ->whereNotNull('t_symbol');
+
+        if ($request->has('year') && $request->year !== 'all') {
+            $year = intval($request->year);
+            $symbolQuery->whereYear('t_date', $year);
+        }
+
+        $symbolSummary = $symbolQuery
+            ->select('t_symbol', DB::raw('SUM(t_amt) as total_amount'))
+            ->groupBy('t_symbol')
+            ->orderByRaw('SUM(t_amt) DESC')
+            ->get()
+            ->toArray();
+
+        $monthQuery = FinAccountLineItems::where('t_account', $account_id)
+            ->whereNull('when_deleted');
+
+        if ($request->has('year') && $request->year !== 'all') {
+            $year = intval($request->year);
+            $monthQuery->whereYear('t_date', $year);
+        }
+
+        $monthSummary = $monthQuery
+            ->select(DB::raw("DATE_FORMAT(t_date, '%Y-%m') as month"), DB::raw('SUM(t_amt) as total_amount'))
+            ->groupBy(DB::raw("DATE_FORMAT(t_date, '%Y-%m')"))
+            ->orderBy('month', 'desc')
+            ->get()
+            ->toArray();
+
+        return response()->json([
+            'totals' => $totals,
+            'symbolSummary' => $symbolSummary,
+            'monthSummary' => $monthSummary,
+        ]);
+    }
+
     public function deleteBalanceSnapshot(Request $request, $account_id)
     {
         $uid = Auth::id();

@@ -1,30 +1,115 @@
+'use client'
+
+import { useState, useEffect, useCallback } from 'react'
 import currency from 'currency.js'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table'
 import Masonry from '@/components/ui/masonry'
+import { Spinner } from '@/components/ui/spinner'
+import { fetchWrapper } from '@/fetchWrapper'
+import { getStoredYear, type YearSelection } from './AccountYearSelector'
 
-interface Props {
-  totals: {
-    total_volume: number
-    total_commission: number
-    total_fee: number
-  }
-  symbolSummary: {
-    t_symbol: string
-    total_amount: number
-  }[]
-  monthSummary: {
-    month: string
-    total_amount: number
-  }[]
+interface Totals {
+  total_volume: number
+  total_commission: number
+  total_fee: number
 }
 
-export default function SummaryClient({ totals, symbolSummary, monthSummary }: Props) {
+interface SymbolSummaryItem {
+  t_symbol: string
+  total_amount: number
+}
+
+interface MonthSummaryItem {
+  month: string
+  total_amount: number
+}
+
+interface SummaryData {
+  totals: Totals
+  symbolSummary: SymbolSummaryItem[]
+  monthSummary: MonthSummaryItem[]
+}
+
+export default function SummaryClient({ id }: { id: number }) {
+  const [data, setData] = useState<SummaryData | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [selectedYear, setSelectedYear] = useState<YearSelection | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  // Get year from sessionStorage on mount and listen for changes
+  useEffect(() => {
+    const updateYear = () => {
+      const stored = getStoredYear(id)
+      setSelectedYear(stored ?? 'all')
+    }
+    
+    // Initial load
+    updateYear()
+    
+    // Listen for storage changes (from other components)
+    window.addEventListener('storage', updateYear)
+    
+    // Custom event for same-page updates
+    const handleYearChange = () => updateYear()
+    window.addEventListener('accountYearChange', handleYearChange)
+    
+    return () => {
+      window.removeEventListener('storage', updateYear)
+      window.removeEventListener('accountYearChange', handleYearChange)
+    }
+  }, [id])
+
+  const fetchSummary = useCallback(async () => {
+    if (selectedYear === null) return
+
+    setIsLoading(true)
+    setError(null)
+    try {
+      const yearParam = selectedYear !== 'all' ? `?year=${selectedYear}` : ''
+      const result = await fetchWrapper.get(`/api/finance/${id}/summary${yearParam}`)
+      setData(result)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load summary')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [id, selectedYear])
+
+  useEffect(() => {
+    if (selectedYear !== null) {
+      fetchSummary()
+    }
+  }, [fetchSummary, selectedYear])
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <Spinner size="large" />
+        <span className="ml-2">Loading summary...</span>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 text-red-600">
+        Error: {error}
+      </div>
+    )
+  }
+
+  if (!data) {
+    return <div className="p-4">No data available</div>
+  }
+
+  const { totals, symbolSummary, monthSummary } = data
+
   return (
     <Masonry columnsCount={3} gutter="16px">
       <Card className="mb-4">
         <CardHeader>
-          <CardTitle>Account Totals</CardTitle>
+          <CardTitle>Account Totals {selectedYear !== 'all' && `(${selectedYear})`}</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
