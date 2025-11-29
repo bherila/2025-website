@@ -27,6 +27,12 @@ const TAB_ITEMS = [
     showYearSelector: true,
   },
   {
+    value: 'linker',
+    title: 'Linker',
+    href: (accountId: number) => `/finance/${accountId}/linker`,
+    showYearSelector: true,
+  },
+  {
     value: 'statements',
     title: 'Statements',
     href: (accountId: number) => `/finance/${accountId}/statements`,

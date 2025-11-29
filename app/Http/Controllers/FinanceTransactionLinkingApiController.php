@@ -289,4 +289,126 @@ class FinanceTransactionLinkingApiController extends Controller
 
         return response()->json($result);
     }
+
+    /**
+     * Find all unlinked transactions for an account and suggest linkable pairs
+     * with transactions from other accounts.
+     */
+    public function findLinkablePairs(Request $request, $account_id)
+    {
+        $uid = Auth::id();
+        $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+
+        // Build query for unlinked transactions in this account
+        $query = FinAccountLineItems::where('t_account', $account_id)
+            ->whereDoesntHave('parentTransactions') // Not a child of another transaction
+            ->whereDoesntHave('childTransactions') // Not a parent of another transaction
+            ->whereNull('when_deleted')
+            ->with('account:acct_id,acct_name')
+            ->orderBy('t_date', 'desc')
+            ->orderBy('t_id', 'desc');
+
+        // Filter by year if provided
+        if ($request->has('year') && $request->year !== 'all') {
+            $year = intval($request->year);
+            $query->whereYear('t_date', $year);
+        }
+
+        $unlinkedTransactions = $query->limit(200)->get();
+
+        // For each unlinked transaction, find potential matches
+        $linkablePairs = [];
+        $seenPairs = [];
+
+        foreach ($unlinkedTransactions as $transaction) {
+            $sourceDate = $transaction->t_date;
+            $sourceAmount = abs(floatval($transaction->t_amt));
+
+            // Skip if amount is 0
+            if ($sourceAmount == 0) {
+                continue;
+            }
+
+            // Calculate date range (+/- 7 days)
+            $startDate = date('Y-m-d', strtotime($sourceDate . ' -7 days'));
+            $endDate = date('Y-m-d', strtotime($sourceDate . ' +7 days'));
+
+            // Calculate amount range (+/- 5%)
+            $minAmount = $sourceAmount * 0.95;
+            $maxAmount = $sourceAmount * 1.05;
+
+            // Find matching transactions from other accounts
+            $potentialMatches = FinAccountLineItems::whereHas('account', function ($q) use ($uid) {
+                    $q->where('acct_owner', $uid);
+                })
+                ->where('t_account', '!=', $account_id) // Different account
+                ->whereDoesntHave('parentTransactions')
+                ->whereDoesntHave('childTransactions')
+                ->whereNull('when_deleted')
+                ->whereBetween('t_date', [$startDate, $endDate])
+                ->whereRaw('ABS(t_amt) BETWEEN ? AND ?', [$minAmount, $maxAmount])
+                ->with('account:acct_id,acct_name')
+                ->limit(5)
+                ->get();
+
+            foreach ($potentialMatches as $match) {
+                // Create a unique key for the pair to avoid duplicates
+                $pairKey = min($transaction->t_id, $match->t_id) . '-' . max($transaction->t_id, $match->t_id);
+                
+                if (isset($seenPairs[$pairKey])) {
+                    continue;
+                }
+                $seenPairs[$pairKey] = true;
+
+                // Check if amounts are opposite signs (indicating a transfer)
+                $sourceAmt = floatval($transaction->t_amt);
+                $matchAmt = floatval($match->t_amt);
+                $areOppositeSigns = ($sourceAmt > 0 && $matchAmt < 0) || ($sourceAmt < 0 && $matchAmt > 0);
+
+                $linkablePairs[] = [
+                    'transaction_a' => [
+                        't_id' => $transaction->t_id,
+                        't_account' => $transaction->t_account,
+                        'acct_name' => $transaction->account?->acct_name,
+                        't_date' => $transaction->t_date,
+                        't_description' => $transaction->t_description,
+                        't_amt' => $transaction->t_amt,
+                        't_type' => $transaction->t_type,
+                    ],
+                    'transaction_b' => [
+                        't_id' => $match->t_id,
+                        't_account' => $match->t_account,
+                        'acct_name' => $match->account?->acct_name,
+                        't_date' => $match->t_date,
+                        't_description' => $match->t_description,
+                        't_amt' => $match->t_amt,
+                        't_type' => $match->t_type,
+                    ],
+                    'are_opposite_signs' => $areOppositeSigns,
+                    'amount_diff' => abs($sourceAmount - abs(floatval($match->t_amt))),
+                    'date_diff' => abs(strtotime($sourceDate) - strtotime($match->t_date)) / 86400,
+                ];
+
+                // Limit total pairs
+                if (count($linkablePairs) >= 100) {
+                    break 2;
+                }
+            }
+        }
+
+        // Sort pairs: prioritize opposite signs, then by smallest amount difference
+        usort($linkablePairs, function ($a, $b) {
+            // Opposite signs first
+            if ($a['are_opposite_signs'] !== $b['are_opposite_signs']) {
+                return $a['are_opposite_signs'] ? -1 : 1;
+            }
+            // Then by amount difference
+            return $a['amount_diff'] <=> $b['amount_diff'];
+        });
+
+        return response()->json([
+            'pairs' => $linkablePairs,
+            'total' => count($linkablePairs),
+        ]);
+    }
 }
