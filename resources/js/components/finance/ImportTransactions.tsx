@@ -22,6 +22,7 @@ import {
   AlertDialogCancel,
 } from '@/components/ui/alert-dialog'
 import { findDuplicateTransactions, filterOutDuplicates } from '@/data/finance/isDuplicateTransaction'
+import { parseIbCsv } from '@/data/finance/parseIbCsv'
 
 const CHUNK_SIZE = 100
 
@@ -317,6 +318,12 @@ function parseData(text: string): { data: AccountLineItem[] | null; parseError: 
   const fidelityData = parseFidelityCsv(text)
   if (fidelityData.length > 0) {
     return { data: fidelityData, parseError: null }
+  }
+
+  // Try parsing as IB
+  const ibData = parseIbCsv(text).trades
+  if (ibData.length > 0) {
+    return { data: ibData, parseError: null }
   }
 
   const data: AccountLineItem[] = []
