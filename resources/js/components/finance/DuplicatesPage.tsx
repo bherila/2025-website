@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -114,13 +114,10 @@ export default function DuplicatesPage({ id }: { id: number }) {
   }
 
   const handleMerge = async () => {
-    if (selectedForDeletion.size === 0) {
-      setError('No transactions selected for deletion')
-      return
-    }
-
     // Build merge requests - group by which transactions to keep
     const mergeRequests: { keepId: number; deleteIds: number[] }[] = []
+    // Track groups that are entirely unchecked (to mark as non-duplicates)
+    const markAsNotDuplicateIds: number[] = []
     
     for (const group of duplicateGroups) {
       const deleteIds = group.transactions
@@ -136,11 +133,16 @@ export default function DuplicatesPage({ id }: { id: number }) {
         if (keepId) {
           mergeRequests.push({ keepId, deleteIds })
         }
+      } else {
+        // Group is entirely unchecked - mark all as non-duplicates
+        for (const tx of group.transactions) {
+          markAsNotDuplicateIds.push(tx.t_id)
+        }
       }
     }
 
-    if (mergeRequests.length === 0) {
-      setError('No valid merge operations found')
+    if (mergeRequests.length === 0 && markAsNotDuplicateIds.length === 0) {
+      setError('No operations to perform')
       return
     }
 
@@ -150,9 +152,17 @@ export default function DuplicatesPage({ id }: { id: number }) {
 
     try {
       const result = await fetchWrapper.post(`/api/finance/${id}/merge-duplicates`, {
-        merges: mergeRequests
+        merges: mergeRequests,
+        markAsNotDuplicateIds: markAsNotDuplicateIds
       })
-      setSuccessMessage(`Successfully merged ${result.mergedCount} duplicate transactions`)
+      const messages: string[] = []
+      if (result.mergedCount > 0) {
+        messages.push(`merged ${result.mergedCount} duplicate transaction(s)`)
+      }
+      if (result.markedAsNotDuplicate > 0) {
+        messages.push(`marked ${result.markedAsNotDuplicate} as not duplicates`)
+      }
+      setSuccessMessage(`Successfully ${messages.join(' and ')}`)
       // Refresh the list
       await fetchDuplicates()
     } catch (err) {
@@ -161,6 +171,24 @@ export default function DuplicatesPage({ id }: { id: number }) {
       setIsMerging(false)
     }
   }
+
+  // Compute counts for button text
+  const { deleteCount, markAsNonDuplicateCount } = useMemo(() => {
+    let deleteCount = 0
+    let markAsNonDuplicateCount = 0
+    
+    for (const group of duplicateGroups) {
+      const selectedInGroup = group.transactions.filter(t => selectedForDeletion.has(t.t_id)).length
+      if (selectedInGroup > 0) {
+        deleteCount += selectedInGroup
+      } else {
+        // Group is entirely unchecked - all will be marked as non-duplicates
+        markAsNonDuplicateCount += group.transactions.length
+      }
+    }
+    
+    return { deleteCount, markAsNonDuplicateCount }
+  }, [duplicateGroups, selectedForDeletion])
 
   const selectAll = () => {
     const all = new Set<number>()
@@ -228,16 +256,21 @@ export default function DuplicatesPage({ id }: { id: number }) {
             </Button>
             <Button 
               onClick={handleMerge} 
-              disabled={isMerging || selectedForDeletion.size === 0}
+              disabled={isMerging || (deleteCount === 0 && markAsNonDuplicateCount === 0)}
               className="ml-auto"
             >
               {isMerging ? (
                 <>
                   <Spinner size="small" className="mr-2" />
-                  Merging...
+                  Processing...
                 </>
               ) : (
-                `Merge & Delete ${selectedForDeletion.size} Transaction(s)`
+                <>
+                  {deleteCount > 0 && `Merge & Delete ${deleteCount}`}
+                  {deleteCount > 0 && markAsNonDuplicateCount > 0 && ', '}
+                  {markAsNonDuplicateCount > 0 && `Mark ${markAsNonDuplicateCount} as Not Duplicates`}
+                  {deleteCount === 0 && markAsNonDuplicateCount === 0 && 'No Changes'}
+                </>
               )}
             </Button>
           </div>

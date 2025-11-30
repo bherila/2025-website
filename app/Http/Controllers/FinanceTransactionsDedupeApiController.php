@@ -178,6 +178,7 @@ class FinanceTransactionsDedupeApiController extends Controller
      * - Combines tags from all transactions onto the kept transaction
      * - Reassigns parent_t_id from deleted transactions to kept transaction
      * - Deletes the specified transactions
+     * - Marks unchecked groups as non-duplicates (t_is_not_duplicate = 1)
      */
     public function mergeDuplicates(Request $request, $account_id)
     {
@@ -185,18 +186,29 @@ class FinanceTransactionsDedupeApiController extends Controller
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
 
         $request->validate([
-            'merges' => 'required|array|min:1',
+            'merges' => 'sometimes|array',
             'merges.*.keepId' => 'required|integer',
             'merges.*.deleteIds' => 'required|array|min:1',
             'merges.*.deleteIds.*' => 'integer',
+            'markAsNotDuplicateIds' => 'sometimes|array',
+            'markAsNotDuplicateIds.*' => 'integer',
         ]);
 
-        $merges = $request->merges;
+        $merges = $request->merges ?? [];
+        $markAsNotDuplicateIds = $request->markAsNotDuplicateIds ?? [];
         $totalDeleted = 0;
         $totalTagsAdded = 0;
+        $totalMarkedAsNotDuplicate = 0;
 
         DB::beginTransaction();
         try {
+            // Mark unchecked groups as non-duplicates
+            if (!empty($markAsNotDuplicateIds)) {
+                $totalMarkedAsNotDuplicate = FinAccountLineItems::whereIn('t_id', $markAsNotDuplicateIds)
+                    ->where('t_account', $account->acct_id)
+                    ->update(['t_is_not_duplicate' => true]);
+            }
+
             foreach ($merges as $merge) {
                 $keepId = $merge['keepId'];
                 $deleteIds = $merge['deleteIds'];
@@ -261,14 +273,15 @@ class FinanceTransactionsDedupeApiController extends Controller
                     ->delete();
                 
                 $totalDeleted += $deletedCount;
-
-                DB::commit();
             }
+
+            DB::commit();
 
             return response()->json([
                 'success' => true,
                 'mergedCount' => $totalDeleted,
                 'tagsAdded' => $totalTagsAdded,
+                'markedAsNotDuplicate' => $totalMarkedAsNotDuplicate,
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
