@@ -85,6 +85,7 @@ class FinanceTransactionLinkingApiController extends Controller
         $maxAmount = $sourceAmount * 1.05;
 
         // Find transactions across all user's accounts that match criteria
+        // Exclude option transactions (where opt_type is set)
         $potentialMatches = FinAccountLineItems::whereHas('account', function ($query) use ($uid) {
                 $query->where('acct_owner', $uid);
             })
@@ -94,6 +95,7 @@ class FinanceTransactionLinkingApiController extends Controller
             ->where('t_account', '!=', $sourceTransaction->t_account) // Exclude same account
             ->whereDoesntHave('parentTransactions') // Exclude already-linked child transactions
             ->whereDoesntHave('childTransactions') // Exclude transactions that are already parents
+            ->whereNull('opt_type') // Exclude option transactions
             ->where(function ($query) use ($minAmount, $maxAmount) {
                 // Match on absolute amount within range
                 $query->whereRaw('ABS(t_amt) BETWEEN ? AND ?', [$minAmount, $maxAmount]);
@@ -304,10 +306,12 @@ class FinanceTransactionLinkingApiController extends Controller
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
 
         // Build query for unlinked transactions in this account
+        // Exclude option transactions (where opt_type is set)
         $query = FinAccountLineItems::where('t_account', $account_id)
             ->whereDoesntHave('parentTransactions')
             ->whereDoesntHave('childTransactions')
             ->whereNull('when_deleted')
+            ->whereNull('opt_type')
             ->with('account:acct_id,acct_name');
 
         // Filter by year if provided
@@ -333,6 +337,7 @@ class FinanceTransactionLinkingApiController extends Controller
 
         // Fetch all potential matches from OTHER accounts in one query
         // This is more efficient than N queries (one per transaction)
+        // Exclude option transactions (where opt_type is set)
         $potentialMatches = FinAccountLineItems::whereHas('account', function ($q) use ($uid) {
                 $q->where('acct_owner', $uid);
             })
@@ -340,6 +345,7 @@ class FinanceTransactionLinkingApiController extends Controller
             ->whereDoesntHave('parentTransactions')
             ->whereDoesntHave('childTransactions')
             ->whereNull('when_deleted')
+            ->whereNull('opt_type')
             ->whereBetween('t_date', [$startDate, $endDate])
             ->with('account:acct_id,acct_name')
             ->get();
