@@ -131,4 +131,135 @@ class StatementController extends Controller
             'dates' => $dates,
             'groupedData' => $groupedData,
         ]);
-    }}
+    }
+
+    /**
+     * Import IB statement data (NAV, positions, performance, etc.)
+     */
+    public function importIbStatement(Request $request, $account_id)
+    {
+        $uid = Auth::id();
+        $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+
+        $request->validate([
+            'statement' => 'required|array',
+            'statement.info' => 'required|array',
+            'statement.info.periodEnd' => 'nullable|string',
+            'statement.totalNav' => 'nullable|numeric',
+            'statement.nav' => 'nullable|array',
+            'statement.cashReport' => 'nullable|array',
+            'statement.positions' => 'nullable|array',
+            'statement.performance' => 'nullable|array',
+        ]);
+
+        $statement = $request->statement;
+        $periodEnd = $statement['info']['periodEnd'] ?? now()->format('Y-m-d');
+        $totalNav = $statement['totalNav'] ?? null;
+
+        // Create the snapshot record
+        $snapshotId = DB::table('fin_account_balance_snapshot')->insertGetId([
+            'acct_id' => $account->acct_id,
+            'balance' => $totalNav,
+            'when_added' => $periodEnd,
+        ]);
+
+        // Insert NAV rows
+        if (!empty($statement['nav'])) {
+            $navRows = array_map(function ($row) use ($snapshotId) {
+                return [
+                    'snapshot_id' => $snapshotId,
+                    'asset_class' => $row['assetClass'] ?? '',
+                    'prior_total' => $row['priorTotal'] ?? null,
+                    'current_long' => $row['currentLong'] ?? null,
+                    'current_short' => $row['currentShort'] ?? null,
+                    'current_total' => $row['currentTotal'] ?? null,
+                    'change_amount' => $row['changeAmount'] ?? null,
+                ];
+            }, $statement['nav']);
+            DB::table('fin_statement_nav')->insert($navRows);
+        }
+
+        // Insert cash report rows
+        if (!empty($statement['cashReport'])) {
+            $cashRows = array_map(function ($row) use ($snapshotId) {
+                return [
+                    'snapshot_id' => $snapshotId,
+                    'currency' => $row['currency'] ?? '',
+                    'line_item' => $row['lineItem'] ?? '',
+                    'total' => $row['total'] ?? null,
+                    'securities' => $row['securities'] ?? null,
+                    'futures' => $row['futures'] ?? null,
+                ];
+            }, $statement['cashReport']);
+            DB::table('fin_statement_cash_report')->insert($cashRows);
+        }
+
+        // Insert position rows
+        if (!empty($statement['positions'])) {
+            $positionRows = array_map(function ($row) use ($snapshotId) {
+                return [
+                    'snapshot_id' => $snapshotId,
+                    'asset_category' => $row['assetCategory'] ?? null,
+                    'currency' => $row['currency'] ?? null,
+                    'symbol' => $row['symbol'] ?? '',
+                    'quantity' => $row['quantity'] ?? null,
+                    'multiplier' => $row['multiplier'] ?? 1,
+                    'cost_price' => $row['costPrice'] ?? null,
+                    'cost_basis' => $row['costBasis'] ?? null,
+                    'close_price' => $row['closePrice'] ?? null,
+                    'market_value' => $row['marketValue'] ?? null,
+                    'unrealized_pl' => $row['unrealizedPl'] ?? null,
+                    'opt_type' => $row['optType'] ?? null,
+                    'opt_strike' => $row['optStrike'] ?? null,
+                    'opt_expiration' => $row['optExpiration'] ?? null,
+                ];
+            }, $statement['positions']);
+            DB::table('fin_statement_positions')->insert($positionRows);
+        }
+
+        // Insert performance rows
+        if (!empty($statement['performance'])) {
+            $perfRows = array_map(function ($row) use ($snapshotId) {
+                return [
+                    'snapshot_id' => $snapshotId,
+                    'perf_type' => $row['perfType'] ?? 'mtm',
+                    'asset_category' => $row['assetCategory'] ?? null,
+                    'symbol' => $row['symbol'] ?? '',
+                    'prior_quantity' => $row['priorQuantity'] ?? null,
+                    'current_quantity' => $row['currentQuantity'] ?? null,
+                    'prior_price' => $row['priorPrice'] ?? null,
+                    'current_price' => $row['currentPrice'] ?? null,
+                    'mtm_pl_position' => $row['mtmPlPosition'] ?? null,
+                    'mtm_pl_transaction' => $row['mtmPlTransaction'] ?? null,
+                    'mtm_pl_commissions' => $row['mtmPlCommissions'] ?? null,
+                    'mtm_pl_other' => $row['mtmPlOther'] ?? null,
+                    'mtm_pl_total' => $row['mtmPlTotal'] ?? null,
+                    'cost_adj' => $row['costAdj'] ?? null,
+                    'realized_st_profit' => $row['realizedStProfit'] ?? null,
+                    'realized_st_loss' => $row['realizedStLoss'] ?? null,
+                    'realized_lt_profit' => $row['realizedLtProfit'] ?? null,
+                    'realized_lt_loss' => $row['realizedLtLoss'] ?? null,
+                    'realized_total' => $row['realizedTotal'] ?? null,
+                    'unrealized_st_profit' => $row['unrealizedStProfit'] ?? null,
+                    'unrealized_st_loss' => $row['unrealizedStLoss'] ?? null,
+                    'unrealized_lt_profit' => $row['unrealizedLtProfit'] ?? null,
+                    'unrealized_lt_loss' => $row['unrealizedLtLoss'] ?? null,
+                    'unrealized_total' => $row['unrealizedTotal'] ?? null,
+                    'total_pl' => $row['totalPl'] ?? null,
+                ];
+            }, $statement['performance']);
+            DB::table('fin_statement_performance')->insert($perfRows);
+        }
+
+        return response()->json([
+            'success' => true,
+            'snapshot_id' => $snapshotId,
+            'period_end' => $periodEnd,
+            'total_nav' => $totalNav,
+            'nav_count' => count($statement['nav'] ?? []),
+            'cash_report_count' => count($statement['cashReport'] ?? []),
+            'positions_count' => count($statement['positions'] ?? []),
+            'performance_count' => count($statement['performance'] ?? []),
+        ]);
+    }
+}

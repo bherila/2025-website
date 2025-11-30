@@ -85,11 +85,27 @@ The Linker tab provides a bulk linking interface:
 - Checkbox selection for batch linking multiple transactions
 - One-click "Link All Selected" for efficient bulk operations
 
+**Excluded from linking:**
+- Option transactions (where `opt_type` is set)
+- Assignment trades (where `t_description` starts with "Assignment")
+
 Note: For single-transaction linking (via TransactionLinkModal), the criteria is more relaxed (±7 days, ±5% amount).
 
 ### Link Balance Detection
 
 When linked transactions sum to $0.00 (e.g., -$500 linked to +$500), the link is considered "balanced" and the UI displays a green indicator.
+
+## Duplicate Detection
+
+Duplicate detection is performed on the client-side. A transaction is considered a duplicate if it has the same `t_date`, `t_type`, `t_description`, `t_qty`, and `t_amt` as an existing transaction. The comparison for `t_type` and `t_description` is a substring match.
+
+### Dedupe Page Features
+
+The Duplicates tab (`/finance/{id}/duplicates`) provides:
+- Automatic grouping of similar transactions
+- Checkbox selection for marking duplicates to delete
+- **Mark as Not Duplicate**: When all items in a group are unchecked and submitted, both transactions are marked as "not duplicate" to prevent future flagging
+- Bulk delete selected duplicates
 
 ## Transaction Tagging
 
@@ -98,6 +114,30 @@ Tags can be applied to transactions for categorization:
 - Tags support parent-child hierarchy via `parent_tag_id`
 - Bulk apply tags to filtered transactions
 - Manage tags at `/finance/tags`
+
+## Stock Options
+
+### Option Parsing
+
+The `StockOptionUtil.ts` module provides consolidated option description parsing supporting multiple broker formats:
+
+| Format | Example | Source |
+|--------|---------|--------|
+| E-Trade CSV | `1 AAPL Jan 15 '24 $150.00 Call` | E-Trade CSV exports |
+| QFX | `CALL AAPL 01/15/24 150` | E-Trade/Fidelity QFX |
+| Fidelity Symbol | `-AAPL250117C00150000` | Fidelity CSV Symbol column |
+| Fidelity Description | `PUT (AAPL) APPLE INC JAN 17 25 $150 (100 SHS)` | Fidelity CSV Description |
+| IB Space | `AMZN 03OCT25 225 C` | Interactive Brokers |
+| IB Compact | `TSLA 251024C00470000` | Interactive Brokers symbol |
+
+### Option Transaction Types
+
+Option transactions may have special types:
+- `Buy to Open` / `Sell to Open` - Opening positions
+- `Buy to Close` / `Sell to Close` - Closing positions
+- `Assignment` - Option assigned (excluded from linker)
+- `Exercise` - Option exercised
+- `Expired` - Option expired worthless
 
 ## API Controllers
 
@@ -108,3 +148,38 @@ Tags can be applied to transactions for categorization:
 | `FinanceTransactionTaggingApiController` | Tag CRUD and application |
 | `FinanceTransactionsDedupeApiController` | Find duplicate transactions |
 | `FinanceApiController` | Account summary and other utilities |
+
+## CSV Parsers
+
+### Supported Formats
+
+| Parser | File | Broker |
+|--------|------|--------|
+| `parseEtradeCsv.ts` | E-Trade CSV | E-Trade |
+| `parseFidelityCsv.ts` | Fidelity CSV | Fidelity |
+| `parseIbCsv.ts` | IB Activity Statement | Interactive Brokers |
+| `parseQuickenQFX.ts` | QFX/OFX | Various |
+| `parseWealthfrontHAR.ts` | HAR export | Wealthfront |
+
+### IB CSV Statement Data
+
+The IB CSV parser (`parseIbCsv.ts`) extracts both transaction-level and statement-level data:
+
+**Transaction Data:**
+- Trades (stocks and options)
+- Interest transactions
+- Fee transactions
+
+**Statement Data:**
+- Statement info (period, account, broker)
+- Net Asset Value (NAV) by asset class
+- Cash Report line items
+- Open Positions with cost basis
+- Mark-to-Market Performance by symbol
+- Realized & Unrealized Performance summary
+
+Statement data is stored in dedicated tables linked to `fin_account_balance_snapshot`:
+- `fin_statement_nav` - NAV breakdown
+- `fin_statement_cash_report` - Cash flow items
+- `fin_statement_positions` - Holdings snapshot
+- `fin_statement_performance` - P/L by symbol
