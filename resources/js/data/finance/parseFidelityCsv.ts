@@ -1,6 +1,7 @@
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { parseDate } from '@/lib/DateHelper'
 import { splitDelimitedText } from '@/lib/splitDelimitedText'
+import { parseOptionDescription } from '@/data/finance/StockOptionUtil'
 
 interface FidelityColumnMapping {
   dateCol: number
@@ -108,10 +109,21 @@ export function parseFidelityCsv(text: string): AccountLineItem[] {
       // So we only use transactionType from splitTransactionString
       const qtyStr = getCol(columns, mapping.quantityCol)
       const qtyNum = qtyStr ? parseFloat(qtyStr) : undefined
+      
+      // Check for option transaction by parsing symbol or description
+      const symbolStr = getCol(columns, mapping.symbolCol)?.trim()
+      const descStr = getCol(columns, mapping.descriptionCol)?.trim()
+      
+      // Try to parse option info from symbol (e.g., "-ARKK210917C127") or description
+      const optionInfo = parseOptionDescription(symbolStr || '') || parseOptionDescription(descStr || '')
+      
+      // For options, use the underlying symbol as t_symbol
+      const effectiveSymbol = optionInfo ? optionInfo.symbol : symbolStr
+      
       const item = AccountLineItemSchema.parse({
         t_date: parseDate(columns[mapping.dateCol])?.formatYMD() ?? columns[mapping.dateCol],
         t_type: transactionType,
-        t_symbol: getCol(columns, mapping.symbolCol),
+        t_symbol: effectiveSymbol,
         t_description: rest || transactionDescription,
         t_qty: qtyNum !== undefined && !isNaN(qtyNum) ? qtyNum : undefined,
         t_price: getCol(columns, mapping.priceCol),
@@ -123,6 +135,10 @@ export function parseFidelityCsv(text: string): AccountLineItem[] {
           ? parseDate(settlementDate)?.formatYMD() ?? settlementDate
           : undefined,
         t_comment: rest ? transactionDescription : undefined,
+        // Option-specific fields
+        opt_type: optionInfo?.optionType ?? undefined,
+        opt_strike: optionInfo?.strikePrice?.toString() ?? undefined,
+        opt_expiration: optionInfo?.maturityDate ?? undefined,
       })
       data.push(item)
     } catch {
@@ -137,6 +153,15 @@ export function parseFidelityCsv(text: string): AccountLineItem[] {
 // Map of transaction description prefixes -> simple transaction type
 // Longer prefixes first to avoid mis-categorization
 const typeMap: Record<string, string> = {
+  // Option actions (longest first)
+  "YOU SOLD CLOSING TRANSACTION": "Sell to Close",
+  "YOU SOLD OPENING TRANSACTION": "Sell to Open",
+  "YOU BOUGHT CLOSING TRANSACTION": "Buy to Close",
+  "YOU BOUGHT OPENING TRANSACTION": "Buy to Open",
+  "ASSIGNED": "Assignment",
+  "EXPIRED": "Expiration",
+  "EXERCISED": "Exercise",
+
   // Buy/Sell actions (longest first)
   "YOU SOLD SHORT SALE EXEC ON MULT EXCHG DETAILS ON REQUEST": "Sell Short",
   "YOU SOLD SHORT SALE AVERAGE PRICE TRADE": "Sell Short",

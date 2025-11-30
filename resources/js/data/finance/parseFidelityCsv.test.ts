@@ -603,4 +603,108 @@ Date downloaded 11/28/2025 11:07 am`
       expect(buyRow?.t_comment).toBe('YOU BOUGHT EXEC ON MULT EXCHG DETAILS ON REQUEST AVERAGE PRICE TRADE')
     })
   })
+
+  describe('option transactions', () => {
+    const csvWithOptions = `Run Date,Action,Symbol,Description,Type,Exchange Quantity,Exchange Currency,Quantity,Currency,Price,Exchange Rate,Commission,Fees,Accrued Interest,Amount,Cash Balance,Settlement Date
+05/28/2021,"YOU SOLD CLOSING TRANSACTION CALL (ARKK) ARK ETF TR SEP 17 21 $127 (100 SHS) (Margin)", -ARKK210917C127,"CALL (ARKK) ARK ETF TR SEP 17 21 $127 (100 SHS)",Margin,0,,USD,3.93,-10,0,6.5,0.38,,3923.12,165973.22,06/01/2021
+05/19/2021,"YOU BOUGHT OPENING TRANSACTION CALL (ARKK) ARK ETF TR SEP 17 21 $127 (100 SHS) (Margin)", -ARKK210917C127,"CALL (ARKK) ARK ETF TR SEP 17 21 $127 (100 SHS)",Margin,0,,USD,2.66,8,0,5.2,0.28,,-2133.48,154719.64,05/20/2021
+06/15/2021,"YOU BOUGHT OPENING TRANSACTION PUT (TSLA) TESLA INC JAN 21 22 $500 (100 SHS) (Margin)", -TSLA220121P500,"PUT (TSLA) TESLA INC JAN 21 22 $500 (100 SHS)",Margin,0,,USD,45.50,2,0,1.3,0.14,,-9101.44,145618.20,06/16/2021`
+
+    it('parses option transactions correctly', () => {
+      const result = parseFidelityCsv(csvWithOptions)
+      expect(result.length).toBe(3)
+    })
+
+    it('extracts option type from symbol', () => {
+      const result = parseFidelityCsv(csvWithOptions)
+      const sellCall = result.find((r) => r.t_amt === 3923.12)
+      expect(sellCall?.opt_type).toBe('call')
+      
+      const buyPut = result.find((r) => r.t_amt === -9101.44)
+      expect(buyPut?.opt_type).toBe('put')
+    })
+
+    it('extracts strike price from symbol', () => {
+      const result = parseFidelityCsv(csvWithOptions)
+      const sellCall = result.find((r) => r.t_amt === 3923.12)
+      expect(sellCall?.opt_strike).toBe('127')
+      
+      const buyPut = result.find((r) => r.t_amt === -9101.44)
+      expect(buyPut?.opt_strike).toBe('500')
+    })
+
+    it('extracts expiration date from symbol', () => {
+      const result = parseFidelityCsv(csvWithOptions)
+      const sellCall = result.find((r) => r.t_amt === 3923.12)
+      expect(sellCall?.opt_expiration).toBe('2021-09-17')
+      
+      const buyPut = result.find((r) => r.t_amt === -9101.44)
+      expect(buyPut?.opt_expiration).toBe('2022-01-21')
+    })
+
+    it('extracts underlying symbol instead of option symbol', () => {
+      const result = parseFidelityCsv(csvWithOptions)
+      const sellCall = result.find((r) => r.t_amt === 3923.12)
+      expect(sellCall?.t_symbol).toBe('ARKK')
+      
+      const buyPut = result.find((r) => r.t_amt === -9101.44)
+      expect(buyPut?.t_symbol).toBe('TSLA')
+    })
+
+    it('parses sell to close transaction type', () => {
+      const result = parseFidelityCsv(csvWithOptions)
+      const sellToClose = result.find((r) => r.t_amt === 3923.12)
+      expect(sellToClose?.t_type).toBe('Sell to Close')
+    })
+
+    it('parses buy to open transaction type', () => {
+      const result = parseFidelityCsv(csvWithOptions)
+      const buyToOpen = result.find((r) => r.t_amt === -2133.48)
+      expect(buyToOpen?.t_type).toBe('Buy to Open')
+    })
+  })
+
+  describe('splitTransactionString for option types', () => {
+    it('extracts YOU SOLD CLOSING TRANSACTION type correctly', () => {
+      const result = splitTransactionString('YOU SOLD CLOSING TRANSACTION CALL (ARKK)')
+      expect(result.transactionType).toBe('Sell to Close')
+      expect(result.transactionDescription).toBe('YOU SOLD CLOSING TRANSACTION')
+    })
+
+    it('extracts YOU BOUGHT OPENING TRANSACTION type correctly', () => {
+      const result = splitTransactionString('YOU BOUGHT OPENING TRANSACTION CALL (ARKK)')
+      expect(result.transactionType).toBe('Buy to Open')
+      expect(result.transactionDescription).toBe('YOU BOUGHT OPENING TRANSACTION')
+    })
+
+    it('extracts YOU SOLD OPENING TRANSACTION type correctly', () => {
+      const result = splitTransactionString('YOU SOLD OPENING TRANSACTION PUT (TSLA)')
+      expect(result.transactionType).toBe('Sell to Open')
+      expect(result.transactionDescription).toBe('YOU SOLD OPENING TRANSACTION')
+    })
+
+    it('extracts YOU BOUGHT CLOSING TRANSACTION type correctly', () => {
+      const result = splitTransactionString('YOU BOUGHT CLOSING TRANSACTION PUT (TSLA)')
+      expect(result.transactionType).toBe('Buy to Close')
+      expect(result.transactionDescription).toBe('YOU BOUGHT CLOSING TRANSACTION')
+    })
+
+    it('extracts ASSIGNED type correctly', () => {
+      const result = splitTransactionString('ASSIGNED CALL (AAPL) APPLE INC')
+      expect(result.transactionType).toBe('Assignment')
+      expect(result.transactionDescription).toBe('ASSIGNED')
+    })
+
+    it('extracts EXPIRED type correctly', () => {
+      const result = splitTransactionString('EXPIRED PUT (MSFT) MICROSOFT CORP')
+      expect(result.transactionType).toBe('Expiration')
+      expect(result.transactionDescription).toBe('EXPIRED')
+    })
+
+    it('extracts EXERCISED type correctly', () => {
+      const result = splitTransactionString('EXERCISED CALL (NVDA) NVIDIA CORP')
+      expect(result.transactionType).toBe('Exercise')
+      expect(result.transactionDescription).toBe('EXERCISED')
+    })
+  })
 })

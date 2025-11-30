@@ -13,6 +13,7 @@
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { parseMultiSectionCsv, getSection, type ParsedMultiCsv } from '@/lib/multiCsvParser'
 import { parseDate } from '@/lib/DateHelper'
+import { parseOptionDescription } from '@/data/finance/StockOptionUtil'
 import dayjs from 'dayjs'
 import customParseFormat from 'dayjs/plugin/customParseFormat'
 
@@ -259,13 +260,13 @@ function parseTradeRow(
       t_symbol = instrument.Underlying || symbol
     }
   } else if (isOptionCategory(assetCategory)) {
-    // Try to parse option info from description
-    const optionInfo = parseOptionFromDescription(row['Description'] || symbol)
+    // Try to parse option info from description using consolidated parser
+    const optionInfo = parseOptionDescription(row['Description'] || symbol)
     if (optionInfo) {
-      opt_type = optionInfo.type
-      opt_strike = optionInfo.strike
-      opt_expiration = optionInfo.expiration
-      t_symbol = optionInfo.underlying
+      opt_type = optionInfo.optionType
+      opt_strike = optionInfo.strikePrice.toString()
+      opt_expiration = optionInfo.maturityDate
+      t_symbol = optionInfo.symbol
     }
   }
 
@@ -456,81 +457,6 @@ function buildTradeDescription(
 }
 
 /**
- * Parse option details from IB description format.
- *
- * Formats:
- * - "AMZN 03OCT25 225 C" -> underlying: AMZN, expiry: 2025-10-03, strike: 225, type: call
- * - "TSLA  251024C00470000" -> underlying: TSLA, expiry: 2025-10-24, strike: 470, type: call
- */
-function parseOptionFromDescription(description: string): {
-  underlying: string
-  expiration: string
-  strike: string
-  type: 'call' | 'put'
-} | null {
-  // Try format: "AMZN 03OCT25 225 C"
-  const spaceFormat = /^(\w+)\s+(\d{2})([A-Z]{3})(\d{2})\s+(\d+(?:\.\d+)?)\s+([CP])$/i
-  let match = description.match(spaceFormat)
-
-  if (match) {
-    const underlying = match[1]
-    const day = match[2]
-    const month = match[3]
-    const year = match[4]
-    const strike = match[5]
-    const optType = match[6]
-
-    if (!underlying || !day || !month || !year || !strike || !optType) {
-      return null
-    }
-
-    const monthMap: Record<string, string> = {
-      JAN: '01', FEB: '02', MAR: '03', APR: '04', MAY: '05', JUN: '06',
-      JUL: '07', AUG: '08', SEP: '09', OCT: '10', NOV: '11', DEC: '12',
-    }
-    const mm = monthMap[month.toUpperCase()] || '01'
-    const yyyy = `20${year}`
-
-    return {
-      underlying: underlying.toUpperCase(),
-      expiration: `${yyyy}-${mm}-${day}`,
-      strike: strike,
-      type: optType.toUpperCase() === 'C' ? 'call' : 'put',
-    }
-  }
-
-  // Try compact format: "TSLA  251024C00470000"
-  const compactFormat = /^(\w+)\s+(\d{6})([CP])(\d{8})$/i
-  match = description.match(compactFormat)
-
-  if (match) {
-    const underlying = match[1]
-    const dateCode = match[2]
-    const optType = match[3]
-    const strikeCode = match[4]
-
-    if (!underlying || !dateCode || !optType || !strikeCode) {
-      return null
-    }
-
-    // dateCode: YYMMDD
-    const yyyy = `20${dateCode.slice(0, 2)}`
-    const mm = dateCode.slice(2, 4)
-    const dd = dateCode.slice(4, 6)
-    // strikeCode: 00470000 -> 470.0000 (divide by 1000)
-    const strike = (parseInt(strikeCode, 10) / 1000).toString()
-
-    return {
-      underlying: underlying.toUpperCase(),
-      expiration: `${yyyy}-${mm}-${dd}`,
-      strike,
-      type: optType.toUpperCase() === 'C' ? 'call' : 'put',
-    }
-  }
-
-  return null
-}
-
 /**
  * Detect if text is an IB CSV format.
  *
