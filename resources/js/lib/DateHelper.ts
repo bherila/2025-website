@@ -46,6 +46,9 @@ export function parseDate(str: string | undefined | null | Date): DateContainer 
     date = dayjs(clean, 'MMM D YY')
   } else if (str.match(/[a-z]{3} \d{1,2} `\d{4}$/i)) {
     date = dayjs(str, 'MMM D `YYYY')
+  } else if (str.match(/^[a-z]+ \d{1,2}, \d{4}$/i)) {
+    // Full month name: "October 1, 2025" or "January 15, 2025"
+    date = dayjs(str, 'MMMM D, YYYY')
   } else if (str.match(/^\d{1,2}-[A-Z]{3}$/i)) {
     date = dayjs(str, 'DD-MMM')
   } else if (str.match(/^\d{2}[-/]\d{2}$/)) {

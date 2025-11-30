@@ -295,6 +295,22 @@ CREATE TABLE `fin_payslip_uploads` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_statement_cash_report`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_statement_cash_report` (
+  `cash_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `snapshot_id` bigint(20) unsigned NOT NULL,
+  `currency` varchar(20) NOT NULL,
+  `line_item` varchar(100) NOT NULL,
+  `total` decimal(18,4) DEFAULT NULL,
+  `securities` decimal(18,4) DEFAULT NULL,
+  `futures` decimal(18,4) DEFAULT NULL,
+  PRIMARY KEY (`cash_id`),
+  KEY `fin_statement_cash_report_snapshot_id_index` (`snapshot_id`),
+  CONSTRAINT `fin_statement_cash_report_snapshot_id_foreign` FOREIGN KEY (`snapshot_id`) REFERENCES `fin_account_balance_snapshot` (`snapshot_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_statement_details`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -311,6 +327,101 @@ CREATE TABLE `fin_statement_details` (
   PRIMARY KEY (`id`),
   KEY `fin_statement_details_snapshot_id_foreign` (`snapshot_id`),
   CONSTRAINT `fin_statement_details_snapshot_id_foreign` FOREIGN KEY (`snapshot_id`) REFERENCES `fin_account_balance_snapshot` (`snapshot_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_statement_nav`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_statement_nav` (
+  `nav_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `snapshot_id` bigint(20) unsigned NOT NULL,
+  `asset_class` varchar(50) NOT NULL,
+  `prior_total` decimal(18,4) DEFAULT NULL,
+  `current_long` decimal(18,4) DEFAULT NULL,
+  `current_short` decimal(18,4) DEFAULT NULL,
+  `current_total` decimal(18,4) DEFAULT NULL,
+  `change_amount` decimal(18,4) DEFAULT NULL,
+  PRIMARY KEY (`nav_id`),
+  KEY `fin_statement_nav_snapshot_id_index` (`snapshot_id`),
+  CONSTRAINT `fin_statement_nav_snapshot_id_foreign` FOREIGN KEY (`snapshot_id`) REFERENCES `fin_account_balance_snapshot` (`snapshot_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_statement_performance`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_statement_performance` (
+  `perf_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `snapshot_id` bigint(20) unsigned NOT NULL,
+  `perf_type` enum('mtm','realized_unrealized') NOT NULL,
+  `asset_category` varchar(50) DEFAULT NULL,
+  `symbol` varchar(50) NOT NULL,
+  `prior_quantity` decimal(18,8) DEFAULT NULL,
+  `current_quantity` decimal(18,8) DEFAULT NULL,
+  `prior_price` decimal(18,8) DEFAULT NULL,
+  `current_price` decimal(18,8) DEFAULT NULL,
+  `mtm_pl_position` decimal(18,4) DEFAULT NULL,
+  `mtm_pl_transaction` decimal(18,4) DEFAULT NULL,
+  `mtm_pl_commissions` decimal(18,4) DEFAULT NULL,
+  `mtm_pl_other` decimal(18,4) DEFAULT NULL,
+  `mtm_pl_total` decimal(18,4) DEFAULT NULL,
+  `cost_adj` decimal(18,4) DEFAULT NULL,
+  `realized_st_profit` decimal(18,4) DEFAULT NULL,
+  `realized_st_loss` decimal(18,4) DEFAULT NULL,
+  `realized_lt_profit` decimal(18,4) DEFAULT NULL,
+  `realized_lt_loss` decimal(18,4) DEFAULT NULL,
+  `realized_total` decimal(18,4) DEFAULT NULL,
+  `unrealized_st_profit` decimal(18,4) DEFAULT NULL,
+  `unrealized_st_loss` decimal(18,4) DEFAULT NULL,
+  `unrealized_lt_profit` decimal(18,4) DEFAULT NULL,
+  `unrealized_lt_loss` decimal(18,4) DEFAULT NULL,
+  `unrealized_total` decimal(18,4) DEFAULT NULL,
+  `total_pl` decimal(18,4) DEFAULT NULL,
+  PRIMARY KEY (`perf_id`),
+  KEY `fin_statement_performance_snapshot_id_index` (`snapshot_id`),
+  KEY `fin_statement_performance_symbol_index` (`symbol`),
+  CONSTRAINT `fin_statement_performance_snapshot_id_foreign` FOREIGN KEY (`snapshot_id`) REFERENCES `fin_account_balance_snapshot` (`snapshot_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_statement_positions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_statement_positions` (
+  `position_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `snapshot_id` bigint(20) unsigned NOT NULL,
+  `asset_category` varchar(50) DEFAULT NULL,
+  `currency` varchar(10) DEFAULT NULL,
+  `symbol` varchar(50) NOT NULL,
+  `quantity` decimal(18,8) DEFAULT NULL,
+  `multiplier` int(11) NOT NULL DEFAULT 1,
+  `cost_price` decimal(18,8) DEFAULT NULL,
+  `cost_basis` decimal(18,4) DEFAULT NULL,
+  `close_price` decimal(18,8) DEFAULT NULL,
+  `market_value` decimal(18,4) DEFAULT NULL,
+  `unrealized_pl` decimal(18,4) DEFAULT NULL,
+  `opt_type` enum('call','put') DEFAULT NULL,
+  `opt_strike` varchar(20) DEFAULT NULL,
+  `opt_expiration` date DEFAULT NULL,
+  PRIMARY KEY (`position_id`),
+  KEY `fin_statement_positions_snapshot_id_index` (`snapshot_id`),
+  KEY `fin_statement_positions_symbol_index` (`symbol`),
+  CONSTRAINT `fin_statement_positions_snapshot_id_foreign` FOREIGN KEY (`snapshot_id`) REFERENCES `fin_account_balance_snapshot` (`snapshot_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_statement_securities_lent`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_statement_securities_lent` (
+  `lent_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `snapshot_id` bigint(20) unsigned NOT NULL,
+  `symbol` varchar(50) NOT NULL,
+  `start_date` date DEFAULT NULL,
+  `fee_rate` decimal(10,6) DEFAULT NULL,
+  `quantity` decimal(18,8) DEFAULT NULL,
+  `collateral_amount` decimal(18,4) DEFAULT NULL,
+  `interest_earned` decimal(18,4) DEFAULT NULL,
+  PRIMARY KEY (`lent_id`),
+  KEY `fin_statement_securities_lent_snapshot_id_index` (`snapshot_id`),
+  CONSTRAINT `fin_statement_securities_lent_snapshot_id_foreign` FOREIGN KEY (`snapshot_id`) REFERENCES `fin_account_balance_snapshot` (`snapshot_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `graduated_tax`;
@@ -612,3 +723,4 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (17,'2025_11_29_185
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (18,'2025_11_29_185611_remove_parent_t_id_from_fin_account_line_items',7);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (19,'2025_11_30_180948_add_is_not_duplicate_to_fin_account_line_items',8);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (20,'2025_11_30_183121_add_ib_columns_to_fin_account_line_items',9);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (21,'2025_11_30_201814_create_statement_detail_tables',10);

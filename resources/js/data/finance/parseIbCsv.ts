@@ -71,6 +71,88 @@ export interface IbFeeRow {
   Amount: string
 }
 
+// Statement-level data types
+export interface IbStatementInfo {
+  brokerName: string
+  period: string
+  periodStart: string | null
+  periodEnd: string | null
+  whenGenerated: string | null
+  accountName: string | null
+  accountNumber: string | null
+}
+
+export interface IbNavRow {
+  assetClass: string
+  priorTotal: number | null
+  currentLong: number | null
+  currentShort: number | null
+  currentTotal: number | null
+  changeAmount: number | null
+}
+
+export interface IbCashReportRow {
+  currency: string
+  lineItem: string
+  total: number | null
+  securities: number | null
+  futures: number | null
+}
+
+export interface IbPositionRow {
+  assetCategory: string
+  currency: string
+  symbol: string
+  quantity: number | null
+  multiplier: number
+  costPrice: number | null
+  costBasis: number | null
+  closePrice: number | null
+  marketValue: number | null
+  unrealizedPl: number | null
+  optType: 'call' | 'put' | null
+  optStrike: string | null
+  optExpiration: string | null
+}
+
+export interface IbPerformanceRow {
+  perfType: 'mtm' | 'realized_unrealized'
+  assetCategory: string
+  symbol: string
+  priorQuantity: number | null
+  currentQuantity: number | null
+  priorPrice: number | null
+  currentPrice: number | null
+  // MTM fields
+  mtmPlPosition: number | null
+  mtmPlTransaction: number | null
+  mtmPlCommissions: number | null
+  mtmPlOther: number | null
+  mtmPlTotal: number | null
+  // Realized/Unrealized fields
+  costAdj: number | null
+  realizedStProfit: number | null
+  realizedStLoss: number | null
+  realizedLtProfit: number | null
+  realizedLtLoss: number | null
+  realizedTotal: number | null
+  unrealizedStProfit: number | null
+  unrealizedStLoss: number | null
+  unrealizedLtProfit: number | null
+  unrealizedLtLoss: number | null
+  unrealizedTotal: number | null
+  totalPl: number | null
+}
+
+export interface IbStatementData {
+  info: IbStatementInfo
+  totalNav: number | null
+  nav: IbNavRow[]
+  cashReport: IbCashReportRow[]
+  positions: IbPositionRow[]
+  performance: IbPerformanceRow[]
+}
+
 export interface ParsedIbCsvResult {
   /** Transaction line items from Trades section */
   trades: AccountLineItem[]
@@ -80,6 +162,8 @@ export interface ParsedIbCsvResult {
   fees: AccountLineItem[]
   /** Financial instrument lookup by symbol */
   instruments: Map<string, IbFinancialInstrumentRow>
+  /** Statement-level data (NAV, positions, performance, etc.) */
+  statement: IbStatementData
   /** Raw parsed multi-section CSV */
   rawParsed: ParsedMultiCsv
   /** Parsing errors/warnings */
@@ -112,6 +196,9 @@ export function parseIbCsv(text: string): ParsedIbCsvResult {
   // Parse fees
   const fees = parseFeesSection(parsed, warnings)
 
+  // Parse statement-level data (positions, NAV, performance)
+  const statement = parseStatementData(parsed, warnings)
+
   return {
     trades,
     interest,
@@ -119,6 +206,7 @@ export function parseIbCsv(text: string): ParsedIbCsvResult {
     instruments,
     rawParsed: parsed,
     warnings,
+    statement,
   }
 }
 
@@ -379,6 +467,349 @@ function parseFeesSection(
   }
 
   return items
+}
+
+// -------------------------------------------------------------------
+// Statement Data Parsers
+// -------------------------------------------------------------------
+
+/**
+ * Parse statement-level data from IB CSV (NAV, positions, performance).
+ */
+function parseStatementData(
+  parsed: ParsedMultiCsv,
+  warnings: string[]
+): IbStatementData {
+  const info = parseStatementInfo(parsed)
+  const totalNav = parseTotalNav(parsed)
+  const nav = parseNavSection(parsed)
+  const cashReport = parseCashReportSection(parsed)
+  const positions = parseOpenPositionsSection(parsed, warnings)
+  const performance = parsePerformanceSection(parsed, warnings)
+
+  return {
+    info,
+    totalNav,
+    nav,
+    cashReport,
+    positions,
+    performance,
+  }
+}
+
+/**
+ * Parse statement info (broker name, period, account info).
+ */
+function parseStatementInfo(parsed: ParsedMultiCsv): IbStatementInfo {
+  const info: IbStatementInfo = {
+    brokerName: 'Interactive Brokers',
+    period: '',
+    periodStart: null,
+    periodEnd: null,
+    whenGenerated: null,
+    accountName: null,
+    accountNumber: null,
+  }
+
+  // Parse Statement section
+  const statementSection = getSection(parsed, 'Statement')
+  if (statementSection) {
+    for (const row of statementSection.rows) {
+      const fieldName = row['Field Name'] || ''
+      const fieldValue = row['Field Value'] || ''
+
+      switch (fieldName) {
+        case 'BrokerName':
+          info.brokerName = fieldValue
+          break
+        case 'Period':
+          info.period = fieldValue
+          // Parse period dates: "October 1, 2025 - October 31, 2025"
+          const periodMatch = fieldValue.match(/^(.+?)\s*-\s*(.+)$/)
+          if (periodMatch && periodMatch[1] && periodMatch[2]) {
+            const startDate = parseDate(periodMatch[1].trim())
+            const endDate = parseDate(periodMatch[2].trim())
+            info.periodStart = startDate?.formatYMD() ?? null
+            info.periodEnd = endDate?.formatYMD() ?? null
+          }
+          break
+        case 'WhenGenerated':
+          info.whenGenerated = fieldValue
+          break
+      }
+    }
+  }
+
+  // Parse Account Information section
+  const accountSection = getSection(parsed, 'Account Information')
+  if (accountSection) {
+    for (const row of accountSection.rows) {
+      const fieldName = row['Field Name'] || ''
+      const fieldValue = row['Field Value'] || ''
+
+      switch (fieldName) {
+        case 'Name':
+          info.accountName = fieldValue
+          break
+        case 'Account':
+          info.accountNumber = fieldValue
+          break
+      }
+    }
+  }
+
+  return info
+}
+
+/**
+ * Parse total NAV from Net Asset Value section.
+ */
+function parseTotalNav(parsed: ParsedMultiCsv): number | null {
+  const section = getSection(parsed, 'Net Asset Value')
+  if (!section) return null
+
+  for (const row of section.rows) {
+    const assetClass = row['Asset Class'] || ''
+    if (assetClass.toLowerCase() === 'total') {
+      const currentTotal = row['Current Total'] || ''
+      const value = parseFloat(currentTotal)
+      return isNaN(value) ? null : value
+    }
+  }
+
+  return null
+}
+
+/**
+ * Parse Net Asset Value section rows.
+ */
+function parseNavSection(parsed: ParsedMultiCsv): IbNavRow[] {
+  const rows: IbNavRow[] = []
+  const section = getSection(parsed, 'Net Asset Value')
+
+  if (!section) return rows
+
+  for (const row of section.rows) {
+    const assetClass = (row['Asset Class'] || '').trim()
+    // Skip empty rows and non-asset rows
+    if (!assetClass) continue
+
+    rows.push({
+      assetClass,
+      priorTotal: parseFloatOrNull(row['Prior Total']),
+      currentLong: parseFloatOrNull(row['Current Long']),
+      currentShort: parseFloatOrNull(row['Current Short']),
+      currentTotal: parseFloatOrNull(row['Current Total']),
+      changeAmount: parseFloatOrNull(row['Change']),
+    })
+  }
+
+  return rows
+}
+
+/**
+ * Parse Cash Report section rows.
+ */
+function parseCashReportSection(parsed: ParsedMultiCsv): IbCashReportRow[] {
+  const rows: IbCashReportRow[] = []
+  const section = getSection(parsed, 'Cash Report')
+
+  if (!section) return rows
+
+  for (const row of section.rows) {
+    const lineItem = (row['Currency Summary'] || '').trim()
+    const currency = (row['Currency'] || '').trim()
+
+    // Skip empty rows
+    if (!lineItem) continue
+
+    rows.push({
+      currency,
+      lineItem,
+      total: parseFloatOrNull(row['Total']),
+      securities: parseFloatOrNull(row['Securities']),
+      futures: parseFloatOrNull(row['Futures']),
+    })
+  }
+
+  return rows
+}
+
+/**
+ * Parse Open Positions section.
+ */
+function parseOpenPositionsSection(
+  parsed: ParsedMultiCsv,
+  warnings: string[]
+): IbPositionRow[] {
+  const positions: IbPositionRow[] = []
+  const section = getSection(parsed, 'Open Positions')
+
+  if (!section) return positions
+
+  for (const row of section.rows) {
+    // Only process Summary rows
+    const discriminator = row['DataDiscriminator'] || ''
+    if (discriminator !== 'Summary') continue
+
+    try {
+      const symbol = (row['Symbol'] || '').trim()
+      const assetCategory = row['Asset Category'] || ''
+      const currency = row['Currency'] || 'USD'
+      const quantity = parseFloatOrNull(row['Quantity'])
+      const multiplier = parseFloat(row['Mult'] || '1') || 1
+      const costPrice = parseFloatOrNull(row['Cost Price'])
+      const costBasis = parseFloatOrNull(row['Cost Basis'])
+      const closePrice = parseFloatOrNull(row['Close Price'])
+      const marketValue = parseFloatOrNull(row['Value'])
+      const unrealizedPl = parseFloatOrNull(row['Unrealized P/L'])
+
+      // Parse option info from symbol if it's an option
+      let optType: 'call' | 'put' | null = null
+      let optStrike: string | null = null
+      let optExpiration: string | null = null
+
+      if (isOptionCategory(assetCategory)) {
+        const optInfo = parseOptionDescription(symbol)
+        if (optInfo) {
+          optType = optInfo.optionType
+          optStrike = optInfo.strikePrice.toString()
+          optExpiration = optInfo.maturityDate
+        }
+      }
+
+      positions.push({
+        assetCategory,
+        currency,
+        symbol,
+        quantity,
+        multiplier,
+        costPrice,
+        costBasis,
+        closePrice,
+        marketValue,
+        unrealizedPl,
+        optType,
+        optStrike,
+        optExpiration,
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      warnings.push(`Failed to parse position row: ${msg}`)
+    }
+  }
+
+  return positions
+}
+
+/**
+ * Parse Mark-to-Market and Realized & Unrealized Performance sections.
+ */
+function parsePerformanceSection(
+  parsed: ParsedMultiCsv,
+  warnings: string[]
+): IbPerformanceRow[] {
+  const performance: IbPerformanceRow[] = []
+
+  // Parse Mark-to-Market Performance Summary
+  const mtmSection = getSection(parsed, 'Mark-to-Market Performance Summary')
+  if (mtmSection) {
+    for (const row of mtmSection.rows) {
+      const symbol = (row['Symbol'] || '').trim()
+      const assetCategory = row['Asset Category'] || ''
+
+      // Skip Total rows and empty symbols
+      if (!symbol || symbol.toLowerCase().includes('total')) continue
+
+      try {
+        performance.push({
+          perfType: 'mtm',
+          assetCategory,
+          symbol,
+          priorQuantity: parseFloatOrNull(row['Prior Quantity']),
+          currentQuantity: parseFloatOrNull(row['Current Quantity']),
+          priorPrice: parseFloatOrNull(row['Prior Price']),
+          currentPrice: parseFloatOrNull(row['Current Price']),
+          mtmPlPosition: parseFloatOrNull(row['Mark-to-Market P/L Position']),
+          mtmPlTransaction: parseFloatOrNull(row['Mark-to-Market P/L Transaction']),
+          mtmPlCommissions: parseFloatOrNull(row['Mark-to-Market P/L Commissions']),
+          mtmPlOther: parseFloatOrNull(row['Mark-to-Market P/L Other']),
+          mtmPlTotal: parseFloatOrNull(row['Mark-to-Market P/L Total']),
+          // Not used for MTM rows
+          costAdj: null,
+          realizedStProfit: null,
+          realizedStLoss: null,
+          realizedLtProfit: null,
+          realizedLtLoss: null,
+          realizedTotal: null,
+          unrealizedStProfit: null,
+          unrealizedStLoss: null,
+          unrealizedLtProfit: null,
+          unrealizedLtLoss: null,
+          unrealizedTotal: null,
+          totalPl: null,
+        })
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        warnings.push(`Failed to parse MTM row: ${msg}`)
+      }
+    }
+  }
+
+  // Parse Realized & Unrealized Performance Summary
+  const ruSection = getSection(parsed, 'Realized & Unrealized Performance Summary')
+  if (ruSection) {
+    for (const row of ruSection.rows) {
+      const symbol = (row['Symbol'] || '').trim()
+      const assetCategory = row['Asset Category'] || ''
+
+      // Skip Total rows and empty symbols
+      if (!symbol || symbol.toLowerCase().includes('total')) continue
+
+      try {
+        performance.push({
+          perfType: 'realized_unrealized',
+          assetCategory,
+          symbol,
+          priorQuantity: null,
+          currentQuantity: null,
+          priorPrice: null,
+          currentPrice: null,
+          mtmPlPosition: null,
+          mtmPlTransaction: null,
+          mtmPlCommissions: null,
+          mtmPlOther: null,
+          mtmPlTotal: null,
+          costAdj: parseFloatOrNull(row['Cost Adj.']),
+          realizedStProfit: parseFloatOrNull(row['Realized S/T Profit']),
+          realizedStLoss: parseFloatOrNull(row['Realized S/T Loss']),
+          realizedLtProfit: parseFloatOrNull(row['Realized L/T Profit']),
+          realizedLtLoss: parseFloatOrNull(row['Realized L/T Loss']),
+          realizedTotal: parseFloatOrNull(row['Realized Total']),
+          unrealizedStProfit: parseFloatOrNull(row['Unrealized S/T Profit']),
+          unrealizedStLoss: parseFloatOrNull(row['Unrealized S/T Loss']),
+          unrealizedLtProfit: parseFloatOrNull(row['Unrealized L/T Profit']),
+          unrealizedLtLoss: parseFloatOrNull(row['Unrealized L/T Loss']),
+          unrealizedTotal: parseFloatOrNull(row['Unrealized Total']),
+          totalPl: parseFloatOrNull(row['Total']),
+        })
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        warnings.push(`Failed to parse R&U row: ${msg}`)
+      }
+    }
+  }
+
+  return performance
+}
+
+/**
+ * Helper to parse float or return null.
+ */
+function parseFloatOrNull(value: string | undefined): number | null {
+  if (!value || value === '--' || value.trim() === '') return null
+  const num = parseFloat(value.replace(/,/g, ''))
+  return isNaN(num) ? null : num
 }
 
 // -------------------------------------------------------------------

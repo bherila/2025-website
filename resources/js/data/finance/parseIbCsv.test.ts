@@ -313,4 +313,198 @@ Trades,Total,,Stocks,USD,,,,,,-8775,-0.50,8775.50,0,-25,`
       expect(result.trades.length).toBe(1)
     })
   })
+
+  describe('parseIbCsv statement data parsing', () => {
+    const fullStatementCsv = `Statement,Header,Field Name,Field Value
+Statement,Data,BrokerName,Interactive Brokers LLC
+Statement,Data,BrokerAddress,"Two Pickwick Plaza, Greenwich, CT 06830"
+Statement,Data,Title,Activity Statement
+Statement,Data,Period,"October 1, 2025 - October 31, 2025"
+Statement,Data,WhenGenerated,"2025-11-30, 00:30:44 EST"
+Account Information,Header,Field Name,Field Value
+Account Information,Data,Name,John Doe
+Account Information,Data,Account,U1234567
+Account Information,Data,Account Type,Individual
+Net Asset Value,Header,Asset Class,Prior Total,Current Long,Current Short,Current Total,Change
+Net Asset Value,Data,Cash ,41488.45,73676.59,-30257.35,43419.25,1930.80
+Net Asset Value,Data,Stock,-2954.90,3522.00,-8008.20,-4486.20,-1531.30
+Net Asset Value,Data,Options,10017.17,3581.64,-3253.44,328.20,-9688.97
+Net Asset Value,Data,Total,48496.36,82789.02,-43698.58,39090.44,-9405.92
+Cash Report,Header,Currency Summary,Currency,Total,Securities,Futures,
+Cash Report,Data,Starting Cash,Base Currency Summary,41488.45,41488.45,0,
+Cash Report,Data,Commissions,Base Currency Summary,-139.94,-139.94,0,
+Cash Report,Data,Ending Cash,Base Currency Summary,43419.25,43419.25,0,
+Cash Report,Data,Starting Cash,USD,-32796.13,-32796.13,0,
+Cash Report,Data,Ending Cash,USD,-30257.35,-30257.35,0,
+Open Positions,Header,DataDiscriminator,Asset Category,Currency,Symbol,Quantity,Mult,Cost Price,Cost Basis,Close Price,Value,Unrealized P/L,Code
+Open Positions,Data,Summary,Stocks,USD,AAPL,100,1,175.50,17550.00,180.00,18000.00,450.00,
+Open Positions,Data,Summary,Stocks,USD,GOOG,-50,1,140.00,-7000.00,145.00,-7250.00,-250.00,
+Open Positions,Data,Summary,Equity and Index Options,USD,AAPL 17JAN25 180 C,5,100,3.50,1750.00,4.00,2000.00,250.00,
+Open Positions,Total,,Stocks,USD,,,,,10550.00,,10750.00,200.00,
+Mark-to-Market Performance Summary,Header,Asset Category,Symbol,Prior Quantity,Current Quantity,Prior Price,Current Price,Mark-to-Market P/L Position,Mark-to-Market P/L Transaction,Mark-to-Market P/L Commissions,Mark-to-Market P/L Other,Mark-to-Market P/L Total,Code
+Mark-to-Market Performance Summary,Data,Stocks,AAPL,100,100,170.00,180.00,1000,0,0,0,1000,
+Mark-to-Market Performance Summary,Data,Stocks,GOOG,-50,-50,135.00,145.00,-500,0,0,0,-500,
+Mark-to-Market Performance Summary,Data,Total,,,,,,500,0,0,0,500,
+Realized & Unrealized Performance Summary,Header,Asset Category,Symbol,Cost Adj.,Realized S/T Profit,Realized S/T Loss,Realized L/T Profit,Realized L/T Loss,Realized Total,Unrealized S/T Profit,Unrealized S/T Loss,Unrealized L/T Profit,Unrealized L/T Loss,Unrealized Total,Total,Code
+Realized & Unrealized Performance Summary,Data,Stocks,AAPL,0,100,0,0,0,100,450,0,0,0,450,550,
+Realized & Unrealized Performance Summary,Data,Stocks,GOOG,0,0,-50,0,0,-50,0,-250,0,0,-250,-300,
+Realized & Unrealized Performance Summary,Data,Total,,0,100,-50,0,0,50,450,-250,0,0,200,250,`
+
+    it('parses statement info correctly', () => {
+      const result = parseIbCsv(fullStatementCsv)
+
+      expect(result.statement.info.brokerName).toBe('Interactive Brokers LLC')
+      expect(result.statement.info.period).toBe('October 1, 2025 - October 31, 2025')
+      expect(result.statement.info.periodStart).toBe('2025-10-01')
+      expect(result.statement.info.periodEnd).toBe('2025-10-31')
+      expect(result.statement.info.whenGenerated).toBe('2025-11-30, 00:30:44 EST')
+      expect(result.statement.info.accountName).toBe('John Doe')
+      expect(result.statement.info.accountNumber).toBe('U1234567')
+    })
+
+    it('parses total NAV correctly', () => {
+      const result = parseIbCsv(fullStatementCsv)
+
+      expect(result.statement.totalNav).toBe(39090.44)
+    })
+
+    it('parses NAV section rows correctly', () => {
+      const result = parseIbCsv(fullStatementCsv)
+
+      expect(result.statement.nav.length).toBe(4)
+
+      const cashRow = result.statement.nav.find(r => r.assetClass.includes('Cash'))
+      expect(cashRow).toBeDefined()
+      expect(cashRow?.priorTotal).toBe(41488.45)
+      expect(cashRow?.currentTotal).toBe(43419.25)
+
+      const totalRow = result.statement.nav.find(r => r.assetClass === 'Total')
+      expect(totalRow).toBeDefined()
+      expect(totalRow?.currentTotal).toBe(39090.44)
+    })
+
+    it('parses cash report section correctly', () => {
+      const result = parseIbCsv(fullStatementCsv)
+
+      expect(result.statement.cashReport.length).toBe(5)
+
+      const startingCash = result.statement.cashReport.find(
+        r => r.lineItem === 'Starting Cash' && r.currency === 'Base Currency Summary'
+      )
+      expect(startingCash).toBeDefined()
+      expect(startingCash?.total).toBe(41488.45)
+
+      const endingCash = result.statement.cashReport.find(
+        r => r.lineItem === 'Ending Cash' && r.currency === 'USD'
+      )
+      expect(endingCash).toBeDefined()
+      expect(endingCash?.total).toBe(-30257.35)
+    })
+
+    it('parses open positions correctly', () => {
+      const result = parseIbCsv(fullStatementCsv)
+
+      expect(result.statement.positions.length).toBe(3)
+
+      const aaplStock = result.statement.positions.find(
+        p => p.symbol === 'AAPL' && p.assetCategory === 'Stocks'
+      )
+      expect(aaplStock).toBeDefined()
+      expect(aaplStock?.quantity).toBe(100)
+      expect(aaplStock?.costBasis).toBe(17550.00)
+      expect(aaplStock?.marketValue).toBe(18000.00)
+      expect(aaplStock?.unrealizedPl).toBe(450.00)
+      expect(aaplStock?.optType).toBeNull()
+
+      const googStock = result.statement.positions.find(p => p.symbol === 'GOOG')
+      expect(googStock).toBeDefined()
+      expect(googStock?.quantity).toBe(-50)
+
+      const aaplOption = result.statement.positions.find(
+        p => p.symbol.includes('AAPL') && p.assetCategory.includes('Options')
+      )
+      expect(aaplOption).toBeDefined()
+      expect(aaplOption?.quantity).toBe(5)
+      expect(aaplOption?.multiplier).toBe(100)
+      expect(aaplOption?.optType).toBe('call')
+      expect(aaplOption?.optStrike).toBe('180')
+      expect(aaplOption?.optExpiration).toBe('2025-01-17')
+    })
+
+    it('parses MTM performance correctly', () => {
+      const result = parseIbCsv(fullStatementCsv)
+
+      const mtmRows = result.statement.performance.filter(p => p.perfType === 'mtm')
+      expect(mtmRows.length).toBe(2) // AAPL and GOOG, not Total
+
+      const aaplMtm = mtmRows.find(p => p.symbol === 'AAPL')
+      expect(aaplMtm).toBeDefined()
+      expect(aaplMtm?.priorQuantity).toBe(100)
+      expect(aaplMtm?.currentQuantity).toBe(100)
+      expect(aaplMtm?.priorPrice).toBe(170.00)
+      expect(aaplMtm?.currentPrice).toBe(180.00)
+      expect(aaplMtm?.mtmPlTotal).toBe(1000)
+
+      const googMtm = mtmRows.find(p => p.symbol === 'GOOG')
+      expect(googMtm).toBeDefined()
+      expect(googMtm?.mtmPlTotal).toBe(-500)
+    })
+
+    it('parses realized & unrealized performance correctly', () => {
+      const result = parseIbCsv(fullStatementCsv)
+
+      const ruRows = result.statement.performance.filter(p => p.perfType === 'realized_unrealized')
+      expect(ruRows.length).toBe(2) // AAPL and GOOG, not Total
+
+      const aaplRu = ruRows.find(p => p.symbol === 'AAPL')
+      expect(aaplRu).toBeDefined()
+      expect(aaplRu?.realizedStProfit).toBe(100)
+      expect(aaplRu?.realizedTotal).toBe(100)
+      expect(aaplRu?.unrealizedStProfit).toBe(450)
+      expect(aaplRu?.unrealizedTotal).toBe(450)
+      expect(aaplRu?.totalPl).toBe(550)
+
+      const googRu = ruRows.find(p => p.symbol === 'GOOG')
+      expect(googRu).toBeDefined()
+      expect(googRu?.realizedStLoss).toBe(-50)
+      expect(googRu?.unrealizedStLoss).toBe(-250)
+      expect(googRu?.totalPl).toBe(-300)
+    })
+
+    it('handles empty statement gracefully', () => {
+      const emptyCsv = ''
+      const result = parseIbCsv(emptyCsv)
+
+      expect(result.statement.info.brokerName).toBe('Interactive Brokers')
+      expect(result.statement.totalNav).toBeNull()
+      expect(result.statement.nav).toEqual([])
+      expect(result.statement.cashReport).toEqual([])
+      expect(result.statement.positions).toEqual([])
+      expect(result.statement.performance).toEqual([])
+    })
+
+    it('handles missing sections gracefully', () => {
+      const minimalCsv = `Statement,Header,Field Name,Field Value
+Statement,Data,BrokerName,Interactive Brokers LLC`
+
+      const result = parseIbCsv(minimalCsv)
+
+      expect(result.statement.info.brokerName).toBe('Interactive Brokers LLC')
+      expect(result.statement.info.accountName).toBeNull()
+      expect(result.statement.totalNav).toBeNull()
+      expect(result.statement.positions).toEqual([])
+    })
+
+    it('parses -- values as null', () => {
+      const csvWithDash = `Mark-to-Market Performance Summary,Header,Asset Category,Symbol,Prior Quantity,Current Quantity,Prior Price,Current Price,Mark-to-Market P/L Position,Mark-to-Market P/L Transaction,Mark-to-Market P/L Commissions,Mark-to-Market P/L Other,Mark-to-Market P/L Total,Code
+Mark-to-Market Performance Summary,Data,Equity and Index Options,AAPL 17JAN25 200 C,0,5,--,4.50,0,20,-3.50,0,16.50,`
+
+      const result = parseIbCsv(csvWithDash)
+
+      const mtmRow = result.statement.performance[0]
+      expect(mtmRow?.priorQuantity).toBe(0)
+      expect(mtmRow?.priorPrice).toBeNull() // -- should be null
+      expect(mtmRow?.currentPrice).toBe(4.50)
+    })
+  })
 })
