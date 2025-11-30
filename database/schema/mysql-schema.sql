@@ -160,6 +160,9 @@ CREATE TABLE `fin_account_line_items` (
   `t_price` decimal(13,4) DEFAULT NULL,
   `t_commission` decimal(13,4) DEFAULT NULL,
   `t_fee` decimal(13,4) DEFAULT NULL,
+  `t_basis` decimal(13,4) DEFAULT NULL,
+  `t_realized_pl` decimal(13,4) DEFAULT NULL,
+  `t_mtm_pl` decimal(13,4) DEFAULT NULL,
   `t_method` varchar(20) DEFAULT NULL,
   `t_source` varchar(20) DEFAULT NULL,
   `t_origin` varchar(20) DEFAULT NULL,
@@ -172,6 +175,10 @@ CREATE TABLE `fin_account_line_items` (
   `t_to` varchar(10) DEFAULT NULL,
   `t_interest_rate` varchar(20) DEFAULT NULL,
   `t_cusip` varchar(20) DEFAULT NULL,
+  `conid` varchar(50) DEFAULT NULL,
+  `underlying` varchar(20) DEFAULT NULL,
+  `listing_exch` varchar(50) DEFAULT NULL,
+  `multiplier` int(11) DEFAULT NULL,
   `when_added` timestamp NULL DEFAULT NULL,
   `when_deleted` timestamp NULL DEFAULT NULL,
   `t_harvested_amount` decimal(13,4) DEFAULT NULL,
@@ -604,3 +611,4 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (16,'2025_11_29_185
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (17,'2025_11_29_185549_migrate_parent_t_id_to_links_table',7);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (18,'2025_11_29_185611_remove_parent_t_id_from_fin_account_line_items',7);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (19,'2025_11_30_180948_add_is_not_duplicate_to_fin_account_line_items',8);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (20,'2025_11_30_183121_add_ib_columns_to_fin_account_line_items',9);
