@@ -175,6 +175,7 @@ CREATE TABLE `fin_account_line_items` (
   `when_added` timestamp NULL DEFAULT NULL,
   `when_deleted` timestamp NULL DEFAULT NULL,
   `t_harvested_amount` decimal(13,4) DEFAULT NULL,
+  `t_is_not_duplicate` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'When true, this transaction has been verified as not a duplicate',
   `t_date_posted` varchar(10) DEFAULT NULL,
   `t_account_balance` decimal(13,4) DEFAULT NULL,
   PRIMARY KEY (`t_id`),
@@ -602,3 +603,4 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (15,'2025_11_28_072
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (16,'2025_11_29_185525_create_fin_account_line_item_links_table',7);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (17,'2025_11_29_185549_migrate_parent_t_id_to_links_table',7);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (18,'2025_11_29_185611_remove_parent_t_id_from_fin_account_line_items',7);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (19,'2025_11_30_180948_add_is_not_duplicate_to_fin_account_line_items',8);
