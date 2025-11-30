@@ -122,7 +122,7 @@ Analyze the provided financial statement PDF document and extract the line items
 3.  All monetary values should be numbers (e.g., `1234.56`). Negative numbers may be represented with parentheses, so parse them correctly (e.g., `(23,355.87)` should be `-23355.87`).
 4.  Percentage values should be returned as numbers (e.g., `1.76%` should be `1.76`).
 5.  The `is_percentage` flag should be `true` if the line item's values are percentages, and `false` otherwise.
-6.  Strip out any superscript footnotes in any fields; for example "Total Pre-Tax Fees³" should be parsed as "Total After-Tax Fees" and the "³" is discarded; "Tax Benefit from Fees4" is parsed as "Tax Benefit from Fees" and the "4" is discarded.
+6.  Strip out any superscript footnotes in any fields; for example "Total Pre-Tax Fees³" should be parsed as "Total Pre-Tax Fees" and the "³" is discarded; "Tax Benefit from Fees4" is parsed as "Tax Benefit from Fees" and the "4" is discarded.
 7.  Condense spacing i.e. "Pre - Tax Return" should be parsed as "Pre-Tax Return".
 
 Example Output:

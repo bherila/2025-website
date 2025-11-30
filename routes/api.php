@@ -67,6 +67,7 @@ Route::middleware(['web', 'auth'])->post('/finance/transactions/import-gemini', 
 Route::middleware(['web', 'auth'])->get('/finance/statement/{snapshot_id}/details', [StatementController::class, 'getDetails']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/all-statement-details', [StatementController::class, 'getFinStatementDetails']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/import-ib-statement', [StatementController::class, 'importIbStatement']);
+Route::middleware(['web', 'auth'])->post('/finance/{account_id}/import-pdf-statement', [StatementController::class, 'importPdfStatement']);
 Route::middleware(['web', 'auth'])->post('/finance/statement/{snapshot_id}/import', [StatementImportGeminiController::class, 'import']);
 Route::middleware(['web', 'auth'])->post('/user/update-api-key', [App\Http\Controllers\UserApiController::class, 'updateApiKey']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/duplicates', [FinanceTransactionsDedupeApiController::class, 'findDuplicates']);

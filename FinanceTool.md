@@ -183,3 +183,79 @@ Statement data is stored in dedicated tables linked to `fin_account_balance_snap
 - `fin_statement_cash_report` - Cash flow items
 - `fin_statement_positions` - Holdings snapshot
 - `fin_statement_performance` - P/L by symbol
+
+### Unified Import Parser
+
+The `parseImportData.ts` module provides a unified entry point for parsing imported data:
+
+**Location**: `resources/js/data/finance/parseImportData.ts`
+
+```typescript
+import { parseImportData } from '@/data/finance/parseImportData'
+
+const { data, statement, parseError } = parseImportData(text)
+```
+
+The parser tries each format in order until one succeeds:
+1. E-Trade CSV
+2. Quicken QFX/OFX
+3. Wealthfront HAR
+4. Fidelity CSV
+5. Interactive Brokers CSV (with statement data)
+6. Generic CSV fallback
+
+## PDF Statement Import
+
+PDF statements can be imported using Gemini AI for parsing. The flow is:
+
+### Import Flow
+
+1. User drops or pastes a PDF file on the import page
+2. Frontend sends PDF to `TransactionGeminiImportController` for parsing
+3. Gemini extracts:
+   - **Statement Info**: date, closing balance
+   - **Statement Details**: MTD/YTD line items (interest, fees, dividends, etc.)
+   - **Transactions**: Individual transaction entries
+4. User previews parsed data and clicks Import
+5. Frontend calls `StatementController::importPdfStatement()` to persist:
+   - Creates `fin_account_balance_snapshot` record
+   - Creates `fin_statement_details` records for MTD/YTD items
+
+### API Endpoints
+
+| Endpoint | Controller | Purpose |
+|----------|------------|---------|
+| `POST /api/finance/gemini-import` | `TransactionGeminiImportController` | Parse PDF with Gemini |
+| `POST /api/finance/{id}/import-pdf-statement` | `StatementController` | Save parsed statement data |
+
+### Statement Details Schema
+
+The `fin_statement_details` table stores MTD/YTD line items:
+
+```sql
+CREATE TABLE fin_statement_details (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  snapshot_id INT NOT NULL,        -- FK to fin_account_balance_snapshot
+  label VARCHAR(255) NOT NULL,     -- e.g., "Interest", "Dividends", "Fees"
+  mtd_amount DECIMAL(15,2),        -- Month-to-date value
+  ytd_amount DECIMAL(15,2),        -- Year-to-date value
+  FOREIGN KEY (snapshot_id) REFERENCES fin_account_balance_snapshot(id)
+);
+```
+
+### Import UI Components
+
+The import page uses extracted components for better maintainability:
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| `ImportProgressDialog` | `ImportProgressDialog.tsx` | Progress bar during import |
+| `StatementPreviewCard` | `StatementPreviewCard.tsx` | Preview IB statement data |
+| `IbStatementDetailModal` | `IbStatementDetailModal.tsx` | Detailed view of IB statement |
+
+### Import Button Text
+
+The import button shows contextual text based on what will be imported:
+- "Import 11 Transactions" - transactions only
+- "Import Statement" - statement only
+- "Import 11 Transactions and Statement" - both

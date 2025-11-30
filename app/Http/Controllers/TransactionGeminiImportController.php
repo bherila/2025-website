@@ -13,6 +13,9 @@ class TransactionGeminiImportController extends Controller
 {
     public function import(Request $request)
     {
+        // Set execution time limit to 5 minutes to handle multiple API requests
+        set_time_limit(300);
+
         $validator = Validator::make($request->all(), [
             'file' => 'required|file|mimes:pdf|max:10240', // 10MB max
         ]);
@@ -36,8 +39,8 @@ class TransactionGeminiImportController extends Controller
                 'x-goog-api-key' => $apiKey,
                 'Content-Type' => 'application/json',
             ])->withOptions([
-                'timeout' => 120, // 2 minutes timeout
-            ])->post('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent', [
+                'timeout' => 300,
+            ])->post('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', [
                 'contents' => [
                     [
                         'parts' => [
@@ -52,13 +55,25 @@ class TransactionGeminiImportController extends Controller
                     ],
                 ],
                 'generationConfig' => [
-                    'response_mime_type' => 'text/plain',
+                    'response_mime_type' => 'application/json',
                 ],
             ]);
 
             if ($response->successful()) {
-                $csv_data = $response->json()['candidates'][0]['content']['parts'][0]['text'];
-                return response($csv_data, 200, ['Content-Type' => 'text/csv']);
+                $json_text = $response->json()['candidates'][0]['content']['parts'][0]['text'];
+                // Strip markdown code fences if present
+                $json_text = preg_replace('/^```json\s*|\s*```$/s', '', trim($json_text));
+                $data = json_decode($json_text, true);
+                
+                if (json_last_error() !== JSON_ERROR_NONE) {
+                    Log::error('Failed to decode JSON from Gemini API', [
+                        'file' => $file->getClientOriginalName(),
+                        'response' => $json_text,
+                    ]);
+                    return response()->json(['error' => 'Failed to parse response from AI.'], 500);
+                }
+                
+                return response()->json($data);
             } else {
                 Log::error('Gemini API request failed for file: ' . $file->getClientOriginalName(), [
                     'status' => $response->status(),
@@ -78,23 +93,71 @@ class TransactionGeminiImportController extends Controller
     private function getPrompt()
     {
         return <<<PROMPT
-Analyze the provided bank statement PDF and extract all transactions.
-Return the data as a CSV with the following headers: date, time, description, amount, type.
+Analyze the provided bank or brokerage statement PDF and extract:
+1. Statement summary information
+2. Statement detail line items (sections with MTD/YTD or period columns showing performance, capital, taxes, etc.)
+3. Transaction entries (individual transactions with dates)
+
+Return the data as JSON with this structure:
+
+```json
+{
+  "statementInfo": {
+    "brokerName": "Bank/Institution Name",
+    "accountNumber": "Account number if visible",
+    "accountName": "Account holder name if visible",
+    "periodStart": "YYYY-MM-DD",
+    "periodEnd": "YYYY-MM-DD",
+    "closingBalance": 12345.67
+  },
+  "statementDetails": [
+    {
+      "section": "Statement Summary ($)",
+      "line_item": "Pre-Tax Return",
+      "statement_period_value": -23355.87,
+      "ytd_value": 12312.59,
+      "is_percentage": false
+    },
+    {
+      "section": "Statement Summary (%)",
+      "line_item": "Pre-Tax Return",
+      "statement_period_value": -1.75,
+      "ytd_value": 1.76,
+      "is_percentage": true
+    }
+  ],
+  "transactions": [
+    {
+      "date": "YYYY-MM-DD",
+      "description": "Transaction description",
+      "amount": 100.00,
+      "type": "deposit"
+    }
+  ]
+}
+```
 
 **Instructions:**
-1.  The output must be only CSV data.
-2.  Do not include any other text or explanations.
-3.  The date format should be YYYY-MM-DD.
-4.  The time format should be HH:MM:SS. If the time is not available, use 00:00:00.
-5.  The amount should be a number. Positive for deposits, negative for withdrawals.
-6.  The description should be a short text describing the transaction.
-7.  The 'type' column should be one of: 'deposit', 'withdrawal', 'transfer', or other short description of the transaction type.
-
-**Example Output:**
-date,time,description,amount,type
-2025-01-01,10:00:00,DEPOSIT,1000.00,deposit
-2025-01-02,14:30:00,GROCERY STORE,-75.50,withdrawal
-2025-01-03,00:00:00,ONLINE PAYMENT,-25.00,withdrawal
+1. Return ONLY valid JSON with no other text.
+2. All dates should be in YYYY-MM-DD format.
+3. **Statement Details**: Extract ALL line items from sections with columns like "MTD" and "YTD", "Statement Period" and "YTD", or similar period-based columns. These include:
+   - Statement Summary ($ and %)
+   - Investor Capital Account
+   - Fund Level Capital Account  
+   - Tax and Pre-Tax Return Detail
+   - Any similar summary/performance sections
+4. For statement details:
+   - `section`: The section header (e.g., "Statement Summary ($)", "Investor Capital Account")
+   - `line_item`: The row label (e.g., "Pre-Tax Return", "Total Beginning Capital")
+   - `statement_period_value`: The MTD/Statement Period value as a number
+   - `ytd_value`: The YTD value as a number
+   - `is_percentage`: true if the values are percentages, false if currency amounts
+5. **Transactions**: Extract individual dated transactions (deposits, withdrawals, trades, etc.) if present.
+6. Parse negative amounts correctly - numbers in parentheses like (23,355.87) should be -23355.87.
+7. Strip footnote superscripts from line items (e.g., "Total Pre-Tax Fees³" → "Total Pre-Tax Fees").
+8. Condense spacing (e.g., "Pre - Tax Return" → "Pre-Tax Return").
+9. If a PDF only has statement details and no transactions, return an empty transactions array.
+10. If a PDF only has transactions and no statement details, return an empty statementDetails array.
 PROMPT;
     }
 }

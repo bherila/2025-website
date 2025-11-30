@@ -262,4 +262,63 @@ class StatementController extends Controller
             'performance_count' => count($statement['performance'] ?? []),
         ]);
     }
+
+    /**
+     * Import statement details from PDF parsing (MTD/YTD line items).
+     * Creates a snapshot and adds statement details to it.
+     */
+    public function importPdfStatement(Request $request, $account_id)
+    {
+        $uid = Auth::id();
+        $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+
+        $request->validate([
+            'statementInfo' => 'nullable|array',
+            'statementInfo.periodStart' => 'nullable|string',
+            'statementInfo.periodEnd' => 'nullable|string',
+            'statementInfo.closingBalance' => 'nullable|numeric',
+            'statementDetails' => 'nullable|array',
+            'statementDetails.*.section' => 'required|string',
+            'statementDetails.*.line_item' => 'required|string',
+            'statementDetails.*.statement_period_value' => 'nullable|numeric',
+            'statementDetails.*.ytd_value' => 'nullable|numeric',
+            'statementDetails.*.is_percentage' => 'nullable|boolean',
+        ]);
+
+        $statementInfo = $request->statementInfo ?? [];
+        $statementDetails = $request->statementDetails ?? [];
+        
+        $periodEnd = $statementInfo['periodEnd'] ?? now()->format('Y-m-d');
+        $closingBalance = $statementInfo['closingBalance'] ?? null;
+
+        // Create the snapshot record
+        $snapshotId = DB::table('fin_account_balance_snapshot')->insertGetId([
+            'acct_id' => $account->acct_id,
+            'balance' => $closingBalance,
+            'when_added' => $periodEnd,
+        ]);
+
+        // Insert statement detail rows
+        if (!empty($statementDetails)) {
+            $detailRows = array_map(function ($row) use ($snapshotId) {
+                return [
+                    'snapshot_id' => $snapshotId,
+                    'section' => $row['section'] ?? '',
+                    'line_item' => $row['line_item'] ?? '',
+                    'statement_period_value' => $row['statement_period_value'] ?? 0,
+                    'ytd_value' => $row['ytd_value'] ?? 0,
+                    'is_percentage' => $row['is_percentage'] ?? false,
+                ];
+            }, $statementDetails);
+            FinStatementDetail::insert($detailRows);
+        }
+
+        return response()->json([
+            'success' => true,
+            'snapshot_id' => $snapshotId,
+            'period_end' => $periodEnd,
+            'closing_balance' => $closingBalance,
+            'details_count' => count($statementDetails),
+        ]);
+    }
 }
