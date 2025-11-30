@@ -41,6 +41,8 @@ export default function DuplicatesPage({ id }: { id: number }) {
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [selectedYear, setSelectedYear] = useState<YearSelection | null>(null)
+  const [markedAsNonDuplicate, setMarkedAsNonDuplicate] = useState(0)
+  const [previouslyMarkedCount, setPreviouslyMarkedCount] = useState(0)
 
   // Get year from URL/sessionStorage on mount and listen for changes
   useEffect(() => {
@@ -75,6 +77,8 @@ export default function DuplicatesPage({ id }: { id: number }) {
       const yearParam = selectedYear !== 'all' ? `?year=${selectedYear}` : ''
       const data = await fetchWrapper.get(`/api/finance/${id}/duplicates${yearParam}`)
       setDuplicateGroups(data.groups || [])
+      setMarkedAsNonDuplicate(data.markedAsNonDuplicate || 0)
+      setPreviouslyMarkedCount(data.previouslyMarkedCount || 0)
       
       // Pre-select all suggested deletions
       const preSelected = new Set<number>()
@@ -197,8 +201,18 @@ export default function DuplicatesPage({ id }: { id: number }) {
       )}
 
       {duplicateGroups.length === 0 ? (
-        <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-          No duplicate transactions found for this account.
+        <div className="text-center py-8 text-gray-500 dark:text-gray-400 space-y-2">
+          <p>No duplicate transactions found for this account.</p>
+          {previouslyMarkedCount > 0 && (
+            <p className="text-sm text-blue-600 dark:text-blue-400">
+              {previouslyMarkedCount} transaction{previouslyMarkedCount !== 1 ? 's' : ''} previously marked as non-duplicate.
+            </p>
+          )}
+          {markedAsNonDuplicate > 0 && (
+            <p className="text-sm text-green-600 dark:text-green-400">
+              {markedAsNonDuplicate} transaction{markedAsNonDuplicate !== 1 ? 's' : ''} just marked as verified non-duplicates.
+            </p>
+          )}
         </div>
       ) : (
         <>

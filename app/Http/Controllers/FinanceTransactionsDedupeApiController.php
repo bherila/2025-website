@@ -12,21 +12,29 @@ class FinanceTransactionsDedupeApiController extends Controller
 {
     /**
      * Find duplicate transactions in an account
-     * Duplicates are detected by: same date + qty + amount + symbol
+     * Duplicates are detected by: same date + qty + amount + symbol + balance
      * Also checks if description/memo are identical or swapped
+     * 
+     * Transactions marked as t_is_not_duplicate=1 are excluded from duplicate detection.
+     * At the end, transactions that had no duplicates are marked as t_is_not_duplicate=1.
+     * 
+     * Note: We keep the NEWER t_id (highest) and delete older ones because when re-importing
+     * CSV data, the newer import may have more complete/updated data.
      */
     public function findDuplicates(Request $request, $account_id)
     {
         $uid = Auth::id();
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
 
-        // Build query for transactions
+        // Build query for transactions - exclude those already marked as not duplicate
         $query = FinAccountLineItems::where('t_account', $account->acct_id)
+            ->where('t_is_not_duplicate', false) // Only check transactions not already verified
             ->with(['tags'])
             ->orderBy('t_date', 'asc')
             ->orderBy('t_id', 'asc');
 
         // Filter by year if provided
+        $year = null;
         if ($request->has('year') && $request->year !== 'all') {
             $year = intval($request->year);
             $query->whereYear('t_date', $year);
@@ -34,6 +42,9 @@ class FinanceTransactionsDedupeApiController extends Controller
 
         // Get all transactions for the account, sorted by date
         $transactions = $query->get();
+        
+        // Track which transaction IDs are involved in duplicate groups
+        $idsInDuplicateGroups = [];
 
         $groups = [];
         $seenIds = [];
@@ -93,9 +104,11 @@ class FinanceTransactionsDedupeApiController extends Controller
                 
                 foreach ($allInGroup as $t) {
                     $seenIds[] = $t->t_id;
+                    $idsInDuplicateGroups[] = $t->t_id;
                 }
 
                 // The last transaction (highest t_id) is the one to keep
+                // We keep the NEWER t_id because re-imported CSV may have updated data
                 $keepTransaction = $allInGroup->sortBy('t_id')->last();
                 $deleteIds = $allInGroup->filter(fn($t) => $t->t_id !== $keepTransaction->t_id)->pluck('t_id')->toArray();
 
@@ -130,9 +143,33 @@ class FinanceTransactionsDedupeApiController extends Controller
             }
         }
 
+        // Mark transactions that had no duplicates as verified non-duplicates
+        // Only do this if we scanned all transactions (not limited by group count)
+        $markedAsNonDuplicate = 0;
+        if (count($groups) < 150) {
+            $allTransactionIds = $transactions->pluck('t_id')->toArray();
+            $idsWithoutDuplicates = array_diff($allTransactionIds, $idsInDuplicateGroups);
+            
+            if (!empty($idsWithoutDuplicates)) {
+                $markedAsNonDuplicate = FinAccountLineItems::whereIn('t_id', $idsWithoutDuplicates)
+                    ->where('t_account', $account->acct_id)
+                    ->update(['t_is_not_duplicate' => true]);
+            }
+        }
+
+        // Count how many transactions were already marked as non-duplicate (for UI info)
+        $previouslyMarkedQuery = FinAccountLineItems::where('t_account', $account->acct_id)
+            ->where('t_is_not_duplicate', true);
+        if ($year) {
+            $previouslyMarkedQuery->whereYear('t_date', $year);
+        }
+        $previouslyMarkedCount = $previouslyMarkedQuery->count();
+
         return response()->json([
             'groups' => $groups,
             'total' => count($groups),
+            'markedAsNonDuplicate' => $markedAsNonDuplicate,
+            'previouslyMarkedCount' => $previouslyMarkedCount,
         ]);
     }
 
