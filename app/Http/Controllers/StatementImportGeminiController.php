@@ -12,7 +12,7 @@ use Throwable;
 
 class StatementImportGeminiController extends Controller
 {
-    public function import(Request $request, $snapshot_id)
+    public function import(Request $request, $statement_id)
     {
         // Set execution time limit to 5 minutes to handle multiple API requests
         set_time_limit(300);
@@ -68,7 +68,7 @@ class StatementImportGeminiController extends Controller
                     $statementItems = isset($data[0]) && is_array($data[0]) ? $data : [$data];
 
                     foreach ($statementItems as $itemData) {
-                        $itemData['snapshot_id'] = $snapshot_id;
+                        $itemData['statement_id'] = $statement_id;
 
                         // Set defaults for required fields if missing
                         $itemData['statement_period_value'] = $itemData['statement_period_value'] ?? 0;

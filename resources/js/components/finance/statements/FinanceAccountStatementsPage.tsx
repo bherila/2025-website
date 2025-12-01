@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { fetchWrapper } from '../../../fetchWrapper'
 import { Spinner } from '../../ui/spinner'
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '../../ui/table'
@@ -15,7 +15,6 @@ import {
 } from '../../ui/alert-dialog'
 import {
   Dialog,
-  DialogTrigger,
   DialogContent,
   DialogTitle,
   DialogDescription,
@@ -24,19 +23,23 @@ import { Button } from '../../ui/button'
 import { Trash2 as Delete, Paperclip, Pencil } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../ui/tooltip'
 
-import StatementDetailModal from './StatementDetailModal';
+import { StatementDetailsModal, type StatementInfo, type StatementDetail } from '../StatementDetailsModal';
 import AllStatementsModal from './AllStatementsModal';
 
 interface StatementSnapshot {
-  snapshot_id: number;
-  when_added: string;
+  statement_id: number;
+  statement_opening_date: string | null;
+  statement_closing_date: string;
   balance: string;
   lineItemCount: number;
 }
 
 interface StatementDetailModalState {
   isOpen: boolean;
-  snapshotId: number | null;
+  statementId: number | null;
+  statementInfo?: StatementInfo;
+  statementDetails: StatementDetail[];
+  isLoading: boolean;
 }
 
 export default function FinanceAccountStatementsPage({ id }: { id: number }) {
@@ -48,7 +51,12 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
   const [selectedStatement, setSelectedStatement] = useState<StatementSnapshot | null>(null);
   const [currentBalance, setCurrentBalance] = useState('');
   const [currentDate, setCurrentDate] = useState('');
-  const [statementDetailModal, setStatementDetailModal] = useState<StatementDetailModalState>({ isOpen: false, snapshotId: null });
+  const [statementDetailModal, setStatementDetailModal] = useState<StatementDetailModalState>({ 
+    isOpen: false, 
+    statementId: null,
+    statementDetails: [],
+    isLoading: false,
+  });
   const [isAllStatementsModalOpen, setIsAllStatementsModalOpen] = useState(false);
 
 
@@ -76,9 +84,9 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
     const percentChange = prevBalance !== 0 ? (change / prevBalance) * 100 : 0;
 
     return {
-      snapshot_id: statement.snapshot_id,
-      when_added: statement.when_added,
-      date: new Date(statement.when_added),
+      statement_id: statement.statement_id,
+      statement_closing_date: statement.statement_closing_date,
+      date: new Date(statement.statement_closing_date),
       balance: currentBalance,
       originalBalance: statement.balance,
       change: change,
@@ -92,7 +100,7 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
     setSelectedStatement(statement);
     if (statement) {
       setCurrentBalance(statement.balance);
-      setCurrentDate(statement.when_added.split(' ')[0]);
+      setCurrentDate(statement.statement_closing_date.split(' ')[0] ?? '');
     } else {
       setCurrentBalance('');
       setCurrentDate('');
@@ -100,9 +108,44 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
     setModalOpen(true);
   };
 
-  const handleDeleteSnapshot = async (when_added: string, balance: string) => {
+  const handleOpenStatementDetailModal = useCallback(async (statementId: number) => {
+    setStatementDetailModal({
+      isOpen: true,
+      statementId,
+      statementDetails: [],
+      isLoading: true,
+    });
+
     try {
-      await fetchWrapper.delete(`/api/finance/${id}/balance-timeseries`, { when_added, balance });
+      const data = await fetchWrapper.get(`/api/finance/statement/${statementId}/details`);
+      setStatementDetailModal(prev => ({
+        ...prev,
+        statementInfo: data.statementInfo,
+        statementDetails: data.statementDetails || [],
+        isLoading: false,
+      }));
+    } catch (error) {
+      console.error('Error fetching statement details:', error);
+      setStatementDetailModal(prev => ({
+        ...prev,
+        statementDetails: [],
+        isLoading: false,
+      }));
+    }
+  }, []);
+
+  const handleCloseStatementDetailModal = useCallback(() => {
+    setStatementDetailModal({
+      isOpen: false,
+      statementId: null,
+      statementDetails: [],
+      isLoading: false,
+    });
+  }, []);
+
+  const handleDeleteSnapshot = async (statement_closing_date: string, balance: string) => {
+    try {
+      await fetchWrapper.delete(`/api/finance/${id}/balance-timeseries`, { statement_closing_date, balance });
       setFetchKey(prev => prev + 1); // Trigger re-fetch
     } catch (error) {
       console.error('Error deleting balance snapshot:', error);
@@ -113,12 +156,12 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
     if (!currentDate || !currentBalance || isSubmitting) return;
     setIsSubmitting(true);
     const url = selectedStatement
-      ? `/api/finance/balance-timeseries/${selectedStatement.snapshot_id}`
+      ? `/api/finance/balance-timeseries/${selectedStatement.statement_id}`
       : `/api/finance/${id}/balance-timeseries`;
     const method = selectedStatement ? 'put' : 'post';
 
     try {
-      await fetchWrapper[method](url, { balance: currentBalance, when_added: currentDate });
+      await fetchWrapper[method](url, { balance: currentBalance, statement_closing_date: currentDate });
       setFetchKey(prev => prev + 1);
       setModalOpen(false);
     } catch (error) {
@@ -158,7 +201,7 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
 
   return (
     <TooltipProvider>
-      <AccountStatementsChart balanceHistory={statements.map((balance) => [new Date(balance.when_added).valueOf(), parseFloat(balance.balance)])} />
+      <AccountStatementsChart balanceHistory={statements.map((balance) => [new Date(balance.statement_closing_date).valueOf(), parseFloat(balance.balance)])} />
       <div className="relative">
         <div className="absolute top-0 right-0 z-10 flex gap-2">
           <Button onClick={() => setIsAllStatementsModalOpen(true)} variant="outline">
@@ -180,7 +223,7 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
           </TableHeader>
           <TableBody>
             {statementHistory.map((row, index) => (
-              <TableRow key={row.when_added + '-' + row.balance + '-' + index}>
+              <TableRow key={row.statement_closing_date + '-' + row.balance + '-' + index}>
                 <TableCell className="text-right">
                   {row.date.toLocaleString('en-US', {
                     year: 'numeric',
@@ -212,7 +255,7 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
                         variant={row.lineItemCount > 0 ? 'default' : 'outline'}
                         className={row.lineItemCount > 0 ? 'bg-green-500 text-white hover:bg-green-600' : ''}
                         size="sm"
-                        onClick={() => setStatementDetailModal({ isOpen: true, snapshotId: row.snapshot_id })}
+                        onClick={() => handleOpenStatementDetailModal(row.statement_id)}
                       >
                         <Paperclip className="h-4 w-4" />
                       </Button>
@@ -242,7 +285,7 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
                       <div className="flex justify-end gap-4 mt-6">
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction asChild>
-                          <Button variant="destructive" onClick={() => handleDeleteSnapshot(row.when_added, row.originalBalance)}>
+                          <Button variant="destructive" onClick={() => handleDeleteSnapshot(row.statement_closing_date, row.originalBalance)}>
                             Delete
                           </Button>
                         </AlertDialogAction>
@@ -307,12 +350,21 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
             </div>
           </DialogContent>
         </Dialog>
-        {statementDetailModal.isOpen && statementDetailModal.snapshotId && (
-          <StatementDetailModal
-            snapshotId={statementDetailModal.snapshotId}
-            isOpen={statementDetailModal.isOpen}
-            onClose={() => setStatementDetailModal({ isOpen: false, snapshotId: null })}
-          />
+        {statementDetailModal.isOpen && (
+          statementDetailModal.isLoading ? (
+            <Dialog open={true} onOpenChange={handleCloseStatementDetailModal}>
+              <DialogContent className="flex justify-center items-center h-40">
+                <Spinner />
+              </DialogContent>
+            </Dialog>
+          ) : (
+            <StatementDetailsModal
+              isOpen={statementDetailModal.isOpen}
+              onClose={handleCloseStatementDetailModal}
+              statementInfo={statementDetailModal.statementInfo}
+              statementDetails={statementDetailModal.statementDetails}
+            />
+          )
         )}
         {isAllStatementsModalOpen && (
           <AllStatementsModal

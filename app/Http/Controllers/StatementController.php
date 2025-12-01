@@ -15,16 +15,31 @@ use Throwable;
 
 class StatementController extends Controller
 {
-    public function getDetails(Request $request, $snapshot_id)
+    public function getDetails(Request $request, $statement_id)
     {
-        $details = FinStatementDetail::where('snapshot_id', $snapshot_id)->get();
-        $snapshot = DB::table('fin_account_balance_snapshot')->where('snapshot_id', $snapshot_id)->first();
-        $account = DB::table('fin_accounts')->where('acct_id', $snapshot->acct_id)->first(); // Fetch account details
+        $details = FinStatementDetail::where('statement_id', $statement_id)->get();
+        $statement = DB::table('fin_statements')->where('statement_id', $statement_id)->first();
+        $account = DB::table('fin_accounts')->where('acct_id', $statement->acct_id)->first();
 
+        // Format response to match PdfStatementPreviewCard expected format
         return response()->json([
-            'details' => $details,
-            'account_id' => $snapshot->acct_id,
-            'account_name' => $account->acct_name, // Add account name
+            'statementInfo' => [
+                'brokerName' => $account->acct_name ?? null,
+                'accountNumber' => $account->acct_number ?? null,
+                'accountName' => $account->acct_name ?? null,
+                'periodStart' => $statement->statement_opening_date,
+                'periodEnd' => $statement->statement_closing_date,
+                'closingBalance' => $statement->balance ? (float) $statement->balance : null,
+            ],
+            'statementDetails' => $details->map(function ($detail) {
+                return [
+                    'section' => $detail->section,
+                    'line_item' => $detail->line_item,
+                    'statement_period_value' => (float) $detail->statement_period_value,
+                    'ytd_value' => (float) $detail->ytd_value,
+                    'is_percentage' => (bool) $detail->is_percentage,
+                ];
+            })->toArray(),
         ]);
     }
 
@@ -35,19 +50,21 @@ class StatementController extends Controller
 
         $request->validate([
             'balance' => 'required|string',
-            'when_added' => 'required|date',
+            'statement_closing_date' => 'required|date',
+            'statement_opening_date' => 'nullable|date',
         ]);
 
-        DB::table('fin_account_balance_snapshot')->insert([
+        DB::table('fin_statements')->insert([
             'acct_id' => $account->acct_id,
             'balance' => $request->balance,
-            'when_added' => $request->when_added,
+            'statement_opening_date' => $request->statement_opening_date,
+            'statement_closing_date' => $request->statement_closing_date,
         ]);
 
         return response()->json(['success' => true]);
     }
 
-    public function updateFinAccountStatement(Request $request, $snapshot_id)
+    public function updateFinAccountStatement(Request $request, $statement_id)
     {
         $uid = Auth::id();
 
@@ -55,16 +72,16 @@ class StatementController extends Controller
             'balance' => 'required|string',
         ]);
 
-        $snapshot = DB::table('fin_account_balance_snapshot')
-            ->where('snapshot_id', $snapshot_id)
+        $statement = DB::table('fin_statements')
+            ->where('statement_id', $statement_id)
             ->first();
 
-        if (!$snapshot) {
-            return response()->json(['error' => 'Snapshot not found'], 404);
+        if (!$statement) {
+            return response()->json(['error' => 'Statement not found'], 404);
         }
 
         $account = DB::table('fin_accounts')
-            ->where('acct_id', $snapshot->acct_id)
+            ->where('acct_id', $statement->acct_id)
             ->where('acct_owner', $uid)
             ->first();
 
@@ -72,8 +89,8 @@ class StatementController extends Controller
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
-        DB::table('fin_account_balance_snapshot')
-            ->where('snapshot_id', $snapshot_id)
+        DB::table('fin_statements')
+            ->where('statement_id', $statement_id)
             ->update([
                 'balance' => $request->balance,
             ]);
@@ -87,30 +104,30 @@ class StatementController extends Controller
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
 
         $details = DB::table('fin_statement_details as fsd')
-            ->join('fin_account_balance_snapshot as fabs', 'fsd.snapshot_id', '=', 'fabs.snapshot_id')
-            ->where('fabs.acct_id', $account->acct_id)
+            ->join('fin_statements as fs', 'fsd.statement_id', '=', 'fs.statement_id')
+            ->where('fs.acct_id', $account->acct_id)
             ->select(
-                'fabs.when_added',
+                'fs.statement_closing_date',
                 'fsd.section',
                 'fsd.line_item',
                 'fsd.statement_period_value',
                 'fsd.ytd_value',
                 'fsd.is_percentage'
             )
-            ->orderBy('fabs.when_added', 'desc')
-            ->orderBy('fabs.snapshot_id', 'asc')
+            ->orderBy('fs.statement_closing_date', 'desc')
+            ->orderBy('fs.statement_id', 'asc')
             ->orderBy('fsd.section')
             ->orderBy('fsd.line_item')
             ->get();
 
         $dates = array_unique(array_map(function ($detail) {
-            return substr($detail->when_added, 0, 10);
+            return $detail->statement_closing_date;
         }, $details->toArray()));
         sort($dates);
 
         $groupedData = [];
         foreach ($details as $detail) {
-            $date = substr($detail->when_added, 0, 10);
+            $date = $detail->statement_closing_date;
             $section = $detail->section;
             $lineItem = $detail->line_item;
 
@@ -144,6 +161,7 @@ class StatementController extends Controller
         $request->validate([
             'statement' => 'required|array',
             'statement.info' => 'required|array',
+            'statement.info.periodStart' => 'nullable|string',
             'statement.info.periodEnd' => 'nullable|string',
             'statement.totalNav' => 'nullable|numeric',
             'statement.nav' => 'nullable|array',
@@ -153,21 +171,23 @@ class StatementController extends Controller
         ]);
 
         $statement = $request->statement;
+        $periodStart = $statement['info']['periodStart'] ?? null;
         $periodEnd = $statement['info']['periodEnd'] ?? now()->format('Y-m-d');
         $totalNav = $statement['totalNav'] ?? null;
 
-        // Create the snapshot record
-        $snapshotId = DB::table('fin_account_balance_snapshot')->insertGetId([
+        // Create the statement record
+        $statementId = DB::table('fin_statements')->insertGetId([
             'acct_id' => $account->acct_id,
             'balance' => $totalNav,
-            'when_added' => $periodEnd,
+            'statement_opening_date' => $periodStart,
+            'statement_closing_date' => $periodEnd,
         ]);
 
         // Insert NAV rows
         if (!empty($statement['nav'])) {
-            $navRows = array_map(function ($row) use ($snapshotId) {
+            $navRows = array_map(function ($row) use ($statementId) {
                 return [
-                    'snapshot_id' => $snapshotId,
+                    'statement_id' => $statementId,
                     'asset_class' => $row['assetClass'] ?? '',
                     'prior_total' => $row['priorTotal'] ?? null,
                     'current_long' => $row['currentLong'] ?? null,
@@ -181,9 +201,9 @@ class StatementController extends Controller
 
         // Insert cash report rows
         if (!empty($statement['cashReport'])) {
-            $cashRows = array_map(function ($row) use ($snapshotId) {
+            $cashRows = array_map(function ($row) use ($statementId) {
                 return [
-                    'snapshot_id' => $snapshotId,
+                    'statement_id' => $statementId,
                     'currency' => $row['currency'] ?? '',
                     'line_item' => $row['lineItem'] ?? '',
                     'total' => $row['total'] ?? null,
@@ -196,9 +216,9 @@ class StatementController extends Controller
 
         // Insert position rows
         if (!empty($statement['positions'])) {
-            $positionRows = array_map(function ($row) use ($snapshotId) {
+            $positionRows = array_map(function ($row) use ($statementId) {
                 return [
-                    'snapshot_id' => $snapshotId,
+                    'statement_id' => $statementId,
                     'asset_category' => $row['assetCategory'] ?? null,
                     'currency' => $row['currency'] ?? null,
                     'symbol' => $row['symbol'] ?? '',
@@ -219,9 +239,9 @@ class StatementController extends Controller
 
         // Insert performance rows
         if (!empty($statement['performance'])) {
-            $perfRows = array_map(function ($row) use ($snapshotId) {
+            $perfRows = array_map(function ($row) use ($statementId) {
                 return [
-                    'snapshot_id' => $snapshotId,
+                    'statement_id' => $statementId,
                     'perf_type' => $row['perfType'] ?? 'mtm',
                     'asset_category' => $row['assetCategory'] ?? null,
                     'symbol' => $row['symbol'] ?? '',
@@ -253,7 +273,8 @@ class StatementController extends Controller
 
         return response()->json([
             'success' => true,
-            'snapshot_id' => $snapshotId,
+            'statement_id' => $statementId,
+            'period_start' => $periodStart,
             'period_end' => $periodEnd,
             'total_nav' => $totalNav,
             'nav_count' => count($statement['nav'] ?? []),
@@ -265,7 +286,7 @@ class StatementController extends Controller
 
     /**
      * Import statement details from PDF parsing (MTD/YTD line items).
-     * Creates a snapshot and adds statement details to it.
+     * Creates a statement record and adds statement details to it.
      */
     public function importPdfStatement(Request $request, $account_id)
     {
@@ -288,21 +309,23 @@ class StatementController extends Controller
         $statementInfo = $request->statementInfo ?? [];
         $statementDetails = $request->statementDetails ?? [];
         
+        $periodStart = $statementInfo['periodStart'] ?? null;
         $periodEnd = $statementInfo['periodEnd'] ?? now()->format('Y-m-d');
         $closingBalance = $statementInfo['closingBalance'] ?? null;
 
-        // Create the snapshot record
-        $snapshotId = DB::table('fin_account_balance_snapshot')->insertGetId([
+        // Create the statement record
+        $statementId = DB::table('fin_statements')->insertGetId([
             'acct_id' => $account->acct_id,
             'balance' => $closingBalance,
-            'when_added' => $periodEnd,
+            'statement_opening_date' => $periodStart,
+            'statement_closing_date' => $periodEnd,
         ]);
 
         // Insert statement detail rows
         if (!empty($statementDetails)) {
-            $detailRows = array_map(function ($row) use ($snapshotId) {
+            $detailRows = array_map(function ($row) use ($statementId) {
                 return [
-                    'snapshot_id' => $snapshotId,
+                    'statement_id' => $statementId,
                     'section' => $row['section'] ?? '',
                     'line_item' => $row['line_item'] ?? '',
                     'statement_period_value' => $row['statement_period_value'] ?? 0,
@@ -315,7 +338,8 @@ class StatementController extends Controller
 
         return response()->json([
             'success' => true,
-            'snapshot_id' => $snapshotId,
+            'statement_id' => $statementId,
+            'period_start' => $periodStart,
             'period_end' => $periodEnd,
             'closing_balance' => $closingBalance,
             'details_count' => count($statementDetails),

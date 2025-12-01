@@ -59,10 +59,10 @@ class FinanceApiController extends Controller
                 'acct_last_balance_date' => now(),
             ]);
 
-        DB::table('fin_account_balance_snapshot')->insert([
+        DB::table('fin_statements')->insert([
             'acct_id' => $request->acct_id,
             'balance' => $request->balance,
-            'when_added' => now(),
+            'statement_closing_date' => now()->format('Y-m-d'),
         ]);
 
         return response()->json(['success' => true]);
@@ -99,15 +99,15 @@ class FinanceApiController extends Controller
             ->get();
 
         // Get balance history for active accounts
-        $balanceHistory = DB::table('fin_account_balance_snapshot')
+        $balanceHistory = DB::table('fin_statements')
             ->whereIn('acct_id', $accounts->pluck('acct_id')->toArray())
-            ->orderBy('when_added', 'asc')
+            ->orderBy('statement_closing_date', 'asc')
             ->get();
 
         // Group snapshots by quarter and account, keeping only the latest balance per quarter
         $quarterlyBalances = [];
-        foreach ($balanceHistory as $snapshot) {
-            $date = $snapshot->when_added;
+        foreach ($balanceHistory as $statement) {
+            $date = $statement->statement_closing_date;
             $quarter = date('Y', strtotime($date)) . '-Q' . ceil(date('n', strtotime($date)) / 3);
 
             if (!isset($quarterlyBalances[$quarter])) {
@@ -115,7 +115,7 @@ class FinanceApiController extends Controller
             }
 
             // Always update the balance since we're iterating in chronological order
-            $quarterlyBalances[$quarter][$snapshot->acct_id] = $snapshot->balance;
+            $quarterlyBalances[$quarter][$statement->acct_id] = $statement->balance;
         }
 
         // Sort quarters chronologically
@@ -152,12 +152,12 @@ class FinanceApiController extends Controller
         $uid = Auth::id();
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
 
-        $balances = DB::table('fin_account_balance_snapshot as fabs')
-            ->leftJoin('fin_statement_details as fsd', 'fabs.snapshot_id', '=', 'fsd.snapshot_id')
-            ->where('fabs.acct_id', $account->acct_id)
-            ->select('fabs.snapshot_id', 'fabs.when_added', 'fabs.balance', DB::raw('count(fsd.id) as lineItemCount'))
-            ->groupBy('fabs.snapshot_id', 'fabs.when_added', 'fabs.balance')
-            ->orderBy('fabs.when_added', 'asc')
+        $balances = DB::table('fin_statements as fs')
+            ->leftJoin('fin_statement_details as fsd', 'fs.statement_id', '=', 'fsd.statement_id')
+            ->where('fs.acct_id', $account->acct_id)
+            ->select('fs.statement_id', 'fs.statement_opening_date', 'fs.statement_closing_date', 'fs.balance', DB::raw('count(fsd.id) as lineItemCount'))
+            ->groupBy('fs.statement_id', 'fs.statement_opening_date', 'fs.statement_closing_date', 'fs.balance')
+            ->orderBy('fs.statement_closing_date', 'asc')
             ->get();
 
         return response()->json($balances);
@@ -227,13 +227,13 @@ class FinanceApiController extends Controller
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
 
         $request->validate([
-            'when_added' => 'required|string',
+            'statement_closing_date' => 'required|string',
             'balance' => 'required|string',
         ]);
 
-        DB::table('fin_account_balance_snapshot')
+        DB::table('fin_statements')
             ->where('acct_id', $account->acct_id)
-            ->where('when_added', $request->when_added)
+            ->where('statement_closing_date', $request->statement_closing_date)
             ->where('balance', $request->balance)
             ->delete();
 

@@ -178,11 +178,12 @@ The IB CSV parser (`parseIbCsv.ts`) extracts both transaction-level and statemen
 - Mark-to-Market Performance by symbol
 - Realized & Unrealized Performance summary
 
-Statement data is stored in dedicated tables linked to `fin_account_balance_snapshot`:
+Statement data is stored in dedicated tables linked to `fin_statements`:
 - `fin_statement_nav` - NAV breakdown
 - `fin_statement_cash_report` - Cash flow items
 - `fin_statement_positions` - Holdings snapshot
 - `fin_statement_performance` - P/L by symbol
+- `fin_statement_details` - Statement line items (MTD/YTD values)
 
 ### Unified Import Parser
 
@@ -218,7 +219,7 @@ PDF statements can be imported using Gemini AI for parsing. The flow is:
    - **Transactions**: Individual transaction entries
 4. User previews parsed data and clicks Import
 5. Frontend calls `StatementController::importPdfStatement()` to persist:
-   - Creates `fin_account_balance_snapshot` record
+   - Creates `fin_statements` record with statement_opening_date and statement_closing_date
    - Creates `fin_statement_details` records for MTD/YTD items
 
 ### API Endpoints
@@ -235,11 +236,26 @@ The `fin_statement_details` table stores MTD/YTD line items:
 ```sql
 CREATE TABLE fin_statement_details (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  snapshot_id INT NOT NULL,        -- FK to fin_account_balance_snapshot
-  label VARCHAR(255) NOT NULL,     -- e.g., "Interest", "Dividends", "Fees"
-  mtd_amount DECIMAL(15,2),        -- Month-to-date value
-  ytd_amount DECIMAL(15,2),        -- Year-to-date value
-  FOREIGN KEY (snapshot_id) REFERENCES fin_account_balance_snapshot(id)
+  statement_id INT NOT NULL,        -- FK to fin_statements
+  label VARCHAR(255) NOT NULL,      -- e.g., "Interest", "Dividends", "Fees"
+  mtd_amount DECIMAL(15,2),         -- Month-to-date value
+  ytd_amount DECIMAL(15,2),         -- Year-to-date value
+  FOREIGN KEY (statement_id) REFERENCES fin_statements(statement_id)
+);
+```
+
+### Statement Schema
+
+The `fin_statements` table stores account balance snapshots and statement metadata:
+
+```sql
+CREATE TABLE fin_statements (
+  statement_id INT AUTO_INCREMENT PRIMARY KEY,
+  acct_id INT NOT NULL,                  -- FK to fin_accounts
+  balance DECIMAL(15,2) NOT NULL,        -- Closing balance
+  statement_opening_date DATE,           -- Statement period start date
+  statement_closing_date DATE NOT NULL,  -- Statement period end date
+  FOREIGN KEY (acct_id) REFERENCES fin_accounts(acct_id)
 );
 ```
 

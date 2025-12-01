@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import currency from 'currency.js';
 
 interface AllDetails {
-  when_added: string;
+  statement_closing_date: string;
   section: string;
   line_item: string;
   statement_period_value: number;
