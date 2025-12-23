@@ -329,6 +329,8 @@ class ClientPortalApiController extends Controller
      */
     public function createTimeEntry(Request $request, $slug)
     {
+        Gate::authorize('Admin');
+        
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
         
         Gate::authorize('ClientCompanyMember', $company->id);
@@ -373,10 +375,61 @@ class ClientPortalApiController extends Controller
     }
 
     /**
+     * Update a time entry.
+     */
+    public function updateTimeEntry(Request $request, $slug, $entryId)
+    {
+        Gate::authorize('Admin');
+        
+        $company = ClientCompany::where('slug', $slug)->firstOrFail();
+        
+        Gate::authorize('ClientCompanyMember', $company->id);
+        
+        $entry = ClientTimeEntry::where('client_company_id', $company->id)->findOrFail($entryId);
+        
+        $validated = $request->validate([
+            'project_id' => 'sometimes|required|exists:client_projects,id',
+            'task_id' => 'nullable|exists:client_tasks,id',
+            'name' => 'nullable|string|max:255',
+            'time' => 'sometimes|required|string',
+            'date_worked' => 'sometimes|required|date',
+            'user_id' => 'nullable|exists:users,id',
+            'is_billable' => 'boolean',
+            'job_type' => 'nullable|string|max:255',
+        ]);
+        
+        if (isset($validated['project_id'])) {
+            // Verify project belongs to this company
+            ClientProject::where('id', $validated['project_id'])
+                         ->where('client_company_id', $company->id)
+                         ->firstOrFail();
+        }
+        
+        if (isset($validated['time'])) {
+            $minutes = ClientTimeEntry::parseTimeToMinutes($validated['time']);
+            if ($minutes <= 0) {
+                return response()->json(['errors' => ['time' => ['Invalid time format. Use h:mm or decimal hours.']]], 422);
+            }
+            $validated['minutes_worked'] = $minutes;
+            unset($validated['time']);
+        }
+        
+        if (isset($validated['name'])) {
+            $validated['name'] = $validated['name']; // Map 'name' to 'name' column (it's actually description in UI but name in DB)
+        }
+
+        $entry->update($validated);
+        
+        return response()->json($entry->load(['user:id,name,email', 'project:id,name,slug', 'task:id,name']));
+    }
+
+    /**
      * Delete a time entry.
      */
     public function deleteTimeEntry($slug, $entryId)
     {
+        Gate::authorize('Admin');
+        
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
         
         Gate::authorize('ClientCompanyMember', $company->id);

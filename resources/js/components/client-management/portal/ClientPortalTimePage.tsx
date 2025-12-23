@@ -95,9 +95,13 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
   const [data, setData] = useState<TimeEntriesResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [newEntryModalOpen, setNewEntryModalOpen] = useState(false)
+  const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null)
   const [projects, setProjects] = useState<Project[]>([])
   const [companyUsers, setCompanyUsers] = useState<User[]>([])
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
+
+  const isAdmin = currentUser?.id === 1 || currentUser?.user_role === 'Admin'
 
   useEffect(() => {
     document.title = `Time: ${companyName}`
@@ -107,6 +111,7 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
     fetchTimeEntries()
     fetchProjects()
     fetchCompanyUsers()
+    fetchCurrentUser()
   }, [slug])
 
   useEffect(() => {
@@ -115,6 +120,18 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
       setExpandedMonths(new Set([data.monthly_data[0].year_month]))
     }
   }, [data?.monthly_data])
+
+  const fetchCurrentUser = async () => {
+    try {
+      const response = await fetch('/api/user')
+      if (response.ok) {
+        const data = await response.json()
+        setCurrentUser(data)
+      }
+    } catch (error) {
+      console.error('Error fetching current user:', error)
+    }
+  }
 
   const fetchTimeEntries = async () => {
     try {
@@ -155,6 +172,7 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
   }
 
   const deleteTimeEntry = async (entryId: number) => {
+    if (!isAdmin) return
     if (!confirm('Delete this time entry?')) return
     
     try {
@@ -170,6 +188,19 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
       }
     } catch (error) {
       console.error('Error deleting time entry:', error)
+    }
+  }
+
+  const openEditModal = (entry: TimeEntry) => {
+    if (!isAdmin) return
+    setEditingEntry(entry)
+    setNewEntryModalOpen(true)
+  }
+
+  const handleModalClose = (open: boolean) => {
+    setNewEntryModalOpen(open)
+    if (!open) {
+      setEditingEntry(null)
     }
   }
 
@@ -232,10 +263,12 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
             <p className="text-sm text-muted-foreground">{companyName}</p>
             <h1 className="text-3xl font-bold">Time Tracking</h1>
           </div>
-          <Button onClick={() => setNewEntryModalOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Time Record
-          </Button>
+          {isAdmin && (
+            <Button onClick={() => setNewEntryModalOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              New Time Record
+            </Button>
+          )}
         </div>
       </div>
 
@@ -261,10 +294,12 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
             <Clock className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
             <h3 className="text-lg font-medium mb-2">No time entries yet</h3>
             <p className="text-muted-foreground mb-4">Start tracking your time</p>
-            <Button onClick={() => setNewEntryModalOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              New Time Record
-            </Button>
+            {isAdmin && (
+              <Button onClick={() => setNewEntryModalOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                New Time Record
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -344,7 +379,8 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
                             {entries.map(entry => (
                               <div 
                                 key={entry.id}
-                                className="flex items-center justify-between p-3 rounded-lg border bg-card"
+                                className={`flex items-center justify-between p-3 rounded-lg border bg-card ${isAdmin ? 'cursor-pointer hover:bg-muted/30 transition-colors' : ''}`}
+                                onClick={() => isAdmin && openEditModal(entry)}
                               >
                                 <div className="flex items-center gap-4">
                                   <span className="font-mono font-medium w-12">{entry.formatted_time}</span>
@@ -358,7 +394,8 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
                                   <div className="text-sm">
                                     {entry.project && (
                                       <a href={`/client/portal/${slug}/project/${entry.project.slug}`} 
-                                         className="text-blue-600 hover:underline">
+                                         className="text-blue-600 hover:underline"
+                                         onClick={(e) => e.stopPropagation()}>
                                         {entry.project.name}
                                       </a>
                                     )}
@@ -369,16 +406,18 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
                                   <Badge variant={entry.is_billable ? 'default' : 'secondary'} className="text-xs">
                                     {entry.is_billable ? 'BILLABLE' : 'NON-BILLABLE'}
                                   </Badge>
-                                  <Button 
-                                    variant="ghost" 
-                                    size="sm"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      deleteTimeEntry(entry.id)
-                                    }}
-                                  >
-                                    <Trash2 className="h-4 w-4 text-muted-foreground" />
-                                  </Button>
+                                  {isAdmin && (
+                                    <Button 
+                                      variant="ghost" 
+                                      size="sm"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        deleteTimeEntry(entry.id)
+                                      }}
+                                    >
+                                      <Trash2 className="h-4 w-4 text-muted-foreground" />
+                                    </Button>
+                                  )}
                                 </div>
                               </div>
                             ))}
@@ -445,11 +484,12 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
 
       <NewTimeEntryModal
         open={newEntryModalOpen}
-        onOpenChange={setNewEntryModalOpen}
+        onOpenChange={handleModalClose}
         slug={slug}
         projects={projects}
         users={companyUsers}
         onSuccess={fetchTimeEntries}
+        entry={editingEntry}
       />
     </div>
   )

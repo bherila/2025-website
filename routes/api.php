@@ -115,6 +115,7 @@ Route::middleware(['web', 'auth'])->put('/client/portal/{slug}/projects/{project
 Route::middleware(['web', 'auth'])->delete('/client/portal/{slug}/projects/{projectSlug}/tasks/{taskId}', [ClientPortalApiController::class, 'deleteTask']);
 Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/time-entries', [ClientPortalApiController::class, 'getTimeEntries']);
 Route::middleware(['web', 'auth'])->post('/client/portal/{slug}/time-entries', [ClientPortalApiController::class, 'createTimeEntry']);
+Route::middleware(['web', 'auth'])->put('/client/portal/{slug}/time-entries/{entryId}', [ClientPortalApiController::class, 'updateTimeEntry']);
 Route::middleware(['web', 'auth'])->delete('/client/portal/{slug}/time-entries/{entryId}', [ClientPortalApiController::class, 'deleteTimeEntry']);
 
 // Client Portal Agreement/Invoice API routes

@@ -18,6 +18,24 @@ interface Project {
   slug: string
 }
 
+interface Task {
+  id: number
+  name: string
+}
+
+interface TimeEntry {
+  id: number
+  name: string | null
+  minutes_worked: number
+  formatted_time: string
+  date_worked: string
+  is_billable: boolean
+  job_type: string
+  user: User | null
+  project: Project | null
+  task: Task | null
+}
+
 interface NewTimeEntryModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -25,9 +43,10 @@ interface NewTimeEntryModalProps {
   projects: Project[]
   users: User[]
   onSuccess: () => void
+  entry?: TimeEntry | null
 }
 
-export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, users, onSuccess }: NewTimeEntryModalProps) {
+export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, users, onSuccess, entry }: NewTimeEntryModalProps) {
   const [time, setTime] = useState('')
   const [description, setDescription] = useState('')
   const [projectId, setProjectId] = useState('')
@@ -47,19 +66,32 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
       .catch(error => console.error('Error fetching current user:', error))
   }, [])
 
-  // Automatically select current user if available and none selected
+  // Initialize state from entry if in edit mode
   useEffect(() => {
-    if (currentUser && !userId && users.some(u => u.id === currentUser.id)) {
-      setUserId(currentUser.id.toString())
+    if (entry && open) {
+      setTime(entry.formatted_time || '')
+      setDescription(entry.name || '')
+      setProjectId(entry.project?.id.toString() || '')
+      setUserId(entry.user?.id.toString() || '')
+      setDateWorked(entry.date_worked ? entry.date_worked.split(' ')[0]! : new Date().toISOString().split('T')[0])
+      setJobType(entry.job_type || 'Software Development')
+      setIsBillable(entry.is_billable ?? true)
+    } else if (open) {
+      // Reset for new entry
+      setTime('')
+      setDescription('')
+      setUserId(currentUser?.id.toString() || '')
+      setDateWorked(new Date().toISOString().split('T')[0])
+      setJobType('Software Development')
+      setIsBillable(true)
+      // Automatically select project if only one exists
+      if (projects.length === 1) {
+        setProjectId(projects[0]!.id.toString())
+      } else {
+        setProjectId('')
+      }
     }
-  }, [currentUser, users, userId])
-
-  // Automatically select project if only one exists
-  useEffect(() => {
-    if (projects.length === 1 && !projectId) {
-      setProjectId(projects[0]!.id.toString())
-    }
-  }, [projects, projectId])
+  }, [entry, open, currentUser, projects])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -69,8 +101,14 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
     setError(null)
     
     try {
-      const response = await fetch(`/api/client/portal/${slug}/time-entries`, {
-        method: 'POST',
+      const url = entry 
+        ? `/api/client/portal/${slug}/time-entries/${entry.id}`
+        : `/api/client/portal/${slug}/time-entries`
+      
+      const method = entry ? 'PUT' : 'POST'
+
+      const response = await fetch(url, {
+        method: method,
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -90,25 +128,18 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
       if (response.ok) {
         onSuccess()
         onOpenChange(false)
-        setTime('')
-        setDescription('')
-        setProjectId('')
-        setUserId('')
-        setDateWorked(new Date().toISOString().split('T')[0])
-        setJobType('Software Development')
-        setIsBillable(true)
       } else {
         const data = await response.json()
         if (data.errors) {
           const errorMessages = Object.values(data.errors).flat().join('; ')
           setError(errorMessages)
         } else {
-          setError(data.message || 'Failed to create time entry')
+          setError(data.message || `Failed to ${entry ? 'update' : 'create'} time entry`)
         }
       }
     } catch (error) {
-      console.error('Error creating time entry:', error)
-      setError('Failed to create time entry')
+      console.error(`Error ${entry ? 'updating' : 'creating'} time entry:`, error)
+      setError(`Failed to ${entry ? 'update' : 'create'} time entry`)
     } finally {
       setLoading(false)
     }
@@ -118,7 +149,7 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>New Time Record</DialogTitle>
+          <DialogTitle>{entry ? 'Edit Time Record' : 'New Time Record'}</DialogTitle>
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -137,7 +168,7 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
                 onChange={(e) => setTime(e.target.value)}
                 placeholder="1:30 or 1.5"
                 required
-                autoFocus
+                autoFocus={!entry}
               />
             </div>
             
@@ -234,7 +265,7 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
               Cancel
             </Button>
             <Button type="submit" disabled={loading || !time.trim() || !projectId}>
-              {loading ? 'Adding...' : 'Add Time Record'}
+              {loading ? 'Saving...' : (entry ? 'Save Changes' : 'Add Time Record')}
             </Button>
           </DialogFooter>
         </form>
