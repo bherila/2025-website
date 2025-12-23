@@ -25,10 +25,6 @@ export default function ClientPortalIndexPage({ slug, companyName }: ClientPorta
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [newProjectModalOpen, setNewProjectModalOpen] = useState(false)
-  const [currentUser, setCurrentUser] = useState<{ id: number, user_role: string | null } | null>(null)
-  const [companyId, setCompanyId] = useState<number | null>(null)
-
-  const isAdmin = currentUser?.id === 1 || currentUser?.user_role === 'Admin'
 
   useEffect(() => {
     document.title = `Client Home: ${companyName}`
@@ -36,33 +32,7 @@ export default function ClientPortalIndexPage({ slug, companyName }: ClientPorta
 
   useEffect(() => {
     fetchProjects()
-    fetchCurrentUser()
-    fetchCompanyData()
   }, [slug])
-
-  const fetchCurrentUser = async () => {
-    try {
-      const response = await fetch('/api/user')
-      if (response.ok) {
-        const data = await response.json()
-        setCurrentUser(data)
-      }
-    } catch (error) {
-      console.error('Error fetching current user:', error)
-    }
-  }
-
-  const fetchCompanyData = async () => {
-    try {
-      const response = await fetch(`/api/client/portal/${slug}`)
-      if (response.ok) {
-        const data = await response.json()
-        setCompanyId(data.id)
-      }
-    } catch (error) {
-      console.error('Error fetching company data:', error)
-    }
-  }
 
   const fetchProjects = async () => {
     try {
@@ -102,23 +72,6 @@ export default function ClientPortalIndexPage({ slug, companyName }: ClientPorta
 
   return (
     <div className="container mx-auto p-8 max-w-6xl">
-      {isAdmin && (
-        <div className="bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4 mb-8 flex justify-between items-center">
-          <div>
-            <h2 className="text-lg font-semibold flex items-center gap-2 text-slate-700 dark:text-slate-300">
-              <Plus className="h-5 w-5" /> Admin: Manage clients
-            </h2>
-          </div>
-          <Button 
-            variant="secondary" 
-            onClick={() => window.location.href = `/client/mgmt/${companyId}`}
-            disabled={!companyId}
-          >
-            Manage project
-          </Button>
-        </div>
-      )}
-
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-3xl font-bold">{companyName}</h1>
