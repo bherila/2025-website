@@ -16,6 +16,16 @@ interface Project {
   created_at: string
 }
 
+interface Agreement {
+  id: number
+  active_date: string
+  termination_date: string | null
+  client_company_signed_date: string | null
+  is_visible_to_client: boolean
+  monthly_retainer_hours: string
+  monthly_retainer_fee: string
+}
+
 interface ClientPortalIndexPageProps {
   slug: string
   companyName: string
@@ -23,6 +33,7 @@ interface ClientPortalIndexPageProps {
 
 export default function ClientPortalIndexPage({ slug, companyName }: ClientPortalIndexPageProps) {
   const [projects, setProjects] = useState<Project[]>([])
+  const [agreements, setAgreements] = useState<Agreement[]>([])
   const [loading, setLoading] = useState(true)
   const [newProjectModalOpen, setNewProjectModalOpen] = useState(false)
 
@@ -31,7 +42,12 @@ export default function ClientPortalIndexPage({ slug, companyName }: ClientPorta
   }, [companyName])
 
   useEffect(() => {
-    fetchProjects()
+    Promise.all([
+      fetchProjects(),
+      fetchAgreements()
+    ]).finally(() => {
+      setLoading(false)
+    })
   }, [slug])
 
   const fetchProjects = async () => {
@@ -43,8 +59,18 @@ export default function ClientPortalIndexPage({ slug, companyName }: ClientPorta
       }
     } catch (error) {
       console.error('Error fetching projects:', error)
-    } finally {
-      setLoading(false)
+    }
+  }
+
+  const fetchAgreements = async () => {
+    try {
+      const response = await fetch(`/api/client/portal/${slug}/agreements`)
+      if (response.ok) {
+        const data = await response.json()
+        setAgreements(data)
+      }
+    } catch (error) {
+      console.error('Error fetching agreements:', error)
     }
   }
 
@@ -120,6 +146,43 @@ export default function ClientPortalIndexPage({ slug, companyName }: ClientPorta
               </CardContent>
             </Card>
           ))}
+        </div>
+      )}
+
+      {agreements.length > 0 && (
+        <div className="mt-12">
+          <div className="flex items-center gap-2 mb-6 text-muted-foreground">
+            <Clock className="h-5 w-5" />
+            <h2 className="text-xl font-semibold text-foreground">Service Agreements</h2>
+          </div>
+          <div className="space-y-3">
+            {agreements.map(agreement => (
+              <Card key={agreement.id} className="hover:shadow-md transition-shadow cursor-pointer"
+                    onClick={() => window.location.href = `/client/portal/${slug}/agreement/${agreement.id}`}>
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">
+                        Agreement (Effective {new Date(agreement.active_date).toLocaleDateString()})
+                      </span>
+                      {agreement.client_company_signed_date ? (
+                        <Badge variant="default" className="bg-green-600">✓ Signed</Badge>
+                      ) : (
+                        <Badge variant="secondary">Awaiting Signature</Badge>
+                      )}
+                      {agreement.termination_date && (
+                        <Badge variant="destructive">Terminated</Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {agreement.monthly_retainer_hours} hrs/mo @ ${parseFloat(agreement.monthly_retainer_fee).toLocaleString()}/mo
+                    </p>
+                  </div>
+                  <Button variant="ghost" size="sm">View Agreement →</Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
       )}
 
