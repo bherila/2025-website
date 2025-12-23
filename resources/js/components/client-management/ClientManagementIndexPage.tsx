@@ -9,6 +9,13 @@ interface User {
   id: number
   name: string
   email: string
+  last_login_date: string | null
+}
+
+function formatLastLogin(lastLogin: string | null): string {
+  if (!lastLogin) return 'never logged in'
+  const date = new Date(lastLogin)
+  return `last login ${date.toLocaleDateString()}`
 }
 
 interface ClientCompany {
@@ -101,8 +108,9 @@ export default function ClientManagementIndexPage() {
               <CardContent className="pt-0">
                 <div className="flex flex-wrap gap-2">
                   {company.users.map(user => (
-                    <Badge key={user.id} variant="secondary">
-                      {user.name}
+                    <Badge key={user.id} variant="secondary" className="py-1">
+                      <span>{user.name}</span>
+                      <span className="ml-1 text-xs opacity-70">({formatLastLogin(user.last_login_date)})</span>
                     </Badge>
                   ))}
                 </div>

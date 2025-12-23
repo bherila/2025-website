@@ -4,7 +4,10 @@ namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Event;
 use App\Models\ClientManagement\ClientCompany;
+use App\Listeners\UpdateLastLoginDate;
+use Illuminate\Auth\Events\Login;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -21,6 +24,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Register login event listener
+        Event::listen(Login::class, UpdateLastLoginDate::class);
+
         Gate::define('Admin', function ($user) {
             return $user->id === 1 || $user->user_role === 'Admin';
         });

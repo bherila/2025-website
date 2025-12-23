@@ -85,7 +85,7 @@ class ClientCompanyApiController extends Controller
     {
         Gate::authorize('Admin');
         
-        $users = User::select('id', 'name', 'email')->orderBy('name')->get();
+        $users = User::select('id', 'name', 'email', 'last_login_date')->orderBy('name')->get();
         
         return response()->json($users);
     }
