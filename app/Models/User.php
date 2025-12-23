@@ -23,6 +23,7 @@ class User extends Authenticatable
         'email',
         'password',
         'gemini_api_key',
+        'user_role',
     ];
 
     /**

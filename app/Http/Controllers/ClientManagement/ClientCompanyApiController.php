@@ -89,4 +89,50 @@ class ClientCompanyApiController extends Controller
         
         return response()->json($users);
     }
+
+    /**
+     * Create a new user and assign them to a client company.
+     */
+    public function createUserAndAssign(Request $request)
+    {
+        Gate::authorize('Admin');
+        
+        $validatedData = $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email',
+            'client_company_id' => 'required|exists:client_companies,id',
+        ]);
+        
+        try {
+            DB::beginTransaction();
+            
+            // Create user with random password
+            $user = User::create([
+                'name' => $validatedData['name'],
+                'email' => $validatedData['email'],
+                'password' => Hash::make(Str::random(32)),
+                'user_role' => null, // null role by default
+            ]);
+            
+            // Assign to client company
+            $company = ClientCompany::findOrFail($validatedData['client_company_id']);
+            $company->users()->attach($user->id);
+            $company->touchLastActivity();
+            
+            DB::commit();
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'User created and assigned successfully',
+                'user' => $user,
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to create user: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
 }
