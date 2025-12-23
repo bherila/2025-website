@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -37,6 +37,29 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
   const [isBillable, setIsBillable] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
+
+  // Fetch current user
+  useEffect(() => {
+    fetch('/api/user')
+      .then(response => response.json())
+      .then(data => setCurrentUser(data))
+      .catch(error => console.error('Error fetching current user:', error))
+  }, [])
+
+  // Automatically select current user if available and none selected
+  useEffect(() => {
+    if (currentUser && !userId && users.some(u => u.id === currentUser.id)) {
+      setUserId(currentUser.id.toString())
+    }
+  }, [currentUser, users, userId])
+
+  // Automatically select project if only one exists
+  useEffect(() => {
+    if (projects.length === 1 && !projectId) {
+      setProjectId(projects[0]!.id.toString())
+    }
+  }, [projects, projectId])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

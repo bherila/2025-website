@@ -4,10 +4,11 @@ namespace App\Models\ClientManagement;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Traits\SerializesDatesAsLocal;
 
 class ClientInvoice extends Model
 {
-    use SoftDeletes;
+    use SoftDeletes, SerializesDatesAsLocal;
 
     protected $table = 'client_invoices';
     protected $primaryKey = 'client_invoice_id';

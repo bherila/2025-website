@@ -8,6 +8,7 @@ use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientProject;
 use App\Models\ClientManagement\ClientTask;
 use App\Models\ClientManagement\ClientTimeEntry;
+use App\Models\User;
 use App\Services\ClientManagement\RolloverCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -20,11 +21,16 @@ class ClientPortalApiController extends Controller
      */
     public function getCompany($slug)
     {
-        $company = ClientCompany::where('slug', $slug)->with('users')->firstOrFail();
+        $company = ClientCompany::where('slug', $slug)->firstOrFail();
         
         Gate::authorize('ClientCompanyMember', $company->id);
         
-        return response()->json($company);
+        $companyData = $company->toArray();
+        $companyUsers = $company->users;
+        $adminUsers = User::where('user_role', 'Admin')->get();
+        $companyData['users'] = $companyUsers->merge($adminUsers)->unique('id')->values();
+        
+        return response()->json($companyData);
     }
 
     /**
