@@ -4,6 +4,7 @@ import { Laptop, Moon, Sun, ChevronDown } from 'lucide-react';
 
 type NavbarProps = {
   authenticated: boolean;
+  isAdmin: boolean;
 };
 
 type ThemeMode = 'system' | 'dark' | 'light';
@@ -15,7 +16,7 @@ function applyTheme(mode: ThemeMode) {
   root.classList.toggle('dark', isDark);
 }
 
-export default function Navbar({ authenticated }: NavbarProps) {
+export default function Navbar({ authenticated, isAdmin }: NavbarProps) {
   const [toolsOpen, setToolsOpen] = useState(false);
   const toolsRef = useRef<HTMLLIElement | null>(null);
   const [theme, setTheme] = useState<ThemeMode>(() => (localStorage.getItem('theme') as ThemeMode) || 'system');
@@ -73,6 +74,12 @@ export default function Navbar({ authenticated }: NavbarProps) {
                 <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/rsu'>Finance RSU</a>
                 <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/payslips'>Finance Payslips</a>
                 <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/accounts'>Finance Accounts</a>
+                {isAdmin && (
+                  <>
+                    <div className='px-2 pt-3 pb-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]'>Admin</div>
+                    <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/client/mgmt'>Client Management</a>
+                  </>
+                )}
                 <div className='px-2 pt-3 pb-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]'>Utilities</div>
                 <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/tools/maxmin'>MaxMin</a>
                 <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/tools/license-manager'>License Manager</a>

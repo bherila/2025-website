@@ -8,9 +8,10 @@ This is a hybrid Laravel 12 + React TypeScript application for personal finance 
 - **Frontend**: React components mount into DOM elements using `createRoot`
 - **Data Flow**: Blade passes initial data via `data-*` attributes; React handles UI updates via API calls
 - **API**: RESTful endpoints under `/api` for CRUD operations
-- **Domain**: Financial accounts, transactions, statements, payslips, RSUs, and CSV imports
-- **Modules**: Finance (accounts, transactions, statements, payslips, RSUs), Tools (license manager, bingo, IRS F461, maxmin), Recipes, Projects
+- **Domain**: Financial accounts, transactions, statements, payslips, RSUs, CSV imports, and client management
+- **Modules**: Finance (accounts, transactions, statements, payslips, RSUs), Tools (license manager, bingo, IRS F461, maxmin), Recipes, Projects, Client Management
 - **Authentication**: Session-based; protected routes use `auth` middleware (web routes) or `['web', 'auth']` (API routes)
+- **Authorization**: Gate-based authorization for admin-only features (e.g., Client Management uses 'Admin' gate)
 
 ### Example Pattern
 ```php
@@ -37,12 +38,14 @@ if (div) {
 - **Build**: `npm run build` for production assets
 
 ## Key Conventions
-- **Models**: Use Eloquent relationships (e.g., `FinAccountLineItems` belongs to `FinAccounts`)
+- **Models**: Use Eloquent relationships (e.g., `FinAccountLineItems` belongs to `FinAccounts`); organize domain-specific models in subdirectories (e.g., `app/Models/ClientManagement/`)
+- **Controllers**: Organize in subdirectories for complex features (e.g., `app/Http/Controllers/ClientManagement/`)
 - **Routes**: Web routes (`routes/web.php`) return Blade views for pages; API routes (`routes/api.php`) handle data operations with `['web', 'auth']` middleware
 - **Components**: Use shadcn/ui + Radix UI primitives with Tailwind CSS
 - **Imports**: CSV parsing for financial data (IB, Fidelity schemas in `docs/`)
 - **State**: Client-side state managed in React; server state via API calls
 - **Auth**: Session-based with `auth` middleware on protected routes
+- **Gates**: Use Laravel Gates for authorization (e.g., `Gate::authorize('Admin')` for admin-only actions)
 
 ## Common Patterns
 - **Transaction CRUD**: API endpoints like `/api/finance/{account_id}/line_items` for GET/POST/DELETE
@@ -52,13 +55,16 @@ if (div) {
 - **File Uploads**: Handle CSV imports with validation and parsing logic
 
 ## File Structure Highlights
-- `app/Models/`: Eloquent models with relationships
+- `app/Models/`: Eloquent models with relationships (organized in subdirectories for complex domains)
+- `app/Http/Controllers/`: Controllers (organized in subdirectories for complex features)
 - `resources/views/finance/`: Blade templates with React mount points
+- `resources/views/client-management/`: Client management Blade templates
 - `resources/js/components/finance/`: React components for finance features
+- `resources/js/components/client-management/`: React components for client management
 - `resources/js/navbar.tsx`: Main navigation component with module links
 - `routes/api.php`: Finance API endpoints
 - `routes/web.php`: Web routes for pages
-- `docs/`: Import schemas and data formats
+- `docs/`: Import schemas, data formats, and feature documentation
 - `training_data/`: Sample CSV files for testing imports
 
 Focus on financial data integrity, proper error handling for imports, and maintaining relationships between accounts, transactions, and statements.</content>

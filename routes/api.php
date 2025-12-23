@@ -11,6 +11,8 @@ use App\Http\Controllers\PayslipController;
 use App\Http\Controllers\PayslipImportController;
 use App\Http\Controllers\RsuController;
 use App\Http\Controllers\StatementController;
+use App\Http\Controllers\ClientManagement\ClientCompanyUserController;
+use App\Http\Controllers\ClientManagement\ClientCompanyApiController;
 
 Route::middleware(['web', 'auth'])->get('/finance/accounts', [FinanceApiController::class, 'accounts']);
 Route::middleware(['web', 'auth'])->post('/finance/accounts', [FinanceApiController::class, 'createAccount']);
@@ -70,3 +72,11 @@ Route::middleware(['web', 'auth'])->post('/finance/{account_id}/import-pdf-state
 Route::middleware(['web', 'auth'])->post('/user/update-api-key', [App\Http\Controllers\UserApiController::class, 'updateApiKey']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/duplicates', [FinanceTransactionsDedupeApiController::class, 'findDuplicates']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/merge-duplicates', [FinanceTransactionsDedupeApiController::class, 'mergeDuplicates']);
+
+// Client Management API routes
+Route::middleware(['web', 'auth'])->get('/client/mgmt/companies', [ClientCompanyApiController::class, 'index']);
+Route::middleware(['web', 'auth'])->get('/client/mgmt/companies/{id}', [ClientCompanyApiController::class, 'show']);
+Route::middleware(['web', 'auth'])->put('/client/mgmt/companies/{id}', [ClientCompanyApiController::class, 'update']);
+Route::middleware(['web', 'auth'])->get('/client/mgmt/users', [ClientCompanyApiController::class, 'getUsers']);
+Route::middleware(['web', 'auth'])->post('/client/mgmt/assign-user', [ClientCompanyUserController::class, 'store']);
+Route::middleware(['web', 'auth'])->delete('/client/mgmt/{companyId}/users/{userId}', [ClientCompanyUserController::class, 'destroy']);

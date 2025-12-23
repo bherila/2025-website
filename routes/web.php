@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\FinanceAccountsController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\PayslipController;
+use App\Http\Controllers\ClientManagement\ClientCompanyController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -48,6 +49,13 @@ Route::middleware('auth')->group(function () {
     Route::get('/tools/license-manager', function () {
         return view('tools.license-manager');
     });
+
+    // Client Management Routes
+    Route::get('/client/mgmt', [ClientCompanyController::class, 'index'])->name('client-management.index');
+    Route::get('/client/mgmt/new', [ClientCompanyController::class, 'create'])->name('client-management.create');
+    Route::post('/client/mgmt', [ClientCompanyController::class, 'store'])->name('client-management.store');
+    Route::get('/client/mgmt/{id}', [ClientCompanyController::class, 'show'])->name('client-management.show');
+    Route::delete('/client/mgmt/{id}', [ClientCompanyController::class, 'destroy'])->name('client-management.destroy');
 });
 
 Route::get('/tools/bingo', [App\Http\Controllers\BingoController::class, 'index']);

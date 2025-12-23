@@ -6,6 +6,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use App\Models\ClientManagement\ClientCompany;
 
 class User extends Authenticatable
 {
@@ -50,5 +51,14 @@ class User extends Authenticatable
     public function getGeminiApiKey()
     {
         return $this->gemini_api_key;
+    }
+
+    /**
+     * Get the client companies this user is associated with.
+     */
+    public function clientCompanies()
+    {
+        return $this->belongsToMany(ClientCompany::class, 'client_company_user', 'user_id', 'client_company_id')
+                    ->withTimestamps();
     }
 }
