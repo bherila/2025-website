@@ -18,6 +18,7 @@ interface User {
 interface ClientCompany {
   id: number
   company_name: string
+  slug: string
   address: string | null
   website: string | null
   phone_number: string | null
@@ -45,6 +46,7 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
 
   const [formData, setFormData] = useState({
     company_name: '',
+    slug: '',
     address: '',
     website: '',
     phone_number: '',
@@ -78,6 +80,7 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
         setCompany(found)
         setFormData({
           company_name: found.company_name,
+          slug: found.slug || '',
           address: found.address || '',
           website: found.website || '',
           phone_number: found.phone_number || '',
@@ -211,6 +214,30 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
                     onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
                     required
                   />
+                </div>
+
+                <div className="col-span-2 space-y-2">
+                  <Label htmlFor="slug">Slug (URL identifier)</Label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">/client/portal/</span>
+                    <Input
+                      id="slug"
+                      value={formData.slug}
+                      onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+                      placeholder="company-slug"
+                      className="flex-1"
+                    />
+                  </div>
+                  {company?.slug && (
+                    <a 
+                      href={`/client/portal/${company.slug}`} 
+                      className="text-sm text-blue-600 hover:underline"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      View Client Portal →
+                    </a>
+                  )}
                 </div>
 
                 <div className="col-span-2 space-y-2">

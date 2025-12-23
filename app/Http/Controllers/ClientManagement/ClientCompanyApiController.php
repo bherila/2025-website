@@ -43,6 +43,7 @@ class ClientCompanyApiController extends Controller
         
         $validatedData = $request->validate([
             'company_name' => 'required|string|max:255',
+            'slug' => 'nullable|string|max:255',
             'address' => 'nullable|string',
             'website' => 'nullable|url',
             'phone_number' => 'nullable|string|max:255',
@@ -52,7 +53,20 @@ class ClientCompanyApiController extends Controller
         ]);
         
         $company = ClientCompany::findOrFail($id);
+        
+        // Validate slug uniqueness if provided and different
+        if (isset($validatedData['slug']) && $validatedData['slug'] !== $company->slug) {
+            $slug = ClientCompany::generateSlug($validatedData['slug']);
+            if (ClientCompany::where('slug', $slug)->where('id', '!=', $id)->exists()) {
+                return response()->json([
+                    'errors' => ['slug' => ['This slug is already in use by another company.']]
+                ], 422);
+            }
+            $validatedData['slug'] = $slug;
+        }
+        
         $company->update($validatedData);
+        $company->touchLastActivity();
         
         return response()->json([
             'success' => true,

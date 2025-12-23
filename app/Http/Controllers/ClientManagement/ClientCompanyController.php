@@ -40,8 +40,22 @@ class ClientCompanyController extends Controller
             'company_name' => 'required|string|max:255',
         ]);
 
+        // Generate slug from company name
+        $slug = ClientCompany::generateSlug($validated['company_name']);
+        
+        // Check if slug is unique
+        if (ClientCompany::where('slug', $slug)->exists()) {
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json([
+                    'errors' => ['slug' => ['A company with a similar name already exists. Please choose a different name.']]
+                ], 422);
+            }
+            return back()->withErrors(['slug' => 'A company with a similar name already exists.'])->withInput();
+        }
+
         $company = ClientCompany::create([
             'company_name' => $validated['company_name'],
+            'slug' => $slug,
             'is_active' => true,
             'last_activity' => now(),
         ]);

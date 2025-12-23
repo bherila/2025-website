@@ -5,6 +5,7 @@ use App\Http\Controllers\FinanceAccountsController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\PayslipController;
 use App\Http\Controllers\ClientManagement\ClientCompanyController;
+use App\Http\Controllers\ClientManagement\ClientPortalController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -56,6 +57,11 @@ Route::middleware('auth')->group(function () {
     Route::post('/client/mgmt', [ClientCompanyController::class, 'store'])->name('client-management.store');
     Route::get('/client/mgmt/{id}', [ClientCompanyController::class, 'show'])->name('client-management.show');
     Route::delete('/client/mgmt/{id}', [ClientCompanyController::class, 'destroy'])->name('client-management.destroy');
+
+    // Client Portal Routes
+    Route::get('/client/portal/{slug}', [ClientPortalController::class, 'index'])->name('client-portal.index');
+    Route::get('/client/portal/{slug}/time', [ClientPortalController::class, 'time'])->name('client-portal.time');
+    Route::get('/client/portal/{slug}/project/{projectSlug}', [ClientPortalController::class, 'project'])->name('client-portal.project');
 });
 
 Route::get('/tools/bingo', [App\Http\Controllers\BingoController::class, 'index']);

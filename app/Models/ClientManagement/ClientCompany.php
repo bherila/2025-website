@@ -12,6 +12,7 @@ class ClientCompany extends Model
 
     protected $fillable = [
         'company_name',
+        'slug',
         'address',
         'website',
         'phone_number',
@@ -28,12 +29,33 @@ class ClientCompany extends Model
     ];
 
     /**
+     * Generate a slug from a company name.
+     * Converts to lowercase, replaces non a-z characters with dashes, collapses consecutive dashes.
+     */
+    public static function generateSlug(string $name): string
+    {
+        $slug = strtolower($name);
+        $slug = preg_replace('/[^a-z0-9]+/', '-', $slug);
+        $slug = preg_replace('/-+/', '-', $slug);
+        $slug = trim($slug, '-');
+        return $slug;
+    }
+
+    /**
      * Get the users associated with this client company.
      */
     public function users()
     {
         return $this->belongsToMany(User::class, 'client_company_user', 'client_company_id', 'user_id')
                     ->withTimestamps();
+    }
+
+    /**
+     * Get the projects associated with this client company.
+     */
+    public function projects()
+    {
+        return $this->hasMany(Project::class, 'client_company_id');
     }
 
     /**

@@ -1,0 +1,114 @@
+<?php
+
+namespace App\Models\ClientManagement;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Models\User;
+
+class TimeEntry extends Model
+{
+    use SoftDeletes;
+
+    protected $table = 'client_time_entries';
+
+    protected $fillable = [
+        'project_id',
+        'client_company_id',
+        'task_id',
+        'name',
+        'minutes_worked',
+        'date_worked',
+        'user_id',
+        'creator_user_id',
+        'is_billable',
+        'job_type',
+    ];
+
+    protected $casts = [
+        'date_worked' => 'date',
+        'is_billable' => 'boolean',
+        'minutes_worked' => 'integer',
+    ];
+
+    /**
+     * Parse a time string like "1:30" or "1.5" into minutes.
+     */
+    public static function parseTimeToMinutes(string $timeString): int
+    {
+        $timeString = trim($timeString);
+        
+        // Check for h:mm format
+        if (preg_match('/^(\d+):(\d{1,2})$/', $timeString, $matches)) {
+            $hours = (int) $matches[1];
+            $minutes = (int) $matches[2];
+            return ($hours * 60) + $minutes;
+        }
+        
+        // Check for decimal hours format (e.g., 1.5)
+        if (is_numeric($timeString)) {
+            $hours = (float) $timeString;
+            return (int) round($hours * 60);
+        }
+        
+        return 0;
+    }
+
+    /**
+     * Format minutes as h:mm string.
+     */
+    public static function formatMinutesAsTime(int $minutes): string
+    {
+        $hours = floor($minutes / 60);
+        $mins = $minutes % 60;
+        return sprintf('%d:%02d', $hours, $mins);
+    }
+
+    /**
+     * Get the project this time entry belongs to.
+     */
+    public function project()
+    {
+        return $this->belongsTo(Project::class, 'project_id');
+    }
+
+    /**
+     * Get the client company this time entry belongs to.
+     */
+    public function clientCompany()
+    {
+        return $this->belongsTo(ClientCompany::class, 'client_company_id');
+    }
+
+    /**
+     * Get the task this time entry is associated with.
+     */
+    public function task()
+    {
+        return $this->belongsTo(Task::class, 'task_id');
+    }
+
+    /**
+     * Get the user who did the work.
+     */
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    /**
+     * Get the user who created this time entry.
+     */
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'creator_user_id');
+    }
+
+    /**
+     * Get the formatted time string.
+     */
+    public function getFormattedTimeAttribute(): string
+    {
+        return self::formatMinutesAsTime($this->minutes_worked);
+    }
+}

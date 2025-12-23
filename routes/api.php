@@ -13,6 +13,7 @@ use App\Http\Controllers\RsuController;
 use App\Http\Controllers\StatementController;
 use App\Http\Controllers\ClientManagement\ClientCompanyUserController;
 use App\Http\Controllers\ClientManagement\ClientCompanyApiController;
+use App\Http\Controllers\ClientManagement\ClientPortalApiController;
 
 Route::middleware(['web', 'auth'])->get('/finance/accounts', [FinanceApiController::class, 'accounts']);
 Route::middleware(['web', 'auth'])->post('/finance/accounts', [FinanceApiController::class, 'createAccount']);
@@ -80,3 +81,15 @@ Route::middleware(['web', 'auth'])->put('/client/mgmt/companies/{id}', [ClientCo
 Route::middleware(['web', 'auth'])->get('/client/mgmt/users', [ClientCompanyApiController::class, 'getUsers']);
 Route::middleware(['web', 'auth'])->post('/client/mgmt/assign-user', [ClientCompanyUserController::class, 'store']);
 Route::middleware(['web', 'auth'])->delete('/client/mgmt/{companyId}/users/{userId}', [ClientCompanyUserController::class, 'destroy']);
+
+// Client Portal API routes
+Route::middleware(['web', 'auth'])->get('/client/portal/{slug}', [ClientPortalApiController::class, 'getCompany']);
+Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/projects', [ClientPortalApiController::class, 'getProjects']);
+Route::middleware(['web', 'auth'])->post('/client/portal/{slug}/projects', [ClientPortalApiController::class, 'createProject']);
+Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/projects/{projectSlug}/tasks', [ClientPortalApiController::class, 'getTasks']);
+Route::middleware(['web', 'auth'])->post('/client/portal/{slug}/projects/{projectSlug}/tasks', [ClientPortalApiController::class, 'createTask']);
+Route::middleware(['web', 'auth'])->put('/client/portal/{slug}/projects/{projectSlug}/tasks/{taskId}', [ClientPortalApiController::class, 'updateTask']);
+Route::middleware(['web', 'auth'])->delete('/client/portal/{slug}/projects/{projectSlug}/tasks/{taskId}', [ClientPortalApiController::class, 'deleteTask']);
+Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/time-entries', [ClientPortalApiController::class, 'getTimeEntries']);
+Route::middleware(['web', 'auth'])->post('/client/portal/{slug}/time-entries', [ClientPortalApiController::class, 'createTimeEntry']);
+Route::middleware(['web', 'auth'])->delete('/client/portal/{slug}/time-entries/{entryId}', [ClientPortalApiController::class, 'deleteTimeEntry']);
