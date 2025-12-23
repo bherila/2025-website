@@ -15,6 +15,16 @@ interface User {
   email: string
 }
 
+interface Agreement {
+  id: number
+  active_date: string
+  termination_date: string | null
+  client_company_signed_date: string | null
+  is_visible_to_client: boolean
+  monthly_retainer_hours: string
+  monthly_retainer_fee: string
+}
+
 interface ClientCompany {
   id: number
   company_name: string
@@ -28,6 +38,7 @@ interface ClientCompany {
   last_activity: string | null
   created_at: string
   users: User[]
+  agreements: Agreement[]
 }
 
 interface ClientManagementShowPageProps {
@@ -153,6 +164,42 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
     } catch (error) {
       console.error('Error removing user:', error)
       setAlertInfo({ show: true, message: 'Failed to remove user', variant: 'destructive' })
+    }
+  }
+
+  const handleCreateAgreement = async () => {
+    setSaving(true)
+    try {
+      const formData = new FormData()
+      formData.append('client_company_id', companyId.toString())
+      
+      const response = await fetch('/client/mgmt/agreement', {
+        method: 'POST',
+        headers: {
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+          'Accept': 'application/json' // We want to handle the redirect ourselves if possible or just let it redirect
+        },
+        body: formData
+      })
+
+      if (response.redirected) {
+        window.location.href = response.url
+      } else if (response.ok) {
+        // If it didn't redirect but was successful, we might need to find the new agreement ID
+        // But the controller always redirects.
+        const text = await response.text()
+        // If we got HTML back, it might be the page it redirected to but fetch followed it.
+        if (response.url) {
+            window.location.href = response.url
+        }
+      } else {
+        throw new Error('Failed to create agreement')
+      }
+    } catch (error) {
+      console.error('Error creating agreement:', error)
+      setAlertInfo({ show: true, message: 'Failed to create agreement', variant: 'destructive' })
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -350,6 +397,55 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
             <p className="text-sm text-muted-foreground mt-4">
               Use "Invite People" from the main list page to add users to this company.
             </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <div>
+              <CardTitle>Agreements</CardTitle>
+            </div>
+            <Button size="sm" onClick={handleCreateAgreement} disabled={saving}>
+              Create New Agreement
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {company.agreements.length === 0 ? (
+              <p className="text-muted-foreground text-sm">No agreements found for this company.</p>
+            ) : (
+              <div className="space-y-3">
+                {company.agreements.map(agreement => (
+                  <div 
+                    key={agreement.id} 
+                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 cursor-pointer"
+                    onClick={() => window.location.href = `/client/mgmt/agreement/${agreement.id}`}
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">
+                          {new Date(agreement.active_date).toLocaleDateString()}
+                        </span>
+                        {agreement.client_company_signed_date ? (
+                          <Badge variant="default" className="bg-green-600">Signed</Badge>
+                        ) : (
+                          <Badge variant="secondary">Draft</Badge>
+                        )}
+                        {agreement.termination_date && (
+                          <Badge variant="destructive">Terminated</Badge>
+                        )}
+                        {agreement.is_visible_to_client && (
+                          <Badge variant="outline">Visible to Client</Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {agreement.monthly_retainer_hours} hrs/mo @ ${agreement.monthly_retainer_fee}/mo
+                      </p>
+                    </div>
+                    <Button variant="ghost" size="sm">View →</Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 

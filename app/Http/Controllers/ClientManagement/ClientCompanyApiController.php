@@ -32,7 +32,7 @@ class ClientCompanyApiController extends Controller
     {
         Gate::authorize('Admin');
         
-        $company = ClientCompany::with('users')->findOrFail($id);
+        $company = ClientCompany::with(['users', 'agreements'])->findOrFail($id);
         
         return response()->json($company);
     }
