@@ -136,6 +136,7 @@ class ClientInvoicingService
             // Line 1: Monthly retainer fee (always)
             $retainerLine = ClientInvoiceLine::create([
                 'client_invoice_id' => $invoice->client_invoice_id,
+                'client_agreement_id' => $agreement->id,
                 'description' => "Monthly Retainer ({$agreement->monthly_retainer_hours} hours)",
                 'quantity' => 1,
                 'unit_price' => $agreement->monthly_retainer_fee,
@@ -153,6 +154,7 @@ class ClientInvoicingService
             if ($calculation['hours_billed_at_rate'] > 0) {
                 $additionalHoursLine = ClientInvoiceLine::create([
                     'client_invoice_id' => $invoice->client_invoice_id,
+                    'client_agreement_id' => $agreement->id,
                     'description' => "Additional Hours @ \${$agreement->hourly_rate}/hr",
                     'quantity' => $calculation['hours_billed_at_rate'],
                     'unit_price' => $agreement->hourly_rate,
@@ -170,6 +172,7 @@ class ClientInvoicingService
             if ($calculation['rollover_hours_used'] > 0) {
                 ClientInvoiceLine::create([
                     'client_invoice_id' => $invoice->client_invoice_id,
+                    'client_agreement_id' => $agreement->id,
                     'description' => "Rollover Hours Applied (from previous months)",
                     'quantity' => $calculation['rollover_hours_used'],
                     'unit_price' => 0,
@@ -404,6 +407,7 @@ class ClientInvoicingService
                     'quantity' => 1,
                     'unit_price' => (float) $agreement->monthly_retainer_fee,
                     'total' => $retainerTotal,
+                    'client_agreement_id' => $agreement->id,
                 ],
                 ...(
                     $calculation['hours_billed_at_rate'] > 0 ? [[
@@ -411,6 +415,7 @@ class ClientInvoicingService
                         'quantity' => $calculation['hours_billed_at_rate'],
                         'unit_price' => (float) $agreement->hourly_rate,
                         'total' => $additionalHoursTotal,
+                        'client_agreement_id' => $agreement->id,
                     ]] : []
                 ),
             ],

@@ -341,7 +341,11 @@ export default function ClientAgreementShowPage({ agreementId, companyId, compan
         </CardContent>
         {isEditable && (
           <CardFooter className="flex justify-between">
-            <Button variant="destructive" onClick={handleDelete}>
+            <Button 
+              variant="destructive" 
+              onClick={handleDelete}
+              disabled={isSigned}
+            >
               Delete Agreement
             </Button>
             <Button onClick={handleSave} disabled={saving}>

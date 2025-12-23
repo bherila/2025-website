@@ -15,6 +15,7 @@ class ClientInvoiceLine extends Model
 
     protected $fillable = [
         'client_invoice_id',
+        'client_agreement_id',
         'description',
         'quantity',
         'unit_price',
@@ -38,6 +39,14 @@ class ClientInvoiceLine extends Model
     public function invoice()
     {
         return $this->belongsTo(ClientInvoice::class, 'client_invoice_id', 'client_invoice_id');
+    }
+
+    /**
+     * Get the agreement this line is associated with.
+     */
+    public function agreement()
+    {
+        return $this->belongsTo(ClientAgreement::class, 'client_agreement_id');
     }
 
     /**
