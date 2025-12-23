@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { X } from 'lucide-react'
+import { X, ArrowLeft, ExternalLink } from 'lucide-react'
 
 interface User {
   id: number
@@ -237,12 +237,24 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
       )}
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Client Company Details</h1>
-        <Button 
-          variant="outline" 
-          onClick={() => window.location.href = '/client/mgmt'}
-        >
-          Back to List
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            onClick={() => window.location.href = '/client/mgmt'}
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to List
+          </Button>
+          {company.slug && (
+            <Button
+              variant="outline"
+              onClick={() => window.location.href = `/client/portal/${company.slug}`}
+            >
+              <ExternalLink className="mr-2 h-4 w-4" />
+              View Client Portal
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="space-y-6">
@@ -279,8 +291,6 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
                     <a 
                       href={`/client/portal/${company.slug}`} 
                       className="text-sm text-blue-600 hover:underline"
-                      target="_blank"
-                      rel="noopener noreferrer"
                     >
                       View Client Portal →
                     </a>
