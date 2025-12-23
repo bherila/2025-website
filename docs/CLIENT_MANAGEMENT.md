@@ -305,10 +305,15 @@ Location: `resources/js/components/client-management/portal/`
 - Uses shadcn/ui Card, Button, Checkbox components
 
 **ClientPortalTimePage.tsx**
-- Time tracking interface
-- List of time entries
-- New Time Entry button
-- Uses shadcn/ui Card, Button, Table components
+- Time tracking interface with monthly groupings
+- Shows time entries grouped by month (most recent first)
+- Each month displays:
+  - **Opening Balance**: Retainer hours + rollover from previous months - expired hours
+  - **Time entries** with project, task, description, job type, hours
+  - **Closing Balance**: Unused hours available to roll over, excess hours to be invoiced
+- Color-coded balance indicators (green for positive, red for negative)
+- Collapsible month sections for better navigation
+- Uses shadcn/ui Card, Button, Table, Collapsible, Skeleton components
 
 **NewProjectModal.tsx**
 - Modal for creating new projects
@@ -378,11 +383,232 @@ The Client Management system is designed to support future features:
 - ✅ **Time Tracking**: Log hours worked per project/task with billable flag
 
 ### Planned Additions
-- **Billing**: Generate invoices based on time logs and hourly rates
 - **Expense Tracking**: Track project-related expenses
 - **Reporting**: Revenue per client, project profitability, time utilization, etc.
 - **File Attachments**: Upload files to projects and tasks
 - **Comments**: Add comments to tasks and time entries
+
+## Billing & Invoicing System
+
+### Database Schema
+
+#### `client_agreements` table
+Stores service agreement terms between the admin and client companies.
+- `client_agreement_id`: Primary key
+- `client_company_id`: Foreign key to `client_companies`
+- `active_date`: When the agreement becomes active (required)
+- `termination_date`: When the agreement ends (nullable)
+- `agreement_text`: Full agreement content (text, nullable)
+- `agreement_link`: URL to external agreement document (nullable)
+- `client_company_signed_date`: When client signed (nullable)
+- `client_company_signed_name`: Name of client signatory (nullable)
+- `client_company_signed_title`: Title of client signatory (nullable)
+- `client_company_signed_user_id`: User who signed for client (nullable)
+- `monthly_retainer_hours`: Hours included per month (decimal 8,2)
+- `rollover_months`: Number of months unused hours can roll over (default 0)
+- `hourly_rate`: Rate for hours beyond retainer (decimal 8,2)
+- `monthly_retainer_fee`: Fixed monthly fee (decimal 10,2)
+- `created_at`, `updated_at`: Timestamps
+
+#### `client_invoices` table
+Stores invoices generated for clients.
+- `client_invoice_id`: Primary key
+- `client_company_id`: Foreign key to `client_companies`
+- `client_agreement_id`: Foreign key to `client_agreements`
+- `invoice_number`: Unique invoice number (string, nullable)
+- `period_start`: Billing period start date
+- `period_end`: Billing period end date
+- `retainer_hours_included`: Hours included in retainer for this period (decimal 8,2)
+- `hours_worked`: Total hours worked in period (decimal 8,2)
+- `rollover_hours_used`: Hours from rollover applied (decimal 8,2)
+- `unused_hours_balance`: Hours remaining after period (decimal 8,2)
+- `negative_hours_balance`: Hours over retainer not covered by rollover (decimal 8,2)
+- `hours_billed_at_rate`: Hours charged at hourly rate (decimal 8,2)
+- `invoice_total`: Total invoice amount (decimal 10,2)
+- `status`: draft, issued, paid, void (enum, default draft)
+- `issue_date`: When invoice was issued (nullable)
+- `due_date`: Payment due date (nullable)
+- `paid_date`: When payment received (nullable)
+- `notes`: Internal or customer-facing notes (text, nullable)
+- `created_at`, `updated_at`: Timestamps
+
+#### `client_invoice_lines` table
+Individual line items on invoices.
+- `client_invoice_line_id`: Primary key
+- `client_invoice_id`: Foreign key to `client_invoices`
+- `description`: Line item description (required)
+- `quantity`: Quantity (decimal 10,4)
+- `unit_price`: Price per unit (decimal 10,2)
+- `line_total`: Calculated total (decimal 10,2)
+- `line_type`: retainer, hourly, expense, adjustment (string)
+- `hours`: Hours if applicable (decimal 8,2, nullable)
+- `created_at`, `updated_at`: Timestamps
+
+### Models
+
+#### `App\Models\ClientManagement\ClientAgreement`
+Location: `app/Models/ClientManagement/ClientAgreement.php`
+
+**Relationships:**
+- `clientCompany()`: Belongs to `ClientCompany`
+- `invoices()`: One-to-many relationship with `ClientInvoice`
+- `signedByUser()`: Belongs to `User` (client_company_signed_user_id)
+
+#### `App\Models\ClientManagement\ClientInvoice`
+Location: `app/Models/ClientManagement/ClientInvoice.php`
+
+**Relationships:**
+- `clientCompany()`: Belongs to `ClientCompany`
+- `agreement()`: Belongs to `ClientAgreement`
+- `lineItems()`: One-to-many relationship with `ClientInvoiceLine`
+
+#### `App\Models\ClientManagement\ClientInvoiceLine`
+Location: `app/Models/ClientManagement/ClientInvoiceLine.php`
+
+**Relationships:**
+- `invoice()`: Belongs to `ClientInvoice`
+
+### Services
+
+#### `App\Services\ClientManagement\RolloverCalculator`
+Location: `app/Services/ClientManagement/RolloverCalculator.php`
+
+Pure PHP class encapsulating all rollover hour calculation logic. Designed for testability and reuse.
+
+**Key Concepts:**
+- **Retainer Hours**: Monthly hours included in the service agreement
+- **Rollover Hours**: Unused hours from previous months that carry forward
+- **Rollover Months**: Number of months hours can roll over (0 = no rollover)
+- **Expired Hours**: Rollover hours that exceeded the rollover_months limit
+
+**Public Methods:**
+
+```php
+public function calculateOpeningBalance(array $monthlyData, string $yearMonth): array
+```
+Returns the opening balance for a given month:
+- `retainer_hours`: Hours included in current month
+- `rollover_hours`: Hours carried from previous months
+- `expired_hours`: Hours that expired (exceeded rollover_months limit)
+- `total_available`: retainer + rollover
+
+```php
+public function calculateClosingBalance(array $openingBalance, float $hoursWorked): array
+```
+Returns the closing balance after work:
+- `unused_hours`: Hours that can roll to next month
+- `excess_hours`: Hours beyond available (will be billed at hourly rate)
+- `status`: 'under' or 'over'
+
+```php
+public function calculateMonthSummary(array $monthlyData, string $yearMonth, float $hoursWorked): array
+```
+Combines opening and closing calculations for a complete month summary.
+
+```php
+public function calculateMultipleMonths(array $monthlyData): array
+```
+Processes all months chronologically, calculating opening and closing balances for each.
+
+**Rollover Logic:**
+
+The rollover calculation uses FIFO (First In, First Out) for tracking which hours expire:
+
+1. **rollover_months = 0**: No rollover; unused hours expire immediately
+2. **rollover_months = 1**: Hours can only be used in the month they're earned
+3. **rollover_months = 2**: Hours can roll over to the next month, then expire
+4. **rollover_months = 3+**: Hours can roll over for N-1 additional months
+
+**Example Scenarios:**
+
+| Scenario | Retainer | Worked | Rollover In | Result |
+|----------|----------|--------|-------------|--------|
+| Under retainer, no rollover | 10h | 8h | 0h | 2h unused, rolls over |
+| Over retainer, has rollover | 10h | 14h | 5h | Uses 4h rollover, 1h rollover remains |
+| Over retainer, insufficient rollover | 10h | 18h | 5h | Uses all 5h rollover, 3h billed extra |
+| Hours expire | 10h | 6h | 8h (3mo old) | 4h expire, 4h new unused |
+
+### Controllers
+
+#### `App\Http\Controllers\ClientManagement\ClientAgreementController`
+Web routes for managing agreements:
+- `index($companyId)`: List company agreements
+- `create($companyId)`: New agreement form
+- `store($companyId)`: Create agreement
+- `show($companyId, $agreementId)`: View/edit agreement
+
+#### `App\Http\Controllers\ClientManagement\ClientInvoiceController`
+Web routes for managing invoices:
+- `index($companyId)`: List company invoices
+- `show($companyId, $invoiceId)`: View/edit invoice
+- `create($companyId)`: Generate new invoice
+
+#### `App\Http\Controllers\ClientManagement\ClientInvoiceApiController`
+API endpoints for invoice operations:
+- `generateInvoice($companyId)`: Auto-generate invoice for billing period
+- `updateStatus($companyId, $invoiceId)`: Change invoice status
+
+### Unit Tests
+
+#### `tests/Unit/Services/ClientManagement/RolloverCalculatorTest.php`
+
+Comprehensive test suite with 25 tests covering all rollover scenarios:
+
+**Opening Balance Tests:**
+- `test_opening_balance_first_month_no_rollover`
+- `test_opening_balance_with_prior_months`
+- `test_opening_balance_with_expired_hours`
+
+**Closing Balance Tests:**
+- `test_closing_balance_under_retainer`
+- `test_closing_balance_exact_match`
+- `test_closing_balance_over_retainer`
+
+**Multiple Months Integration Tests:**
+- `test_multiple_months_case_a_uses_rollover`: Hours exceed retainer, rollover available
+- `test_multiple_months_case_b_exceeds_rollover`: Hours exceed both retainer + rollover
+- `test_multiple_months_case_c_unused_rolls_over`: Under retainer, accumulates balance
+- `test_multiple_months_case_d_no_rollover_allowed`: rollover_months=1 means no rollover
+
+**Edge Cases:**
+- Months with zero retainer hours
+- Very large rollover balances
+- Partial month usage
+- Mixed over/under months
+
+Run tests with:
+```bash
+vendor/bin/phpunit tests/Unit/Services/ClientManagement/RolloverCalculatorTest.php
+```
+
+### Portal API Enhancements
+
+The `getTimeEntries()` API now returns enhanced data for the monthly grouping UI:
+
+```json
+{
+  "time_entries": [...],
+  "monthly_data": {
+    "2025-01": {
+      "retainer_hours": 20,
+      "rollover_months": 3,
+      "hours_worked": 18.5,
+      "opening_balance": {
+        "retainer_hours": 20,
+        "rollover_hours": 5,
+        "expired_hours": 0,
+        "total_available": 25
+      },
+      "closing_balance": {
+        "unused_hours": 6.5,
+        "excess_hours": 0,
+        "status": "under"
+      }
+    },
+    ...
+  }
+}
+```
 
 ### Extensibility Considerations
 - Models and controllers organized in `ClientManagement` subdirectories
@@ -429,3 +655,28 @@ The Client Management system is designed to support future features:
 - [ ] Time entries associated with projects and tasks
 - [ ] Deleting a company cascades to projects, tasks, time entries
 - [ ] Deleting a project cascades to tasks, nullifies time entries
+
+### Billing Features
+- [ ] Agreements can be created with all required fields
+- [ ] Client can sign agreement through portal
+- [ ] Invoices calculate retainer hours correctly
+- [ ] Rollover hours calculated correctly across months
+- [ ] Expired hours calculated correctly based on rollover_months
+- [ ] Invoice line items generated with correct amounts
+- [ ] Invoice status transitions work (draft → issued → paid)
+- [ ] Portal shows invoices to client users
+
+### Time Page Monthly Grouping
+- [ ] Time entries grouped by month (most recent first)
+- [ ] Opening balance shows retainer + rollover - expired
+- [ ] Closing balance shows unused or excess hours
+- [ ] Color coding correct (green positive, red negative)
+- [ ] Month sections collapsible
+- [ ] Skeleton loading state displays correctly
+
+### Unit Tests (RolloverCalculator)
+- [x] 25 tests passing (run `vendor/bin/phpunit tests/Unit/Services/ClientManagement/`)
+- [x] Case A: Hours exceed retainer, rollover available
+- [x] Case B: Hours exceed retainer + rollover
+- [x] Case C: Hours under retainer, rollover accumulates
+- [x] Case D: rollover_months=1 means no rollover

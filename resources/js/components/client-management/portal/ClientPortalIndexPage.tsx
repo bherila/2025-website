@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Plus, Clock, FolderOpen } from 'lucide-react'
 import NewProjectModal from './NewProjectModal'
 
@@ -26,6 +27,10 @@ export default function ClientPortalIndexPage({ slug, companyName }: ClientPorta
   const [newProjectModalOpen, setNewProjectModalOpen] = useState(false)
 
   useEffect(() => {
+    document.title = `Client Home: ${companyName}`
+  }, [companyName])
+
+  useEffect(() => {
     fetchProjects()
   }, [slug])
 
@@ -44,7 +49,25 @@ export default function ClientPortalIndexPage({ slug, companyName }: ClientPorta
   }
 
   if (loading) {
-    return <div className="p-8">Loading...</div>
+    return (
+      <div className="container mx-auto p-8 max-w-6xl">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <Skeleton className="h-10 w-48 mb-2" />
+            <Skeleton className="h-4 w-24" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-32" />
+            <Skeleton className="h-10 w-32" />
+          </div>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-40 w-full" />
+        </div>
+      </div>
+    )
   }
 
   return (

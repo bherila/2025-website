@@ -2,6 +2,9 @@ import { createRoot } from 'react-dom/client'
 import ClientPortalIndexPage from '@/components/client-management/portal/ClientPortalIndexPage'
 import ClientPortalTimePage from '@/components/client-management/portal/ClientPortalTimePage'
 import ClientPortalProjectPage from '@/components/client-management/portal/ClientPortalProjectPage'
+import ClientPortalAgreementPage from '@/components/client-management/portal/ClientPortalAgreementPage'
+import ClientPortalInvoicesPage from '@/components/client-management/portal/ClientPortalInvoicesPage'
+import ClientPortalInvoicePage from '@/components/client-management/portal/ClientPortalInvoicePage'
 
 document.addEventListener('DOMContentLoaded', () => {
   const indexDiv = document.getElementById('ClientPortalIndexPage')
@@ -30,6 +33,35 @@ document.addEventListener('DOMContentLoaded', () => {
       companyName={projectDiv.dataset.companyName!}
       projectSlug={projectDiv.dataset.projectSlug!}
       projectName={projectDiv.dataset.projectName!}
+    />)
+  }
+
+  const agreementDiv = document.getElementById('ClientPortalAgreementPage')
+  if (agreementDiv) {
+    const root = createRoot(agreementDiv)
+    root.render(<ClientPortalAgreementPage 
+      slug={agreementDiv.dataset.slug!}
+      companyName={agreementDiv.dataset.companyName!}
+      agreementId={parseInt(agreementDiv.dataset.agreementId!)}
+    />)
+  }
+
+  const invoicesDiv = document.getElementById('ClientPortalInvoicesPage')
+  if (invoicesDiv) {
+    const root = createRoot(invoicesDiv)
+    root.render(<ClientPortalInvoicesPage 
+      slug={invoicesDiv.dataset.slug!}
+      companyName={invoicesDiv.dataset.companyName!}
+    />)
+  }
+
+  const invoiceDiv = document.getElementById('ClientPortalInvoicePage')
+  if (invoiceDiv) {
+    const root = createRoot(invoiceDiv)
+    root.render(<ClientPortalInvoicePage 
+      slug={invoiceDiv.dataset.slug!}
+      companyName={invoiceDiv.dataset.companyName!}
+      invoiceId={parseInt(invoiceDiv.dataset.invoiceId!)}
     />)
   }
 })

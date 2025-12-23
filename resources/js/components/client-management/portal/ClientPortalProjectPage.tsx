@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Plus, ArrowLeft, Check, Star, EyeOff } from 'lucide-react'
 import NewTaskModal from './NewTaskModal'
 
@@ -36,6 +37,10 @@ export default function ClientPortalProjectPage({ slug, companyName, projectSlug
   const [loading, setLoading] = useState(true)
   const [newTaskModalOpen, setNewTaskModalOpen] = useState(false)
   const [companyUsers, setCompanyUsers] = useState<User[]>([])
+
+  useEffect(() => {
+    document.title = `Project: ${projectName} | ${companyName}`
+  }, [projectName, companyName])
 
   useEffect(() => {
     fetchTasks()
@@ -92,7 +97,20 @@ export default function ClientPortalProjectPage({ slug, companyName, projectSlug
   const completedTasks = tasks.filter(t => t.completed_at)
 
   if (loading) {
-    return <div className="p-8">Loading...</div>
+    return (
+      <div className="container mx-auto p-8 max-w-4xl">
+        <Skeleton className="h-8 w-32 mb-4" />
+        <div className="mb-6">
+          <Skeleton className="h-4 w-24 mb-2" />
+          <Skeleton className="h-10 w-64" />
+        </div>
+        <div className="space-y-3">
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-16 w-full" />
+        </div>
+      </div>
+    )
   }
 
   return (

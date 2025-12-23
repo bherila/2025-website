@@ -55,7 +55,47 @@ class ClientCompany extends Model
      */
     public function projects()
     {
-        return $this->hasMany(Project::class, 'client_company_id');
+        return $this->hasMany(ClientProject::class, 'client_company_id');
+    }
+
+    /**
+     * Get the agreements associated with this client company.
+     */
+    public function agreements()
+    {
+        return $this->hasMany(ClientAgreement::class, 'client_company_id');
+    }
+
+    /**
+     * Get the currently active agreement.
+     */
+    public function activeAgreement()
+    {
+        $now = now();
+        return $this->agreements()
+            ->where('active_date', '<=', $now)
+            ->where(function ($query) use ($now) {
+                $query->whereNull('termination_date')
+                      ->orWhere('termination_date', '>', $now);
+            })
+            ->orderBy('active_date', 'desc')
+            ->first();
+    }
+
+    /**
+     * Get the invoices associated with this client company.
+     */
+    public function invoices()
+    {
+        return $this->hasMany(ClientInvoice::class, 'client_company_id');
+    }
+
+    /**
+     * Get time entries for this client company.
+     */
+    public function timeEntries()
+    {
+        return $this->hasMany(ClientTimeEntry::class, 'client_company_id');
     }
 
     /**

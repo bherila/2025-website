@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\User;
 
-class Project extends Model
+class ClientProject extends Model
 {
     use SoftDeletes;
 
@@ -54,7 +54,7 @@ class Project extends Model
      */
     public function tasks()
     {
-        return $this->hasMany(Task::class, 'project_id');
+        return $this->hasMany(ClientTask::class, 'project_id');
     }
 
     /**
@@ -62,6 +62,6 @@ class Project extends Model
      */
     public function timeEntries()
     {
-        return $this->hasMany(TimeEntry::class, 'project_id');
+        return $this->hasMany(ClientTimeEntry::class, 'project_id');
     }
 }

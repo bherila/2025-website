@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\User;
 
-class TimeEntry extends Model
+class ClientTimeEntry extends Model
 {
     use SoftDeletes;
 
@@ -23,6 +23,7 @@ class TimeEntry extends Model
         'creator_user_id',
         'is_billable',
         'job_type',
+        'client_invoice_line_id',
     ];
 
     protected $casts = [
@@ -69,7 +70,7 @@ class TimeEntry extends Model
      */
     public function project()
     {
-        return $this->belongsTo(Project::class, 'project_id');
+        return $this->belongsTo(ClientProject::class, 'project_id');
     }
 
     /**
@@ -85,7 +86,7 @@ class TimeEntry extends Model
      */
     public function task()
     {
-        return $this->belongsTo(Task::class, 'task_id');
+        return $this->belongsTo(ClientTask::class, 'task_id');
     }
 
     /**
@@ -102,6 +103,22 @@ class TimeEntry extends Model
     public function creator()
     {
         return $this->belongsTo(User::class, 'creator_user_id');
+    }
+
+    /**
+     * Get the invoice line this time entry is linked to.
+     */
+    public function invoiceLine()
+    {
+        return $this->belongsTo(ClientInvoiceLine::class, 'client_invoice_line_id', 'client_invoice_line_id');
+    }
+
+    /**
+     * Check if this time entry has been invoiced.
+     */
+    public function isInvoiced(): bool
+    {
+        return $this->client_invoice_line_id !== null;
     }
 
     /**

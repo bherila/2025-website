@@ -14,6 +14,8 @@ use App\Http\Controllers\StatementController;
 use App\Http\Controllers\ClientManagement\ClientCompanyUserController;
 use App\Http\Controllers\ClientManagement\ClientCompanyApiController;
 use App\Http\Controllers\ClientManagement\ClientPortalApiController;
+use App\Http\Controllers\ClientManagement\ClientAgreementApiController;
+use App\Http\Controllers\ClientManagement\ClientPortalAgreementApiController;
 
 Route::middleware(['web', 'auth'])->get('/finance/accounts', [FinanceApiController::class, 'accounts']);
 Route::middleware(['web', 'auth'])->post('/finance/accounts', [FinanceApiController::class, 'createAccount']);
@@ -83,6 +85,26 @@ Route::middleware(['web', 'auth'])->post('/client/mgmt/assign-user', [ClientComp
 Route::middleware(['web', 'auth'])->post('/client/mgmt/create-user-and-assign', [ClientCompanyApiController::class, 'createUserAndAssign']);
 Route::middleware(['web', 'auth'])->delete('/client/mgmt/{companyId}/users/{userId}', [ClientCompanyUserController::class, 'destroy']);
 
+// Client Agreement API routes (Admin)
+Route::middleware(['web', 'auth'])->get('/client/mgmt/companies/{companyId}/agreements', [ClientAgreementApiController::class, 'index']);
+Route::middleware(['web', 'auth'])->get('/client/mgmt/agreements/{id}', [ClientAgreementApiController::class, 'show']);
+Route::middleware(['web', 'auth'])->put('/client/mgmt/agreements/{id}', [ClientAgreementApiController::class, 'update']);
+Route::middleware(['web', 'auth'])->post('/client/mgmt/agreements/{id}/terminate', [ClientAgreementApiController::class, 'terminate']);
+Route::middleware(['web', 'auth'])->delete('/client/mgmt/agreements/{id}', [ClientAgreementApiController::class, 'destroy']);
+
+// Client Invoice API routes (Admin)
+Route::middleware(['web', 'auth'])->get('/client/mgmt/companies/{company}/invoices', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'index']);
+Route::middleware(['web', 'auth'])->get('/client/mgmt/companies/{company}/invoices/{invoice}', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'show']);
+Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices/preview', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'preview']);
+Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'store']);
+Route::middleware(['web', 'auth'])->put('/client/mgmt/companies/{company}/invoices/{invoice}', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'update']);
+Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices/{invoice}/issue', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'issue']);
+Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices/{invoice}/mark-paid', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'markPaid']);
+Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices/{invoice}/void', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'void']);
+Route::middleware(['web', 'auth'])->delete('/client/mgmt/companies/{company}/invoices/{invoice}', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'destroy']);
+Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices/{invoice}/line-items', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'addLineItem']);
+Route::middleware(['web', 'auth'])->delete('/client/mgmt/companies/{company}/invoices/{invoice}/line-items/{lineId}', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'removeLineItem']);
+
 // Client Portal API routes
 Route::middleware(['web', 'auth'])->get('/client/portal/{slug}', [ClientPortalApiController::class, 'getCompany']);
 Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/projects', [ClientPortalApiController::class, 'getProjects']);
@@ -94,3 +116,10 @@ Route::middleware(['web', 'auth'])->delete('/client/portal/{slug}/projects/{proj
 Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/time-entries', [ClientPortalApiController::class, 'getTimeEntries']);
 Route::middleware(['web', 'auth'])->post('/client/portal/{slug}/time-entries', [ClientPortalApiController::class, 'createTimeEntry']);
 Route::middleware(['web', 'auth'])->delete('/client/portal/{slug}/time-entries/{entryId}', [ClientPortalApiController::class, 'deleteTimeEntry']);
+
+// Client Portal Agreement/Invoice API routes
+Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/agreements', [ClientPortalAgreementApiController::class, 'index']);
+Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/agreements/{agreementId}', [ClientPortalAgreementApiController::class, 'show']);
+Route::middleware(['web', 'auth'])->post('/client/portal/{slug}/agreements/{agreementId}/sign', [ClientPortalAgreementApiController::class, 'sign']);
+Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/invoices', [ClientPortalAgreementApiController::class, 'getInvoices']);
+Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/invoices/{invoiceId}', [ClientPortalAgreementApiController::class, 'getInvoice']);

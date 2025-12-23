@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\User;
 
-class Task extends Model
+class ClientTask extends Model
 {
     use SoftDeletes;
 
@@ -34,7 +34,7 @@ class Task extends Model
      */
     public function project()
     {
-        return $this->belongsTo(Project::class, 'project_id');
+        return $this->belongsTo(ClientProject::class, 'project_id');
     }
 
     /**
@@ -58,7 +58,7 @@ class Task extends Model
      */
     public function timeEntries()
     {
-        return $this->hasMany(TimeEntry::class, 'task_id');
+        return $this->hasMany(ClientTimeEntry::class, 'task_id');
     }
 
     /**
@@ -79,9 +79,9 @@ class Task extends Model
     }
 
     /**
-     * Mark the task as incomplete.
+     * Mark the task as not completed.
      */
-    public function markIncomplete()
+    public function markNotCompleted()
     {
         $this->completed_at = null;
         $this->save();

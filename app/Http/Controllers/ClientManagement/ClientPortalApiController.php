@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\ClientManagement;
 
 use App\Http\Controllers\Controller;
+use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientCompany;
-use App\Models\ClientManagement\Project;
-use App\Models\ClientManagement\Task;
-use App\Models\ClientManagement\TimeEntry;
+use App\Models\ClientManagement\ClientProject;
+use App\Models\ClientManagement\ClientTask;
+use App\Models\ClientManagement\ClientTimeEntry;
+use App\Services\ClientManagement\RolloverCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
@@ -34,7 +36,7 @@ class ClientPortalApiController extends Controller
         
         Gate::authorize('ClientCompanyMember', $company->id);
         
-        $projects = Project::where('client_company_id', $company->id)
+        $projects = ClientProject::where('client_company_id', $company->id)
                           ->withCount(['tasks', 'timeEntries'])
                           ->orderBy('name')
                           ->get();
@@ -56,17 +58,17 @@ class ClientPortalApiController extends Controller
             'description' => 'nullable|string',
         ]);
         
-        $projectSlug = Project::generateSlug($validated['name']);
+        $projectSlug = ClientProject::generateSlug($validated['name']);
         
         // Ensure unique slug
         $baseSlug = $projectSlug;
         $counter = 1;
-        while (Project::where('slug', $projectSlug)->exists()) {
+        while (ClientProject::where('slug', $projectSlug)->exists()) {
             $projectSlug = $baseSlug . '-' . $counter;
             $counter++;
         }
         
-        $project = Project::create([
+        $project = ClientProject::create([
             'client_company_id' => $company->id,
             'name' => $validated['name'],
             'slug' => $projectSlug,
@@ -86,11 +88,11 @@ class ClientPortalApiController extends Controller
         
         Gate::authorize('ClientCompanyMember', $company->id);
         
-        $project = Project::where('slug', $projectSlug)
+        $project = ClientProject::where('slug', $projectSlug)
                          ->where('client_company_id', $company->id)
                          ->firstOrFail();
         
-        $tasks = Task::where('project_id', $project->id)
+        $tasks = ClientTask::where('project_id', $project->id)
                     ->with(['assignee:id,name,email', 'creator:id,name'])
                     ->orderByRaw('completed_at IS NOT NULL')
                     ->orderBy('is_high_priority', 'desc')
@@ -109,7 +111,7 @@ class ClientPortalApiController extends Controller
         
         Gate::authorize('ClientCompanyMember', $company->id);
         
-        $project = Project::where('slug', $projectSlug)
+        $project = ClientProject::where('slug', $projectSlug)
                          ->where('client_company_id', $company->id)
                          ->firstOrFail();
         
@@ -121,7 +123,7 @@ class ClientPortalApiController extends Controller
             'is_hidden_from_clients' => 'boolean',
         ]);
         
-        $task = Task::create([
+        $task = ClientTask::create([
             'project_id' => $project->id,
             'name' => $validated['name'],
             'description' => $validated['description'] ?? null,
@@ -143,11 +145,11 @@ class ClientPortalApiController extends Controller
         
         Gate::authorize('ClientCompanyMember', $company->id);
         
-        $project = Project::where('slug', $projectSlug)
+        $project = ClientProject::where('slug', $projectSlug)
                          ->where('client_company_id', $company->id)
                          ->firstOrFail();
         
-        $task = Task::where('project_id', $project->id)->findOrFail($taskId);
+        $task = ClientTask::where('project_id', $project->id)->findOrFail($taskId);
         
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
@@ -181,18 +183,18 @@ class ClientPortalApiController extends Controller
         
         Gate::authorize('ClientCompanyMember', $company->id);
         
-        $project = Project::where('slug', $projectSlug)
+        $project = ClientProject::where('slug', $projectSlug)
                          ->where('client_company_id', $company->id)
                          ->firstOrFail();
         
-        $task = Task::where('project_id', $project->id)->findOrFail($taskId);
+        $task = ClientTask::where('project_id', $project->id)->findOrFail($taskId);
         $task->delete();
         
         return response()->json(['success' => true]);
     }
 
     /**
-     * Get all time entries for a company (across all projects).
+     * Get all time entries for a company, grouped by month with hour balance info.
      */
     public function getTimeEntries($slug)
     {
@@ -200,7 +202,7 @@ class ClientPortalApiController extends Controller
         
         Gate::authorize('ClientCompanyMember', $company->id);
         
-        $entries = TimeEntry::where('client_company_id', $company->id)
+        $entries = ClientTimeEntry::where('client_company_id', $company->id)
                            ->with(['user:id,name,email', 'project:id,name,slug', 'task:id,name'])
                            ->orderBy('date_worked', 'desc')
                            ->orderBy('created_at', 'desc')
@@ -214,13 +216,103 @@ class ClientPortalApiController extends Controller
         $totalMinutes = $entries->sum('minutes_worked');
         $billableMinutes = $entries->where('is_billable', true)->sum('minutes_worked');
         
+        // Group entries by month and calculate rollover balances
+        $monthlyData = $this->calculateMonthlyBalances($company, $entries);
+        
         return response()->json([
             'entries' => $entries,
-            'total_time' => TimeEntry::formatMinutesAsTime($totalMinutes),
+            'monthly_data' => $monthlyData,
+            'total_time' => ClientTimeEntry::formatMinutesAsTime($totalMinutes),
             'total_minutes' => $totalMinutes,
-            'billable_time' => TimeEntry::formatMinutesAsTime($billableMinutes),
+            'billable_time' => ClientTimeEntry::formatMinutesAsTime($billableMinutes),
             'billable_minutes' => $billableMinutes,
         ]);
+    }
+
+    /**
+     * Calculate monthly hour balances with rollover information.
+     */
+    protected function calculateMonthlyBalances(ClientCompany $company, $entries): array
+    {
+        // Group entries by month
+        $entriesByMonth = $entries->groupBy(function ($entry) {
+            return $entry->date_worked->format('Y-m');
+        });
+
+        // Get the active agreement (or agreements over time)
+        $agreement = $company->activeAgreement();
+        
+        if (!$agreement) {
+            // No agreement - just return month groupings without balance calculations
+            return $entriesByMonth->map(function ($monthEntries, $yearMonth) {
+                $billableMinutes = $monthEntries->where('is_billable', true)->sum('minutes_worked');
+                return [
+                    'year_month' => $yearMonth,
+                    'has_agreement' => false,
+                    'entries_count' => $monthEntries->count(),
+                    'hours_worked' => round($billableMinutes / 60, 2),
+                    'formatted_hours' => ClientTimeEntry::formatMinutesAsTime($billableMinutes),
+                    'opening' => null,
+                    'closing' => null,
+                ];
+            })->values()->toArray();
+        }
+
+        // Build monthly hours data for calculator
+        $monthKeys = $entriesByMonth->keys()->sort()->values();
+        $months = [];
+        
+        foreach ($monthKeys as $yearMonth) {
+            $monthEntries = $entriesByMonth[$yearMonth];
+            $billableMinutes = $monthEntries->where('is_billable', true)->sum('minutes_worked');
+            
+            $months[] = [
+                'year_month' => $yearMonth,
+                'retainer_hours' => (float) $agreement->monthly_retainer_hours,
+                'hours_worked' => $billableMinutes / 60,
+                'entries_count' => $monthEntries->count(),
+                'billable_minutes' => $billableMinutes,
+            ];
+        }
+
+        // Calculate balances using RolloverCalculator
+        $calculator = new RolloverCalculator();
+        $balances = $calculator->calculateMultipleMonths(
+            $months,
+            (int) $agreement->rollover_months
+        );
+
+        // Merge balance data with month info
+        $result = [];
+        foreach ($balances as $index => $balance) {
+            $monthData = $months[$index];
+            $result[] = [
+                'year_month' => $monthData['year_month'],
+                'has_agreement' => true,
+                'entries_count' => $monthData['entries_count'],
+                'hours_worked' => round($monthData['hours_worked'], 2),
+                'formatted_hours' => ClientTimeEntry::formatMinutesAsTime($monthData['billable_minutes']),
+                'retainer_hours' => $monthData['retainer_hours'],
+                'rollover_months' => $agreement->rollover_months,
+                'opening' => [
+                    'retainer_hours' => $balance['opening']['retainer_hours'],
+                    'rollover_hours' => $balance['opening']['rollover_hours'],
+                    'expired_hours' => $balance['opening']['expired_hours'],
+                    'total_available' => $balance['opening']['total_available'],
+                    'negative_offset' => $balance['opening']['negative_offset'],
+                ],
+                'closing' => [
+                    'unused_hours' => $balance['closing']['unused_hours'],
+                    'excess_hours' => $balance['closing']['excess_hours'],
+                    'hours_used_from_retainer' => $balance['closing']['hours_used_from_retainer'],
+                    'hours_used_from_rollover' => $balance['closing']['hours_used_from_rollover'],
+                    'remaining_rollover' => $balance['closing']['remaining_rollover'],
+                ],
+            ];
+        }
+
+        // Return in descending order (most recent first)
+        return array_reverse($result);
     }
 
     /**
@@ -244,18 +336,18 @@ class ClientPortalApiController extends Controller
         ]);
         
         // Verify project belongs to this company
-        $project = Project::where('id', $validated['project_id'])
+        $project = ClientProject::where('id', $validated['project_id'])
                          ->where('client_company_id', $company->id)
                          ->firstOrFail();
         
         // Parse time string to minutes
-        $minutes = TimeEntry::parseTimeToMinutes($validated['time']);
+        $minutes = ClientTimeEntry::parseTimeToMinutes($validated['time']);
         
         if ($minutes <= 0) {
             return response()->json(['errors' => ['time' => ['Invalid time format. Use h:mm or decimal hours.']]], 422);
         }
         
-        $entry = TimeEntry::create([
+        $entry = ClientTimeEntry::create([
             'project_id' => $project->id,
             'client_company_id' => $company->id,
             'task_id' => $validated['task_id'] ?? null,
@@ -280,7 +372,7 @@ class ClientPortalApiController extends Controller
         
         Gate::authorize('ClientCompanyMember', $company->id);
         
-        $entry = TimeEntry::where('client_company_id', $company->id)->findOrFail($entryId);
+        $entry = ClientTimeEntry::where('client_company_id', $company->id)->findOrFail($entryId);
         $entry->delete();
         
         return response()->json(['success' => true]);
