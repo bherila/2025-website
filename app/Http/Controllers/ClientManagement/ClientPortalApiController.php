@@ -329,49 +329,7 @@ class ClientPortalApiController extends Controller
      */
     public function createTimeEntry(Request $request, $slug)
     {
-        Gate::authorize('Admin');
-        
-        $company = ClientCompany::where('slug', $slug)->firstOrFail();
-        
-        Gate::authorize('ClientCompanyMember', $company->id);
-        
-        $validated = $request->validate([
-            'project_id' => 'required|exists:client_projects,id',
-            'task_id' => 'nullable|exists:client_tasks,id',
-            'name' => 'nullable|string|max:255',
-            'time' => 'required|string',
-            'date_worked' => 'required|date',
-            'user_id' => 'nullable|exists:users,id',
-            'is_billable' => 'boolean',
-            'job_type' => 'nullable|string|max:255',
-        ]);
-        
-        // Verify project belongs to this company
-        $project = ClientProject::where('id', $validated['project_id'])
-                         ->where('client_company_id', $company->id)
-                         ->firstOrFail();
-        
-        // Parse time string to minutes
-        $minutes = ClientTimeEntry::parseTimeToMinutes($validated['time']);
-        
-        if ($minutes <= 0) {
-            return response()->json(['errors' => ['time' => ['Invalid time format. Use h:mm or decimal hours.']]], 422);
-        }
-        
-        $entry = ClientTimeEntry::create([
-            'project_id' => $project->id,
-            'client_company_id' => $company->id,
-            'task_id' => $validated['task_id'] ?? null,
-            'name' => $validated['name'] ?? null,
-            'minutes_worked' => $minutes,
-            'date_worked' => $validated['date_worked'],
-            'user_id' => $validated['user_id'] ?? Auth::id(),
-            'creator_user_id' => Auth::id(),
-            'is_billable' => $validated['is_billable'] ?? true,
-            'job_type' => $validated['job_type'] ?? 'Software Development',
-        ]);
-        
-        return response()->json($entry->load(['user:id,name,email', 'project:id,name,slug', 'task:id,name']), 201);
+        return $this->storeOrUpdateTimeEntry($request, $slug);
     }
 
     /**
@@ -379,20 +337,28 @@ class ClientPortalApiController extends Controller
      */
     public function updateTimeEntry(Request $request, $slug, $entryId)
     {
+        return $this->storeOrUpdateTimeEntry($request, $slug, $entryId);
+    }
+
+    /**
+     * Shared logic for creating or updating a time entry.
+     */
+    private function storeOrUpdateTimeEntry(Request $request, string $slug, ?int $entryId = null)
+    {
         Gate::authorize('Admin');
         
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
         
         Gate::authorize('ClientCompanyMember', $company->id);
-        
-        $entry = ClientTimeEntry::where('client_company_id', $company->id)->findOrFail($entryId);
+
+        $isUpdate = $entryId !== null;
         
         $validated = $request->validate([
-            'project_id' => 'sometimes|required|exists:client_projects,id',
+            'project_id' => ($isUpdate ? 'sometimes|' : '') . 'required|exists:client_projects,id',
             'task_id' => 'nullable|exists:client_tasks,id',
             'name' => 'nullable|string|max:255',
-            'time' => 'sometimes|required|string',
-            'date_worked' => 'sometimes|required|date',
+            'time' => ($isUpdate ? 'sometimes|' : '') . 'required|string',
+            'date_worked' => ($isUpdate ? 'sometimes|' : '') . 'required|date',
             'user_id' => 'nullable|exists:users,id',
             'is_billable' => 'boolean',
             'job_type' => 'nullable|string|max:255',
@@ -406,21 +372,38 @@ class ClientPortalApiController extends Controller
         }
         
         if (isset($validated['time'])) {
+            // Parse time string to minutes
             $minutes = ClientTimeEntry::parseTimeToMinutes($validated['time']);
+            
             if ($minutes <= 0) {
                 return response()->json(['errors' => ['time' => ['Invalid time format. Use h:mm or decimal hours.']]], 422);
             }
             $validated['minutes_worked'] = $minutes;
             unset($validated['time']);
         }
-        
-        if (isset($validated['name'])) {
-            $validated['name'] = $validated['name']; // Map 'name' to 'name' column (it's actually description in UI but name in DB)
-        }
 
-        $entry->update($validated);
+        if ($isUpdate) {
+            $entry = ClientTimeEntry::where('client_company_id', $company->id)->findOrFail($entryId);
+            $entry->update($validated);
+        } else {
+            $entry = ClientTimeEntry::create([
+                'project_id' => $validated['project_id'],
+                'client_company_id' => $company->id,
+                'task_id' => $validated['task_id'] ?? null,
+                'name' => $validated['name'] ?? null,
+                'minutes_worked' => $validated['minutes_worked'],
+                'date_worked' => $validated['date_worked'],
+                'user_id' => $validated['user_id'] ?? Auth::id(),
+                'creator_user_id' => Auth::id(),
+                'is_billable' => $validated['is_billable'] ?? true,
+                'job_type' => $validated['job_type'] ?? 'Software Development',
+            ]);
+        }
         
-        return response()->json($entry->load(['user:id,name,email', 'project:id,name,slug', 'task:id,name']));
+        return response()->json(
+            $entry->load(['user:id,name,email', 'project:id,name,slug', 'task:id,name']),
+            $isUpdate ? 200 : 201
+        );
     }
 
     /**
