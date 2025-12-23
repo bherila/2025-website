@@ -14,6 +14,7 @@ interface User {
 interface ClientCompany {
   id: number
   company_name: string
+  slug: string | null
   is_active: boolean
   users: User[]
   created_at: string
@@ -76,13 +77,24 @@ export default function ClientManagementIndexPage() {
                     {company.users.length} {company.users.length === 1 ? 'user' : 'users'}
                   </div>
                 </div>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => window.location.href = `/client/mgmt/${company.id}`}
-                >
-                  Details
-                </Button>
+<div className="flex gap-2">
+                  {company.slug && (
+                    <Button 
+                      variant="default" 
+                      size="sm"
+                      onClick={() => window.location.href = `/client/portal/${company.slug}`}
+                    >
+                      Portal
+                    </Button>
+                  )}
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => window.location.href = `/client/mgmt/${company.id}`}
+                  >
+                    Details
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             {company.users.length > 0 && (
