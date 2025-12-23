@@ -3,6 +3,7 @@ import '@testing-library/jest-dom';
 import ImportTransactions from '@/components/finance/ImportTransactions';
 import React from 'react';
 import type { AccountLineItem } from '@/data/finance/AccountLineItem';
+import { fetchWrapper } from '@/fetchWrapper';
 
 // Mock the child component
 jest.mock('@/components/TransactionsTable', () => () => <div data-testid="transactions-table" />);
@@ -35,8 +36,11 @@ jest.mock('@/fetchWrapper', () => ({
 }));
 
 describe('ImportTransactions', () => {
-  it('parses CSV data and displays the import button', () => {
+  it('parses CSV data and displays the import button', async () => {
     const onImportFinishedMock = jest.fn();
+
+    // Mock get response for existing transactions
+    (fetchWrapper.get as jest.Mock).mockResolvedValue([]);
 
     render(<ImportTransactions accountId={1} onImportFinished={onImportFinishedMock} />);
 
@@ -45,13 +49,25 @@ describe('ImportTransactions', () => {
 2025-01-02,14:30:00,GROCERY STORE,-75.50,withdrawal
 2025-01-03,00:00:00,ONLINE PAYMENT,-25.00,withdrawal`;
 
-    const textarea = screen.getByPlaceholderText(
-      'Paste CSV, QFX, or HAR data here, or drag and drop a file.',
-    );
+    // Create a mock clipboard event
+    const clipboardEvent = new Event('paste', {
+      bubbles: true,
+      cancelable: true,
+      composed: true
+    });
+    
+    // Mock the clipboardData property
+    Object.defineProperty(clipboardEvent, 'clipboardData', {
+      value: {
+        getData: (format: string) => format === 'text/plain' ? csvData : '',
+        items: []
+      }
+    });
 
-    fireEvent.change(textarea, { target: { value: csvData } });
+    // Dispatch the event to the document
+    fireEvent(document, clipboardEvent);
 
-    const importButton = screen.getByText('Import 3');
+    const importButton = await screen.findByText('Import 3 Transactions');
     expect(importButton).toBeInTheDocument();
   });
 });

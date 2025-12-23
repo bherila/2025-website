@@ -24,10 +24,11 @@ jobs:
         with:
           version: 10
 
-      - name: Build frontend
+      - name: Build frontend and run tests
         run: |
           pnpm install --frozen-lockfile
           pnpm run build
+          pnpm run test
 
       - name: Run PHPUnit
         run: vendor/bin/phpunit --configuration phpunit.xml
