@@ -16,6 +16,7 @@ class ClientTask extends Model
         'project_id',
         'name',
         'description',
+        'due_date',
         'completed_at',
         'assignee_user_id',
         'creator_user_id',
@@ -24,6 +25,7 @@ class ClientTask extends Model
     ];
 
     protected $casts = [
+        'due_date' => 'datetime',
         'completed_at' => 'datetime',
         'is_high_priority' => 'boolean',
         'is_hidden_from_clients' => 'boolean',

@@ -24,6 +24,7 @@ interface NewTaskModalProps {
 export default function NewTaskModal({ open, onOpenChange, slug, projectSlug, users, onSuccess }: NewTaskModalProps) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [dueDate, setDueDate] = useState('')
   const [assigneeId, setAssigneeId] = useState('')
   const [isHighPriority, setIsHighPriority] = useState(false)
   const [isHiddenFromClients, setIsHiddenFromClients] = useState(false)
@@ -48,6 +49,7 @@ export default function NewTaskModal({ open, onOpenChange, slug, projectSlug, us
         body: JSON.stringify({ 
           name, 
           description,
+          due_date: dueDate || null,
           assignee_user_id: assigneeId || null,
           is_high_priority: isHighPriority,
           is_hidden_from_clients: isHiddenFromClients,
@@ -59,6 +61,7 @@ export default function NewTaskModal({ open, onOpenChange, slug, projectSlug, us
         onOpenChange(false)
         setName('')
         setDescription('')
+        setDueDate('')
         setAssigneeId('')
         setIsHighPriority(false)
         setIsHiddenFromClients(false)
@@ -127,6 +130,16 @@ export default function NewTaskModal({ open, onOpenChange, slug, projectSlug, us
                   </option>
                 ))}
               </select>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="duedate">Due Date</Label>
+              <Input
+                id="duedate"
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+              />
             </div>
           </div>
 

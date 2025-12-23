@@ -118,6 +118,7 @@ class ClientPortalApiController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
+            'due_date' => 'nullable|date',
             'assignee_user_id' => 'nullable|exists:users,id',
             'is_high_priority' => 'boolean',
             'is_hidden_from_clients' => 'boolean',
@@ -127,6 +128,7 @@ class ClientPortalApiController extends Controller
             'project_id' => $project->id,
             'name' => $validated['name'],
             'description' => $validated['description'] ?? null,
+            'due_date' => $validated['due_date'] ?? null,
             'assignee_user_id' => $validated['assignee_user_id'] ?? null,
             'creator_user_id' => Auth::id(),
             'is_high_priority' => $validated['is_high_priority'] ?? false,
@@ -154,6 +156,7 @@ class ClientPortalApiController extends Controller
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'description' => 'nullable|string',
+            'due_date' => 'nullable|date',
             'assignee_user_id' => 'nullable|exists:users,id',
             'is_high_priority' => 'boolean',
             'is_hidden_from_clients' => 'boolean',

@@ -4,8 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Plus, ArrowLeft, Check, Star, EyeOff } from 'lucide-react'
+import { Plus, ArrowLeft, Check, Star, EyeOff, Calendar, Spinner } from 'lucide-react'
 import NewTaskModal from './NewTaskModal'
+import EditTaskModal from './EditTaskModal'
+import { format } from 'date-fns'
 
 interface User {
   id: number
@@ -15,9 +17,11 @@ interface User {
 
 interface Task {
   id: number
+  project_id: number
   name: string
   description: string | null
   completed_at: string | null
+  due_date: string | null
   assignee: User | null
   creator: User | null
   is_high_priority: boolean
@@ -36,7 +40,10 @@ export default function ClientPortalProjectPage({ slug, companyName, projectSlug
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [newTaskModalOpen, setNewTaskModalOpen] = useState(false)
+  const [editTaskModalOpen, setEditTaskModalOpen] = useState(false)
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [companyUsers, setCompanyUsers] = useState<User[]>([])
+  const [togglingTasks, setTogglingTasks] = useState<Set<number>>(new Set())
 
   useEffect(() => {
     document.title = `Project: ${projectName} | ${companyName}`
@@ -74,6 +81,7 @@ export default function ClientPortalProjectPage({ slug, companyName, projectSlug
   }
 
   const toggleTaskComplete = async (task: Task) => {
+    setTogglingTasks(prev => new Set(prev).add(task.id))
     try {
       const response = await fetch(`/api/client/portal/${slug}/projects/${projectSlug}/tasks/${task.id}`, {
         method: 'PUT',
@@ -90,7 +98,18 @@ export default function ClientPortalProjectPage({ slug, companyName, projectSlug
       }
     } catch (error) {
       console.error('Error updating task:', error)
+    } finally {
+      setTogglingTasks(prev => {
+        const next = new Set(prev)
+        next.delete(task.id)
+        return next
+      })
     }
+  }
+
+  const handleTaskClick = (task: Task) => {
+    setSelectedTask(task)
+    setEditTaskModalOpen(true)
   }
 
   const incompleteTasks = tasks.filter(t => !t.completed_at)
@@ -149,17 +168,22 @@ export default function ClientPortalProjectPage({ slug, companyName, projectSlug
         ) : (
           <>
             {incompleteTasks.map(task => (
-              <Card key={task.id} className={task.is_high_priority ? 'border-l-4 border-l-orange-500' : ''}>
+              <Card key={task.id} className={`transition-all hover:shadow-md ${task.is_high_priority ? 'border-l-4 border-l-orange-500' : ''}`}>
                 <CardContent className="py-4">
                   <div className="flex items-start gap-3">
-                    <Checkbox
-                      checked={false}
-                      onCheckedChange={() => toggleTaskComplete(task)}
-                      className="mt-1"
-                    />
-                    <div className="flex-1">
+                    <div className="mt-1">
+                      {togglingTasks.has(task.id) ? (
+                        <div className="h-4 w-4 rounded-sm border border-primary animate-pulse bg-primary/20" />
+                      ) : (
+                        <Checkbox
+                          checked={false}
+                          onCheckedChange={() => toggleTaskComplete(task)}
+                        />
+                      )}
+                    </div>
+                    <div className="flex-1 cursor-pointer" onClick={() => handleTaskClick(task)}>
                       <div className="flex items-center gap-2">
-                        <span className="font-medium">{task.name}</span>
+                        <span className="font-medium hover:text-primary hover:underline decoration-dashed underline-offset-4">{task.name}</span>
                         {task.is_high_priority && (
                           <Star className="h-4 w-4 text-orange-500 fill-orange-500" />
                         )}
@@ -168,11 +192,17 @@ export default function ClientPortalProjectPage({ slug, companyName, projectSlug
                         )}
                       </div>
                       {task.description && (
-                        <p className="text-sm text-muted-foreground mt-1">{task.description}</p>
+                        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{task.description}</p>
                       )}
-                      <div className="flex gap-2 mt-2">
+                      <div className="flex gap-3 mt-2 items-center text-xs text-muted-foreground">
                         {task.assignee && (
-                          <Badge variant="secondary">{task.assignee.name}</Badge>
+                          <Badge variant="secondary" className="font-normal">{task.assignee.name}</Badge>
+                        )}
+                        {task.due_date && (
+                           <div className={`flex items-center gap-1 ${new Date(task.due_date) < new Date() ? 'text-red-500 font-medium' : ''}`}>
+                             <Calendar className="h-3 w-3" />
+                             {format(new Date(task.due_date), 'MMM d, yyyy')}
+                           </div>
                         )}
                       </div>
                     </div>
@@ -188,16 +218,28 @@ export default function ClientPortalProjectPage({ slug, companyName, projectSlug
                   <Card key={task.id} className="opacity-60 mb-2">
                     <CardContent className="py-4">
                       <div className="flex items-start gap-3">
-                        <Checkbox
-                          checked={true}
-                          onCheckedChange={() => toggleTaskComplete(task)}
-                          className="mt-1"
-                        />
-                        <div className="flex-1">
-                          <span className="font-medium line-through">{task.name}</span>
-                          {task.assignee && (
-                            <Badge variant="secondary" className="ml-2">{task.assignee.name}</Badge>
+                        <div className="mt-1">
+                          {togglingTasks.has(task.id) ? (
+                             <div className="h-4 w-4 rounded-sm border border-primary animate-pulse bg-primary/20" />
+                          ) : (
+                            <Checkbox
+                              checked={true}
+                              onCheckedChange={() => toggleTaskComplete(task)}
+                            />
                           )}
+                        </div>
+                        <div className="flex-1 cursor-pointer" onClick={() => handleTaskClick(task)}>
+                          <span className="font-medium line-through">{task.name}</span>
+                          <div className="flex gap-2 mt-1 items-center">
+                            {task.assignee && (
+                              <Badge variant="secondary" className="ml-0 text-xs">{task.assignee.name}</Badge>
+                            )}
+                            {task.completed_at && (
+                               <span className="text-xs text-muted-foreground">
+                                 Completed {format(new Date(task.completed_at), 'MMM d')}
+                               </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </CardContent>
@@ -217,6 +259,18 @@ export default function ClientPortalProjectPage({ slug, companyName, projectSlug
         users={companyUsers}
         onSuccess={fetchTasks}
       />
+
+      {selectedTask && (
+        <EditTaskModal
+          open={editTaskModalOpen}
+          onOpenChange={setEditTaskModalOpen}
+          task={selectedTask}
+          slug={slug}
+          projectSlug={projectSlug}
+          users={companyUsers}
+          onSuccess={fetchTasks}
+        />
+      )}
     </div>
   )
 }
