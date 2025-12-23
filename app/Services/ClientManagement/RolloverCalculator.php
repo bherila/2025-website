@@ -60,10 +60,12 @@ class RolloverCalculator
 
         // Apply negative balance offset (subtract from this month's retainer hours first)
         $negativeOffset = 0.0;
+        $invoicedNegativeBalance = 0.0;
         $effectiveRetainerHours = $retainerHours;
         
         if ($previousNegativeBalance > 0) {
             $negativeOffset = min($previousNegativeBalance, $retainerHours);
+            $invoicedNegativeBalance = max(0, $previousNegativeBalance - $retainerHours);
             $effectiveRetainerHours = $retainerHours - $negativeOffset;
         }
 
@@ -75,6 +77,7 @@ class RolloverCalculator
             'expired_hours' => round($expiredHours, 4),
             'total_available' => round($totalAvailable, 4),
             'negative_offset' => round($negativeOffset, 4),
+            'invoiced_negative_balance' => round($invoicedNegativeBalance, 4),
             'effective_retainer_hours' => round($effectiveRetainerHours, 4),
         ];
     }
@@ -120,8 +123,8 @@ class RolloverCalculator
             // Case B: Exceeded all available hours
             $hoursUsedFromRetainer = $retainerHours;
             $hoursUsedFromRollover = $rolloverHours;
-            $excessHours = $hoursWorked - $totalAvailable;
-            $negativeBalance = 0.0; // Excess is billed, not carried as negative
+            $excessHours = 0.0; // Excess creates negative balance for next month, not billed immediately
+            $negativeBalance = $hoursWorked - $totalAvailable;
         }
 
         return [
@@ -240,29 +243,50 @@ class RolloverCalculator
      */
     public function getStatusDescription(array $monthSummary): string
     {
+        $opening = $monthSummary['opening'];
         $closing = $monthSummary['closing'];
         
+        $parts = [];
+
+        if (isset($opening['invoiced_negative_balance']) && $opening['invoiced_negative_balance'] > 0) {
+            $parts[] = sprintf(
+                'Previous negative balance exceeded retainer by %.2f hours (billed at hourly rate)',
+                $opening['invoiced_negative_balance']
+            );
+        }
+
+        if ($closing['negative_balance'] > 0) {
+            $parts[] = sprintf(
+                'Negative balance of %.2f hours carried forward to next month',
+                $closing['negative_balance']
+            );
+        }
+        
         if ($closing['excess_hours'] > 0) {
-            return sprintf(
-                'Exceeded by %.2f hours (will be billed at hourly rate)',
+            $parts[] = sprintf(
+                'Exceeded by %.2f hours (billed at hourly rate)',
                 $closing['excess_hours']
             );
         }
         
         if ($closing['unused_hours'] > 0) {
-            return sprintf(
+            $parts[] = sprintf(
                 '%.2f unused hours will roll over',
                 $closing['unused_hours']
             );
         }
         
         if ($closing['hours_used_from_rollover'] > 0) {
-            return sprintf(
+            $parts[] = sprintf(
                 'Used %.2f rollover hours',
                 $closing['hours_used_from_rollover']
             );
         }
+
+        if (empty($parts)) {
+            return 'All retainer hours used exactly';
+        }
         
-        return 'All retainer hours used exactly';
+        return implode('; ', $parts);
     }
 }
