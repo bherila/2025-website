@@ -48,10 +48,10 @@ class RolloverCalculator
 
         // Calculate rollover and expired hours from previous months
         foreach ($previousMonthsUnused as $monthsAgo => $unusedHours) {
-            // If rollover_months is 1, hours don't roll over (this month only)
-            // If rollover_months is 2, hours from 1 month ago roll over, but 2+ expire
-            // If rollover_months is 3, hours from 1-2 months ago roll over, 3+ expire
-            if ($rolloverMonths > 1 && $monthsAgo < $rolloverMonths) {
+            // If rollover_months is 1, hours from 1 month ago roll over
+            // If rollover_months is 2, hours from 1-2 months ago roll over
+            // If rollover_months is 0, nothing rolls over
+            if ($monthsAgo <= $rolloverMonths) {
                 $rolloverHours += $unusedHours;
             } else {
                 $expiredHours += $unusedHours;
@@ -216,6 +216,90 @@ class RolloverCalculator
                 $previousNegativeBalance
             );
 
+            // Deduct used rollover hours from the history stack (FIFO)
+            $usedRollover = $summary['closing']['hours_used_from_rollover'];
+            if ($usedRollover > 0) {
+                // unusedByMonth is chronological (FIFO)
+                foreach ($unusedByMonth as $key => $amount) {
+                    if ($usedRollover <= 0) break;
+                    
+                    // Only deduct from months that were actually eligible for rollover
+                    // We need to check if this specific month key was eligible.
+                    // But since we built previousMonthsUnused from all valid unusedByMonth, 
+                    // and assuming calculateOpeningBalance summed them all...
+                    // Wait, calculateOpeningBalance filters based on rolloverMonths.
+                    // We should only deduct from those that passed the filter.
+                    
+                    // Recalculate monthsAgo for this key
+                    // We need to know the index relative to current processing month
+                    // This is complicated to do inside this loop cleanly without re-logic.
+                    
+                    // SIMPLIFICATION:
+                    // If we assume the caller provided months in order, and we are processing chronologically.
+                    // The entries in unusedByMonth are those that haven't been pruned.
+                    // Pruning happens at the end of the loop.
+                    // But we only want to deduct from "valid" rollover sources.
+                    // If an entry is too old (will expire this month), it contributed to expiredHours, NOT rolloverHours.
+                    // So we shouldn't deduct usedRollover from it? 
+                    // Or should we? If it expired, it wasn't used.
+                    // So we should only deduct from monthsAgo <= rolloverMonths.
+                    
+                    // We can find the key in monthKeys
+                    $keyIndex = array_search($key, $monthKeys);
+                    // monthKeys contains keys UP TO this iteration? No, unusedByMonth grows.
+                    // monthKeys was snapshot at start of loop.
+                    // Let's rely on calculating monthsAgo.
+                    // The current month is $index.
+                    // The stored month index is implicit? No.
+                    
+                    // Easier: Iterate previousMonthsUnused which has monthsAgo keys.
+                    // But previousMonthsUnused is a copy. We need to update unusedByMonth.
+                    // We can map monthsAgo back to the key?
+                    // $monthKeys[$monthCount - $monthsAgo] ?
+                    
+                    // Let's just iterate unusedByMonth and check eligibility.
+                    // We need the "age" of the entry relative to current processing.
+                    // We don't store the date object, just the string key.
+                    // But we know unusedByMonth keys are ordered.
+                    // The ones at the end are newest.
+                    // The ones at the start are oldest.
+                    
+                    // Total count in unusedByMonth is $monthCount (at start of loop).
+                    // Iterate $i from 0 to $monthCount - 1.
+                    // Age = $monthCount - $i.
+                    // If Age <= rolloverMonths: It is eligible.
+                    
+                    $take = min($amount, $usedRollover);
+                    
+                    // Determine age of this entry
+                    // We can't easily know age without the full list logic.
+                    // But we used $monthKeys earlier.
+                    // $monthKeys[$i] corresponds to $unusedByMonth key at index $i.
+                    
+                    // Let's iterate using the index $i from the earlier loop
+                    // But we are outside that loop.
+                }
+                
+                // Re-implementation of deduction logic using monthKeys
+                foreach ($monthKeys as $i => $key) {
+                    if ($usedRollover <= 0) break;
+                    
+                    $monthsAgo = $monthCount - $i;
+                    if ($monthsAgo <= $rolloverMonths) {
+                        // This entry contributed to rollover
+                        $amount = $unusedByMonth[$key];
+                        $deduct = min($amount, $usedRollover);
+                        
+                        $unusedByMonth[$key] -= $deduct;
+                        $usedRollover -= $deduct;
+                        
+                        if ($unusedByMonth[$key] <= 0.0001) {
+                            unset($unusedByMonth[$key]);
+                        }
+                    }
+                }
+            }
+
             $summary['year_month'] = $yearMonth;
             $results[] = $summary;
 
@@ -226,9 +310,9 @@ class RolloverCalculator
             }
 
             // Remove expired months from tracking (beyond rollover window)
-            if (count($unusedByMonth) >= $rolloverMonths) {
-                // Keep only the most recent rollover_months - 1 entries
-                $unusedByMonth = array_slice($unusedByMonth, -($rolloverMonths - 1), null, true);
+            // We keep rollover_months + 1 to properly report expired hours in the next month
+            if (count($unusedByMonth) > $rolloverMonths + 1) {
+                $unusedByMonth = array_slice($unusedByMonth, -($rolloverMonths + 1), null, true);
             }
         }
 
