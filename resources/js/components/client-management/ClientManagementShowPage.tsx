@@ -7,7 +7,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { X, ArrowLeft, ExternalLink } from 'lucide-react'
+import { X, ArrowLeft, ExternalLink, FileText } from 'lucide-react'
+import ClientAdminActions from './ClientAdminActions'
 
 interface User {
   id: number
@@ -238,6 +239,7 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Client Company Details</h1>
         <div className="flex gap-2">
+          <ClientAdminActions companyId={companyId} companySlug={company.slug} />
           <Button 
             variant="outline" 
             onClick={() => window.location.href = '/client/mgmt'}

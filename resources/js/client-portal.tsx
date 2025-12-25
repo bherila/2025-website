@@ -5,8 +5,19 @@ import ClientPortalProjectPage from '@/components/client-management/portal/Clien
 import ClientPortalAgreementPage from '@/components/client-management/portal/ClientPortalAgreementPage'
 import ClientPortalInvoicesPage from '@/components/client-management/portal/ClientPortalInvoicesPage'
 import ClientPortalInvoicePage from '@/components/client-management/portal/ClientPortalInvoicePage'
+import ClientAdminActions from '@/components/client-management/ClientAdminActions'
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Mount admin actions if available
+  const adminActionsDiv = document.getElementById('ClientAdminActions')
+  if (adminActionsDiv) {
+    const root = createRoot(adminActionsDiv)
+    root.render(<ClientAdminActions 
+      companyId={parseInt(adminActionsDiv.dataset.companyId!)}
+      companySlug={adminActionsDiv.dataset.companySlug}
+    />)
+  }
+
   const indexDiv = document.getElementById('ClientPortalIndexPage')
   if (indexDiv) {
     const root = createRoot(indexDiv)

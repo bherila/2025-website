@@ -228,6 +228,14 @@ class ClientPortalApiController extends Controller
         // Group entries by month and calculate rollover balances
         $monthlyData = $this->calculateMonthlyBalances($company, $entries);
         
+        // Calculate total unbilled hours (billable hours in months without agreements)
+        $totalUnbilledHours = 0;
+        foreach ($monthlyData as $month) {
+            if (!$month['has_agreement'] && isset($month['unbilled_hours'])) {
+                $totalUnbilledHours += $month['unbilled_hours'];
+            }
+        }
+        
         return response()->json([
             'entries' => $entries,
             'monthly_data' => $monthlyData,
@@ -235,6 +243,7 @@ class ClientPortalApiController extends Controller
             'total_minutes' => $totalMinutes,
             'billable_time' => ClientTimeEntry::formatMinutesAsTime($billableMinutes),
             'billable_minutes' => $billableMinutes,
+            'total_unbilled_hours' => round($totalUnbilledHours, 2),
         ]);
     }
 
@@ -252,15 +261,18 @@ class ClientPortalApiController extends Controller
         $agreement = $company->activeAgreement();
         
         if (!$agreement) {
-            // No agreement - just return month groupings without balance calculations
+            // No agreement - return month groupings with unbilled hours tracking
+            // These hours will be billed when a future agreement becomes active
             return $entriesByMonth->map(function ($monthEntries, $yearMonth) {
                 $billableMinutes = $monthEntries->where('is_billable', true)->sum('minutes_worked');
+                $unbilledHours = round($billableMinutes / 60, 2);
                 return [
                     'year_month' => $yearMonth,
                     'has_agreement' => false,
                     'entries_count' => $monthEntries->count(),
-                    'hours_worked' => round($billableMinutes / 60, 2),
+                    'hours_worked' => $unbilledHours,
                     'formatted_hours' => ClientTimeEntry::formatMinutesAsTime($billableMinutes),
+                    'unbilled_hours' => $unbilledHours, // Track unbilled hours for delayed billing
                     'opening' => null,
                     'closing' => null,
                 ];

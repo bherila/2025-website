@@ -528,6 +528,60 @@ The rollover calculation uses FIFO (First In, First Out) for tracking which hour
 | Over retainer, insufficient rollover | 10h | 18h | 5h | Uses all 5h rollover, 3h billed extra |
 | Hours expire | 10h | 6h | 8h (3mo old) | 4h expire, 4h new unused |
 
+### Delayed Billing
+
+Delayed billing allows billable time entries to be tracked and eventually invoiced, even when they are created during periods without an active agreement.
+
+**How It Works:**
+
+1. **Time Entry Creation Without Agreement**: When billable time entries are created for a client company that has no active agreement, those entries are marked as billable but remain uninvoiced.
+
+2. **UI Warning**: The Time Records page displays an amber warning for months where there is no active agreement, showing the number of unbilled hours that are pending.
+
+3. **Invoice Generation**: When an invoice is generated for a period with an active agreement, the invoicing system automatically includes all prior unbilled time entries as a "Prior Period Hours (delayed billing)" line item.
+
+4. **Billing Rate**: Delayed billing hours are charged at the current agreement's hourly rate.
+
+**Example Scenario:**
+
+| Month | Agreement Status | Hours Worked | Result |
+|-------|-----------------|--------------|--------|
+| January | None | 5h | 5h marked as unbilled, warning shown |
+| February | Active ($150/hr, 10h retainer) | 8h | Invoice includes: Retainer $1000 + Prior Period Hours 5h × $150 = $750 |
+
+**API Response:**
+
+The time entries API includes delayed billing information:
+
+```json
+{
+  "months": [
+    {
+      "year_month": "2024-01",
+      "total_hours": 5.0,
+      "has_active_agreement": false,
+      "unbilled_hours": 5.0
+    },
+    {
+      "year_month": "2024-02",
+      "total_hours": 8.0,
+      "has_active_agreement": true,
+      "unbilled_hours": 0
+    }
+  ],
+  "total_unbilled_hours": 5.0
+}
+```
+
+**Invoice Line Types:**
+
+| Line Type | Description |
+|-----------|-------------|
+| `retainer` | Monthly retainer fee |
+| `additional_hours` | Hours exceeding retainer in current period |
+| `delayed_billing` | Prior period hours billed to current invoice |
+| `credit` | Rollover hours applied (informational, $0) |
+
 ### Controllers
 
 #### `App\Http\Controllers\ClientManagement\ClientAgreementController`
@@ -680,3 +734,15 @@ The `getTimeEntries()` API now returns enhanced data for the monthly grouping UI
 - [x] Case B: Hours exceed retainer + rollover
 - [x] Case C: Hours under retainer, rollover accumulates
 - [x] Case D: rollover_months=1 means no rollover
+
+### Feature Tests (Delayed Billing)
+- [x] Test invoice includes delayed billing entries from periods without agreement
+- [x] Test preview shows delayed billing information
+- [x] Test non-billable entries are not included in delayed billing
+- [x] Test already-invoiced entries are not included in delayed billing
+- [x] Test API endpoint shows unbilled hours for periods without agreement
+
+Run delayed billing tests with:
+```bash
+vendor/bin/phpunit tests/Feature/ClientManagement/DelayedBillingTest.php
+```

@@ -97,6 +97,18 @@ class ClientInvoicingService
                 ->orderBy('date_worked')
                 ->get();
 
+            // Also get any older uninvoiced billable time entries (delayed billing)
+            // These are entries from periods when there was no active agreement
+            $delayedBillingEntries = ClientTimeEntry::where('client_company_id', $company->id)
+                ->whereNull('client_invoice_line_id')
+                ->where('is_billable', true)
+                ->where('date_worked', '<', $periodStart)
+                ->orderBy('date_worked')
+                ->get();
+
+            $delayedBillingMinutes = $delayedBillingEntries->sum('minutes_worked');
+            $delayedBillingHours = $delayedBillingMinutes / 60;
+
             // Calculate total hours worked this period
             $totalMinutesWorked = $timeEntries->sum('minutes_worked');
             $hoursWorked = $totalMinutesWorked / 60;
@@ -168,7 +180,27 @@ class ClientInvoicingService
                 $this->linkTimeEntriesToLine($timeEntries, $additionalHoursLine, $calculation['hours_billed_at_rate']);
             }
 
-            // Line 3: Credit for rollover hours applied (informational, $0)
+            // Line 3: Delayed billing hours from prior periods (if any)
+            if ($delayedBillingHours > 0) {
+                $delayedBillingLine = ClientInvoiceLine::create([
+                    'client_invoice_id' => $invoice->client_invoice_id,
+                    'client_agreement_id' => $agreement->id,
+                    'description' => "Prior Period Hours (delayed billing) @ \${$agreement->hourly_rate}/hr",
+                    'quantity' => $delayedBillingHours,
+                    'unit_price' => $agreement->hourly_rate,
+                    'line_total' => $delayedBillingHours * (float) $agreement->hourly_rate,
+                    'line_type' => 'delayed_billing',
+                    'hours' => $delayedBillingHours,
+                    'sort_order' => $sortOrder++,
+                ]);
+
+                // Link all delayed billing entries to this line
+                foreach ($delayedBillingEntries as $entry) {
+                    $entry->update(['client_invoice_line_id' => $delayedBillingLine->client_invoice_line_id]);
+                }
+            }
+
+            // Line 4: Credit for rollover hours applied (informational, $0)
             if ($calculation['rollover_hours_used'] > 0) {
                 ClientInvoiceLine::create([
                     'client_invoice_id' => $invoice->client_invoice_id,
@@ -371,6 +403,17 @@ class ClientInvoicingService
             ->orderBy('date_worked')
             ->get();
 
+        // Also get delayed billing entries (from periods before this one)
+        $delayedBillingEntries = ClientTimeEntry::where('client_company_id', $company->id)
+            ->whereNull('client_invoice_line_id')
+            ->where('is_billable', true)
+            ->where('date_worked', '<', $periodStart)
+            ->orderBy('date_worked')
+            ->get();
+
+        $delayedBillingMinutes = $delayedBillingEntries->sum('minutes_worked');
+        $delayedBillingHours = $delayedBillingMinutes / 60;
+
         $totalMinutesWorked = $timeEntries->sum('minutes_worked');
         $hoursWorked = $totalMinutesWorked / 60;
 
@@ -385,7 +428,8 @@ class ClientInvoicingService
         // Calculate totals
         $retainerTotal = (float) $agreement->monthly_retainer_fee;
         $additionalHoursTotal = $calculation['hours_billed_at_rate'] * (float) $agreement->hourly_rate;
-        $invoiceTotal = $retainerTotal + $additionalHoursTotal;
+        $delayedBillingTotal = $delayedBillingHours * (float) $agreement->hourly_rate;
+        $invoiceTotal = $retainerTotal + $additionalHoursTotal + $delayedBillingTotal;
 
         return [
             'period_start' => $periodStart->toDateString(),
@@ -397,7 +441,9 @@ class ClientInvoicingService
                 'rollover_months' => $agreement->rollover_months,
             ],
             'time_entries_count' => $timeEntries->count(),
+            'delayed_billing_entries_count' => $delayedBillingEntries->count(),
             'hours_worked' => round($hoursWorked, 2),
+            'delayed_billing_hours' => round($delayedBillingHours, 2),
             'rollover_hours_available' => round($rolloverHoursAvailable, 2),
             'negative_balance_carried' => round($negativeBalanceFromPrevious, 2),
             'calculation' => $calculation,
@@ -415,6 +461,15 @@ class ClientInvoicingService
                         'quantity' => $calculation['hours_billed_at_rate'],
                         'unit_price' => (float) $agreement->hourly_rate,
                         'total' => $additionalHoursTotal,
+                        'client_agreement_id' => $agreement->id,
+                    ]] : []
+                ),
+                ...(
+                    $delayedBillingHours > 0 ? [[
+                        'description' => "Prior Period Hours (delayed billing) @ \${$agreement->hourly_rate}/hr",
+                        'quantity' => round($delayedBillingHours, 2),
+                        'unit_price' => (float) $agreement->hourly_rate,
+                        'total' => round($delayedBillingTotal, 2),
                         'client_agreement_id' => $agreement->id,
                     ]] : []
                 ),
