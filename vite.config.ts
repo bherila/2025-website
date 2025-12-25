@@ -26,7 +26,9 @@ export default defineConfig({
         'resources/js/add-grant.tsx',
         'resources/js/bingo/index.tsx',
         'resources/js/irsf461/irsf461.tsx',
-        'resources/js/license-manager.tsx'
+        'resources/js/license-manager.tsx',
+        'resources/js/client-management.tsx',
+        'resources/js/client-portal.tsx'
       ],
       refresh: true,
     }),
