@@ -6,8 +6,31 @@ import { Textarea } from './ui/textarea'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Button } from './ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import type { AccountLineItem } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '../fetchWrapper'
+
+// Common transaction types
+const TRANSACTION_TYPES = [
+  'Buy',
+  'Sell',
+  'Buy (Covered)',
+  'Buy (Opening)',
+  'Sell (Covered)',
+  'Sell (Opening)',
+  'Dividend',
+  'Interest',
+  'Fee',
+  'Transfer',
+  'Deposit',
+  'Withdrawal',
+  'Option Assignment',
+  'Option Exercise',
+  'Option Expiration',
+  'Stock Split',
+  'Reinvestment',
+  'Other',
+]
 
 interface TransactionDetailsModalProps {
   transaction: AccountLineItem
@@ -27,6 +50,18 @@ export default function TransactionDetailsModal({ transaction, isOpen, onClose, 
     return num.toString()
   }
 
+  // Helper to format date for input[type="date"]
+  const formatDateValue = (value: string | null | undefined): string => {
+    if (!value) return ''
+    // Handle various date formats
+    const date = new Date(value)
+    if (isNaN(date.getTime())) return ''
+    return date.toISOString().split('T')[0]
+  }
+
+  const [transactionDate, setTransactionDate] = useState(formatDateValue(transaction.t_date))
+  const [transactionType, setTransactionType] = useState(transaction.t_type || '')
+  const [amount, setAmount] = useState(formatNumericValue(transaction.t_amt))
   const [comment, setComment] = useState(transaction.t_comment || '')
   const [description, setDescription] = useState(transaction.t_description || '')
   const [qty, setQty] = useState(formatNumericValue(transaction.t_qty))
@@ -37,6 +72,9 @@ export default function TransactionDetailsModal({ transaction, isOpen, onClose, 
 
   // Reset form when transaction changes
   useEffect(() => {
+    setTransactionDate(formatDateValue(transaction.t_date))
+    setTransactionType(transaction.t_type || '')
+    setAmount(formatNumericValue(transaction.t_amt))
     setComment(transaction.t_comment || '')
     setDescription(transaction.t_description || '')
     setQty(formatNumericValue(transaction.t_qty))
@@ -50,6 +88,9 @@ export default function TransactionDetailsModal({ transaction, isOpen, onClose, 
     setIsSaving(true)
     try {
       const updatedFields: Partial<AccountLineItem> = {
+        t_date: transactionDate || undefined,
+        t_type: transactionType || null,
+        t_amt: amount ? parseFloat(amount) : 0,
         t_comment: comment || null,
         t_description: description || null,
         t_qty: qty ? parseFloat(qty) : 0,
@@ -76,11 +117,55 @@ export default function TransactionDetailsModal({ transaction, isOpen, onClose, 
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Transaction Details</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-4">
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="t_date" className="text-right">
+              Date
+            </Label>
+            <Input
+              id="t_date"
+              type="date"
+              value={transactionDate}
+              onChange={(e) => setTransactionDate(e.target.value)}
+              className="col-span-3"
+            />
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="t_type" className="text-right">
+              Type
+            </Label>
+            <div className="col-span-3">
+              <Select value={transactionType} onValueChange={setTransactionType}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select type..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {TRANSACTION_TYPES.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {type}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="t_amt" className="text-right">
+              Amount
+            </Label>
+            <Input
+              id="t_amt"
+              type="text"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="col-span-3"
+              placeholder="e.g., 1000.00 or -500.50"
+            />
+          </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="description" className="text-right">
               Description
