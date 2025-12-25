@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Plus, ArrowLeft, Check, Star, EyeOff, Calendar } from 'lucide-react'
 import NewTaskModal from './NewTaskModal'
 import EditTaskModal from './EditTaskModal'
+import ClientPortalNav from './ClientPortalNav'
 import { format } from 'date-fns'
 
 interface User {
@@ -117,36 +118,33 @@ export default function ClientPortalProjectPage({ slug, companyName, projectSlug
 
   if (loading) {
     return (
-      <div className="container mx-auto p-8 max-w-4xl">
-        <Skeleton className="h-8 w-32 mb-4" />
-        <div className="mb-6">
-          <Skeleton className="h-4 w-24 mb-2" />
-          <Skeleton className="h-10 w-64" />
+      <>
+        <ClientPortalNav slug={slug} companyName={companyName} currentPage="project" currentProjectSlug={projectSlug} />
+        <div className="container mx-auto px-8 max-w-4xl">
+          <div className="mb-6">
+            <Skeleton className="h-10 w-64" />
+          </div>
+          <div className="space-y-3">
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-16 w-full" />
+          </div>
         </div>
-        <div className="space-y-3">
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-16 w-full" />
-        </div>
-      </div>
+      </>
     )
   }
 
   return (
-    <div className="container mx-auto p-8 max-w-4xl">
-      <div className="mb-6">
-        <Button variant="ghost" className="mb-4" onClick={() => window.location.href = `/client/portal/${slug}`}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Projects
-        </Button>
-        
-        <div className="flex justify-between items-center">
-          <div>
-            <p className="text-sm text-muted-foreground">{companyName}</p>
-            <h1 className="text-3xl font-bold">{projectName}</h1>
-          </div>
-          <Button onClick={() => setNewTaskModalOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
+    <>
+      <ClientPortalNav slug={slug} companyName={companyName} currentPage="project" currentProjectSlug={projectSlug} />
+      <div className="container mx-auto px-8 max-w-4xl">
+        <div className="mb-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-bold">{projectName}</h1>
+            </div>
+            <Button onClick={() => setNewTaskModalOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
             Add Task
           </Button>
         </div>
@@ -271,6 +269,7 @@ export default function ClientPortalProjectPage({ slug, companyName, projectSlug
           onSuccess={fetchTasks}
         />
       )}
-    </div>
+      </div>
+    </>
   )
 }

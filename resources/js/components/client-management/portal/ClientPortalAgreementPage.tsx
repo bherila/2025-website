@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AlertCircle, ArrowLeft, FileText, Check } from 'lucide-react'
+import ClientPortalNav from './ClientPortalNav'
 
 interface ClientAgreement {
   id: number
@@ -110,21 +111,23 @@ export default function ClientPortalAgreementPage({ slug, companyName, agreement
 
   if (loading) {
     return (
-      <div className="container mx-auto p-8 max-w-4xl">
-        <Skeleton className="h-10 w-32 mb-4" />
-        <Card>
-          <CardHeader>
-            <Skeleton className="h-8 w-64 mb-2" />
-            <Skeleton className="h-4 w-48" />
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-3/4" />
-            <Skeleton className="h-64 w-full mt-4" />
-          </CardContent>
-        </Card>
-      </div>
+      <>
+        <ClientPortalNav slug={slug} companyName={companyName} currentPage="agreement" />
+        <div className="container mx-auto px-8 max-w-4xl">
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-8 w-64 mb-2" />
+              <Skeleton className="h-4 w-48" />
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-64 w-full mt-4" />
+            </CardContent>
+          </Card>
+        </div>
+      </>
     )
   }
 
@@ -136,27 +139,23 @@ export default function ClientPortalAgreementPage({ slug, companyName, agreement
   const isTerminated = !!agreement.termination_date
 
   return (
-    <div className="container mx-auto p-8 max-w-4xl">
-      <Button variant="ghost" className="mb-4" onClick={() => window.location.href = `/client/portal/${slug}`}>
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Back to Portal
-      </Button>
-
-      <div className="flex items-center gap-4 mb-6">
-        <FileText className="h-8 w-8 text-muted-foreground" />
-        <div>
-          <h1 className="text-3xl font-bold">Service Agreement</h1>
-          <p className="text-muted-foreground">{companyName}</p>
+    <>
+      <ClientPortalNav slug={slug} companyName={companyName} currentPage="agreement" />
+      <div className="container mx-auto px-8 max-w-4xl">
+        <div className="flex items-center gap-4 mb-6">
+          <FileText className="h-8 w-8 text-muted-foreground" />
+          <div>
+            <h1 className="text-3xl font-bold">Service Agreement</h1>
+          </div>
+          <div className="ml-auto flex gap-2">
+            {isSigned && <Badge variant="default"><Check className="mr-1 h-3 w-3" /> Signed</Badge>}
+            {isTerminated && <Badge variant="destructive">Terminated</Badge>}
+            {!isSigned && !isTerminated && <Badge variant="secondary">Awaiting Signature</Badge>}
+          </div>
         </div>
-        <div className="ml-auto flex gap-2">
-          {isSigned && <Badge variant="default"><Check className="mr-1 h-3 w-3" /> Signed</Badge>}
-          {isTerminated && <Badge variant="destructive">Terminated</Badge>}
-          {!isSigned && !isTerminated && <Badge variant="secondary">Awaiting Signature</Badge>}
-        </div>
-      </div>
 
-      {error && (
-        <Alert variant="destructive" className="mb-4">
+        {error && (
+          <Alert variant="destructive" className="mb-4">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
@@ -290,6 +289,7 @@ export default function ClientPortalAgreementPage({ slug, companyName, agreement
           </CardFooter>
         </Card>
       )}
-    </div>
+      </div>
+    </>
   )
 }

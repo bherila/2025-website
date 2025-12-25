@@ -3,8 +3,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Plus, ArrowLeft, Clock, Trash2, ChevronDown, ChevronRight, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react'
+import { Plus, ArrowLeft, Clock, Trash2, ChevronDown, ChevronRight, TrendingUp, TrendingDown, AlertCircle, AlertTriangle } from 'lucide-react'
 import NewTimeEntryModal from './NewTimeEntryModal'
+import ClientPortalNav from './ClientPortalNav'
 
 interface User {
   id: number
@@ -63,6 +64,7 @@ interface MonthlyData {
   rollover_months?: number
   opening: MonthlyOpeningBalance | null
   closing: MonthlyClosingBalance | null
+  unbilled_hours?: number // Billable hours with no active agreement (delayed billing)
 }
 
 interface TimeEntriesResponse {
@@ -72,6 +74,7 @@ interface TimeEntriesResponse {
   total_minutes: number
   billable_time: string
   billable_minutes: number
+  total_unbilled_hours?: number // Total hours to be billed against future agreements
 }
 
 interface ClientPortalTimePageProps {
@@ -238,55 +241,61 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
 
   if (loading) {
     return (
-      <div className="container mx-auto p-8 max-w-6xl">
-        <Skeleton className="h-8 w-32 mb-4" />
-        <Skeleton className="h-10 w-64 mb-6" />
-        <Skeleton className="h-24 w-full mb-6" />
-        <div className="space-y-4">
-          <Skeleton className="h-32 w-full" />
-          <Skeleton className="h-32 w-full" />
+      <>
+        <ClientPortalNav slug={slug} companyName={companyName} currentPage="time" />
+        <div className="container mx-auto px-8 max-w-6xl">
+          <Skeleton className="h-10 w-64 mb-6" />
+          <Skeleton className="h-24 w-full mb-6" />
+          <div className="space-y-4">
+            <Skeleton className="h-32 w-full" />
+            <Skeleton className="h-32 w-full" />
+          </div>
         </div>
-      </div>
+      </>
     )
   }
 
   return (
-    <div className="container mx-auto p-8 max-w-6xl">
-      <div className="mb-6">
-        <Button variant="ghost" className="mb-4" onClick={() => window.location.href = `/client/portal/${slug}`}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Projects
-        </Button>
-        
-        <div className="flex justify-between items-center">
-          <div>
-            <p className="text-sm text-muted-foreground">{companyName}</p>
-            <h1 className="text-3xl font-bold">Time Tracking</h1>
+    <>
+      <ClientPortalNav slug={slug} companyName={companyName} currentPage="time" />
+      <div className="container mx-auto px-8 max-w-6xl">
+        <div className="mb-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-bold">Time Tracking</h1>
+            </div>
+            {isAdmin && (
+              <Button onClick={() => setNewEntryModalOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                New Time Record
+              </Button>
+            )}
           </div>
-          {isAdmin && (
-            <Button onClick={() => setNewEntryModalOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              New Time Record
-            </Button>
-          )}
         </div>
-      </div>
 
-      {/* Summary Bar */}
-      <Card className="mb-6">
-        <CardContent className="py-4">
-          <div className="flex gap-8">
-            <div>
-              <span className="text-sm text-muted-foreground">Total Time:</span>
-              <span className="ml-2 font-semibold">{data?.total_time || '0:00'}</span>
+        {/* Summary Bar */}
+        <Card className="mb-6">
+          <CardContent className="py-4">
+            <div className="flex gap-8 flex-wrap">
+              <div>
+                <span className="text-sm text-muted-foreground">Total Time:</span>
+                <span className="ml-2 font-semibold">{data?.total_time || '0:00'}</span>
+              </div>
+              <div>
+                <span className="text-sm text-muted-foreground">Billable:</span>
+                <span className="ml-2 font-semibold text-green-600">{data?.billable_time || '0:00'}</span>
+              </div>
+              {data?.total_unbilled_hours && data.total_unbilled_hours > 0 && (
+                <div className="flex items-center gap-2 px-3 py-1 bg-amber-50 dark:bg-amber-950 rounded-md border border-amber-200 dark:border-amber-800">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <span className="text-sm text-amber-700 dark:text-amber-300">
+                    {formatHours(data.total_unbilled_hours)} pending billing
+                  </span>
+                </div>
+              )}
             </div>
-            <div>
-              <span className="text-sm text-muted-foreground">Billable:</span>
-              <span className="ml-2 font-semibold text-green-600">{data?.billable_time || '0:00'}</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
       {(!data?.monthly_data || data.monthly_data.length === 0) ? (
         <Card>
@@ -469,9 +478,24 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
                     )}
 
                     {!month.has_agreement && (
-                      <div className="mt-4 p-3 rounded-lg bg-muted text-sm text-muted-foreground">
-                        <AlertCircle className="h-4 w-4 inline mr-2" />
-                        No active agreement for this period. Hours are not billed.
+                      <div className="mt-4 p-4 rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800">
+                        <div className="flex items-start gap-3">
+                          <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
+                          <div>
+                            <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                              No active agreement for this period
+                            </p>
+                            {month.unbilled_hours && month.unbilled_hours > 0 ? (
+                              <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                                <strong>{formatHours(month.unbilled_hours)}</strong> of billable hours will be invoiced when a future agreement becomes active.
+                              </p>
+                            ) : (
+                              <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                                Any billable hours will be invoiced when a future agreement becomes active.
+                              </p>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     )}
                   </CardContent>
@@ -491,6 +515,7 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
         onSuccess={fetchTimeEntries}
         entry={editingEntry}
       />
-    </div>
+      </div>
+    </>
   )
 }

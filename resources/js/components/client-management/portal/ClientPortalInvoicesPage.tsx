@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ArrowLeft, FileText, Receipt } from 'lucide-react'
+import ClientPortalNav from './ClientPortalNav'
 
 interface Invoice {
   client_invoice_id: number
@@ -64,48 +65,39 @@ export default function ClientPortalInvoicesPage({ slug, companyName }: ClientPo
 
   if (loading) {
     return (
-      <div className="container mx-auto p-8 max-w-4xl">
-        <Skeleton className="h-10 w-32 mb-4" />
-        <div className="flex items-center gap-4 mb-6">
-          <Skeleton className="h-8 w-8 rounded" />
-          <div>
-            <Skeleton className="h-8 w-32 mb-1" />
-            <Skeleton className="h-4 w-48" />
+      <>
+        <ClientPortalNav slug={slug} companyName={companyName} currentPage="invoices" />
+        <div className="container mx-auto px-8 max-w-4xl">
+          <div className="space-y-4">
+            {[1, 2, 3].map(i => (
+              <Card key={i}>
+                <CardContent className="p-4">
+                  <div className="flex justify-between items-center">
+                    <div className="space-y-2">
+                      <Skeleton className="h-5 w-32" />
+                      <Skeleton className="h-4 w-24" />
+                    </div>
+                    <Skeleton className="h-6 w-16" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         </div>
-        <div className="space-y-4">
-          {[1, 2, 3].map(i => (
-            <Card key={i}>
-              <CardContent className="p-4">
-                <div className="flex justify-between items-center">
-                  <div className="space-y-2">
-                    <Skeleton className="h-5 w-32" />
-                    <Skeleton className="h-4 w-24" />
-                  </div>
-                  <Skeleton className="h-6 w-16" />
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
+      </>
     )
   }
 
   return (
-    <div className="container mx-auto p-8 max-w-4xl">
-      <Button variant="ghost" className="mb-4" onClick={() => window.location.href = `/client/portal/${slug}`}>
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Back to Portal
-      </Button>
-
-      <div className="flex items-center gap-4 mb-6">
-        <Receipt className="h-8 w-8 text-muted-foreground" />
-        <div>
-          <h1 className="text-3xl font-bold">Invoices</h1>
-          <p className="text-muted-foreground">{companyName}</p>
+    <>
+      <ClientPortalNav slug={slug} companyName={companyName} currentPage="invoices" />
+      <div className="container mx-auto px-8 max-w-4xl">
+        <div className="flex items-center gap-4 mb-6">
+          <Receipt className="h-8 w-8 text-muted-foreground" />
+          <div>
+            <h1 className="text-3xl font-bold">Invoices</h1>
+          </div>
         </div>
-      </div>
 
       {invoices.length === 0 ? (
         <Card>
@@ -159,6 +151,7 @@ export default function ClientPortalInvoicesPage({ slug, companyName }: ClientPo
           ))}
         </div>
       )}
-    </div>
+      </div>
+    </>
   )
 }

@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Plus, Clock, FolderOpen } from 'lucide-react'
 import NewProjectModal from './NewProjectModal'
+import ClientPortalNav from './ClientPortalNav'
 
 interface Project {
   id: number
@@ -97,23 +98,26 @@ export default function ClientPortalIndexPage({ slug, companyName }: ClientPorta
   }
 
   return (
-    <div className="container mx-auto p-8 max-w-6xl">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-3xl font-bold">{companyName}</h1>
-          <p className="text-muted-foreground">Client Portal</p>
+    <>
+      <ClientPortalNav 
+        slug={slug} 
+        companyName={companyName} 
+        currentPage="home"
+        projects={projects}
+      />
+      <div className="container mx-auto px-8 max-w-6xl">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h1 className="text-3xl font-bold">{companyName}</h1>
+            <p className="text-muted-foreground">Client Portal</p>
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={() => setNewProjectModalOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              New Project
+            </Button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => window.location.href = `/client/portal/${slug}/time`}>
-            <Clock className="mr-2 h-4 w-4" />
-            Time Tracking
-          </Button>
-          <Button onClick={() => setNewProjectModalOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Project
-          </Button>
-        </div>
-      </div>
 
       {projects.length === 0 ? (
         <Card>
@@ -192,6 +196,7 @@ export default function ClientPortalIndexPage({ slug, companyName }: ClientPorta
         slug={slug}
         onSuccess={fetchProjects}
       />
-    </div>
+      </div>
+    </>
   )
 }

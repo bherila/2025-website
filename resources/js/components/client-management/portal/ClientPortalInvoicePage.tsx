@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table'
-import { ArrowLeft, Receipt, Check, Clock } from 'lucide-react'
+import { Receipt, Check, Clock } from 'lucide-react'
+import ClientPortalNav from './ClientPortalNav'
 
 interface InvoiceLine {
   client_invoice_line_id: number
@@ -85,31 +85,33 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId }
 
   if (loading) {
     return (
-      <div className="container mx-auto p-8 max-w-4xl">
-        <Skeleton className="h-10 w-32 mb-4" />
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between items-start">
-              <div>
-                <Skeleton className="h-8 w-48 mb-2" />
-                <Skeleton className="h-4 w-32" />
-              </div>
-              <Skeleton className="h-6 w-16" />
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {[1, 2, 3, 4].map(i => (
-                <div key={i}>
-                  <Skeleton className="h-4 w-20 mb-1" />
-                  <Skeleton className="h-5 w-24" />
+      <>
+        <ClientPortalNav slug={slug} companyName={companyName} currentPage="invoice" />
+        <div className="container mx-auto px-8 max-w-4xl">
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-start">
+                <div>
+                  <Skeleton className="h-8 w-48 mb-2" />
+                  <Skeleton className="h-4 w-32" />
                 </div>
-              ))}
-            </div>
-            <Skeleton className="h-48 w-full" />
-          </CardContent>
-        </Card>
-      </div>
+                <Skeleton className="h-6 w-16" />
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[1, 2, 3, 4].map(i => (
+                  <div key={i}>
+                    <Skeleton className="h-4 w-20 mb-1" />
+                    <Skeleton className="h-5 w-24" />
+                  </div>
+                ))}
+              </div>
+              <Skeleton className="h-48 w-full" />
+            </CardContent>
+          </Card>
+        </div>
+      </>
     )
   }
 
@@ -118,24 +120,20 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId }
   }
 
   return (
-    <div className="container mx-auto p-8 max-w-4xl">
-      <Button variant="ghost" className="mb-4" onClick={() => window.location.href = `/client/portal/${slug}/invoices`}>
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Back to Invoices
-      </Button>
-
-      <div className="flex items-center gap-4 mb-6">
-        <Receipt className="h-8 w-8 text-muted-foreground" />
-        <div>
-          <h1 className="text-3xl font-bold">
-            {invoice.invoice_number || `Invoice #${invoice.client_invoice_id}`}
-          </h1>
-          <p className="text-muted-foreground">{companyName}</p>
+    <>
+      <ClientPortalNav slug={slug} companyName={companyName} currentPage="invoice" />
+      <div className="container mx-auto px-8 max-w-4xl">
+        <div className="flex items-center gap-4 mb-6">
+          <Receipt className="h-8 w-8 text-muted-foreground" />
+          <div>
+            <h1 className="text-3xl font-bold">
+              {invoice.invoice_number || `Invoice #${invoice.client_invoice_id}`}
+            </h1>
+          </div>
+          <div className="ml-auto">
+            {getStatusBadge(invoice.status)}
+          </div>
         </div>
-        <div className="ml-auto">
-          {getStatusBadge(invoice.status)}
-        </div>
-      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <Card>
@@ -250,6 +248,7 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId }
           </CardContent>
         </Card>
       )}
-    </div>
+      </div>
+    </>
   )
 }
