@@ -6,7 +6,7 @@ import type { AccountLineItem } from '@/data/finance/AccountLineItem';
 import { fetchWrapper } from '@/fetchWrapper';
 
 // Mock the child component
-jest.mock('@/components/TransactionsTable', () => () => <div data-testid="transactions-table" />);
+jest.mock('@/components/finance/TransactionsTable', () => () => <div data-testid="transactions-table" />);
 
 jest.mock('@/components/ui/button', () => ({
     Button: ({ children, ...props }: { children: React.ReactNode }) => <button {...props}>{children}</button>,

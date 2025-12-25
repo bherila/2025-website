@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Dialog, DialogContent, DialogTrigger, DialogTitle, DialogHeader } from './ui/dialog'
+import { Dialog, DialogContent, DialogTrigger, DialogTitle, DialogHeader } from '@/components/ui/dialog'
 
 interface ModalImageProps {
   imageUrl: string

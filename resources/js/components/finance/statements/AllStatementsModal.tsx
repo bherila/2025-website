@@ -1,10 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react';
-import { fetchWrapper } from '../../../fetchWrapper';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
-import { Spinner } from '../../ui/spinner';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../ui/table';
+import { fetchWrapper } from '@/fetchWrapper';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Spinner } from '@/components/ui/spinner';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import currency from 'currency.js';
 
 interface AllDetails {

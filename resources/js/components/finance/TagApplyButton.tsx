@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
-import { Button } from './ui/button'
-import { Spinner } from './ui/spinner'
+import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
 import { CheckIcon } from 'lucide-react'
 
 interface Props {

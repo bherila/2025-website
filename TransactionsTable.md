@@ -65,8 +65,8 @@ goToTransaction(accountId, transactionId, 2024)
 
 ## Component Location
 
-- **Frontend Component**: `resources/js/components/TransactionsTable.tsx`
-- **CSS Styles**: `resources/js/components/TransactionsTable.css`
+- **Frontend Component**: `resources/js/components/finance/TransactionsTable.tsx`
+- **CSS Styles**: `resources/js/components/finance/TransactionsTable.css`
 - **Primary Usage**: `resources/js/components/finance/FinanceAccountTransactionsPage.tsx`
 - **Type Definitions**: `resources/js/data/finance/AccountLineItem.ts`
 

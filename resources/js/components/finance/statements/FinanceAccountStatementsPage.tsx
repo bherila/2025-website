@@ -1,8 +1,8 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
-import { fetchWrapper } from '../../../fetchWrapper'
-import { Spinner } from '../../ui/spinner'
-import { Table, TableBody, TableCell, TableHeader, TableRow } from '../../ui/table'
+import { fetchWrapper } from '@/fetchWrapper'
+import { Spinner } from '@/components/ui/spinner'
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
 import AccountStatementsChart from './AccountStatementsChart'
 import {
   AlertDialog,
@@ -12,16 +12,16 @@ import {
   AlertDialogDescription,
   AlertDialogCancel,
   AlertDialogAction,
-} from '../../ui/alert-dialog'
+} from '@/components/ui/alert-dialog'
 import {
   Dialog,
   DialogContent,
   DialogTitle,
   DialogDescription,
-} from '../../ui/dialog'
-import { Button } from '../../ui/button'
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
 import { Trash2 as Delete, Paperclip, Pencil } from 'lucide-react'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../ui/tooltip'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 import { StatementDetailsModal, type StatementInfo, type StatementDetail } from '../StatementDetailsModal';
 import AllStatementsModal from './AllStatementsModal';

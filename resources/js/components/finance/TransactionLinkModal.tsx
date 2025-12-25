@@ -1,12 +1,12 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog'
-import { Button } from './ui/button'
-import { Spinner } from './ui/spinner'
-import { Table } from './ui/table'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
+import { Table } from '@/components/ui/table'
 import type { AccountLineItem } from '@/data/finance/AccountLineItem'
-import { fetchWrapper } from '../fetchWrapper'
+import { fetchWrapper } from '@/fetchWrapper'
 import currency from 'currency.js'
 import { goToTransaction } from '@/lib/financeRouteBuilder'
 

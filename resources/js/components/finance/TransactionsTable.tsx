@@ -3,12 +3,12 @@ import './TransactionsTable.css'
 import currency from 'currency.js'
 import { useEffect, useMemo, useState } from 'react'
 import type { AccountLineItem } from '@/data/finance/AccountLineItem'
-import { Badge } from './ui/badge'
-import { Spinner } from './ui/spinner'
-import { Button } from './ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Spinner } from '@/components/ui/spinner'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
-import { Table } from './ui/table'
+import { Table } from '@/components/ui/table'
 import { ClearFilterButton } from './ClearFilterButton'
 import { TagApplyButton } from './TagApplyButton'
 import TransactionDetailsModal from './TransactionDetailsModal'
@@ -22,8 +22,8 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from './ui/alert-dialog'
-import { fetchWrapper } from '../fetchWrapper'
+} from '@/components/ui/alert-dialog'
+import { fetchWrapper } from '@/fetchWrapper'
 import { isDuplicateTransaction } from '@/data/finance/isDuplicateTransaction'
 
 interface Props {

@@ -1,9 +1,9 @@
 'use client'
 import { useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
-import { Label } from '../ui/label'
-import { Checkbox } from '../ui/checkbox'
-import { fetchWrapper } from '../../fetchWrapper'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
+import { fetchWrapper } from '@/fetchWrapper'
 
 export interface EditAccountFlagsProps {
   accountId: string

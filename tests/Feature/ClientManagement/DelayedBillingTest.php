@@ -45,8 +45,8 @@ class DelayedBillingTest extends TestCase
         // Create a project
         $this->project = ClientProject::create([
             'client_company_id' => $this->company->id,
-            'project_name' => 'Test Project',
-            'is_billable' => true,
+            'name' => 'Test Project',
+            'slug' => 'test-project',
         ]);
     }
 
@@ -55,21 +55,21 @@ class DelayedBillingTest extends TestCase
         // Create time entries in January 2024 (before agreement)
         ClientTimeEntry::create([
             'client_company_id' => $this->company->id,
-            'client_project_id' => $this->project->client_project_id,
+            'project_id' => $this->project->id,
             'user_id' => $this->user->id,
             'date_worked' => Carbon::create(2024, 1, 15),
             'minutes_worked' => 120, // 2 hours
-            'description' => 'Pre-agreement work 1',
+            'name' => 'Pre-agreement work 1',
             'is_billable' => true,
         ]);
         
         ClientTimeEntry::create([
             'client_company_id' => $this->company->id,
-            'client_project_id' => $this->project->client_project_id,
+            'project_id' => $this->project->id,
             'user_id' => $this->user->id,
             'date_worked' => Carbon::create(2024, 1, 20),
             'minutes_worked' => 180, // 3 hours
-            'description' => 'Pre-agreement work 2',
+            'name' => 'Pre-agreement work 2',
             'is_billable' => true,
         ]);
 
@@ -89,11 +89,11 @@ class DelayedBillingTest extends TestCase
         // Create time entry for February (during agreement)
         ClientTimeEntry::create([
             'client_company_id' => $this->company->id,
-            'client_project_id' => $this->project->client_project_id,
+            'project_id' => $this->project->id,
             'user_id' => $this->user->id,
             'date_worked' => Carbon::create(2024, 2, 15),
             'minutes_worked' => 300, // 5 hours
-            'description' => 'February work',
+            'name' => 'February work',
             'is_billable' => true,
         ]);
 
@@ -135,11 +135,11 @@ class DelayedBillingTest extends TestCase
         // Create pre-agreement time entry
         ClientTimeEntry::create([
             'client_company_id' => $this->company->id,
-            'client_project_id' => $this->project->client_project_id,
+            'project_id' => $this->project->id,
             'user_id' => $this->user->id,
             'date_worked' => Carbon::create(2024, 1, 15),
             'minutes_worked' => 240, // 4 hours
-            'description' => 'Pre-agreement work',
+            'name' => 'Pre-agreement work',
             'is_billable' => true,
         ]);
 
@@ -182,11 +182,11 @@ class DelayedBillingTest extends TestCase
         // Create non-billable pre-agreement time entry
         ClientTimeEntry::create([
             'client_company_id' => $this->company->id,
-            'client_project_id' => $this->project->client_project_id,
+            'project_id' => $this->project->id,
             'user_id' => $this->user->id,
             'date_worked' => Carbon::create(2024, 1, 15),
             'minutes_worked' => 120,
-            'description' => 'Non-billable work',
+            'name' => 'Non-billable work',
             'is_billable' => false, // Not billable
         ]);
 
@@ -237,11 +237,11 @@ class DelayedBillingTest extends TestCase
         // Create time entry for January
         ClientTimeEntry::create([
             'client_company_id' => $this->company->id,
-            'client_project_id' => $this->project->client_project_id,
+            'project_id' => $this->project->id,
             'user_id' => $this->user->id,
             'date_worked' => Carbon::create(2024, 1, 15),
             'minutes_worked' => 120,
-            'description' => 'January work',
+            'name' => 'January work',
             'is_billable' => true,
         ]);
 
@@ -269,19 +269,22 @@ class DelayedBillingTest extends TestCase
         // Create time entry before agreement
         ClientTimeEntry::create([
             'client_company_id' => $this->company->id,
-            'client_project_id' => $this->project->client_project_id,
+            'project_id' => $this->project->id,
             'user_id' => $this->user->id,
             'date_worked' => Carbon::create(2024, 1, 15),
             'minutes_worked' => 180, // 3 hours
-            'description' => 'Pre-agreement work',
+            'name' => 'Pre-agreement work',
             'is_billable' => true,
         ]);
+
+        // Add user as member of the company
+        $this->company->users()->attach($this->user->id);
 
         // Login as user
         $this->actingAs($this->user);
 
         // Make API call to get time entries
-        $response = $this->getJson("/api/client/portal/{$this->company->slug}/time");
+        $response = $this->getJson("/api/client/portal/{$this->company->slug}/time-entries");
 
         $response->assertOk();
         
@@ -291,9 +294,9 @@ class DelayedBillingTest extends TestCase
         $this->assertArrayHasKey('total_unbilled_hours', $data);
         $this->assertEquals(3, $data['total_unbilled_hours']);
         
-        // The month grouping should show unbilled_hours for the period without agreement
-        $this->assertNotEmpty($data['months']);
-        $januaryMonth = collect($data['months'])->firstWhere('year_month', '2024-01');
+        // The monthly_data should show unbilled_hours for the period without agreement
+        $this->assertNotEmpty($data['monthly_data']);
+        $januaryMonth = collect($data['monthly_data'])->firstWhere('year_month', '2024-01');
         $this->assertNotNull($januaryMonth);
         $this->assertEquals(3, $januaryMonth['unbilled_hours']);
     }

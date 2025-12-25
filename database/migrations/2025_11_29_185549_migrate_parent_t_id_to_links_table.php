@@ -4,6 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
 
 return new class extends Migration
 {
@@ -16,13 +17,22 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Migrate existing parent_t_id relationships to the links table
-        DB::statement('
-            INSERT INTO fin_account_line_item_links (parent_t_id, child_t_id, when_added)
-            SELECT parent_t_id, t_id, NOW()
-            FROM fin_account_line_items
-            WHERE parent_t_id IS NOT NULL
-        ');
+        // Migrate existing parent_t_id relationships to the links table using query builder
+        // for cross-database compatibility (MySQL, SQLite, etc.)
+        $now = Carbon::now();
+        
+        $linksToInsert = DB::table('fin_account_line_items')
+            ->whereNotNull('parent_t_id')
+            ->select('parent_t_id', 't_id')
+            ->get();
+
+        foreach ($linksToInsert as $link) {
+            DB::table('fin_account_line_item_links')->insert([
+                'parent_t_id' => $link->parent_t_id,
+                'child_t_id' => $link->t_id,
+                'when_added' => $now,
+            ]);
+        }
     }
 
     /**
@@ -32,13 +42,17 @@ return new class extends Migration
      */
     public function down(): void
     {
-        // Restore parent_t_id values from links table
-        DB::statement('
-            UPDATE fin_account_line_items fali
-            INNER JOIN fin_account_line_item_links falil ON fali.t_id = falil.child_t_id
-            SET fali.parent_t_id = falil.parent_t_id
-            WHERE falil.when_deleted IS NULL
-        ');
+        // Restore parent_t_id values from links table using query builder
+        // for cross-database compatibility
+        $links = DB::table('fin_account_line_item_links')
+            ->whereNull('when_deleted')
+            ->get();
+
+        foreach ($links as $link) {
+            DB::table('fin_account_line_items')
+                ->where('t_id', $link->child_t_id)
+                ->update(['parent_t_id' => $link->parent_t_id]);
+        }
 
         // Clear the links table
         DB::table('fin_account_line_item_links')->truncate();

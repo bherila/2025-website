@@ -1,13 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import type { AccountLineItem } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
 
 // Common transaction types
@@ -32,99 +31,101 @@ const TRANSACTION_TYPES = [
   'Other',
 ]
 
-interface TransactionDetailsModalProps {
-  transaction: AccountLineItem
+interface NewTransactionModalProps {
+  accountId: number
   isOpen: boolean
   onClose: () => void
-  onSave?: (updatedTransaction: Partial<AccountLineItem>) => Promise<void>
+  onSuccess?: () => void
 }
 
-export default function TransactionDetailsModal({ transaction, isOpen, onClose, onSave }: TransactionDetailsModalProps) {
+export default function NewTransactionModal({ accountId, isOpen, onClose, onSuccess }: NewTransactionModalProps) {
   const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  // Helper to format numeric value for form input (as text)
-  const formatNumericValue = (value: number | string | null | undefined): string => {
-    if (value === null || value === undefined || value === '') return ''
-    const num = typeof value === 'string' ? parseFloat(value) : value
-    if (isNaN(num)) return ''
-    return num.toString()
+  // Form state
+  const [transactionDate, setTransactionDate] = useState(new Date().toISOString().split('T')[0])
+  const [transactionType, setTransactionType] = useState('')
+  const [amount, setAmount] = useState('')
+  const [description, setDescription] = useState('')
+  const [symbol, setSymbol] = useState('')
+  const [qty, setQty] = useState('')
+  const [price, setPrice] = useState('')
+  const [commission, setCommission] = useState('')
+  const [fee, setFee] = useState('')
+  const [comment, setComment] = useState('')
+
+  const resetForm = () => {
+    setTransactionDate(new Date().toISOString().split('T')[0])
+    setTransactionType('')
+    setAmount('')
+    setDescription('')
+    setSymbol('')
+    setQty('')
+    setPrice('')
+    setCommission('')
+    setFee('')
+    setComment('')
+    setError(null)
   }
 
-  // Helper to format date for input[type="date"]
-  const formatDateValue = (value: string | null | undefined): string => {
-    if (!value) return ''
-    // Handle various date formats
-    const date = new Date(value)
-    if (isNaN(date.getTime())) return ''
-    return date.toISOString().split('T')[0]
+  const handleClose = () => {
+    resetForm()
+    onClose()
   }
-
-  const [transactionDate, setTransactionDate] = useState(formatDateValue(transaction.t_date))
-  const [transactionType, setTransactionType] = useState(transaction.t_type || '')
-  const [amount, setAmount] = useState(formatNumericValue(transaction.t_amt))
-  const [comment, setComment] = useState(transaction.t_comment || '')
-  const [description, setDescription] = useState(transaction.t_description || '')
-  const [qty, setQty] = useState(formatNumericValue(transaction.t_qty))
-  const [price, setPrice] = useState(formatNumericValue(transaction.t_price))
-  const [commission, setCommission] = useState(formatNumericValue(transaction.t_commission))
-  const [fee, setFee] = useState(formatNumericValue(transaction.t_fee))
-  const [symbol, setSymbol] = useState(transaction.t_symbol || '')
-
-  // Reset form when transaction changes
-  useEffect(() => {
-    setTransactionDate(formatDateValue(transaction.t_date))
-    setTransactionType(transaction.t_type || '')
-    setAmount(formatNumericValue(transaction.t_amt))
-    setComment(transaction.t_comment || '')
-    setDescription(transaction.t_description || '')
-    setQty(formatNumericValue(transaction.t_qty))
-    setPrice(formatNumericValue(transaction.t_price))
-    setCommission(formatNumericValue(transaction.t_commission))
-    setFee(formatNumericValue(transaction.t_fee))
-    setSymbol(transaction.t_symbol || '')
-  }, [transaction])
 
   const handleSave = async () => {
+    setError(null)
+
+    // Validation
+    if (!transactionDate) {
+      setError('Date is required')
+      return
+    }
+
     setIsSaving(true)
     try {
-      const updatedFields: Partial<AccountLineItem> = {
-        t_date: transactionDate || undefined,
+      const newTransaction = {
+        t_date: transactionDate,
         t_type: transactionType || null,
         t_amt: amount ? parseFloat(amount) : 0,
-        t_comment: comment || null,
         t_description: description || null,
+        t_symbol: symbol || null,
         t_qty: qty ? parseFloat(qty) : 0,
         t_price: price ? parseFloat(price) : 0,
         t_commission: commission ? parseFloat(commission) : 0,
         t_fee: fee ? parseFloat(fee) : 0,
-        t_symbol: symbol || null,
+        t_comment: comment || null,
       }
 
-      await fetchWrapper.post(`/api/finance/transactions/${transaction.t_id}/update`, updatedFields);
+      await fetchWrapper.post(`/api/finance/${accountId}/transaction`, newTransaction)
 
-      // Call optional onSave prop if provided
-      if (onSave) {
-        await onSave(updatedFields)
+      if (onSuccess) {
+        onSuccess()
       }
-
-      onClose()
-    } catch (error) {
-      console.error('Failed to save transaction details', error)
+      handleClose()
+    } catch (err) {
+      console.error('Failed to create transaction', err)
+      setError('Failed to create transaction. Please try again.')
     } finally {
       setIsSaving(false)
     }
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Transaction Details</DialogTitle>
+          <DialogTitle>New Transaction</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-4">
+          {error && (
+            <div className="bg-destructive/15 text-destructive px-4 py-2 rounded-md text-sm">
+              {error}
+            </div>
+          )}
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="t_date" className="text-right">
-              Date
+              Date <span className="text-destructive">*</span>
             </Label>
             <Input
               id="t_date"
@@ -251,11 +252,11 @@ export default function TransactionDetailsModal({ transaction, isOpen, onClose, 
           </div>
         </div>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={onClose} disabled={isSaving}>
+          <Button type="button" variant="outline" onClick={handleClose} disabled={isSaving}>
             Cancel
           </Button>
           <Button type="submit" onClick={handleSave} disabled={isSaving}>
-            {isSaving ? 'Saving...' : 'Save'}
+            {isSaving ? 'Creating...' : 'Create Transaction'}
           </Button>
         </DialogFooter>
       </DialogContent>

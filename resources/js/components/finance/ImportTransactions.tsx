@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react'
 import { z } from 'zod'
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
-import TransactionsTable from '../TransactionsTable'
+import TransactionsTable from './TransactionsTable'
 import { Button } from '@/components/ui/button'
 import { fetchWrapper } from '@/fetchWrapper'
 import { Spinner } from '@/components/ui/spinner'
