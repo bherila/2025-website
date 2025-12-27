@@ -1,4 +1,5 @@
-import currency from 'currency.js'
+import type currency from 'currency.js'
+
 export interface IAward {
   award_id?: string
   grant_date?: string

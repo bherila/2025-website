@@ -1,6 +1,7 @@
 'use client'
+
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import type { IAward } from '@/rsu/IAward'
+import type { IAward } from '@/types/finance'
 import _ from 'lodash'
 import currency from 'currency.js'
 
@@ -12,7 +13,7 @@ export default function RsuChart({ rsu, mode = 'shares' }: { rsu: IAward[]; mode
   const dataSource = []
 
   // Find the most recent vest price for fallback
-  let lastKnownPrice: { [symbol: string]: number | null } = {}
+  const lastKnownPrice: { [symbol: string]: number | null } = {}
   for (const vest of rsu) {
     if (vest.vest_price != null) {
       lastKnownPrice[vest.symbol!] = vest.vest_price
@@ -23,13 +24,13 @@ export default function RsuChart({ rsu, mode = 'shares' }: { rsu: IAward[]; mode
     const currentVests = vests[vestDate]
     if (!currentVests) continue
 
-    let o: { [key: string]: string | number } = { vest_date: vestDate }
+    const o: { [key: string]: string | number } = { vest_date: vestDate }
     for (const vest of currentVests) {
       award_ids.add(vest.award_id!)
       if (mode === 'value') {
         // Use vest price if available, else fallback to last known price for that symbol
-        let price = vest.vest_price ?? lastKnownPrice[vest.symbol!]
-        let shares = currency(vest.share_count!).value
+        const price = vest.vest_price ?? lastKnownPrice[vest.symbol!]
+        const shares = currency(vest.share_count!).value
         o[vest.award_id!] = price != null ? currency(shares).multiply(price).value : 0
         // Update last known price if this vest has a price
         if (vest.vest_price != null) lastKnownPrice[vest.symbol!] = vest.vest_price

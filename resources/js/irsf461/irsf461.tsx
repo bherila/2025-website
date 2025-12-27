@@ -1,7 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import ExcessBusinessLossClient from './ExcessBusinessLossClient'
-import Container from '../components/container'
+import Container from '@/components/container'
 
 const root = ReactDOM.createRoot(document.getElementById('app') as HTMLElement)
 

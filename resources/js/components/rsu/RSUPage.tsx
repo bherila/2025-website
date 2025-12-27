@@ -1,13 +1,15 @@
+'use client'
+
 import { useEffect, useState } from 'react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Card } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { fetchWrapper } from '@/fetchWrapper'
-import type { IAward } from '@/rsu/IAward'
-import { RsuByVestDate } from '@/rsu/rsuByVestDate'
-import { RsuByAward } from '@/rsu/rsuByAward'
-import RsuChart from './RsuChart'
-import RsuSubNav from '@/rsu/components/RsuSubNav'
+import type { IAward } from '@/types/finance'
+import { RsuByVestDate } from '@/components/rsu/RsuByVestDate'
+import { RsuByAward } from '@/components/rsu/RsuByAward'
+import RsuChart from '@/components/rsu/RsuChart'
+import RsuSubNav from '@/components/rsu/RsuSubNav'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import currency from 'currency.js'
 import Container from '@/components/container'
@@ -20,9 +22,7 @@ export default function RSUPage() {
     fetchWrapper
       .get('/api/rsu')
       .then((response) => setRsu(response))
-      .catch(
-        (e) => console.error(e)
-      )
+      .catch((e) => console.error(e))
       .finally(() => setLoading(false))
   }, [])
 

@@ -1,10 +1,10 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import Container from './components/container';
-import MainTitle from './components/main-title';
-import ImageAndText from './components/image-and-text';
-import CustomLink from './components/link';
-import { CTAs } from './components/ctas';
+import Container from '@/components/container';
+import MainTitle from '@/components/MainTitle';
+import ImageAndText from '@/components/image-and-text';
+import CustomLink from '@/components/link';
+import { CTAs } from '@/components/ctas';
 
 const ProjectsPage: React.FC = () => {
   return (

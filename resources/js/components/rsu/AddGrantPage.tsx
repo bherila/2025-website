@@ -1,13 +1,14 @@
 'use client'
-import { useEffect, useState } from 'react'
+
+import { useState } from 'react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import currency from 'currency.js'
 import { fetchWrapper } from '@/fetchWrapper'
-import type { IAward } from '@/rsu/IAward'
-import RsuSubNav from '@/rsu/components/RsuSubNav'
+import type { IAward } from '@/types/finance'
+import RsuSubNav from '@/components/rsu/RsuSubNav'
 
 export default function AddGrantPage() {
   const [shares, setShares] = useState<string>('')
@@ -58,12 +59,9 @@ export default function AddGrantPage() {
           <form
             onSubmit={(e) => {
               e.preventDefault()
-              fetchWrapper
-                .post('/api/rsu', rowsToImport)
-
-                .finally(() => {
-                  setShares('')
-                })
+              fetchWrapper.post('/api/rsu', rowsToImport).finally(() => {
+                setShares('')
+              })
             }}
           >
             <div className="space-y-4 mb-4">
@@ -108,7 +106,7 @@ export default function AddGrantPage() {
                 rows={10}
                 onChange={(e) =>
                   setShares(
-                    e.currentTarget.value.replace(/\t\r?\n/g, '\t').replace(/(\d{1,2})\/(\d{1,2})\/(\d{4})/g, '$3-$1-$2'),
+                    e.currentTarget.value.replace(/\t\r?\n/g, '\t').replace(/(\d{1,2})\/(\d{1,2})\/(\d{4})/g, '$3-$1-$2')
                   )
                 }
                 value={shares}

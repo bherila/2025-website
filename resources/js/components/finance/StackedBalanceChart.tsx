@@ -1,4 +1,5 @@
 'use client'
+
 import { useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts'
 import currency from 'currency.js'
@@ -51,7 +52,6 @@ function generateTSV({
   isRetirement,
   includeLiabilities,
   includeRetirement,
-  groupByAccount,
 }: {
   data: (string | number)[][]
   labels?: string[] | undefined
@@ -59,12 +59,13 @@ function generateTSV({
   isRetirement?: boolean[] | undefined
   includeLiabilities: boolean
   includeRetirement: boolean
-  groupByAccount: boolean
 }) {
   // Filtered labels (accounts to include)
   const filteredLabels = labels
     ? labels.filter((_, i) => (!isNegative?.[i] || includeLiabilities) && (!isRetirement?.[i] || includeRetirement))
-    : data[0] ? Array.from({ length: data[0].length - 1 }, (_, i) => `balance${i + 1}`) : []
+    : data[0]
+      ? Array.from({ length: data[0].length - 1 }, (_, i) => `balance${i + 1}`)
+      : []
 
   // Header row: Date + account columns
   const header = ['Date', ...filteredLabels]
@@ -118,13 +119,12 @@ export default function StackedBalanceChart({ data, labels, isNegative, isRetire
       isRetirement,
       includeLiabilities,
       includeRetirement,
-      groupByAccount,
     })
     try {
       await navigator.clipboard.writeText(tsv)
       setCopyButtonText('Copied!')
       setTimeout(() => setCopyButtonText('Copy raw data'), 2000)
-    } catch (e) {
+    } catch {
       setCopyButtonText('Failed')
       setTimeout(() => setCopyButtonText('Copy raw data'), 2000)
     }
@@ -132,8 +132,8 @@ export default function StackedBalanceChart({ data, labels, isNegative, isRetire
 
   // Transform the data into the format recharts expects
   const chartData = data.map(([date, ...balances]) => {
-    const dataPoint: { [key: string]: any } = {
-      date: date,
+    const dataPoint: { [key: string]: string | number } = {
+      date: date ?? '',
     }
 
     let totalBalance = 0
@@ -170,9 +170,11 @@ export default function StackedBalanceChart({ data, labels, isNegative, isRetire
   const balanceKeys = groupByAccount
     ? labels
       ? labels.filter(
-          (_, index) => (!isNegative?.[index] || includeLiabilities) && (!isRetirement?.[index] || includeRetirement),
+          (_, index) => (!isNegative?.[index] || includeLiabilities) && (!isRetirement?.[index] || includeRetirement)
         )
-      : data[0] ? Array.from({ length: data[0].length - 1 }, (_, i) => `balance${i + 1}`) : []
+      : data[0]
+        ? Array.from({ length: data[0].length - 1 }, (_, i) => `balance${i + 1}`)
+        : []
     : ['Net Worth']
 
   return (
@@ -235,7 +237,7 @@ export default function StackedBalanceChart({ data, labels, isNegative, isRetire
                   <LabelList
                     dataKey="Net Worth"
                     position="top"
-                    formatter={(value: any) => formatFriendlyAmount(value as number)}
+                    formatter={(value: unknown) => formatFriendlyAmount(value as number)}
                     className="text-xs font-bold"
                   />
                 ) : null}

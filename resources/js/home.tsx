@@ -1,7 +1,7 @@
 import './bootstrap';
 import CustomLink from '@/components/link';
-import MainTitle from '@/components/main-title';
-import { CTAs } from './components/ctas';
+import MainTitle from '@/components/MainTitle';
+import { CTAs } from '@/components/ctas';
 import { createRoot } from 'react-dom/client';
 import React from 'react';
 

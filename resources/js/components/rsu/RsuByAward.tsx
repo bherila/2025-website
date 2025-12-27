@@ -1,4 +1,4 @@
-import type { IAward } from '@/rsu/IAward'
+import type { IAward } from '@/types/finance'
 import _ from 'lodash'
 import currency from 'currency.js'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -39,7 +39,6 @@ export function RsuByAward(props: { rsu: IAward[] }) {
           let totalGrantValue = currency(0)
           let weightedGrantSum = currency(0)
           let weightedGrantShares = 0
-          const now = new Date().toISOString().slice(0, 10)
           for (const share of lRSU) {
             const shares = typeof share.share_count === 'object' ? share.share_count.value : share.share_count
             const price = share.vest_price ?? null

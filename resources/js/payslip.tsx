@@ -1,7 +1,7 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
-import PayslipClient from './components/payslip/PayslipClient'
-import { fetchPayslipYears, fetchPayslips } from './lib/api'
+import PayslipClient from '@/components/payslip/PayslipClient'
+import { fetchPayslipYears, fetchPayslips } from '@/lib/api'
 
 async function renderPayslipPage() {
   const urlParams = new URLSearchParams(window.location.search)

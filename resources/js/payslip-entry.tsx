@@ -1,8 +1,8 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
-import PayslipDetailClient from './components/payslip/PayslipDetailClient'
-import { fetchPayslipById } from './lib/api'
-import type { fin_payslip } from './components/payslip/payslipDbCols'
+import PayslipDetailClient from '@/components/payslip/PayslipDetailClient'
+import { fetchPayslipById } from '@/lib/api'
+import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 
 async function renderPayslipEntryPage() {
   const urlParams = new URLSearchParams(window.location.search)

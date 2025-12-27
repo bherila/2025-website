@@ -1,7 +1,7 @@
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils'
 
 export default function RsuSubNav() {
-  const pathname = window.location.pathname;
+  const pathname = window.location.pathname
 
   const navItems = [
     {
@@ -12,7 +12,7 @@ export default function RsuSubNav() {
       name: 'Add an award',
       href: '/rsu/add-grant',
     },
-  ];
+  ]
 
   return (
     <div className="flex flex-col md:flex-row items-center mb-2 mt-2 gap-4">
@@ -31,7 +31,7 @@ export default function RsuSubNav() {
                 (pathname.endsWith('/') && pathname.slice(0, -1) === item.href) ||
                 (item.href.endsWith('/') && item.href.slice(0, -1) === pathname)
                 ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
             )}
           >
             {item.name}
@@ -39,5 +39,5 @@ export default function RsuSubNav() {
         ))}
       </nav>
     </div>
-  );
+  )
 }
