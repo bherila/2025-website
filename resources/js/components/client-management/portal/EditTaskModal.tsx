@@ -7,6 +7,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { format } from 'date-fns'
+import { FileList, FileUploadButton, DeleteFileModal, useFileOperations } from '@/components/shared/FileManager'
+import type { FileRecord } from '@/types/files'
 
 interface User {
   id: number
@@ -35,9 +37,10 @@ interface EditTaskModalProps {
   projectSlug: string
   users: User[]
   onSuccess: () => void
+  isAdmin: boolean
 }
 
-export default function EditTaskModal({ open, onOpenChange, task, slug, projectSlug, users, onSuccess }: EditTaskModalProps) {
+export default function EditTaskModal({ open, onOpenChange, task, slug, projectSlug, users, onSuccess, isAdmin }: EditTaskModalProps) {
   const [name, setName] = useState(task.name)
   const [description, setDescription] = useState(task.description || '')
   const [dueDate, setDueDate] = useState(task.due_date ? task.due_date.split('T')[0] : '')
@@ -55,6 +58,18 @@ export default function EditTaskModal({ open, onOpenChange, task, slug, projectS
   const [timeLoading, setTimeLoading] = useState(false)
   const [timeSuccess, setTimeSuccess] = useState(false)
 
+  // File management state
+  const fileOps = useFileOperations({
+    listUrl: `/api/files/tasks/${task.id}`,
+    uploadUrl: `/api/files/tasks/${task.id}`,
+    uploadUrlEndpoint: `/api/files/tasks/${task.id}/upload-url`,
+    downloadUrlPattern: (fileId) => `/api/files/tasks/${task.id}/${fileId}/download`,
+    deleteUrlPattern: (fileId) => `/api/files/tasks/${task.id}/${fileId}`,
+  })
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [deleteFileState, setDeleteFileState] = useState<FileRecord | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
   useEffect(() => {
     setName(task.name)
     setDescription(task.description || '')
@@ -62,6 +77,7 @@ export default function EditTaskModal({ open, onOpenChange, task, slug, projectS
     setAssigneeId(task.assignee?.id.toString() || '')
     setIsHighPriority(task.is_high_priority)
     setIsHiddenFromClients(task.is_hidden_from_clients)
+    fileOps.fetchFiles()
   }, [task])
 
   const handleUpdateTask = async (e: React.FormEvent) => {
@@ -154,6 +170,20 @@ export default function EditTaskModal({ open, onOpenChange, task, slug, projectS
     }
   }
 
+  const handleDeleteRequest = (file: FileRecord) => {
+    setDeleteFileState(file)
+    setDeleteModalOpen(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteFileState) return
+    setIsDeleting(true)
+    await fileOps.deleteFile(deleteFileState)
+    setIsDeleting(false)
+    setDeleteModalOpen(false)
+    setDeleteFileState(null)
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
@@ -162,9 +192,10 @@ export default function EditTaskModal({ open, onOpenChange, task, slug, projectS
         </DialogHeader>
         
         <Tabs defaultValue="details">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="details">Details</TabsTrigger>
             <TabsTrigger value="time">Log Time</TabsTrigger>
+            <TabsTrigger value="files">Files</TabsTrigger>
           </TabsList>
           
           <TabsContent value="details">
@@ -326,8 +357,34 @@ export default function EditTaskModal({ open, onOpenChange, task, slug, projectS
                </DialogFooter>
             </form>
           </TabsContent>
+
+          <TabsContent value="files">
+            <div className="space-y-4 mt-4">
+              {isAdmin && (
+                <div className="flex justify-end">
+                  <FileUploadButton onUpload={fileOps.uploadFile} />
+                </div>
+              )}
+              <FileList
+                files={fileOps.files}
+                loading={fileOps.loading}
+                isAdmin={isAdmin}
+                onDownload={fileOps.downloadFile}
+                onDelete={handleDeleteRequest}
+                title=""
+              />
+            </div>
+          </TabsContent>
         </Tabs>
       </DialogContent>
+
+      <DeleteFileModal
+        file={deleteFileState}
+        isOpen={deleteModalOpen}
+        isDeleting={isDeleting}
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={handleDeleteConfirm}
+      />
     </Dialog>
   )
 }

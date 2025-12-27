@@ -8,15 +8,18 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AlertCircle, ArrowLeft, FileText, Check } from 'lucide-react'
 import ClientPortalNav from './ClientPortalNav'
+import { FileList, FileUploadButton, FileHistoryModal, DeleteFileModal, useFileOperations } from '@/components/shared/FileManager'
 import type { ClientAgreement } from '@/types/client-management/client-agreement'
+import type { FileRecord, DownloadHistoryEntry } from '@/types/files'
 
 interface ClientPortalAgreementPageProps {
   slug: string
   companyName: string
   agreementId: number
+  isAdmin: boolean
 }
 
-export default function ClientPortalAgreementPage({ slug, companyName, agreementId }: ClientPortalAgreementPageProps) {
+export default function ClientPortalAgreementPage({ slug, companyName, agreementId, isAdmin }: ClientPortalAgreementPageProps) {
   const [agreement, setAgreement] = useState<ClientAgreement | null>(null)
   const [loading, setLoading] = useState(true)
   const [signing, setSigning] = useState(false)
@@ -26,8 +29,25 @@ export default function ClientPortalAgreementPage({ slug, companyName, agreement
   const [signName, setSignName] = useState('')
   const [signTitle, setSignTitle] = useState('')
 
+  // File management state
+  const fileOps = useFileOperations({
+    listUrl: `/api/files/agreements/${agreementId}`,
+    uploadUrl: `/api/files/agreements/${agreementId}`,
+    uploadUrlEndpoint: `/api/files/agreements/${agreementId}/upload-url`,
+    downloadUrlPattern: (fileId) => `/api/files/agreements/${agreementId}/${fileId}/download`,
+    deleteUrlPattern: (fileId) => `/api/files/agreements/${agreementId}/${fileId}`,
+    historyUrlPattern: (fileId) => `/api/files/agreements/${agreementId}/${fileId}/history`,
+  })
+  const [historyModalOpen, setHistoryModalOpen] = useState(false)
+  const [historyFile, setHistoryFile] = useState<FileRecord | null>(null)
+  const [historyData, setHistoryData] = useState<DownloadHistoryEntry[]>([])
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [deleteFileState, setDeleteFileState] = useState<FileRecord | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
   useEffect(() => {
     fetchAgreement()
+    fileOps.fetchFiles()
   }, [agreementId])
 
   useEffect(() => {
@@ -89,6 +109,20 @@ export default function ClientPortalAgreementPage({ slug, companyName, agreement
     } finally {
       setSigning(false)
     }
+  }
+
+  const handleDeleteRequest = (file: FileRecord) => {
+    setDeleteFileState(file)
+    setDeleteModalOpen(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteFileState) return
+    setIsDeleting(true)
+    await fileOps.deleteFile(deleteFileState)
+    setIsDeleting(false)
+    setDeleteModalOpen(false)
+    setDeleteFileState(null)
   }
 
   if (loading) {
@@ -271,6 +305,43 @@ export default function ClientPortalAgreementPage({ slug, companyName, agreement
           </CardFooter>
         </Card>
       )}
+
+      {/* Agreement Files Section */}
+      <Card className="mt-6">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Agreement Files</CardTitle>
+            {isAdmin && (
+              <FileUploadButton onUpload={fileOps.uploadFile} />
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          <FileList
+            files={fileOps.files}
+            loading={fileOps.loading}
+            isAdmin={isAdmin}
+            onDownload={fileOps.downloadFile}
+            onDelete={handleDeleteRequest}
+            title=""
+          />
+        </CardContent>
+      </Card>
+
+      <FileHistoryModal
+        file={historyFile}
+        history={historyData}
+        isOpen={historyModalOpen}
+        onClose={() => setHistoryModalOpen(false)}
+      />
+
+      <DeleteFileModal
+        file={deleteFileState}
+        isOpen={deleteModalOpen}
+        isDeleting={isDeleting}
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={handleDeleteConfirm}
+      />
       </div>
     </>
   )

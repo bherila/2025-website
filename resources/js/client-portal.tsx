@@ -24,6 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
     root.render(<ClientPortalIndexPage 
       slug={indexDiv.dataset.slug!}
       companyName={indexDiv.dataset.companyName!}
+      isAdmin={indexDiv.dataset.isAdmin === 'true'}
     />)
   }
 
@@ -55,6 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
       slug={agreementDiv.dataset.slug!}
       companyName={agreementDiv.dataset.companyName!}
       agreementId={parseInt(agreementDiv.dataset.agreementId!)}
+      isAdmin={agreementDiv.dataset.isAdmin === 'true'}
     />)
   }
 

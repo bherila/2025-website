@@ -1,23 +1,51 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
+
+import { Clock, FolderOpen, Plus } from 'lucide-react'
+
+import {
+  DeleteFileModal,
+  FileHistoryModal,
+  FileList,
+  FileUploadButton,
+  useFileOperations,
+} from '@/components/shared/FileManager'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Plus, Clock, FolderOpen } from 'lucide-react'
-import NewProjectModal from './NewProjectModal'
+import type { Agreement, Project } from '@/types/client-management/common'
+import type { DownloadHistoryEntry, FileRecord } from '@/types/files'
+
 import ClientPortalNav from './ClientPortalNav'
-import type { Project, Agreement } from '@/types/client-management/common'
+import NewProjectModal from './NewProjectModal'
 
 interface ClientPortalIndexPageProps {
   slug: string
   companyName: string
+  isAdmin?: boolean
 }
 
-export default function ClientPortalIndexPage({ slug, companyName }: ClientPortalIndexPageProps) {
+export default function ClientPortalIndexPage({ slug, companyName, isAdmin = false }: ClientPortalIndexPageProps) {
   const [projects, setProjects] = useState<Project[]>([])
   const [agreements, setAgreements] = useState<Agreement[]>([])
   const [loading, setLoading] = useState(true)
   const [newProjectModalOpen, setNewProjectModalOpen] = useState(false)
+
+  // File management state
+  const [historyModalOpen, setHistoryModalOpen] = useState(false)
+  const [historyFile, setHistoryFile] = useState<FileRecord | null>(null)
+  const [historyData, setHistoryData] = useState<DownloadHistoryEntry[]>([])
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [deleteFile, setDeleteFileState] = useState<FileRecord | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const fileOps = useFileOperations({
+    listUrl: `/api/client/portal/${slug}/files`,
+    uploadUrl: `/api/client/portal/${slug}/files`,
+    uploadUrlEndpoint: `/api/client/portal/${slug}/files/upload-url`,
+    downloadUrlPattern: (fileId) => `/api/client/portal/${slug}/files/${fileId}/download`,
+    deleteUrlPattern: (fileId) => `/api/client/portal/${slug}/files/${fileId}`,
+  })
 
   useEffect(() => {
     document.title = `Client Home: ${companyName}`
@@ -26,10 +54,11 @@ export default function ClientPortalIndexPage({ slug, companyName }: ClientPorta
   useEffect(() => {
     Promise.all([
       fetchProjects(),
-      fetchAgreements()
+      fetchAgreements(),
     ]).finally(() => {
       setLoading(false)
     })
+    fileOps.fetchFiles()
   }, [slug])
 
   const fetchProjects = async () => {
@@ -54,6 +83,20 @@ export default function ClientPortalIndexPage({ slug, companyName }: ClientPorta
     } catch (error) {
       console.error('Error fetching agreements:', error)
     }
+  }
+
+  const handleDeleteRequest = (file: FileRecord) => {
+    setDeleteFileState(file)
+    setDeleteModalOpen(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteFile) return
+    setIsDeleting(true)
+    await fileOps.deleteFile(deleteFile)
+    setIsDeleting(false)
+    setDeleteModalOpen(false)
+    setDeleteFileState(null)
   }
 
   if (loading) {
@@ -171,11 +214,44 @@ export default function ClientPortalIndexPage({ slug, companyName }: ClientPorta
         </div>
       )}
 
+      {/* Company Files Section */}
+      <div className="mt-12">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold">Company Files</h2>
+          {isAdmin && (
+            <FileUploadButton onUpload={fileOps.uploadFile} />
+          )}
+        </div>
+        <FileList
+          files={fileOps.files}
+          loading={fileOps.loading}
+          isAdmin={isAdmin}
+          onDownload={fileOps.downloadFile}
+          onDelete={handleDeleteRequest}
+          title="Files"
+        />
+      </div>
+
       <NewProjectModal
         open={newProjectModalOpen}
         onOpenChange={setNewProjectModalOpen}
         slug={slug}
         onSuccess={fetchProjects}
+      />
+
+      <FileHistoryModal
+        file={historyFile}
+        history={historyData}
+        isOpen={historyModalOpen}
+        onClose={() => setHistoryModalOpen(false)}
+      />
+
+      <DeleteFileModal
+        file={deleteFile}
+        isOpen={deleteModalOpen}
+        isDeleting={isDeleting}
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={handleDeleteConfirm}
       />
       </div>
     </>

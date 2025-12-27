@@ -345,6 +345,7 @@ export default function ClientPortalProjectPage({ slug, companyName, projectSlug
             projectSlug={projectSlug}
             users={companyUsers}
             onSuccess={fetchTasks}
+            isAdmin={isAdmin}
           />
         )}
 

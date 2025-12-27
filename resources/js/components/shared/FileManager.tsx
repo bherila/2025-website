@@ -138,7 +138,7 @@ export function FileList({ files, loading, isAdmin, onDownload, onDelete, onView
 }
 
 interface FileUploadButtonProps {
-  onUpload: (file: File) => Promise<void>
+  onUpload: (file: File) => Promise<void | FileRecord | null>
   disabled?: boolean
   className?: string
 }
