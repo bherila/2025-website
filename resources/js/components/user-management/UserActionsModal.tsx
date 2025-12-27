@@ -43,6 +43,7 @@ export default function UserActionsModal({
   onUpdate,
 }: UserActionsModalProps) {
   const [newPassword, setNewPassword] = useState('')
+  const [newEmail, setNewEmail] = useState(user.email)
   const [selectedRole, setSelectedRole] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -52,6 +53,34 @@ export default function UserActionsModal({
   const rolesNotAssigned = availableRoles.filter(
     (role) => !user.roles.includes(role)
   )
+
+  const handleUpdateEmail = async () => {
+    if (!newEmail || !newEmail.includes('@')) {
+      setError('Please enter a valid email address')
+      return
+    }
+
+    if (newEmail === user.email) {
+      setError('Email is the same as current email')
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      await fetchWrapper.post(`/api/admin/users/${user.id}/email`, {
+        email: newEmail,
+      })
+      setSuccess('Email updated successfully')
+      onUpdate()
+    } catch (err) {
+      setError('Failed to update email')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleSetPassword = async () => {
     if (newPassword.length < 8) {
@@ -142,19 +171,21 @@ export default function UserActionsModal({
         )}
 
         <div className="space-y-6">
-          {/* Set Password Section */}
+          {/* Update Email Section */}
           <div className="space-y-2">
-            <Label htmlFor="password">Set New Password</Label>
+            <Label htmlFor="email">Email Address</Label>
             <div className="flex gap-2">
               <Input
-                id="password"
-                type="password"
-                placeholder="New password (min 8 chars)"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
+                id="email"
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
               />
-              <Button onClick={handleSetPassword} disabled={loading}>
-                Set
+              <Button
+                onClick={handleUpdateEmail}
+                disabled={loading || newEmail === user.email}
+              >
+                Update
               </Button>
             </div>
           </div>
@@ -167,7 +198,7 @@ export default function UserActionsModal({
                 <SelectTrigger className="flex-1">
                   <SelectValue placeholder="Select role to add" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent position="popper" sideOffset={4}>
                   {rolesNotAssigned.length === 0 ? (
                     <SelectItem value="_none" disabled>
                       No roles available
@@ -226,6 +257,23 @@ export default function UserActionsModal({
             <p className="text-xs text-muted-foreground">
               Users without &apos;user&apos; or &apos;admin&apos; role cannot log in.
             </p>
+          </div>
+
+          {/* Set Password Section */}
+          <div className="space-y-2">
+            <Label htmlFor="password">Set New Password</Label>
+            <div className="flex gap-2">
+              <Input
+                id="password"
+                type="password"
+                placeholder="New password (min 8 chars)"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+              <Button onClick={handleSetPassword} disabled={loading}>
+                Set
+              </Button>
+            </div>
           </div>
         </div>
 

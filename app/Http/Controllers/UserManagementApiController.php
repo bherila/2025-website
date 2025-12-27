@@ -32,7 +32,8 @@ class UserManagementApiController extends Controller
                     'roles' => $user->getRoles(),
                     'client_companies' => $user->clientCompanies->map(fn ($c) => [
                         'id' => $c->id,
-                        'name' => $c->name,
+                        'name' => $c->company_name,
+                        'slug' => $c->slug,
                     ]),
                     'last_login_date' => $user->last_login_date,
                     'created_at' => $user->created_at,
@@ -131,6 +132,67 @@ class UserManagementApiController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Password updated successfully',
+        ]);
+    }
+
+    /**
+     * Create a new user.
+     */
+    public function create(Request $request)
+    {
+        Gate::authorize('admin');
+
+        $request->validate([
+            'email' => 'required|email|unique:users,email',
+            'name' => 'nullable|string|max:255',
+            'password' => 'nullable|string|min:8',
+        ]);
+
+        $userData = [
+            'email' => $request->email,
+            'name' => $request->name ?: explode('@', $request->email)[0],
+        ];
+
+        if ($request->password) {
+            $userData['password'] = Hash::make($request->password);
+        } else {
+            // Generate a random password if none provided
+            $userData['password'] = Hash::make(\Illuminate\Support\Str::random(32));
+        }
+
+        $user = User::create($userData);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'User created successfully',
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+            ],
+        ], 201);
+    }
+
+    /**
+     * Update a user's email address.
+     */
+    public function updateEmail(Request $request, int $id)
+    {
+        Gate::authorize('admin');
+
+        $request->validate([
+            'email' => 'required|email|unique:users,email,'.$id,
+        ]);
+
+        $user = User::findOrFail($id);
+        $user->update([
+            'email' => $request->email,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Email updated successfully',
+            'email' => $user->email,
         ]);
     }
 }

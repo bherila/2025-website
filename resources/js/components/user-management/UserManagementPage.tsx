@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 
+import { Plus } from 'lucide-react'
+
 import Container from '@/components/container'
 import MainTitle from '@/components/MainTitle'
 import { Badge } from '@/components/ui/badge'
@@ -11,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
 
+import CreateUserModal from './CreateUserModal'
 import UserActionsModal from './UserActionsModal'
 
 export interface User {
@@ -18,7 +21,7 @@ export interface User {
   name: string
   email: string
   roles: string[]
-  client_companies: { id: number; name: string }[]
+  client_companies: { id: number; name: string; slug: string }[]
   last_login_date: string | null
   created_at: string
 }
@@ -29,6 +32,7 @@ export default function UserManagementPage() {
   const [loading, setLoading] = useState(true)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
 
   const fetchUsers = async () => {
     try {
@@ -82,7 +86,13 @@ export default function UserManagementPage() {
 
   return (
     <Container>
-      <MainTitle>User Management</MainTitle>
+      <div className="flex justify-between items-center">
+        <MainTitle>User Management</MainTitle>
+        <Button onClick={() => setIsCreateModalOpen(true)}>
+          <Plus className="w-4 h-4 mr-2" />
+          New User
+        </Button>
+      </div>
 
       <Card>
         <CardHeader>
@@ -110,9 +120,11 @@ export default function UserManagementPage() {
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
                       {user.client_companies.map((company) => (
-                        <Badge key={company.id} variant="outline">
-                          {company.name}
-                        </Badge>
+                        <a key={company.id} href={`/client/portal/${company.slug}`}>
+                          <Badge variant="outline" className="cursor-pointer hover:bg-accent">
+                            {company.name}
+                          </Badge>
+                        </a>
                       ))}
                     </div>
                   </TableCell>
@@ -159,6 +171,12 @@ export default function UserManagementPage() {
           onUpdate={handleUserUpdate}
         />
       )}
+
+      <CreateUserModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onCreated={handleUserUpdate}
+      />
     </Container>
   )
 }

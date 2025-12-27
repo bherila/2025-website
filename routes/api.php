@@ -127,6 +127,8 @@ Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/invoices/{invoice
 
 // User Management API routes (Admin only)
 Route::middleware(['web', 'auth'])->get('/admin/users', [App\Http\Controllers\UserManagementApiController::class, 'index']);
+Route::middleware(['web', 'auth'])->post('/admin/users', [App\Http\Controllers\UserManagementApiController::class, 'create']);
 Route::middleware(['web', 'auth'])->post('/admin/users/{id}/roles', [App\Http\Controllers\UserManagementApiController::class, 'addRole']);
 Route::middleware(['web', 'auth'])->delete('/admin/users/{id}/roles/{role}', [App\Http\Controllers\UserManagementApiController::class, 'removeRole']);
 Route::middleware(['web', 'auth'])->post('/admin/users/{id}/password', [App\Http\Controllers\UserManagementApiController::class, 'setPassword']);
+Route::middleware(['web', 'auth'])->post('/admin/users/{id}/email', [App\Http\Controllers\UserManagementApiController::class, 'updateEmail']);
