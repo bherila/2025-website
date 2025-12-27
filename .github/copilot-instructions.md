@@ -9,9 +9,10 @@ This is a hybrid Laravel 12 + React TypeScript application for personal finance 
 - **Data Flow**: Blade passes initial data via `data-*` attributes; React handles UI updates via API calls
 - **API**: RESTful endpoints under `/api` for CRUD operations
 - **Domain**: Financial accounts, transactions, statements, payslips, RSUs, CSV imports, and client management
-- **Modules**: Finance (accounts, transactions, statements, payslips, RSUs), Tools (license manager, bingo, IRS F461, maxmin), Recipes, Projects, Client Management
+- **Modules**: Finance (accounts, transactions, statements, payslips, RSUs), Tools (license manager, bingo, IRS F461, maxmin, user management), Recipes, Projects, Client Management
 - **Authentication**: Session-based; protected routes use `auth` middleware (web routes) or `['web', 'auth']` (API routes)
-- **Authorization**: Gate-based authorization for admin-only features (e.g., Client Management uses 'Admin' gate)
+- **Authorization**: Gate-based authorization for admin-only features (e.g., Client Management uses 'admin' gate)
+- **User Roles**: Comma-separated roles in `user_role` column (e.g., `"admin,user"`). All roles lowercase. Available roles: `admin`, `user`
 
 ### Example Pattern
 ```php
@@ -46,7 +47,8 @@ if (div) {
 - **Imports**: CSV parsing for financial data (IB, Fidelity schemas in `docs/`)
 - **State**: Client-side state managed in React; server state via API calls
 - **Auth**: Session-based with `auth` middleware on protected routes
-- **Gates**: Use Laravel Gates for authorization (e.g., `Gate::authorize('Admin')` for admin-only actions)
+- **Gates**: Use Laravel Gates for authorization (e.g., `Gate::authorize('admin')` for admin-only actions)
+- **User Roles**: Multiple roles per user stored as comma-separated string. Check with `$user->hasRole('admin')` helper method
 
 ## Common Patterns
 - **Transaction CRUD**: API endpoints like `/api/finance/{account_id}/line_items` for GET/POST/DELETE
