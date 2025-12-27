@@ -132,3 +132,39 @@ Route::middleware(['web', 'auth'])->post('/admin/users/{id}/roles', [App\Http\Co
 Route::middleware(['web', 'auth'])->delete('/admin/users/{id}/roles/{role}', [App\Http\Controllers\UserManagementApiController::class, 'removeRole']);
 Route::middleware(['web', 'auth'])->post('/admin/users/{id}/password', [App\Http\Controllers\UserManagementApiController::class, 'setPassword']);
 Route::middleware(['web', 'auth'])->post('/admin/users/{id}/email', [App\Http\Controllers\UserManagementApiController::class, 'updateEmail']);
+
+// File Management API routes
+use App\Http\Controllers\FileController;
+
+// Project files
+Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/projects/{projectSlug}/files', [FileController::class, 'listProjectFiles']);
+Route::middleware(['web', 'auth'])->post('/client/portal/{slug}/projects/{projectSlug}/files', [FileController::class, 'uploadProjectFile']);
+Route::middleware(['web', 'auth'])->post('/client/portal/{slug}/projects/{projectSlug}/files/upload-url', [FileController::class, 'getProjectUploadUrl']);
+Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/projects/{projectSlug}/files/{fileId}/download', [FileController::class, 'downloadProjectFile']);
+Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/projects/{projectSlug}/files/{fileId}/history', [FileController::class, 'getProjectFileHistory']);
+Route::middleware(['web', 'auth'])->delete('/client/portal/{slug}/projects/{projectSlug}/files/{fileId}', [FileController::class, 'deleteProjectFile']);
+
+// Client company files
+Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/files', [FileController::class, 'listClientCompanyFiles']);
+Route::middleware(['web', 'auth'])->post('/client/portal/{slug}/files', [FileController::class, 'uploadClientCompanyFile']);
+Route::middleware(['web', 'auth'])->post('/client/portal/{slug}/files/upload-url', [FileController::class, 'getClientCompanyUploadUrl']);
+Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/files/{fileId}/download', [FileController::class, 'downloadClientCompanyFile']);
+Route::middleware(['web', 'auth'])->delete('/client/portal/{slug}/files/{fileId}', [FileController::class, 'deleteClientCompanyFile']);
+
+// Agreement files
+Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/agreements/{agreementId}/files', [FileController::class, 'listAgreementFiles']);
+Route::middleware(['web', 'auth'])->post('/client/portal/{slug}/agreements/{agreementId}/files', [FileController::class, 'uploadAgreementFile']);
+Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/agreements/{agreementId}/files/{fileId}/download', [FileController::class, 'downloadAgreementFile']);
+Route::middleware(['web', 'auth'])->delete('/client/portal/{slug}/agreements/{agreementId}/files/{fileId}', [FileController::class, 'deleteAgreementFile']);
+
+// Task files
+Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/projects/{projectSlug}/tasks/{taskId}/files', [FileController::class, 'listTaskFiles']);
+Route::middleware(['web', 'auth'])->post('/client/portal/{slug}/projects/{projectSlug}/tasks/{taskId}/files', [FileController::class, 'uploadTaskFile']);
+Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/projects/{projectSlug}/tasks/{taskId}/files/{fileId}/download', [FileController::class, 'downloadTaskFile']);
+Route::middleware(['web', 'auth'])->delete('/client/portal/{slug}/projects/{projectSlug}/tasks/{taskId}/files/{fileId}', [FileController::class, 'deleteTaskFile']);
+
+// Financial account files
+Route::middleware(['web', 'auth'])->get('/finance/{accountId}/files', [FileController::class, 'listFinAccountFiles']);
+Route::middleware(['web', 'auth'])->post('/finance/{accountId}/files', [FileController::class, 'uploadFinAccountFile']);
+Route::middleware(['web', 'auth'])->get('/finance/{accountId}/files/{fileId}/download', [FileController::class, 'downloadFinAccountFile']);
+Route::middleware(['web', 'auth'])->delete('/finance/{accountId}/files/{fileId}', [FileController::class, 'deleteFinAccountFile']);

@@ -44,6 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
       companyName={projectDiv.dataset.companyName!}
       projectSlug={projectDiv.dataset.projectSlug!}
       projectName={projectDiv.dataset.projectName!}
+      isAdmin={projectDiv.dataset.isAdmin === 'true'}
     />)
   }
 
