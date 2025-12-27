@@ -3,11 +3,11 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Models\ClientManagement\ClientCompany;
+use App\Traits\SerializesDatesAsLocal;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use App\Models\ClientManagement\ClientCompany;
-use App\Traits\SerializesDatesAsLocal;
 
 class User extends Authenticatable
 {
@@ -63,6 +63,6 @@ class User extends Authenticatable
     public function clientCompanies()
     {
         return $this->belongsToMany(ClientCompany::class, 'client_company_user', 'user_id', 'client_company_id')
-                    ->withTimestamps();
+            ->withTimestamps();
     }
 }

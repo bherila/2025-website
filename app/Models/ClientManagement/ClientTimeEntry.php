@@ -2,14 +2,14 @@
 
 namespace App\Models\ClientManagement;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\User;
 use App\Traits\SerializesDatesAsLocal;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ClientTimeEntry extends Model
 {
-    use SoftDeletes, SerializesDatesAsLocal;
+    use SerializesDatesAsLocal, SoftDeletes;
 
     protected $table = 'client_time_entries';
 
@@ -39,20 +39,22 @@ class ClientTimeEntry extends Model
     public static function parseTimeToMinutes(string $timeString): int
     {
         $timeString = trim($timeString);
-        
+
         // Check for h:mm format
         if (preg_match('/^(\d+):(\d{1,2})$/', $timeString, $matches)) {
             $hours = (int) $matches[1];
             $minutes = (int) $matches[2];
+
             return ($hours * 60) + $minutes;
         }
-        
+
         // Check for decimal hours format (e.g., 1.5)
         if (is_numeric($timeString)) {
             $hours = (float) $timeString;
+
             return (int) round($hours * 60);
         }
-        
+
         return 0;
     }
 
@@ -63,6 +65,7 @@ class ClientTimeEntry extends Model
     {
         $hours = floor($minutes / 60);
         $mins = $minutes % 60;
+
         return sprintf('%d:%02d', $hours, $mins);
     }
 

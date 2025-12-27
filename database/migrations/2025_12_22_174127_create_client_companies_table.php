@@ -23,7 +23,7 @@ return new class extends Migration
             $table->timestamp('last_activity')->nullable();
             $table->timestamps();
             $table->softDeletes();
-            
+
             $table->index('is_active');
             $table->index('company_name');
         });

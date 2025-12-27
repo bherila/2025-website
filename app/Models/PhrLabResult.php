@@ -44,7 +44,7 @@ class PhrLabResult extends Model
         parent::boot();
 
         static::creating(function ($model) {
-            if (!auth()->check()) {
+            if (! auth()->check()) {
                 throw new \Exception('Authentication required to create lab result');
             }
             if ($model->user_id && $model->user_id != auth()->id()) {

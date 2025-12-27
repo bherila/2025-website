@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\FinAccountLineItems;
+use App\Models\FinAccounts;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use App\Models\FinAccounts;
-use App\Models\FinAccountLineItems;
 
 class FinanceApiController extends Controller
 {
@@ -23,7 +23,7 @@ class FinanceApiController extends Controller
 
         $filterAndSortAccounts = function ($isDebt, $isRetirement) use ($accounts) {
             return $accounts->filter(function ($account) use ($isDebt, $isRetirement) {
-                return !$account->acct_is_debt == !$isDebt && !$account->acct_is_retirement == !$isRetirement;
+                return ! $account->acct_is_debt == ! $isDebt && ! $account->acct_is_retirement == ! $isRetirement;
             });
         };
 
@@ -108,9 +108,9 @@ class FinanceApiController extends Controller
         $quarterlyBalances = [];
         foreach ($balanceHistory as $statement) {
             $date = $statement->statement_closing_date;
-            $quarter = date('Y', strtotime($date)) . '-Q' . ceil(date('n', strtotime($date)) / 3);
+            $quarter = date('Y', strtotime($date)).'-Q'.ceil(date('n', strtotime($date)) / 3);
 
-            if (!isset($quarterlyBalances[$quarter])) {
+            if (! isset($quarterlyBalances[$quarter])) {
                 $quarterlyBalances[$quarter] = [];
             }
 
@@ -134,7 +134,7 @@ class FinanceApiController extends Controller
                 // Use current balance if available, otherwise use previous quarter's balance, or '0' if no previous
                 $balance = $currentBalances[$account->acct_id] ?? $previousBalances[$account->acct_id] ?? '0';
                 // Negate balance for liability accounts
-                $row[] = $account->acct_is_debt ? '-' . $balance : $balance;
+                $row[] = $account->acct_is_debt ? '-'.$balance : $balance;
             }
             $chartDataArray[] = $row;
         }
@@ -310,5 +310,4 @@ class FinanceApiController extends Controller
 
         return response()->json(['success' => true]);
     }
-
 }

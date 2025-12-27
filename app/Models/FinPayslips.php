@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class FinPayslips extends Model
 {
     use SoftDeletes;
+
     protected $table = 'fin_payslip';
 
     protected $primaryKey = 'payslip_id';
@@ -86,7 +87,7 @@ class FinPayslips extends Model
         parent::boot();
 
         static::creating(function ($model) {
-            if (!auth()->check()) {
+            if (! auth()->check()) {
                 throw new \Exception('Authentication required to create payslip');
             }
             if ($model->uid && $model->uid != auth()->id()) {

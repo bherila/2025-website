@@ -14,8 +14,8 @@ use Tests\TestCase;
 
 /**
  * Feature tests for delayed billing functionality.
- * 
- * Delayed billing allows billable time entries created during periods 
+ *
+ * Delayed billing allows billable time entries created during periods
  * without an active agreement to be billed when an agreement becomes active.
  */
 class DelayedBillingTest extends TestCase
@@ -23,25 +23,28 @@ class DelayedBillingTest extends TestCase
     use RefreshDatabase;
 
     private ClientInvoicingService $invoicingService;
+
     private User $user;
+
     private ClientCompany $company;
+
     private ClientProject $project;
 
     protected function setUp(): void
     {
         parent::setUp();
-        
+
         $this->invoicingService = app(ClientInvoicingService::class);
-        
+
         // Create a user
         $this->user = User::factory()->create();
-        
+
         // Create a company
         $this->company = ClientCompany::create([
             'company_name' => 'Test Company',
             'slug' => 'test-company',
         ]);
-        
+
         // Create a project
         $this->project = ClientProject::create([
             'client_company_id' => $this->company->id,
@@ -62,7 +65,7 @@ class DelayedBillingTest extends TestCase
             'name' => 'Pre-agreement work 1',
             'is_billable' => true,
         ]);
-        
+
         ClientTimeEntry::create([
             'client_company_id' => $this->company->id,
             'project_id' => $this->project->id,
@@ -100,7 +103,7 @@ class DelayedBillingTest extends TestCase
         // Generate invoice for February
         $periodStart = Carbon::create(2024, 2, 1);
         $periodEnd = Carbon::create(2024, 2, 29);
-        
+
         $invoice = $this->invoicingService->generateInvoice(
             $this->company,
             $periodStart,
@@ -109,19 +112,19 @@ class DelayedBillingTest extends TestCase
 
         // Assert invoice was created
         $this->assertNotNull($invoice);
-        
+
         // Refresh to get line items
         $invoice->refresh();
         $lineItems = $invoice->lineItems;
-        
+
         // Should have: retainer line + delayed billing line
         // Retainer covers all 5 current hours (under 10 hour limit)
         // Delayed billing should charge for the 5 pre-agreement hours
         $delayedBillingLine = $lineItems->firstWhere('line_type', 'delayed_billing');
-        
+
         $this->assertNotNull($delayedBillingLine, 'Invoice should include delayed billing line item');
         $this->assertEquals(5, $delayedBillingLine->hours); // 2 + 3 hours from January
-        $this->assertEquals(750.00, (float)$delayedBillingLine->line_total); // 5 hours * $150/hr
+        $this->assertEquals(750.00, (float) $delayedBillingLine->line_total); // 5 hours * $150/hr
 
         // Verify all time entries are now linked
         $unbilledEntries = ClientTimeEntry::where('client_company_id', $this->company->id)
@@ -159,7 +162,7 @@ class DelayedBillingTest extends TestCase
         // Preview invoice
         $periodStart = Carbon::create(2024, 2, 1);
         $periodEnd = Carbon::create(2024, 2, 29);
-        
+
         $preview = $this->invoicingService->previewInvoice(
             $this->company,
             $periodStart,
@@ -171,7 +174,7 @@ class DelayedBillingTest extends TestCase
         $this->assertArrayHasKey('delayed_billing_entries_count', $preview);
         $this->assertEquals(4, $preview['delayed_billing_hours']);
         $this->assertEquals(1, $preview['delayed_billing_entries_count']);
-        
+
         // Check invoice total includes delayed billing
         // Retainer: $1000 + Delayed billing: 4 * $100 = $400
         $this->assertEquals(1400.00, $preview['invoice_total']);
@@ -206,7 +209,7 @@ class DelayedBillingTest extends TestCase
         // Preview invoice
         $periodStart = Carbon::create(2024, 2, 1);
         $periodEnd = Carbon::create(2024, 2, 29);
-        
+
         $preview = $this->invoicingService->previewInvoice(
             $this->company,
             $periodStart,
@@ -287,13 +290,13 @@ class DelayedBillingTest extends TestCase
         $response = $this->getJson("/api/client/portal/{$this->company->slug}/time-entries");
 
         $response->assertOk();
-        
+
         $data = $response->json();
-        
+
         // Should show total unbilled hours
         $this->assertArrayHasKey('total_unbilled_hours', $data);
         $this->assertEquals(3, $data['total_unbilled_hours']);
-        
+
         // The monthly_data should show unbilled_hours for the period without agreement
         $this->assertNotEmpty($data['monthly_data']);
         $januaryMonth = collect($data['monthly_data'])->firstWhere('year_month', '2024-01');

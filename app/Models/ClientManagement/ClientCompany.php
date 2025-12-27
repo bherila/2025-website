@@ -2,14 +2,14 @@
 
 namespace App\Models\ClientManagement;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\User;
 use App\Traits\SerializesDatesAsLocal;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ClientCompany extends Model
 {
-    use SoftDeletes, SerializesDatesAsLocal;
+    use SerializesDatesAsLocal, SoftDeletes;
 
     protected $fillable = [
         'company_name',
@@ -39,6 +39,7 @@ class ClientCompany extends Model
         $slug = preg_replace('/[^a-z0-9]+/', '-', $slug);
         $slug = preg_replace('/-+/', '-', $slug);
         $slug = trim($slug, '-');
+
         return $slug;
     }
 
@@ -48,7 +49,7 @@ class ClientCompany extends Model
     public function users()
     {
         return $this->belongsToMany(User::class, 'client_company_user', 'client_company_id', 'user_id')
-                    ->withTimestamps();
+            ->withTimestamps();
     }
 
     /**
@@ -73,11 +74,12 @@ class ClientCompany extends Model
     public function activeAgreement()
     {
         $now = now();
+
         return $this->agreements()
             ->where('active_date', '<=', $now)
             ->where(function ($query) use ($now) {
                 $query->whereNull('termination_date')
-                      ->orWhere('termination_date', '>', $now);
+                    ->orWhere('termination_date', '>', $now);
             })
             ->orderBy('active_date', 'desc')
             ->first();

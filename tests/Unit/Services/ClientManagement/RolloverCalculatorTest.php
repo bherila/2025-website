@@ -7,7 +7,7 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * Unit tests for the RolloverCalculator class.
- * 
+ *
  * Tests cover all rollover scenarios:
  * a) Hours exceeded retainer, rollover hours available to use
  * b) Hours exceeded retainer, not enough rollover hours (excess billed)
@@ -21,7 +21,7 @@ class RolloverCalculatorTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->calculator = new RolloverCalculator();
+        $this->calculator = new RolloverCalculator;
     }
 
     // =========================================================================
@@ -87,8 +87,8 @@ class RolloverCalculatorTest extends TestCase
             retainerHours: 10.0,
             previousMonthsUnused: [
                 1 => 5.0, // 1 month ago (rolls over)
-                2 => 3.0  // 2 months ago (expires)
-            ], 
+                2 => 3.0,  // 2 months ago (expires)
+            ],
             rolloverMonths: 1,
             previousNegativeBalance: 0.0
         );
@@ -272,7 +272,7 @@ class RolloverCalculatorTest extends TestCase
 
         // Month 1: 7 worked, 3 unused
         $this->assertEquals(3.0, $results[0]['closing']['unused_hours']);
-        
+
         // Month 2: 10 retainer + 3 rollover = 13 available, 8 worked
         $this->assertEquals(3.0, $results[1]['opening']['rollover_hours']);
         $this->assertEquals(13.0, $results[1]['opening']['total_available']);
@@ -292,7 +292,7 @@ class RolloverCalculatorTest extends TestCase
 
         // Month 1: 5 worked, 5 unused
         $this->assertEquals(5.0, $results[0]['closing']['unused_hours']);
-        
+
         // Month 2: Uses rollover for excess
         $this->assertEquals(5.0, $results[1]['opening']['rollover_hours']);
         $this->assertEquals(15.0, $results[1]['opening']['total_available']);
@@ -313,7 +313,7 @@ class RolloverCalculatorTest extends TestCase
 
         // Month 1: 7 worked, 3 unused
         $this->assertEquals(3.0, $results[0]['closing']['unused_hours']);
-        
+
         // Month 2: 10 retainer + 3 rollover = 13 available, 20 worked = 7 excess
         $this->assertEquals(3.0, $results[1]['opening']['rollover_hours']);
         $this->assertEquals(13.0, $results[1]['opening']['total_available']);
@@ -335,7 +335,7 @@ class RolloverCalculatorTest extends TestCase
 
         // Month 1: 5 worked, 5 unused (but won't roll over)
         $this->assertEquals(5.0, $results[0]['closing']['unused_hours']);
-        
+
         // Month 2: Only 10 available (no rollover), 12 worked = 2 excess
         $this->assertEquals(0.0, $results[1]['opening']['rollover_hours']);
         $this->assertEquals(5.0, $results[1]['opening']['expired_hours']);
@@ -357,11 +357,11 @@ class RolloverCalculatorTest extends TestCase
 
         // Month 1: 5 unused
         $this->assertEquals(5.0, $results[0]['closing']['unused_hours']);
-        
+
         // Month 2: 5 rollover from Jan + 10 retainer, 6 used, 4 unused from Feb's retainer
         $this->assertEquals(5.0, $results[1]['opening']['rollover_hours']);
         $this->assertEquals(4.0, $results[1]['closing']['unused_hours']);
-        
+
         // Month 3: Jan's 5 hours are 2 months old. rollover_months=2 means they are still valid.
         // Feb's 4 hours are 1 month old. Valid.
         // Total rollover = 5 + 4 = 9.
@@ -387,14 +387,14 @@ class RolloverCalculatorTest extends TestCase
 
         // Month 1: 5 unused
         $this->assertEquals(5.0, $results[0]['closing']['unused_hours']);
-        
+
         // Month 2: Had 5 rollover, used 10 from retainer (exactly), 0 from rollover
         $this->assertEquals(5.0, $results[1]['opening']['rollover_hours']);
         $this->assertEquals(15.0, $results[1]['opening']['total_available']);
         $this->assertEquals(10.0, $results[1]['closing']['hours_used_from_retainer']);
         $this->assertEquals(0.0, $results[1]['closing']['hours_used_from_rollover']);
         $this->assertEquals(0.0, $results[1]['closing']['unused_hours']); // Used exactly retainer
-        
+
         // Month 3: Still has 5 rollover from Jan (Feb had 0 unused)
         $this->assertEquals(5.0, $results[2]['opening']['rollover_hours']);
         $this->assertEquals(15.0, $results[2]['opening']['total_available']);

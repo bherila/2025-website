@@ -18,12 +18,12 @@ class ClientPortalAgreementApiController extends Controller
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
         Gate::authorize('ClientCompanyMember', $company->id);
-        
+
         $agreements = $company->agreements()
             ->where('is_visible_to_client', true)
             ->orderBy('active_date', 'desc')
             ->get();
-        
+
         return response()->json($agreements);
     }
 
@@ -34,13 +34,13 @@ class ClientPortalAgreementApiController extends Controller
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
         Gate::authorize('ClientCompanyMember', $company->id);
-        
+
         $agreement = ClientAgreement::where('id', $agreementId)
             ->where('client_company_id', $company->id)
             ->where('is_visible_to_client', true)
             ->with('signedByUser')
             ->firstOrFail();
-        
+
         return response()->json($agreement);
     }
 
@@ -51,25 +51,25 @@ class ClientPortalAgreementApiController extends Controller
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
         Gate::authorize('ClientCompanyMember', $company->id);
-        
+
         $agreement = ClientAgreement::where('id', $agreementId)
             ->where('client_company_id', $company->id)
             ->where('is_visible_to_client', true)
             ->firstOrFail();
-        
+
         if ($agreement->isSigned()) {
             return response()->json([
-                'error' => 'This agreement has already been signed.'
+                'error' => 'This agreement has already been signed.',
             ], 422);
         }
-        
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'title' => 'required|string|max:255',
         ]);
-        
+
         $agreement->sign(auth()->user(), $validated['name'], $validated['title']);
-        
+
         return response()->json([
             'success' => true,
             'agreement' => $agreement->fresh('signedByUser'),
@@ -83,12 +83,12 @@ class ClientPortalAgreementApiController extends Controller
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
         Gate::authorize('ClientCompanyMember', $company->id);
-        
+
         $invoices = $company->invoices()
             ->whereIn('status', ['issued', 'paid'])
             ->orderBy('issue_date', 'desc')
             ->get();
-        
+
         return response()->json($invoices);
     }
 
@@ -99,13 +99,13 @@ class ClientPortalAgreementApiController extends Controller
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
         Gate::authorize('ClientCompanyMember', $company->id);
-        
+
         $invoice = ClientInvoice::where('client_invoice_id', $invoiceId)
             ->where('client_company_id', $company->id)
             ->whereIn('status', ['issued', 'paid'])
             ->with('lineItems')
             ->firstOrFail();
-        
+
         return response()->json($invoice);
     }
 }

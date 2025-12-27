@@ -3,8 +3,8 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class RsuController extends Controller
 {
@@ -12,14 +12,14 @@ class RsuController extends Controller
     {
         $user = Auth::user();
         $data = DB::table('fin_equity_awards as a')
-            ->leftJoin('stock_quotes_daily as s', function($join) {
+            ->leftJoin('stock_quotes_daily as s', function ($join) {
                 $join->on('a.symbol', '=', 's.c_symb')
-                     ->whereRaw('s.c_date = (select max(c_date) from stock_quotes_daily where c_symb = a.symbol and c_date <= a.vest_date)');
+                    ->whereRaw('s.c_date = (select max(c_date) from stock_quotes_daily where c_symb = a.symbol and c_date <= a.vest_date)');
             })
             ->where('a.uid', $user->id)
             ->select('a.*', 's.c_close as fetched_vest_price')
             ->get()
-            ->map(function($item) {
+            ->map(function ($item) {
                 if ($item->vest_price === null && $item->fetched_vest_price !== null) {
                     $item->vest_price = $item->fetched_vest_price;
                 }
@@ -27,6 +27,7 @@ class RsuController extends Controller
                 if ($item->vest_price === null) {
                     unset($item->vest_price);
                 }
+
                 return $item;
             });
 

@@ -1,21 +1,20 @@
 <?php
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\ClientManagement\ClientAgreementApiController;
+use App\Http\Controllers\ClientManagement\ClientCompanyApiController;
+use App\Http\Controllers\ClientManagement\ClientCompanyUserController;
+use App\Http\Controllers\ClientManagement\ClientPortalAgreementApiController;
+use App\Http\Controllers\ClientManagement\ClientPortalApiController;
 use App\Http\Controllers\FinanceApiController;
+use App\Http\Controllers\FinanceTransactionLinkingApiController;
 use App\Http\Controllers\FinanceTransactionsApiController;
 use App\Http\Controllers\FinanceTransactionsDedupeApiController;
-use App\Http\Controllers\FinanceTransactionLinkingApiController;
 use App\Http\Controllers\FinanceTransactionTaggingApiController;
 use App\Http\Controllers\PayslipController;
 use App\Http\Controllers\PayslipImportController;
 use App\Http\Controllers\RsuController;
 use App\Http\Controllers\StatementController;
-use App\Http\Controllers\ClientManagement\ClientCompanyUserController;
-use App\Http\Controllers\ClientManagement\ClientCompanyApiController;
-use App\Http\Controllers\ClientManagement\ClientPortalApiController;
-use App\Http\Controllers\ClientManagement\ClientAgreementApiController;
-use App\Http\Controllers\ClientManagement\ClientPortalAgreementApiController;
+use Illuminate\Support\Facades\Route;
 
 Route::middleware(['web', 'auth'])->get('/finance/accounts', [FinanceApiController::class, 'accounts']);
 Route::middleware(['web', 'auth'])->post('/finance/accounts', [FinanceApiController::class, 'createAccount']);

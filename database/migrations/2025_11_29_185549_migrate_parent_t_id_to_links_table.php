@@ -1,16 +1,14 @@
 <?php
 
-use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
     /**
      * Run the migrations.
-     * 
+     *
      * Migrates existing parent_t_id relationships to the new links table.
      * The parent_t_id column stored the parent transaction's ID on the child transaction,
      * so we need to insert records with parent_t_id as parent and t_id as child.
@@ -20,7 +18,7 @@ return new class extends Migration
         // Migrate existing parent_t_id relationships to the links table using query builder
         // for cross-database compatibility (MySQL, SQLite, etc.)
         $now = Carbon::now();
-        
+
         $linksToInsert = DB::table('fin_account_line_items')
             ->whereNotNull('parent_t_id')
             ->select('parent_t_id', 't_id')
@@ -37,7 +35,7 @@ return new class extends Migration
 
     /**
      * Reverse the migrations.
-     * 
+     *
      * Restores parent_t_id values from the links table back to the original column.
      */
     public function down(): void

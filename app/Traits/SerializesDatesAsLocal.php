@@ -8,12 +8,11 @@ trait SerializesDatesAsLocal
 {
     /**
      * Prepare a date for array / JSON serialization.
-     * 
+     *
      * This ensures that dates are serialized without timezone information (Z or offsets),
      * which prevents JavaScript from shifting them when creating Date objects.
      * This results in "as stored" or "local" interpretation in the browser.
      *
-     * @param  \DateTimeInterface  $date
      * @return string
      */
     protected function serializeDate(DateTimeInterface $date)

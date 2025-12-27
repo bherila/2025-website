@@ -2,15 +2,16 @@
 
 namespace App\Models\ClientManagement;
 
+use App\Traits\SerializesDatesAsLocal;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use App\Traits\SerializesDatesAsLocal;
 
 class ClientInvoice extends Model
 {
-    use SoftDeletes, SerializesDatesAsLocal;
+    use SerializesDatesAsLocal, SoftDeletes;
 
     protected $table = 'client_invoices';
+
     protected $primaryKey = 'client_invoice_id';
 
     protected $fillable = [

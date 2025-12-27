@@ -177,7 +177,7 @@ class ClientInvoiceApiController extends Controller
             'due_date' => 'nullable|date',
         ]);
 
-        if (!$invoice->isEditable()) {
+        if (! $invoice->isEditable()) {
             return response()->json(['error' => 'Invoice cannot be edited in its current status'], 400);
         }
 
@@ -217,7 +217,7 @@ class ClientInvoiceApiController extends Controller
             return response()->json(['error' => 'Invoice does not belong to this company'], 404);
         }
 
-        if (!in_array($invoice->status, ['issued', 'draft'])) {
+        if (! in_array($invoice->status, ['issued', 'draft'])) {
             return response()->json(['error' => 'Invoice cannot be marked as paid in its current status'], 400);
         }
 
@@ -288,7 +288,7 @@ class ClientInvoiceApiController extends Controller
             return response()->json(['error' => 'Invoice does not belong to this company'], 404);
         }
 
-        if (!$invoice->isEditable()) {
+        if (! $invoice->isEditable()) {
             return response()->json(['error' => 'Invoice cannot be edited in its current status'], 400);
         }
 
@@ -336,13 +336,13 @@ class ClientInvoiceApiController extends Controller
             return response()->json(['error' => 'Invoice does not belong to this company'], 404);
         }
 
-        if (!$invoice->isEditable()) {
+        if (! $invoice->isEditable()) {
             return response()->json(['error' => 'Invoice cannot be edited in its current status'], 400);
         }
 
         $line = $invoice->lineItems()->where('client_invoice_line_id', $lineId)->first();
 
-        if (!$line) {
+        if (! $line) {
             return response()->json(['error' => 'Line item not found'], 404);
         }
 

@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\FinAccountLineItemTagMap;
+use App\Models\FinAccountTag;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use App\Models\FinAccountTag;
-use App\Models\FinAccountLineItemTagMap;
 
 class FinanceTransactionTaggingApiController extends Controller
 {
@@ -19,12 +19,13 @@ class FinanceTransactionTaggingApiController extends Controller
         // Include transaction counts if requested
         if ($request->get('include_counts') === 'true') {
             $tags = $query->get(['tag_id', 'tag_label', 'tag_color']);
-            
+
             // Get counts for each tag
             $tags = $tags->map(function ($tag) {
                 $tag->transaction_count = FinAccountLineItemTagMap::where('tag_id', $tag->tag_id)
                     ->whereNull('when_deleted')
                     ->count();
+
                 return $tag;
             });
 

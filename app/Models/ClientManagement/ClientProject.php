@@ -2,14 +2,14 @@
 
 namespace App\Models\ClientManagement;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\User;
 use App\Traits\SerializesDatesAsLocal;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ClientProject extends Model
 {
-    use SoftDeletes, SerializesDatesAsLocal;
+    use SerializesDatesAsLocal, SoftDeletes;
 
     protected $table = 'client_projects';
 
@@ -31,6 +31,7 @@ class ClientProject extends Model
         $slug = preg_replace('/[^a-z0-9]+/', '-', $slug);
         $slug = preg_replace('/-+/', '-', $slug);
         $slug = trim($slug, '-');
+
         return $slug;
     }
 

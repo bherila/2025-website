@@ -14,9 +14,9 @@ return new class extends Migration
         Schema::table('client_invoice_lines', function (Blueprint $table) {
             $table->unsignedBigInteger('client_agreement_id')->nullable()->after('client_invoice_id');
             $table->foreign('client_agreement_id')
-                  ->references('id')
-                  ->on('client_agreements')
-                  ->onDelete('restrict');
+                ->references('id')
+                ->on('client_agreements')
+                ->onDelete('restrict');
         });
     }
 

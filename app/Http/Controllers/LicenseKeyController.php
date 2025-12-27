@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ProductKey;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use App\Models\ProductKey;
 
 class LicenseKeyController extends Controller
 {
@@ -14,8 +14,6 @@ class LicenseKeyController extends Controller
 
         return response()->json($productKeys);
     }
-
- 
 
     public function store(Request $request)
     {
@@ -42,14 +40,14 @@ class LicenseKeyController extends Controller
     public function import(Request $request)
     {
         $items = $request->all();
-        if (!is_array($items)) {
+        if (! is_array($items)) {
             return response()->json(['error' => 'Invalid payload, expected array'], 400);
         }
 
         $uid = Auth::id();
         $insertData = [];
         foreach ($items as $item) {
-            if (!isset($item['productKey']) || !isset($item['productName'])) {
+            if (! isset($item['productKey']) || ! isset($item['productName'])) {
                 continue;
             }
             $insertData[] = [

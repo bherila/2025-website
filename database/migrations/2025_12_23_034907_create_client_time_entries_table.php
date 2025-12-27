@@ -25,7 +25,7 @@ return new class extends Migration
             $table->string('job_type')->default('Software Development');
             $table->timestamps();
             $table->softDeletes();
-            
+
             $table->index('project_id');
             $table->index('client_company_id');
             $table->index('task_id');

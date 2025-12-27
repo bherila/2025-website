@@ -14,9 +14,9 @@ return new class extends Migration
         Schema::table('client_time_entries', function (Blueprint $table) {
             $table->unsignedBigInteger('client_invoice_line_id')->nullable()->after('job_type');
             $table->foreign('client_invoice_line_id')
-                  ->references('client_invoice_line_id')
-                  ->on('client_invoice_lines')
-                  ->onDelete('restrict');
+                ->references('client_invoice_line_id')
+                ->on('client_invoice_lines')
+                ->onDelete('restrict');
             $table->index('client_invoice_line_id');
         });
     }

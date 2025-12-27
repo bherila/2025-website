@@ -27,7 +27,7 @@ class TransactionGeminiImportController extends Controller
         $user = Auth::user();
         $apiKey = $user->getGeminiApiKey();
 
-        if (!$apiKey) {
+        if (! $apiKey) {
             return response()->json(['error' => 'Gemini API key is not set.'], 400);
         }
 
@@ -64,35 +64,38 @@ class TransactionGeminiImportController extends Controller
                 // Strip markdown code fences if present
                 $json_text = preg_replace('/^```json\s*|\s*```$/s', '', trim($json_text));
                 $data = json_decode($json_text, true);
-                
+
                 if (json_last_error() !== JSON_ERROR_NONE) {
                     Log::error('Failed to decode JSON from Gemini API', [
                         'file' => $file->getClientOriginalName(),
                         'response' => $json_text,
                     ]);
+
                     return response()->json(['error' => 'Failed to parse response from AI.'], 500);
                 }
-                
+
                 return response()->json($data);
             } else {
-                Log::error('Gemini API request failed for file: ' . $file->getClientOriginalName(), [
+                Log::error('Gemini API request failed for file: '.$file->getClientOriginalName(), [
                     'status' => $response->status(),
                     'response' => $response->body(),
                 ]);
                 if ($response->status() == 429) {
                     return response()->json(['error' => 'API rate limit exceeded. Please wait and try again.'], 429);
                 }
+
                 return response()->json(['error' => 'Failed to process the PDF file.'], 500);
             }
         } catch (Throwable $e) {
-            Log::error('Error during transaction import: ' . $e->getMessage());
+            Log::error('Error during transaction import: '.$e->getMessage());
+
             return response()->json(['error' => 'An unexpected error occurred during import.'], 500);
         }
     }
 
     private function getPrompt()
     {
-        return <<<PROMPT
+        return <<<'PROMPT'
 Analyze the provided bank or brokerage statement PDF and extract:
 1. Statement summary information
 2. Statement detail line items (sections with MTD/YTD or period columns showing performance, capital, taxes, etc.)

@@ -27,7 +27,7 @@ class ProductKey extends Model
         parent::boot();
 
         static::creating(function ($model) {
-            if (!auth()->check()) {
+            if (! auth()->check()) {
                 throw new \Exception('Authentication required to create product key');
             }
             if ($model->uid && $model->uid != auth()->id()) {

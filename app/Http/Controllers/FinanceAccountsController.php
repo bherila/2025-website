@@ -2,11 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\FinAccounts;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
-use App\Models\FinAccounts;
-use App\Models\FinAccountLineItems;
 
 class FinanceAccountsController extends Controller
 {
@@ -23,7 +21,7 @@ class FinanceAccountsController extends Controller
             ->where('acct_owner', $uid)
             ->first();
 
-        if (!$account) {
+        if (! $account) {
             abort(404, 'Account not found');
         }
 
@@ -38,7 +36,7 @@ class FinanceAccountsController extends Controller
             ->where('acct_owner', $uid)
             ->first();
 
-        if (!$account) {
+        if (! $account) {
             abort(404, 'Account not found');
         }
 
@@ -55,7 +53,7 @@ class FinanceAccountsController extends Controller
             ->where('acct_owner', $uid)
             ->first();
 
-        if (!$account) {
+        if (! $account) {
             abort(404, 'Account not found');
         }
 
@@ -70,7 +68,7 @@ class FinanceAccountsController extends Controller
             ->where('acct_owner', $uid)
             ->first();
 
-        if (!$account) {
+        if (! $account) {
             abort(404, 'Account not found');
         }
 
@@ -91,7 +89,7 @@ class FinanceAccountsController extends Controller
             ->where('acct_owner', $uid)
             ->first();
 
-        if (!$account) {
+        if (! $account) {
             abort(404, 'Account not found');
         }
 
@@ -106,7 +104,7 @@ class FinanceAccountsController extends Controller
             ->where('acct_owner', $uid)
             ->first();
 
-        if (!$account) {
+        if (! $account) {
             abort(404, 'Account not found');
         }
 
@@ -121,7 +119,7 @@ class FinanceAccountsController extends Controller
             ->where('acct_owner', $uid)
             ->first();
 
-        if (!$account) {
+        if (! $account) {
             abort(404, 'Account not found');
         }
 

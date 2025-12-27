@@ -2,20 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\FinAccountLineItemLink;
+use App\Models\FinAccountLineItems;
+use App\Models\FinAccounts;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use App\Models\FinAccounts;
-use App\Models\FinAccountLineItems;
-use App\Models\FinAccountLineItemLink;
 
 class FinanceTransactionLinkingApiController extends Controller
 {
     /**
      * Normalize link direction: older transaction is always 'a' (parent), newer is 'b' (child).
      * If dates are equal, lower t_id is 'a'.
-     * 
-     * @param FinAccountLineItems $transaction1
-     * @param FinAccountLineItems $transaction2
+     *
      * @return array ['a' => FinAccountLineItems, 'b' => FinAccountLineItems]
      */
     private function normalizeLink(FinAccountLineItems $transaction1, FinAccountLineItems $transaction2): array
@@ -33,16 +31,12 @@ class FinanceTransactionLinkingApiController extends Controller
 
     /**
      * Find an existing link between two transactions (checks both directions for safety)
-     * 
-     * @param int $t_id_1
-     * @param int $t_id_2
-     * @return FinAccountLineItemLink|null
      */
     private function findExistingLink(int $t_id_1, int $t_id_2): ?FinAccountLineItemLink
     {
         return FinAccountLineItemLink::where(function ($query) use ($t_id_1, $t_id_2) {
-                $query->where('parent_t_id', $t_id_1)->where('child_t_id', $t_id_2);
-            })
+            $query->where('parent_t_id', $t_id_1)->where('child_t_id', $t_id_2);
+        })
             ->orWhere(function ($query) use ($t_id_1, $t_id_2) {
                 $query->where('parent_t_id', $t_id_2)->where('child_t_id', $t_id_1);
             })
@@ -77,8 +71,8 @@ class FinanceTransactionLinkingApiController extends Controller
         $linkingAllowed = $linkedAmount < $sourceAmount;
 
         // Calculate date range (+/- 7 days)
-        $startDate = date('Y-m-d', strtotime($sourceDate . ' -7 days'));
-        $endDate = date('Y-m-d', strtotime($sourceDate . ' +7 days'));
+        $startDate = date('Y-m-d', strtotime($sourceDate.' -7 days'));
+        $endDate = date('Y-m-d', strtotime($sourceDate.' +7 days'));
 
         // Calculate amount range (+/- 5%)
         $minAmount = $sourceAmount * 0.95;
@@ -87,8 +81,8 @@ class FinanceTransactionLinkingApiController extends Controller
         // Find transactions across all user's accounts that match criteria
         // Exclude option transactions (where opt_type is set) and Assignment trades
         $potentialMatches = FinAccountLineItems::whereHas('account', function ($query) use ($uid) {
-                $query->where('acct_owner', $uid);
-            })
+            $query->where('acct_owner', $uid);
+        })
             ->with('account:acct_id,acct_name')
             ->whereBetween('t_date', [$startDate, $endDate])
             ->where('t_id', '!=', $transaction_id) // Exclude the source transaction
@@ -221,7 +215,7 @@ class FinanceTransactionLinkingApiController extends Controller
         // Find the link between these two transactions (in either direction)
         $link = $this->findExistingLink($transaction_id, $request->linked_t_id);
 
-        if (!$link) {
+        if (! $link) {
             return response()->json([
                 'success' => false,
                 'error' => 'These transactions are not linked.',
@@ -300,7 +294,7 @@ class FinanceTransactionLinkingApiController extends Controller
     /**
      * Find all unlinked transactions for an account and suggest linkable pairs
      * with transactions from other accounts.
-     * 
+     *
      * Uses in-memory processing for efficiency (SQL roundtrip latency > memory cost).
      * For bulk linking: requires EXACT amount match, but allows ±5 day date offset
      * to accommodate weekends and holidays.
@@ -342,15 +336,15 @@ class FinanceTransactionLinkingApiController extends Controller
         $dates = $unlinkedTransactions->pluck('t_date')->toArray();
         $minDate = min($dates);
         $maxDate = max($dates);
-        $startDate = date('Y-m-d', strtotime($minDate . ' -5 days'));
-        $endDate = date('Y-m-d', strtotime($maxDate . ' +5 days'));
+        $startDate = date('Y-m-d', strtotime($minDate.' -5 days'));
+        $endDate = date('Y-m-d', strtotime($maxDate.' +5 days'));
 
         // Fetch all potential matches from OTHER accounts in one query
         // This is more efficient than N queries (one per transaction)
         // Exclude option transactions (where opt_type is set) and Assignment trades
         $potentialMatches = FinAccountLineItems::whereHas('account', function ($q) use ($uid) {
-                $q->where('acct_owner', $uid);
-            })
+            $q->where('acct_owner', $uid);
+        })
             ->where('t_account', '!=', $account_id)
             ->whereDoesntHave('parentTransactions')
             ->whereDoesntHave('childTransactions')
@@ -372,7 +366,7 @@ class FinanceTransactionLinkingApiController extends Controller
         foreach ($potentialMatches as $match) {
             $absAmt = round(abs(floatval($match->t_amt)), 2);
             $key = (string) $absAmt;
-            if (!isset($matchesByAmount[$key])) {
+            if (! isset($matchesByAmount[$key])) {
                 $matchesByAmount[$key] = [];
             }
             $matchesByAmount[$key][] = $match;
@@ -392,7 +386,7 @@ class FinanceTransactionLinkingApiController extends Controller
 
             // Look up exact matches by amount
             $amountKey = (string) round($sourceAmount, 2);
-            if (!isset($matchesByAmount[$amountKey])) {
+            if (! isset($matchesByAmount[$amountKey])) {
                 continue;
             }
 
@@ -412,7 +406,7 @@ class FinanceTransactionLinkingApiController extends Controller
                 }
 
                 // Create unique pair key to avoid duplicates
-                $pairKey = min($transaction->t_id, $match->t_id) . '-' . max($transaction->t_id, $match->t_id);
+                $pairKey = min($transaction->t_id, $match->t_id).'-'.max($transaction->t_id, $match->t_id);
                 if (isset($seenPairs[$pairKey])) {
                     continue;
                 }
@@ -460,6 +454,7 @@ class FinanceTransactionLinkingApiController extends Controller
             if ($a['are_opposite_signs'] !== $b['are_opposite_signs']) {
                 return $a['are_opposite_signs'] ? -1 : 1;
             }
+
             // Then by date difference
             return $a['date_diff'] <=> $b['date_diff'];
         });

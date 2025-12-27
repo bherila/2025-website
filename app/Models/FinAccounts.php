@@ -39,7 +39,7 @@ class FinAccounts extends Model
         parent::boot();
 
         static::creating(function ($model) {
-            if (!auth()->check()) {
+            if (! auth()->check()) {
                 throw new \Exception('Authentication required to create account');
             }
             if ($model->acct_owner && $model->acct_owner != auth()->id()) {

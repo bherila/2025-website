@@ -2,9 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
-use Parsedown;
 use Symfony\Component\Yaml\Yaml;
 
 class RecipeController extends Controller
@@ -12,14 +10,15 @@ class RecipeController extends Controller
     public function index()
     {
         $data = $this->getAllRecipes();
+
         return view('recipes.index', $data);
     }
 
     public function show($slug)
     {
-        $filePath = resource_path('markdown/recipes/' . $slug . '.md');
+        $filePath = resource_path('markdown/recipes/'.$slug.'.md');
 
-        if (!File::exists($filePath)) {
+        if (! File::exists($filePath)) {
             abort(404, 'Recipe not found.');
         }
 
@@ -61,7 +60,7 @@ class RecipeController extends Controller
 
             $recipeCategories = $parsed['frontmatter']['categories'] ?? [];
             foreach ($recipeCategories as $category) {
-                if (!in_array($category, $categories)) {
+                if (! in_array($category, $categories)) {
                     $categories[] = $category;
                 }
             }

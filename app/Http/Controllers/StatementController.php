@@ -2,16 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\FinStatementDetail;
 use App\Models\FinAccounts;
+use App\Models\FinStatementDetail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Http\Client\Pool;
-use Throwable;
 
 class StatementController extends Controller
 {
@@ -76,7 +71,7 @@ class StatementController extends Controller
             ->where('statement_id', $statement_id)
             ->first();
 
-        if (!$statement) {
+        if (! $statement) {
             return response()->json(['error' => 'Statement not found'], 404);
         }
 
@@ -85,7 +80,7 @@ class StatementController extends Controller
             ->where('acct_owner', $uid)
             ->first();
 
-        if (!$account) {
+        if (! $account) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -131,17 +126,17 @@ class StatementController extends Controller
             $section = $detail->section;
             $lineItem = $detail->line_item;
 
-            if (!isset($groupedData[$section])) {
+            if (! isset($groupedData[$section])) {
                 $groupedData[$section] = [];
             }
-            if (!isset($groupedData[$section][$lineItem])) {
+            if (! isset($groupedData[$section][$lineItem])) {
                 $groupedData[$section][$lineItem] = [
-                    'is_percentage' => (bool)$detail->is_percentage,
+                    'is_percentage' => (bool) $detail->is_percentage,
                     'values' => [],
-                    'last_ytd_value' => (float)$detail->ytd_value,
+                    'last_ytd_value' => (float) $detail->ytd_value,
                 ];
             }
-            $groupedData[$section][$lineItem]['values'][$date] = (float)$detail->statement_period_value;
+            $groupedData[$section][$lineItem]['values'][$date] = (float) $detail->statement_period_value;
         }
 
         return response()->json([
@@ -184,7 +179,7 @@ class StatementController extends Controller
         ]);
 
         // Insert NAV rows
-        if (!empty($statement['nav'])) {
+        if (! empty($statement['nav'])) {
             $navRows = array_map(function ($row) use ($statementId) {
                 return [
                     'statement_id' => $statementId,
@@ -200,7 +195,7 @@ class StatementController extends Controller
         }
 
         // Insert cash report rows
-        if (!empty($statement['cashReport'])) {
+        if (! empty($statement['cashReport'])) {
             $cashRows = array_map(function ($row) use ($statementId) {
                 return [
                     'statement_id' => $statementId,
@@ -215,7 +210,7 @@ class StatementController extends Controller
         }
 
         // Insert position rows
-        if (!empty($statement['positions'])) {
+        if (! empty($statement['positions'])) {
             $positionRows = array_map(function ($row) use ($statementId) {
                 return [
                     'statement_id' => $statementId,
@@ -238,7 +233,7 @@ class StatementController extends Controller
         }
 
         // Insert performance rows
-        if (!empty($statement['performance'])) {
+        if (! empty($statement['performance'])) {
             $perfRows = array_map(function ($row) use ($statementId) {
                 return [
                     'statement_id' => $statementId,
@@ -308,7 +303,7 @@ class StatementController extends Controller
 
         $statementInfo = $request->statementInfo ?? [];
         $statementDetails = $request->statementDetails ?? [];
-        
+
         $periodStart = $statementInfo['periodStart'] ?? null;
         $periodEnd = $statementInfo['periodEnd'] ?? now()->format('Y-m-d');
         $closingBalance = $statementInfo['closingBalance'] ?? null;
@@ -322,7 +317,7 @@ class StatementController extends Controller
         ]);
 
         // Insert statement detail rows
-        if (!empty($statementDetails)) {
+        if (! empty($statementDetails)) {
             $detailRows = array_map(function ($row) use ($statementId) {
                 return [
                     'statement_id' => $statementId,

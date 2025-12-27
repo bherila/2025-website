@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\FinAccountLineItems;
+use App\Models\FinAccounts;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use App\Models\FinAccounts;
-use App\Models\FinAccountLineItems;
 
 class FinanceTransactionsDedupeApiController extends Controller
 {
@@ -14,10 +14,10 @@ class FinanceTransactionsDedupeApiController extends Controller
      * Find duplicate transactions in an account
      * Duplicates are detected by: same date + qty + amount + symbol + balance
      * Also checks if description/memo are identical or swapped
-     * 
+     *
      * Transactions marked as t_is_not_duplicate=1 are excluded from duplicate detection.
      * At the end, transactions that had no duplicates are marked as t_is_not_duplicate=1.
-     * 
+     *
      * Note: We keep the NEWER t_id (highest) and delete older ones because when re-importing
      * CSV data, the newer import may have more complete/updated data.
      */
@@ -42,7 +42,7 @@ class FinanceTransactionsDedupeApiController extends Controller
 
         // Get all transactions for the account, sorted by date
         $transactions = $query->get();
-        
+
         // Track which transaction IDs are involved in duplicate groups
         $idsInDuplicateGroups = [];
 
@@ -101,7 +101,7 @@ class FinanceTransactionsDedupeApiController extends Controller
             if ($duplicates->count() > 0) {
                 // Create a group with all matching transactions
                 $allInGroup = collect([$transaction])->merge($duplicates);
-                
+
                 foreach ($allInGroup as $t) {
                     $seenIds[] = $t->t_id;
                     $idsInDuplicateGroups[] = $t->t_id;
@@ -110,7 +110,7 @@ class FinanceTransactionsDedupeApiController extends Controller
                 // The last transaction (highest t_id) is the one to keep
                 // We keep the NEWER t_id because re-imported CSV may have updated data
                 $keepTransaction = $allInGroup->sortBy('t_id')->last();
-                $deleteIds = $allInGroup->filter(fn($t) => $t->t_id !== $keepTransaction->t_id)->pluck('t_id')->toArray();
+                $deleteIds = $allInGroup->filter(fn ($t) => $t->t_id !== $keepTransaction->t_id)->pluck('t_id')->toArray();
 
                 $groups[] = [
                     'key' => $groupKey,
@@ -126,9 +126,9 @@ class FinanceTransactionsDedupeApiController extends Controller
                             't_amt' => $t->t_amt,
                             't_comment' => $t->t_comment,
                             'parent_t_id' => $t->parent_t_id,
-                            'tags' => $t->tags->map(fn($tag) => [
+                            'tags' => $t->tags->map(fn ($tag) => [
                                 'tag_id' => $tag->tag_id,
-                                'tag_label' => $tag->tag_label
+                                'tag_label' => $tag->tag_label,
                             ])->toArray(),
                         ];
                     })->values()->toArray(),
@@ -149,8 +149,8 @@ class FinanceTransactionsDedupeApiController extends Controller
         if (count($groups) < 150) {
             $allTransactionIds = $transactions->pluck('t_id')->toArray();
             $idsWithoutDuplicates = array_diff($allTransactionIds, $idsInDuplicateGroups);
-            
-            if (!empty($idsWithoutDuplicates)) {
+
+            if (! empty($idsWithoutDuplicates)) {
                 $markedAsNonDuplicate = FinAccountLineItems::whereIn('t_id', $idsWithoutDuplicates)
                     ->where('t_account', $account->acct_id)
                     ->update(['t_is_not_duplicate' => true]);
@@ -203,7 +203,7 @@ class FinanceTransactionsDedupeApiController extends Controller
         DB::beginTransaction();
         try {
             // Mark unchecked groups as non-duplicates
-            if (!empty($markAsNotDuplicateIds)) {
+            if (! empty($markAsNotDuplicateIds)) {
                 $totalMarkedAsNotDuplicate = FinAccountLineItems::whereIn('t_id', $markAsNotDuplicateIds)
                     ->where('t_account', $account->acct_id)
                     ->update(['t_is_not_duplicate' => true]);
@@ -218,7 +218,7 @@ class FinanceTransactionsDedupeApiController extends Controller
                     ->where('t_account', $account->acct_id)
                     ->first();
 
-                if (!$keepTransaction) {
+                if (! $keepTransaction) {
                     continue; // Skip if keep transaction not found
                 }
 
@@ -271,7 +271,7 @@ class FinanceTransactionsDedupeApiController extends Controller
                 $deletedCount = FinAccountLineItems::whereIn('t_id', $deleteIds)
                     ->where('t_account', $account->acct_id)
                     ->delete();
-                
+
                 $totalDeleted += $deletedCount;
             }
 
@@ -285,7 +285,8 @@ class FinanceTransactionsDedupeApiController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['error' => 'Failed to merge transactions: ' . $e->getMessage()], 500);
+
+            return response()->json(['error' => 'Failed to merge transactions: '.$e->getMessage()], 500);
         }
     }
 
@@ -298,6 +299,7 @@ class FinanceTransactionsDedupeApiController extends Controller
         if ($value === null || $value === '' || $value === 0 || $value === '0' || $value === 0.0 || $value === '0.0' || $value === '0.00') {
             return '0';
         }
+
         // Round to 2 decimal places for comparison
         return number_format((float) $value, 2, '.', '');
     }
@@ -311,6 +313,7 @@ class FinanceTransactionsDedupeApiController extends Controller
         if ($value === null || $value === '') {
             return '';
         }
+
         return strtolower(trim($value));
     }
 }

@@ -28,7 +28,7 @@ class PHRPatientVitals extends Model
         parent::boot();
 
         static::creating(function ($model) {
-            if (!auth()->check()) {
+            if (! auth()->check()) {
                 throw new \Exception('Authentication required to create patient vital');
             }
             if ($model->user_id && $model->user_id != auth()->id()) {

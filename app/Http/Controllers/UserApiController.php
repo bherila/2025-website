@@ -16,6 +16,7 @@ class UserApiController extends Controller
         if ($userArray['gemini_api_key']) {
             $userArray['gemini_api_key'] = substr($userArray['gemini_api_key'], -4);
         }
+
         return response()->json($userArray);
     }
 
@@ -37,7 +38,7 @@ class UserApiController extends Controller
             'password' => 'required|min:8|confirmed',
         ]);
 
-        if (!Hash::check($request->current_password, Auth::user()->password)) {
+        if (! Hash::check($request->current_password, Auth::user()->password)) {
             return response()->json(['message' => 'Current password is incorrect'], 422);
         }
 

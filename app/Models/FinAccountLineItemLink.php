@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class FinAccountLineItemLink extends Model
 {
     protected $table = 'fin_account_line_item_links';
+
     public $timestamps = false;
 
     protected $fillable = [

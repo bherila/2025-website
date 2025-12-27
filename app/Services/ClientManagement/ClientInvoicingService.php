@@ -12,14 +12,14 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Service for generating client invoices with rollover hour logic.
- * 
+ *
  * Per agreement terms:
  * - Each month includes a set number of retainer hours
  * - Unused hours can roll over for N months (rollover_months from agreement)
  * - If client goes over in a month, rollover hours are used first (FIFO)
  * - If still over after using rollover, excess is billed at hourly rate
  * - If client was previously negative, new month's hours offset the negative first
- * 
+ *
  * Uses RolloverCalculator for all rollover logic calculations.
  */
 class ClientInvoicingService
@@ -28,17 +28,18 @@ class ClientInvoicingService
 
     public function __construct(?RolloverCalculator $rolloverCalculator = null)
     {
-        $this->rolloverCalculator = $rolloverCalculator ?? new RolloverCalculator();
+        $this->rolloverCalculator = $rolloverCalculator ?? new RolloverCalculator;
     }
 
     /**
      * Generate an invoice for a specific billing period.
-     * 
-     * @param ClientCompany $company The client company
-     * @param Carbon $periodStart Start of billing period
-     * @param Carbon $periodEnd End of billing period
-     * @param ClientAgreement|null $agreement The agreement to use (defaults to active agreement)
+     *
+     * @param  ClientCompany  $company  The client company
+     * @param  Carbon  $periodStart  Start of billing period
+     * @param  Carbon  $periodEnd  End of billing period
+     * @param  ClientAgreement|null  $agreement  The agreement to use (defaults to active agreement)
      * @return ClientInvoice The generated invoice
+     *
      * @throws \Exception If no active agreement or validation fails
      */
     public function generateInvoice(
@@ -48,9 +49,9 @@ class ClientInvoicingService
         ?ClientAgreement $agreement = null
     ): ClientInvoice {
         // Get the active agreement if not provided
-        if (!$agreement) {
+        if (! $agreement) {
             $agreement = $company->activeAgreement();
-            if (!$agreement) {
+            if (! $agreement) {
                 throw new \Exception('No active agreement found for this client company.');
             }
         }
@@ -63,7 +64,7 @@ class ClientInvoicingService
                     ->orWhereBetween('period_end', [$periodStart, $periodEnd])
                     ->orWhere(function ($q) use ($periodStart, $periodEnd) {
                         $q->where('period_start', '<=', $periodStart)
-                          ->where('period_end', '>=', $periodEnd);
+                            ->where('period_end', '>=', $periodEnd);
                     });
             })
             ->whereNotIn('status', ['void'])
@@ -86,7 +87,7 @@ class ClientInvoicingService
             $rolloverHoursAvailable = $this->calculateRolloverHours($agreement, $periodStart, $previousInvoice);
 
             // Get negative balance from previous invoice (if client was over)
-            $negativeBalanceFromPrevious = $previousInvoice ? 
+            $negativeBalanceFromPrevious = $previousInvoice ?
                 (float) $previousInvoice->negative_hours_balance : 0;
 
             // Get all billable, uninvoiced time entries for this period
@@ -205,7 +206,7 @@ class ClientInvoicingService
                 ClientInvoiceLine::create([
                     'client_invoice_id' => $invoice->client_invoice_id,
                     'client_agreement_id' => $agreement->id,
-                    'description' => "Rollover Hours Applied (from previous months)",
+                    'description' => 'Rollover Hours Applied (from previous months)',
                     'quantity' => $calculation['rollover_hours_used'],
                     'unit_price' => 0,
                     'line_total' => 0,
@@ -226,7 +227,7 @@ class ClientInvoicingService
      * Calculate rollover hours available from previous invoices within the rollover window.
      */
     protected function calculateRolloverHours(
-        ClientAgreement $agreement, 
+        ClientAgreement $agreement,
         Carbon $periodStart,
         ?ClientInvoice $previousInvoice
     ): float {
@@ -236,7 +237,7 @@ class ClientInvoicingService
 
         // Find invoices within the rollover window
         $rolloverWindowStart = $periodStart->copy()->subMonths((int) $agreement->rollover_months);
-        
+
         // Sum up unused hours from invoices in the rollover window
         $rolloverHours = ClientInvoice::where('client_agreement_id', $agreement->id)
             ->whereNotIn('status', ['void'])
@@ -249,7 +250,7 @@ class ClientInvoicingService
 
     /**
      * Calculate hour balances according to the billing rules.
-     * 
+     *
      * Rules:
      * 1. This month's retainer hours are added to the pool
      * 2. If there was a negative balance, offset it first with new hours
@@ -266,7 +267,7 @@ class ClientInvoicingService
     ): array {
         // Start with this month's retainer hours
         $availableRetainerHours = $retainerHours;
-        
+
         // If there was a negative balance, offset it first
         if ($negativeBalanceFromPrevious > 0) {
             $offsetAmount = min($negativeBalanceFromPrevious, $availableRetainerHours);
@@ -276,7 +277,7 @@ class ClientInvoicingService
 
         // Total hours available = remaining retainer + rollover
         $totalAvailable = $availableRetainerHours + $rolloverHoursAvailable;
-        
+
         // Calculate how hours are consumed
         $hoursCoveredByRetainer = 0;
         $rolloverHoursUsed = 0;
@@ -315,10 +316,10 @@ class ClientInvoicingService
 
     /**
      * Link time entries to an invoice line.
-     * 
-     * @param \Illuminate\Support\Collection $timeEntries Collection of time entries (modified in place)
-     * @param ClientInvoiceLine $line The invoice line to link to
-     * @param float $hoursToLink Maximum hours to link to this line
+     *
+     * @param  \Illuminate\Support\Collection  $timeEntries  Collection of time entries (modified in place)
+     * @param  ClientInvoiceLine  $line  The invoice line to link to
+     * @param  float  $hoursToLink  Maximum hours to link to this line
      */
     protected function linkTimeEntriesToLine($timeEntries, ClientInvoiceLine $line, float $hoursToLink): void
     {
@@ -350,7 +351,7 @@ class ClientInvoicingService
         // Format: {COMPANY_PREFIX}-{YEAR}{MONTH}-{SEQUENCE}
         $prefix = strtoupper(substr(preg_replace('/[^a-zA-Z0-9]/', '', $company->name), 0, 4));
         $yearMonth = now()->format('Ym');
-        
+
         // Find the next sequence number for this company
         $lastInvoice = ClientInvoice::where('client_company_id', $company->id)
             ->where('invoice_number', 'like', "{$prefix}-{$yearMonth}-%")
@@ -376,9 +377,9 @@ class ClientInvoicingService
         Carbon $periodEnd,
         ?ClientAgreement $agreement = null
     ): array {
-        if (!$agreement) {
+        if (! $agreement) {
             $agreement = $company->activeAgreement();
-            if (!$agreement) {
+            if (! $agreement) {
                 throw new \Exception('No active agreement found for this client company.');
             }
         }
@@ -392,7 +393,7 @@ class ClientInvoicingService
             ->first();
 
         $rolloverHoursAvailable = $this->calculateRolloverHours($agreement, $periodStart, $previousInvoice);
-        $negativeBalanceFromPrevious = $previousInvoice ? 
+        $negativeBalanceFromPrevious = $previousInvoice ?
             (float) $previousInvoice->negative_hours_balance : 0;
 
         // Get time entries

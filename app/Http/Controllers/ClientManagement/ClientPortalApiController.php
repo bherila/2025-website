@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\ClientManagement;
 
 use App\Http\Controllers\Controller;
-use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientProject;
 use App\Models\ClientManagement\ClientTask;
@@ -22,14 +21,14 @@ class ClientPortalApiController extends Controller
     public function getCompany($slug)
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
-        
+
         Gate::authorize('ClientCompanyMember', $company->id);
-        
+
         $companyData = $company->toArray();
         $companyUsers = $company->users;
         $adminUsers = User::where('user_role', 'Admin')->get();
         $companyData['users'] = $companyUsers->merge($adminUsers)->unique('id')->values();
-        
+
         return response()->json($companyData);
     }
 
@@ -39,14 +38,14 @@ class ClientPortalApiController extends Controller
     public function getProjects($slug)
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
-        
+
         Gate::authorize('ClientCompanyMember', $company->id);
-        
+
         $projects = ClientProject::where('client_company_id', $company->id)
-                          ->withCount(['tasks', 'timeEntries'])
-                          ->orderBy('name')
-                          ->get();
-        
+            ->withCount(['tasks', 'timeEntries'])
+            ->orderBy('name')
+            ->get();
+
         return response()->json($projects);
     }
 
@@ -56,24 +55,24 @@ class ClientPortalApiController extends Controller
     public function createProject(Request $request, $slug)
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
-        
+
         Gate::authorize('ClientCompanyMember', $company->id);
-        
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
         ]);
-        
+
         $projectSlug = ClientProject::generateSlug($validated['name']);
-        
+
         // Ensure unique slug
         $baseSlug = $projectSlug;
         $counter = 1;
         while (ClientProject::where('slug', $projectSlug)->exists()) {
-            $projectSlug = $baseSlug . '-' . $counter;
+            $projectSlug = $baseSlug.'-'.$counter;
             $counter++;
         }
-        
+
         $project = ClientProject::create([
             'client_company_id' => $company->id,
             'name' => $validated['name'],
@@ -81,7 +80,7 @@ class ClientPortalApiController extends Controller
             'description' => $validated['description'] ?? null,
             'creator_user_id' => Auth::id(),
         ]);
-        
+
         return response()->json($project, 201);
     }
 
@@ -91,20 +90,20 @@ class ClientPortalApiController extends Controller
     public function getTasks($slug, $projectSlug)
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
-        
+
         Gate::authorize('ClientCompanyMember', $company->id);
-        
+
         $project = ClientProject::where('slug', $projectSlug)
-                         ->where('client_company_id', $company->id)
-                         ->firstOrFail();
-        
+            ->where('client_company_id', $company->id)
+            ->firstOrFail();
+
         $tasks = ClientTask::where('project_id', $project->id)
-                    ->with(['assignee:id,name,email', 'creator:id,name'])
-                    ->orderByRaw('completed_at IS NOT NULL')
-                    ->orderBy('is_high_priority', 'desc')
-                    ->orderBy('created_at', 'desc')
-                    ->get();
-        
+            ->with(['assignee:id,name,email', 'creator:id,name'])
+            ->orderByRaw('completed_at IS NOT NULL')
+            ->orderBy('is_high_priority', 'desc')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
         return response()->json($tasks);
     }
 
@@ -114,13 +113,13 @@ class ClientPortalApiController extends Controller
     public function createTask(Request $request, $slug, $projectSlug)
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
-        
+
         Gate::authorize('ClientCompanyMember', $company->id);
-        
+
         $project = ClientProject::where('slug', $projectSlug)
-                         ->where('client_company_id', $company->id)
-                         ->firstOrFail();
-        
+            ->where('client_company_id', $company->id)
+            ->firstOrFail();
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
@@ -129,7 +128,7 @@ class ClientPortalApiController extends Controller
             'is_high_priority' => 'boolean',
             'is_hidden_from_clients' => 'boolean',
         ]);
-        
+
         $task = ClientTask::create([
             'project_id' => $project->id,
             'name' => $validated['name'],
@@ -140,7 +139,7 @@ class ClientPortalApiController extends Controller
             'is_high_priority' => $validated['is_high_priority'] ?? false,
             'is_hidden_from_clients' => $validated['is_hidden_from_clients'] ?? false,
         ]);
-        
+
         return response()->json($task->load(['assignee:id,name,email', 'creator:id,name']), 201);
     }
 
@@ -150,15 +149,15 @@ class ClientPortalApiController extends Controller
     public function updateTask(Request $request, $slug, $projectSlug, $taskId)
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
-        
+
         Gate::authorize('ClientCompanyMember', $company->id);
-        
+
         $project = ClientProject::where('slug', $projectSlug)
-                         ->where('client_company_id', $company->id)
-                         ->firstOrFail();
-        
+            ->where('client_company_id', $company->id)
+            ->firstOrFail();
+
         $task = ClientTask::where('project_id', $project->id)->findOrFail($taskId);
-        
+
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'description' => 'nullable|string',
@@ -168,7 +167,7 @@ class ClientPortalApiController extends Controller
             'is_hidden_from_clients' => 'boolean',
             'completed' => 'boolean',
         ]);
-        
+
         if (isset($validated['completed'])) {
             if ($validated['completed']) {
                 $task->completed_at = now();
@@ -177,9 +176,9 @@ class ClientPortalApiController extends Controller
             }
             unset($validated['completed']);
         }
-        
+
         $task->update($validated);
-        
+
         return response()->json($task->fresh(['assignee:id,name,email', 'creator:id,name']));
     }
 
@@ -189,16 +188,16 @@ class ClientPortalApiController extends Controller
     public function deleteTask($slug, $projectSlug, $taskId)
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
-        
+
         Gate::authorize('ClientCompanyMember', $company->id);
-        
+
         $project = ClientProject::where('slug', $projectSlug)
-                         ->where('client_company_id', $company->id)
-                         ->firstOrFail();
-        
+            ->where('client_company_id', $company->id)
+            ->firstOrFail();
+
         $task = ClientTask::where('project_id', $project->id)->findOrFail($taskId);
         $task->delete();
-        
+
         return response()->json(['success' => true]);
     }
 
@@ -208,34 +207,35 @@ class ClientPortalApiController extends Controller
     public function getTimeEntries($slug)
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
-        
+
         Gate::authorize('ClientCompanyMember', $company->id);
-        
+
         $entries = ClientTimeEntry::where('client_company_id', $company->id)
-                           ->with(['user:id,name,email', 'project:id,name,slug', 'task:id,name'])
-                           ->orderBy('date_worked', 'desc')
-                           ->orderBy('created_at', 'desc')
-                           ->get()
-                           ->map(function ($entry) {
-                               $entry->formatted_time = $entry->formatted_time;
-                               return $entry;
-                           });
-        
+            ->with(['user:id,name,email', 'project:id,name,slug', 'task:id,name'])
+            ->orderBy('date_worked', 'desc')
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($entry) {
+                $entry->formatted_time = $entry->formatted_time;
+
+                return $entry;
+            });
+
         // Calculate totals
         $totalMinutes = $entries->sum('minutes_worked');
         $billableMinutes = $entries->where('is_billable', true)->sum('minutes_worked');
-        
+
         // Group entries by month and calculate rollover balances
         $monthlyData = $this->calculateMonthlyBalances($company, $entries);
-        
+
         // Calculate total unbilled hours (billable hours in months without agreements)
         $totalUnbilledHours = 0;
         foreach ($monthlyData as $month) {
-            if (!$month['has_agreement'] && isset($month['unbilled_hours'])) {
+            if (! $month['has_agreement'] && isset($month['unbilled_hours'])) {
                 $totalUnbilledHours += $month['unbilled_hours'];
             }
         }
-        
+
         return response()->json([
             'entries' => $entries,
             'monthly_data' => $monthlyData,
@@ -259,13 +259,14 @@ class ClientPortalApiController extends Controller
 
         // Get the active agreement (or agreements over time)
         $agreement = $company->activeAgreement();
-        
-        if (!$agreement) {
+
+        if (! $agreement) {
             // No agreement - return month groupings with unbilled hours tracking
             // These hours will be billed when a future agreement becomes active
             return $entriesByMonth->map(function ($monthEntries, $yearMonth) {
                 $billableMinutes = $monthEntries->where('is_billable', true)->sum('minutes_worked');
                 $unbilledHours = round($billableMinutes / 60, 2);
+
                 return [
                     'year_month' => $yearMonth,
                     'has_agreement' => false,
@@ -282,11 +283,11 @@ class ClientPortalApiController extends Controller
         // Build monthly hours data for calculator
         $monthKeys = $entriesByMonth->keys()->sort()->values();
         $months = [];
-        
+
         foreach ($monthKeys as $yearMonth) {
             $monthEntries = $entriesByMonth[$yearMonth];
             $billableMinutes = $monthEntries->where('is_billable', true)->sum('minutes_worked');
-            
+
             $months[] = [
                 'year_month' => $yearMonth,
                 'retainer_hours' => (float) $agreement->monthly_retainer_hours,
@@ -297,7 +298,7 @@ class ClientPortalApiController extends Controller
         }
 
         // Calculate balances using RolloverCalculator
-        $calculator = new RolloverCalculator();
+        $calculator = new RolloverCalculator;
         $balances = $calculator->calculateMultipleMonths(
             $months,
             (int) $agreement->rollover_months
@@ -358,35 +359,35 @@ class ClientPortalApiController extends Controller
     private function storeOrUpdateTimeEntry(Request $request, string $slug, ?int $entryId = null)
     {
         Gate::authorize('Admin');
-        
+
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
-        
+
         Gate::authorize('ClientCompanyMember', $company->id);
 
         $isUpdate = $entryId !== null;
-        
+
         $validated = $request->validate([
-            'project_id' => ($isUpdate ? 'sometimes|' : '') . 'required|exists:client_projects,id',
+            'project_id' => ($isUpdate ? 'sometimes|' : '').'required|exists:client_projects,id',
             'task_id' => 'nullable|exists:client_tasks,id',
             'name' => 'nullable|string|max:255',
-            'time' => ($isUpdate ? 'sometimes|' : '') . 'required|string',
-            'date_worked' => ($isUpdate ? 'sometimes|' : '') . 'required|date',
+            'time' => ($isUpdate ? 'sometimes|' : '').'required|string',
+            'date_worked' => ($isUpdate ? 'sometimes|' : '').'required|date',
             'user_id' => 'nullable|exists:users,id',
             'is_billable' => 'boolean',
             'job_type' => 'nullable|string|max:255',
         ]);
-        
+
         if (isset($validated['project_id'])) {
             // Verify project belongs to this company
             ClientProject::where('id', $validated['project_id'])
-                         ->where('client_company_id', $company->id)
-                         ->firstOrFail();
+                ->where('client_company_id', $company->id)
+                ->firstOrFail();
         }
-        
+
         if (isset($validated['time'])) {
             // Parse time string to minutes
             $minutes = ClientTimeEntry::parseTimeToMinutes($validated['time']);
-            
+
             if ($minutes <= 0) {
                 return response()->json(['errors' => ['time' => ['Invalid time format. Use h:mm or decimal hours.']]], 422);
             }
@@ -411,7 +412,7 @@ class ClientPortalApiController extends Controller
                 'job_type' => $validated['job_type'] ?? 'Software Development',
             ]);
         }
-        
+
         return response()->json(
             $entry->load(['user:id,name,email', 'project:id,name,slug', 'task:id,name']),
             $isUpdate ? 200 : 201
@@ -424,14 +425,14 @@ class ClientPortalApiController extends Controller
     public function deleteTimeEntry($slug, $entryId)
     {
         Gate::authorize('Admin');
-        
+
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
-        
+
         Gate::authorize('ClientCompanyMember', $company->id);
-        
+
         $entry = ClientTimeEntry::where('client_company_id', $company->id)->findOrFail($entryId);
         $entry->delete();
-        
+
         return response()->json(['success' => true]);
     }
 }

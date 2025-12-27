@@ -2,12 +2,12 @@
 
 namespace App\Providers;
 
-use Illuminate\Support\ServiceProvider;
-use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Event;
-use App\Models\ClientManagement\ClientCompany;
 use App\Listeners\UpdateLastLoginDate;
+use App\Models\ClientManagement\ClientCompany;
 use Illuminate\Auth\Events\Login;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -38,18 +38,18 @@ class AppServiceProvider extends ServiceProvider
             if ($user->id === 1) {
                 return true;
             }
-            
+
             // Admin users have access
             if ($user->user_role === 'Admin') {
                 return true;
             }
-            
+
             // Check if user is a member of the client company
             $company = ClientCompany::find($clientCompanyId);
-            if (!$company) {
+            if (! $company) {
                 return false;
             }
-            
+
             return $company->users()->where('user_id', $user->id)->exists();
         });
     }

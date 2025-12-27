@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\ClientManagement;
 
 use App\Http\Controllers\Controller;
-use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientAgreement;
+use App\Models\ClientManagement\ClientCompany;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
@@ -16,9 +16,9 @@ class ClientAgreementController extends Controller
     public function show($id)
     {
         Gate::authorize('Admin');
-        
+
         $agreement = ClientAgreement::with('clientCompany')->findOrFail($id);
-        
+
         return view('client-management.agreement.show', [
             'agreement' => $agreement,
             'company' => $agreement->clientCompany,
@@ -31,13 +31,13 @@ class ClientAgreementController extends Controller
     public function store(Request $request)
     {
         Gate::authorize('Admin');
-        
+
         $validated = $request->validate([
             'client_company_id' => 'required|exists:client_companies,id',
         ]);
-        
+
         $company = ClientCompany::findOrFail($validated['client_company_id']);
-        
+
         $agreement = ClientAgreement::create([
             'client_company_id' => $company->id,
             'active_date' => now(),
@@ -47,7 +47,7 @@ class ClientAgreementController extends Controller
             'monthly_retainer_fee' => 0,
             'is_visible_to_client' => false,
         ]);
-        
+
         return redirect("/client/mgmt/agreement/{$agreement->id}");
     }
 }

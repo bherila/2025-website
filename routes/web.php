@@ -1,13 +1,13 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\ClientManagement\ClientAgreementController;
+use App\Http\Controllers\ClientManagement\ClientCompanyController;
+use App\Http\Controllers\ClientManagement\ClientPortalAgreementController;
+use App\Http\Controllers\ClientManagement\ClientPortalController;
 use App\Http\Controllers\FinanceAccountsController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\PayslipController;
-use App\Http\Controllers\ClientManagement\ClientCompanyController;
-use App\Http\Controllers\ClientManagement\ClientPortalController;
-use App\Http\Controllers\ClientManagement\ClientAgreementController;
-use App\Http\Controllers\ClientManagement\ClientPortalAgreementController;
+use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return view('welcome');
@@ -59,7 +59,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/client/mgmt', [ClientCompanyController::class, 'store'])->name('client-management.store');
     Route::get('/client/mgmt/{id}', [ClientCompanyController::class, 'show'])->name('client-management.show');
     Route::delete('/client/mgmt/{id}', [ClientCompanyController::class, 'destroy'])->name('client-management.destroy');
-    
+
     // Agreement Management Routes (Admin)
     Route::post('/client/mgmt/agreement', [ClientAgreementController::class, 'store'])->name('client-management.agreement.store');
     Route::get('/client/mgmt/agreement/{id}', [ClientAgreementController::class, 'show'])->name('client-management.agreement.show');

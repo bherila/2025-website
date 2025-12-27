@@ -7,7 +7,9 @@ use Illuminate\Database\Eloquent\Model;
 class FinAccountTag extends Model
 {
     protected $table = 'fin_account_tag';
+
     protected $primaryKey = 'tag_id';
+
     public $timestamps = false;
 
     protected $fillable = [

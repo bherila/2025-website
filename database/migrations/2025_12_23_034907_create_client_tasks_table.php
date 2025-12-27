@@ -23,7 +23,7 @@ return new class extends Migration
             $table->boolean('is_hidden_from_clients')->default(false);
             $table->timestamps();
             $table->softDeletes();
-            
+
             $table->index('project_id');
             $table->index('assignee_user_id');
             $table->index('completed_at');

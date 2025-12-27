@@ -7,7 +7,9 @@ use Illuminate\Database\Eloquent\Model;
 class FinAccountLineItems extends Model
 {
     protected $table = 'fin_account_line_items';
+
     protected $primaryKey = 't_id';
+
     public $timestamps = false;
 
     protected $fillable = [

@@ -2,11 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\FinAccountLineItems;
+use App\Models\FinAccounts;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
-use App\Models\FinAccounts;
-use App\Models\FinAccountLineItems;
 
 class FinanceTransactionsApiController extends Controller
 {
@@ -37,10 +36,10 @@ class FinanceTransactionsApiController extends Controller
         // Transform line items to include parent_of_t_ids array
         $lineItems = $lineItems->map(function ($item) {
             $itemArray = $item->toArray();
-            
+
             // Add parent_of_t_ids array (IDs of child transactions)
             $itemArray['parent_of_t_ids'] = $item->childTransactions->pluck('t_id')->toArray();
-            
+
             // Add parent transaction info if exists (using the new many-to-many relationship)
             $parentTransaction = $item->parentTransactions->first();
             if ($parentTransaction) {
@@ -53,7 +52,7 @@ class FinanceTransactionsApiController extends Controller
                     't_amt' => $parentTransaction->t_amt,
                 ];
             }
-            
+
             // Add child transactions info
             if ($item->childTransactions->count() > 0) {
                 $itemArray['child_transactions'] = $item->childTransactions->map(function ($child) {
@@ -67,17 +66,17 @@ class FinanceTransactionsApiController extends Controller
                     ];
                 })->toArray();
             }
-            
+
             // Remove the raw relationship data
             unset($itemArray['parent_transactions']);
 
-            if (!$item->t_schc_category) {
+            if (! $item->t_schc_category) {
                 unset($itemArray['t_schc_category']);
             }
             if (empty($itemArray['parent_of_t_ids'])) {
                 unset($itemArray['parent_of_t_ids']);
             }
-            
+
             return $itemArray;
         });
 
@@ -144,7 +143,7 @@ class FinanceTransactionsApiController extends Controller
             ];
         }
 
-        if (!empty($dataToInsert)) {
+        if (! empty($dataToInsert)) {
             FinAccountLineItems::insert($dataToInsert);
         }
 
@@ -240,17 +239,39 @@ class FinanceTransactionsApiController extends Controller
         });
 
         // Allow setting values to null/0 explicitly
-        if ($request->has('t_date')) $updateData['t_date'] = $request->t_date;
-        if ($request->has('t_type')) $updateData['t_type'] = $request->t_type;
-        if ($request->has('t_amt')) $updateData['t_amt'] = $request->t_amt ?? 0;
-        if ($request->has('t_comment')) $updateData['t_comment'] = $request->t_comment;
-        if ($request->has('t_description')) $updateData['t_description'] = $request->t_description;
-        if ($request->has('t_qty')) $updateData['t_qty'] = $request->t_qty ?? 0;
-        if ($request->has('t_price')) $updateData['t_price'] = $request->t_price ?? 0;
-        if ($request->has('t_commission')) $updateData['t_commission'] = $request->t_commission ?? 0;
-        if ($request->has('t_fee')) $updateData['t_fee'] = $request->t_fee ?? 0;
-        if ($request->has('t_symbol')) $updateData['t_symbol'] = $request->t_symbol;
-        if ($request->has('t_memo')) $updateData['t_memo'] = $request->t_memo;
+        if ($request->has('t_date')) {
+            $updateData['t_date'] = $request->t_date;
+        }
+        if ($request->has('t_type')) {
+            $updateData['t_type'] = $request->t_type;
+        }
+        if ($request->has('t_amt')) {
+            $updateData['t_amt'] = $request->t_amt ?? 0;
+        }
+        if ($request->has('t_comment')) {
+            $updateData['t_comment'] = $request->t_comment;
+        }
+        if ($request->has('t_description')) {
+            $updateData['t_description'] = $request->t_description;
+        }
+        if ($request->has('t_qty')) {
+            $updateData['t_qty'] = $request->t_qty ?? 0;
+        }
+        if ($request->has('t_price')) {
+            $updateData['t_price'] = $request->t_price ?? 0;
+        }
+        if ($request->has('t_commission')) {
+            $updateData['t_commission'] = $request->t_commission ?? 0;
+        }
+        if ($request->has('t_fee')) {
+            $updateData['t_fee'] = $request->t_fee ?? 0;
+        }
+        if ($request->has('t_symbol')) {
+            $updateData['t_symbol'] = $request->t_symbol;
+        }
+        if ($request->has('t_memo')) {
+            $updateData['t_memo'] = $request->t_memo;
+        }
 
         $lineItem->update($updateData);
 

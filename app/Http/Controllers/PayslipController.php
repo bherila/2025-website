@@ -33,8 +33,8 @@ class PayslipController extends Controller
                 ->toArray();
 
             // Add current year if not present
-            $currentYear = (string)date('Y');
-            if (!in_array($currentYear, $years)) {
+            $currentYear = (string) date('Y');
+            if (! in_array($currentYear, $years)) {
                 $years[] = $currentYear;
             }
 
@@ -42,7 +42,7 @@ class PayslipController extends Controller
 
             return response()->json($years);
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Failed to fetch payslip years: ' . $e->getMessage()], 500);
+            return response()->json(['error' => 'Failed to fetch payslip years: '.$e->getMessage()], 500);
         }
     }
 
@@ -68,6 +68,7 @@ class PayslipController extends Controller
             if (is_string($payslip->other)) {
                 $payslip->other = json_decode($payslip->other, true);
             }
+
             return $payslip;
         });
 

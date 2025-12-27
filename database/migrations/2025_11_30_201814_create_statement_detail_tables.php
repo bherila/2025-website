@@ -21,7 +21,7 @@ return new class extends Migration
             $table->decimal('current_short', 18, 4)->nullable();
             $table->decimal('current_total', 18, 4)->nullable();
             $table->decimal('change_amount', 18, 4)->nullable();
-            
+
             $table->index('snapshot_id');
             $table->foreign('snapshot_id')
                 ->references('snapshot_id')
@@ -38,7 +38,7 @@ return new class extends Migration
             $table->decimal('total', 18, 4)->nullable();
             $table->decimal('securities', 18, 4)->nullable();
             $table->decimal('futures', 18, 4)->nullable();
-            
+
             $table->index('snapshot_id');
             $table->foreign('snapshot_id')
                 ->references('snapshot_id')
@@ -63,7 +63,7 @@ return new class extends Migration
             $table->enum('opt_type', ['call', 'put'])->nullable();
             $table->string('opt_strike', 20)->nullable();
             $table->date('opt_expiration')->nullable();
-            
+
             $table->index('snapshot_id');
             $table->index('symbol');
             $table->foreign('snapshot_id')
@@ -102,7 +102,7 @@ return new class extends Migration
             $table->decimal('unrealized_lt_loss', 18, 4)->nullable();
             $table->decimal('unrealized_total', 18, 4)->nullable();
             $table->decimal('total_pl', 18, 4)->nullable();
-            
+
             $table->index('snapshot_id');
             $table->index('symbol');
             $table->foreign('snapshot_id')
@@ -121,7 +121,7 @@ return new class extends Migration
             $table->decimal('quantity', 18, 8)->nullable();
             $table->decimal('collateral_amount', 18, 4)->nullable();
             $table->decimal('interest_earned', 18, 4)->nullable();
-            
+
             $table->index('snapshot_id');
             $table->foreign('snapshot_id')
                 ->references('snapshot_id')

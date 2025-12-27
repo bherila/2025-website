@@ -2,14 +2,14 @@
 
 namespace App\Models\ClientManagement;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\User;
 use App\Traits\SerializesDatesAsLocal;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ClientAgreement extends Model
 {
-    use SoftDeletes, SerializesDatesAsLocal;
+    use SerializesDatesAsLocal, SoftDeletes;
 
     protected $table = 'client_agreements';
 
@@ -71,7 +71,8 @@ class ClientAgreement extends Model
     public function isActive(): bool
     {
         $now = now();
-        return $this->active_date <= $now && 
+
+        return $this->active_date <= $now &&
                ($this->termination_date === null || $this->termination_date > $now);
     }
 
@@ -88,7 +89,7 @@ class ClientAgreement extends Model
      */
     public function isEditable(): bool
     {
-        return !$this->isSigned();
+        return ! $this->isSigned();
     }
 
     /**
@@ -107,7 +108,7 @@ class ClientAgreement extends Model
     /**
      * Terminate the agreement.
      */
-    public function terminate(\DateTime $terminationDate = null): void
+    public function terminate(?\DateTime $terminationDate = null): void
     {
         $this->update([
             'termination_date' => $terminationDate ?? now(),

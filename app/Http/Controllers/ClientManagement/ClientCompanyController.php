@@ -15,7 +15,7 @@ class ClientCompanyController extends Controller
     public function index()
     {
         Gate::authorize('Admin');
-        
+
         return view('client-management.index');
     }
 
@@ -25,7 +25,7 @@ class ClientCompanyController extends Controller
     public function create()
     {
         Gate::authorize('Admin');
-        
+
         return view('client-management.create');
     }
 
@@ -35,21 +35,22 @@ class ClientCompanyController extends Controller
     public function store(Request $request)
     {
         Gate::authorize('Admin');
-        
+
         $validated = $request->validate([
             'company_name' => 'required|string|max:255',
         ]);
 
         // Generate slug from company name
         $slug = ClientCompany::generateSlug($validated['company_name']);
-        
+
         // Check if slug is unique
         if (ClientCompany::where('slug', $slug)->exists()) {
             if ($request->wantsJson() || $request->ajax()) {
                 return response()->json([
-                    'errors' => ['slug' => ['A company with a similar name already exists. Please choose a different name.']]
+                    'errors' => ['slug' => ['A company with a similar name already exists. Please choose a different name.']],
                 ], 422);
             }
+
             return back()->withErrors(['slug' => 'A company with a similar name already exists.'])->withInput();
         }
 
@@ -73,9 +74,9 @@ class ClientCompanyController extends Controller
     public function show($id)
     {
         Gate::authorize('Admin');
-        
+
         $company = ClientCompany::with('users')->findOrFail($id);
-        
+
         return view('client-management.show', compact('company'));
     }
 
@@ -85,9 +86,9 @@ class ClientCompanyController extends Controller
     public function update(Request $request, $id)
     {
         Gate::authorize('Admin');
-        
+
         $company = ClientCompany::findOrFail($id);
-        
+
         $validated = $request->validate([
             'company_name' => 'required|string|max:255',
             'address' => 'nullable|string',
@@ -106,7 +107,7 @@ class ClientCompanyController extends Controller
         }
 
         return redirect()->route('client-management.show', $company->id)
-                        ->with('success', 'Client company updated successfully.');
+            ->with('success', 'Client company updated successfully.');
     }
 
     /**
@@ -115,11 +116,11 @@ class ClientCompanyController extends Controller
     public function destroy($id)
     {
         Gate::authorize('Admin');
-        
+
         $company = ClientCompany::findOrFail($id);
         $company->delete();
 
         return redirect()->route('client-management.index')
-                        ->with('success', 'Client company deleted successfully.');
+            ->with('success', 'Client company deleted successfully.');
     }
 }

@@ -3,12 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\FinPayslips;
+use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Http\Client\Pool;
 use Throwable;
 
 class PayslipImportController extends Controller
@@ -17,7 +17,7 @@ class PayslipImportController extends Controller
     {
         // Set execution time limit to 5 minutes to handle multiple API requests
         set_time_limit(300);
-        
+
         $validator = Validator::make($request->all(), [
             'files' => 'required|array|max:10',
             'files.*' => 'required|file|max:10240', // 10MB max
@@ -30,7 +30,7 @@ class PayslipImportController extends Controller
         $user = Auth::user();
         $apiKey = $user->getGeminiApiKey();
 
-        if (!$apiKey) {
+        if (! $apiKey) {
             return response()->json(['error' => 'Gemini API key is not set.'], 400);
         }
 
@@ -49,23 +49,23 @@ class PayslipImportController extends Controller
                         'x-goog-api-key' => $apiKey,
                         'Content-Type' => 'application/json',
                     ])->post('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', [
-                            'contents' => [
-                                [
-                                    'parts' => [
-                                        ['text' => $prompt],
-                                        [
-                                            'inline_data' => [
-                                                'mime_type' => 'application/pdf',
-                                                'data' => base64_encode($file->get()),
-                                            ],
+                        'contents' => [
+                            [
+                                'parts' => [
+                                    ['text' => $prompt],
+                                    [
+                                        'inline_data' => [
+                                            'mime_type' => 'application/pdf',
+                                            'data' => base64_encode($file->get()),
                                         ],
                                     ],
                                 ],
                             ],
-                            'generationConfig' => [
-                                'response_mime_type' => 'application/json',
-                            ],
-                        ]);
+                        ],
+                        'generationConfig' => [
+                            'response_mime_type' => 'application/json',
+                        ],
+                    ]);
                 }
             });
 
@@ -91,13 +91,13 @@ class PayslipImportController extends Controller
                             $successful_imports++;
                         }
                     } else {
-                        Log::error('Failed to decode JSON from Gemini API for file: ' . $fileName, [
+                        Log::error('Failed to decode JSON from Gemini API for file: '.$fileName, [
                             'response' => $response->body(),
                         ]);
                         $failed_imports++;
                     }
                 } else {
-                    Log::error('Gemini API request failed for file: ' . $fileName, [
+                    Log::error('Gemini API request failed for file: '.$fileName, [
                         'status' => $response->status(),
                         'response' => $response->body(),
                     ]);
@@ -108,7 +108,8 @@ class PayslipImportController extends Controller
                 }
             }
         } catch (Throwable $e) {
-            Log::error('Error during payslip import: ' . $e->getMessage());
+            Log::error('Error during payslip import: '.$e->getMessage());
+
             return response()->json(['error' => 'An unexpected error occurred during import.'], 500);
         }
 
@@ -117,7 +118,7 @@ class PayslipImportController extends Controller
             $message .= " Failed to import data from {$failed_imports} file(s).";
         }
 
-        Log::info('Payslip import summary for user ID ' . $user->id, [
+        Log::info('Payslip import summary for user ID '.$user->id, [
             'successful_imports' => $successful_imports,
             'failed_imports' => $failed_imports,
         ]);
@@ -132,7 +133,7 @@ class PayslipImportController extends Controller
 
     private function getPrompt()
     {
-        return <<<PROMPT
+        return <<<'PROMPT'
 Analyze the provided payslip PDF document and extract the following fields in JSON format.
 
 **JSON Fields:**

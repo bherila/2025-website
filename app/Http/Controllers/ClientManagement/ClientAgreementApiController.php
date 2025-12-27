@@ -16,10 +16,10 @@ class ClientAgreementApiController extends Controller
     public function index($companyId)
     {
         Gate::authorize('Admin');
-        
+
         $company = ClientCompany::findOrFail($companyId);
         $agreements = $company->agreements()->orderBy('active_date', 'desc')->get();
-        
+
         return response()->json($agreements);
     }
 
@@ -29,9 +29,9 @@ class ClientAgreementApiController extends Controller
     public function show($id)
     {
         Gate::authorize('Admin');
-        
+
         $agreement = ClientAgreement::with('clientCompany', 'signedByUser')->findOrFail($id);
-        
+
         return response()->json($agreement);
     }
 
@@ -41,16 +41,16 @@ class ClientAgreementApiController extends Controller
     public function update(Request $request, $id)
     {
         Gate::authorize('Admin');
-        
+
         $agreement = ClientAgreement::findOrFail($id);
-        
+
         // Only allow editing if not signed
         if ($agreement->isSigned()) {
             return response()->json([
-                'error' => 'Cannot edit a signed agreement. You can only terminate it.'
+                'error' => 'Cannot edit a signed agreement. You can only terminate it.',
             ], 422);
         }
-        
+
         $validated = $request->validate([
             'active_date' => 'nullable|date',
             'agreement_text' => 'nullable|string',
@@ -61,9 +61,9 @@ class ClientAgreementApiController extends Controller
             'monthly_retainer_fee' => 'nullable|numeric|min:0',
             'is_visible_to_client' => 'nullable|boolean',
         ]);
-        
+
         $agreement->update($validated);
-        
+
         return response()->json([
             'success' => true,
             'agreement' => $agreement->fresh(),
@@ -76,16 +76,16 @@ class ClientAgreementApiController extends Controller
     public function terminate(Request $request, $id)
     {
         Gate::authorize('Admin');
-        
+
         $agreement = ClientAgreement::findOrFail($id);
-        
+
         $validated = $request->validate([
             'termination_date' => 'nullable|date',
         ]);
-        
+
         $terminationDate = $validated['termination_date'] ?? now();
         $agreement->terminate(new \DateTime($terminationDate));
-        
+
         return response()->json([
             'success' => true,
             'agreement' => $agreement->fresh(),
@@ -98,17 +98,17 @@ class ClientAgreementApiController extends Controller
     public function destroy($id)
     {
         Gate::authorize('Admin');
-        
+
         $agreement = ClientAgreement::findOrFail($id);
-        
+
         if ($agreement->isSigned()) {
             return response()->json([
-                'error' => 'Cannot delete a signed agreement.'
+                'error' => 'Cannot delete a signed agreement.',
             ], 422);
         }
-        
+
         $agreement->delete();
-        
+
         return response()->json([
             'success' => true,
         ]);

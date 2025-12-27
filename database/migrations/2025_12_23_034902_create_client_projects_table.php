@@ -20,7 +20,7 @@ return new class extends Migration
             $table->foreignId('creator_user_id')->nullable()->constrained('users')->onDelete('set null');
             $table->timestamps();
             $table->softDeletes();
-            
+
             $table->unique('slug');
             $table->index('client_company_id');
         });

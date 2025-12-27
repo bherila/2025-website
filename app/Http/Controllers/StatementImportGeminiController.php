@@ -16,7 +16,7 @@ class StatementImportGeminiController extends Controller
     {
         // Set execution time limit to 5 minutes to handle multiple API requests
         set_time_limit(300);
-        
+
         $validator = Validator::make($request->all(), [
             'file' => 'required|file|max:10240', // 10MB max
         ]);
@@ -28,7 +28,7 @@ class StatementImportGeminiController extends Controller
         $user = Auth::user();
         $apiKey = $user->getGeminiApiKey();
 
-        if (!$apiKey) {
+        if (! $apiKey) {
             return response()->json(['error' => 'Gemini API key is not set.'], 400);
         }
 
@@ -41,23 +41,23 @@ class StatementImportGeminiController extends Controller
                 'x-goog-api-key' => $apiKey,
                 'Content-Type' => 'application/json',
             ])->post('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', [
-                    'contents' => [
-                        [
-                            'parts' => [
-                                ['text' => $prompt],
-                                [
-                                    'inline_data' => [
-                                        'mime_type' => 'application/pdf',
-                                        'data' => base64_encode($file->get()),
-                                    ],
+                'contents' => [
+                    [
+                        'parts' => [
+                            ['text' => $prompt],
+                            [
+                                'inline_data' => [
+                                    'mime_type' => 'application/pdf',
+                                    'data' => base64_encode($file->get()),
                                 ],
                             ],
                         ],
                     ],
-                    'generationConfig' => [
-                        'response_mime_type' => 'application/json',
-                    ],
-                ]);
+                ],
+                'generationConfig' => [
+                    'response_mime_type' => 'application/json',
+                ],
+            ]);
 
             if ($response->successful()) {
                 $json_string = $response->json()['candidates'][0]['content']['parts'][0]['text'];
@@ -78,23 +78,26 @@ class StatementImportGeminiController extends Controller
                         FinStatementDetail::create($itemData);
                     }
                 } else {
-                    Log::error('Failed to decode JSON from Gemini API for file: ' . $file->getClientOriginalName(), [
+                    Log::error('Failed to decode JSON from Gemini API for file: '.$file->getClientOriginalName(), [
                         'response' => $response->body(),
                     ]);
+
                     return response()->json(['error' => 'Failed to parse statement data.'], 500);
                 }
             } else {
-                Log::error('Gemini API request failed for file: ' . $file->getClientOriginalName(), [
+                Log::error('Gemini API request failed for file: '.$file->getClientOriginalName(), [
                     'status' => $response->status(),
                     'response' => $response->body(),
                 ]);
                 if ($response->status() == 429) {
                     return response()->json(['error' => 'API rate limit exceeded. Please wait and try again.'], 429);
                 }
+
                 return response()->json(['error' => 'Failed to import statement data.'], 500);
             }
         } catch (Throwable $e) {
-            Log::error('Error during statement import: ' . $e->getMessage());
+            Log::error('Error during statement import: '.$e->getMessage());
+
             return response()->json(['error' => 'An unexpected error occurred during import.'], 500);
         }
 
@@ -106,7 +109,7 @@ class StatementImportGeminiController extends Controller
 
     private function getPrompt()
     {
-        return <<<PROMPT
+        return <<<'PROMPT'
 Analyze the provided financial statement PDF document and extract the line items from each section. Return the data as a JSON array of objects.
 
 **JSON Fields:**
