@@ -28,7 +28,8 @@ export default defineConfig({
         'resources/js/irsf461/irsf461.tsx',
         'resources/js/license-manager.tsx',
         'resources/js/client-management.tsx',
-        'resources/js/client-portal.tsx'
+        'resources/js/client-portal.tsx',
+        'resources/js/user-management.tsx'
       ],
       refresh: true,
     }),

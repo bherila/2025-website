@@ -58,6 +58,96 @@ class User extends Authenticatable
     }
 
     /**
+     * Check if user has a specific role.
+     * Roles are stored as comma-separated lowercase strings in user_role column.
+     */
+    public function hasRole(string $role): bool
+    {
+        // User ID 1 always has admin role
+        if ($role === 'admin' && $this->id === 1) {
+            return true;
+        }
+
+        if (empty($this->user_role)) {
+            return false;
+        }
+
+        $roles = array_map('trim', explode(',', strtolower($this->user_role)));
+
+        return in_array(strtolower($role), $roles, true);
+    }
+
+    /**
+     * Get all roles as an array.
+     */
+    public function getRoles(): array
+    {
+        if (empty($this->user_role)) {
+            return $this->id === 1 ? ['admin'] : [];
+        }
+
+        $roles = array_map('trim', explode(',', strtolower($this->user_role)));
+
+        // Ensure user ID 1 always has admin
+        if ($this->id === 1 && ! in_array('admin', $roles, true)) {
+            $roles[] = 'admin';
+        }
+
+        return array_values(array_unique($roles));
+    }
+
+    /**
+     * Add a role to the user.
+     */
+    public function addRole(string $role): bool
+    {
+        $role = strtolower(trim($role));
+        if (empty($role) || str_contains($role, ',')) {
+            return false;
+        }
+
+        if ($this->hasRole($role)) {
+            return true; // Already has role
+        }
+
+        $roles = $this->getRoles();
+        $roles[] = $role;
+        $this->user_role = implode(',', array_unique($roles));
+        $this->save();
+
+        return true;
+    }
+
+    /**
+     * Remove a role from the user.
+     * Cannot remove admin role from user ID 1.
+     */
+    public function removeRole(string $role): bool
+    {
+        $role = strtolower(trim($role));
+
+        // Prevent removing admin from user ID 1
+        if ($role === 'admin' && $this->id === 1) {
+            return false;
+        }
+
+        $roles = $this->getRoles();
+        $roles = array_filter($roles, fn ($r) => $r !== $role);
+        $this->user_role = empty($roles) ? '' : implode(',', $roles);
+        $this->save();
+
+        return true;
+    }
+
+    /**
+     * Check if user can log in (has user or admin role).
+     */
+    public function canLogin(): bool
+    {
+        return $this->hasRole('user') || $this->hasRole('admin');
+    }
+
+    /**
      * Get the client companies this user is associated with.
      */
     public function clientCompanies()

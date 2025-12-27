@@ -27,20 +27,21 @@ class AppServiceProvider extends ServiceProvider
         // Register login event listener
         Event::listen(Login::class, UpdateLastLoginDate::class);
 
+        // Admin gate - check if user has admin role
+        Gate::define('admin', function ($user) {
+            return $user->hasRole('admin');
+        });
+
+        // Alias for backward compatibility (uppercase)
         Gate::define('Admin', function ($user) {
-            return $user->id === 1 || $user->user_role === 'Admin';
+            return $user->hasRole('admin');
         });
 
         // Gate for accessing client company resources
-        // User must be a member of the client company OR be the root user (id=1)
+        // User must be a member of the client company OR be an admin
         Gate::define('ClientCompanyMember', function ($user, $clientCompanyId) {
-            // Root user always has access
-            if ($user->id === 1) {
-                return true;
-            }
-
             // Admin users have access
-            if ($user->user_role === 'Admin') {
+            if ($user->hasRole('admin')) {
                 return true;
             }
 

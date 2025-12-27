@@ -124,3 +124,9 @@ Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/agreements/{agree
 Route::middleware(['web', 'auth'])->post('/client/portal/{slug}/agreements/{agreementId}/sign', [ClientPortalAgreementApiController::class, 'sign']);
 Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/invoices', [ClientPortalAgreementApiController::class, 'getInvoices']);
 Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/invoices/{invoiceId}', [ClientPortalAgreementApiController::class, 'getInvoice']);
+
+// User Management API routes (Admin only)
+Route::middleware(['web', 'auth'])->get('/admin/users', [App\Http\Controllers\UserManagementApiController::class, 'index']);
+Route::middleware(['web', 'auth'])->post('/admin/users/{id}/roles', [App\Http\Controllers\UserManagementApiController::class, 'addRole']);
+Route::middleware(['web', 'auth'])->delete('/admin/users/{id}/roles/{role}', [App\Http\Controllers\UserManagementApiController::class, 'removeRole']);
+Route::middleware(['web', 'auth'])->post('/admin/users/{id}/password', [App\Http\Controllers\UserManagementApiController::class, 'setPassword']);

@@ -7,6 +7,7 @@ use App\Http\Controllers\ClientManagement\ClientPortalController;
 use App\Http\Controllers\FinanceAccountsController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\PayslipController;
+use App\Http\Controllers\UserManagementController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -18,6 +19,7 @@ Route::get('/login', function () {
 })->name('login');
 
 Route::post('/login', [LoginController::class, 'login']);
+Route::post('/login/dev', [LoginController::class, 'devLogin'])->name('login.dev');
 
 Route::get('/tools/maxmin', function () {
     return view('tools.maxmin');
@@ -52,6 +54,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/tools/license-manager', function () {
         return view('tools.license-manager');
     });
+
+    // User Management Routes (Admin only)
+    Route::get('/admin/users', [UserManagementController::class, 'index'])->name('admin.users');
 
     // Client Management Routes
     Route::get('/client/mgmt', [ClientCompanyController::class, 'index'])->name('client-management.index');
