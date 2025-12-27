@@ -15,33 +15,33 @@ export function splitDelimitedText(text: string, delimiter?: string): string[][]
   // Auto-detect delimiter from first line
   if (!delimiter) {
     const firstLine = text.split('\n')[0]
-    // Check for delimiters outside of quoted sections
-    let inQuotes = false
-    let foundDelimiter = ''
+    let foundDelimiter = ','
 
-    for (let i = 0; i < firstLine.length; i++) {
-      const char = firstLine[i]
-      if (char === '"') {
-        inQuotes = !inQuotes
-        continue
-      }
-      if (!inQuotes) {
-        if (char === '\t') {
-          foundDelimiter = '\t'
-          break
-        } else if (char === ',') {
-          foundDelimiter = ','
-          break
-        } else if (char === '|') {
-          foundDelimiter = '|'
-          break
+    if (firstLine) {
+      // Check for delimiters outside of quoted sections
+      let inQuotes = false
+
+      for (let i = 0; i < firstLine.length; i++) {
+        const char = firstLine[i]
+        if (char === '"') {
+          inQuotes = !inQuotes
+          continue
+        }
+        if (!inQuotes) {
+          if (char === '\t') {
+            foundDelimiter = '\t'
+            break
+          } else if (char === ',') {
+            foundDelimiter = ','
+            break
+          } else if (char === '|') {
+            foundDelimiter = '|'
+            break
+          }
         }
       }
     }
 
-    if (!foundDelimiter) {
-      foundDelimiter = ','
-    }
     delimiter = foundDelimiter
   }
 

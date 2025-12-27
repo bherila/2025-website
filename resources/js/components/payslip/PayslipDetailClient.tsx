@@ -1,5 +1,4 @@
-'use client'
-import { useForm } from 'react-hook-form'
+import { useForm, type SubmitHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import type { fin_payslip } from './payslipDbCols'
 import { fin_payslip_schema } from './payslipDbCols'
@@ -29,12 +28,10 @@ const PayslipFormSection = ({
   title,
   fields,
   control,
-  initialValues,
 }: {
   title: string
   fields: string[]
   control: any
-  initialValues?: Partial<fin_payslip>
 }) => (
   <div className="border p-4 rounded-md">
     <h3 className="text-lg font-semibold mb-4">{title}</h3>
@@ -43,7 +40,7 @@ const PayslipFormSection = ({
         <FormField
           key={field}
           control={control}
-          name={field as keyof fin_payslip}
+          name={field as any}
           render={({ field: inputField }) => (
             <FormItem>
               <FormLabel>{field.replace(/_/g, ' ')}</FormLabel>
@@ -69,7 +66,7 @@ const PayslipFormSection = ({
 )
 
 interface PayslipDetailClientProps {
-  initialPayslip?: fin_payslip
+  initialPayslip?: fin_payslip | undefined
 }
 
 export default function PayrollForm({ initialPayslip }: PayslipDetailClientProps) {
@@ -95,21 +92,21 @@ export default function PayrollForm({ initialPayslip }: PayslipDetailClientProps
     }
 
     Object.keys(convertedPayslip).forEach(
-      (key) => convertedPayslip[key as keyof fin_payslip] == null && delete convertedPayslip[key as keyof fin_payslip],
+      (key) => (convertedPayslip as any)[key] == null && delete (convertedPayslip as any)[key],
     )
 
     return convertedPayslip
   }, [initialPayslip])
 
   const form = useForm<fin_payslip>({
-    resolver: zodResolver(fin_payslip_schema),
-    defaultValues: prepareInitialValues,
+    resolver: zodResolver(fin_payslip_schema) as any,
+    defaultValues: prepareInitialValues as any,
   })
 
   useEffect(() => {
     if (initialPayslip) {
       Object.keys(prepareInitialValues).forEach((key) => {
-        form.setValue(key as keyof fin_payslip, (prepareInitialValues as any)[key])
+        form.setValue(key as any, (prepareInitialValues as any)[key])
       })
     }
   }, [initialPayslip, form, prepareInitialValues])
@@ -119,12 +116,12 @@ export default function PayrollForm({ initialPayslip }: PayslipDetailClientProps
     parseDate(form.watch('pay_date'))?.formatYMD()?.slice(0, 4) !==
       parseDate(initialPayslip.pay_date)?.formatYMD()?.slice(0, 4)
 
-  const onSubmit = async (data: fin_payslip) => {
+  const onSubmit: SubmitHandler<fin_payslip> = async (data) => {
     setIsSubmitting(true)
     setApiError(null)
     try {
-      const payslipToSave: fin_payslip & { payslip_id?: number } = { ...data };
-      if (saveMode === 'edit' && initialPayslip) {
+      const payslipToSave: any = { ...data };
+      if (saveMode === 'edit' && initialPayslip?.payslip_id) {
         payslipToSave.payslip_id = initialPayslip.payslip_id;
       }
 
@@ -229,7 +226,7 @@ export default function PayrollForm({ initialPayslip }: PayslipDetailClientProps
                 <FormItem>
                   <FormLabel>Comment</FormLabel>
                   <FormControl>
-                    <Textarea {...field} placeholder="Optional notes about this payslip" />
+                    <Textarea {...field} value={field.value ?? ''} placeholder="Optional notes about this payslip" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -249,37 +246,31 @@ export default function PayrollForm({ initialPayslip }: PayslipDetailClientProps
                 'ps_vacation_payout',
               ]}
               control={form.control}
-              initialValues={initialPayslip}
             />
             <PayslipFormSection
               title="Imputed Income"
               fields={['imp_legal', 'imp_fitness', 'imp_ltd', 'imp_other']}
               control={form.control}
-              initialValues={initialPayslip}
             />
             <PayslipFormSection
               title="Federal Taxes Paid"
               fields={['ps_oasdi', 'ps_medicare', 'ps_fed_tax', 'ps_fed_tax_addl', 'ps_fed_tax_refunded']}
               control={form.control}
-              initialValues={initialPayslip}
             />
             <PayslipFormSection
               title="State Taxes"
               fields={['ps_state_tax', 'ps_state_disability', 'ps_state_tax_addl']}
               control={form.control}
-              initialValues={initialPayslip}
             />
             <PayslipFormSection
               title="Retirement Savings"
               fields={['ps_401k_pretax', 'ps_401k_aftertax', 'ps_401k_employer']}
               control={form.control}
-              initialValues={initialPayslip}
             />
             <PayslipFormSection
               title="Pretax Deductions"
               fields={['ps_pretax_medical', 'ps_pretax_fsa', 'ps_pretax_vision', 'ps_pretax_dental']}
               control={form.control}
-              initialValues={initialPayslip}
             />
           </div>
 

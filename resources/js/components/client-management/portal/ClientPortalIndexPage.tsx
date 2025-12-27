@@ -6,26 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Plus, Clock, FolderOpen } from 'lucide-react'
 import NewProjectModal from './NewProjectModal'
 import ClientPortalNav from './ClientPortalNav'
-
-interface Project {
-  id: number
-  name: string
-  slug: string
-  description: string | null
-  tasks_count: number
-  time_entries_count: number
-  created_at: string
-}
-
-interface Agreement {
-  id: number
-  active_date: string
-  termination_date: string | null
-  client_company_signed_date: string | null
-  is_visible_to_client: boolean
-  monthly_retainer_hours: string
-  monthly_retainer_fee: string
-}
+import type { Project, Agreement } from '@/types/client-management/common'
 
 interface ClientPortalIndexPageProps {
   slug: string

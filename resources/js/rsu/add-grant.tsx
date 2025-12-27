@@ -24,21 +24,25 @@ export default function AddGrantPage() {
         .map((r) => r.trim())
         .filter(Boolean)
       if (cols.length !== 2) {
-        return {} // skip
+        return null
       }
       try {
+        const vest_date = cols[0]
+        const share_count_str = cols[1]
+        if (!vest_date || !share_count_str) return null
+
         return {
           award_id: awardId,
           grant_date: grantDate,
-          vest_date: cols[0],
-          share_count: currency(cols[1]),
+          vest_date: vest_date,
+          share_count: currency(share_count_str),
           symbol,
         }
       } catch {
-        return {}
+        return null
       }
     })
-    .filter((r) => !!r.share_count)
+    .filter((r) => r !== null) as IAward[]
 
   return (
     <>

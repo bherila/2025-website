@@ -56,7 +56,7 @@ export default function TransactionDetailsModal({ transaction, isOpen, onClose, 
     // Handle various date formats
     const date = new Date(value)
     if (isNaN(date.getTime())) return ''
-    return date.toISOString().split('T')[0]
+    return date.toISOString().split('T')[0] || ''
   }
 
   const [transactionDate, setTransactionDate] = useState(formatDateValue(transaction.t_date))
@@ -88,7 +88,7 @@ export default function TransactionDetailsModal({ transaction, isOpen, onClose, 
     setIsSaving(true)
     try {
       const updatedFields: Partial<AccountLineItem> = {
-        t_date: transactionDate || undefined,
+        ...(transactionDate ? { t_date: transactionDate } : {}),
         t_type: transactionType || null,
         t_amt: amount ? parseFloat(amount) : 0,
         t_comment: comment || null,

@@ -9,38 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { X, ArrowLeft, ExternalLink, FileText } from 'lucide-react'
 import ClientAdminActions from './ClientAdminActions'
-
-interface User {
-  id: number
-  name: string
-  email: string
-}
-
-interface Agreement {
-  id: number
-  active_date: string
-  termination_date: string | null
-  client_company_signed_date: string | null
-  is_visible_to_client: boolean
-  monthly_retainer_hours: string
-  monthly_retainer_fee: string
-}
-
-interface ClientCompany {
-  id: number
-  company_name: string
-  slug: string
-  address: string | null
-  website: string | null
-  phone_number: string | null
-  default_hourly_rate: string | null
-  additional_notes: string | null
-  is_active: boolean
-  last_activity: string | null
-  created_at: string
-  users: User[]
-  agreements: Agreement[]
-}
+import type { User, ClientCompany, Agreement } from '@/types/client-management/common'
 
 interface ClientManagementShowPageProps {
   companyId: number

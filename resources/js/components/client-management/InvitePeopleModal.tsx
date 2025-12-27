@@ -5,17 +5,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { AlertCircle } from 'lucide-react'
-
-interface User {
-  id: number
-  name: string
-  email: string
-}
-
-interface ClientCompany {
-  id: number
-  company_name: string
-}
+import type { User, ClientCompany } from '@/types/client-management/common'
 
 interface InvitePeopleModalProps {
   open: boolean

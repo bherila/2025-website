@@ -47,7 +47,10 @@ function BingoPage() {
       while (cards.size < input.numCards) {
         const card = createRandomSquareArray(5, itemList)
         if (input.activateFreeSpace) {
-          card[2][2] = 'Free Space :)'
+          const middleRow = card[2];
+          if (middleRow) {
+            middleRow[2] = 'Free Space :)'
+          }
         }
         const cardJson = JSON.stringify(card)
         if (!cards.has(cardJson)) {

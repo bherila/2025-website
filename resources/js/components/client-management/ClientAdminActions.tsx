@@ -1,5 +1,3 @@
-'use client'
-
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
@@ -13,30 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { FileText, Loader2 } from 'lucide-react'
-
-interface ClientAdminActionsProps {
-  companyId: number
-  companySlug?: string
-}
-
-interface InvoicePreview {
-  period_start: string
-  period_end: string
-  time_entries_count: number
-  hours_worked: number
-  invoice_total: number
-  agreement?: {
-    monthly_retainer_hours: string
-    monthly_retainer_fee: string
-    hourly_rate: string
-  }
-  calculation?: {
-    hours_covered_by_retainer: number
-    rollover_hours_used: number
-    hours_billed_at_rate: number
-    unused_hours_balance: number
-  }
-}
+import type { InvoicePreview, ClientAdminActionsProps } from '@/types/client-management/invoice'
 
 export default function ClientAdminActions({ companyId, companySlug }: ClientAdminActionsProps) {
   const [dialogOpen, setDialogOpen] = useState(false)

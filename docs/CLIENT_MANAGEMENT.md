@@ -256,6 +256,9 @@ Vite entry points:
 - Admin: `resources/js/client-management.tsx`
 - Portal: `resources/js/client-portal.tsx`
 
+### TypeScript Typings
+Shared TypeScript interfaces are generated within the `@/types/client-management/` directory to ensure type consistency across components. When adding new interfaces, create or update files in this directory and import them using type-only imports (`import type { InterfaceName } from '@/types/client-management/file'`).
+
 #### React Components
 Location: `resources/js/components/client-management/`
 

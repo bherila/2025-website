@@ -4,28 +4,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ChevronDown, ChevronUp, Plus } from 'lucide-react'
 import InvitePeopleModal from '@/components/client-management/InvitePeopleModal'
+import type { User, ClientCompany } from '@/types/client-management/common'
 
-interface User {
-  id: number
-  name: string
-  email: string
-  last_login_date: string | null
-}
-
-function formatLastLogin(lastLogin: string | null): string {
+function formatLastLogin(lastLogin: string | null | undefined): string {
   if (!lastLogin) return 'never logged in'
   const date = new Date(lastLogin)
   return `last login ${date.toLocaleDateString()}`
-}
-
-interface ClientCompany {
-  id: number
-  company_name: string
-  slug: string | null
-  is_active: boolean
-  users: User[]
-  created_at: string
-  last_activity: string | null
 }
 
 export default function ClientManagementIndexPage() {

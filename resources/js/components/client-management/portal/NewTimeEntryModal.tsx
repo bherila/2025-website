@@ -5,36 +5,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
-
-interface User {
-  id: number
-  name: string
-  email: string
-}
-
-interface Project {
-  id: number
-  name: string
-  slug: string
-}
-
-interface Task {
-  id: number
-  name: string
-}
-
-interface TimeEntry {
-  id: number
-  name: string | null
-  minutes_worked: number
-  formatted_time: string
-  date_worked: string
-  is_billable: boolean
-  job_type: string
-  user: User | null
-  project: Project | null
-  task: Task | null
-}
+import type { User, Project, Task } from '@/types/client-management/common'
+import type { TimeEntry } from '@/types/client-management/time-entry'
 
 interface NewTimeEntryModalProps {
   open: boolean

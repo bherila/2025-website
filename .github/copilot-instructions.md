@@ -42,6 +42,7 @@ if (div) {
 - **Controllers**: Organize in subdirectories for complex features (e.g., `app/Http/Controllers/ClientManagement/`)
 - **Routes**: Web routes (`routes/web.php`) return Blade views for pages; API routes (`routes/api.php`) handle data operations with `['web', 'auth']` middleware
 - **Components**: Use shadcn/ui + Radix UI primitives with Tailwind CSS
+- **TypeScript Typings**: Generate shared TypeScript interfaces within the `@/types/` root directory, organized by domain (e.g., `@/types/client-management/`). Use type-only imports (`import type { InterfaceName } from '@/types/domain/file'`) to ensure type consistency across components
 - **Imports**: CSV parsing for financial data (IB, Fidelity schemas in `docs/`)
 - **State**: Client-side state managed in React; server state via API calls
 - **Auth**: Session-based with `auth` middleware on protected routes

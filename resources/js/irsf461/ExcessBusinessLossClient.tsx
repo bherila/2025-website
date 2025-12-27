@@ -55,27 +55,41 @@ export default function ExcessBusinessLossClient() {
   ) => {
     setInputValues((prev) => {
       const copy = [...prev]
-      copy[idx] = { ...copy[idx], [field]: value }
+      const row = copy[idx]
+      if (row) {
+        copy[idx] = { ...row, [field]: value }
+      }
       return copy
     })
   }
 
   // Commit value to main state onBlur
   const handleInputBlur = (idx: number, field: 'w2' | 'personalCapGain' | 'capGain' | 'businessNetIncome') => {
+    const currentInputRow = inputValues[idx];
+    if (!currentInputRow) return;
+
+    const val = parseCurrency(currentInputRow[field]);
+
     setRows((prev) => {
       const copy = [...prev]
-      copy[idx] = {
-        ...copy[idx],
-        [field]: parseCurrency(inputValues[idx][field]),
+      const row = copy[idx]
+      if (row) {
+        copy[idx] = {
+          ...row,
+          [field]: val,
+        }
       }
       return copy
     })
     // Optionally, reformat the input value after blur
     setInputValues((prev) => {
       const copy = [...prev]
-      copy[idx] = {
-        ...copy[idx],
-        [field]: currency(parseCurrency(inputValues[idx][field])).format(),
+      const row = copy[idx]
+      if (row) {
+        copy[idx] = {
+          ...row,
+          [field]: currency(val).format(),
+        }
       }
       return copy
     })
@@ -125,116 +139,121 @@ export default function ExcessBusinessLossClient() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {tableRows.map((row, idx) => (
-            <TableRow key={row.year}>
-              <TableCell>{row.year}</TableCell>
-              <TableCell>
-                <Input
-                  type="text"
-                  value={inputValues[idx].w2}
-                  onChange={(e) => handleInputChange(idx, 'w2', e.target.value)}
-                  onBlur={() => handleInputBlur(idx, 'w2')}
-                  onFocus={(e) => {
-                    handleInputChange(idx, 'w2', String(currency(inputValues[idx].w2).value))
-                    e.target.select()
-                  }}
-                  className="w-32"
-                  onKeyDown={(e) => {
-                    if (e.key === 'ArrowDown' && idx < tableRows.length - 1) {
-                      e.preventDefault()
-                      document.getElementById(`w2-input-${idx + 1}`)?.focus()
-                    }
-                    if (e.key === 'ArrowUp' && idx > 0) {
-                      e.preventDefault()
-                      document.getElementById(`w2-input-${idx - 1}`)?.focus()
-                    }
-                  }}
-                  id={`w2-input-${idx}`}
-                />
-              </TableCell>
-              <TableCell>
-                <Input
-                  type="text"
-                  value={inputValues[idx].personalCapGain}
-                  onChange={(e) => handleInputChange(idx, 'personalCapGain', e.target.value)}
-                  onBlur={() => handleInputBlur(idx, 'personalCapGain')}
-                  onFocus={(e) => {
-                    handleInputChange(idx, 'personalCapGain', String(currency(inputValues[idx].personalCapGain).value))
-                    e.target.select()
-                  }}
-                  className="w-32"
-                  onKeyDown={(e) => {
-                    if (e.key === 'ArrowDown' && idx < tableRows.length - 1) {
-                      e.preventDefault()
-                      document.getElementById(`personalCapGain-input-${idx + 1}`)?.focus()
-                    }
-                    if (e.key === 'ArrowUp' && idx > 0) {
-                      e.preventDefault()
-                      document.getElementById(`personalCapGain-input-${idx - 1}`)?.focus()
-                    }
-                  }}
-                  id={`personalCapGain-input-${idx}`}
-                />
-              </TableCell>
-              <TableCell>
-                <Input
-                  type="text"
-                  value={inputValues[idx].capGain}
-                  onChange={(e) => handleInputChange(idx, 'capGain', e.target.value)}
-                  onBlur={() => handleInputBlur(idx, 'capGain')}
-                  onFocus={(e) => {
-                    handleInputChange(idx, 'capGain', String(currency(inputValues[idx].capGain).value))
-                    e.target.select()
-                  }}
-                  className="w-32"
-                  onKeyDown={(e) => {
-                    if (e.key === 'ArrowDown' && idx < tableRows.length - 1) {
-                      e.preventDefault()
-                      document.getElementById(`capGain-input-${idx + 1}`)?.focus()
-                    }
-                    if (e.key === 'ArrowUp' && idx > 0) {
-                      e.preventDefault()
-                      document.getElementById(`capGain-input-${idx - 1}`)?.focus()
-                    }
-                  }}
-                  id={`capGain-input-${idx}`}
-                />
-              </TableCell>
-              <TableCell>
-                <Input
-                  type="text"
-                  value={inputValues[idx].businessNetIncome}
-                  onChange={(e) => handleInputChange(idx, 'businessNetIncome', e.target.value)}
-                  onBlur={() => handleInputBlur(idx, 'businessNetIncome')}
-                  onFocus={(e) => {
-                    handleInputChange(idx, 'businessNetIncome', String(currency(inputValues[idx].businessNetIncome).value))
-                    e.target.select()
-                  }}
-                  className="w-32"
-                  onKeyDown={(e) => {
-                    if (e.key === 'ArrowDown' && idx < tableRows.length - 1) {
-                      e.preventDefault()
-                      document.getElementById(`businessNetIncome-input-${idx + 1}`)?.focus()
-                    }
-                    if (e.key === 'ArrowUp' && idx > 0) {
-                      e.preventDefault()
-                      document.getElementById(`businessNetIncome-input-${idx - 1}`)?.focus()
-                    }
-                  }}
-                  id={`businessNetIncome-input-${idx}`}
-                />
-              </TableCell>
-              <TableCell>{formatFriendlyAmount(row.startingNOL)}</TableCell>
-              <TableCell>{formatFriendlyAmount(row.limit)}</TableCell>
-              <TableCell>{formatFriendlyAmount(row.allowedLoss)}</TableCell>
-              <TableCell>{formatFriendlyAmount(row.disallowedLoss)}</TableCell>
-              <TableCell>{formatFriendlyAmount(row.f1040.f1040_line11)}</TableCell>
-              <TableCell>
-                <DialogForm1040View data={row.f1040} taxYear={row.year} />
-                <DialogSchedule1View data={row.f1040.schedule1} taxYear={row.year} />
-              </TableCell>
-            </TableRow>
-          ))}
+          {tableRows.map((row, idx) => {
+            const inputRow = inputValues[idx];
+            if (!inputRow) return null;
+
+            return (
+              <TableRow key={row.year}>
+                <TableCell>{row.year}</TableCell>
+                <TableCell>
+                  <Input
+                    type="text"
+                    value={inputRow.w2}
+                    onChange={(e) => handleInputChange(idx, 'w2', e.target.value)}
+                    onBlur={() => handleInputBlur(idx, 'w2')}
+                    onFocus={(e) => {
+                      handleInputChange(idx, 'w2', String(currency(inputRow.w2).value))
+                      e.target.select()
+                    }}
+                    className="w-32"
+                    onKeyDown={(e) => {
+                      if (e.key === 'ArrowDown' && idx < tableRows.length - 1) {
+                        e.preventDefault()
+                        document.getElementById(`w2-input-${idx + 1}`)?.focus()
+                      }
+                      if (e.key === 'ArrowUp' && idx > 0) {
+                        e.preventDefault()
+                        document.getElementById(`w2-input-${idx - 1}`)?.focus()
+                      }
+                    }}
+                    id={`w2-input-${idx}`}
+                  />
+                </TableCell>
+                <TableCell>
+                  <Input
+                    type="text"
+                    value={inputRow.personalCapGain}
+                    onChange={(e) => handleInputChange(idx, 'personalCapGain', e.target.value)}
+                    onBlur={() => handleInputBlur(idx, 'personalCapGain')}
+                    onFocus={(e) => {
+                      handleInputChange(idx, 'personalCapGain', String(currency(inputRow.personalCapGain).value))
+                      e.target.select()
+                    }}
+                    className="w-32"
+                    onKeyDown={(e) => {
+                      if (e.key === 'ArrowDown' && idx < tableRows.length - 1) {
+                        e.preventDefault()
+                        document.getElementById(`personalCapGain-input-${idx + 1}`)?.focus()
+                      }
+                      if (e.key === 'ArrowUp' && idx > 0) {
+                        e.preventDefault()
+                        document.getElementById(`personalCapGain-input-${idx - 1}`)?.focus()
+                      }
+                    }}
+                    id={`personalCapGain-input-${idx}`}
+                  />
+                </TableCell>
+                <TableCell>
+                  <Input
+                    type="text"
+                    value={inputRow.capGain}
+                    onChange={(e) => handleInputChange(idx, 'capGain', e.target.value)}
+                    onBlur={() => handleInputBlur(idx, 'capGain')}
+                    onFocus={(e) => {
+                      handleInputChange(idx, 'capGain', String(currency(inputRow.capGain).value))
+                      e.target.select()
+                    }}
+                    className="w-32"
+                    onKeyDown={(e) => {
+                      if (e.key === 'ArrowDown' && idx < tableRows.length - 1) {
+                        e.preventDefault()
+                        document.getElementById(`capGain-input-${idx + 1}`)?.focus()
+                      }
+                      if (e.key === 'ArrowUp' && idx > 0) {
+                        e.preventDefault()
+                        document.getElementById(`capGain-input-${idx - 1}`)?.focus()
+                      }
+                    }}
+                    id={`capGain-input-${idx}`}
+                  />
+                </TableCell>
+                <TableCell>
+                  <Input
+                    type="text"
+                    value={inputRow.businessNetIncome}
+                    onChange={(e) => handleInputChange(idx, 'businessNetIncome', e.target.value)}
+                    onBlur={() => handleInputBlur(idx, 'businessNetIncome')}
+                    onFocus={(e) => {
+                      handleInputChange(idx, 'businessNetIncome', String(currency(inputRow.businessNetIncome).value))
+                      e.target.select()
+                    }}
+                    className="w-32"
+                    onKeyDown={(e) => {
+                      if (e.key === 'ArrowDown' && idx < tableRows.length - 1) {
+                        e.preventDefault()
+                        document.getElementById(`businessNetIncome-input-${idx + 1}`)?.focus()
+                      }
+                      if (e.key === 'ArrowUp' && idx > 0) {
+                        e.preventDefault()
+                        document.getElementById(`businessNetIncome-input-${idx - 1}`)?.focus()
+                      }
+                    }}
+                    id={`businessNetIncome-input-${idx}`}
+                  />
+                </TableCell>
+                <TableCell>{formatFriendlyAmount(row.startingNOL)}</TableCell>
+                <TableCell>{formatFriendlyAmount(row.limit)}</TableCell>
+                <TableCell>{formatFriendlyAmount(row.allowedLoss)}</TableCell>
+                <TableCell>{formatFriendlyAmount(row.disallowedLoss)}</TableCell>
+                <TableCell>{formatFriendlyAmount(row.f1040.f1040_line11)}</TableCell>
+                <TableCell>
+                  <DialogForm1040View data={row.f1040} taxYear={row.year} />
+                  <DialogSchedule1View data={row.f1040.schedule1} taxYear={row.year} />
+                </TableCell>
+              </TableRow>
+            )
+          })}
           {/* Set All row */}
           <TableRow>
             <TableCell className="font-semibold">Set all:</TableCell>

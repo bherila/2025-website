@@ -20,8 +20,11 @@ export default function RsuChart({ rsu, mode = 'shares' }: { rsu: IAward[]; mode
   }
 
   for (const vestDate of Object.keys(vests)) {
+    const currentVests = vests[vestDate]
+    if (!currentVests) continue
+
     let o: { [key: string]: string | number } = { vest_date: vestDate }
-    for (const vest of vests[vestDate]) {
+    for (const vest of currentVests) {
       award_ids.add(vest.award_id!)
       if (mode === 'value') {
         // Use vest price if available, else fallback to last known price for that symbol

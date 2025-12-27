@@ -14,7 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const root = createRoot(adminActionsDiv)
     root.render(<ClientAdminActions 
       companyId={parseInt(adminActionsDiv.dataset.companyId!)}
-      companySlug={adminActionsDiv.dataset.companySlug}
+      companySlug={adminActionsDiv.dataset.companySlug || null}
     />)
   }
 

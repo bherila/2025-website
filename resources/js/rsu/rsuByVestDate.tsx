@@ -23,6 +23,8 @@ export function RsuByVestDate(props: { rsu: IAward[] }) {
       <TableBody>
         {Object.keys(grouped).map((k, i) => {
           const lRSU = grouped[k]
+          if (!lRSU) return null
+
           const vested = k < now
           const totalShares = lRSU.reduce((p, c) => p.add(c.share_count!), currency(0))
           // Compute weighted average price and total value using currency.js

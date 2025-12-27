@@ -28,7 +28,7 @@ export function parseWealthfrontHAR(text: string): AccountLineItem[] {
             data.push(parsedItem)
           } catch (e) {
             if (e instanceof z.ZodError) {
-              console.error('Error parsing HAR item:', e.errors)
+              console.error('Error parsing HAR item:', e.issues)
             } else {
               console.error('Error parsing HAR item:', e)
             }

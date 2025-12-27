@@ -8,7 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { AlertCircle, ArrowLeft, FileText, Check, X } from 'lucide-react'
-import type { ClientAgreement } from '@/types/client-agreement'
+import type { ClientAgreement } from '@/types/client-management/client-agreement'
 
 interface ClientAgreementShowPageProps {
   agreementId: number

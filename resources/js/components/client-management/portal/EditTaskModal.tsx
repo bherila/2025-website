@@ -24,6 +24,7 @@ interface Task {
   creator: User | null
   is_high_priority: boolean
   is_hidden_from_clients: boolean
+  project_id: number
 }
 
 interface EditTaskModalProps {

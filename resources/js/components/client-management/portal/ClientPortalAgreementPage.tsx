@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AlertCircle, ArrowLeft, FileText, Check } from 'lucide-react'
 import ClientPortalNav from './ClientPortalNav'
-import type { ClientAgreement } from '@/types/client-agreement'
+import type { ClientAgreement } from '@/types/client-management/client-agreement'
 
 interface ClientPortalAgreementPageProps {
   slug: string

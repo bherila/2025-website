@@ -5,19 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ArrowLeft, FileText, Receipt } from 'lucide-react'
 import ClientPortalNav from './ClientPortalNav'
-
-interface Invoice {
-  client_invoice_id: number
-  invoice_number: string | null
-  invoice_total: string
-  issue_date: string | null
-  due_date: string | null
-  paid_date: string | null
-  status: 'draft' | 'issued' | 'paid' | 'void'
-  period_start: string | null
-  period_end: string | null
-  unused_hours_balance: string
-}
+import type { Invoice } from '@/types/client-management/invoice'
 
 interface ClientPortalInvoicesPageProps {
   slug: string

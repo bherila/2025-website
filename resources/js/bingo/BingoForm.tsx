@@ -21,7 +21,7 @@ const BingoForm = (props: { onSubmit: (data: BingoData) => void }) => {
     handleSubmit,
     formState: { errors },
   } = useForm<BingoData>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema) as any,
     defaultValues: {
       itemsList: Array.from({ length: 99 }, (_, i) => i.toString()).join('\n'),
       activateFreeSpace: false,

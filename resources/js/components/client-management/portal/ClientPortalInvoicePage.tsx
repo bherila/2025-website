@@ -5,36 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table'
 import { Receipt, Check, Clock } from 'lucide-react'
 import ClientPortalNav from './ClientPortalNav'
-
-interface InvoiceLine {
-  client_invoice_line_id: number
-  description: string
-  quantity: string
-  unit_price: string
-  line_total: string
-  line_type: string
-  hours: string | null
-}
-
-interface Invoice {
-  client_invoice_id: number
-  invoice_number: string | null
-  invoice_total: string
-  issue_date: string | null
-  due_date: string | null
-  paid_date: string | null
-  status: 'draft' | 'issued' | 'paid' | 'void'
-  period_start: string | null
-  period_end: string | null
-  retainer_hours_included: string
-  hours_worked: string
-  rollover_hours_used: string
-  unused_hours_balance: string
-  negative_hours_balance: string
-  hours_billed_at_rate: string
-  notes: string | null
-  line_items: InvoiceLine[]
-}
+import type { Invoice, InvoiceLine } from '@/types/client-management/invoice'
 
 interface ClientPortalInvoicePageProps {
   slug: string
