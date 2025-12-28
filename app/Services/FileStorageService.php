@@ -69,18 +69,19 @@ class FileStorageService
      */
     public function getSignedUploadUrl(string $s3Path, string $contentType, int $expiration = 60): string
     {
-        $client = $this->storage()->getClient();
         $bucket = config('filesystems.disks.s3.bucket');
+        if (empty($bucket)) {
+            throw new \RuntimeException('S3 Bucket is not configured in filesystems.disks.s3.bucket');
+        }
 
-        $cmd = $client->getCommand('PutObject', [
-            'Bucket' => $bucket,
-            'Key' => $s3Path,
-            'ContentType' => $contentType,
-        ]);
-
-        $request = $client->createPresignedRequest($cmd, "+{$expiration} minutes");
-
-        return (string) $request->getUri();
+        return $this->storage()->temporaryUploadUrl(
+            $s3Path,
+            now()->addMinutes($expiration),
+            [
+                'Bucket' => $bucket,
+                'ContentType' => $contentType,
+            ]
+        );
     }
 
     /**
@@ -93,18 +94,19 @@ class FileStorageService
      */
     public function getSignedDownloadUrl(string $s3Path, string $downloadFilename, int $expiration = 60): string
     {
-        $client = $this->storage()->getClient();
         $bucket = config('filesystems.disks.s3.bucket');
+        if (empty($bucket)) {
+            throw new \RuntimeException('S3 Bucket is not configured in filesystems.disks.s3.bucket');
+        }
 
-        $cmd = $client->getCommand('GetObject', [
-            'Bucket' => $bucket,
-            'Key' => $s3Path,
-            'ResponseContentDisposition' => 'attachment; filename="'.addslashes($downloadFilename).'"',
-        ]);
-
-        $request = $client->createPresignedRequest($cmd, "+{$expiration} minutes");
-
-        return (string) $request->getUri();
+        return $this->storage()->temporaryUrl(
+            $s3Path,
+            now()->addMinutes($expiration),
+            [
+                'Bucket' => $bucket,
+                'ResponseContentDisposition' => 'attachment; filename="'.addslashes($downloadFilename).'"',
+            ]
+        );
     }
 
     /**
