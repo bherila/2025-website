@@ -34,7 +34,7 @@ class FileController extends Controller
      */
     public function listProjectFiles(string $companySlug, string $projectSlug): JsonResponse
     {
-        $project = $this->getProjectBySlug($companySlug, $projectSlug);
+        $project = $this->validateProjectAccess($companySlug, $projectSlug);
 
         $files = FileForProject::where('project_id', $project->id)
             ->with('uploader:id,name')
@@ -49,9 +49,7 @@ class FileController extends Controller
      */
     public function uploadProjectFile(Request $request, string $companySlug, string $projectSlug): JsonResponse
     {
-        Gate::authorize('admin');
-
-        $project = $this->getProjectBySlug($companySlug, $projectSlug);
+        $project = $this->validateProjectAccess($companySlug, $projectSlug, true);
 
         $request->validate([
             'file' => 'required|file|max:102400', // 100MB max
@@ -82,9 +80,7 @@ class FileController extends Controller
      */
     public function getProjectUploadUrl(Request $request, string $companySlug, string $projectSlug): JsonResponse
     {
-        Gate::authorize('admin');
-
-        $project = $this->getProjectBySlug($companySlug, $projectSlug);
+        $project = $this->validateProjectAccess($companySlug, $projectSlug, true);
 
         $request->validate([
             'filename' => 'required|string|max:255',
@@ -120,7 +116,7 @@ class FileController extends Controller
      */
     public function downloadProjectFile(string $companySlug, string $projectSlug, int $fileId): JsonResponse
     {
-        $project = $this->getProjectBySlug($companySlug, $projectSlug);
+        $project = $this->validateProjectAccess($companySlug, $projectSlug);
 
         $file = FileForProject::where('id', $fileId)
             ->where('project_id', $project->id)
@@ -141,9 +137,7 @@ class FileController extends Controller
      */
     public function getProjectFileHistory(string $companySlug, string $projectSlug, int $fileId): JsonResponse
     {
-        Gate::authorize('admin');
-
-        $project = $this->getProjectBySlug($companySlug, $projectSlug);
+        $project = $this->validateProjectAccess($companySlug, $projectSlug, true);
 
         $file = FileForProject::where('id', $fileId)
             ->where('project_id', $project->id)
@@ -161,9 +155,7 @@ class FileController extends Controller
      */
     public function deleteProjectFile(string $companySlug, string $projectSlug, int $fileId): JsonResponse
     {
-        Gate::authorize('admin');
-
-        $project = $this->getProjectBySlug($companySlug, $projectSlug);
+        $project = $this->validateProjectAccess($companySlug, $projectSlug, true);
 
         $file = FileForProject::where('id', $fileId)
             ->where('project_id', $project->id)
@@ -179,7 +171,7 @@ class FileController extends Controller
      */
     public function listClientCompanyFiles(string $companySlug): JsonResponse
     {
-        $company = ClientCompany::where('slug', $companySlug)->firstOrFail();
+        $company = $this->validateCompanyAccess($companySlug);
 
         $files = FileForClientCompany::where('client_company_id', $company->id)
             ->with('uploader:id,name')
@@ -194,9 +186,7 @@ class FileController extends Controller
      */
     public function uploadClientCompanyFile(Request $request, string $companySlug): JsonResponse
     {
-        Gate::authorize('admin');
-
-        $company = ClientCompany::where('slug', $companySlug)->firstOrFail();
+        $company = $this->validateCompanyAccess($companySlug, true);
 
         $request->validate([
             'file' => 'required|file|max:102400',
@@ -227,9 +217,7 @@ class FileController extends Controller
      */
     public function getClientCompanyUploadUrl(Request $request, string $companySlug): JsonResponse
     {
-        Gate::authorize('admin');
-
-        $company = ClientCompany::where('slug', $companySlug)->firstOrFail();
+        $company = $this->validateCompanyAccess($companySlug, true);
 
         $request->validate([
             'filename' => 'required|string|max:255',
@@ -264,7 +252,7 @@ class FileController extends Controller
      */
     public function downloadClientCompanyFile(string $companySlug, int $fileId): JsonResponse
     {
-        $company = ClientCompany::where('slug', $companySlug)->firstOrFail();
+        $company = $this->validateCompanyAccess($companySlug);
 
         $file = FileForClientCompany::where('id', $fileId)
             ->where('client_company_id', $company->id)
@@ -285,9 +273,7 @@ class FileController extends Controller
      */
     public function deleteClientCompanyFile(string $companySlug, int $fileId): JsonResponse
     {
-        Gate::authorize('admin');
-
-        $company = ClientCompany::where('slug', $companySlug)->firstOrFail();
+        $company = $this->validateCompanyAccess($companySlug, true);
 
         $file = FileForClientCompany::where('id', $fileId)
             ->where('client_company_id', $company->id)
@@ -303,7 +289,7 @@ class FileController extends Controller
      */
     public function listAgreementFiles(string $companySlug, int $agreementId): JsonResponse
     {
-        $company = ClientCompany::where('slug', $companySlug)->firstOrFail();
+        $company = $this->validateCompanyAccess($companySlug);
         $agreement = ClientAgreement::where('id', $agreementId)
             ->where('client_company_id', $company->id)
             ->firstOrFail();
@@ -321,9 +307,7 @@ class FileController extends Controller
      */
     public function uploadAgreementFile(Request $request, string $companySlug, int $agreementId): JsonResponse
     {
-        Gate::authorize('admin');
-
-        $company = ClientCompany::where('slug', $companySlug)->firstOrFail();
+        $company = $this->validateCompanyAccess($companySlug, true);
         $agreement = ClientAgreement::where('id', $agreementId)
             ->where('client_company_id', $company->id)
             ->firstOrFail();
@@ -357,7 +341,7 @@ class FileController extends Controller
      */
     public function downloadAgreementFile(string $companySlug, int $agreementId, int $fileId): JsonResponse
     {
-        $company = ClientCompany::where('slug', $companySlug)->firstOrFail();
+        $company = $this->validateCompanyAccess($companySlug);
         $agreement = ClientAgreement::where('id', $agreementId)
             ->where('client_company_id', $company->id)
             ->firstOrFail();
@@ -381,9 +365,7 @@ class FileController extends Controller
      */
     public function deleteAgreementFile(string $companySlug, int $agreementId, int $fileId): JsonResponse
     {
-        Gate::authorize('admin');
-
-        $company = ClientCompany::where('slug', $companySlug)->firstOrFail();
+        $company = $this->validateCompanyAccess($companySlug, true);
         $agreement = ClientAgreement::where('id', $agreementId)
             ->where('client_company_id', $company->id)
             ->firstOrFail();
@@ -402,7 +384,7 @@ class FileController extends Controller
      */
     public function listTaskFiles(string $companySlug, string $projectSlug, int $taskId): JsonResponse
     {
-        $project = $this->getProjectBySlug($companySlug, $projectSlug);
+        $project = $this->validateProjectAccess($companySlug, $projectSlug);
         $task = ClientTask::where('id', $taskId)
             ->where('project_id', $project->id)
             ->firstOrFail();
@@ -420,9 +402,7 @@ class FileController extends Controller
      */
     public function uploadTaskFile(Request $request, string $companySlug, string $projectSlug, int $taskId): JsonResponse
     {
-        Gate::authorize('admin');
-
-        $project = $this->getProjectBySlug($companySlug, $projectSlug);
+        $project = $this->validateProjectAccess($companySlug, $projectSlug, true);
         $task = ClientTask::where('id', $taskId)
             ->where('project_id', $project->id)
             ->firstOrFail();
@@ -456,7 +436,7 @@ class FileController extends Controller
      */
     public function downloadTaskFile(string $companySlug, string $projectSlug, int $taskId, int $fileId): JsonResponse
     {
-        $project = $this->getProjectBySlug($companySlug, $projectSlug);
+        $project = $this->validateProjectAccess($companySlug, $projectSlug);
         $task = ClientTask::where('id', $taskId)
             ->where('project_id', $project->id)
             ->firstOrFail();
@@ -480,9 +460,7 @@ class FileController extends Controller
      */
     public function deleteTaskFile(string $companySlug, string $projectSlug, int $taskId, int $fileId): JsonResponse
     {
-        Gate::authorize('admin');
-
-        $project = $this->getProjectBySlug($companySlug, $projectSlug);
+        $project = $this->validateProjectAccess($companySlug, $projectSlug, true);
         $task = ClientTask::where('id', $taskId)
             ->where('project_id', $project->id)
             ->firstOrFail();
@@ -594,11 +572,42 @@ class FileController extends Controller
     }
 
     /**
-     * Get a project by company and project slug.
+     * Validate that the current user has access to a company.
      */
-    protected function getProjectBySlug(string $companySlug, string $projectSlug): ClientProject
+    protected function validateCompanyAccess(string $companySlug, bool $requireAdmin = false): ClientCompany
     {
+        $user = Auth::user();
+        if (!$user) {
+            abort(401);
+        }
+
+        if ($requireAdmin) {
+            Gate::authorize('admin');
+        }
+
         $company = ClientCompany::where('slug', $companySlug)->firstOrFail();
+
+        // Admin can access everything
+        if ($user->hasRole('admin')) {
+            return $company;
+        }
+
+        // Check if user is assigned to this company
+        $hasAccess = $company->users()->where('user_id', $user->id)->exists();
+
+        if (!$hasAccess) {
+            abort(403, 'You do not have access to this company.');
+        }
+
+        return $company;
+    }
+
+    /**
+     * Validate that the current user has access to a project.
+     */
+    protected function validateProjectAccess(string $companySlug, string $projectSlug, bool $requireAdmin = false): ClientProject
+    {
+        $company = $this->validateCompanyAccess($companySlug, $requireAdmin);
 
         return ClientProject::where('slug', $projectSlug)
             ->where('client_company_id', $company->id)
