@@ -18,7 +18,9 @@ export type {
 export type {
   Invoice,
   InvoiceLine,
-  InvoicePreview
+  InvoicePreview,
+  ClientAdminActionsProps,
+  ClientInvoicePayment
 } from './invoice'
 
 export type { ClientAgreement } from './client-agreement'

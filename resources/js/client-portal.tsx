@@ -76,6 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
       slug={invoiceDiv.dataset.slug!}
       companyName={invoiceDiv.dataset.companyName!}
       invoiceId={parseInt(invoiceDiv.dataset.invoiceId!)}
+      isAdmin={invoiceDiv.dataset.isAdmin === 'true'}
     />)
   }
 })

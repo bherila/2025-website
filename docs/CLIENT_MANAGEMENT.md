@@ -528,6 +528,17 @@ Stores invoices generated for clients.
 - `paid_date`: When payment received (nullable)
 - `notes`: Internal or customer-facing notes (text, nullable)
 - `created_at`, `updated_at`: Timestamps
+- `deleted_at`: Soft delete timestamp (nullable)
+
+#### `client_invoice_payments` table
+Stores payments made against invoices.
+- `client_invoice_payment_id`: Primary key
+- `client_invoice_id`: Foreign key to `client_invoices`
+- `amount`: Payment amount (decimal 10,2)
+- `payment_date`: Date payment was received
+- `payment_method`: Credit Card, ACH, Wire, Check, Other (string)
+- `notes`: Payment notes (text, nullable)
+- `created_at`, `updated_at`: Timestamps
 
 #### `client_invoice_lines` table
 Individual line items on invoices.
@@ -558,6 +569,26 @@ Location: `app/Models/ClientManagement/ClientInvoice.php`
 - `clientCompany()`: Belongs to `ClientCompany`
 - `agreement()`: Belongs to `ClientAgreement`
 - `lineItems()`: One-to-many relationship with `ClientInvoiceLine`
+- `payments()`: One-to-many relationship with `ClientInvoicePayment`
+
+**Computed Properties (Accessors):**
+- `payments_total`: Sum of all payment amounts
+- `remaining_balance`: `invoice_total - payments_total`
+
+**Methods:**
+- `isEditable()`: Returns true if status is 'draft'
+- `isIssued()`: Returns true if `issue_date` is set
+- `issue()`: Sets status to 'issued' and `issue_date` to now
+- `markPaid($paidDate = null)`: Sets status to 'paid' and `paid_date` (defaults to now)
+- `void()`: Sets status to 'void'
+- `unVoid(string $targetStatus)`: Reverts a voided invoice to 'issued' or 'draft' status
+- `recalculateTotal()`: Updates `invoice_total` from sum of line items
+
+#### `App\Models\ClientManagement\ClientInvoicePayment`
+Location: `app/Models/ClientManagement/ClientInvoicePayment.php`
+
+**Relationships:**
+- `invoice()`: Belongs to `ClientInvoice`
 
 #### `App\Models\ClientManagement\ClientInvoiceLine`
 Location: `app/Models/ClientManagement/ClientInvoiceLine.php`
@@ -696,8 +727,62 @@ Web routes for managing invoices:
 
 #### `App\Http\Controllers\ClientManagement\ClientInvoiceApiController`
 API endpoints for invoice operations:
-- `generateInvoice($companyId)`: Auto-generate invoice for billing period
-- `updateStatus($companyId, $invoiceId)`: Change invoice status
+- `index($company)`: List all invoices for a company
+- `show($company, $invoice)`: Get invoice details with line items and payments
+- `preview($company)`: Preview invoice before generating
+- `store($company)`: Generate new invoice for billing period
+- `update($company, $invoice)`: Update invoice notes/due date (draft only)
+- `issue($company, $invoice)`: Issue a draft invoice
+- `markPaid($company, $invoice)`: Mark invoice as paid
+- `void($company, $invoice)`: Void an invoice (only if no payments exist)
+- `unVoid($company, $invoice)`: Revert a voided invoice to issued/draft
+- `destroy($company, $invoice)`: Delete a draft invoice
+- `addLineItem($company, $invoice, ...)`: Add custom line item
+- `updateLineItem($company, $invoice, $lineId, ...)`: Update a line item
+- `removeLineItem($company, $invoice, $lineId)`: Remove a line item
+- `getPayments($company, $invoice)`: List payments on invoice
+- `addPayment($company, $invoice, ...)`: Add payment (auto-marks paid if balance is zero)
+- `updatePayment($company, $invoice, $payment, ...)`: Update payment
+- `deletePayment($company, $invoice, $payment)`: Delete payment
+
+**Invoice Status Transitions:**
+```
+draft → issued → paid
+         ↓
+        void → issued (via unVoid)
+               ↓
+              draft (via unVoid)
+```
+
+**Validation Rules:**
+- Cannot void an invoice with payments (must delete payments first)
+- Cannot create overlapping invoice periods for the same company
+- Cannot issue an invoice that's already issued
+- Only draft invoices can be deleted
+
+### API Routes for Invoices
+
+All routes require `['web', 'auth']` middleware and Admin gate authorization:
+
+```
+GET    /api/client/mgmt/companies/{company}/invoices
+GET    /api/client/mgmt/companies/{company}/invoices/{invoice}
+POST   /api/client/mgmt/companies/{company}/invoices/preview
+POST   /api/client/mgmt/companies/{company}/invoices
+PUT    /api/client/mgmt/companies/{company}/invoices/{invoice}
+POST   /api/client/mgmt/companies/{company}/invoices/{invoice}/issue
+POST   /api/client/mgmt/companies/{company}/invoices/{invoice}/mark-paid
+POST   /api/client/mgmt/companies/{company}/invoices/{invoice}/void
+POST   /api/client/mgmt/companies/{company}/invoices/{invoice}/unvoid
+DELETE /api/client/mgmt/companies/{company}/invoices/{invoice}
+POST   /api/client/mgmt/companies/{company}/invoices/{invoice}/line-items
+PUT    /api/client/mgmt/companies/{company}/invoices/{invoice}/line-items/{lineId}
+DELETE /api/client/mgmt/companies/{company}/invoices/{invoice}/line-items/{lineId}
+GET    /api/client/mgmt/companies/{company}/invoices/{invoice}/payments
+POST   /api/client/mgmt/companies/{company}/invoices/{invoice}/payments
+PUT    /api/client/mgmt/companies/{company}/invoices/{invoice}/payments/{payment}
+DELETE /api/client/mgmt/companies/{company}/invoices/{invoice}/payments/{payment}
+```
 
 ### Unit Tests
 
@@ -827,6 +912,38 @@ The `getTimeEntries()` API now returns enhanced data for the monthly grouping UI
 - [ ] Invoice line items generated with correct amounts
 - [ ] Invoice status transitions work (draft → issued → paid)
 - [ ] Portal shows invoices to client users
+- [ ] Cannot create overlapping invoice periods for same company
+- [ ] Voided invoice periods can be reused
+- [ ] Cannot void invoice with payments (must delete payments first)
+- [ ] Can un-void invoice back to issued or draft status
+- [ ] Payment adds correctly with amount, date, method
+- [ ] Invoice marks as paid when balance reaches zero
+- [ ] Paid date set to latest payment date (not current date)
+- [ ] Remaining balance calculated correctly from payments
+- [ ] Payment date populates correctly in edit modal
+
+### Invoice Unit Tests (ClientInvoiceTest)
+Run with:
+```bash
+vendor/bin/phpunit tests/Feature/ClientManagement/ClientInvoiceTest.php
+```
+
+Tests include:
+- [x] Can generate invoice for period
+- [x] Cannot generate overlapping invoice
+- [x] Can generate adjacent invoices
+- [x] Voided invoice periods can be reused
+- [x] Invoice can be voided
+- [x] Invoice can be un-voided
+- [x] Un-void validates target status
+- [x] Mark paid uses provided date
+- [x] Mark paid uses now when no date provided
+- [x] Payment adds correctly
+- [x] Remaining balance calculated correctly
+- [x] Payments total accessor works
+- [x] Invoice API requires admin
+- [x] Invoice API void rejects invoice with payments
+- [x] Invoice API un-void works
 
 ### Time Page Monthly Grouping
 - [ ] Time entries grouped by month (most recent first)

@@ -5,7 +5,8 @@
 <div id="ClientPortalInvoicePage" 
      data-slug="{{ $slug }}" 
      data-company-name="{{ $company->company_name }}"
-     data-invoice-id="{{ $invoiceId }}"></div>
+     data-invoice-id="{{ $invoiceId }}"
+     data-is-admin="{{ auth()->user()?->hasRole('admin') ? 'true' : 'false' }}"></div>
 @endsection
 
 @push('scripts')

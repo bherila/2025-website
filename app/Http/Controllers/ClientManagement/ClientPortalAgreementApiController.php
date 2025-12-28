@@ -84,9 +84,15 @@ class ClientPortalAgreementApiController extends Controller
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
         Gate::authorize('ClientCompanyMember', $company->id);
 
-        $invoices = $company->invoices()
-            ->whereIn('status', ['issued', 'paid'])
-            ->orderBy('issue_date', 'desc')
+        $query = $company->invoices();
+
+        // Admins can see all invoices, but clients can only see issued or paid ones.
+        if (! auth()->user()->hasRole('admin')) {
+            $query->whereIn('status', ['issued', 'paid']);
+        }
+
+        $invoices = $query->orderBy('issue_date', 'desc')
+            ->orderBy('period_start', 'desc')
             ->get();
 
         return response()->json($invoices);
@@ -98,13 +104,18 @@ class ClientPortalAgreementApiController extends Controller
     public function getInvoice($slug, $invoiceId)
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
-        Gate::authorize('ClientCompanyMember', $company->id);
+        Gate::authorize('ClientCompanyMember', 'view', $company);
 
-        $invoice = ClientInvoice::where('client_invoice_id', $invoiceId)
+        $query = ClientInvoice::where('client_invoice_id', $invoiceId)
             ->where('client_company_id', $company->id)
-            ->whereIn('status', ['issued', 'paid'])
-            ->with('lineItems')
-            ->firstOrFail();
+            ->with(['lineItems', 'payments']);
+
+        // Admins can see all invoices, but clients can only see issued or paid ones.
+        if (! auth()->user()->hasRole('admin')) {
+            $query->whereIn('status', ['issued', 'paid']);
+        }
+
+        $invoice = $query->firstOrFail();
 
         return response()->json($invoice);
     }

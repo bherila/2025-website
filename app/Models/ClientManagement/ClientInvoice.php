@@ -14,6 +14,8 @@ class ClientInvoice extends Model
 
     protected $primaryKey = 'client_invoice_id';
 
+    protected $appends = ['payments_total', 'remaining_balance'];
+
     protected $fillable = [
         'client_company_id',
         'client_agreement_id',
@@ -74,11 +76,43 @@ class ClientInvoice extends Model
     }
 
     /**
+     * Get the payments for this invoice.
+     */
+    public function payments()
+    {
+        return $this->hasMany(ClientInvoicePayment::class, 'client_invoice_id', 'client_invoice_id');
+    }
+
+    /**
+     * Accessor for the total of all payments.
+     */
+    public function getPaymentsTotalAttribute()
+    {
+        return $this->payments->sum('amount');
+    }
+
+    /**
+     * Accessor for the remaining balance.
+     */
+    public function getRemainingBalanceAttribute()
+    {
+        return $this->invoice_total - $this->payments_total;
+    }
+
+    /**
      * Check if the invoice is editable (still in draft).
      */
     public function isEditable(): bool
     {
         return $this->status === 'draft';
+    }
+
+    /**
+     * Check if the invoice has been issued.
+     */
+    public function isIssued(): bool
+    {
+        return $this->issue_date !== null;
     }
 
     /**
@@ -94,12 +128,14 @@ class ClientInvoice extends Model
 
     /**
      * Mark the invoice as paid.
+     *
+     * @param \Carbon\Carbon|string|null $paidDate The date the invoice was paid. Defaults to now().
      */
-    public function markPaid(): void
+    public function markPaid($paidDate = null): void
     {
         $this->update([
             'status' => 'paid',
-            'paid_date' => now(),
+            'paid_date' => $paidDate ?? now(),
         ]);
     }
 
@@ -110,6 +146,22 @@ class ClientInvoice extends Model
     {
         $this->update([
             'status' => 'void',
+        ]);
+    }
+
+    /**
+     * Revert a voided invoice to issued or draft status.
+     *
+     * @param string $targetStatus The status to revert to ('issued' or 'draft')
+     */
+    public function unVoid(string $targetStatus = 'issued'): void
+    {
+        if (!in_array($targetStatus, ['issued', 'draft'])) {
+            throw new \InvalidArgumentException('Target status must be "issued" or "draft"');
+        }
+        
+        $this->update([
+            'status' => $targetStatus,
         ]);
     }
 

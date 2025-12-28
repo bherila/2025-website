@@ -58,6 +58,235 @@ CREATE TABLE `cache_locks` (
   PRIMARY KEY (`key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `client_agreements`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `client_agreements` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `client_company_id` bigint(20) unsigned NOT NULL,
+  `active_date` datetime NOT NULL DEFAULT current_timestamp(),
+  `termination_date` datetime DEFAULT NULL,
+  `agreement_text` text DEFAULT NULL,
+  `agreement_link` varchar(4096) DEFAULT NULL,
+  `client_company_signed_date` datetime DEFAULT NULL,
+  `client_company_signed_user_id` bigint(20) unsigned DEFAULT NULL,
+  `client_company_signed_name` varchar(255) DEFAULT NULL,
+  `client_company_signed_title` varchar(255) DEFAULT NULL,
+  `monthly_retainer_hours` decimal(8,2) NOT NULL DEFAULT 0.00,
+  `rollover_months` int(11) NOT NULL DEFAULT 1,
+  `hourly_rate` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `monthly_retainer_fee` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `is_visible_to_client` tinyint(1) NOT NULL DEFAULT 0,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `deleted_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `client_agreements_client_company_signed_user_id_foreign` (`client_company_signed_user_id`),
+  KEY `client_agreements_client_company_id_index` (`client_company_id`),
+  KEY `client_agreements_active_date_index` (`active_date`),
+  KEY `client_agreements_termination_date_index` (`termination_date`),
+  CONSTRAINT `client_agreements_client_company_id_foreign` FOREIGN KEY (`client_company_id`) REFERENCES `client_companies` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `client_agreements_client_company_signed_user_id_foreign` FOREIGN KEY (`client_company_signed_user_id`) REFERENCES `users` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `client_companies`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `client_companies` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `company_name` varchar(255) NOT NULL,
+  `slug` varchar(255) NOT NULL DEFAULT '',
+  `address` text DEFAULT NULL,
+  `website` varchar(255) DEFAULT NULL,
+  `phone_number` varchar(255) DEFAULT NULL,
+  `default_hourly_rate` decimal(8,2) DEFAULT NULL,
+  `additional_notes` text DEFAULT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `last_activity` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `deleted_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `client_companies_slug_unique` (`slug`),
+  KEY `client_companies_is_active_index` (`is_active`),
+  KEY `client_companies_company_name_index` (`company_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `client_company_user`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `client_company_user` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `client_company_id` bigint(20) unsigned NOT NULL,
+  `user_id` bigint(20) unsigned NOT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `client_company_user_client_company_id_user_id_unique` (`client_company_id`,`user_id`),
+  KEY `client_company_user_user_id_foreign` (`user_id`),
+  CONSTRAINT `client_company_user_client_company_id_foreign` FOREIGN KEY (`client_company_id`) REFERENCES `client_companies` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `client_company_user_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `client_invoice_lines`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `client_invoice_lines` (
+  `client_invoice_line_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `client_invoice_id` bigint(20) unsigned NOT NULL,
+  `client_agreement_id` bigint(20) unsigned DEFAULT NULL,
+  `description` varchar(255) NOT NULL,
+  `quantity` decimal(10,4) NOT NULL DEFAULT 1.0000,
+  `unit_price` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `line_total` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `line_type` enum('retainer','additional_hours','expense','adjustment','credit') NOT NULL DEFAULT 'retainer',
+  `hours` decimal(10,4) DEFAULT NULL,
+  `sort_order` int(11) NOT NULL DEFAULT 0,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `deleted_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`client_invoice_line_id`),
+  KEY `client_invoice_lines_client_invoice_id_index` (`client_invoice_id`),
+  KEY `client_invoice_lines_client_agreement_id_foreign` (`client_agreement_id`),
+  CONSTRAINT `client_invoice_lines_client_agreement_id_foreign` FOREIGN KEY (`client_agreement_id`) REFERENCES `client_agreements` (`id`),
+  CONSTRAINT `client_invoice_lines_client_invoice_id_foreign` FOREIGN KEY (`client_invoice_id`) REFERENCES `client_invoices` (`client_invoice_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `client_invoice_payments`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `client_invoice_payments` (
+  `client_invoice_payment_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `client_invoice_id` bigint(20) unsigned NOT NULL,
+  `amount` decimal(10,2) NOT NULL,
+  `payment_date` date NOT NULL,
+  `payment_method` varchar(255) NOT NULL,
+  `notes` text DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `deleted_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`client_invoice_payment_id`),
+  KEY `client_invoice_payments_client_invoice_id_foreign` (`client_invoice_id`),
+  CONSTRAINT `client_invoice_payments_client_invoice_id_foreign` FOREIGN KEY (`client_invoice_id`) REFERENCES `client_invoices` (`client_invoice_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `client_invoices`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `client_invoices` (
+  `client_invoice_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `client_company_id` bigint(20) unsigned NOT NULL,
+  `client_agreement_id` bigint(20) unsigned DEFAULT NULL,
+  `period_start` date DEFAULT NULL,
+  `period_end` date DEFAULT NULL,
+  `invoice_number` varchar(255) DEFAULT NULL,
+  `invoice_total` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `issue_date` datetime DEFAULT NULL,
+  `due_date` datetime DEFAULT NULL,
+  `paid_date` datetime DEFAULT NULL,
+  `retainer_hours_included` decimal(10,4) NOT NULL DEFAULT 0.0000,
+  `hours_worked` decimal(10,4) NOT NULL DEFAULT 0.0000,
+  `rollover_hours_used` decimal(10,4) NOT NULL DEFAULT 0.0000,
+  `unused_hours_balance` decimal(10,4) NOT NULL DEFAULT 0.0000,
+  `negative_hours_balance` decimal(10,4) NOT NULL DEFAULT 0.0000,
+  `hours_billed_at_rate` decimal(10,4) NOT NULL DEFAULT 0.0000,
+  `status` enum('draft','issued','paid','void') NOT NULL DEFAULT 'draft',
+  `notes` text DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `deleted_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`client_invoice_id`),
+  KEY `client_invoices_client_company_id_index` (`client_company_id`),
+  KEY `client_invoices_client_agreement_id_index` (`client_agreement_id`),
+  KEY `client_invoices_issue_date_index` (`issue_date`),
+  KEY `client_invoices_status_index` (`status`),
+  CONSTRAINT `client_invoices_client_agreement_id_foreign` FOREIGN KEY (`client_agreement_id`) REFERENCES `client_agreements` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `client_invoices_client_company_id_foreign` FOREIGN KEY (`client_company_id`) REFERENCES `client_companies` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `client_projects`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `client_projects` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `client_company_id` bigint(20) unsigned NOT NULL,
+  `name` varchar(255) NOT NULL,
+  `slug` varchar(255) NOT NULL,
+  `description` text DEFAULT NULL,
+  `creator_user_id` bigint(20) unsigned DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `deleted_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `client_projects_slug_unique` (`slug`),
+  KEY `client_projects_creator_user_id_foreign` (`creator_user_id`),
+  KEY `client_projects_client_company_id_index` (`client_company_id`),
+  CONSTRAINT `client_projects_client_company_id_foreign` FOREIGN KEY (`client_company_id`) REFERENCES `client_companies` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `client_projects_creator_user_id_foreign` FOREIGN KEY (`creator_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `client_tasks`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `client_tasks` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `project_id` bigint(20) unsigned NOT NULL,
+  `name` varchar(255) NOT NULL,
+  `description` text DEFAULT NULL,
+  `due_date` datetime DEFAULT NULL,
+  `completed_at` timestamp NULL DEFAULT NULL,
+  `assignee_user_id` bigint(20) unsigned DEFAULT NULL,
+  `creator_user_id` bigint(20) unsigned DEFAULT NULL,
+  `is_high_priority` tinyint(1) NOT NULL DEFAULT 0,
+  `is_hidden_from_clients` tinyint(1) NOT NULL DEFAULT 0,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `deleted_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `client_tasks_creator_user_id_foreign` (`creator_user_id`),
+  KEY `client_tasks_project_id_index` (`project_id`),
+  KEY `client_tasks_assignee_user_id_index` (`assignee_user_id`),
+  KEY `client_tasks_completed_at_index` (`completed_at`),
+  CONSTRAINT `client_tasks_assignee_user_id_foreign` FOREIGN KEY (`assignee_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `client_tasks_creator_user_id_foreign` FOREIGN KEY (`creator_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `client_tasks_project_id_foreign` FOREIGN KEY (`project_id`) REFERENCES `client_projects` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `client_time_entries`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `client_time_entries` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `project_id` bigint(20) unsigned NOT NULL,
+  `client_company_id` bigint(20) unsigned NOT NULL,
+  `task_id` bigint(20) unsigned DEFAULT NULL,
+  `name` varchar(255) DEFAULT NULL,
+  `minutes_worked` int(11) NOT NULL,
+  `date_worked` date NOT NULL,
+  `user_id` bigint(20) unsigned DEFAULT NULL,
+  `creator_user_id` bigint(20) unsigned DEFAULT NULL,
+  `is_billable` tinyint(1) NOT NULL DEFAULT 1,
+  `job_type` varchar(255) NOT NULL DEFAULT 'Software Development',
+  `client_invoice_line_id` bigint(20) unsigned DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `deleted_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `client_time_entries_creator_user_id_foreign` (`creator_user_id`),
+  KEY `client_time_entries_project_id_index` (`project_id`),
+  KEY `client_time_entries_client_company_id_index` (`client_company_id`),
+  KEY `client_time_entries_task_id_index` (`task_id`),
+  KEY `client_time_entries_user_id_index` (`user_id`),
+  KEY `client_time_entries_date_worked_index` (`date_worked`),
+  KEY `client_time_entries_client_invoice_line_id_index` (`client_invoice_line_id`),
+  CONSTRAINT `client_time_entries_client_company_id_foreign` FOREIGN KEY (`client_company_id`) REFERENCES `client_companies` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `client_time_entries_client_invoice_line_id_foreign` FOREIGN KEY (`client_invoice_line_id`) REFERENCES `client_invoice_lines` (`client_invoice_line_id`),
+  CONSTRAINT `client_time_entries_creator_user_id_foreign` FOREIGN KEY (`creator_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `client_time_entries_project_id_foreign` FOREIGN KEY (`project_id`) REFERENCES `client_projects` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `client_time_entries_task_id_foreign` FOREIGN KEY (`task_id`) REFERENCES `client_tasks` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `client_time_entries_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `earnings_annual`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -97,17 +326,121 @@ CREATE TABLE `failed_jobs` (
   UNIQUE KEY `failed_jobs_uuid_unique` (`uuid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `fin_account_balance_snapshot`;
+DROP TABLE IF EXISTS `files_for_agreements`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `fin_account_balance_snapshot` (
-  `snapshot_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+CREATE TABLE `files_for_agreements` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `agreement_id` bigint(20) unsigned NOT NULL,
+  `original_filename` varchar(255) NOT NULL,
+  `stored_filename` varchar(255) NOT NULL,
+  `s3_path` varchar(255) NOT NULL,
+  `mime_type` varchar(255) DEFAULT NULL,
+  `file_size_bytes` bigint(20) unsigned NOT NULL,
+  `uploaded_by_user_id` bigint(20) unsigned DEFAULT NULL,
+  `download_history` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT 'Array of {user_id, downloaded_at}' CHECK (json_valid(`download_history`)),
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `deleted_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `files_for_agreements_uploaded_by_user_id_foreign` (`uploaded_by_user_id`),
+  KEY `files_for_agreements_agreement_id_index` (`agreement_id`),
+  CONSTRAINT `files_for_agreements_agreement_id_foreign` FOREIGN KEY (`agreement_id`) REFERENCES `client_agreements` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `files_for_agreements_uploaded_by_user_id_foreign` FOREIGN KEY (`uploaded_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `files_for_client_companies`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `files_for_client_companies` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `client_company_id` bigint(20) unsigned NOT NULL,
+  `original_filename` varchar(255) NOT NULL,
+  `stored_filename` varchar(255) NOT NULL,
+  `s3_path` varchar(255) NOT NULL,
+  `mime_type` varchar(255) DEFAULT NULL,
+  `file_size_bytes` bigint(20) unsigned NOT NULL,
+  `uploaded_by_user_id` bigint(20) unsigned DEFAULT NULL,
+  `download_history` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT 'Array of {user_id, downloaded_at}' CHECK (json_valid(`download_history`)),
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `deleted_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `files_for_client_companies_uploaded_by_user_id_foreign` (`uploaded_by_user_id`),
+  KEY `files_for_client_companies_client_company_id_index` (`client_company_id`),
+  CONSTRAINT `files_for_client_companies_client_company_id_foreign` FOREIGN KEY (`client_company_id`) REFERENCES `client_companies` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `files_for_client_companies_uploaded_by_user_id_foreign` FOREIGN KEY (`uploaded_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `files_for_fin_accounts`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `files_for_fin_accounts` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `acct_id` bigint(20) unsigned NOT NULL,
-  `balance` varchar(20) NOT NULL,
-  `when_added` timestamp NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`snapshot_id`),
-  KEY `fin_account_balance_snapshot_acct_id_index` (`acct_id`),
-  CONSTRAINT `fin_account_balance_snapshot_acct_id_foreign` FOREIGN KEY (`acct_id`) REFERENCES `fin_accounts` (`acct_id`)
+  `statement_id` bigint(20) unsigned DEFAULT NULL COMMENT 'Optional link to parsed statement',
+  `original_filename` varchar(255) NOT NULL,
+  `stored_filename` varchar(255) NOT NULL,
+  `s3_path` varchar(255) NOT NULL,
+  `mime_type` varchar(255) DEFAULT NULL,
+  `file_size_bytes` bigint(20) unsigned NOT NULL,
+  `uploaded_by_user_id` bigint(20) unsigned DEFAULT NULL,
+  `download_history` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT 'Array of {user_id, downloaded_at}' CHECK (json_valid(`download_history`)),
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `deleted_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `files_for_fin_accounts_uploaded_by_user_id_foreign` (`uploaded_by_user_id`),
+  KEY `files_for_fin_accounts_acct_id_index` (`acct_id`),
+  KEY `files_for_fin_accounts_statement_id_index` (`statement_id`),
+  CONSTRAINT `files_for_fin_accounts_acct_id_foreign` FOREIGN KEY (`acct_id`) REFERENCES `fin_accounts` (`acct_id`) ON DELETE CASCADE,
+  CONSTRAINT `files_for_fin_accounts_uploaded_by_user_id_foreign` FOREIGN KEY (`uploaded_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `files_for_projects`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `files_for_projects` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `project_id` bigint(20) unsigned NOT NULL,
+  `original_filename` varchar(255) NOT NULL,
+  `stored_filename` varchar(255) NOT NULL,
+  `s3_path` varchar(255) NOT NULL,
+  `mime_type` varchar(255) DEFAULT NULL,
+  `file_size_bytes` bigint(20) unsigned NOT NULL,
+  `uploaded_by_user_id` bigint(20) unsigned DEFAULT NULL,
+  `download_history` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT 'Array of {user_id, downloaded_at}' CHECK (json_valid(`download_history`)),
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `deleted_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `files_for_projects_uploaded_by_user_id_foreign` (`uploaded_by_user_id`),
+  KEY `files_for_projects_project_id_index` (`project_id`),
+  CONSTRAINT `files_for_projects_project_id_foreign` FOREIGN KEY (`project_id`) REFERENCES `client_projects` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `files_for_projects_uploaded_by_user_id_foreign` FOREIGN KEY (`uploaded_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `files_for_tasks`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `files_for_tasks` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `task_id` bigint(20) unsigned NOT NULL,
+  `original_filename` varchar(255) NOT NULL,
+  `stored_filename` varchar(255) NOT NULL,
+  `s3_path` varchar(255) NOT NULL,
+  `mime_type` varchar(255) DEFAULT NULL,
+  `file_size_bytes` bigint(20) unsigned NOT NULL,
+  `uploaded_by_user_id` bigint(20) unsigned DEFAULT NULL,
+  `download_history` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT 'Array of {user_id, downloaded_at}' CHECK (json_valid(`download_history`)),
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `deleted_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `files_for_tasks_uploaded_by_user_id_foreign` (`uploaded_by_user_id`),
+  KEY `files_for_tasks_task_id_index` (`task_id`),
+  CONSTRAINT `files_for_tasks_task_id_foreign` FOREIGN KEY (`task_id`) REFERENCES `client_tasks` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `files_for_tasks_uploaded_by_user_id_foreign` FOREIGN KEY (`uploaded_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_account_line_item_links`;
@@ -300,15 +633,15 @@ DROP TABLE IF EXISTS `fin_statement_cash_report`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `fin_statement_cash_report` (
   `cash_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `snapshot_id` bigint(20) unsigned NOT NULL,
+  `statement_id` bigint(20) unsigned NOT NULL,
   `currency` varchar(20) NOT NULL,
   `line_item` varchar(100) NOT NULL,
   `total` decimal(18,4) DEFAULT NULL,
   `securities` decimal(18,4) DEFAULT NULL,
   `futures` decimal(18,4) DEFAULT NULL,
   PRIMARY KEY (`cash_id`),
-  KEY `fin_statement_cash_report_snapshot_id_index` (`snapshot_id`),
-  CONSTRAINT `fin_statement_cash_report_snapshot_id_foreign` FOREIGN KEY (`snapshot_id`) REFERENCES `fin_account_balance_snapshot` (`snapshot_id`) ON DELETE CASCADE
+  KEY `fin_statement_cash_report_snapshot_id_index` (`statement_id`),
+  CONSTRAINT `fin_statement_cash_report_statement_id_foreign` FOREIGN KEY (`statement_id`) REFERENCES `fin_statements` (`statement_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_statement_details`;
@@ -316,7 +649,7 @@ DROP TABLE IF EXISTS `fin_statement_details`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `fin_statement_details` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `snapshot_id` bigint(20) unsigned NOT NULL,
+  `statement_id` bigint(20) unsigned NOT NULL,
   `section` varchar(255) NOT NULL,
   `line_item` varchar(255) NOT NULL,
   `statement_period_value` decimal(16,4) NOT NULL,
@@ -325,8 +658,8 @@ CREATE TABLE `fin_statement_details` (
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
-  KEY `fin_statement_details_snapshot_id_foreign` (`snapshot_id`),
-  CONSTRAINT `fin_statement_details_snapshot_id_foreign` FOREIGN KEY (`snapshot_id`) REFERENCES `fin_account_balance_snapshot` (`snapshot_id`) ON DELETE CASCADE
+  KEY `fin_statement_details_statement_id_foreign` (`statement_id`),
+  CONSTRAINT `fin_statement_details_statement_id_foreign` FOREIGN KEY (`statement_id`) REFERENCES `fin_statements` (`statement_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_statement_nav`;
@@ -334,7 +667,7 @@ DROP TABLE IF EXISTS `fin_statement_nav`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `fin_statement_nav` (
   `nav_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `snapshot_id` bigint(20) unsigned NOT NULL,
+  `statement_id` bigint(20) unsigned NOT NULL,
   `asset_class` varchar(50) NOT NULL,
   `prior_total` decimal(18,4) DEFAULT NULL,
   `current_long` decimal(18,4) DEFAULT NULL,
@@ -342,8 +675,8 @@ CREATE TABLE `fin_statement_nav` (
   `current_total` decimal(18,4) DEFAULT NULL,
   `change_amount` decimal(18,4) DEFAULT NULL,
   PRIMARY KEY (`nav_id`),
-  KEY `fin_statement_nav_snapshot_id_index` (`snapshot_id`),
-  CONSTRAINT `fin_statement_nav_snapshot_id_foreign` FOREIGN KEY (`snapshot_id`) REFERENCES `fin_account_balance_snapshot` (`snapshot_id`) ON DELETE CASCADE
+  KEY `fin_statement_nav_snapshot_id_index` (`statement_id`),
+  CONSTRAINT `fin_statement_nav_statement_id_foreign` FOREIGN KEY (`statement_id`) REFERENCES `fin_statements` (`statement_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_statement_performance`;
@@ -351,7 +684,7 @@ DROP TABLE IF EXISTS `fin_statement_performance`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `fin_statement_performance` (
   `perf_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `snapshot_id` bigint(20) unsigned NOT NULL,
+  `statement_id` bigint(20) unsigned NOT NULL,
   `perf_type` enum('mtm','realized_unrealized') NOT NULL,
   `asset_category` varchar(50) DEFAULT NULL,
   `symbol` varchar(50) NOT NULL,
@@ -377,9 +710,9 @@ CREATE TABLE `fin_statement_performance` (
   `unrealized_total` decimal(18,4) DEFAULT NULL,
   `total_pl` decimal(18,4) DEFAULT NULL,
   PRIMARY KEY (`perf_id`),
-  KEY `fin_statement_performance_snapshot_id_index` (`snapshot_id`),
+  KEY `fin_statement_performance_snapshot_id_index` (`statement_id`),
   KEY `fin_statement_performance_symbol_index` (`symbol`),
-  CONSTRAINT `fin_statement_performance_snapshot_id_foreign` FOREIGN KEY (`snapshot_id`) REFERENCES `fin_account_balance_snapshot` (`snapshot_id`) ON DELETE CASCADE
+  CONSTRAINT `fin_statement_performance_statement_id_foreign` FOREIGN KEY (`statement_id`) REFERENCES `fin_statements` (`statement_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_statement_positions`;
@@ -387,7 +720,7 @@ DROP TABLE IF EXISTS `fin_statement_positions`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `fin_statement_positions` (
   `position_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `snapshot_id` bigint(20) unsigned NOT NULL,
+  `statement_id` bigint(20) unsigned NOT NULL,
   `asset_category` varchar(50) DEFAULT NULL,
   `currency` varchar(10) DEFAULT NULL,
   `symbol` varchar(50) NOT NULL,
@@ -402,9 +735,9 @@ CREATE TABLE `fin_statement_positions` (
   `opt_strike` varchar(20) DEFAULT NULL,
   `opt_expiration` date DEFAULT NULL,
   PRIMARY KEY (`position_id`),
-  KEY `fin_statement_positions_snapshot_id_index` (`snapshot_id`),
+  KEY `fin_statement_positions_snapshot_id_index` (`statement_id`),
   KEY `fin_statement_positions_symbol_index` (`symbol`),
-  CONSTRAINT `fin_statement_positions_snapshot_id_foreign` FOREIGN KEY (`snapshot_id`) REFERENCES `fin_account_balance_snapshot` (`snapshot_id`) ON DELETE CASCADE
+  CONSTRAINT `fin_statement_positions_statement_id_foreign` FOREIGN KEY (`statement_id`) REFERENCES `fin_statements` (`statement_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_statement_securities_lent`;
@@ -412,7 +745,7 @@ DROP TABLE IF EXISTS `fin_statement_securities_lent`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `fin_statement_securities_lent` (
   `lent_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `snapshot_id` bigint(20) unsigned NOT NULL,
+  `statement_id` bigint(20) unsigned NOT NULL,
   `symbol` varchar(50) NOT NULL,
   `start_date` date DEFAULT NULL,
   `fee_rate` decimal(10,6) DEFAULT NULL,
@@ -420,8 +753,22 @@ CREATE TABLE `fin_statement_securities_lent` (
   `collateral_amount` decimal(18,4) DEFAULT NULL,
   `interest_earned` decimal(18,4) DEFAULT NULL,
   PRIMARY KEY (`lent_id`),
-  KEY `fin_statement_securities_lent_snapshot_id_index` (`snapshot_id`),
-  CONSTRAINT `fin_statement_securities_lent_snapshot_id_foreign` FOREIGN KEY (`snapshot_id`) REFERENCES `fin_account_balance_snapshot` (`snapshot_id`) ON DELETE CASCADE
+  KEY `fin_statement_securities_lent_snapshot_id_index` (`statement_id`),
+  CONSTRAINT `fin_statement_securities_lent_statement_id_foreign` FOREIGN KEY (`statement_id`) REFERENCES `fin_statements` (`statement_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_statements`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_statements` (
+  `statement_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `acct_id` bigint(20) unsigned NOT NULL,
+  `balance` varchar(20) NOT NULL,
+  `statement_opening_date` date DEFAULT NULL,
+  `statement_closing_date` date DEFAULT NULL,
+  PRIMARY KEY (`statement_id`),
+  KEY `fin_account_balance_snapshot_acct_id_index` (`acct_id`),
+  CONSTRAINT `fin_account_balance_snapshot_acct_id_foreign` FOREIGN KEY (`acct_id`) REFERENCES `fin_accounts` (`acct_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `graduated_tax`;
@@ -653,12 +1000,15 @@ CREATE TABLE `users` (
   `email` varchar(255) NOT NULL,
   `email_verified_at` timestamp NULL DEFAULT NULL,
   `password` varchar(255) NOT NULL,
+  `user_role` varchar(255) NOT NULL DEFAULT 'User',
   `remember_token` varchar(100) DEFAULT NULL,
+  `last_login_date` datetime DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   `gemini_api_key` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `users_email_unique` (`email`)
+  UNIQUE KEY `users_email_unique` (`email`),
+  KEY `users_user_role_index` (`user_role`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `verification`;
@@ -724,3 +1074,20 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (18,'2025_11_29_185
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (19,'2025_11_30_180948_add_is_not_duplicate_to_fin_account_line_items',8);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (20,'2025_11_30_183121_add_ib_columns_to_fin_account_line_items',9);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (21,'2025_11_30_201814_create_statement_detail_tables',10);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (22,'2025_12_01_053950_rename_fin_account_balance_snapshot_to_fin_statements',11);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (23,'2025_12_22_174104_add_user_role_to_users_table',12);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (24,'2025_12_22_174127_create_client_companies_table',12);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (25,'2025_12_22_174145_create_client_company_user_table',12);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (26,'2025_12_23_034747_add_slug_to_client_companies_table',13);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (27,'2025_12_23_034902_create_client_projects_table',13);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (28,'2025_12_23_034907_create_client_tasks_table',13);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (29,'2025_12_23_034907_create_client_time_entries_table',13);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (30,'2025_12_23_052015_add_last_login_date_to_users_table',14);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (31,'2025_12_23_052135_create_client_agreements_table',14);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (32,'2025_12_23_052215_create_client_invoices_table',14);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (33,'2025_12_23_052300_create_client_invoice_lines_table',14);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (34,'2025_12_23_052319_add_invoice_line_to_client_time_entries_table',14);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (35,'2025_12_23_071831_add_due_date_to_client_tasks_table',15);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (36,'2025_12_23_081114_add_client_agreement_id_to_client_invoice_lines_table',16);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (37,'2025_12_27_223125_create_files_tables',17);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (38,'2025_12_28_054636_create_client_invoice_payments_table',18);

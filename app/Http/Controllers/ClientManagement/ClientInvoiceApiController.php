@@ -5,6 +5,7 @@ namespace App\Http\Controllers\ClientManagement;
 use App\Http\Controllers\Controller;
 use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientInvoice;
+use App\Models\ClientManagement\ClientInvoicePayment;
 use App\Services\ClientManagement\ClientInvoicingService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -63,7 +64,7 @@ class ClientInvoiceApiController extends Controller
             return response()->json(['error' => 'Invoice does not belong to this company'], 404);
         }
 
-        $invoice->load(['agreement', 'lineItems.timeEntries']);
+        $invoice->load(['agreement', 'lineItems.timeEntries', 'payments']);
 
         return response()->json([
             'id' => $invoice->client_invoice_id,
@@ -82,6 +83,8 @@ class ClientInvoiceApiController extends Controller
             'hours_billed_at_rate' => $invoice->hours_billed_at_rate,
             'rollover_hours_used' => $invoice->rollover_hours_used,
             'notes' => $invoice->notes,
+            'payments' => $invoice->payments,
+            'remaining_balance' => $invoice->remaining_balance,
             'agreement' => $invoice->agreement ? [
                 'id' => $invoice->agreement->id,
                 'monthly_retainer_hours' => $invoice->agreement->monthly_retainer_hours,
@@ -241,6 +244,11 @@ class ClientInvoiceApiController extends Controller
             return response()->json(['error' => 'Paid invoices cannot be voided'], 400);
         }
 
+        // Check if there are any payments on the invoice
+        if ($invoice->payments()->count() > 0) {
+            return response()->json(['error' => 'Invoices with payments cannot be voided. Please delete all payments first.'], 400);
+        }
+
         // Unlink time entries from this invoice's lines
         foreach ($invoice->lineItems as $line) {
             $line->timeEntries()->update(['client_invoice_line_id' => null]);
@@ -249,6 +257,31 @@ class ClientInvoiceApiController extends Controller
         $invoice->void();
 
         return response()->json(['message' => 'Invoice voided successfully']);
+    }
+
+    /**
+     * Revert a voided invoice to issued or draft status.
+     */
+    public function unVoid(Request $request, ClientCompany $company, ClientInvoice $invoice)
+    {
+        Gate::authorize('Admin');
+
+        if ($invoice->client_company_id !== $company->id) {
+            return response()->json(['error' => 'Invoice does not belong to this company'], 404);
+        }
+
+        if ($invoice->status !== 'void') {
+            return response()->json(['error' => 'Only voided invoices can be un-voided'], 400);
+        }
+
+        $targetStatus = $request->input('status', 'issued');
+        if (!in_array($targetStatus, ['issued', 'draft'])) {
+            return response()->json(['error' => 'Target status must be "issued" or "draft"'], 400);
+        }
+
+        $invoice->unVoid($targetStatus);
+
+        return response()->json(['message' => 'Invoice status reverted successfully']);
     }
 
     /**
@@ -360,6 +393,146 @@ class ClientInvoiceApiController extends Controller
         return response()->json([
             'message' => 'Line item removed successfully',
             'new_invoice_total' => $invoice->fresh()->invoice_total,
+        ]);
+    }
+
+    /**
+     * Update a custom line item on a draft invoice.
+     */
+    public function updateLineItem(Request $request, ClientCompany $company, ClientInvoice $invoice, int $lineId)
+    {
+        Gate::authorize('Admin');
+
+        if ($invoice->client_company_id !== $company->id || !$invoice->isEditable()) {
+            abort(403);
+        }
+
+        $request->validate([
+            'description' => 'required|string|max:255',
+            'quantity' => 'required|numeric|min:0',
+            'unit_price' => 'required|numeric',
+        ]);
+
+        $line = $invoice->lineItems()->where('client_invoice_line_id', $lineId)->firstOrFail();
+
+        if ($line->line_type === 'retainer' || $line->line_type === 'additional_hours') {
+            return response()->json(['error' => 'Cannot edit system-generated line items.'], 400);
+        }
+        
+        $line->update([
+            'description' => $request->description,
+            'quantity' => $request->quantity,
+            'unit_price' => $request->unit_price,
+            'line_total' => $request->quantity * $request->unit_price,
+        ]);
+
+        $invoice->recalculateTotal();
+
+        return response()->json([
+            'message' => 'Line item updated successfully',
+            'line_item' => $line->fresh(),
+            'new_invoice_total' => $invoice->fresh()->invoice_total,
+        ]);
+    }
+
+    //
+    // Payment Methods
+    //
+
+    public function getPayments(ClientCompany $company, ClientInvoice $invoice)
+    {
+        Gate::authorize('Admin');
+        if ($invoice->client_company_id !== $company->id) {
+            abort(404);
+        }
+        return response()->json($invoice->payments()->orderBy('payment_date', 'desc')->get());
+    }
+
+    public function addPayment(Request $request, ClientCompany $company, ClientInvoice $invoice)
+    {
+        Gate::authorize('Admin');
+        if ($invoice->client_company_id !== $company->id) {
+            abort(404);
+        }
+
+        $request->validate([
+            'amount' => 'required|numeric|min:0.01',
+            'payment_date' => 'required|date',
+            'payment_method' => 'required|string|in:Credit Card,ACH,Wire,Check,Other',
+            'notes' => 'nullable|string',
+        ]);
+
+        $payment = $invoice->payments()->create($request->all());
+
+        // Update invoice status if fully paid
+        $invoiceFresh = $invoice->fresh(['payments']);
+        if ($invoiceFresh->remaining_balance <= 0) {
+            // Set paid_date to the latest payment date
+            $latestPaymentDate = $invoiceFresh->payments()->max('payment_date');
+            $invoice->markPaid($latestPaymentDate);
+        }
+
+        return response()->json([
+            'message' => 'Payment added successfully.',
+            'payment' => $payment,
+            'invoice' => $invoice->fresh(['payments']),
+        ], 201);
+    }
+    
+    public function updatePayment(Request $request, ClientCompany $company, ClientInvoice $invoice, ClientInvoicePayment $payment)
+    {
+        Gate::authorize('Admin');
+        if ($invoice->client_company_id !== $company->id || $payment->client_invoice_id !== $invoice->client_invoice_id) {
+            abort(404);
+        }
+    
+        $request->validate([
+            'amount' => 'required|numeric|min:0.01',
+            'payment_date' => 'required|date',
+            'payment_method' => 'required|string|in:Credit Card,ACH,Wire,Check,Other',
+            'notes' => 'nullable|string',
+        ]);
+    
+        $payment->update($request->all());
+    
+        // Update invoice status
+        $invoiceFresh = $invoice->fresh(['payments']);
+        if ($invoiceFresh->remaining_balance <= 0) {
+            if ($invoice->status !== 'paid') {
+                // Set paid_date to the latest payment date
+                $latestPaymentDate = $invoiceFresh->payments()->max('payment_date');
+                $invoice->markPaid($latestPaymentDate);
+            }
+        } else {
+            if ($invoice->status === 'paid') {
+                $invoice->update(['status' => 'issued', 'paid_date' => null]);
+            }
+        }
+    
+        return response()->json([
+            'message' => 'Payment updated successfully.',
+            'payment' => $payment->fresh(),
+            'invoice' => $invoice->fresh(['payments']),
+        ]);
+    }
+
+    public function deletePayment(ClientCompany $company, ClientInvoice $invoice, ClientInvoicePayment $payment)
+    {
+        Gate::authorize('Admin');
+        if ($invoice->client_company_id !== $company->id || $payment->client_invoice_id !== $invoice->client_invoice_id) {
+            abort(404);
+        }
+
+        $payment->delete();
+
+        // Update invoice status if it was previously paid
+        if ($invoice->status === 'paid' && $invoice->fresh()->remaining_balance > 0) {
+            $invoice->update(['status' => 'issued', 'paid_date' => null]);
+        }
+
+        return response()->json([
+            'message' => 'Payment deleted successfully.',
+            'invoice' => $invoice->fresh(['payments']),
         ]);
     }
 }

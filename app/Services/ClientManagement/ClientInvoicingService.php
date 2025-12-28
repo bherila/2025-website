@@ -56,25 +56,43 @@ class ClientInvoicingService
             }
         }
 
-        // Validate period doesn't overlap with existing invoices
-        $existingInvoice = ClientInvoice::where('client_company_id', $company->id)
+        // Check for an existing invoice for this exact period
+        $invoice = ClientInvoice::where('client_company_id', $company->id)
             ->where('client_agreement_id', $agreement->id)
-            ->where(function ($query) use ($periodStart, $periodEnd) {
-                $query->whereBetween('period_start', [$periodStart, $periodEnd])
-                    ->orWhereBetween('period_end', [$periodStart, $periodEnd])
-                    ->orWhere(function ($q) use ($periodStart, $periodEnd) {
-                        $q->where('period_start', '<=', $periodStart)
-                            ->where('period_end', '>=', $periodEnd);
-                    });
-            })
+            ->where('period_start', $periodStart)
+            ->where('period_end', $periodEnd)
             ->whereNotIn('status', ['void'])
             ->first();
 
-        if ($existingInvoice) {
-            throw new \Exception("An invoice already exists for this period (Invoice #{$existingInvoice->invoice_number}).");
+        // If invoice exists and is already issued, it cannot be changed.
+        if ($invoice && $invoice->isIssued()) {
+            throw new \Exception("An issued invoice (#{$invoice->invoice_number}) already exists for this period and cannot be modified.");
         }
 
-        return DB::transaction(function () use ($company, $agreement, $periodStart, $periodEnd) {
+        // Check for overlapping periods with other invoices for the same company
+        // (excluding the current invoice if updating a draft, and excluding voided invoices)
+        $overlappingInvoice = ClientInvoice::where('client_company_id', $company->id)
+            ->whereNotIn('status', ['void'])
+            ->where(function ($query) use ($periodStart, $periodEnd) {
+                // Overlap exists if: existing.start < new.end AND existing.end > new.start
+                $query->where('period_start', '<', $periodEnd)
+                      ->where('period_end', '>', $periodStart);
+            })
+            ->when($invoice, function ($query) use ($invoice) {
+                // Exclude the current invoice if updating a draft
+                $query->where('client_invoice_id', '!=', $invoice->client_invoice_id);
+            })
+            ->first();
+
+        if ($overlappingInvoice) {
+            throw new \Exception(
+                "An invoice (#{$overlappingInvoice->invoice_number}) already exists for an overlapping period " .
+                "({$overlappingInvoice->period_start->format('M d, Y')} - {$overlappingInvoice->period_end->format('M d, Y')}). " .
+                "Please choose a different date range or void the existing invoice first."
+            );
+        }
+
+        return DB::transaction(function () use ($company, $agreement, $periodStart, $periodEnd, $invoice) {
             // Get the previous invoice to carry forward any balances
             $previousInvoice = ClientInvoice::where('client_company_id', $company->id)
                 ->where('client_agreement_id', $agreement->id)
@@ -99,7 +117,6 @@ class ClientInvoicingService
                 ->get();
 
             // Also get any older uninvoiced billable time entries (delayed billing)
-            // These are entries from periods when there was no active agreement
             $delayedBillingEntries = ClientTimeEntry::where('client_company_id', $company->id)
                 ->whereNull('client_invoice_line_id')
                 ->where('is_billable', true)
@@ -123,17 +140,11 @@ class ClientInvoicingService
                 (int) $agreement->rollover_months
             );
 
-            // Generate invoice number
-            $invoiceNumber = $this->generateInvoiceNumber($company, $agreement);
-
-            // Create the invoice
-            $invoice = ClientInvoice::create([
+            $invoiceData = [
                 'client_company_id' => $company->id,
                 'client_agreement_id' => $agreement->id,
                 'period_start' => $periodStart,
                 'period_end' => $periodEnd,
-                'invoice_number' => $invoiceNumber,
-                'invoice_total' => 0, // Will calculate after line items
                 'retainer_hours_included' => $agreement->monthly_retainer_hours,
                 'hours_worked' => $hoursWorked,
                 'rollover_hours_used' => $calculation['rollover_hours_used'],
@@ -141,7 +152,23 @@ class ClientInvoicingService
                 'negative_hours_balance' => $calculation['negative_hours_balance'],
                 'hours_billed_at_rate' => $calculation['hours_billed_at_rate'],
                 'status' => 'draft',
-            ]);
+            ];
+
+            if ($invoice) {
+                // Update existing draft invoice
+                $invoice->update($invoiceData);
+
+                // Unlink old time entries and delete old line items
+                foreach ($invoice->lineItems as $line) {
+                    $line->timeEntries()->update(['client_invoice_line_id' => null]);
+                }
+                $invoice->lineItems()->delete();
+            } else {
+                // Create a new invoice
+                $invoiceData['invoice_number'] = $this->generateInvoiceNumber($company, $agreement);
+                $invoiceData['invoice_total'] = 0; // Will calculate after line items
+                $invoice = ClientInvoice::create($invoiceData);
+            }
 
             // Create line items
             $sortOrder = 1;

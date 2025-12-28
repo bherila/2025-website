@@ -6,6 +6,14 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ArrowLeft, FileText, Receipt } from 'lucide-react'
 import ClientPortalNav from './ClientPortalNav'
 import type { Invoice } from '@/types/client-management/invoice'
+import {
+    Breadcrumb,
+    BreadcrumbItem,
+    BreadcrumbLink,
+    BreadcrumbList,
+    BreadcrumbPage,
+    BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb"
 
 interface ClientPortalInvoicesPageProps {
   slug: string
@@ -80,6 +88,19 @@ export default function ClientPortalInvoicesPage({ slug, companyName }: ClientPo
     <>
       <ClientPortalNav slug={slug} companyName={companyName} currentPage="invoices" />
       <div className="container mx-auto px-8 max-w-4xl">
+        <div className="mb-6">
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbLink href={`/client/portal/${slug}`}>Home</BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>Invoices</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
+        </div>
         <div className="flex items-center gap-4 mb-6">
           <Receipt className="h-8 w-8 text-muted-foreground" />
           <div>

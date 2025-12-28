@@ -101,9 +101,17 @@ Route::middleware(['web', 'auth'])->put('/client/mgmt/companies/{company}/invoic
 Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices/{invoice}/issue', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'issue']);
 Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices/{invoice}/mark-paid', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'markPaid']);
 Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices/{invoice}/void', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'void']);
+Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices/{invoice}/unvoid', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'unVoid']);
 Route::middleware(['web', 'auth'])->delete('/client/mgmt/companies/{company}/invoices/{invoice}', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'destroy']);
 Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices/{invoice}/line-items', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'addLineItem']);
+Route::middleware(['web', 'auth'])->put('/client/mgmt/companies/{company}/invoices/{invoice}/line-items/{lineId}', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'updateLineItem']);
 Route::middleware(['web', 'auth'])->delete('/client/mgmt/companies/{company}/invoices/{invoice}/line-items/{lineId}', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'removeLineItem']);
+
+// Client Invoice Payment API routes (Admin)
+Route::middleware(['web', 'auth'])->get('/client/mgmt/companies/{company}/invoices/{invoice}/payments', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'getPayments']);
+Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices/{invoice}/payments', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'addPayment']);
+Route::middleware(['web', 'auth'])->put('/client/mgmt/companies/{company}/invoices/{invoice}/payments/{payment}', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'updatePayment']);
+Route::middleware(['web', 'auth'])->delete('/client/mgmt/companies/{company}/invoices/{invoice}/payments/{payment}', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'deletePayment']);
 
 // Client Portal API routes
 Route::middleware(['web', 'auth'])->get('/client/portal/{slug}', [ClientPortalApiController::class, 'getCompany']);

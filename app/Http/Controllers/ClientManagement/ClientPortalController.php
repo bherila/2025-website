@@ -84,15 +84,21 @@ class ClientPortalController extends Controller
 
         Gate::authorize('ClientCompanyMember', $company->id);
 
-        $invoice = ClientInvoice::where('client_invoice_id', $invoiceId)
-            ->where('client_company_id', $company->id)
-            ->whereIn('status', ['issued', 'paid'])
-            ->firstOrFail();
+        $query = ClientInvoice::where('client_invoice_id', $invoiceId)
+            ->where('client_company_id', $company->id);
+
+        // Admins can see all invoices, but clients can only see issued or paid ones.
+        if (! auth()->user()->hasRole('admin')) {
+            $query->whereIn('status', ['issued', 'paid']);
+        }
+
+        $invoice = $query->firstOrFail();
 
         return view('client-management.portal.invoice', [
             'company' => $company,
             'invoice' => $invoice,
             'slug' => $slug,
+            'invoiceId' => $invoice->client_invoice_id,
         ]);
     }
 }
