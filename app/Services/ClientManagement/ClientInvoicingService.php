@@ -32,6 +32,100 @@ class ClientInvoicingService
     }
 
     /**
+     * Generate invoices for all calendar months from agreement start to now.
+     *
+     * @param  ClientCompany  $company  The client company
+     * @return array Summary of generated/updated/skipped invoices
+     *
+     * @throws \Exception If no active agreement found
+     */
+    public function generateAllMonthlyInvoices(ClientCompany $company): array
+    {
+        $agreement = $company->activeAgreement();
+        if (! $agreement) {
+            throw new \Exception('No active agreement found for this client company.');
+        }
+
+        $generated = [];
+        $updated = [];
+        $skipped = [];
+
+        // Start from the agreement's active date
+        $currentDate = Carbon::parse($agreement->active_date)->startOfMonth();
+        $endDate = $agreement->termination_date
+            ? Carbon::parse($agreement->termination_date)
+            : now();
+
+        // Generate invoices for each calendar month
+        while ($currentDate->lte($endDate)) {
+            $periodStart = $currentDate->copy()->startOfMonth();
+            $periodEnd = $currentDate->copy()->endOfMonth();
+
+            // Check if invoice already exists for this period
+            $existingInvoice = ClientInvoice::where('client_company_id', $company->id)
+                ->where('period_start', $periodStart)
+                ->where('period_end', $periodEnd)
+                ->first();
+
+            if ($existingInvoice) {
+                // Skip if invoice is issued, paid, or voided
+                if (in_array($existingInvoice->status, ['issued', 'paid', 'void'])) {
+                    $skipped[] = [
+                        'period' => $periodStart->format('Y-m'),
+                        'invoice_id' => $existingInvoice->client_invoice_id,
+                        'status' => $existingInvoice->status,
+                        'reason' => 'Invoice already exists with status: '.$existingInvoice->status,
+                    ];
+                } else {
+                    // Re-generate if draft
+                    try {
+                        $invoice = $this->generateInvoice($company, $periodStart, $periodEnd, $agreement);
+                        $updated[] = [
+                            'period' => $periodStart->format('Y-m'),
+                            'invoice_id' => $invoice->client_invoice_id,
+                            'invoice_number' => $invoice->invoice_number,
+                        ];
+                    } catch (\Exception $e) {
+                        $skipped[] = [
+                            'period' => $periodStart->format('Y-m'),
+                            'error' => $e->getMessage(),
+                        ];
+                    }
+                }
+            } else {
+                // Generate new invoice
+                try {
+                    $invoice = $this->generateInvoice($company, $periodStart, $periodEnd, $agreement);
+                    $generated[] = [
+                        'period' => $periodStart->format('Y-m'),
+                        'invoice_id' => $invoice->client_invoice_id,
+                        'invoice_number' => $invoice->invoice_number,
+                    ];
+                } catch (\Exception $e) {
+                    $skipped[] = [
+                        'period' => $periodStart->format('Y-m'),
+                        'error' => $e->getMessage(),
+                    ];
+                }
+            }
+
+            // Move to next month
+            $currentDate->addMonth();
+        }
+
+        return [
+            'generated' => $generated,
+            'updated' => $updated,
+            'skipped' => $skipped,
+            'summary' => [
+                'generated_count' => count($generated),
+                'updated_count' => count($updated),
+                'skipped_count' => count($skipped),
+            ],
+        ];
+    }
+
+    /**
      * Generate an invoice for a specific billing period.
      *
      * @param  ClientCompany  $company  The client company
@@ -158,11 +252,23 @@ class ClientInvoicingService
                 // Update existing draft invoice
                 $invoice->update($invoiceData);
 
-                // Unlink old time entries and delete old line items
-                foreach ($invoice->lineItems as $line) {
+                // Only delete system-generated line items (preserve manual items like 'expense' and 'adjustment')
+                // System-generated line types: retainer, additional_hours, credit
+                $systemGeneratedTypes = ['retainer', 'additional_hours', 'credit'];
+                
+                $systemLines = $invoice->lineItems()
+                    ->whereIn('line_type', $systemGeneratedTypes)
+                    ->get();
+                
+                // Unlink time entries from system-generated lines
+                foreach ($systemLines as $line) {
                     $line->timeEntries()->update(['client_invoice_line_id' => null]);
                 }
-                $invoice->lineItems()->delete();
+                
+                // Delete only system-generated line items
+                $invoice->lineItems()
+                    ->whereIn('line_type', $systemGeneratedTypes)
+                    ->delete();
             } else {
                 // Create a new invoice
                 $invoiceData['invoice_number'] = $this->generateInvoiceNumber($company, $agreement);
@@ -217,7 +323,7 @@ class ClientInvoicingService
                     'quantity' => $delayedBillingHours,
                     'unit_price' => $agreement->hourly_rate,
                     'line_total' => $delayedBillingHours * (float) $agreement->hourly_rate,
-                    'line_type' => 'delayed_billing',
+                    'line_type' => 'additional_hours',
                     'hours' => $delayedBillingHours,
                     'sort_order' => $sortOrder++,
                 ]);
@@ -393,117 +499,6 @@ class ClientInvoicingService
         }
 
         return sprintf('%s-%s-%03d', $prefix, $yearMonth, $seq);
-    }
-
-    /**
-     * Preview what an invoice would look like without creating it.
-     */
-    public function previewInvoice(
-        ClientCompany $company,
-        Carbon $periodStart,
-        Carbon $periodEnd,
-        ?ClientAgreement $agreement = null
-    ): array {
-        if (! $agreement) {
-            $agreement = $company->activeAgreement();
-            if (! $agreement) {
-                throw new \Exception('No active agreement found for this client company.');
-            }
-        }
-
-        // Get the previous invoice
-        $previousInvoice = ClientInvoice::where('client_company_id', $company->id)
-            ->where('client_agreement_id', $agreement->id)
-            ->whereNotIn('status', ['void'])
-            ->where('period_end', '<', $periodStart)
-            ->orderBy('period_end', 'desc')
-            ->first();
-
-        $rolloverHoursAvailable = $this->calculateRolloverHours($agreement, $periodStart, $previousInvoice);
-        $negativeBalanceFromPrevious = $previousInvoice ?
-            (float) $previousInvoice->negative_hours_balance : 0;
-
-        // Get time entries
-        $timeEntries = ClientTimeEntry::where('client_company_id', $company->id)
-            ->whereNull('client_invoice_line_id')
-            ->where('is_billable', true)
-            ->whereBetween('date_worked', [$periodStart, $periodEnd])
-            ->orderBy('date_worked')
-            ->get();
-
-        // Also get delayed billing entries (from periods before this one)
-        $delayedBillingEntries = ClientTimeEntry::where('client_company_id', $company->id)
-            ->whereNull('client_invoice_line_id')
-            ->where('is_billable', true)
-            ->where('date_worked', '<', $periodStart)
-            ->orderBy('date_worked')
-            ->get();
-
-        $delayedBillingMinutes = $delayedBillingEntries->sum('minutes_worked');
-        $delayedBillingHours = $delayedBillingMinutes / 60;
-
-        $totalMinutesWorked = $timeEntries->sum('minutes_worked');
-        $hoursWorked = $totalMinutesWorked / 60;
-
-        $calculation = $this->calculateHourBalances(
-            $hoursWorked,
-            (float) $agreement->monthly_retainer_hours,
-            $rolloverHoursAvailable,
-            $negativeBalanceFromPrevious,
-            (int) $agreement->rollover_months
-        );
-
-        // Calculate totals
-        $retainerTotal = (float) $agreement->monthly_retainer_fee;
-        $additionalHoursTotal = $calculation['hours_billed_at_rate'] * (float) $agreement->hourly_rate;
-        $delayedBillingTotal = $delayedBillingHours * (float) $agreement->hourly_rate;
-        $invoiceTotal = $retainerTotal + $additionalHoursTotal + $delayedBillingTotal;
-
-        return [
-            'period_start' => $periodStart->toDateString(),
-            'period_end' => $periodEnd->toDateString(),
-            'agreement' => [
-                'monthly_retainer_hours' => $agreement->monthly_retainer_hours,
-                'monthly_retainer_fee' => $agreement->monthly_retainer_fee,
-                'hourly_rate' => $agreement->hourly_rate,
-                'rollover_months' => $agreement->rollover_months,
-            ],
-            'time_entries_count' => $timeEntries->count(),
-            'delayed_billing_entries_count' => $delayedBillingEntries->count(),
-            'hours_worked' => round($hoursWorked, 2),
-            'delayed_billing_hours' => round($delayedBillingHours, 2),
-            'rollover_hours_available' => round($rolloverHoursAvailable, 2),
-            'negative_balance_carried' => round($negativeBalanceFromPrevious, 2),
-            'calculation' => $calculation,
-            'line_items' => [
-                [
-                    'description' => "Monthly Retainer ({$agreement->monthly_retainer_hours} hours)",
-                    'quantity' => 1,
-                    'unit_price' => (float) $agreement->monthly_retainer_fee,
-                    'total' => $retainerTotal,
-                    'client_agreement_id' => $agreement->id,
-                ],
-                ...(
-                    $calculation['hours_billed_at_rate'] > 0 ? [[
-                        'description' => "Additional Hours @ \${$agreement->hourly_rate}/hr",
-                        'quantity' => $calculation['hours_billed_at_rate'],
-                        'unit_price' => (float) $agreement->hourly_rate,
-                        'total' => $additionalHoursTotal,
-                        'client_agreement_id' => $agreement->id,
-                    ]] : []
-                ),
-                ...(
-                    $delayedBillingHours > 0 ? [[
-                        'description' => "Prior Period Hours (delayed billing) @ \${$agreement->hourly_rate}/hr",
-                        'quantity' => round($delayedBillingHours, 2),
-                        'unit_price' => (float) $agreement->hourly_rate,
-                        'total' => round($delayedBillingTotal, 2),
-                        'client_agreement_id' => $agreement->id,
-                    ]] : []
-                ),
-            ],
-            'invoice_total' => round($invoiceTotal, 2),
-        ];
     }
 
     /**

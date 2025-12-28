@@ -327,4 +327,146 @@ class ClientInvoiceTest extends TestCase
 
         $this->assertEquals('issued', $invoice->fresh()->status);
     }
+
+    public function test_regenerating_invoice_preserves_manual_line_items(): void
+    {
+        // Create a project for time entries
+        $project = ClientProject::create([
+            'client_company_id' => $this->company->id,
+            'name' => 'Test Project',
+            'slug' => 'test-project',
+        ]);
+
+        // Create time entries for January
+        ClientTimeEntry::create([
+            'client_company_id' => $this->company->id,
+            'project_id' => $project->id,
+            'user_id' => $this->admin->id,
+            'date_worked' => Carbon::create(2024, 1, 15),
+            'minutes_worked' => 120, // 2 hours
+            'name' => 'Initial work',
+            'is_billable' => true,
+        ]);
+
+        // Generate initial invoice
+        $invoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2024, 1, 1),
+            Carbon::create(2024, 1, 31)
+        );
+
+        // Count initial system-generated line items
+        $initialSystemLines = $invoice->lineItems()
+            ->whereIn('line_type', ['retainer', 'additional_hours', 'credit'])
+            ->count();
+
+        // Add a manual line item (using 'expense' type)
+        $manualLine = $invoice->lineItems()->create([
+            'client_agreement_id' => $this->agreement->id,
+            'description' => 'Manual consulting fee',
+            'quantity' => 1,
+            'unit_price' => 500.00,
+            'line_total' => 500.00,
+            'line_type' => 'expense', // Manual items use 'expense' or 'adjustment'
+            'sort_order' => 999,
+        ]);
+
+        $manualLineId = $manualLine->client_invoice_line_id;
+
+        // Recalculate total to include manual item
+        $invoice->recalculateTotal();
+        $originalTotal = $invoice->invoice_total;
+
+        // Add more time entries
+        ClientTimeEntry::create([
+            'client_company_id' => $this->company->id,
+            'project_id' => $project->id,
+            'user_id' => $this->admin->id,
+            'date_worked' => Carbon::create(2024, 1, 20),
+            'minutes_worked' => 180, // 3 hours
+            'name' => 'Additional work',
+            'is_billable' => true,
+        ]);
+
+        // Regenerate the invoice (simulate re-running invoicing)
+        $regeneratedInvoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2024, 1, 1),
+            Carbon::create(2024, 1, 31)
+        );
+
+        // Assert it's the same invoice (not a new one)
+        $this->assertEquals($invoice->client_invoice_id, $regeneratedInvoice->client_invoice_id);
+
+        // Assert manual line item still exists
+        $this->assertDatabaseHas('client_invoice_lines', [
+            'client_invoice_line_id' => $manualLineId,
+            'client_invoice_id' => $invoice->client_invoice_id,
+            'description' => 'Manual consulting fee',
+            'line_total' => 500.00,
+        ]);
+
+        // Assert manual line is still in the collection
+        $manualLineStillExists = $regeneratedInvoice->lineItems()
+            ->where('client_invoice_line_id', $manualLineId)
+            ->exists();
+        $this->assertTrue($manualLineStillExists, 'Manual line item should be preserved');
+
+        // Assert system-generated lines were regenerated (not duplicated)
+        $finalSystemLines = $regeneratedInvoice->lineItems()
+            ->whereIn('line_type', ['retainer', 'additional_hours', 'credit'])
+            ->count();
+
+        // Should have same number of system lines (regenerated, not duplicated)
+        $this->assertEquals($initialSystemLines, $finalSystemLines);
+
+        // Assert invoice total includes manual item
+        $this->assertGreaterThan($originalTotal - 500, $regeneratedInvoice->invoice_total);
+    }
+
+    public function test_regenerating_invoice_does_not_duplicate_system_line_items(): void
+    {
+        // Create a project for time entries
+        $project = ClientProject::create([
+            'client_company_id' => $this->company->id,
+            'name' => 'Test Project',
+            'slug' => 'test-project',
+        ]);
+
+        // Create initial time entry
+        ClientTimeEntry::create([
+            'client_company_id' => $this->company->id,
+            'project_id' => $project->id,
+            'user_id' => $this->admin->id,
+            'date_worked' => Carbon::create(2024, 1, 15),
+            'minutes_worked' => 120,
+            'name' => 'Initial work',
+            'is_billable' => true,
+        ]);
+
+        // Generate initial invoice
+        $invoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2024, 1, 1),
+            Carbon::create(2024, 1, 31)
+        );
+
+        $initialLineCount = $invoice->lineItems()->count();
+        $initialRetainerLines = $invoice->lineItems()->where('line_type', 'retainer')->count();
+
+        // Regenerate without any changes
+        $regeneratedInvoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2024, 1, 1),
+            Carbon::create(2024, 1, 31)
+        );
+
+        // Assert no duplication occurred
+        $finalLineCount = $regeneratedInvoice->lineItems()->count();
+        $finalRetainerLines = $regeneratedInvoice->lineItems()->where('line_type', 'retainer')->count();
+
+        $this->assertEquals($initialLineCount, $finalLineCount, 'Line items should not be duplicated');
+        $this->assertEquals(1, $finalRetainerLines, 'Should only have one retainer line');
+        $this->assertEquals($initialRetainerLines, $finalRetainerLines);
+    }
 }

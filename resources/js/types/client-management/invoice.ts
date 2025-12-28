@@ -58,5 +58,6 @@ export interface InvoicePreview {
 
 export interface ClientAdminActionsProps {
   companyId: number
-  companySlug?: string | null
+  onClose: () => void
+  onSuccess?: () => void
 }

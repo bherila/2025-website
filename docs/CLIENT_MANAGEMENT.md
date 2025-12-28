@@ -767,7 +767,7 @@ All routes require `['web', 'auth']` middleware and Admin gate authorization:
 ```
 GET    /api/client/mgmt/companies/{company}/invoices
 GET    /api/client/mgmt/companies/{company}/invoices/{invoice}
-POST   /api/client/mgmt/companies/{company}/invoices/preview
+POST   /api/client/mgmt/companies/{company}/invoices/generate-all
 POST   /api/client/mgmt/companies/{company}/invoices
 PUT    /api/client/mgmt/companies/{company}/invoices/{invoice}
 POST   /api/client/mgmt/companies/{company}/invoices/{invoice}/issue
@@ -852,6 +852,162 @@ The `getTimeEntries()` API now returns enhanced data for the monthly grouping UI
 - `default_hourly_rate` field prepared for billing system
 - `last_activity` tracks engagement for retention analysis
 - Soft deletes preserve historical data for reporting
+
+## Invoice Generation and Management
+
+### Automated Invoice Generation
+
+The system provides automated invoice generation for all calendar months via the "Run Invoicing" feature.
+
+**Admin Page Enhancements:**
+
+The Client Management admin page (`/client/mgmt`) now displays key metrics for each company:
+
+- **Invoice Balance Due**: Total outstanding balance across all unpaid/issued invoices (orange badge with $ icon)
+- **Uninvoiced Hours**: Total billable hours not yet linked to any invoice (blue badge with clock icon)
+- **Run Invoicing Button**: Per-company button to auto-generate invoices for all months
+
+**Workflow:**
+
+1. Admin clicks "Run Invoicing" for a company
+2. System automatically generates invoices for ALL calendar months from agreement start date to present
+3. Results summary shows:
+   - **Generated**: New invoices created (draft status)
+   - **Updated**: Existing draft invoices regenerated with latest data
+   - **Skipped**: Issued/paid/void invoices left untouched
+
+**Key Features:**
+
+- **No manual date selection**: Automatically uses calendar month boundaries
+- **Smart detection**: Skips months without time entries or where invoice already finalized
+- **Draft regeneration**: Updates existing draft invoices with latest time entry data
+- **Protected invoices**: Never modifies issued, paid, or voided invoices
+
+**API Endpoint:**
+```
+POST /api/client/mgmt/companies/{company}/invoices/generate-all
+```
+
+**Response Format:**
+```json
+{
+  "message": "Invoice generation completed",
+  "results": {
+    "generated": [
+      {"period": "2024-01", "invoice_id": 1, "invoice_number": "INV-001"},
+      {"period": "2024-02", "invoice_id": 2, "invoice_number": "INV-002"}
+    ],
+    "updated": [
+      {"period": "2024-03", "invoice_id": 3, "invoice_number": "INV-003"}
+    ],
+    "skipped": [
+      {"period": "2024-04", "invoice_id": 4, "status": "paid", "reason": "Invoice already exists with status: paid"}
+    ],
+    "summary": {
+      "generated_count": 2,
+      "updated_count": 1,
+      "skipped_count": 1
+    }
+  }
+}
+```
+
+### Manual Line Item Preservation
+
+When regenerating invoices (e.g., via "Run Invoicing" or manual re-generation), the system intelligently preserves manual adjustments:
+
+**System-Generated Line Items** (auto-deleted and regenerated):
+- `retainer`: Monthly retainer fee
+- `additional_hours`: Hours exceeding retainer + rollover
+- `credit`: Informational rollover hours applied (zero amount)
+
+**Manual Line Items** (preserved during regeneration):
+- `expense`: Manual expenses or fees added by admin
+- `adjustment`: Price adjustments or credits
+
+**Example Scenario:**
+
+1. Draft invoice created automatically with retainer line
+2. Admin manually adds $500 "Consulting fee" (expense type)
+3. Admin clicks "Run Invoicing" to refresh with latest time entries
+4. Result: System line items regenerated, $500 consulting fee preserved
+
+**Line Type Enum Values:**
+```php
+enum('retainer', 'additional_hours', 'expense', 'adjustment', 'credit')
+```
+
+**Note on Delayed Billing:**
+Prior period hours (delayed billing) are created as `additional_hours` type with description containing "Prior Period" to distinguish them from current period additional hours.
+
+### Invoice Line Item Management
+
+**Adding Manual Line Items:**
+
+Via API:
+```
+POST /api/client/mgmt/companies/{company}/invoices/{invoice}/line-items
+```
+
+Body:
+```json
+{
+  "description": "Manual consulting fee",
+  "quantity": 1,
+  "unit_price": 500.00,
+  "line_type": "expense"
+}
+```
+
+**Editing Line Items:**
+
+- System-generated line items (retainer, additional_hours, credit) cannot be edited directly
+- Manual line items (expense, adjustment) can be updated via API
+- All line items recalculate invoice total automatically
+
+**Deleting Line Items:**
+
+- System-generated line items are automatically regenerated if invoice is refreshed
+- Manual line items persist across regeneration unless explicitly deleted
+- Deleting a line item unlinks any associated time entries
+
+**Time Entry Linking:**
+
+System automatically links time entries to invoice lines:
+1. Up to retainer hours → linked to retainer line
+2. Additional hours → linked to additional_hours line
+3. Prior period hours → linked to delayed billing line (additional_hours with "Prior Period" description)
+
+Unlinking occurs when:
+- Invoice is voided
+- Invoice is deleted
+- Draft invoice is regenerated (system lines only)
+
+### Invoice Payment Tracking
+
+**Adding Payments:**
+
+When adding a payment to an invoice:
+- `amount`: Payment amount (supports partial payments)
+- `payment_date`: Date payment received
+- `payment_method`: Credit Card, ACH, Wire Transfer, Check, Other
+- `notes`: Optional payment notes
+
+**Auto-Paid Status:**
+
+When `payments_total >= invoice_total`:
+- Invoice status automatically changes to 'paid'
+- `paid_date` set to the date of the latest payment (not current date)
+
+**Payment Deletion:**
+
+- Deleting a payment recalculates remaining balance
+- If invoice was marked paid, status reverts to 'issued' or 'draft'
+- Cannot void an invoice with payments (must delete payments first)
+
+**Payment Default Amount:**
+
+When adding a payment via UI, the amount field defaults to the remaining balance, simplifying full-payment entry.
 
 ## Security
 - All routes protected by authentication middleware
@@ -944,6 +1100,8 @@ Tests include:
 - [x] Invoice API requires admin
 - [x] Invoice API void rejects invoice with payments
 - [x] Invoice API un-void works
+- [x] Regenerating invoice preserves manual line items
+- [x] Regenerating invoice does not duplicate system line items
 
 ### Time Page Monthly Grouping
 - [ ] Time entries grouped by month (most recent first)

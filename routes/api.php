@@ -95,7 +95,7 @@ Route::middleware(['web', 'auth'])->delete('/client/mgmt/agreements/{id}', [Clie
 // Client Invoice API routes (Admin)
 Route::middleware(['web', 'auth'])->get('/client/mgmt/companies/{company}/invoices', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'index']);
 Route::middleware(['web', 'auth'])->get('/client/mgmt/companies/{company}/invoices/{invoice}', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'show']);
-Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices/preview', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'preview']);
+Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices/generate-all', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'generateAll']);
 Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'store']);
 Route::middleware(['web', 'auth'])->put('/client/mgmt/companies/{company}/invoices/{invoice}', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'update']);
 Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices/{invoice}/issue', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'issue']);

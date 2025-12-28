@@ -8,14 +8,12 @@ import ClientPortalInvoicePage from '@/components/client-management/portal/Clien
 import ClientAdminActions from '@/components/client-management/ClientAdminActions'
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Mount admin actions if available
+  // Mount admin actions if available (legacy mounting - no longer used, kept for compatibility)
   const adminActionsDiv = document.getElementById('ClientAdminActions')
   if (adminActionsDiv) {
-    const root = createRoot(adminActionsDiv)
-    root.render(<ClientAdminActions 
-      companyId={parseInt(adminActionsDiv.dataset.companyId!)}
-      companySlug={adminActionsDiv.dataset.companySlug || null}
-    />)
+    // This is no longer used - ClientAdminActions is now a modal dialog
+    // It should be rendered by the parent page component
+    console.warn('ClientAdminActions div found but component has been refactored to a modal')
   }
 
   const indexDiv = document.getElementById('ClientPortalIndexPage')

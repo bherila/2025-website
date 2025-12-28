@@ -120,7 +120,10 @@ class DelayedBillingTest extends TestCase
         // Should have: retainer line + delayed billing line
         // Retainer covers all 5 current hours (under 10 hour limit)
         // Delayed billing should charge for the 5 pre-agreement hours
-        $delayedBillingLine = $lineItems->firstWhere('line_type', 'delayed_billing');
+        $delayedBillingLine = $lineItems->first(function ($line) {
+            return $line->line_type === 'additional_hours' && 
+                   str_contains($line->description, 'Prior Period');
+        });
 
         $this->assertNotNull($delayedBillingLine, 'Invoice should include delayed billing line item');
         $this->assertEquals(5, $delayedBillingLine->hours); // 2 + 3 hours from January
@@ -133,7 +136,7 @@ class DelayedBillingTest extends TestCase
         $this->assertEquals(0, $unbilledEntries, 'All time entries should be linked to invoice lines');
     }
 
-    public function test_preview_shows_delayed_billing_information(): void
+    public function test_invoice_includes_delayed_billing_information(): void
     {
         // Create pre-agreement time entry
         ClientTimeEntry::create([
@@ -159,25 +162,26 @@ class DelayedBillingTest extends TestCase
             'is_active' => true,
         ]);
 
-        // Preview invoice
+        // Generate invoice
         $periodStart = Carbon::create(2024, 2, 1);
         $periodEnd = Carbon::create(2024, 2, 29);
 
-        $preview = $this->invoicingService->previewInvoice(
+        $invoice = $this->invoicingService->generateInvoice(
             $this->company,
             $periodStart,
             $periodEnd
         );
 
-        // Assert delayed billing info is present
-        $this->assertArrayHasKey('delayed_billing_hours', $preview);
-        $this->assertArrayHasKey('delayed_billing_entries_count', $preview);
-        $this->assertEquals(4, $preview['delayed_billing_hours']);
-        $this->assertEquals(1, $preview['delayed_billing_entries_count']);
+        // Check that delayed billing is included in the line items
+        $delayedBillingLine = $invoice->lineItems()
+            ->where('description', 'LIKE', '%Prior Period%')
+            ->first();
+        
+        $this->assertNotNull($delayedBillingLine, 'Invoice should include a delayed billing line item');
 
         // Check invoice total includes delayed billing
         // Retainer: $1000 + Delayed billing: 4 * $100 = $400
-        $this->assertEquals(1400.00, $preview['invoice_total']);
+        $this->assertEquals(1400.00, $invoice->invoice_total);
     }
 
     public function test_non_billable_entries_are_not_included_in_delayed_billing(): void
@@ -206,20 +210,23 @@ class DelayedBillingTest extends TestCase
             'is_active' => true,
         ]);
 
-        // Preview invoice
+        // Generate invoice
         $periodStart = Carbon::create(2024, 2, 1);
         $periodEnd = Carbon::create(2024, 2, 29);
 
-        $preview = $this->invoicingService->previewInvoice(
+        $invoice = $this->invoicingService->generateInvoice(
             $this->company,
             $periodStart,
             $periodEnd
         );
 
-        // No delayed billing since entry is non-billable
-        $this->assertEquals(0, $preview['delayed_billing_hours']);
-        $this->assertEquals(0, $preview['delayed_billing_entries_count']);
-        $this->assertEquals(1000.00, $preview['invoice_total']); // Just retainer
+        // No delayed billing since entry is non-billable (check line items)
+        $delayedBillingLine = $invoice->lineItems()
+            ->where('description', 'LIKE', '%Prior Period%')
+            ->first();
+        
+        $this->assertNull($delayedBillingLine, 'Invoice should not include delayed billing for non-billable entries');
+        $this->assertEquals(1000.00, $invoice->invoice_total); // Just retainer
     }
 
     public function test_already_invoiced_entries_are_not_included_in_delayed_billing(): void
@@ -255,16 +262,19 @@ class DelayedBillingTest extends TestCase
             Carbon::create(2024, 1, 31)
         );
 
-        // Preview February invoice
-        $preview = $this->invoicingService->previewInvoice(
+        // Generate February invoice
+        $februaryInvoice = $this->invoicingService->generateInvoice(
             $this->company,
             Carbon::create(2024, 2, 1),
             Carbon::create(2024, 2, 29)
         );
 
         // No delayed billing since January entry was already invoiced
-        $this->assertEquals(0, $preview['delayed_billing_hours']);
-        $this->assertEquals(0, $preview['delayed_billing_entries_count']);
+        $delayedBillingLine = $februaryInvoice->lineItems()
+            ->where('description', 'LIKE', '%Prior Period%')
+            ->first();
+        
+        $this->assertNull($delayedBillingLine, 'Invoice should not include delayed billing for already-invoiced entries');
     }
 
     public function test_api_endpoint_shows_unbilled_hours_for_periods_without_agreement(): void

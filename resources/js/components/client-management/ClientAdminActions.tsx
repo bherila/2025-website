@@ -7,248 +7,197 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { FileText, Loader2 } from 'lucide-react'
-import type { InvoicePreview, ClientAdminActionsProps } from '@/types/client-management/invoice'
+import { Loader2, CheckCircle2, XCircle, Clock } from 'lucide-react'
+import type { ClientAdminActionsProps } from '@/types/client-management/invoice'
 
-export default function ClientAdminActions({ companyId, companySlug }: ClientAdminActionsProps) {
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [previewing, setPreviewing] = useState(false)
-  const [preview, setPreview] = useState<InvoicePreview | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
-  
-  // Default to current month
-  const today = new Date()
-  const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
-  const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0)
-  
-  const [periodStart, setPeriodStart] = useState(firstDayOfMonth.toISOString().split('T')[0])
-  const [periodEnd, setPeriodEnd] = useState(lastDayOfMonth.toISOString().split('T')[0])
-
-  const handlePreview = async () => {
-    setError(null)
-    setSuccess(null)
-    setPreviewing(true)
-    
-    try {
-      const response = await fetch(`/api/client/mgmt/companies/${companyId}/invoices/preview`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
-        },
-        body: JSON.stringify({
-          period_start: periodStart,
-          period_end: periodEnd,
-        })
-      })
-
-      const data = await response.json()
-
-      if (response.ok) {
-        setPreview(data)
-      } else {
-        setError(data.error || 'Failed to preview invoice')
-      }
-    } catch (err) {
-      setError('An error occurred while previewing the invoice')
-    } finally {
-      setPreviewing(false)
-    }
+interface GenerateAllResults {
+  generated: Array<{ period: string; invoice_id: number; invoice_number: string }>
+  updated: Array<{ period: string; invoice_id: number; invoice_number: string }>
+  skipped: Array<{ period: string; invoice_id?: number; status?: string; reason?: string; error?: string }>
+  summary: {
+    generated_count: number
+    updated_count: number
+    skipped_count: number
   }
+}
 
-  const handleGenerate = async () => {
+export default function ClientAdminActions({ companyId, onClose, onSuccess }: ClientAdminActionsProps) {
+  const [loading, setLoading] = useState(false)
+  const [results, setResults] = useState<GenerateAllResults | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleGenerateAll = async () => {
     setError(null)
-    setSuccess(null)
+    setResults(null)
     setLoading(true)
 
     try {
-      const response = await fetch(`/api/client/mgmt/companies/${companyId}/invoices`, {
+      const response = await fetch(`/api/client/mgmt/companies/${companyId}/invoices/generate-all`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
-        },
-        body: JSON.stringify({
-          period_start: periodStart,
-          period_end: periodEnd,
-        })
+        }
       })
 
       const data = await response.json()
 
       if (response.ok) {
-        setSuccess(`Invoice ${data.invoice.invoice_number} generated successfully!`)
-        setPreview(null)
-        // Optionally redirect to the invoice page
-        setTimeout(() => {
-          if (companySlug) {
-            window.location.href = `/client/portal/${companySlug}/invoices`
-          }
-        }, 1500)
+        setResults(data.results)
+        if (onSuccess) {
+          onSuccess()
+        }
       } else {
-        setError(data.error || 'Failed to generate invoice')
+        setError(data.error || 'Failed to generate invoices')
       }
     } catch (err) {
-      setError('An error occurred while generating the invoice')
+      setError('An error occurred while generating invoices')
     } finally {
       setLoading(false)
     }
   }
 
+  const handleClose = () => {
+    setResults(null)
+    setError(null)
+    onClose()
+  }
+
   return (
-    <>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => setDialogOpen(true)}
-        className="gap-2"
-      >
-        <FileText className="h-4 w-4" />
-        Run Invoicing
-      </Button>
+    <Dialog open={true} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-[600px]">
+        <DialogHeader>
+          <DialogTitle>Run Invoicing</DialogTitle>
+          <DialogDescription>
+            Generate invoices for all calendar months from the agreement start date to now.
+            This will create new draft invoices or update existing draft invoices. Issued, paid, and voided invoices will be skipped.
+          </DialogDescription>
+        </DialogHeader>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Generate Invoice</DialogTitle>
-            <DialogDescription>
-              Generate an invoice for the specified billing period.
-            </DialogDescription>
-          </DialogHeader>
+        <div className="space-y-4 py-4">
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
 
-          <div className="space-y-4 py-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
-            {success && (
-              <Alert>
-                <AlertDescription className="text-green-600">{success}</AlertDescription>
-              </Alert>
-            )}
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="period_start">Period Start</Label>
-                <Input
-                  id="period_start"
-                  type="date"
-                  value={periodStart}
-                  onChange={(e) => {
-                    setPeriodStart(e.target.value)
-                    setPreview(null)
-                  }}
-                />
+          {!results && !loading && (
+            <div className="space-y-4">
+              <div className="text-sm text-muted-foreground">
+                This process will:
+                <ul className="list-disc list-inside mt-2 space-y-1">
+                  <li>Generate new invoices for months without invoices</li>
+                  <li>Update existing draft invoices with current data</li>
+                  <li>Skip issued, paid, and voided invoices</li>
+                </ul>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="period_end">Period End</Label>
-                <Input
-                  id="period_end"
-                  type="date"
-                  value={periodEnd}
-                  onChange={(e) => {
-                    setPeriodEnd(e.target.value)
-                    setPreview(null)
-                  }}
-                />
-              </div>
-            </div>
-
-            {!preview && (
               <Button 
-                onClick={handlePreview} 
-                variant="secondary" 
+                onClick={handleGenerateAll} 
                 className="w-full"
-                disabled={previewing}
               >
-                {previewing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Preview Invoice
+                Generate Invoices for All Months
               </Button>
-            )}
+            </div>
+          )}
 
-            {preview && (
-              <div className="space-y-3 p-4 bg-muted rounded-lg">
-                <h4 className="font-medium">Invoice Preview</h4>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div>Period:</div>
-                  <div>{preview.period_start} to {preview.period_end}</div>
-                  
-                  <div>Time Entries:</div>
-                  <div>{preview.time_entries_count}</div>
-                  
-                  <div>Hours Worked:</div>
-                  <div>{preview.hours_worked.toFixed(2)}</div>
-                  
-                  {preview.agreement && (
-                    <>
-                      <div>Retainer Hours:</div>
-                      <div>{preview.agreement.monthly_retainer_hours}</div>
-                      
-                      <div>Monthly Fee:</div>
-                      <div>${parseFloat(preview.agreement.monthly_retainer_fee).toLocaleString()}</div>
-                    </>
-                  )}
-                  
-                  {preview.calculation && (
-                    <>
-                      {preview.calculation.rollover_hours_used > 0 && (
-                        <>
-                          <div>Rollover Used:</div>
-                          <div>{preview.calculation.rollover_hours_used.toFixed(2)}</div>
-                        </>
-                      )}
-                      
-                      {preview.calculation.hours_billed_at_rate > 0 && (
-                        <>
-                          <div>Additional Hours:</div>
-                          <div>{preview.calculation.hours_billed_at_rate.toFixed(2)}</div>
-                        </>
-                      )}
-                    </>
-                  )}
+          {loading && (
+            <div className="flex flex-col items-center justify-center py-8 space-y-3">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Generating invoices...</p>
+            </div>
+          )}
 
-                  {preview.delayed_billing_hours > 0 && (
-                    <>
-                      <div className="text-amber-600">Prior Period Hours:</div>
-                      <div className="text-amber-600">
-                        {preview.delayed_billing_hours.toFixed(2)} ({preview.delayed_billing_entries_count} entries)
-                      </div>
-                    </>
-                  )}
-                  
-                  <div className="font-medium pt-2 border-t">Invoice Total:</div>
-                  <div className="font-medium pt-2 border-t">${preview.invoice_total.toFixed(2)}</div>
+          {results && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="flex flex-col items-center p-4 bg-green-50 dark:bg-green-950 rounded-lg">
+                  <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400 mb-2" />
+                  <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                    {results.summary.generated_count}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Generated</div>
                 </div>
 
-                <div className="flex gap-2 pt-2">
-                  <Button 
-                    onClick={handleGenerate} 
-                    disabled={loading}
-                    className="flex-1"
-                  >
-                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Generate Invoice
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setPreview(null)}
-                    disabled={loading}
-                  >
-                    Cancel
-                  </Button>
+                <div className="flex flex-col items-center p-4 bg-blue-50 dark:bg-blue-950 rounded-lg">
+                  <Clock className="h-6 w-6 text-blue-600 dark:text-blue-400 mb-2" />
+                  <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                    {results.summary.updated_count}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Updated</div>
+                </div>
+
+                <div className="flex flex-col items-center p-4 bg-amber-50 dark:bg-amber-950 rounded-lg">
+                  <XCircle className="h-6 w-6 text-amber-600 dark:text-amber-400 mb-2" />
+                  <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                    {results.summary.skipped_count}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Skipped</div>
                 </div>
               </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
+
+              {results.generated.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm">Generated Invoices</h4>
+                  <div className="max-h-32 overflow-y-auto space-y-1">
+                    {results.generated.map((item, idx) => (
+                      <div key={idx} className="text-sm flex justify-between items-center p-2 bg-green-50 dark:bg-green-950 rounded">
+                        <span className="font-mono">{item.period}</span>
+                        <span className="text-xs text-muted-foreground">{item.invoice_number}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {results.updated.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm">Updated Draft Invoices</h4>
+                  <div className="max-h-32 overflow-y-auto space-y-1">
+                    {results.updated.map((item, idx) => (
+                      <div key={idx} className="text-sm flex justify-between items-center p-2 bg-blue-50 dark:bg-blue-950 rounded">
+                        <span className="font-mono">{item.period}</span>
+                        <span className="text-xs text-muted-foreground">{item.invoice_number}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {results.skipped.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm">Skipped</h4>
+                  <div className="max-h-32 overflow-y-auto space-y-1">
+                    {results.skipped.map((item, idx) => (
+                      <div key={idx} className="text-sm p-2 bg-amber-50 dark:bg-amber-950 rounded">
+                        <div className="flex justify-between items-center">
+                          <span className="font-mono">{item.period}</span>
+                          {item.status && (
+                            <span className="text-xs text-muted-foreground uppercase">{item.status}</span>
+                          )}
+                        </div>
+                        {(item.reason || item.error) && (
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {item.reason || item.error}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <Button 
+                onClick={handleClose} 
+                className="w-full"
+                variant="default"
+              >
+                Done
+              </Button>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }

@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { ChevronDown, ChevronUp, Plus } from 'lucide-react'
+import { ChevronDown, ChevronUp, Plus, DollarSign, Clock } from 'lucide-react'
 import InvitePeopleModal from '@/components/client-management/InvitePeopleModal'
+import ClientAdminActions from '@/components/client-management/ClientAdminActions'
 import type { User, ClientCompany } from '@/types/client-management/common'
 
 function formatLastLogin(lastLogin: string | null | undefined): string {
@@ -17,6 +18,7 @@ export default function ClientManagementIndexPage() {
   const [loading, setLoading] = useState(true)
   const [showInactive, setShowInactive] = useState(false)
   const [inviteModalOpen, setInviteModalOpen] = useState(false)
+  const [runInvoicingCompanyId, setRunInvoicingCompanyId] = useState<number | null>(null)
 
   useEffect(() => {
     fetchCompanies()
@@ -64,11 +66,36 @@ export default function ClientManagementIndexPage() {
               <div className="flex justify-between items-start">
                 <div className="flex-1">
                   <CardTitle className="text-xl">{company.company_name}</CardTitle>
-                  <div className="mt-2 text-sm text-muted-foreground">
-                    {company.users.length} {company.users.length === 1 ? 'user' : 'users'}
+                  <div className="mt-2 space-y-1">
+                    <div className="text-sm text-muted-foreground">
+                      {company.users.length} {company.users.length === 1 ? 'user' : 'users'}
+                    </div>
+                    {company.total_balance_due !== undefined && company.total_balance_due > 0 && (
+                      <div className="flex items-center gap-1.5 text-sm">
+                        <DollarSign className="h-4 w-4 text-orange-600" />
+                        <span className="font-medium text-orange-600">
+                          ${company.total_balance_due.toFixed(2)} balance due
+                        </span>
+                      </div>
+                    )}
+                    {company.uninvoiced_hours !== undefined && company.uninvoiced_hours > 0 && (
+                      <div className="flex items-center gap-1.5 text-sm">
+                        <Clock className="h-4 w-4 text-blue-600" />
+                        <span className="font-medium text-blue-600">
+                          {company.uninvoiced_hours.toFixed(2)} uninvoiced hours
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
-<div className="flex gap-2">
+                <div className="flex gap-2">
+                  <Button 
+                    variant="secondary" 
+                    size="sm"
+                    onClick={() => setRunInvoicingCompanyId(company.id)}
+                  >
+                    Run Invoicing
+                  </Button>
                   {company.slug && (
                     <Button 
                       variant="default" 
@@ -147,6 +174,17 @@ export default function ClientManagementIndexPage() {
         companies={companies}
         onSuccess={fetchCompanies}
       />
+
+      {runInvoicingCompanyId && (
+        <ClientAdminActions
+          companyId={runInvoicingCompanyId}
+          onClose={() => setRunInvoicingCompanyId(null)}
+          onSuccess={() => {
+            setRunInvoicingCompanyId(null)
+            fetchCompanies()
+          }}
+        />
+      )}
     </div>
   )
 }

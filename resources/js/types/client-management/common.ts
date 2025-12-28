@@ -20,6 +20,8 @@ export interface ClientCompany {
   created_at: string
   users: User[]
   agreements: Agreement[]
+  total_balance_due?: number
+  uninvoiced_hours?: number
 }
 
 export interface Project {

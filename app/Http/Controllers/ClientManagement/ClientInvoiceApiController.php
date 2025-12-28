@@ -107,31 +107,6 @@ class ClientInvoiceApiController extends Controller
     }
 
     /**
-     * Preview an invoice before generating it.
-     */
-    public function preview(Request $request, ClientCompany $company)
-    {
-        Gate::authorize('Admin');
-
-        $request->validate([
-            'period_start' => 'required|date',
-            'period_end' => 'required|date|after:period_start',
-        ]);
-
-        try {
-            $preview = $this->invoicingService->previewInvoice(
-                $company,
-                Carbon::parse($request->period_start),
-                Carbon::parse($request->period_end)
-            );
-
-            return response()->json($preview);
-        } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 400);
-        }
-    }
-
-    /**
      * Generate a new invoice.
      */
     public function store(Request $request, ClientCompany $company)
@@ -159,6 +134,25 @@ class ClientInvoiceApiController extends Controller
                     'status' => $invoice->status,
                 ],
             ], 201);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    /**
+     * Generate invoices for all calendar months.
+     */
+    public function generateAll(ClientCompany $company)
+    {
+        Gate::authorize('Admin');
+
+        try {
+            $results = $this->invoicingService->generateAllMonthlyInvoices($company);
+
+            return response()->json([
+                'message' => 'Invoice generation completed',
+                'results' => $results,
+            ], 200);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 400);
         }

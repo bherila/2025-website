@@ -20,7 +20,18 @@ class ClientCompanyApiController extends Controller
     {
         Gate::authorize('Admin');
 
-        $companies = ClientCompany::with('users')->get();
+        $companies = ClientCompany::with(['users', 'invoices.payments'])->get()->map(function ($company) {
+            $company->total_balance_due = $company->invoices
+                ->whereNotIn('status', ['paid', 'void'])
+                ->sum('remaining_balance');
+            
+            $company->uninvoiced_hours = $company->timeEntries()
+                ->where('is_billable', true)
+                ->whereNull('client_invoice_line_id')
+                ->sum('minutes_worked') / 60;
+            
+            return $company;
+        });
 
         return response()->json($companies);
     }
