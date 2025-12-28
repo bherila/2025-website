@@ -284,26 +284,16 @@ export default function ClientPortalAgreementPage({ slug, companyName, agreement
       )}
 
       {/* Agreement Files Section */}
-      <Card className="mt-6">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Agreement Files</CardTitle>
-            {isAdmin && (
-              <FileUploadButton onUpload={fileManager.uploadFile} />
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          <FileList
-            files={fileManager.files}
-            loading={fileManager.loading}
-            isAdmin={isAdmin}
-            onDownload={fileManager.downloadFile}
-            onDelete={fileManager.handleDeleteRequest}
-            title=""
-          />
-        </CardContent>
-      </Card>
+      <FileList
+        className="mt-6"
+        files={fileManager.files}
+        loading={fileManager.loading}
+        isAdmin={isAdmin}
+        onDownload={fileManager.downloadFile}
+        onDelete={fileManager.handleDeleteRequest}
+        title="Agreement Files"
+        actions={isAdmin && <FileUploadButton onUpload={fileManager.uploadFile} />}
+      />
 
       <FileHistoryModal
         file={fileManager.historyFile}

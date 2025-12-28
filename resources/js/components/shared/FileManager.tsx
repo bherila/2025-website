@@ -30,14 +30,19 @@ interface FileListProps {
   onDelete?: (file: FileRecord) => void
   onViewHistory?: (file: FileRecord) => void
   title?: string
+  actions?: React.ReactNode
+  className?: string
 }
 
-export function FileList({ files, loading, isAdmin, onDownload, onDelete, onViewHistory, title = 'Files' }: FileListProps) {
+export function FileList({ files, loading, isAdmin, onDownload, onDelete, onViewHistory, title = 'Files', actions, className }: FileListProps) {
   if (loading) {
     return (
-      <Card>
+      <Card className={className}>
         <CardHeader>
-          <CardTitle className="text-lg">{title}</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg">{title}</CardTitle>
+            {actions}
+          </div>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center py-8">
@@ -50,9 +55,12 @@ export function FileList({ files, loading, isAdmin, onDownload, onDelete, onView
 
   if (files.length === 0) {
     return (
-      <Card>
+      <Card className={className}>
         <CardHeader>
-          <CardTitle className="text-lg">{title}</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg">{title}</CardTitle>
+            {actions}
+          </div>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col items-center justify-center py-8 text-center">
@@ -65,9 +73,12 @@ export function FileList({ files, loading, isAdmin, onDownload, onDelete, onView
   }
 
   return (
-    <Card>
+    <Card className={className}>
       <CardHeader>
-        <CardTitle className="text-lg">{title} ({files.length})</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-lg">{title} ({files.length})</CardTitle>
+          {actions}
+        </div>
       </CardHeader>
       <CardContent className="space-y-2">
         {files.map((file) => (

@@ -385,24 +385,16 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
         )}
 
         {/* Account Files Section */}
-        <Card className="mt-8">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Statement Files</CardTitle>
-              <FileUploadButton onUpload={fileManager.uploadFile} />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <FileList
-              files={fileManager.files}
-              loading={fileManager.loading}
-              isAdmin={true}
-              onDownload={fileManager.downloadFile}
-              onDelete={fileManager.handleDeleteRequest}
-              title=""
-            />
-          </CardContent>
-        </Card>
+        <FileList
+          className="mt-8"
+          files={fileManager.files}
+          loading={fileManager.loading}
+          isAdmin={true}
+          onDownload={fileManager.downloadFile}
+          onDelete={fileManager.handleDeleteRequest}
+          title="Statement Files"
+          actions={<FileUploadButton onUpload={fileManager.uploadFile} />}
+        />
 
         <DeleteFileModal
           file={fileManager.deleteFile}
