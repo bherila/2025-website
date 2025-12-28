@@ -30,12 +30,10 @@ export default function ClientPortalAgreementPage({ slug, companyName, agreement
 
   // File management
   const fileManager = useFileManagement({
-    listUrl: `/api/files/agreements/${agreementId}`,
-    uploadUrl: `/api/files/agreements/${agreementId}`,
-    uploadUrlEndpoint: `/api/files/agreements/${agreementId}/upload-url`,
-    downloadUrlPattern: (fileId) => `/api/files/agreements/${agreementId}/${fileId}/download`,
-    deleteUrlPattern: (fileId) => `/api/files/agreements/${agreementId}/${fileId}`,
-    historyUrlPattern: (fileId) => `/api/files/agreements/${agreementId}/${fileId}/history`,
+    listUrl: `/api/client/portal/${slug}/agreements/${agreementId}/files`,
+    uploadUrl: `/api/client/portal/${slug}/agreements/${agreementId}/files`,
+    downloadUrlPattern: (fileId) => `/api/client/portal/${slug}/agreements/${agreementId}/files/${fileId}/download`,
+    deleteUrlPattern: (fileId) => `/api/client/portal/${slug}/agreements/${agreementId}/files/${fileId}`,
   })
 
   useEffect(() => {

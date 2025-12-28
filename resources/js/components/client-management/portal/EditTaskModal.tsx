@@ -59,11 +59,10 @@ export default function EditTaskModal({ open, onOpenChange, task, slug, projectS
 
   // File management
   const fileManager = useFileManagement({
-    listUrl: `/api/files/tasks/${task.id}`,
-    uploadUrl: `/api/files/tasks/${task.id}`,
-    uploadUrlEndpoint: `/api/files/tasks/${task.id}/upload-url`,
-    downloadUrlPattern: (fileId) => `/api/files/tasks/${task.id}/${fileId}/download`,
-    deleteUrlPattern: (fileId) => `/api/files/tasks/${task.id}/${fileId}`,
+    listUrl: `/api/client/portal/${slug}/projects/${projectSlug}/tasks/${task.id}/files`,
+    uploadUrl: `/api/client/portal/${slug}/projects/${projectSlug}/tasks/${task.id}/files`,
+    downloadUrlPattern: (fileId) => `/api/client/portal/${slug}/projects/${projectSlug}/tasks/${task.id}/files/${fileId}/download`,
+    deleteUrlPattern: (fileId) => `/api/client/portal/${slug}/projects/${projectSlug}/tasks/${task.id}/files/${fileId}`,
   })
 
   useEffect(() => {

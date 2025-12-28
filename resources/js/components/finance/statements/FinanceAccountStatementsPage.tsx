@@ -63,11 +63,10 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
 
   // File management
   const fileManager = useFileManagement({
-    listUrl: `/api/files/fin_accounts/${id}`,
-    uploadUrl: `/api/files/fin_accounts/${id}`,
-    uploadUrlEndpoint: `/api/files/fin_accounts/${id}/upload-url`,
-    downloadUrlPattern: (fileId) => `/api/files/fin_accounts/${id}/${fileId}/download`,
-    deleteUrlPattern: (fileId) => `/api/files/fin_accounts/${id}/${fileId}`,
+    listUrl: `/api/finance/${id}/files`,
+    uploadUrl: `/api/finance/${id}/files`,
+    downloadUrlPattern: (fileId) => `/api/finance/${id}/files/${fileId}/download`,
+    deleteUrlPattern: (fileId) => `/api/finance/${id}/files/${fileId}`,
   })
 
   useEffect(() => {
