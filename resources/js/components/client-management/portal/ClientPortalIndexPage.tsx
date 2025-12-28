@@ -7,14 +7,13 @@ import {
   FileHistoryModal,
   FileList,
   FileUploadButton,
-  useFileOperations,
+  useFileManagement,
 } from '@/components/shared/FileManager'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { Agreement, Project } from '@/types/client-management/common'
-import type { DownloadHistoryEntry, FileRecord } from '@/types/files'
 
 import ClientPortalNav from './ClientPortalNav'
 import NewProjectModal from './NewProjectModal'
@@ -31,15 +30,7 @@ export default function ClientPortalIndexPage({ slug, companyName, isAdmin = fal
   const [loading, setLoading] = useState(true)
   const [newProjectModalOpen, setNewProjectModalOpen] = useState(false)
 
-  // File management state
-  const [historyModalOpen, setHistoryModalOpen] = useState(false)
-  const [historyFile, setHistoryFile] = useState<FileRecord | null>(null)
-  const [historyData, setHistoryData] = useState<DownloadHistoryEntry[]>([])
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
-  const [deleteFile, setDeleteFileState] = useState<FileRecord | null>(null)
-  const [isDeleting, setIsDeleting] = useState(false)
-
-  const fileOps = useFileOperations({
+  const fileManager = useFileManagement({
     listUrl: `/api/client/portal/${slug}/files`,
     uploadUrl: `/api/client/portal/${slug}/files`,
     uploadUrlEndpoint: `/api/client/portal/${slug}/files/upload-url`,
@@ -58,7 +49,7 @@ export default function ClientPortalIndexPage({ slug, companyName, isAdmin = fal
     ]).finally(() => {
       setLoading(false)
     })
-    fileOps.fetchFiles()
+    fileManager.fetchFiles()
   }, [slug])
 
   const fetchProjects = async () => {
@@ -83,20 +74,6 @@ export default function ClientPortalIndexPage({ slug, companyName, isAdmin = fal
     } catch (error) {
       console.error('Error fetching agreements:', error)
     }
-  }
-
-  const handleDeleteRequest = (file: FileRecord) => {
-    setDeleteFileState(file)
-    setDeleteModalOpen(true)
-  }
-
-  const handleDeleteConfirm = async () => {
-    if (!deleteFile) return
-    setIsDeleting(true)
-    await fileOps.deleteFile(deleteFile)
-    setIsDeleting(false)
-    setDeleteModalOpen(false)
-    setDeleteFileState(null)
   }
 
   if (loading) {
@@ -140,97 +117,99 @@ export default function ClientPortalIndexPage({ slug, companyName, isAdmin = fal
               <Plus className="mr-2 h-4 w-4" />
               New Project
             </Button>
+            {isAdmin && (
+              <FileUploadButton onUpload={fileManager.uploadFile} />
+            )}
           </div>
         </div>
 
-      {projects.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <FolderOpen className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium mb-2">No projects yet</h3>
-            <p className="text-muted-foreground mb-4">Create your first project to get started</p>
-            <Button onClick={() => setNewProjectModalOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              New Project
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {projects.map(project => (
-            <Card key={project.id} className="cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => window.location.href = `/client/portal/${slug}/project/${project.slug}`}>
-              <CardHeader>
-                <CardTitle className="text-lg">{project.name}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {project.description && (
-                  <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{project.description}</p>
-                )}
-                <div className="flex gap-2">
-                  <Badge variant="secondary">{project.tasks_count} tasks</Badge>
-                  <Badge variant="outline">{project.time_entries_count} time entries</Badge>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {agreements.length > 0 && (
-        <div className="mt-12">
-          <div className="flex items-center gap-2 mb-6 text-muted-foreground">
-            <Clock className="h-5 w-5" />
-            <h2 className="text-xl font-semibold text-foreground">Service Agreements</h2>
-          </div>
-          <div className="space-y-3">
-            {agreements.map(agreement => (
-              <Card key={agreement.id} className="hover:shadow-md transition-shadow cursor-pointer"
-                    onClick={() => window.location.href = `/client/portal/${slug}/agreement/${agreement.id}`}>
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">
-                        Agreement (Effective {new Date(agreement.active_date).toLocaleDateString()})
-                      </span>
-                      {agreement.client_company_signed_date ? (
-                        <Badge variant="default" className="bg-green-600">✓ Signed</Badge>
-                      ) : (
-                        <Badge variant="secondary">Awaiting Signature</Badge>
-                      )}
-                      {agreement.termination_date && (
-                        <Badge variant="destructive">Terminated</Badge>
-                      )}
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {agreement.monthly_retainer_hours} hrs/mo @ ${parseFloat(agreement.monthly_retainer_fee).toLocaleString()}/mo
-                    </p>
-                  </div>
-                  <Button variant="ghost" size="sm">View Agreement →</Button>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Column - Projects and Agreements (2/3 width) */}
+          <div className="lg:col-span-2 space-y-6">
+            {projects.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <FolderOpen className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-medium mb-2">No projects yet</h3>
+                  <p className="text-muted-foreground mb-4">Create your first project to get started</p>
+                  <Button onClick={() => setNewProjectModalOpen(true)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    New Project
+                  </Button>
                 </CardContent>
               </Card>
-            ))}
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
+                {projects.map(project => (
+                  <Card key={project.id} className="cursor-pointer hover:shadow-md transition-shadow"
+                        onClick={() => window.location.href = `/client/portal/${slug}/project/${project.slug}`}>
+                    <CardHeader>
+                      <CardTitle className="text-lg">{project.name}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {project.description && (
+                        <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{project.description}</p>
+                      )}
+                      <div className="flex gap-2">
+                        <Badge variant="secondary">{project.tasks_count} tasks</Badge>
+                        <Badge variant="outline">{project.time_entries_count} time entries</Badge>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+
+            {agreements.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-4 text-muted-foreground">
+                  <Clock className="h-5 w-5" />
+                  <h2 className="text-xl font-semibold text-foreground">Service Agreements</h2>
+                </div>
+                <div className="space-y-3">
+                  {agreements.map(agreement => (
+                    <Card key={agreement.id} className="hover:shadow-md transition-shadow cursor-pointer"
+                          onClick={() => window.location.href = `/client/portal/${slug}/agreement/${agreement.id}`}>
+                      <CardContent className="p-4 flex items-center justify-between">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">
+                              Agreement (Effective {new Date(agreement.active_date).toLocaleDateString()})
+                            </span>
+                            {agreement.client_company_signed_date ? (
+                              <Badge variant="default" className="bg-green-600">✓ Signed</Badge>
+                            ) : (
+                              <Badge variant="secondary">Awaiting Signature</Badge>
+                            )}
+                            {agreement.termination_date && (
+                              <Badge variant="destructive">Terminated</Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {agreement.monthly_retainer_hours} hrs/mo @ ${parseFloat(agreement.monthly_retainer_fee).toLocaleString()}/mo
+                          </p>
+                        </div>
+                        <Button variant="ghost" size="sm">View Agreement →</Button>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Right Column - Company Files (1/3 width) */}
+          <div className="space-y-4">
+            <FileList
+              files={fileManager.files}
+              loading={fileManager.loading}
+              isAdmin={isAdmin}
+              onDownload={fileManager.downloadFile}
+              onDelete={fileManager.handleDeleteRequest}
+              title="Company Files"
+            />
           </div>
         </div>
-      )}
-
-      {/* Company Files Section */}
-      <div className="mt-12">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold">Company Files</h2>
-          {isAdmin && (
-            <FileUploadButton onUpload={fileOps.uploadFile} />
-          )}
-        </div>
-        <FileList
-          files={fileOps.files}
-          loading={fileOps.loading}
-          isAdmin={isAdmin}
-          onDownload={fileOps.downloadFile}
-          onDelete={handleDeleteRequest}
-          title="Files"
-        />
-      </div>
 
       <NewProjectModal
         open={newProjectModalOpen}
@@ -240,18 +219,18 @@ export default function ClientPortalIndexPage({ slug, companyName, isAdmin = fal
       />
 
       <FileHistoryModal
-        file={historyFile}
-        history={historyData}
-        isOpen={historyModalOpen}
-        onClose={() => setHistoryModalOpen(false)}
+        file={fileManager.historyFile}
+        history={fileManager.historyData}
+        isOpen={fileManager.historyModalOpen}
+        onClose={fileManager.closeHistoryModal}
       />
 
       <DeleteFileModal
-        file={deleteFile}
-        isOpen={deleteModalOpen}
-        isDeleting={isDeleting}
-        onClose={() => setDeleteModalOpen(false)}
-        onConfirm={handleDeleteConfirm}
+        file={fileManager.deleteFile}
+        isOpen={fileManager.deleteModalOpen}
+        isDeleting={fileManager.isDeleting}
+        onClose={fileManager.closeDeleteModal}
+        onConfirm={fileManager.handleDeleteConfirm}
       />
       </div>
     </>

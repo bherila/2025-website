@@ -8,14 +8,13 @@ import {
   FileHistoryModal,
   FileList,
   FileUploadButton,
-  useFileOperations,
+  useFileManagement,
 } from '@/components/shared/FileManager'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { DownloadHistoryEntry, FileRecord } from '@/types/files'
 
 import ClientPortalNav from './ClientPortalNav'
 import EditTaskModal from './EditTaskModal'
@@ -58,15 +57,7 @@ export default function ClientPortalProjectPage({ slug, companyName, projectSlug
   const [companyUsers, setCompanyUsers] = useState<User[]>([])
   const [togglingTasks, setTogglingTasks] = useState<Set<number>>(new Set())
 
-  // File management state
-  const [historyModalOpen, setHistoryModalOpen] = useState(false)
-  const [historyFile, setHistoryFile] = useState<FileRecord | null>(null)
-  const [historyData, setHistoryData] = useState<DownloadHistoryEntry[]>([])
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
-  const [deleteFile, setDeleteFileState] = useState<FileRecord | null>(null)
-  const [isDeleting, setIsDeleting] = useState(false)
-
-  const fileOps = useFileOperations({
+  const fileManager = useFileManagement({
     listUrl: `/api/client/portal/${slug}/projects/${projectSlug}/files`,
     uploadUrl: `/api/client/portal/${slug}/projects/${projectSlug}/files`,
     uploadUrlEndpoint: `/api/client/portal/${slug}/projects/${projectSlug}/files/upload-url`,
@@ -82,7 +73,7 @@ export default function ClientPortalProjectPage({ slug, companyName, projectSlug
   useEffect(() => {
     fetchTasks()
     fetchCompanyUsers()
-    fileOps.fetchFiles()
+    fileManager.fetchFiles()
   }, [slug, projectSlug])
 
   const fetchTasks = async () => {
@@ -97,27 +88,6 @@ export default function ClientPortalProjectPage({ slug, companyName, projectSlug
     } finally {
       setLoading(false)
     }
-  }
-
-  const handleViewHistory = async (file: FileRecord) => {
-    const history = await fileOps.getFileHistory(file)
-    setHistoryFile(file)
-    setHistoryData(history)
-    setHistoryModalOpen(true)
-  }
-
-  const handleDeleteRequest = (file: FileRecord) => {
-    setDeleteFileState(file)
-    setDeleteModalOpen(true)
-  }
-
-  const handleDeleteConfirm = async () => {
-    if (!deleteFile) return
-    setIsDeleting(true)
-    await fileOps.deleteFile(deleteFile)
-    setIsDeleting(false)
-    setDeleteModalOpen(false)
-    setDeleteFileState(null)
   }
 
   const fetchCompanyUsers = async () => {
@@ -199,10 +169,15 @@ export default function ClientPortalProjectPage({ slug, companyName, projectSlug
             <div>
               <h1 className="text-3xl font-bold">{projectName}</h1>
             </div>
-            <Button onClick={() => setNewTaskModalOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Task
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={() => setNewTaskModalOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Task
+              </Button>
+              {isAdmin && (
+                <FileUploadButton onUpload={fileManager.uploadFile} />
+              )}
+            </div>
           </div>
         </div>
 
@@ -309,19 +284,13 @@ export default function ClientPortalProjectPage({ slug, companyName, projectSlug
 
           {/* Files Column - 1/3 width */}
           <div className="space-y-4">
-            {isAdmin && (
-              <FileUploadButton
-                onUpload={fileOps.uploadFile}
-                className="w-full"
-              />
-            )}
             <FileList
-              files={fileOps.files}
-              loading={fileOps.loading}
+              files={fileManager.files}
+              loading={fileManager.loading}
               isAdmin={isAdmin}
-              onDownload={fileOps.downloadFile}
-              onDelete={handleDeleteRequest}
-              onViewHistory={handleViewHistory}
+              onDownload={fileManager.downloadFile}
+              onDelete={fileManager.handleDeleteRequest}
+              onViewHistory={fileManager.handleViewHistory}
               title="Project Files"
             />
           </div>
@@ -350,18 +319,18 @@ export default function ClientPortalProjectPage({ slug, companyName, projectSlug
         )}
 
         <FileHistoryModal
-          file={historyFile}
-          history={historyData}
-          isOpen={historyModalOpen}
-          onClose={() => setHistoryModalOpen(false)}
+          file={fileManager.historyFile}
+          history={fileManager.historyData}
+          isOpen={fileManager.historyModalOpen}
+          onClose={fileManager.closeHistoryModal}
         />
 
         <DeleteFileModal
-          file={deleteFile}
-          isOpen={deleteModalOpen}
-          isDeleting={isDeleting}
-          onClose={() => setDeleteModalOpen(false)}
-          onConfirm={handleDeleteConfirm}
+          file={fileManager.deleteFile}
+          isOpen={fileManager.deleteModalOpen}
+          isDeleting={fileManager.isDeleting}
+          onClose={fileManager.closeDeleteModal}
+          onConfirm={fileManager.handleDeleteConfirm}
         />
       </div>
     </>

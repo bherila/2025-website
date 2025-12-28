@@ -145,6 +145,7 @@ interface FileUploadButtonProps {
 
 export function FileUploadButton({ onUpload, disabled, className }: FileUploadButtonProps) {
   const [uploading, setUploading] = useState(false)
+  const [progress, setProgress] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleClick = () => {
@@ -156,10 +157,26 @@ export function FileUploadButton({ onUpload, disabled, className }: FileUploadBu
     if (!file) return
 
     setUploading(true)
+    setProgress(0)
+    
+    // Simulate progress for the upload (actual progress comes from S3 in the hook)
+    const progressInterval = setInterval(() => {
+      setProgress(prev => {
+        // Slowly increment progress but cap at 90% until actual completion
+        if (prev < 90) return prev + Math.random() * 15
+        return prev
+      })
+    }, 200)
+    
     try {
       await onUpload(file)
+      setProgress(100)
     } finally {
+      clearInterval(progressInterval)
+      // Brief delay to show 100% before hiding
+      await new Promise(resolve => setTimeout(resolve, 300))
       setUploading(false)
+      setProgress(0)
       // Reset the input so the same file can be selected again
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
@@ -178,14 +195,22 @@ export function FileUploadButton({ onUpload, disabled, className }: FileUploadBu
       <Button
         onClick={handleClick}
         disabled={disabled || uploading}
-        className={className}
+        className={`relative overflow-hidden ${className || ''}`}
       >
-        {uploading ? (
-          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-        ) : (
-          <Upload className="h-4 w-4 mr-2" />
+        {uploading && (
+          <div 
+            className="absolute inset-0 bg-primary/20 transition-all duration-200"
+            style={{ width: `${progress}%` }}
+          />
         )}
-        {uploading ? 'Uploading...' : 'Upload File'}
+        <span className="relative flex items-center">
+          {uploading ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Upload className="h-4 w-4 mr-2" />
+          )}
+          {uploading ? `Uploading... ${Math.round(progress)}%` : 'Upload File'}
+        </span>
       </Button>
     </>
   )
@@ -410,5 +435,72 @@ export function useFileOperations(options: UseFileOperationsOptions) {
     downloadFile,
     deleteFile,
     getFileHistory,
+  }
+}
+
+// Higher-level hook that includes modal state management for delete and history modals
+interface UseFileManagementOptions extends UseFileOperationsOptions {
+  autoFetch?: boolean
+}
+
+export function useFileManagement(options: UseFileManagementOptions) {
+  const { autoFetch = false, ...fileOpsOptions } = options
+  const fileOps = useFileOperations(fileOpsOptions)
+
+  // Modal state
+  const [historyModalOpen, setHistoryModalOpen] = useState(false)
+  const [historyFile, setHistoryFile] = useState<FileRecord | null>(null)
+  const [historyData, setHistoryData] = useState<DownloadHistoryEntry[]>([])
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [deleteFile, setDeleteFileState] = useState<FileRecord | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const handleViewHistory = async (file: FileRecord) => {
+    const history = await fileOps.getFileHistory(file)
+    setHistoryFile(file)
+    setHistoryData(history)
+    setHistoryModalOpen(true)
+  }
+
+  const handleDeleteRequest = (file: FileRecord) => {
+    setDeleteFileState(file)
+    setDeleteModalOpen(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteFile) return
+    setIsDeleting(true)
+    await fileOps.deleteFile(deleteFile)
+    setIsDeleting(false)
+    setDeleteModalOpen(false)
+    setDeleteFileState(null)
+  }
+
+  const closeHistoryModal = () => {
+    setHistoryModalOpen(false)
+  }
+
+  const closeDeleteModal = () => {
+    setDeleteModalOpen(false)
+  }
+
+  return {
+    // File operations
+    ...fileOps,
+
+    // History modal state and handlers
+    historyModalOpen,
+    historyFile,
+    historyData,
+    handleViewHistory,
+    closeHistoryModal,
+
+    // Delete modal state and handlers
+    deleteModalOpen,
+    deleteFile,
+    isDeleting,
+    handleDeleteRequest,
+    handleDeleteConfirm,
+    closeDeleteModal,
   }
 }

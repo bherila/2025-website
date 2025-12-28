@@ -7,8 +7,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { format } from 'date-fns'
-import { FileList, FileUploadButton, DeleteFileModal, useFileOperations } from '@/components/shared/FileManager'
-import type { FileRecord } from '@/types/files'
+import { FileList, FileUploadButton, DeleteFileModal, useFileManagement } from '@/components/shared/FileManager'
 
 interface User {
   id: number
@@ -58,17 +57,14 @@ export default function EditTaskModal({ open, onOpenChange, task, slug, projectS
   const [timeLoading, setTimeLoading] = useState(false)
   const [timeSuccess, setTimeSuccess] = useState(false)
 
-  // File management state
-  const fileOps = useFileOperations({
+  // File management
+  const fileManager = useFileManagement({
     listUrl: `/api/files/tasks/${task.id}`,
     uploadUrl: `/api/files/tasks/${task.id}`,
     uploadUrlEndpoint: `/api/files/tasks/${task.id}/upload-url`,
     downloadUrlPattern: (fileId) => `/api/files/tasks/${task.id}/${fileId}/download`,
     deleteUrlPattern: (fileId) => `/api/files/tasks/${task.id}/${fileId}`,
   })
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
-  const [deleteFileState, setDeleteFileState] = useState<FileRecord | null>(null)
-  const [isDeleting, setIsDeleting] = useState(false)
 
   useEffect(() => {
     setName(task.name)
@@ -77,7 +73,7 @@ export default function EditTaskModal({ open, onOpenChange, task, slug, projectS
     setAssigneeId(task.assignee?.id.toString() || '')
     setIsHighPriority(task.is_high_priority)
     setIsHiddenFromClients(task.is_hidden_from_clients)
-    fileOps.fetchFiles()
+    fileManager.fetchFiles()
   }, [task])
 
   const handleUpdateTask = async (e: React.FormEvent) => {
@@ -168,20 +164,6 @@ export default function EditTaskModal({ open, onOpenChange, task, slug, projectS
     } finally {
       setTimeLoading(false)
     }
-  }
-
-  const handleDeleteRequest = (file: FileRecord) => {
-    setDeleteFileState(file)
-    setDeleteModalOpen(true)
-  }
-
-  const handleDeleteConfirm = async () => {
-    if (!deleteFileState) return
-    setIsDeleting(true)
-    await fileOps.deleteFile(deleteFileState)
-    setIsDeleting(false)
-    setDeleteModalOpen(false)
-    setDeleteFileState(null)
   }
 
   return (
@@ -362,15 +344,15 @@ export default function EditTaskModal({ open, onOpenChange, task, slug, projectS
             <div className="space-y-4 mt-4">
               {isAdmin && (
                 <div className="flex justify-end">
-                  <FileUploadButton onUpload={fileOps.uploadFile} />
+                  <FileUploadButton onUpload={fileManager.uploadFile} />
                 </div>
               )}
               <FileList
-                files={fileOps.files}
-                loading={fileOps.loading}
+                files={fileManager.files}
+                loading={fileManager.loading}
                 isAdmin={isAdmin}
-                onDownload={fileOps.downloadFile}
-                onDelete={handleDeleteRequest}
+                onDownload={fileManager.downloadFile}
+                onDelete={fileManager.handleDeleteRequest}
                 title=""
               />
             </div>
@@ -379,11 +361,11 @@ export default function EditTaskModal({ open, onOpenChange, task, slug, projectS
       </DialogContent>
 
       <DeleteFileModal
-        file={deleteFileState}
-        isOpen={deleteModalOpen}
-        isDeleting={isDeleting}
-        onClose={() => setDeleteModalOpen(false)}
-        onConfirm={handleDeleteConfirm}
+        file={fileManager.deleteFile}
+        isOpen={fileManager.deleteModalOpen}
+        isDeleting={fileManager.isDeleting}
+        onClose={fileManager.closeDeleteModal}
+        onConfirm={fileManager.handleDeleteConfirm}
       />
     </Dialog>
   )

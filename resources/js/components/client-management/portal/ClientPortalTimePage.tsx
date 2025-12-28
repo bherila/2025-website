@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Plus, ArrowLeft, Clock, Trash2, ChevronDown, ChevronRight, TrendingUp, TrendingDown, AlertCircle, AlertTriangle } from 'lucide-react'
+import { Plus, ArrowLeft, Clock, Trash2, ChevronDown, ChevronRight, TrendingUp, TrendingDown, AlertCircle, AlertTriangle, Download } from 'lucide-react'
 import NewTimeEntryModal from './NewTimeEntryModal'
 import ClientPortalNav from './ClientPortalNav'
 import type { User, Project, Task } from '@/types/client-management/common'
@@ -149,6 +149,35 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
     setExpandedMonths(newExpanded)
   }
 
+  const downloadCSV = () => {
+    if (!data?.entries || data.entries.length === 0) return
+    
+    // Create CSV content
+    const headers = ['Date', 'Project', 'Task', 'Description', 'Hours', 'Billable', 'User']
+    const rows = data.entries.map(entry => [
+      entry.date_worked,
+      entry.project?.name || '',
+      entry.task?.name || '',
+      entry.name || '',
+      (entry.minutes_worked / 60).toFixed(2),
+      entry.is_billable ? 'Yes' : 'No',
+      entry.user?.name || ''
+    ])
+    
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    ].join('\n')
+    
+    // Create and download file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `${companyName.replace(/[^a-zA-Z0-9]/g, '_')}_time_entries.csv`
+    link.click()
+    URL.revokeObjectURL(link.href)
+  }
+
   // Group entries by month
   const entriesByMonth = data?.entries.reduce((acc, entry) => {
     const yearMonth = entry.date_worked.substring(0, 7) // YYYY-MM
@@ -196,12 +225,20 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
             <div>
               <h1 className="text-3xl font-bold">Time Tracking</h1>
             </div>
-            {isAdmin && (
-              <Button onClick={() => setNewEntryModalOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                New Time Record
-              </Button>
-            )}
+            <div className="flex gap-2">
+              {data?.entries && data.entries.length > 0 && (
+                <Button variant="outline" onClick={downloadCSV}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Download CSV
+                </Button>
+              )}
+              {isAdmin && (
+                <Button onClick={() => setNewEntryModalOpen(true)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  New Time Record
+                </Button>
+              )}
+            </div>
           </div>
         </div>
 

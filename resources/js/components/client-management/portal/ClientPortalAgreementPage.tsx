@@ -8,9 +8,8 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AlertCircle, ArrowLeft, FileText, Check } from 'lucide-react'
 import ClientPortalNav from './ClientPortalNav'
-import { FileList, FileUploadButton, FileHistoryModal, DeleteFileModal, useFileOperations } from '@/components/shared/FileManager'
+import { FileList, FileUploadButton, FileHistoryModal, DeleteFileModal, useFileManagement } from '@/components/shared/FileManager'
 import type { ClientAgreement } from '@/types/client-management/client-agreement'
-import type { FileRecord, DownloadHistoryEntry } from '@/types/files'
 
 interface ClientPortalAgreementPageProps {
   slug: string
@@ -29,8 +28,8 @@ export default function ClientPortalAgreementPage({ slug, companyName, agreement
   const [signName, setSignName] = useState('')
   const [signTitle, setSignTitle] = useState('')
 
-  // File management state
-  const fileOps = useFileOperations({
+  // File management
+  const fileManager = useFileManagement({
     listUrl: `/api/files/agreements/${agreementId}`,
     uploadUrl: `/api/files/agreements/${agreementId}`,
     uploadUrlEndpoint: `/api/files/agreements/${agreementId}/upload-url`,
@@ -38,16 +37,10 @@ export default function ClientPortalAgreementPage({ slug, companyName, agreement
     deleteUrlPattern: (fileId) => `/api/files/agreements/${agreementId}/${fileId}`,
     historyUrlPattern: (fileId) => `/api/files/agreements/${agreementId}/${fileId}/history`,
   })
-  const [historyModalOpen, setHistoryModalOpen] = useState(false)
-  const [historyFile, setHistoryFile] = useState<FileRecord | null>(null)
-  const [historyData, setHistoryData] = useState<DownloadHistoryEntry[]>([])
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
-  const [deleteFileState, setDeleteFileState] = useState<FileRecord | null>(null)
-  const [isDeleting, setIsDeleting] = useState(false)
 
   useEffect(() => {
     fetchAgreement()
-    fileOps.fetchFiles()
+    fileManager.fetchFiles()
   }, [agreementId])
 
   useEffect(() => {
@@ -109,20 +102,6 @@ export default function ClientPortalAgreementPage({ slug, companyName, agreement
     } finally {
       setSigning(false)
     }
-  }
-
-  const handleDeleteRequest = (file: FileRecord) => {
-    setDeleteFileState(file)
-    setDeleteModalOpen(true)
-  }
-
-  const handleDeleteConfirm = async () => {
-    if (!deleteFileState) return
-    setIsDeleting(true)
-    await fileOps.deleteFile(deleteFileState)
-    setIsDeleting(false)
-    setDeleteModalOpen(false)
-    setDeleteFileState(null)
   }
 
   if (loading) {
@@ -312,35 +291,35 @@ export default function ClientPortalAgreementPage({ slug, companyName, agreement
           <div className="flex items-center justify-between">
             <CardTitle>Agreement Files</CardTitle>
             {isAdmin && (
-              <FileUploadButton onUpload={fileOps.uploadFile} />
+              <FileUploadButton onUpload={fileManager.uploadFile} />
             )}
           </div>
         </CardHeader>
         <CardContent>
           <FileList
-            files={fileOps.files}
-            loading={fileOps.loading}
+            files={fileManager.files}
+            loading={fileManager.loading}
             isAdmin={isAdmin}
-            onDownload={fileOps.downloadFile}
-            onDelete={handleDeleteRequest}
+            onDownload={fileManager.downloadFile}
+            onDelete={fileManager.handleDeleteRequest}
             title=""
           />
         </CardContent>
       </Card>
 
       <FileHistoryModal
-        file={historyFile}
-        history={historyData}
-        isOpen={historyModalOpen}
-        onClose={() => setHistoryModalOpen(false)}
+        file={fileManager.historyFile}
+        history={fileManager.historyData}
+        isOpen={fileManager.historyModalOpen}
+        onClose={fileManager.closeHistoryModal}
       />
 
       <DeleteFileModal
-        file={deleteFileState}
-        isOpen={deleteModalOpen}
-        isDeleting={isDeleting}
-        onClose={() => setDeleteModalOpen(false)}
-        onConfirm={handleDeleteConfirm}
+        file={fileManager.deleteFile}
+        isOpen={fileManager.deleteModalOpen}
+        isDeleting={fileManager.isDeleting}
+        onClose={fileManager.closeDeleteModal}
+        onConfirm={fileManager.handleDeleteConfirm}
       />
       </div>
     </>

@@ -384,12 +384,106 @@ The Client Management system is designed to support future features:
 - ✅ **Projects**: Track projects per client company with slug-based URLs
 - ✅ **Task Management**: Associate tasks with projects, track priority and completion
 - ✅ **Time Tracking**: Log hours worked per project/task with billable flag
+- ✅ **File Attachments**: Upload files to client companies, projects, agreements, and tasks
 
 ### Planned Additions
 - **Expense Tracking**: Track project-related expenses
 - **Reporting**: Revenue per client, project profitability, time utilization, etc.
-- **File Attachments**: Upload files to projects and tasks
 - **Comments**: Add comments to tasks and time entries
+
+## File Storage System
+
+### Overview
+The file storage system enables uploading, downloading, and managing files associated with client management entities (companies, projects, agreements, tasks) and financial accounts. Files are stored in S3-compatible storage with signed URLs for secure access.
+
+### Database Schema
+
+#### `uploaded_files` table
+- `id`: Primary key (auto-increment)
+- `fileable_type`: Polymorphic type (e.g., 'client_companies', 'client_projects')
+- `fileable_id`: ID of the associated entity
+- `original_filename`: Original filename as uploaded
+- `stored_filename`: UUID-based filename with date prefix (e.g., "2025.01.15 report.pdf")
+- `mime_type`: File MIME type
+- `file_size`: Size in bytes
+- `storage_path`: Full S3 path to file
+- `uploaded_by_user_id`: Foreign key to users (set null on delete)
+- `created_at`, `updated_at`: Timestamps
+- `deleted_at`: Soft delete timestamp
+
+#### `file_download_history` table
+- `id`: Primary key
+- `uploaded_file_id`: Foreign key to uploaded_files (cascade on delete)
+- `downloaded_by_user_id`: Foreign key to users (set null on delete)
+- `downloaded_at`: Timestamp of download
+- `ip_address`: IP of requester (nullable)
+
+### Supported Entity Types
+Files can be attached to:
+- **Client Companies**: General company documents (`/api/client/portal/{slug}/files`)
+- **Projects**: Project-specific documents (`/api/client/portal/{slug}/projects/{projectSlug}/files`)
+- **Agreements**: Agreement documents (`/api/files/agreements/{id}`)
+- **Tasks**: Task attachments (`/api/files/tasks/{id}`)
+- **Financial Accounts**: Statement files (`/api/files/fin_accounts/{id}`)
+
+### Frontend Components
+
+#### Location: `resources/js/components/shared/FileManager.tsx`
+
+**Components:**
+- `FileList`: Displays list of files with download, history, and delete actions
+- `FileUploadButton`: Upload button with progress indicator
+- `FileHistoryModal`: Shows download history for a file
+- `DeleteFileModal`: Confirmation dialog for file deletion
+
+**Hooks:**
+- `useFileOperations(options)`: Low-level hook for file CRUD operations
+- `useFileManagement(options)`: Higher-level hook that includes modal state management
+
+**Usage Example:**
+```tsx
+const fileManager = useFileManagement({
+  listUrl: `/api/client/portal/${slug}/files`,
+  uploadUrl: `/api/client/portal/${slug}/files`,
+  uploadUrlEndpoint: `/api/client/portal/${slug}/files/upload-url`,
+  downloadUrlPattern: (fileId) => `/api/client/portal/${slug}/files/${fileId}/download`,
+  deleteUrlPattern: (fileId) => `/api/client/portal/${slug}/files/${fileId}`,
+  historyUrlPattern: (fileId) => `/api/client/portal/${slug}/files/${fileId}/history`,
+})
+
+// Use in JSX:
+<FileUploadButton onUpload={fileManager.uploadFile} />
+<FileList
+  files={fileManager.files}
+  loading={fileManager.loading}
+  isAdmin={isAdmin}
+  onDownload={fileManager.downloadFile}
+  onDelete={fileManager.handleDeleteRequest}
+  title="Files"
+/>
+<DeleteFileModal
+  file={fileManager.deleteFile}
+  isOpen={fileManager.deleteModalOpen}
+  isDeleting={fileManager.isDeleting}
+  onClose={fileManager.closeDeleteModal}
+  onConfirm={fileManager.handleDeleteConfirm}
+/>
+```
+
+### Upload Flow
+1. **Small files (≤50MB)**: Direct upload via POST to the upload URL
+2. **Large files (>50MB)**: 
+   - Request signed S3 URL via POST to upload-url endpoint
+   - Upload directly to S3 using PUT with the signed URL
+   - Backend creates the file record after S3 upload
+
+### API Endpoints (per entity type)
+- `GET /api/.../files` - List files for entity
+- `POST /api/.../files` - Upload file directly
+- `POST /api/.../files/upload-url` - Get signed URL for large file upload
+- `GET /api/.../files/{id}/download` - Get signed download URL
+- `GET /api/.../files/{id}/history` - Get download history
+- `DELETE /api/.../files/{id}` - Soft delete file
 
 ## Billing & Invoicing System
 
@@ -712,6 +806,17 @@ The `getTimeEntries()` API now returns enhanced data for the monthly grouping UI
 - [ ] Time entries associated with projects and tasks
 - [ ] Deleting a company cascades to projects, tasks, time entries
 - [ ] Deleting a project cascades to tasks, nullifies time entries
+
+### File Management Features
+- [ ] Files can be uploaded to client companies
+- [ ] Files can be uploaded to projects
+- [ ] Files can be uploaded to agreements
+- [ ] Files can be uploaded to tasks
+- [ ] Files can be downloaded with signed URL
+- [ ] Download history is tracked
+- [ ] Files can be soft-deleted (admin only)
+- [ ] Large files upload directly to S3 via signed URL
+- [ ] Upload progress indicator shows percentage
 
 ### Billing Features
 - [ ] Agreements can be created with all required fields

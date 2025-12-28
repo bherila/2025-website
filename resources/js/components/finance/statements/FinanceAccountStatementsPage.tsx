@@ -23,8 +23,7 @@ import { Button } from '@/components/ui/button'
 import { Trash2 as Delete, Paperclip, Pencil } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { FileList, FileUploadButton, DeleteFileModal, useFileOperations } from '@/components/shared/FileManager'
-import type { FileRecord } from '@/types/files'
+import { FileList, FileUploadButton, DeleteFileModal, useFileManagement } from '@/components/shared/FileManager'
 
 import { StatementDetailsModal, type StatementInfo, type StatementDetail } from '../StatementDetailsModal';
 import AllStatementsModal from './AllStatementsModal';
@@ -62,31 +61,14 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
   });
   const [isAllStatementsModalOpen, setIsAllStatementsModalOpen] = useState(false);
 
-  // File management state
-  const fileOps = useFileOperations({
+  // File management
+  const fileManager = useFileManagement({
     listUrl: `/api/files/fin_accounts/${id}`,
     uploadUrl: `/api/files/fin_accounts/${id}`,
     uploadUrlEndpoint: `/api/files/fin_accounts/${id}/upload-url`,
     downloadUrlPattern: (fileId) => `/api/files/fin_accounts/${id}/${fileId}/download`,
     deleteUrlPattern: (fileId) => `/api/files/fin_accounts/${id}/${fileId}`,
   })
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
-  const [deleteFileState, setDeleteFileState] = useState<FileRecord | null>(null)
-  const [isDeleting, setIsDeleting] = useState(false)
-
-  const handleDeleteRequest = (file: FileRecord) => {
-    setDeleteFileState(file)
-    setDeleteModalOpen(true)
-  }
-
-  const handleDeleteConfirm = async () => {
-    if (!deleteFileState) return
-    setIsDeleting(true)
-    await fileOps.deleteFile(deleteFileState)
-    setIsDeleting(false)
-    setDeleteModalOpen(false)
-    setDeleteFileState(null)
-  }
 
   useEffect(() => {
     const fetchData = async () => {
@@ -101,7 +83,7 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
       }
     }
     fetchData()
-    fileOps.fetchFiles()
+    fileManager.fetchFiles()
   }, [id, fetchKey])
 
   const statementHistory = statements?.map((statement, index) => {
@@ -408,27 +390,27 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>Statement Files</CardTitle>
-              <FileUploadButton onUpload={fileOps.uploadFile} />
+              <FileUploadButton onUpload={fileManager.uploadFile} />
             </div>
           </CardHeader>
           <CardContent>
             <FileList
-              files={fileOps.files}
-              loading={fileOps.loading}
+              files={fileManager.files}
+              loading={fileManager.loading}
               isAdmin={true}
-              onDownload={fileOps.downloadFile}
-              onDelete={handleDeleteRequest}
+              onDownload={fileManager.downloadFile}
+              onDelete={fileManager.handleDeleteRequest}
               title=""
             />
           </CardContent>
         </Card>
 
         <DeleteFileModal
-          file={deleteFileState}
-          isOpen={deleteModalOpen}
-          isDeleting={isDeleting}
-          onClose={() => setDeleteModalOpen(false)}
-          onConfirm={handleDeleteConfirm}
+          file={fileManager.deleteFile}
+          isOpen={fileManager.deleteModalOpen}
+          isDeleting={fileManager.isDeleting}
+          onClose={fileManager.closeDeleteModal}
+          onConfirm={fileManager.handleDeleteConfirm}
         />
       </div>
     </TooltipProvider>
