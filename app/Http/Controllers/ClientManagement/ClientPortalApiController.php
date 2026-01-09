@@ -232,7 +232,11 @@ class ClientPortalApiController extends Controller
         $totalUnbilledHours = 0;
         foreach ($monthlyData as $month) {
             if (! $month['has_agreement'] && isset($month['unbilled_hours'])) {
-                $totalUnbilledHours += $month['unbilled_hours'];
+                // If the hours have already been applied to the next active agreement,
+                // do not double-count them as still unbilled in the summary bar.
+                if (! ($month['will_be_billed_in_next_agreement'] ?? false)) {
+                    $totalUnbilledHours += $month['unbilled_hours'];
+                }
             }
         }
 
@@ -284,17 +288,51 @@ class ClientPortalApiController extends Controller
         $monthKeys = $entriesByMonth->keys()->sort()->values();
         $months = [];
 
+        $agreementStartMonth = $agreement->active_date?->format('Y-m');
+        $preAgreementBillableMinutes = 0;
+        $preAgreementMonths = [];
+        $firstAgreementMonthSeen = false;
+
         foreach ($monthKeys as $yearMonth) {
             $monthEntries = $entriesByMonth[$yearMonth];
             $billableMinutes = $monthEntries->where('is_billable', true)->sum('minutes_worked');
 
+            // If the month is before the agreement start, track it as "pending" and bill it
+            // against the first active month instead of treating it like an active retainer month.
+            if ($agreementStartMonth && $yearMonth < $agreementStartMonth) {
+                $preAgreementBillableMinutes += $billableMinutes;
+
+                $preAgreementMonths[] = [
+                    'year_month' => $yearMonth,
+                    'has_agreement' => false,
+                    'entries_count' => $monthEntries->count(),
+                    'hours_worked' => round($billableMinutes / 60, 2),
+                    'formatted_hours' => ClientTimeEntry::formatMinutesAsTime($billableMinutes),
+                    'unbilled_hours' => round($billableMinutes / 60, 2),
+                    'opening' => null,
+                    'closing' => null,
+                    // Indicates these hours have been carried forward into the first active month
+                    'will_be_billed_in_next_agreement' => true,
+                ];
+
+                continue;
+            }
+
+            $carryHours = 0.0;
+            if (! $firstAgreementMonthSeen && $preAgreementBillableMinutes > 0) {
+                $carryHours = $preAgreementBillableMinutes / 60;
+            }
+
             $months[] = [
                 'year_month' => $yearMonth,
                 'retainer_hours' => (float) $agreement->monthly_retainer_hours,
-                'hours_worked' => $billableMinutes / 60,
+                'hours_worked' => ($billableMinutes / 60) + $carryHours,
                 'entries_count' => $monthEntries->count(),
                 'billable_minutes' => $billableMinutes,
+                'pre_agreement_hours_applied' => $carryHours,
             ];
+
+            $firstAgreementMonthSeen = true;
         }
 
         // Calculate balances using RolloverCalculator
@@ -305,7 +343,7 @@ class ClientPortalApiController extends Controller
         );
 
         // Merge balance data with month info
-        $result = [];
+        $result = $preAgreementMonths;
         foreach ($balances as $index => $balance) {
             $monthData = $months[$index];
             $result[] = [
@@ -330,6 +368,7 @@ class ClientPortalApiController extends Controller
                     'hours_used_from_rollover' => $balance['closing']['hours_used_from_rollover'],
                     'remaining_rollover' => $balance['closing']['remaining_rollover'],
                 ],
+                'pre_agreement_hours_applied' => $monthData['pre_agreement_hours_applied'] ?? 0,
             ];
         }
 
