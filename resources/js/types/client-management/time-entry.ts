@@ -41,6 +41,8 @@ export interface MonthlyData {
   opening: MonthlyOpeningBalance | null
   closing: MonthlyClosingBalance | null
   unbilled_hours?: number // Billable hours with no active agreement (delayed billing)
+  pre_agreement_hours_applied?: number
+  will_be_billed_in_next_agreement?: boolean
 }
 
 export interface TimeEntriesResponse {

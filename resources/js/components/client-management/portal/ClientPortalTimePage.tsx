@@ -3,11 +3,12 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Plus, ArrowLeft, Clock, Trash2, ChevronDown, ChevronRight, TrendingUp, TrendingDown, AlertCircle, AlertTriangle, Download } from 'lucide-react'
+import { Plus, ArrowLeft, Clock, Trash2, ChevronDown, ChevronRight, TrendingUp, TrendingDown, AlertCircle, AlertTriangle, Download, HelpCircle } from 'lucide-react'
 import NewTimeEntryModal from './NewTimeEntryModal'
 import ClientPortalNav from './ClientPortalNav'
 import type { User, Project, Task } from '@/types/client-management/common'
 import type { TimeEntry, MonthlyOpeningBalance, MonthlyClosingBalance, MonthlyData, TimeEntriesResponse } from '@/types/client-management/time-entry'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 interface ClientPortalTimePageProps {
   slug: string
@@ -202,7 +203,8 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
 
   if (loading) {
     return (
-      <>
+      <TooltipProvider>
+        <>
         <ClientPortalNav slug={slug} companyName={companyName} currentPage="time" />
         <div className="container mx-auto px-8 max-w-6xl">
           <Skeleton className="h-10 w-64 mb-6" />
@@ -212,12 +214,14 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
             <Skeleton className="h-32 w-full" />
           </div>
         </div>
-      </>
+        </>
+      </TooltipProvider>
     )
   }
 
   return (
-    <>
+    <TooltipProvider>
+      <>
       <ClientPortalNav slug={slug} companyName={companyName} currentPage="time" />
       <div className="container mx-auto px-8 max-w-6xl">
         <div className="mb-6">
@@ -245,23 +249,31 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
         {/* Summary Bar */}
         <Card className="mb-6">
           <CardContent className="py-4">
-            <div className="flex gap-8 flex-wrap">
-              <div>
-                <span className="text-sm text-muted-foreground">Total Time:</span>
-                <span className="ml-2 font-semibold">{data?.total_time || '0:00'}</span>
-              </div>
-              <div>
-                <span className="text-sm text-muted-foreground">Billable:</span>
-                <span className="ml-2 font-semibold text-green-600">{data?.billable_time || '0:00'}</span>
-              </div>
-              {data?.total_unbilled_hours && data.total_unbilled_hours > 0 && (
-                <div className="flex items-center gap-2 px-3 py-1 bg-amber-50 dark:bg-amber-950 rounded-md border border-amber-200 dark:border-amber-800">
-                  <AlertTriangle className="h-4 w-4 text-amber-600" />
-                  <span className="text-sm text-amber-700 dark:text-amber-300">
-                    {formatHours(data.total_unbilled_hours)} pending billing
-                  </span>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="p-3 rounded-lg border bg-card">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Clock className="h-4 w-4" />
+                  Total Time
                 </div>
-              )}
+                <div className="text-2xl font-semibold mt-1">{data?.total_time || '0:00'}</div>
+              </div>
+              <div className="p-3 rounded-lg border bg-card">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Badge variant="outline" className="px-2 py-0.5">Billable</Badge>
+                  Hours
+                </div>
+                <div className="text-2xl font-semibold text-green-600 mt-1">{data?.billable_time || '0:00'}</div>
+              </div>
+              <div className="p-3 rounded-lg border bg-amber-50 dark:bg-amber-950">
+                <div className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-300">
+                  <AlertTriangle className="h-4 w-4" />
+                  Pending Billing
+                </div>
+                <div className="text-xl font-semibold text-amber-700 dark:text-amber-200 mt-1">
+                  {data?.total_unbilled_hours && data.total_unbilled_hours > 0 ? formatHours(data.total_unbilled_hours) : '0:00'}
+                </div>
+                <p className="text-xs text-amber-700/80 dark:text-amber-200/80 mt-1">Billable hours from periods without an active agreement.</p>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -286,6 +298,10 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
             const isExpanded = expandedMonths.has(month.year_month)
             const monthEntries = entriesByMonth[month.year_month] || []
             const entriesByDate = groupEntriesByDate(monthEntries)
+            const openingAvailable = month.has_agreement && month.opening ? month.opening.total_available : undefined
+            const remainingPool = month.has_agreement && month.closing
+              ? Math.max(0, (month.closing.unused_hours || 0) + (month.closing.remaining_rollover || 0))
+              : undefined
 
             return (
               <Card key={month.year_month}>
@@ -318,29 +334,90 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                         <div className="flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                          <span className="text-muted-foreground">Retainer:</span>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-muted-foreground inline-flex items-center gap-1">Retainer <HelpCircle className="h-3 w-3" /></span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Hours included in this month&apos;s retainer.</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                           <span className="font-medium">{formatHours(month.opening.retainer_hours)}</span>
                         </div>
                         {month.opening.rollover_hours > 0 && (
                           <div className="flex items-center gap-2">
                             <TrendingUp className="h-4 w-4 text-green-500" />
-                            <span className="text-muted-foreground">Rollover:</span>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="text-muted-foreground inline-flex items-center gap-1">Rollover <HelpCircle className="h-3 w-3" /></span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Unused hours from prior eligible months.</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                             <span className="font-medium text-green-600">+{formatHours(month.opening.rollover_hours)}</span>
                           </div>
                         )}
                         {month.opening.expired_hours > 0 && (
                           <div className="flex items-center gap-2">
                             <TrendingDown className="h-4 w-4 text-orange-500" />
-                            <span className="text-muted-foreground">Expired:</span>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="text-muted-foreground inline-flex items-center gap-1">Expired <HelpCircle className="h-3 w-3" /></span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Rollover hours that fell outside the window.</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                             <span className="font-medium text-orange-600">-{formatHours(month.opening.expired_hours)}</span>
                           </div>
                         )}
                         <div className="flex items-center gap-2">
                           <Clock className="h-4 w-4 text-primary" />
-                          <span className="text-muted-foreground">Available:</span>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-muted-foreground inline-flex items-center gap-1">Available <HelpCircle className="h-3 w-3" /></span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Retainer plus rollover at month start.</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                           <span className="font-medium">{formatHours(month.opening.total_available)}</span>
                         </div>
                       </div>
+                      {month.pre_agreement_hours_applied && month.pre_agreement_hours_applied > 0 && (
+                        <div className="mt-3 rounded-lg border bg-amber-50 dark:bg-amber-950 px-3 py-2 text-sm flex items-start gap-2">
+                          <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5" />
+                          <div>
+                            <span className="font-medium text-amber-800 dark:text-amber-200">{formatHours(month.pre_agreement_hours_applied)} carried in</span>
+                            <p className="text-amber-700/90 dark:text-amber-200/80">Billable hours from months before the agreement start are applied here.</p>
+                          </div>
+                        </div>
+                      )}
+                      {typeof remainingPool === 'number' && typeof openingAvailable === 'number' && (
+                        <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-muted-foreground">
+                          <div className="p-3 rounded-lg border bg-muted/30">
+                            <div className="flex items-center gap-1 text-xs font-medium">Available (start)</div>
+                            <div className="font-semibold text-base">{formatHours(openingAvailable)}</div>
+                          </div>
+                          <div className="p-3 rounded-lg border bg-muted/30">
+                            <div className="flex items-center gap-1 text-xs font-medium">Worked this month</div>
+                            <div className="font-semibold text-base">{formatHours(month.hours_worked)}</div>
+                          </div>
+                          <div className="p-3 rounded-lg border bg-muted/30">
+                            <div className="flex items-center gap-1 text-xs font-medium">Remaining (after work)</div>
+                            <div className="font-semibold text-base">{formatHours(Math.max(0, remainingPool))}</div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </CardHeader>
@@ -443,6 +520,11 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
                             </div>
                           )}
                         </div>
+                        {month.pre_agreement_hours_applied && month.pre_agreement_hours_applied > 0 && (
+                          <div className="mt-3 text-xs text-muted-foreground">
+                            Includes {formatHours(month.pre_agreement_hours_applied)} billed from pre-agreement work.
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -485,6 +567,7 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
         entry={editingEntry}
       />
       </div>
-    </>
+      </>
+    </TooltipProvider>
   )
 }
