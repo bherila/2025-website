@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import { EditBillModal } from './EditBillModal';
 import { ImportBillModal } from './ImportBillModal';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
@@ -328,8 +329,11 @@ export function UtilityBillListPage({ accountId, accountName, accountType }: Uti
                     )}
                     <TableCell>
                       <Badge 
-                        variant={bill.status === 'Paid' ? 'default' : 'secondary'}
-                        className="cursor-pointer hover:opacity-80 transition-opacity"
+                        variant={bill.status === 'Paid' ? 'outline' : 'destructive'}
+                        className={cn(
+                          "cursor-pointer hover:opacity-80 transition-opacity",
+                          bill.status === 'Paid' && "bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400 dark:border-green-900"
+                        )}
                         onClick={() => handleToggleStatus(bill)}
                       >
                         {togglingStatus === bill.id ? '...' : bill.status}

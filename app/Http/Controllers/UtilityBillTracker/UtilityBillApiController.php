@@ -176,7 +176,10 @@ class UtilityBillApiController extends Controller
             'status' => $bill->status === 'Paid' ? 'Unpaid' : 'Paid',
         ]);
 
-        return response()->json($bill);
+        return response()->json([
+            'success' => true,
+            'bill' => $bill->fresh()->load('linkedTransaction:t_id,t_description,t_amt,t_date'),
+        ]);
     }
 
     /**
