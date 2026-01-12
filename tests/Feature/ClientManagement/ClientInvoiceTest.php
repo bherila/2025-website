@@ -320,12 +320,13 @@ class ClientInvoiceTest extends TestCase
         );
         $invoice->void();
 
-        $this->actingAs($this->admin)
+        $response = $this->actingAs($this->admin)
             ->postJson("/api/client/mgmt/companies/{$this->company->id}/invoices/{$invoice->client_invoice_id}/unvoid", [
                 'status' => 'issued',
-            ])
-            ->assertStatus(200)
-            ->assertJson(['message' => 'Invoice status reverted successfully']);
+            ]);
+
+        $this->assertEquals(200, $response->status(), $response->getContent());
+        $this->assertJsonStringEqualsJsonString(json_encode(['message' => 'Invoice status reverted successfully']), $response->getContent());
 
         $this->assertEquals('issued', $invoice->fresh()->status);
     }
