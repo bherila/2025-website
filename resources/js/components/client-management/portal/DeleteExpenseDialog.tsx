@@ -14,18 +14,35 @@ interface DeleteExpenseDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   expense: ClientExpense | null
-  onConfirm: () => void
+  companyId: number
+  onSuccess: () => void
 }
 
 export default function DeleteExpenseDialog({
   open,
   onOpenChange,
   expense,
-  onConfirm,
+  companyId,
+  onSuccess,
 }: DeleteExpenseDialogProps) {
-  const handleConfirm = () => {
-    onConfirm()
-    onOpenChange(false)
+  const handleConfirm = async () => {
+    if (!expense) return
+
+    try {
+      const response = await fetch(`/api/client/mgmt/companies/${companyId}/expenses/${expense.id}`, {
+        method: 'DELETE',
+        headers: {
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+        }
+      })
+
+      if (response.ok) {
+        onSuccess()
+        onOpenChange(false)
+      }
+    } catch (error) {
+      console.error('Error deleting expense:', error)
+    }
   }
 
   return (

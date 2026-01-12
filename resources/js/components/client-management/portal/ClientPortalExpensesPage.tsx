@@ -93,23 +93,6 @@ export default function ClientPortalExpensesPage({ slug, companyName, companyId 
     }
   }
 
-  const handleDelete = async (expense: ClientExpense) => {
-    try {
-      const response = await fetch(`/api/client/mgmt/companies/${companyId}/expenses/${expense.id}`, {
-        method: 'DELETE',
-        headers: {
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
-        }
-      })
-
-      if (response.ok) {
-        fetchExpenses()
-      }
-    } catch (error) {
-      console.error('Error deleting expense:', error)
-    }
-  }
-
   const handleMarkReimbursed = async (expense: ClientExpense) => {
     try {
       const response = await fetch(`/api/client/mgmt/companies/${companyId}/expenses/${expense.id}/mark-reimbursed`, {
@@ -365,7 +348,8 @@ export default function ClientPortalExpensesPage({ slug, companyName, companyId 
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
         expense={expenseToDelete}
-        onConfirm={() => expenseToDelete && handleDelete(expenseToDelete)}
+        companyId={companyId}
+        onSuccess={fetchExpenses}
       />
     </>
   )
