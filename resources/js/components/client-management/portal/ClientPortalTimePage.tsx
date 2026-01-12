@@ -248,8 +248,8 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
         </div>
 
         {/* Summary Bar */}
-        <Card className="mb-6">
-          <CardContent className="py-4">
+        <div className="mb-6">
+          <div className="py-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="p-3 rounded-lg border bg-card">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -276,8 +276,8 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
                 <p className="text-xs text-info-foreground/90 mt-1">Billable hours from periods without an active agreement.</p>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
       {(!data?.monthly_data || data.monthly_data.length === 0) ? (
         <Card>
