@@ -434,8 +434,8 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
                             {entries.map(entry => (
                               <div 
                                 key={entry.id}
-                                className={`flex items-center justify-between p-3 rounded-lg border bg-card ${isAdmin ? 'cursor-pointer hover:bg-muted/30 transition-colors' : ''}`}
-                                onClick={() => isAdmin && openEditModal(entry)}
+                                className={`flex items-center justify-between p-3 rounded-lg border bg-card ${isAdmin && !entry.is_invoiced ? 'cursor-pointer hover:bg-muted/30 transition-colors' : ''}`}
+                                onClick={() => isAdmin && !entry.is_invoiced && openEditModal(entry)}
                               >
                                 <div className="flex items-center gap-4">
                                   <span className="font-mono font-medium w-12">{entry.formatted_time}</span>
@@ -467,7 +467,7 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
                                       {entry.is_billable ? 'BILLABLE' : 'NON-BILLABLE'}
                                     </Badge>
                                   )}
-                                  {isAdmin && (
+                                  {isAdmin && !entry.is_invoiced && (
                                     <Button 
                                       variant="ghost" 
                                       size="sm"

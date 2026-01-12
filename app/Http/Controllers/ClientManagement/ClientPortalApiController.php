@@ -436,6 +436,9 @@ class ClientPortalApiController extends Controller
 
         if ($isUpdate) {
             $entry = ClientTimeEntry::where('client_company_id', $company->id)->findOrFail($entryId);
+            if ($entry->isInvoiced()) {
+                return response()->json(['error' => 'Cannot update invoiced time entries.'], 403);
+            }
             $entry->update($validated);
         } else {
             $entry = ClientTimeEntry::create([
@@ -470,6 +473,9 @@ class ClientPortalApiController extends Controller
         Gate::authorize('ClientCompanyMember', $company->id);
 
         $entry = ClientTimeEntry::where('client_company_id', $company->id)->findOrFail($entryId);
+        if ($entry->isInvoiced()) {
+            return response()->json(['error' => 'Cannot delete invoiced time entries.'], 403);
+        }
         $entry->delete();
 
         return response()->json(['success' => true]);
