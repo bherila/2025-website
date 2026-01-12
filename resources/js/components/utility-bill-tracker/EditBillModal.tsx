@@ -43,13 +43,19 @@ export function EditBillModal({
 
   const isElectricity = accountType === 'Electricity';
 
+  const formatDateForInput = (dateString: string | null | undefined) => {
+    if (!dateString) return '';
+    // API might return "YYYY-MM-DD HH:MM:SS" or ISO string
+    return dateString.split(/[ T]/)[0];
+  };
+
   useEffect(() => {
     if (open) {
       if (bill && !isNew) {
         setFormData({
-          bill_start_date: bill.bill_start_date,
-          bill_end_date: bill.bill_end_date,
-          due_date: bill.due_date,
+          bill_start_date: formatDateForInput(bill.bill_start_date),
+          bill_end_date: formatDateForInput(bill.bill_end_date),
+          due_date: formatDateForInput(bill.due_date),
           total_cost: bill.total_cost,
           status: bill.status,
           notes: bill.notes || '',

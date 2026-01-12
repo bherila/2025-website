@@ -42,7 +42,7 @@ interface EditTaskModalProps {
 export default function EditTaskModal({ open, onOpenChange, task, slug, projectSlug, users, onSuccess, isAdmin }: EditTaskModalProps) {
   const [name, setName] = useState(task.name)
   const [description, setDescription] = useState(task.description || '')
-  const [dueDate, setDueDate] = useState(task.due_date ? task.due_date.split('T')[0] : '')
+  const [dueDate, setDueDate] = useState(task.due_date ? task.due_date.split(/[ T]/)[0] : '')
   const [assigneeId, setAssigneeId] = useState(task.assignee?.id.toString() || '')
   const [isHighPriority, setIsHighPriority] = useState(task.is_high_priority)
   const [isHiddenFromClients, setIsHiddenFromClients] = useState(task.is_hidden_from_clients)
@@ -68,7 +68,7 @@ export default function EditTaskModal({ open, onOpenChange, task, slug, projectS
   useEffect(() => {
     setName(task.name)
     setDescription(task.description || '')
-    setDueDate(task.due_date ? task.due_date.split('T')[0] : '')
+    setDueDate(task.due_date ? task.due_date.split(/[ T]/)[0] : '')
     setAssigneeId(task.assignee?.id.toString() || '')
     setIsHighPriority(task.is_high_priority)
     setIsHiddenFromClients(task.is_hidden_from_clients)

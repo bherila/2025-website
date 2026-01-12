@@ -48,7 +48,7 @@ export default function ClientAgreementShowPage({ agreementId, companyId, compan
         const data = await response.json()
         setAgreement(data)
         setFormData({
-          active_date: data.active_date?.split('T')[0] || '',
+          active_date: data.active_date?.split(/[ T]/)[0] || '',
           agreement_text: data.agreement_text || '',
           agreement_link: data.agreement_link || '',
           monthly_retainer_hours: data.monthly_retainer_hours || '',

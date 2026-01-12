@@ -73,7 +73,7 @@ export default function NewExpenseModal({
       setFormData({
         description: expense.description,
         amount: expense.amount.toString(),
-        expense_date: expense.expense_date.split('T')[0] || '',
+        expense_date: expense.expense_date.split(/[ T]/)[0] || '',
         project_id: expense.project_id,
         fin_line_item_id: expense.fin_line_item_id,
         is_reimbursable: expense.is_reimbursable,
