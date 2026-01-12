@@ -46,6 +46,7 @@ export default function ClientPortalIndexPage({ slug, companyName, isAdmin = fal
     Promise.all([
       fetchProjects(),
       fetchAgreements(),
+      fetchTimeEntries(),
     ]).finally(() => {
       setLoading(false)
     })
@@ -61,6 +62,15 @@ export default function ClientPortalIndexPage({ slug, companyName, isAdmin = fal
       }
     } catch (error) {
       console.error('Error fetching projects:', error)
+    }
+  }
+
+  const fetchTimeEntries = async () => {
+    try {
+      // Preload time entries into cache (data not directly used here)
+      await fetch(`/api/client/portal/${slug}/time-entries`)
+    } catch (error) {
+      console.error('Error preloading time entries:', error)
     }
   }
 

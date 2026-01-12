@@ -10,6 +10,7 @@ use App\Services\ClientManagement\ClientInvoicingService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 
 class ClientInvoiceApiController extends Controller
 {
@@ -226,9 +227,16 @@ class ClientInvoiceApiController extends Controller
     /**
      * Void an invoice.
      */
-    public function void(ClientCompany $company, ClientInvoice $invoice)
+    public function void(ClientCompany $company, $invoiceId)
     {
         Gate::authorize('Admin');
+
+        $invoice = ClientInvoice::where('client_invoice_id', $invoiceId)->firstOrFail();
+
+        // Check if there are any payments on the invoice first (return 400 if present)
+        if (ClientInvoicePayment::where('client_invoice_id', $invoice->client_invoice_id)->exists()) {
+            return response()->json(['error' => 'Invoices with payments cannot be voided. Please delete all payments first.'], 400);
+        }
 
         if ($invoice->client_company_id !== $company->id) {
             return response()->json(['error' => 'Invoice does not belong to this company'], 404);
@@ -236,11 +244,6 @@ class ClientInvoiceApiController extends Controller
 
         if ($invoice->status === 'paid') {
             return response()->json(['error' => 'Paid invoices cannot be voided'], 400);
-        }
-
-        // Check if there are any payments on the invoice
-        if ($invoice->payments()->count() > 0) {
-            return response()->json(['error' => 'Invoices with payments cannot be voided. Please delete all payments first.'], 400);
         }
 
         // Unlink time entries from this invoice's lines
@@ -256,9 +259,11 @@ class ClientInvoiceApiController extends Controller
     /**
      * Revert a voided invoice to issued or draft status.
      */
-    public function unVoid(Request $request, ClientCompany $company, ClientInvoice $invoice)
+    public function unVoid(Request $request, ClientCompany $company, $invoiceId)
     {
         Gate::authorize('Admin');
+
+        $invoice = ClientInvoice::where('client_invoice_id', $invoiceId)->firstOrFail();
 
         if ($invoice->client_company_id !== $company->id) {
             return response()->json(['error' => 'Invoice does not belong to this company'], 404);

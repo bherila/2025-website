@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-import { Home, FolderOpen, Clock, FileText, ChevronDown } from 'lucide-react'
+import { Home, FolderOpen, Clock, FileText, ChevronDown, Receipt } from 'lucide-react'
 
 interface Project {
   id: number
@@ -20,7 +20,7 @@ interface Project {
 interface ClientPortalNavProps {
   slug: string
   companyName: string
-  currentPage: 'home' | 'project' | 'time' | 'invoices' | 'invoice' | 'agreement'
+  currentPage: 'home' | 'project' | 'time' | 'invoices' | 'invoice' | 'agreement' | 'expenses'
   currentProjectSlug?: string
   projects?: Project[]
 }
@@ -92,7 +92,31 @@ export default function ClientPortalNav({
                 </a>
               </Button>
 
-              {/* Projects dropdown */}
+              {/* Time Records */}
+              <Button 
+                variant={currentPage === 'time' ? 'secondary' : 'ghost'} 
+                size="sm"
+                asChild
+              >
+                <a href={`/client/portal/${slug}/time`}>
+                  <Clock className="h-4 w-4 mr-1" />
+                  Time Records
+                </a>
+              </Button>
+
+              {/* Invoices */}
+              <Button 
+                variant={currentPage === 'invoices' || currentPage === 'invoice' ? 'secondary' : 'ghost'} 
+                size="sm"
+                asChild
+              >
+                <a href={`/client/portal/${slug}/invoices`}>
+                  <FileText className="h-4 w-4 mr-1" />
+                  Invoices
+                </a>
+              </Button>
+
+              {/* Tasks dropdown */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button 
@@ -101,7 +125,7 @@ export default function ClientPortalNav({
                     className="gap-1"
                   >
                     <FolderOpen className="h-4 w-4" />
-                    {currentProject ? currentProject.name : 'Projects'}
+                    {currentProject ? currentProject.name : 'Tasks'}
                     <ChevronDown className="h-3 w-3" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -126,32 +150,19 @@ export default function ClientPortalNav({
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
+
+              {/* Expenses */}
+              <Button 
+                variant={currentPage === 'expenses' ? 'secondary' : 'ghost'} 
+                size="sm"
+                asChild
+              >
+                <a href={`/client/portal/${slug}/expenses`}>
+                  <Receipt className="h-4 w-4 mr-1" />
+                  Expenses
+                </a>
+              </Button>
             </div>
-          </div>
-
-          {/* Right side: Time Records and Invoices */}
-          <div className="flex items-center gap-1">
-            <Button 
-              variant={currentPage === 'time' ? 'secondary' : 'ghost'} 
-              size="sm"
-              asChild
-            >
-              <a href={`/client/portal/${slug}/time`}>
-                <Clock className="h-4 w-4 mr-1" />
-                Time Records
-              </a>
-            </Button>
-
-            <Button 
-              variant={currentPage === 'invoices' || currentPage === 'invoice' ? 'secondary' : 'ghost'} 
-              size="sm"
-              asChild
-            >
-              <a href={`/client/portal/${slug}/invoices`}>
-                <FileText className="h-4 w-4 mr-1" />
-                Invoices
-              </a>
-            </Button>
           </div>
         </div>
       </div>

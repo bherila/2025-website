@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
 
 class UserApiController extends Controller
@@ -12,12 +13,20 @@ class UserApiController extends Controller
     public function getUser()
     {
         $user = Auth::user();
-        $userArray = $user->toArray();
-        if ($userArray['gemini_api_key']) {
-            $userArray['gemini_api_key'] = substr($userArray['gemini_api_key'], -4);
+        if (! $user) {
+            return response()->json(['error' => 'Unauthenticated'], 401);
         }
 
-        return response()->json($userArray);
+        $userId = $user->id;
+
+        return Cache::remember("user_data_{$userId}", 60, function () use ($user) {
+            $userArray = $user->toArray();
+            if (! empty($userArray['gemini_api_key'])) {
+                $userArray['gemini_api_key'] = substr($userArray['gemini_api_key'], -4);
+            }
+
+            return $userArray;
+        });
     }
 
     public function updateEmail(Request $request)
@@ -26,7 +35,9 @@ class UserApiController extends Controller
             'email' => ['required', 'email', Rule::unique('users')->ignore(Auth::id())],
         ]);
 
-        Auth::user()->update(['email' => $request->email]);
+        $user = Auth::user();
+        $user->update(['email' => $request->email]);
+        Cache::forget("user_data_{$user->id}");
 
         return response()->json(['message' => 'Email updated successfully']);
     }
@@ -38,11 +49,13 @@ class UserApiController extends Controller
             'password' => 'required|min:8|confirmed',
         ]);
 
-        if (! Hash::check($request->current_password, Auth::user()->password)) {
+        $user = Auth::user();
+        if (! Hash::check($request->current_password, $user->password)) {
             return response()->json(['message' => 'Current password is incorrect'], 422);
         }
 
-        Auth::user()->update(['password' => Hash::make($request->password)]);
+        $user->update(['password' => Hash::make($request->password)]);
+        Cache::forget("user_data_{$user->id}");
 
         return response()->json(['message' => 'Password updated successfully']);
     }
@@ -53,7 +66,9 @@ class UserApiController extends Controller
             'gemini_api_key' => 'nullable|string',
         ]);
 
-        Auth::user()->update(['gemini_api_key' => $request->gemini_api_key]);
+        $user = Auth::user();
+        $user->update(['gemini_api_key' => $request->gemini_api_key]);
+        Cache::forget("user_data_{$user->id}");
 
         return response()->json(['message' => $request->gemini_api_key ? 'API key updated successfully' : 'API key cleared successfully']);
     }

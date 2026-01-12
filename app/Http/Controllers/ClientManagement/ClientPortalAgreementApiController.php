@@ -8,6 +8,7 @@ use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientInvoice;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Cache;
 
 class ClientPortalAgreementApiController extends Controller
 {
@@ -19,12 +20,12 @@ class ClientPortalAgreementApiController extends Controller
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
         Gate::authorize('ClientCompanyMember', $company->id);
 
-        $agreements = $company->agreements()
-            ->where('is_visible_to_client', true)
-            ->orderBy('active_date', 'desc')
-            ->get();
-
-        return response()->json($agreements);
+        return Cache::remember("client_portal_agreements_{$slug}", 60, function () use ($company) {
+            return $company->agreements()
+                ->where('is_visible_to_client', true)
+                ->orderBy('active_date', 'desc')
+                ->get();
+        });
     }
 
     /**
@@ -35,13 +36,13 @@ class ClientPortalAgreementApiController extends Controller
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
         Gate::authorize('ClientCompanyMember', $company->id);
 
-        $agreement = ClientAgreement::where('id', $agreementId)
-            ->where('client_company_id', $company->id)
-            ->where('is_visible_to_client', true)
-            ->with('signedByUser')
-            ->firstOrFail();
-
-        return response()->json($agreement);
+        return Cache::remember("client_portal_agreement_{$slug}_{$agreementId}", 60, function () use ($company, $agreementId) {
+            return ClientAgreement::where('id', $agreementId)
+                ->where('client_company_id', $company->id)
+                ->where('is_visible_to_client', true)
+                ->with('signedByUser')
+                ->firstOrFail();
+        });
     }
 
     /**
@@ -70,6 +71,12 @@ class ClientPortalAgreementApiController extends Controller
 
         $agreement->sign(auth()->user(), $validated['name'], $validated['title']);
 
+        // Invalidate caches
+        Cache::forget("client_portal_agreement_{$slug}_{$agreementId}");
+        Cache::forget("client_portal_agreements_{$slug}");
+        Cache::forget("client_admin_agreement_{$agreementId}");
+        Cache::forget("client_admin_agreements_{$company->id}");
+
         return response()->json([
             'success' => true,
             'agreement' => $agreement->fresh('signedByUser'),
@@ -84,18 +91,18 @@ class ClientPortalAgreementApiController extends Controller
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
         Gate::authorize('ClientCompanyMember', $company->id);
 
-        $query = $company->invoices();
+        return Cache::remember("client_portal_invoices_{$slug}", 60, function () use ($company) {
+            $query = $company->invoices();
 
-        // Admins can see all invoices, but clients can only see issued or paid ones.
-        if (! auth()->user()->hasRole('admin')) {
-            $query->whereIn('status', ['issued', 'paid']);
-        }
+            // Admins can see all invoices, but clients can only see issued or paid ones.
+            if (! auth()->user()->hasRole('admin')) {
+                $query->whereIn('status', ['issued', 'paid']);
+            }
 
-        $invoices = $query->orderBy('issue_date', 'desc')
-            ->orderBy('period_start', 'desc')
-            ->get();
-
-        return response()->json($invoices);
+            return $query->orderBy('issue_date', 'desc')
+                ->orderBy('period_start', 'desc')
+                ->get();
+        });
     }
 
     /**
@@ -104,19 +111,19 @@ class ClientPortalAgreementApiController extends Controller
     public function getInvoice($slug, $invoiceId)
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
-        Gate::authorize('ClientCompanyMember', 'view', $company);
+        Gate::authorize('ClientCompanyMember', $company->id);
 
-        $query = ClientInvoice::where('client_invoice_id', $invoiceId)
-            ->where('client_company_id', $company->id)
-            ->with(['lineItems', 'payments']);
+        return Cache::remember("client_portal_invoice_{$slug}_{$invoiceId}", 60, function () use ($company, $invoiceId) {
+            $query = ClientInvoice::where('client_invoice_id', $invoiceId)
+                ->where('client_company_id', $company->id)
+                ->with(['lineItems', 'payments']);
 
-        // Admins can see all invoices, but clients can only see issued or paid ones.
-        if (! auth()->user()->hasRole('admin')) {
-            $query->whereIn('status', ['issued', 'paid']);
-        }
+            // Admins can see all invoices, but clients can only see issued or paid ones.
+            if (! auth()->user()->hasRole('admin')) {
+                $query->whereIn('status', ['issued', 'paid']);
+            }
 
-        $invoice = $query->firstOrFail();
-
-        return response()->json($invoice);
+            return $query->firstOrFail();
+        });
     }
 }

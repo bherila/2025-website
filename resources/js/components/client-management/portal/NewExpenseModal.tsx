@@ -56,7 +56,7 @@ export default function NewExpenseModal({
   const [formData, setFormData] = useState<ClientExpenseFormData>({
     description: '',
     amount: '',
-    expense_date: new Date().toISOString().split('T')[0],
+    expense_date: new Date().toISOString().split('T')[0] || '',
     project_id: null,
     fin_line_item_id: null,
     is_reimbursable: false,
@@ -73,7 +73,7 @@ export default function NewExpenseModal({
       setFormData({
         description: expense.description,
         amount: expense.amount.toString(),
-        expense_date: expense.expense_date.split('T')[0],
+        expense_date: expense.expense_date.split('T')[0] || '',
         project_id: expense.project_id,
         fin_line_item_id: expense.fin_line_item_id,
         is_reimbursable: expense.is_reimbursable,
@@ -86,7 +86,7 @@ export default function NewExpenseModal({
       setFormData({
         description: '',
         amount: '',
-        expense_date: new Date().toISOString().split('T')[0],
+        expense_date: new Date().toISOString().split('T')[0] || '',
         project_id: null,
         fin_line_item_id: null,
         is_reimbursable: false,
@@ -249,7 +249,7 @@ export default function NewExpenseModal({
           <div className="flex items-center space-x-2">
             <Switch
               id="is_reimbursable"
-              checked={formData.is_reimbursable}
+              checked={formData.is_reimbursable || false}
               onCheckedChange={(checked) => setFormData({ ...formData, is_reimbursable: checked })}
             />
             <Label htmlFor="is_reimbursable">Reimbursable expense</Label>
@@ -259,7 +259,7 @@ export default function NewExpenseModal({
             <div className="flex items-center space-x-2 ml-6">
               <Switch
                 id="is_reimbursed"
-                checked={formData.is_reimbursed}
+                checked={formData.is_reimbursed || false}
                 onCheckedChange={(checked) => setFormData({ ...formData, is_reimbursed: checked })}
               />
               <Label htmlFor="is_reimbursed">Already reimbursed</Label>

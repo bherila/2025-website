@@ -12,6 +12,7 @@ use App\Services\ClientManagement\RolloverCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Cache;
 
 class ClientPortalApiController extends Controller
 {
@@ -21,15 +22,16 @@ class ClientPortalApiController extends Controller
     public function getCompany($slug)
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
-
         Gate::authorize('ClientCompanyMember', $company->id);
 
-        $companyData = $company->toArray();
-        $companyUsers = $company->users;
-        $adminUsers = User::where('user_role', 'Admin')->get();
-        $companyData['users'] = $companyUsers->merge($adminUsers)->unique('id')->values();
+        return Cache::remember("client_portal_company_{$slug}", 60, function () use ($company) {
+            $companyData = $company->toArray();
+            $companyUsers = $company->users;
+            $adminUsers = User::where('user_role', 'Admin')->get();
+            $companyData['users'] = $companyUsers->merge($adminUsers)->unique('id')->values();
 
-        return response()->json($companyData);
+            return $companyData;
+        });
     }
 
     /**
@@ -38,15 +40,14 @@ class ClientPortalApiController extends Controller
     public function getProjects($slug)
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
-
         Gate::authorize('ClientCompanyMember', $company->id);
 
-        $projects = ClientProject::where('client_company_id', $company->id)
-            ->withCount(['tasks', 'timeEntries'])
-            ->orderBy('name')
-            ->get();
-
-        return response()->json($projects);
+        return Cache::remember("client_portal_projects_{$slug}", 60, function () use ($company) {
+            return ClientProject::where('client_company_id', $company->id)
+                ->withCount(['tasks', 'timeEntries'])
+                ->orderBy('name')
+                ->get();
+        });
     }
 
     /**
@@ -81,6 +82,8 @@ class ClientPortalApiController extends Controller
             'creator_user_id' => Auth::id(),
         ]);
 
+        Cache::forget("client_portal_projects_{$slug}");
+
         return response()->json($project, 201);
     }
 
@@ -90,21 +93,20 @@ class ClientPortalApiController extends Controller
     public function getTasks($slug, $projectSlug)
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
-
         Gate::authorize('ClientCompanyMember', $company->id);
 
         $project = ClientProject::where('slug', $projectSlug)
             ->where('client_company_id', $company->id)
             ->firstOrFail();
 
-        $tasks = ClientTask::where('project_id', $project->id)
-            ->with(['assignee:id,name,email', 'creator:id,name'])
-            ->orderByRaw('completed_at IS NOT NULL')
-            ->orderBy('is_high_priority', 'desc')
-            ->orderBy('created_at', 'desc')
-            ->get();
-
-        return response()->json($tasks);
+        return Cache::remember("client_portal_tasks_{$slug}_{$projectSlug}", 60, function () use ($project) {
+            return ClientTask::where('project_id', $project->id)
+                ->with(['assignee:id,name,email', 'creator:id,name'])
+                ->orderByRaw('completed_at IS NOT NULL')
+                ->orderBy('is_high_priority', 'desc')
+                ->orderBy('created_at', 'desc')
+                ->get();
+        });
     }
 
     /**
@@ -139,6 +141,9 @@ class ClientPortalApiController extends Controller
             'is_high_priority' => $validated['is_high_priority'] ?? false,
             'is_hidden_from_clients' => $validated['is_hidden_from_clients'] ?? false,
         ]);
+
+        Cache::forget("client_portal_tasks_{$slug}_{$projectSlug}");
+        Cache::forget("client_portal_projects_{$slug}"); // Update counts
 
         return response()->json($task->load(['assignee:id,name,email', 'creator:id,name']), 201);
     }
@@ -179,6 +184,9 @@ class ClientPortalApiController extends Controller
 
         $task->update($validated);
 
+        Cache::forget("client_portal_tasks_{$slug}_{$projectSlug}");
+        Cache::forget("client_portal_projects_{$slug}"); // Update counts (completed status might not affect count but safest to clear)
+
         return response()->json($task->fresh(['assignee:id,name,email', 'creator:id,name']));
     }
 
@@ -198,6 +206,9 @@ class ClientPortalApiController extends Controller
         $task = ClientTask::where('project_id', $project->id)->findOrFail($taskId);
         $task->delete();
 
+        Cache::forget("client_portal_tasks_{$slug}_{$projectSlug}");
+        Cache::forget("client_portal_projects_{$slug}"); // Update counts
+
         return response()->json(['success' => true]);
     }
 
@@ -207,48 +218,49 @@ class ClientPortalApiController extends Controller
     public function getTimeEntries($slug)
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
-
         Gate::authorize('ClientCompanyMember', $company->id);
 
-        $entries = ClientTimeEntry::where('client_company_id', $company->id)
-            ->with(['user:id,name,email', 'project:id,name,slug', 'task:id,name'])
-            ->orderBy('date_worked', 'desc')
-            ->orderBy('created_at', 'desc')
-            ->get()
-            ->map(function ($entry) {
-                $entry->formatted_time = $entry->formatted_time;
+        return Cache::remember("client_portal_time_entries_{$slug}", 300, function () use ($company) {
+            $entries = ClientTimeEntry::where('client_company_id', $company->id)
+                ->with(['user:id,name,email', 'project:id,name,slug', 'task:id,name'])
+                ->orderBy('date_worked', 'desc')
+                ->orderBy('created_at', 'desc')
+                ->get()
+                ->map(function ($entry) {
+                    $entry->formatted_time = $entry->formatted_time;
 
-                return $entry;
-            });
+                    return $entry;
+                });
 
-        // Calculate totals
-        $totalMinutes = $entries->sum('minutes_worked');
-        $billableMinutes = $entries->where('is_billable', true)->sum('minutes_worked');
+            // Calculate totals
+            $totalMinutes = $entries->sum('minutes_worked');
+            $billableMinutes = $entries->where('is_billable', true)->sum('minutes_worked');
 
-        // Group entries by month and calculate rollover balances
-        $monthlyData = $this->calculateMonthlyBalances($company, $entries);
+            // Group entries by month and calculate rollover balances
+            $monthlyData = $this->calculateMonthlyBalances($company, $entries);
 
-        // Calculate total unbilled hours (billable hours in months without agreements)
-        $totalUnbilledHours = 0;
-        foreach ($monthlyData as $month) {
-            if (! $month['has_agreement'] && isset($month['unbilled_hours'])) {
-                // If the hours have already been applied to the next active agreement,
-                // do not double-count them as still unbilled in the summary bar.
-                if (! ($month['will_be_billed_in_next_agreement'] ?? false)) {
-                    $totalUnbilledHours += $month['unbilled_hours'];
+            // Calculate total unbilled hours (billable hours in months without agreements)
+            $totalUnbilledHours = 0;
+            foreach ($monthlyData as $month) {
+                if (! $month['has_agreement'] && isset($month['unbilled_hours'])) {
+                    // If the hours have already been applied to the next active agreement,
+                    // do not double-count them as still unbilled in the summary bar.
+                    if (! ($month['will_be_billed_in_next_agreement'] ?? false)) {
+                        $totalUnbilledHours += $month['unbilled_hours'];
+                    }
                 }
             }
-        }
 
-        return response()->json([
-            'entries' => $entries,
-            'monthly_data' => $monthlyData,
-            'total_time' => ClientTimeEntry::formatMinutesAsTime($totalMinutes),
-            'total_minutes' => $totalMinutes,
-            'billable_time' => ClientTimeEntry::formatMinutesAsTime($billableMinutes),
-            'billable_minutes' => $billableMinutes,
-            'total_unbilled_hours' => round($totalUnbilledHours, 2),
-        ]);
+            return [
+                'entries' => $entries,
+                'monthly_data' => $monthlyData,
+                'total_time' => ClientTimeEntry::formatMinutesAsTime($totalMinutes),
+                'total_minutes' => $totalMinutes,
+                'billable_time' => ClientTimeEntry::formatMinutesAsTime($billableMinutes),
+                'billable_minutes' => $billableMinutes,
+                'total_unbilled_hours' => round($totalUnbilledHours, 2),
+            ];
+        });
     }
 
     /**
@@ -455,6 +467,9 @@ class ClientPortalApiController extends Controller
             ]);
         }
 
+        Cache::forget("client_portal_time_entries_{$slug}");
+        Cache::forget("client_portal_projects_{$slug}"); // Update counts
+
         return response()->json(
             $entry->load(['user:id,name,email', 'project:id,name,slug', 'task:id,name']),
             $isUpdate ? 200 : 201
@@ -477,6 +492,9 @@ class ClientPortalApiController extends Controller
             return response()->json(['error' => 'Cannot delete invoiced time entries.'], 403);
         }
         $entry->delete();
+
+        Cache::forget("client_portal_time_entries_{$slug}");
+        Cache::forget("client_portal_projects_{$slug}"); // Update counts
 
         return response()->json(['success' => true]);
     }

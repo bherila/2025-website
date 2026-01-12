@@ -126,7 +126,7 @@ export default function ClientPortalExpensesPage({ slug, companyName, companyId 
   if (loading) {
     return (
       <>
-        <ClientPortalNav slug={slug} companyName={companyName} currentPage="home" />
+        <ClientPortalNav slug={slug} companyName={companyName} currentPage="expenses" />
         <div className="container mx-auto px-8 max-w-6xl">
           <Skeleton className="h-10 w-64 mb-6" />
           <Skeleton className="h-24 w-full mb-6" />
@@ -138,7 +138,7 @@ export default function ClientPortalExpensesPage({ slug, companyName, companyId 
 
   return (
     <>
-      <ClientPortalNav slug={slug} companyName={companyName} currentPage="home" />
+      <ClientPortalNav slug={slug} companyName={companyName} currentPage="expenses" />
       <div className="container mx-auto px-8 max-w-6xl">
         <div className="mb-6">
           <div className="flex justify-between items-center">
