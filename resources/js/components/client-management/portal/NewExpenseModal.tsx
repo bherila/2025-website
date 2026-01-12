@@ -208,16 +208,16 @@ export default function NewExpenseModal({
           <div className="space-y-2">
             <Label htmlFor="project">Project (optional)</Label>
             <Select
-              value={formData.project_id?.toString() || ''}
-              onValueChange={(value) => 
-                setFormData({ ...formData, project_id: value ? parseInt(value) : null })
+              value={formData.project_id?.toString() ?? 'none'}
+              onValueChange={(value) =>
+                setFormData({ ...formData, project_id: value === 'none' ? null : parseInt(value) })
               }
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select project" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">No project</SelectItem>
+                <SelectItem value="none">No project</SelectItem>
                 {projects.map((project) => (
                   <SelectItem key={project.id} value={project.id.toString()}>
                     {project.name}
@@ -227,24 +227,7 @@ export default function NewExpenseModal({
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="fin_line_item_id">Finance Line Item ID (optional)</Label>
-            <Input
-              id="fin_line_item_id"
-              type="number"
-              value={formData.fin_line_item_id || ''}
-              onChange={(e) => 
-                setFormData({ 
-                  ...formData, 
-                  fin_line_item_id: e.target.value ? parseInt(e.target.value) : null 
-                })
-              }
-              placeholder="Enter t_id from finance transactions"
-            />
-            <p className="text-xs text-muted-foreground">
-              Link to a FinAccount transaction by entering its t_id
-            </p>
-          </div>
+          {/* Finance Line Item ID removed from dialog per request */}
 
           <div className="flex items-center space-x-2">
             <Switch
