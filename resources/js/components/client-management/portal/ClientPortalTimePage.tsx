@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Plus, Clock, Trash2, ChevronDown, ChevronRight, TrendingUp, TrendingDown, AlertCircle, AlertTriangle, Download, HelpCircle } from 'lucide-react'
+import { Plus, Clock, Trash2, ChevronDown, ChevronRight, TrendingUp, TrendingDown, AlertCircle, Download, HelpCircle, Info } from 'lucide-react'
 import NewTimeEntryModal from './NewTimeEntryModal'
 import ClientPortalNav from './ClientPortalNav'
 import type { User, Project, Task } from '@/types/client-management/common'
@@ -264,15 +264,15 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
                 </div>
                 <div className="text-2xl font-semibold text-green-600 mt-1">{data?.billable_time || '0:00'}</div>
               </div>
-              <div className="p-3 rounded-lg border bg-amber-50 dark:bg-amber-950">
-                <div className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-300">
-                  <AlertTriangle className="h-4 w-4" />
+              <div className="p-3 rounded-lg border bg-blue-50/50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-900/30">
+                <div className="flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300 font-medium">
+                  <Info className="h-4 w-4" />
                   Pending Billing
                 </div>
-                <div className="text-xl font-semibold text-amber-700 dark:text-amber-200 mt-1">
+                <div className="text-xl font-semibold text-blue-700 dark:text-blue-200 mt-1">
                   {data?.total_unbilled_hours && data.total_unbilled_hours > 0 ? formatHours(data.total_unbilled_hours) : '0:00'}
                 </div>
-                <p className="text-xs text-amber-700/80 dark:text-amber-200/80 mt-1">Billable hours from periods without an active agreement.</p>
+                <p className="text-xs text-blue-700/80 dark:text-blue-200/80 mt-1">Billable hours from periods without an active agreement.</p>
               </div>
             </div>
           </CardContent>
@@ -394,11 +394,11 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
                         </div>
                       </div>
                       {month.pre_agreement_hours_applied && month.pre_agreement_hours_applied > 0 && (
-                        <div className="mt-3 rounded-lg border bg-amber-50 dark:bg-amber-950 px-3 py-2 text-sm flex items-start gap-2">
-                          <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5" />
+                        <div className="mt-3 rounded-lg border bg-blue-50/50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-900/30 px-3 py-2 text-sm flex items-start gap-2">
+                          <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5" />
                           <div>
-                            <span className="font-medium text-amber-800 dark:text-amber-200">{formatHours(month.pre_agreement_hours_applied)} carried in</span>
-                            <p className="text-amber-700/90 dark:text-amber-200/80">Billable hours from months before the agreement start are applied here.</p>
+                            <span className="font-medium text-blue-800 dark:text-blue-200">{formatHours(month.pre_agreement_hours_applied)} carried in</span>
+                            <p className="text-blue-700/90 dark:text-blue-200/80">Billable hours from months before the agreement start are applied here.</p>
                           </div>
                         </div>
                       )}
@@ -535,19 +535,19 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
                     )}
 
                     {!month.has_agreement && (
-                      <div className="mt-4 p-4 rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800">
+                      <div className="mt-4 p-4 rounded-lg bg-blue-50/50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30">
                         <div className="flex items-start gap-3">
-                          <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
+                          <Info className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
                           <div>
-                            <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                            <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
                               No active agreement for this period
                             </p>
                             {month.unbilled_hours && month.unbilled_hours > 0 ? (
-                              <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                              <p className="text-sm text-blue-700/90 dark:text-blue-200/80 mt-1">
                                 <strong>{formatHours(month.unbilled_hours)}</strong> of billable hours will be invoiced when a future agreement becomes active.
                               </p>
                             ) : (
-                              <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                              <p className="text-sm text-blue-700/90 dark:text-blue-200/80 mt-1">
                                 Any billable hours will be invoiced when a future agreement becomes active.
                               </p>
                             )}
