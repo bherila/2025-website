@@ -291,8 +291,27 @@ class ClientInvoiceApiController extends Controller
 
         $invoice = ClientInvoice::where('client_invoice_id', $invoiceId)->firstOrFail();
 
-        if ($invoice->client_company_id != $company->id) {
-            return response()->json(['error' => 'Invoice does not belong to this company'], 404);
+        // Some tests disable middleware which can prevent route model binding.
+        // Fall back to the raw route parameter when `$company->id` is not available.
+        $routeCompanyId = is_object($company) && isset($company->id)
+            ? $company->id
+            : $request->route('company');
+
+        if ($invoice->client_company_id != $routeCompanyId) {
+            Log::debug('unVoid: company mismatch', [
+                'route_company_id' => $routeCompanyId,
+                'invoice_id' => $invoice->client_invoice_id,
+                'invoice_company_id' => $invoice->client_company_id,
+                'invoice_status' => $invoice->status,
+            ]);
+
+            return response()->json([
+                'error' => 'Invoice does not belong to this company',
+                'route_company_id' => $routeCompanyId,
+                'invoice_id' => $invoice->client_invoice_id,
+                'invoice_company_id' => $invoice->client_company_id,
+                'invoice_status' => $invoice->status,
+            ], 404);
         }
 
         if ($invoice->status !== 'void') {
