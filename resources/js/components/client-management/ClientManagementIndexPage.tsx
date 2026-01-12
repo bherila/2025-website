@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 import { ChevronDown, ChevronUp, Plus, DollarSign, Clock } from 'lucide-react'
 import InvitePeopleModal from '@/components/client-management/InvitePeopleModal'
 import ClientAdminActions from '@/components/client-management/ClientAdminActions'
@@ -40,7 +41,22 @@ export default function ClientManagementIndexPage() {
   const inactiveCompanies = companies.filter(c => !c.is_active)
 
   if (loading) {
-    return <div className="p-8">Loading...</div>
+    return (
+      <div className="container mx-auto p-8 max-w-6xl">
+        <div className="flex justify-between items-center mb-6">
+          <Skeleton className="h-9 w-64" />
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-32" />
+            <Skeleton className="h-10 w-32" />
+          </div>
+        </div>
+        <div className="space-y-4">
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-32 w-full" />
+        </div>
+      </div>
+    )
   }
 
   return (

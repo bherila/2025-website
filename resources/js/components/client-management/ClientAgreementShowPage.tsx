@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 import { AlertCircle, ArrowLeft, FileText, Check, X } from 'lucide-react'
 import type { ClientAgreement } from '@/types/client-management/client-agreement'
 
@@ -148,7 +149,21 @@ export default function ClientAgreementShowPage({ agreementId, companyId, compan
   }
 
   if (loading) {
-    return <div className="p-8">Loading...</div>
+    return (
+      <div className="container mx-auto p-8 max-w-4xl">
+        <Skeleton className="h-10 w-32 mb-4" />
+        <div className="flex items-center gap-4 mb-6">
+          <Skeleton className="h-8 w-8" />
+          <div>
+            <Skeleton className="h-9 w-48" />
+            <Skeleton className="h-4 w-32 mt-1" />
+          </div>
+          <Skeleton className="h-6 w-20 ml-auto" />
+        </div>
+        <Skeleton className="h-64 w-full mb-6" />
+        <Skeleton className="h-96 w-full" />
+      </div>
+    )
   }
 
   if (!agreement) {
