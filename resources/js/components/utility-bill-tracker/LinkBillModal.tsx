@@ -182,7 +182,7 @@ export function LinkBillModal({ open, onOpenChange, accountId, bill, onLinked }:
             <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p>No matching transactions found.</p>
             <p className="text-sm mt-2">
-              We searched for transactions within 90 days after the bill end date with amounts within 10% of the total cost.
+              We searched for non-investment transactions within 90 days after the bill end date with amounts within 10% of the total cost.
             </p>
           </div>
         ) : (

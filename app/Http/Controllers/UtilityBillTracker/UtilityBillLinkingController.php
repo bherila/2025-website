@@ -48,6 +48,10 @@ class UtilityBillLinkingController extends Controller
                 // Match on absolute amount within range (bills are typically debits/negative)
                 $query->whereRaw('ABS(t_amt) BETWEEN ? AND ?', [$minAmount, $maxAmount]);
             })
+            ->where(function ($query) {
+                // Exclude transactions with stock symbols as they aren't utility payments
+                $query->whereNull('t_symbol')->orWhere('t_symbol', '');
+            })
             ->orderByRaw('ABS(ABS(t_amt) - ?)', [$totalCost]) // Order by closest amount match
             ->orderBy('t_date', 'asc')
             ->limit(50)
