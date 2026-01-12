@@ -1,5 +1,7 @@
 @extends('layouts.app')
 
+@section('title', 'Utility Bill Tracker | ' . config('app.name', 'Ben Herila'))
+
 @section('content')
 <div id="UtilityAccountListPage"></div>
 @endsection

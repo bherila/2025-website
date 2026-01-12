@@ -1,5 +1,7 @@
 @extends('layouts.app')
 
+@section('title', $account_name . ' | Utility Bill Tracker | ' . config('app.name', 'Ben Herila'))
+
 @section('content')
 <div id="UtilityBillListPage" 
   data-account-id="{{ $account_id }}"

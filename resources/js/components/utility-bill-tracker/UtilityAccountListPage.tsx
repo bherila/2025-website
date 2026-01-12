@@ -47,8 +47,8 @@ export function UtilityAccountListPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+      <Card className="border-none shadow-none">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 px-0">
           <div>
             <CardTitle className="text-2xl">Utility Bill Tracker</CardTitle>
             <CardDescription>Manage your utility accounts and bills</CardDescription>
@@ -58,7 +58,7 @@ export function UtilityAccountListPage() {
             Add Account
           </Button>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-0">
           {loading ? (
             <div className="space-y-4">
               <Skeleton className="h-12 w-full" />

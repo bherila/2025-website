@@ -245,8 +245,8 @@ export function UtilityBillListPage({ accountId, accountName, accountType }: Uti
         </Button>
       </div>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+      <Card className="border-none shadow-none">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 px-0">
           <div>
             <CardTitle className="text-2xl">{accountName}</CardTitle>
             <CardDescription>
@@ -264,7 +264,7 @@ export function UtilityBillListPage({ accountId, accountName, accountType }: Uti
             </Button>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-0">
           {bills.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <p>No bills yet for this account.</p>
@@ -382,12 +382,12 @@ export function UtilityBillListPage({ accountId, accountName, accountType }: Uti
       </Card>
 
       {/* Account Notes Section */}
-      <Card>
-        <CardHeader>
+      <Card className="border-none shadow-none">
+        <CardHeader className="px-0">
           <CardTitle className="text-lg">Account Notes</CardTitle>
           <CardDescription>Add any notes about this utility account</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 px-0">
           <Textarea
             value={notes}
             onChange={(e) => handleNotesChange(e.target.value)}
