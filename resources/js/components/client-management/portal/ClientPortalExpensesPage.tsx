@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import ClientPortalNav from './ClientPortalNav'
 import NewExpenseModal from './NewExpenseModal'
+import DeleteExpenseDialog from './DeleteExpenseDialog'
 import type { Project } from '@/types/client-management/common'
 import type { ClientExpense, ExpensesResponse } from '@/types/client-management/expense'
 import {
@@ -26,16 +27,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 
 interface ClientPortalExpensesPageProps {
   slug: string
@@ -64,7 +55,7 @@ export default function ClientPortalExpensesPage({ slug, companyName, companyId 
   const [modalOpen, setModalOpen] = useState(false)
   const [editingExpense, setEditingExpense] = useState<ClientExpense | null>(null)
   const [projects, setProjects] = useState<Project[]>([])
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [expenseToDelete, setExpenseToDelete] = useState<ClientExpense | null>(null)
 
   useEffect(() => {
@@ -102,11 +93,9 @@ export default function ClientPortalExpensesPage({ slug, companyName, companyId 
     }
   }
 
-  const handleDelete = async () => {
-    if (!expenseToDelete) return
-    
+  const handleDelete = async (expense: ClientExpense) => {
     try {
-      const response = await fetch(`/api/client/mgmt/companies/${companyId}/expenses/${expenseToDelete.id}`, {
+      const response = await fetch(`/api/client/mgmt/companies/${companyId}/expenses/${expense.id}`, {
         method: 'DELETE',
         headers: {
           'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
@@ -118,9 +107,6 @@ export default function ClientPortalExpensesPage({ slug, companyName, companyId 
       }
     } catch (error) {
       console.error('Error deleting expense:', error)
-    } finally {
-      setDeleteConfirmOpen(false)
-      setExpenseToDelete(null)
     }
   }
 
@@ -350,7 +336,7 @@ export default function ClientPortalExpensesPage({ slug, companyName, companyId 
                             onClick={(e) => {
                               e.stopPropagation()
                               setExpenseToDelete(expense)
-                              setDeleteConfirmOpen(true)
+                              setDeleteDialogOpen(true)
                             }}
                           >
                             <Trash2 className="h-4 w-4 text-muted-foreground" />
@@ -375,22 +361,12 @@ export default function ClientPortalExpensesPage({ slug, companyName, companyId 
         expense={editingExpense}
       />
 
-      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Expense</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this expense? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteExpenseDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        expense={expenseToDelete}
+        onConfirm={() => expenseToDelete && handleDelete(expenseToDelete)}
+      />
     </>
   )
 }
