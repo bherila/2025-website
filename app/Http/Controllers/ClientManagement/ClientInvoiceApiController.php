@@ -62,6 +62,13 @@ class ClientInvoiceApiController extends Controller
         Gate::authorize('Admin');
 
         if ($invoice->client_company_id != $company->id) {
+            Log::debug('unVoid: company mismatch', [
+                'route_company_id' => $company->id,
+                'invoice_id' => $invoice->client_invoice_id,
+                'invoice_company_id' => $invoice->client_company_id,
+                'invoice_status' => $invoice->status,
+            ]);
+
             return response()->json(['error' => 'Invoice does not belong to this company'], 404);
         }
 
