@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import type { UtilityBill } from '@/types/utility-bill-tracker';
+import { formatDateForInput } from '@/lib/DateHelper';
 
 interface EditBillModalProps {
   open: boolean;
@@ -19,14 +20,14 @@ interface EditBillModalProps {
   onSaved: () => void;
 }
 
-export function EditBillModal({ 
-  open, 
-  onOpenChange, 
-  accountId, 
-  accountType, 
-  bill, 
-  isNew, 
-  onSaved 
+export function EditBillModal({
+  open,
+  onOpenChange,
+  accountId,
+  accountType,
+  bill,
+  isNew,
+  onSaved
 }: EditBillModalProps) {
   const [formData, setFormData] = useState({
     bill_start_date: '',
@@ -47,12 +48,6 @@ export function EditBillModal({
   const [error, setError] = useState<string | null>(null);
 
   const isElectricity = accountType === 'Electricity';
-
-  const formatDateForInput = (dateString: string | null | undefined): string => {
-    if (!dateString) return '';
-    // API might return "YYYY-MM-DD HH:MM:SS" or ISO string
-    return dateString.split(/[ T]/)[0] ?? '';
-  };
 
   useEffect(() => {
     if (open) {
@@ -90,7 +85,6 @@ export function EditBillModal({
       setError(null);
     }
   }, [open, bill, isNew]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);

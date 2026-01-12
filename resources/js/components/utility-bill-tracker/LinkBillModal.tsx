@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { UtilityBill, LinkableTransaction } from '@/types/utility-bill-tracker';
+import { formatDate } from '@/lib/DateHelper';
+import { formatCurrency } from '@/lib/formatCurrency';
 
 interface LinkBillModalProps {
   open: boolean;
@@ -35,9 +37,11 @@ export function LinkBillModal({ open, onOpenChange, accountId, bill, onLinked }:
       }
       
       const data = await response.json();
-      setTransactions(data);
+      // The API returns { potential_matches: [...], bill: {...}, current_link: ... }
+      setTransactions(data.potential_matches || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
+      setTransactions([]);
     } finally {
       setLoading(false);
     }
@@ -84,6 +88,7 @@ export function LinkBillModal({ open, onOpenChange, accountId, bill, onLinked }:
       const response = await fetch(`/api/utility-bill-tracker/accounts/${accountId}/bills/${bill.id}/unlink`, {
         method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
         },
       });
@@ -99,19 +104,6 @@ export function LinkBillModal({ open, onOpenChange, accountId, bill, onLinked }:
     } finally {
       setUnlinking(false);
     }
-  };
-
-  const formatCurrency = (value: string | number) => {
-    const num = typeof value === 'string' ? parseFloat(value) : value;
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(num);
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
   };
 
   const handleClose = () => {
@@ -146,7 +138,7 @@ export function LinkBillModal({ open, onOpenChange, accountId, bill, onLinked }:
               <div className="text-center text-sm text-muted-foreground">
                 {formatDate(bill.linked_transaction.t_date)} - {formatCurrency(bill.linked_transaction.t_amt)}
                 <br />
-                {bill.linked_transaction.t_desc}
+                {bill.linked_transaction.t_description}
               </div>
             )}
             <DialogFooter className="mt-4">
@@ -190,7 +182,7 @@ export function LinkBillModal({ open, onOpenChange, accountId, bill, onLinked }:
             <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p>No matching transactions found.</p>
             <p className="text-sm mt-2">
-              We searched for transactions within 90 days of the due date with amounts within 10% of the total cost.
+              We searched for transactions within 90 days after the bill end date with amounts within 10% of the total cost.
             </p>
           </div>
         ) : (
@@ -213,11 +205,11 @@ export function LinkBillModal({ open, onOpenChange, accountId, bill, onLinked }:
                   {transactions.map((tx) => (
                     <TableRow key={tx.t_id}>
                       <TableCell>{formatDate(tx.t_date)}</TableCell>
-                      <TableCell className="max-w-[100px] truncate" title={tx.account_name}>
-                        {tx.account_name}
+                      <TableCell className="max-w-[100px] truncate" title={tx.acct_name}>
+                        {tx.acct_name}
                       </TableCell>
-                      <TableCell className="max-w-[150px] truncate" title={tx.t_desc || ''}>
-                        {tx.t_desc || '-'}
+                      <TableCell className="max-w-[150px] truncate" title={tx.t_description || ''}>
+                        {tx.t_description || '-'}
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         {formatCurrency(tx.t_amt)}

@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { CreateAccountModal } from './CreateAccountModal';
 import type { UtilityAccount } from '@/types/utility-bill-tracker';
+import { formatCurrency } from '@/lib/formatCurrency';
 
 export function UtilityAccountListPage() {
   const [accounts, setAccounts] = useState<UtilityAccount[]>([]);
@@ -42,12 +43,6 @@ export function UtilityAccountListPage() {
 
   const handleRowClick = (accountId: number) => {
     window.location.href = `/utility-bill-tracker/${accountId}/bills`;
-  };
-
-  const formatCurrency = (value: string | number | null | undefined) => {
-    if (value === null || value === undefined) return '$0.00';
-    const num = typeof value === 'string' ? parseFloat(value) : value;
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(num);
   };
 
   return (

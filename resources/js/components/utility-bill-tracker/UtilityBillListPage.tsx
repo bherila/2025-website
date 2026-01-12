@@ -12,6 +12,8 @@ import { ImportBillModal } from './ImportBillModal';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { LinkBillModal } from './LinkBillModal';
 import type { UtilityAccount, UtilityBill } from '@/types/utility-bill-tracker';
+import { formatDate } from '@/lib/DateHelper';
+import { formatCurrency } from '@/lib/formatCurrency';
 
 interface UtilityBillListPageProps {
   accountId: number;
@@ -196,19 +198,6 @@ export function UtilityBillListPage({ accountId, accountName, accountType }: Uti
       console.error('Failed to delete account:', err);
       alert(err instanceof Error ? err.message : 'Failed to delete account');
     }
-  };
-
-  const formatCurrency = (value: string | number) => {
-    const num = typeof value === 'string' ? parseFloat(value) : value;
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(num);
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
   };
 
   if (loading) {

@@ -63,3 +63,25 @@ export function parseDate(str: string | undefined | null | Date): DateContainer 
 
   return date?.isValid() ? new DateContainer(date.toDate()) : null
 }
+
+/**
+ * Formats a date string for HTML date inputs (YYYY-MM-DD).
+ * Handles both ISO strings and space-separated date strings from Laravel.
+ */
+export function formatDateForInput(dateString: string | null | undefined): string {
+  if (!dateString) return '';
+  // API might return "YYYY-MM-DD HH:MM:SS" or ISO string
+  return dateString.split(/[ T]/)[0];
+}
+
+/**
+ * Formats a date string for display (e.g., "Jan 1, 2026").
+ */
+export function formatDate(dateString: string | null | undefined): string {
+  if (!dateString) return '-';
+  return new Date(dateString).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
