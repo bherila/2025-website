@@ -9,6 +9,7 @@ import ClientPortalNav from './ClientPortalNav'
 import type { User, Project, Task } from '@/types/client-management/common'
 import type { TimeEntry, TimeEntriesResponse } from '@/types/client-management/time-entry'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import SummaryTile from '@/components/ui/summary-tile'
 
 interface ClientPortalTimePageProps {
   slug: string
@@ -404,18 +405,15 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
                       )}
                       {typeof remainingPool === 'number' && typeof openingAvailable === 'number' && (
                         <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-muted-foreground">
-                          <div className="p-3 rounded-lg border bg-muted/30">
-                            <div className="flex items-center gap-1 text-xs font-medium">Available (start)</div>
-                            <div className="font-semibold text-base">{formatHours(openingAvailable)}</div>
-                          </div>
-                          <div className="p-3 rounded-lg border bg-muted/30">
-                            <div className="flex items-center gap-1 text-xs font-medium">Worked this month</div>
-                            <div className="font-semibold text-base">{formatHours(month.hours_worked)}</div>
-                          </div>
-                          <div className="p-3 rounded-lg border bg-muted/30">
-                            <div className="flex items-center gap-1 text-xs font-medium">Remaining (after work)</div>
-                            <div className="font-semibold text-base">{formatHours(Math.max(0, remainingPool))}</div>
-                          </div>
+                          <SummaryTile title={<span>Available (start)</span>}>
+                            {formatHours(openingAvailable)}
+                          </SummaryTile>
+                          <SummaryTile title={<span>Worked this month</span>}>
+                            {formatHours(month.hours_worked)}
+                          </SummaryTile>
+                          <SummaryTile title={<span>Remaining (after work)</span>}>
+                            {formatHours(Math.max(0, remainingPool))}
+                          </SummaryTile>
                         </div>
                       )}
                     </div>
@@ -493,37 +491,32 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
                         <h4 className="text-sm font-semibold mb-3">Month End Summary</h4>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                           {month.closing.unused_hours > 0 && (
-                            <div className="p-3 rounded-lg bg-green-50 dark:bg-green-950">
-                              <div className="text-green-600 font-medium">{formatHours(month.closing.unused_hours)}</div>
-                              <div className="text-xs text-muted-foreground">Unused (rolls over)</div>
-                            </div>
+                            <SummaryTile title={<span>Unused (rolls over)</span>}>
+                              {formatHours(month.closing.unused_hours)}
+                            </SummaryTile>
                           )}
                           {month.closing.hours_used_from_rollover > 0 && (
-                            <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950">
-                              <div className="text-blue-600 font-medium">{formatHours(month.closing.hours_used_from_rollover)}</div>
-                              <div className="text-xs text-muted-foreground">Rollover used</div>
-                            </div>
+                            <SummaryTile title={<span>Rollover used</span>}>
+                              {formatHours(month.closing.hours_used_from_rollover)}
+                            </SummaryTile>
                           )}
                           {month.closing.remaining_rollover > 0 && (
-                            <div className="p-3 rounded-lg bg-purple-50 dark:bg-purple-950">
-                              <div className="text-purple-600 font-medium">{formatHours(month.closing.remaining_rollover)}</div>
-                              <div className="text-xs text-muted-foreground">Rollover remaining</div>
-                            </div>
+                            <SummaryTile title={<span>Rollover remaining</span>}>
+                              {formatHours(month.closing.remaining_rollover)}
+                            </SummaryTile>
                           )}
                           {month.closing.excess_hours > 0 && (
-                            <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950">
+                            <SummaryTile title={<span>Excess (will be invoiced)</span>}>
                               <div className="flex items-center gap-1">
                                 <AlertCircle className="h-4 w-4 text-red-500" />
                                 <span className="text-red-600 font-medium">{formatHours(month.closing.excess_hours)}</span>
                               </div>
-                              <div className="text-xs text-muted-foreground">Excess (will be invoiced)</div>
-                            </div>
+                            </SummaryTile>
                           )}
                           {month.closing.unused_hours === 0 && month.closing.excess_hours === 0 && (
-                            <div className="p-3 rounded-lg bg-muted">
-                              <div className="font-medium">0:00</div>
-                              <div className="text-xs text-muted-foreground">Balance (exact usage)</div>
-                            </div>
+                            <SummaryTile title={<span>Balance (exact usage)</span>}>
+                              0:00
+                            </SummaryTile>
                           )}
                         </div>
                         {month.pre_agreement_hours_applied && month.pre_agreement_hours_applied > 0 && (
