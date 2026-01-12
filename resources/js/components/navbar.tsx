@@ -2,9 +2,16 @@ import * as React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Laptop, Moon, Sun, ChevronDown } from 'lucide-react';
 
+type ClientCompany = {
+  id: number;
+  company_name: string;
+  slug: string;
+};
+
 type NavbarProps = {
   authenticated: boolean;
   isAdmin: boolean;
+  clientCompanies?: ClientCompany[];
 };
 
 type ThemeMode = 'system' | 'dark' | 'light';
@@ -16,9 +23,13 @@ function applyTheme(mode: ThemeMode) {
   root.classList.toggle('dark', isDark);
 }
 
-export default function Navbar({ authenticated, isAdmin }: NavbarProps) {
+export default function Navbar({ authenticated, isAdmin, clientCompanies }: NavbarProps) {
   const [toolsOpen, setToolsOpen] = useState(false);
   const toolsRef = useRef<HTMLLIElement | null>(null);
+  
+  const [clientsOpen, setClientsOpen] = useState(false);
+  const clientsRef = useRef<HTMLLIElement | null>(null);
+
   const [theme, setTheme] = useState<ThemeMode>(() => (localStorage.getItem('theme') as ThemeMode) || 'system');
 
   useEffect(() => {
@@ -28,8 +39,12 @@ export default function Navbar({ authenticated, isAdmin }: NavbarProps) {
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (!toolsRef.current) return;
-      if (!toolsRef.current.contains(e.target as Node)) setToolsOpen(false);
+      if (toolsRef.current && !toolsRef.current.contains(e.target as Node)) {
+        setToolsOpen(false);
+      }
+      if (clientsRef.current && !clientsRef.current.contains(e.target as Node)) {
+        setClientsOpen(false);
+      }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -89,6 +104,35 @@ export default function Navbar({ authenticated, isAdmin }: NavbarProps) {
               </div>
             )}
           </li>
+          {authenticated && clientCompanies && clientCompanies.length > 0 && (
+            <li ref={clientsRef} className='relative'>
+              <button
+                type='button'
+                className='inline-flex items-center gap-1 hover:underline underline-offset-4'
+                onClick={() => setClientsOpen((v) => !v)}
+                aria-expanded={clientsOpen}
+                aria-haspopup='menu'
+              >
+                Client Portal <ChevronDown className='w-4 h-4' />
+              </button>
+              {clientsOpen && (
+                <div
+                  role='menu'
+                  className='absolute z-50 mt-2 w-64 rounded-md border border-gray-200 dark:border-[#3E3E3A] bg-white dark:bg-[#161615] shadow-[0_10px_30px_rgba(0,0,0,0.08)] p-2'
+                >
+                  {clientCompanies.map((company) => (
+                    <a
+                      key={company.id}
+                      className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] truncate'
+                      href={`/client/portal/${company.slug}`}
+                    >
+                      {company.company_name}
+                    </a>
+                  ))}
+                </div>
+              )}
+            </li>
+          )}
         </ul>
       </div>
 

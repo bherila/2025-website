@@ -27,6 +27,7 @@
       <div id="navbar" 
         data-authenticated="{{ auth()->check() ? 'true' : 'false' }}" 
         data-is-admin="{{ auth()->check() && (auth()->id() === 1 || auth()->user()->user_role === 'Admin') ? 'true' : 'false' }}" 
+        data-client-companies="{{ auth()->check() ? json_encode(auth()->user()->clientCompanies()->select('client_companies.id', 'company_name', 'slug')->get()) : '[]' }}"
       />
     </header>
 

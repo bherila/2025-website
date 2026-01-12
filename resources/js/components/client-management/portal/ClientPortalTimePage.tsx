@@ -432,7 +432,7 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
                             {entries.map(entry => (
                               <div 
                                 key={entry.id}
-                                className={`flex items-center justify-between p-3 rounded-lg border bg-card ${isAdmin && !entry.is_invoiced ? 'cursor-pointer hover:bg-muted/30 transition-colors' : ''}`}
+                                className={`flex items-center justify-between p-3 rounded-lg bg-card ${isAdmin && !entry.is_invoiced ? 'cursor-pointer hover:bg-muted/30 transition-colors' : ''}`}
                                 onClick={() => isAdmin && !entry.is_invoiced && openEditModal(entry)}
                               >
                                 <div className="flex items-center gap-4">
