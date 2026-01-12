@@ -61,7 +61,7 @@ class ClientInvoiceApiController extends Controller
     {
         Gate::authorize('Admin');
 
-        if ($invoice->client_company_id !== $company->id) {
+        if ($invoice->client_company_id != $company->id) {
             return response()->json(['error' => 'Invoice does not belong to this company'], 404);
         }
 
@@ -166,7 +166,7 @@ class ClientInvoiceApiController extends Controller
     {
         Gate::authorize('Admin');
 
-        if ($invoice->client_company_id !== $company->id) {
+        if ($invoice->client_company_id != $company->id) {
             return response()->json(['error' => 'Invoice does not belong to this company'], 404);
         }
 
@@ -191,7 +191,7 @@ class ClientInvoiceApiController extends Controller
     {
         Gate::authorize('Admin');
 
-        if ($invoice->client_company_id !== $company->id) {
+        if ($invoice->client_company_id != $company->id) {
             return response()->json(['error' => 'Invoice does not belong to this company'], 404);
         }
 
@@ -211,7 +211,7 @@ class ClientInvoiceApiController extends Controller
     {
         Gate::authorize('Admin');
 
-        if ($invoice->client_company_id !== $company->id) {
+        if ($invoice->client_company_id != $company->id) {
             return response()->json(['error' => 'Invoice does not belong to this company'], 404);
         }
 
@@ -238,7 +238,7 @@ class ClientInvoiceApiController extends Controller
             return response()->json(['error' => 'Invoices with payments cannot be voided. Please delete all payments first.'], 400);
         }
 
-        if ($invoice->client_company_id !== $company->id) {
+        if ($invoice->client_company_id != $company->id) {
             return response()->json(['error' => 'Invoice does not belong to this company'], 404);
         }
 
@@ -265,7 +265,7 @@ class ClientInvoiceApiController extends Controller
 
         $invoice = ClientInvoice::where('client_invoice_id', $invoiceId)->firstOrFail();
 
-        if ($invoice->client_company_id !== $company->id) {
+        if ($invoice->client_company_id != $company->id) {
             return response()->json(['error' => 'Invoice does not belong to this company'], 404);
         }
 
@@ -290,7 +290,7 @@ class ClientInvoiceApiController extends Controller
     {
         Gate::authorize('Admin');
 
-        if ($invoice->client_company_id !== $company->id) {
+        if ($invoice->client_company_id != $company->id) {
             return response()->json(['error' => 'Invoice does not belong to this company'], 404);
         }
 
@@ -316,7 +316,7 @@ class ClientInvoiceApiController extends Controller
     {
         Gate::authorize('Admin');
 
-        if ($invoice->client_company_id !== $company->id) {
+        if ($invoice->client_company_id != $company->id) {
             return response()->json(['error' => 'Invoice does not belong to this company'], 404);
         }
 
@@ -364,7 +364,7 @@ class ClientInvoiceApiController extends Controller
     {
         Gate::authorize('Admin');
 
-        if ($invoice->client_company_id !== $company->id) {
+        if ($invoice->client_company_id != $company->id) {
             return response()->json(['error' => 'Invoice does not belong to this company'], 404);
         }
 
@@ -402,7 +402,7 @@ class ClientInvoiceApiController extends Controller
     {
         Gate::authorize('Admin');
 
-        if ($invoice->client_company_id !== $company->id || !$invoice->isEditable()) {
+        if ($invoice->client_company_id != $company->id || !$invoice->isEditable()) {
             abort(403);
         }
 
@@ -441,7 +441,7 @@ class ClientInvoiceApiController extends Controller
     public function getPayments(ClientCompany $company, ClientInvoice $invoice)
     {
         Gate::authorize('Admin');
-        if ($invoice->client_company_id !== $company->id) {
+        if ($invoice->client_company_id != $company->id) {
             abort(404);
         }
         return response()->json($invoice->payments()->orderBy('payment_date', 'desc')->get());
@@ -450,7 +450,7 @@ class ClientInvoiceApiController extends Controller
     public function addPayment(Request $request, ClientCompany $company, ClientInvoice $invoice)
     {
         Gate::authorize('Admin');
-        if ($invoice->client_company_id !== $company->id) {
+        if ($invoice->client_company_id != $company->id) {
             abort(404);
         }
 
@@ -481,7 +481,7 @@ class ClientInvoiceApiController extends Controller
     public function updatePayment(Request $request, ClientCompany $company, ClientInvoice $invoice, ClientInvoicePayment $payment)
     {
         Gate::authorize('Admin');
-        if ($invoice->client_company_id !== $company->id || $payment->client_invoice_id !== $invoice->client_invoice_id) {
+        if ($invoice->client_company_id != $company->id || $payment->client_invoice_id != $invoice->client_invoice_id) {
             abort(404);
         }
     
@@ -518,7 +518,7 @@ class ClientInvoiceApiController extends Controller
     public function deletePayment(ClientCompany $company, ClientInvoice $invoice, ClientInvoicePayment $payment)
     {
         Gate::authorize('Admin');
-        if ($invoice->client_company_id !== $company->id || $payment->client_invoice_id !== $invoice->client_invoice_id) {
+        if ($invoice->client_company_id != $company->id || $payment->client_invoice_id != $invoice->client_invoice_id) {
             abort(404);
         }
 
