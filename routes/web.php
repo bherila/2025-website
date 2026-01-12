@@ -76,6 +76,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/client/portal/{slug}/agreement/{agreementId}', [ClientPortalAgreementController::class, 'show'])->name('client-portal.agreement');
     Route::get('/client/portal/{slug}/invoices', [ClientPortalController::class, 'invoices'])->name('client-portal.invoices');
     Route::get('/client/portal/{slug}/invoice/{invoiceId}', [ClientPortalController::class, 'invoice'])->name('client-portal.invoice');
+    Route::get('/client/portal/{slug}/expenses', [ClientPortalController::class, 'expenses'])->name('client-portal.expenses');
 });
 
 Route::get('/tools/bingo', [App\Http\Controllers\BingoController::class, 'index']);

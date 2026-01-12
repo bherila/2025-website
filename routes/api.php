@@ -113,6 +113,16 @@ Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoi
 Route::middleware(['web', 'auth'])->put('/client/mgmt/companies/{company}/invoices/{invoice}/payments/{payment}', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'updatePayment']);
 Route::middleware(['web', 'auth'])->delete('/client/mgmt/companies/{company}/invoices/{invoice}/payments/{payment}', [App\Http\Controllers\ClientManagement\ClientInvoiceApiController::class, 'deletePayment']);
 
+// Client Expense API routes (Admin)
+Route::middleware(['web', 'auth'])->get('/client/mgmt/companies/{company}/expenses', [App\Http\Controllers\ClientManagement\ClientExpenseApiController::class, 'index']);
+Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/expenses', [App\Http\Controllers\ClientManagement\ClientExpenseApiController::class, 'store']);
+Route::middleware(['web', 'auth'])->get('/client/mgmt/companies/{company}/expenses/{expense}', [App\Http\Controllers\ClientManagement\ClientExpenseApiController::class, 'show']);
+Route::middleware(['web', 'auth'])->put('/client/mgmt/companies/{company}/expenses/{expense}', [App\Http\Controllers\ClientManagement\ClientExpenseApiController::class, 'update']);
+Route::middleware(['web', 'auth'])->delete('/client/mgmt/companies/{company}/expenses/{expense}', [App\Http\Controllers\ClientManagement\ClientExpenseApiController::class, 'destroy']);
+Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/expenses/{expense}/mark-reimbursed', [App\Http\Controllers\ClientManagement\ClientExpenseApiController::class, 'markReimbursed']);
+Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/expenses/{expense}/link-finance', [App\Http\Controllers\ClientManagement\ClientExpenseApiController::class, 'linkToFinanceLineItem']);
+Route::middleware(['web', 'auth'])->delete('/client/mgmt/companies/{company}/expenses/{expense}/link-finance', [App\Http\Controllers\ClientManagement\ClientExpenseApiController::class, 'unlinkFromFinanceLineItem']);
+
 // Client Portal API routes
 Route::middleware(['web', 'auth'])->get('/client/portal/{slug}', [ClientPortalApiController::class, 'getCompany']);
 Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/projects', [ClientPortalApiController::class, 'getProjects']);

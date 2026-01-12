@@ -5,6 +5,7 @@ import ClientPortalProjectPage from '@/components/client-management/portal/Clien
 import ClientPortalAgreementPage from '@/components/client-management/portal/ClientPortalAgreementPage'
 import ClientPortalInvoicesPage from '@/components/client-management/portal/ClientPortalInvoicesPage'
 import ClientPortalInvoicePage from '@/components/client-management/portal/ClientPortalInvoicePage'
+import ClientPortalExpensesPage from '@/components/client-management/portal/ClientPortalExpensesPage'
 import ClientAdminActions from '@/components/client-management/ClientAdminActions'
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -75,6 +76,16 @@ document.addEventListener('DOMContentLoaded', () => {
       companyName={invoiceDiv.dataset.companyName!}
       invoiceId={parseInt(invoiceDiv.dataset.invoiceId!)}
       isAdmin={invoiceDiv.dataset.isAdmin === 'true'}
+    />)
+  }
+
+  const expensesDiv = document.getElementById('ClientPortalExpensesPage')
+  if (expensesDiv) {
+    const root = createRoot(expensesDiv)
+    root.render(<ClientPortalExpensesPage 
+      slug={expensesDiv.dataset.slug!}
+      companyName={expensesDiv.dataset.companyName!}
+      companyId={parseInt(expensesDiv.dataset.companyId!)}
     />)
   }
 })

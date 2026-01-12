@@ -150,6 +150,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
   const isTagsColumnEmpty = useMemo(() => data.every((row) => !row.tags || row.tags.length === 0), [data])
   const isPostDateColumnEmpty = useMemo(() => data.every((row) => !row.t_date_posted), [data])
   const isCashBalanceColumnEmpty = useMemo(() => data.every((row) => !row.t_account_balance), [data])
+  const isClientExpenseColumnEmpty = useMemo(() => data.every((row) => !row.client_expense), [data])
 
   const filteredData = data.filter(
     (row) =>
@@ -297,6 +298,9 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
               <th className="clickable text-right" onClick={() => handleSort('t_account_balance')}>
                 Cash Balance {sortField === 't_account_balance' && (sortDirection === 'asc' ? '↑' : '↓')}
               </th>
+            )}
+            {!isClientExpenseColumnEmpty && (
+              <th className="text-center">Client</th>
             )}
             {enableLinking && <th className="text-center">Link</th>}
             <th className="text-center">Details</th>
@@ -479,6 +483,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                 {cashBalanceFilter && <ClearFilterButton onClick={() => setCashBalanceFilter('')} ariaLabel="Clear balance filter" />}
               </th>
             )}
+            {!isClientExpenseColumnEmpty && <th></th>}
             {enableLinking && <th></th>}
             <th></th>
             {onDeleteTransaction && <th></th>}
@@ -675,6 +680,19 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                   {row.t_account_balance != null ? currency(row.t_account_balance).format() : ''}
                 </td>
               )}
+              {!isClientExpenseColumnEmpty && (
+                <td className="text-center">
+                  {row.client_expense?.client_company && (
+                    <a
+                      href={`/client/portal/${row.client_expense.client_company.slug}`}
+                      className="text-blue-600 hover:underline text-xs inline-flex items-center gap-1"
+                      title={`Billed to ${row.client_expense.client_company.company_name}`}
+                    >
+                      {row.client_expense.client_company.company_name}
+                    </a>
+                  )}
+                </td>
+              )}
               {enableLinking && (
                 <td>
                   <Button 
@@ -736,6 +754,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
             {!isStrikeColumnEmpty && <TotalCell />}
             {!isMemoColumnEmpty && <TotalCell />}
             {!isCashBalanceColumnEmpty && <TotalCell />}
+            {!isClientExpenseColumnEmpty && <TotalCell />}
             {enableLinking && <TotalCell />}
             <TotalCell />
             {onDeleteTransaction && <TotalCell />}

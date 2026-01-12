@@ -52,6 +52,22 @@ export const LinkedTransactionSchema = z.object({
   t_amt: z.union([z.number(), z.string()]),
 })
 
+// Schema for client company linked via expense
+export const ClientCompanyLinkSchema = z.object({
+  id: z.number(),
+  company_name: z.string(),
+  slug: z.string(),
+})
+
+// Schema for client expense linked to a line item
+export const ClientExpenseLinkSchema = z.object({
+  id: z.number(),
+  description: z.string(),
+  amount: z.union([z.number(), z.string()]),
+  is_reimbursable: z.boolean(),
+  client_company: ClientCompanyLinkSchema.nullable().optional(),
+})
+
 // Schema validation for the account_line_items table
 export const AccountLineItemSchema = z.object({
   t_id: z.number().optional(),
@@ -84,8 +100,11 @@ export const AccountLineItemSchema = z.object({
   parent_transaction: LinkedTransactionSchema.nullable().optional(),
   child_transactions: z.array(LinkedTransactionSchema).optional(),
   tags: z.array(AccountLineItemTagSchema).optional(),
+  client_expense: ClientExpenseLinkSchema.nullable().optional(),
 })
 
 export type AccountLineItemTag = z.infer<typeof AccountLineItemTagSchema>
 export type LinkedTransaction = z.infer<typeof LinkedTransactionSchema>
+export type ClientCompanyLink = z.infer<typeof ClientCompanyLinkSchema>
+export type ClientExpenseLink = z.infer<typeof ClientExpenseLinkSchema>
 export type AccountLineItem = z.infer<typeof AccountLineItemSchema>

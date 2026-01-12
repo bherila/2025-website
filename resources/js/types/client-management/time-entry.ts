@@ -7,6 +7,7 @@ export interface TimeEntry {
   formatted_time: string
   date_worked: string
   is_billable: boolean
+  is_invoiced: boolean
   job_type: string
   user: User | null
   project: Project | null

@@ -3,11 +3,11 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Plus, ArrowLeft, Clock, Trash2, ChevronDown, ChevronRight, TrendingUp, TrendingDown, AlertCircle, AlertTriangle, Download, HelpCircle } from 'lucide-react'
+import { Plus, Clock, Trash2, ChevronDown, ChevronRight, TrendingUp, TrendingDown, AlertCircle, AlertTriangle, Download, HelpCircle } from 'lucide-react'
 import NewTimeEntryModal from './NewTimeEntryModal'
 import ClientPortalNav from './ClientPortalNav'
 import type { User, Project, Task } from '@/types/client-management/common'
-import type { TimeEntry, MonthlyOpeningBalance, MonthlyClosingBalance, MonthlyData, TimeEntriesResponse } from '@/types/client-management/time-entry'
+import type { TimeEntry, TimeEntriesResponse } from '@/types/client-management/time-entry'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 interface ClientPortalTimePageProps {
@@ -458,9 +458,15 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                  <Badge variant={entry.is_billable ? 'default' : 'secondary'} className="text-xs">
-                                    {entry.is_billable ? 'BILLABLE' : 'NON-BILLABLE'}
-                                  </Badge>
+                                  {entry.is_billable && entry.is_invoiced ? (
+                                    <Badge variant="outline" className="text-xs border-green-600 text-green-600">
+                                      INVOICED
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant={entry.is_billable ? 'default' : 'secondary'} className="text-xs">
+                                      {entry.is_billable ? 'BILLABLE' : 'NON-BILLABLE'}
+                                    </Badge>
+                                  )}
                                   {isAdmin && (
                                     <Button 
                                       variant="ghost" 

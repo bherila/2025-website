@@ -18,7 +18,7 @@ class FinanceTransactionsApiController extends Controller
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
 
         $query = FinAccountLineItems::where('t_account', $account->acct_id)
-            ->with(['tags', 'parentTransactions.account', 'childTransactions.account'])
+            ->with(['tags', 'parentTransactions.account', 'childTransactions.account', 'clientExpense.clientCompany'])
             ->orderBy('t_date', 'desc');
 
         if ($request->has('start_date') && $request->has('end_date')) {
@@ -67,8 +67,30 @@ class FinanceTransactionsApiController extends Controller
                 })->toArray();
             }
 
+            // Add client expense info if exists (store in a temp variable first)
+            $clientExpenseData = null;
+            if ($item->clientExpense) {
+                $clientExpenseData = [
+                    'id' => $item->clientExpense->id,
+                    'description' => $item->clientExpense->description,
+                    'amount' => $item->clientExpense->amount,
+                    'is_reimbursable' => $item->clientExpense->is_reimbursable,
+                    'client_company' => $item->clientExpense->clientCompany ? [
+                        'id' => $item->clientExpense->clientCompany->id,
+                        'company_name' => $item->clientExpense->clientCompany->company_name,
+                        'slug' => $item->clientExpense->clientCompany->slug,
+                    ] : null,
+                ];
+            }
+
             // Remove the raw relationship data
             unset($itemArray['parent_transactions']);
+            unset($itemArray['client_expense']); // Remove the raw Eloquent relation data
+
+            // Add the formatted client expense data back
+            if ($clientExpenseData) {
+                $itemArray['client_expense'] = $clientExpenseData;
+            }
 
             if (! $item->t_schc_category) {
                 unset($itemArray['t_schc_category']);

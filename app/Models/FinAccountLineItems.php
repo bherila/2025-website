@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\ClientManagement\ClientExpense;
 use Illuminate\Database\Eloquent\Model;
 
 class FinAccountLineItems extends Model
@@ -96,5 +97,13 @@ class FinAccountLineItems extends Model
             't_id',
             't_id'
         )->wherePivotNull('when_deleted');
+    }
+
+    /**
+     * Get the client expense linked to this line item.
+     */
+    public function clientExpense()
+    {
+        return $this->hasOne(ClientExpense::class, 'fin_line_item_id', 't_id');
     }
 }

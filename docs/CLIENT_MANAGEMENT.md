@@ -1129,3 +1129,96 @@ Run delayed billing tests with:
 ```bash
 vendor/bin/phpunit tests/Feature/ClientManagement/DelayedBillingTest.php
 ```
+
+---
+
+## Client Expenses
+
+### Overview
+The Expenses feature allows admin users to track reimbursable and non-reimbursable expenses for client companies. Expenses can be optionally linked to:
+- A specific project within the client company
+- A FinAccount line item (for financial tracking integration)
+
+### Database Schema
+
+#### `client_expenses` table
+- `id`: Primary key (auto-increment)
+- `client_company_id`: Foreign key to `client_companies` (cascade on delete)
+- `project_id`: Foreign key to `client_projects` (set null on delete, nullable)
+- `fin_line_item_id`: Foreign key to `fin_account_line_items.t_id` (set null on delete, nullable)
+- `description`: Expense description (required)
+- `amount`: Expense amount (decimal 12,2)
+- `expense_date`: Date of expense (required)
+- `is_reimbursable`: Whether expense is reimbursable (boolean, default false)
+- `is_reimbursed`: Whether expense has been reimbursed (boolean, default false)
+- `reimbursed_date`: Date of reimbursement (nullable)
+- `category`: Expense category (string, nullable)
+- `notes`: Additional notes (text, nullable)
+- `creator_user_id`: Foreign key to `users` (set null on delete)
+- `client_invoice_line_id`: Foreign key to invoice lines (nullable, for future invoicing)
+- `created_at`, `updated_at`: Timestamps
+- `deleted_at`: Soft delete timestamp (nullable)
+
+### API Routes for Expenses
+
+All protected by `['web', 'auth']` middleware and Admin gate:
+
+```
+GET    /api/client/mgmt/companies/{company}/expenses              → List all expenses
+POST   /api/client/mgmt/companies/{company}/expenses              → Create expense
+GET    /api/client/mgmt/companies/{company}/expenses/{expense}    → Get single expense
+PUT    /api/client/mgmt/companies/{company}/expenses/{expense}    → Update expense
+DELETE /api/client/mgmt/companies/{company}/expenses/{expense}    → Delete expense
+POST   /api/client/mgmt/companies/{company}/expenses/{expense}/mark-reimbursed  → Mark as reimbursed
+POST   /api/client/mgmt/companies/{company}/expenses/{expense}/link-finance     → Link to finance line item
+DELETE /api/client/mgmt/companies/{company}/expenses/{expense}/link-finance     → Unlink from finance line item
+```
+
+### Web Routes for Expenses
+
+```
+GET /client/portal/{slug}/expenses → ClientPortalExpensesPage (Admin only)
+```
+
+### Components
+
+#### ClientPortalExpensesPage
+Location: `resources/js/components/client-management/portal/ClientPortalExpensesPage.tsx`
+
+Features:
+- Summary cards showing total, reimbursable, pending, and non-reimbursable amounts
+- Sortable table of all expenses
+- Link to FinAccount transaction when linked (admin only visible)
+- Mark expense as reimbursed action
+- Click row to edit expense
+
+#### NewExpenseModal
+Location: `resources/js/components/client-management/portal/NewExpenseModal.tsx`
+
+Features:
+- Create and edit expenses
+- Select project from dropdown
+- Enter FinAccount line item ID (t_id) to link
+- Toggle reimbursable/reimbursed status
+- Category selection from preset list
+
+### FinAccount Integration
+
+When an expense is linked to a FinAccount line item:
+1. The expense stores the `fin_line_item_id` (t_id from `fin_account_line_items`)
+2. The Expenses page shows a link to the transaction in the Finance module
+3. The Finance TransactionsTable shows a "Client" column with a link back to the client portal
+
+This bidirectional linking allows:
+- Viewing which personal expenses are billed to clients
+- Navigating from client expenses to the actual financial transaction
+- Tracking reimbursement status
+
+### Time Entry Invoiced Status
+
+Time entries now display an "Invoiced" status badge when:
+- The entry is billable (`is_billable = true`)
+- The entry is linked to an invoice line (`client_invoice_line_id IS NOT NULL`)
+
+The `ClientTimeEntry` model has an `is_invoiced` appended attribute that is automatically included in API responses.
+

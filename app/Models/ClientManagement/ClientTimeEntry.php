@@ -13,6 +13,8 @@ class ClientTimeEntry extends Model
 
     protected $table = 'client_time_entries';
 
+    protected $appends = ['is_invoiced'];
+
     protected $fillable = [
         'project_id',
         'client_company_id',
@@ -123,6 +125,14 @@ class ClientTimeEntry extends Model
     public function isInvoiced(): bool
     {
         return $this->client_invoice_line_id !== null;
+    }
+
+    /**
+     * Accessor for is_invoiced attribute.
+     */
+    public function getIsInvoicedAttribute(): bool
+    {
+        return $this->isInvoiced();
     }
 
     /**

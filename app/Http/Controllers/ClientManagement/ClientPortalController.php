@@ -101,4 +101,19 @@ class ClientPortalController extends Controller
             'invoiceId' => $invoice->client_invoice_id,
         ]);
     }
+
+    /**
+     * Display the expenses page for a company (admin only).
+     */
+    public function expenses($slug)
+    {
+        $company = ClientCompany::where('slug', $slug)->firstOrFail();
+
+        Gate::authorize('Admin');
+
+        return view('client-management.portal.expenses', [
+            'company' => $company,
+            'slug' => $slug,
+        ]);
+    }
 }
