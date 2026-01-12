@@ -49,14 +49,14 @@ class ClientInvoiceTest extends TestCase
         // Create an active agreement
         $this->agreement = ClientAgreement::create([
             'client_company_id' => $this->company->id,
-            'agreement_name' => 'Standard Retainer',
+            'agreement_text' => 'Standard Retainer',
             'monthly_retainer_fee' => 1000.00,
             'monthly_retainer_hours' => 10,
             'hourly_rate' => 150.00,
-            'start_date' => Carbon::create(2024, 1, 1),
-            'end_date' => null,
+            'active_date' => Carbon::create(2024, 1, 1),
+            'termination_date' => null,
             'rollover_months' => 3,
-            'is_active' => true,
+            'is_visible_to_client' => true,
         ]);
     }
 
@@ -289,6 +289,7 @@ class ClientInvoiceTest extends TestCase
 
     public function test_invoice_api_void_rejects_invoice_with_payments(): void
     {
+        $this->withoutMiddleware();
         $invoice = $this->invoicingService->generateInvoice(
             $this->company,
             Carbon::create(2024, 1, 1),
@@ -311,6 +312,7 @@ class ClientInvoiceTest extends TestCase
 
     public function test_invoice_api_unvoid_works(): void
     {
+        $this->withoutMiddleware();
         $invoice = $this->invoicingService->generateInvoice(
             $this->company,
             Carbon::create(2024, 1, 1),
