@@ -320,6 +320,9 @@ class ClientInvoiceTest extends TestCase
         );
         $invoice->void();
 
+        // Sanity-check IDs before API call
+        $this->assertEquals($this->company->id, $invoice->client_company_id, 'Invoice should belong to the company');
+
         $response = $this->actingAs($this->admin)
             ->postJson("/api/client/mgmt/companies/{$this->company->id}/invoices/{$invoice->client_invoice_id}/unvoid", [
                 'status' => 'issued',
