@@ -185,3 +185,20 @@ Route::middleware(['web', 'auth'])->get('/finance/{accountId}/files', [FileContr
 Route::middleware(['web', 'auth'])->post('/finance/{accountId}/files', [FileController::class, 'uploadFinAccountFile']);
 Route::middleware(['web', 'auth'])->get('/finance/{accountId}/files/{fileId}/download', [FileController::class, 'downloadFinAccountFile']);
 Route::middleware(['web', 'auth'])->delete('/finance/{accountId}/files/{fileId}', [FileController::class, 'deleteFinAccountFile']);
+
+// Utility Bill Tracker API routes
+use App\Http\Controllers\UtilityBillTracker\UtilityAccountApiController;
+use App\Http\Controllers\UtilityBillTracker\UtilityBillApiController;
+use App\Http\Controllers\UtilityBillTracker\UtilityBillImportController;
+
+Route::middleware(['web', 'auth'])->get('/utility-bill-tracker/accounts', [UtilityAccountApiController::class, 'index']);
+Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts', [UtilityAccountApiController::class, 'store']);
+Route::middleware(['web', 'auth'])->get('/utility-bill-tracker/accounts/{id}', [UtilityAccountApiController::class, 'show']);
+Route::middleware(['web', 'auth'])->put('/utility-bill-tracker/accounts/{id}/notes', [UtilityAccountApiController::class, 'updateNotes']);
+Route::middleware(['web', 'auth'])->delete('/utility-bill-tracker/accounts/{id}', [UtilityAccountApiController::class, 'destroy']);
+Route::middleware(['web', 'auth'])->get('/utility-bill-tracker/accounts/{accountId}/bills', [UtilityBillApiController::class, 'index']);
+Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accountId}/bills', [UtilityBillApiController::class, 'store']);
+Route::middleware(['web', 'auth'])->get('/utility-bill-tracker/accounts/{accountId}/bills/{billId}', [UtilityBillApiController::class, 'show']);
+Route::middleware(['web', 'auth'])->put('/utility-bill-tracker/accounts/{accountId}/bills/{billId}', [UtilityBillApiController::class, 'update']);
+Route::middleware(['web', 'auth'])->delete('/utility-bill-tracker/accounts/{accountId}/bills/{billId}', [UtilityBillApiController::class, 'destroy']);
+Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accountId}/bills/import-pdf', [UtilityBillImportController::class, 'import']);

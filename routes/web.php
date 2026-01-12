@@ -8,6 +8,7 @@ use App\Http\Controllers\FinanceAccountsController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\PayslipController;
 use App\Http\Controllers\UserManagementController;
+use App\Http\Controllers\UtilityBillTracker\UtilityAccountController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -77,6 +78,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/client/portal/{slug}/invoices', [ClientPortalController::class, 'invoices'])->name('client-portal.invoices');
     Route::get('/client/portal/{slug}/invoice/{invoiceId}', [ClientPortalController::class, 'invoice'])->name('client-portal.invoice');
     Route::get('/client/portal/{slug}/expenses', [ClientPortalController::class, 'expenses'])->name('client-portal.expenses');
+
+    // Utility Bill Tracker Routes
+    Route::get('/utility-bill-tracker', [UtilityAccountController::class, 'index'])->name('utility-bill-tracker.index');
+    Route::get('/utility-bill-tracker/{id}/bills', [UtilityAccountController::class, 'bills'])->name('utility-bill-tracker.bills');
 });
 
 Route::get('/tools/bingo', [App\Http\Controllers\BingoController::class, 'index']);

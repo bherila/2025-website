@@ -89,6 +89,7 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies }: Navb
                 <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/rsu'>Finance RSU</a>
                 <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/payslips'>Finance Payslips</a>
                 <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/accounts'>Finance Accounts</a>
+                <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/utility-bill-tracker'>Utility Bill Tracker</a>
                 <div className='px-2 pt-3 pb-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]'>Utilities</div>
                 <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/tools/maxmin'>MaxMin</a>
                 <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/tools/license-manager'>License Manager</a>
