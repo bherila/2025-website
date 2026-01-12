@@ -12,7 +12,6 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Skeleton } from '@/components/ui/skeleton'
 import type { Agreement, Project } from '@/types/client-management/common'
 
 import ClientPortalNav from './ClientPortalNav'
@@ -22,12 +21,19 @@ interface ClientPortalIndexPageProps {
   slug: string
   companyName: string
   isAdmin?: boolean
+  initialProjects?: Project[]
+  initialAgreements?: Agreement[]
 }
 
-export default function ClientPortalIndexPage({ slug, companyName, isAdmin = false }: ClientPortalIndexPageProps) {
-  const [projects, setProjects] = useState<Project[]>([])
-  const [agreements, setAgreements] = useState<Agreement[]>([])
-  const [loading, setLoading] = useState(true)
+export default function ClientPortalIndexPage({ 
+  slug, 
+  companyName, 
+  isAdmin = false,
+  initialProjects = [],
+  initialAgreements = []
+}: ClientPortalIndexPageProps) {
+  const [projects] = useState<Project[]>(initialProjects)
+  const [agreements] = useState<Agreement[]>(initialAgreements)
   const [newProjectModalOpen, setNewProjectModalOpen] = useState(false)
 
   const fileManager = useFileManagement({
@@ -43,27 +49,9 @@ export default function ClientPortalIndexPage({ slug, companyName, isAdmin = fal
   }, [companyName])
 
   useEffect(() => {
-    Promise.all([
-      fetchProjects(),
-      fetchAgreements(),
-      fetchTimeEntries(),
-    ]).finally(() => {
-      setLoading(false)
-    })
+    fetchTimeEntries()
     fileManager.fetchFiles()
   }, [slug])
-
-  const fetchProjects = async () => {
-    try {
-      const response = await fetch(`/api/client/portal/${slug}/projects`)
-      if (response.ok) {
-        const data = await response.json()
-        setProjects(data)
-      }
-    } catch (error) {
-      console.error('Error fetching projects:', error)
-    }
-  }
 
   const fetchTimeEntries = async () => {
     try {
@@ -72,40 +60,6 @@ export default function ClientPortalIndexPage({ slug, companyName, isAdmin = fal
     } catch (error) {
       console.error('Error preloading time entries:', error)
     }
-  }
-
-  const fetchAgreements = async () => {
-    try {
-      const response = await fetch(`/api/client/portal/${slug}/agreements`)
-      if (response.ok) {
-        const data = await response.json()
-        setAgreements(data)
-      }
-    } catch (error) {
-      console.error('Error fetching agreements:', error)
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="container mx-auto p-8 max-w-6xl">
-        <div className="flex justify-between items-center mb-6">
-          <div>
-            <Skeleton className="h-10 w-48 mb-2" />
-            <Skeleton className="h-4 w-24" />
-          </div>
-          <div className="flex gap-2">
-            <Skeleton className="h-10 w-32" />
-            <Skeleton className="h-10 w-32" />
-          </div>
-        </div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <Skeleton className="h-40 w-full" />
-          <Skeleton className="h-40 w-full" />
-          <Skeleton className="h-40 w-full" />
-        </div>
-      </div>
-    )
   }
 
   return (
@@ -225,7 +179,6 @@ export default function ClientPortalIndexPage({ slug, companyName, isAdmin = fal
         open={newProjectModalOpen}
         onOpenChange={setNewProjectModalOpen}
         slug={slug}
-        onSuccess={fetchProjects}
       />
 
       <FileHistoryModal
@@ -246,3 +199,4 @@ export default function ClientPortalIndexPage({ slug, companyName, isAdmin = fal
     </>
   )
 }
+

@@ -2,7 +2,13 @@
 
 @section('content')
 <x-client-admin-header :company="$company" />
-<div id="ClientPortalIndexPage" data-slug="{{ $slug }}" data-company-name="{{ $company->company_name }}" data-is-admin="{{ auth()->user()?->hasRole('admin') ? 'true' : 'false' }}"></div>
+<div id="ClientPortalIndexPage" 
+     data-slug="{{ $slug }}" 
+     data-company-name="{{ $company->company_name }}" 
+     data-is-admin="{{ auth()->user()?->hasRole('admin') ? 'true' : 'false' }}"
+     data-projects="{{ json_encode($projects) }}"
+     data-agreements="{{ json_encode($agreements) }}"
+></div>
 @endsection
 
 @push('scripts')

@@ -19,11 +19,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const indexDiv = document.getElementById('ClientPortalIndexPage')
   if (indexDiv) {
+    let initialProjects = []
+    let initialAgreements = []
+    try {
+      if (indexDiv.dataset.projects) initialProjects = JSON.parse(indexDiv.dataset.projects)
+      if (indexDiv.dataset.agreements) initialAgreements = JSON.parse(indexDiv.dataset.agreements)
+    } catch (e) {
+      console.error('Failed to parse initial data', e)
+    }
+
     const root = createRoot(indexDiv)
     root.render(<ClientPortalIndexPage 
       slug={indexDiv.dataset.slug!}
       companyName={indexDiv.dataset.companyName!}
       isAdmin={indexDiv.dataset.isAdmin === 'true'}
+      initialProjects={initialProjects}
+      initialAgreements={initialAgreements}
     />)
   }
 

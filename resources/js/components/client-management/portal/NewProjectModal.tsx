@@ -9,10 +9,9 @@ interface NewProjectModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   slug: string
-  onSuccess: () => void
 }
 
-export default function NewProjectModal({ open, onOpenChange, slug, onSuccess }: NewProjectModalProps) {
+export default function NewProjectModal({ open, onOpenChange, slug }: NewProjectModalProps) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [loading, setLoading] = useState(false)
@@ -37,10 +36,7 @@ export default function NewProjectModal({ open, onOpenChange, slug, onSuccess }:
       })
 
       if (response.ok) {
-        onSuccess()
-        onOpenChange(false)
-        setName('')
-        setDescription('')
+        window.location.reload()
       } else {
         const data = await response.json()
         setError(data.message || 'Failed to create project')
