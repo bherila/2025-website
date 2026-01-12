@@ -5,11 +5,19 @@ namespace App\Http\Controllers\UtilityBillTracker;
 use App\Http\Controllers\Controller;
 use App\Models\UtilityBillTracker\UtilityAccount;
 use App\Models\UtilityBillTracker\UtilityBill;
+use App\Services\FileStorageService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
 class UtilityBillApiController extends Controller
 {
+    protected FileStorageService $fileService;
+
+    public function __construct(FileStorageService $fileService)
+    {
+        $this->fileService = $fileService;
+    }
+
     /**
      * Get all bills for a utility account.
      */
@@ -18,6 +26,7 @@ class UtilityBillApiController extends Controller
         $account = UtilityAccount::findOrFail($accountId);
 
         $bills = UtilityBill::where('utility_account_id', $accountId)
+            ->with('linkedTransaction:t_id,t_description,t_amt,t_date')
             ->orderBy('due_date', 'desc')
             ->get();
 
@@ -38,6 +47,8 @@ class UtilityBillApiController extends Controller
             'total_cost' => 'required|numeric|min:0',
             'status' => 'required|in:Paid,Unpaid',
             'notes' => 'nullable|string',
+            'taxes' => 'nullable|numeric|min:0',
+            'fees' => 'nullable|numeric|min:0',
         ];
 
         // Add electricity-specific validation if account type is Electricity
@@ -61,6 +72,8 @@ class UtilityBillApiController extends Controller
             'total_cost' => $request->total_cost,
             'status' => $request->status,
             'notes' => $request->notes,
+            'taxes' => $request->taxes,
+            'fees' => $request->fees,
         ];
 
         // Include electricity-specific fields if account type is Electricity
@@ -84,6 +97,7 @@ class UtilityBillApiController extends Controller
 
         $bill = UtilityBill::where('utility_account_id', $accountId)
             ->where('id', $billId)
+            ->with('linkedTransaction:t_id,t_description,t_amt,t_date')
             ->firstOrFail();
 
         return response()->json($bill);
@@ -107,6 +121,8 @@ class UtilityBillApiController extends Controller
             'total_cost' => 'required|numeric|min:0',
             'status' => 'required|in:Paid,Unpaid',
             'notes' => 'nullable|string',
+            'taxes' => 'nullable|numeric|min:0',
+            'fees' => 'nullable|numeric|min:0',
         ];
 
         // Add electricity-specific validation if account type is Electricity
@@ -129,6 +145,8 @@ class UtilityBillApiController extends Controller
             'total_cost' => $request->total_cost,
             'status' => $request->status,
             'notes' => $request->notes,
+            'taxes' => $request->taxes,
+            'fees' => $request->fees,
         ];
 
         // Include electricity-specific fields if account type is Electricity
@@ -144,6 +162,24 @@ class UtilityBillApiController extends Controller
     }
 
     /**
+     * Toggle bill status between Paid and Unpaid.
+     */
+    public function toggleStatus(int $accountId, int $billId)
+    {
+        UtilityAccount::findOrFail($accountId);
+
+        $bill = UtilityBill::where('utility_account_id', $accountId)
+            ->where('id', $billId)
+            ->firstOrFail();
+
+        $bill->update([
+            'status' => $bill->status === 'Paid' ? 'Unpaid' : 'Paid',
+        ]);
+
+        return response()->json($bill);
+    }
+
+    /**
      * Delete a utility bill.
      */
     public function destroy(int $accountId, int $billId)
@@ -154,8 +190,62 @@ class UtilityBillApiController extends Controller
             ->where('id', $billId)
             ->firstOrFail();
 
+        // The model's deleting event will handle S3 file deletion
         $bill->delete();
 
         return response()->json(['message' => 'Bill deleted successfully']);
+    }
+
+    /**
+     * Download the PDF file for a bill.
+     */
+    public function downloadPdf(int $accountId, int $billId)
+    {
+        UtilityAccount::findOrFail($accountId);
+
+        $bill = UtilityBill::where('utility_account_id', $accountId)
+            ->where('id', $billId)
+            ->firstOrFail();
+
+        if (!$bill->pdf_s3_path) {
+            return response()->json(['error' => 'No PDF file attached to this bill'], 404);
+        }
+
+        $downloadUrl = $this->fileService->getSignedDownloadUrl(
+            $bill->pdf_s3_path,
+            $bill->pdf_original_filename ?? 'bill.pdf',
+            15
+        );
+
+        return response()->json(['download_url' => $downloadUrl]);
+    }
+
+    /**
+     * Delete the PDF file for a bill.
+     */
+    public function deletePdf(int $accountId, int $billId)
+    {
+        UtilityAccount::findOrFail($accountId);
+
+        $bill = UtilityBill::where('utility_account_id', $accountId)
+            ->where('id', $billId)
+            ->firstOrFail();
+
+        if (!$bill->pdf_s3_path) {
+            return response()->json(['error' => 'No PDF file attached to this bill'], 404);
+        }
+
+        // Delete from S3
+        $this->fileService->deleteFile($bill->pdf_s3_path);
+
+        // Clear the file columns
+        $bill->update([
+            'pdf_original_filename' => null,
+            'pdf_stored_filename' => null,
+            'pdf_s3_path' => null,
+            'pdf_file_size_bytes' => null,
+        ]);
+
+        return response()->json(['message' => 'PDF deleted successfully']);
     }
 }

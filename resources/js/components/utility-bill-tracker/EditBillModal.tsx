@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { useState, useEffect } from 'react';
+import { FileText, Trash2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -32,6 +33,8 @@ export function EditBillModal({
     bill_end_date: '',
     due_date: '',
     total_cost: '',
+    taxes: '',
+    fees: '',
     status: 'Unpaid' as 'Paid' | 'Unpaid',
     notes: '',
     power_consumed_kwh: '',
@@ -39,24 +42,29 @@ export function EditBillModal({
     total_delivery_fees: '',
   });
   const [submitting, setSubmitting] = useState(false);
+  const [deletingPdf, setDeletingPdf] = useState(false);
+  const [currentBill, setCurrentBill] = useState<UtilityBill | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const isElectricity = accountType === 'Electricity';
 
-  const formatDateForInput = (dateString: string | null | undefined) => {
+  const formatDateForInput = (dateString: string | null | undefined): string => {
     if (!dateString) return '';
     // API might return "YYYY-MM-DD HH:MM:SS" or ISO string
-    return dateString.split(/[ T]/)[0];
+    return dateString.split(/[ T]/)[0] ?? '';
   };
 
   useEffect(() => {
     if (open) {
       if (bill && !isNew) {
+        setCurrentBill(bill);
         setFormData({
           bill_start_date: formatDateForInput(bill.bill_start_date),
           bill_end_date: formatDateForInput(bill.bill_end_date),
           due_date: formatDateForInput(bill.due_date),
           total_cost: bill.total_cost,
+          taxes: bill.taxes || '',
+          fees: bill.fees || '',
           status: bill.status,
           notes: bill.notes || '',
           power_consumed_kwh: bill.power_consumed_kwh || '',
@@ -64,11 +72,14 @@ export function EditBillModal({
           total_delivery_fees: bill.total_delivery_fees || '',
         });
       } else {
+        setCurrentBill(null);
         setFormData({
           bill_start_date: '',
           bill_end_date: '',
           due_date: '',
           total_cost: '',
+          taxes: '',
+          fees: '',
           status: 'Unpaid',
           notes: '',
           power_consumed_kwh: '',
@@ -91,6 +102,8 @@ export function EditBillModal({
         bill_end_date: formData.bill_end_date,
         due_date: formData.due_date,
         total_cost: parseFloat(formData.total_cost) || 0,
+        taxes: formData.taxes ? parseFloat(formData.taxes) : null,
+        fees: formData.fees ? parseFloat(formData.fees) : null,
         status: formData.status,
         notes: formData.notes || null,
       };
@@ -130,6 +143,43 @@ export function EditBillModal({
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleDeletePdf = async () => {
+    if (!currentBill) return;
+    
+    setDeletingPdf(true);
+    try {
+      const response = await fetch(`/api/utility-bill-tracker/accounts/${accountId}/bills/${currentBill.id}/pdf`, {
+        method: 'DELETE',
+        headers: {
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete PDF');
+      }
+
+      const data = await response.json();
+      setCurrentBill(data.bill);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete PDF');
+    } finally {
+      setDeletingPdf(false);
+    }
+  };
+
+  const formatFileSize = (bytes: number | null): string => {
+    if (!bytes) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let size = bytes;
+    let unitIndex = 0;
+    while (size >= 1024 && unitIndex < units.length - 1) {
+      size /= 1024;
+      unitIndex++;
+    }
+    return `${size.toFixed(unitIndex > 0 ? 2 : 0)} ${units[unitIndex]}`;
   };
 
   return (
@@ -209,6 +259,33 @@ export function EditBillModal({
               />
             </div>
 
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="taxes">Taxes ($)</Label>
+                <Input
+                  id="taxes"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.taxes}
+                  onChange={(e) => handleInputChange('taxes', e.target.value)}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="fees">Fees ($)</Label>
+                <Input
+                  id="fees"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.fees}
+                  onChange={(e) => handleInputChange('fees', e.target.value)}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+
             {isElectricity && (
               <>
                 <div className="border-t pt-4 mt-4">
@@ -267,6 +344,38 @@ export function EditBillModal({
                 rows={3}
               />
             </div>
+
+            {/* PDF Information Section */}
+            {currentBill?.pdf_s3_path && (
+              <div className="border-t pt-4 mt-4">
+                <p className="text-sm font-medium text-muted-foreground mb-3">Attached PDF</p>
+                <div className="flex items-center justify-between p-3 rounded bg-muted/50">
+                  <div className="flex items-center space-x-3 min-w-0">
+                    <FileText className="h-5 w-5 text-primary flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{currentBill.pdf_original_filename}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatFileSize(currentBill.pdf_file_size_bytes)}
+                      </p>
+                    </div>
+                  </div>
+                  <Button 
+                    type="button"
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={handleDeletePdf}
+                    disabled={deletingPdf}
+                    className="text-destructive hover:text-destructive"
+                  >
+                    {deletingPdf ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {error && (
               <div className="text-sm text-destructive">{error}</div>

@@ -190,6 +190,7 @@ Route::middleware(['web', 'auth'])->delete('/finance/{accountId}/files/{fileId}'
 use App\Http\Controllers\UtilityBillTracker\UtilityAccountApiController;
 use App\Http\Controllers\UtilityBillTracker\UtilityBillApiController;
 use App\Http\Controllers\UtilityBillTracker\UtilityBillImportController;
+use App\Http\Controllers\UtilityBillTracker\UtilityBillLinkingController;
 
 Route::middleware(['web', 'auth'])->get('/utility-bill-tracker/accounts', [UtilityAccountApiController::class, 'index']);
 Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts', [UtilityAccountApiController::class, 'store']);
@@ -200,5 +201,13 @@ Route::middleware(['web', 'auth'])->get('/utility-bill-tracker/accounts/{account
 Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accountId}/bills', [UtilityBillApiController::class, 'store']);
 Route::middleware(['web', 'auth'])->get('/utility-bill-tracker/accounts/{accountId}/bills/{billId}', [UtilityBillApiController::class, 'show']);
 Route::middleware(['web', 'auth'])->put('/utility-bill-tracker/accounts/{accountId}/bills/{billId}', [UtilityBillApiController::class, 'update']);
+Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accountId}/bills/{billId}/toggle-status', [UtilityBillApiController::class, 'toggleStatus']);
 Route::middleware(['web', 'auth'])->delete('/utility-bill-tracker/accounts/{accountId}/bills/{billId}', [UtilityBillApiController::class, 'destroy']);
+Route::middleware(['web', 'auth'])->get('/utility-bill-tracker/accounts/{accountId}/bills/{billId}/download-pdf', [UtilityBillApiController::class, 'downloadPdf']);
+Route::middleware(['web', 'auth'])->delete('/utility-bill-tracker/accounts/{accountId}/bills/{billId}/pdf', [UtilityBillApiController::class, 'deletePdf']);
 Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accountId}/bills/import-pdf', [UtilityBillImportController::class, 'import']);
+
+// Utility Bill Linking routes
+Route::middleware(['web', 'auth'])->get('/utility-bill-tracker/accounts/{accountId}/bills/{billId}/linkable', [UtilityBillLinkingController::class, 'findLinkableTransactions']);
+Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accountId}/bills/{billId}/link', [UtilityBillLinkingController::class, 'linkTransaction']);
+Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accountId}/bills/{billId}/unlink', [UtilityBillLinkingController::class, 'unlinkTransaction']);

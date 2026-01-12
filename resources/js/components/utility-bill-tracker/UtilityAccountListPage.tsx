@@ -44,6 +44,12 @@ export function UtilityAccountListPage() {
     window.location.href = `/utility-bill-tracker/${accountId}/bills`;
   };
 
+  const formatCurrency = (value: string | number | null | undefined) => {
+    if (value === null || value === undefined) return '$0.00';
+    const num = typeof value === 'string' ? parseFloat(value) : value;
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(num);
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       <Card>
@@ -83,6 +89,7 @@ export function UtilityAccountListPage() {
                   <TableHead>Account Name</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead className="text-right">Bills</TableHead>
+                  <TableHead className="text-right">Total Amount</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -95,6 +102,7 @@ export function UtilityAccountListPage() {
                     <TableCell className="font-medium">{account.account_name}</TableCell>
                     <TableCell>{account.account_type}</TableCell>
                     <TableCell className="text-right">{account.bills_count ?? 0}</TableCell>
+                    <TableCell className="text-right font-medium">{formatCurrency(account.bills_sum_total_cost)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\UtilityBillTracker;
 use App\Http\Controllers\Controller;
 use App\Models\UtilityBillTracker\UtilityAccount;
 use App\Models\UtilityBillTracker\UtilityBill;
+use App\Services\FileStorageService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
@@ -14,6 +15,13 @@ use Throwable;
 
 class UtilityBillImportController extends Controller
 {
+    protected FileStorageService $fileService;
+
+    public function __construct(FileStorageService $fileService)
+    {
+        $this->fileService = $fileService;
+    }
+
     public function import(Request $request, int $accountId)
     {
         // Set execution time limit to 5 minutes to handle Gemini API requests
@@ -38,6 +46,7 @@ class UtilityBillImportController extends Controller
         }
 
         $file = $request->file('file');
+        $fileContent = $file->get();
         $prompt = $this->getPrompt($account->account_type);
 
         try {
@@ -54,7 +63,7 @@ class UtilityBillImportController extends Controller
                             [
                                 'inline_data' => [
                                     'mime_type' => 'application/pdf',
-                                    'data' => base64_encode($file->get()),
+                                    'data' => base64_encode($fileContent),
                                 ],
                             ],
                         ],
@@ -70,6 +79,13 @@ class UtilityBillImportController extends Controller
                 $data = json_decode(str_replace(['```json', '```'], '', $json_string), true);
 
                 if (json_last_error() === JSON_ERROR_NONE && is_array($data)) {
+                    // Store the PDF file in S3
+                    $originalFilename = $file->getClientOriginalName();
+                    $storedFilename = UtilityBill::generateStoredFilename($originalFilename);
+                    $s3Path = UtilityBill::generateS3Path($accountId, $storedFilename);
+                    
+                    $uploaded = $this->fileService->uploadContent($fileContent, $s3Path);
+                    
                     // Create the bill with extracted data
                     $billData = [
                         'utility_account_id' => $accountId,
@@ -77,6 +93,8 @@ class UtilityBillImportController extends Controller
                         'bill_end_date' => $data['bill_end_date'] ?? null,
                         'due_date' => $data['due_date'] ?? null,
                         'total_cost' => $data['total_cost'] ?? 0,
+                        'taxes' => $data['taxes'] ?? null,
+                        'fees' => $data['fees'] ?? null,
                         'status' => 'Unpaid',
                         'notes' => $data['notes'] ?? null,
                     ];
@@ -88,11 +106,20 @@ class UtilityBillImportController extends Controller
                         $billData['total_delivery_fees'] = $data['total_delivery_fees'] ?? null;
                     }
 
+                    // Add PDF file info if upload was successful
+                    if ($uploaded) {
+                        $billData['pdf_original_filename'] = $originalFilename;
+                        $billData['pdf_stored_filename'] = $storedFilename;
+                        $billData['pdf_s3_path'] = $s3Path;
+                        $billData['pdf_file_size_bytes'] = strlen($fileContent);
+                    }
+
                     $bill = UtilityBill::create($billData);
 
                     Log::info('Utility bill import successful for user ID '.$user->id, [
                         'account_id' => $accountId,
                         'bill_id' => $bill->id,
+                        'pdf_stored' => $uploaded,
                     ]);
 
                     return response()->json([
@@ -148,6 +175,8 @@ Analyze the provided utility bill PDF document and extract the following fields 
 - `bill_end_date`: Billing period end date (YYYY-MM-DD)
 - `due_date`: Payment due date (YYYY-MM-DD)
 - `total_cost`: Total amount due (numeric, in dollars)
+- `taxes`: Total taxes charged on the bill (numeric, in dollars)
+- `fees`: Total fees charged on the bill, excluding taxes (numeric, in dollars)
 - `notes`: Any relevant notes or account information extracted from the bill (optional, string)
 PROMPT;
 

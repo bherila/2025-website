@@ -16,6 +16,7 @@ class UtilityAccountApiController extends Controller
     public function index()
     {
         $accounts = UtilityAccount::withCount('bills')
+            ->withSum('bills', 'total_cost')
             ->orderBy('account_name')
             ->get();
 

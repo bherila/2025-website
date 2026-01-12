@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, Upload, Trash2, Pencil } from 'lucide-react';
+import { ArrowLeft, Plus, Upload, Trash2, Pencil, Link2, Download, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { EditBillModal } from './EditBillModal';
 import { ImportBillModal } from './ImportBillModal';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
+import { LinkBillModal } from './LinkBillModal';
 import type { UtilityAccount, UtilityBill } from '@/types/utility-bill-tracker';
 
 interface UtilityBillListPageProps {
@@ -31,8 +32,10 @@ export function UtilityBillListPage({ accountId, accountName, accountType }: Uti
   const [showImportModal, setShowImportModal] = useState(false);
   const [showDeleteBillModal, setShowDeleteBillModal] = useState(false);
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
+  const [showLinkModal, setShowLinkModal] = useState(false);
   const [selectedBill, setSelectedBill] = useState<UtilityBill | null>(null);
   const [isNewBill, setIsNewBill] = useState(false);
+  const [togglingStatus, setTogglingStatus] = useState<number | null>(null);
 
   const isElectricity = accountType === 'Electricity';
 
@@ -52,7 +55,11 @@ export function UtilityBillListPage({ accountId, accountName, accountType }: Uti
       const billsData = await billsRes.json();
 
       setAccount(accountData);
-      setBills(billsData);
+      // Sort bills by due date descending
+      const sortedBills = billsData.sort((a: UtilityBill, b: UtilityBill) => 
+        new Date(b.due_date).getTime() - new Date(a.due_date).getTime()
+      );
+      setBills(sortedBills);
       setNotes(accountData.notes || '');
       setError(null);
     } catch (err) {
@@ -110,6 +117,41 @@ export function UtilityBillListPage({ accountId, accountName, accountType }: Uti
   const handleDeleteBill = (bill: UtilityBill) => {
     setSelectedBill(bill);
     setShowDeleteBillModal(true);
+  };
+
+  const handleToggleStatus = async (bill: UtilityBill) => {
+    if (togglingStatus === bill.id) return;
+    
+    setTogglingStatus(bill.id);
+    try {
+      const response = await fetch(`/api/utility-bill-tracker/accounts/${accountId}/bills/${bill.id}/toggle-status`, {
+        method: 'POST',
+        headers: {
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to toggle status');
+      }
+
+      const data = await response.json();
+      // Update the bill in the local state
+      setBills(prev => prev.map(b => b.id === bill.id ? data.bill : b));
+    } catch (err) {
+      console.error('Failed to toggle status:', err);
+    } finally {
+      setTogglingStatus(null);
+    }
+  };
+
+  const handleLinkBill = (bill: UtilityBill) => {
+    setSelectedBill(bill);
+    setShowLinkModal(true);
+  };
+
+  const handleDownloadPdf = (bill: UtilityBill) => {
+    window.open(`/api/utility-bill-tracker/accounts/${accountId}/bills/${bill.id}/download-pdf`, '_blank');
   };
 
   const confirmDeleteBill = async () => {
@@ -251,6 +293,8 @@ export function UtilityBillListPage({ accountId, accountName, accountType }: Uti
                   <TableHead>Bill Period</TableHead>
                   <TableHead>Due Date</TableHead>
                   <TableHead className="text-right">Total Cost</TableHead>
+                  <TableHead className="text-right">Taxes</TableHead>
+                  <TableHead className="text-right">Fees</TableHead>
                   {isElectricity && (
                     <>
                       <TableHead className="text-right">Power (kWh)</TableHead>
@@ -259,6 +303,7 @@ export function UtilityBillListPage({ accountId, accountName, accountType }: Uti
                     </>
                   )}
                   <TableHead>Status</TableHead>
+                  <TableHead>Linked</TableHead>
                   <TableHead>Notes</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -272,6 +317,12 @@ export function UtilityBillListPage({ accountId, accountName, accountType }: Uti
                     <TableCell>{formatDate(bill.due_date)}</TableCell>
                     <TableCell className="text-right font-medium">
                       {formatCurrency(bill.total_cost)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {bill.taxes ? formatCurrency(bill.taxes) : '-'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {bill.fees ? formatCurrency(bill.fees) : '-'}
                     </TableCell>
                     {isElectricity && (
                       <>
@@ -287,16 +338,41 @@ export function UtilityBillListPage({ accountId, accountName, accountType }: Uti
                       </>
                     )}
                     <TableCell>
-                      <Badge variant={bill.status === 'Paid' ? 'default' : 'secondary'}>
-                        {bill.status}
+                      <Badge 
+                        variant={bill.status === 'Paid' ? 'default' : 'secondary'}
+                        className="cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={() => handleToggleStatus(bill)}
+                      >
+                        {togglingStatus === bill.id ? '...' : bill.status}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {bill.t_id ? (
+                        <a 
+                          href={bill.linked_transaction ? `/finance/accounts/${bill.linked_transaction.account_name ? '' : ''}` : '#'}
+                          className="text-primary hover:underline text-xs"
+                          title={bill.linked_transaction?.t_desc || 'Linked transaction'}
+                        >
+                          {bill.linked_transaction ? formatCurrency(bill.linked_transaction.t_amt) : 'Yes'}
+                        </a>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">-</span>
+                      )}
                     </TableCell>
                     <TableCell className="max-w-[200px] truncate" title={bill.notes || ''}>
                       {bill.notes || '-'}
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => handleEditBill(bill)}>
+                      <div className="flex justify-end gap-1">
+                        {bill.pdf_s3_path && (
+                          <Button variant="ghost" size="sm" onClick={() => handleDownloadPdf(bill)} title="Download PDF">
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <Button variant="ghost" size="sm" onClick={() => handleLinkBill(bill)} title="Link to Transaction">
+                          <Link2 className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleEditBill(bill)} title="Edit">
                           <Pencil className="h-4 w-4" />
                         </Button>
                         <Button variant="ghost" size="sm" onClick={() => handleDeleteBill(bill)}>
@@ -368,6 +444,14 @@ export function UtilityBillListPage({ accountId, accountName, accountType }: Uti
         title="Delete Account"
         description={`Are you sure you want to delete "${accountName}"? This action cannot be undone.`}
         onConfirm={handleDeleteAccount}
+      />
+
+      <LinkBillModal
+        open={showLinkModal}
+        onOpenChange={setShowLinkModal}
+        accountId={accountId}
+        bill={selectedBill}
+        onLinked={fetchData}
       />
     </div>
   );
