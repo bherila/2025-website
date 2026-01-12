@@ -104,6 +104,18 @@ export default function ClientPortalNav({
                 </a>
               </Button>
 
+              {/* Expenses */}
+              <Button 
+                variant={currentPage === 'expenses' ? 'secondary' : 'ghost'} 
+                size="sm"
+                asChild
+              >
+                <a href={`/client/portal/${slug}/expenses`}>
+                  <Receipt className="h-4 w-4 mr-1" />
+                  Expenses
+                </a>
+              </Button>
+
               {/* Invoices */}
               <Button 
                 variant={currentPage === 'invoices' || currentPage === 'invoice' ? 'secondary' : 'ghost'} 
@@ -150,18 +162,6 @@ export default function ClientPortalNav({
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
-
-              {/* Expenses */}
-              <Button 
-                variant={currentPage === 'expenses' ? 'secondary' : 'ghost'} 
-                size="sm"
-                asChild
-              >
-                <a href={`/client/portal/${slug}/expenses`}>
-                  <Receipt className="h-4 w-4 mr-1" />
-                  Expenses
-                </a>
-              </Button>
             </div>
           </div>
         </div>
