@@ -29,7 +29,8 @@ export default defineConfig({
         'resources/js/license-manager.tsx',
         'resources/js/client-management.tsx',
         'resources/js/client-portal.tsx',
-        'resources/js/user-management.tsx'
+        'resources/js/user-management.tsx',
+        'resources/js/utility-bill-tracker.tsx'
       ],
       refresh: true,
     }),
