@@ -21,7 +21,6 @@ interface ImportBillModalProps {
 export function ImportBillModal({ open, onOpenChange, accountId, onImported }: ImportBillModalProps) {
   const [files, setFiles] = useState<FileImportStatus[]>([]);
   const [importing, setImporting] = useState(false);
-  const [currentIndex, setCurrentIndex] = useState(0);
   const [importComplete, setImportComplete] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -45,7 +44,6 @@ export function ImportBillModal({ open, onOpenChange, accountId, onImported }: I
     });
 
     if (errors.length > 0) {
-      // Show first error (could be enhanced to show all)
       console.warn('File validation errors:', errors);
     }
 
@@ -60,53 +58,76 @@ export function ImportBillModal({ open, onOpenChange, accountId, onImported }: I
     if (files.length === 0) return;
 
     setImporting(true);
-    setCurrentIndex(0);
     setImportComplete(false);
+
+    // Set all files to importing status, removing any previous errors
+    setFiles(prev => prev.map(f => {
+      const { error, ...rest } = f;
+      return { ...rest, status: 'importing' } as FileImportStatus;
+    }));
 
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 
-    for (let i = 0; i < files.length; i++) {
-      setCurrentIndex(i);
-      
-      // Update status to importing
-      setFiles(prev => prev.map((f, idx) => 
-        idx === i ? { ...f, status: 'importing' } : f
-      ));
+    try {
+      const formData = new FormData();
+      files.forEach((f) => {
+        formData.append('files[]', f.file);
+      });
 
-      const currentFile = files[i];
-      if (!currentFile) continue;
+      const response = await fetch(`/api/utility-bill-tracker/accounts/${accountId}/bills/import-pdf`, {
+        method: 'POST',
+        headers: {
+          'X-CSRF-TOKEN': csrfToken,
+        },
+        body: formData,
+      });
 
-      try {
-        const formData = new FormData();
-        formData.append('file', currentFile.file);
+      const data = await response.json();
 
-        const response = await fetch(`/api/utility-bill-tracker/accounts/${accountId}/bills/import-pdf`, {
-          method: 'POST',
-          headers: {
-            'X-CSRF-TOKEN': csrfToken,
-          },
-          body: formData,
-        });
-
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || 'Failed to import bill');
+      if (!response.ok) {
+        // If the entire batch failed
+        const errorMsg = data.error || 'Batch import failed';
+        setFiles(prev => prev.map(f => ({ ...f, status: 'error', error: errorMsg })));
+      } else {
+        // Process individual results
+        if (data.results && Array.isArray(data.results)) {
+          setFiles(prev => prev.map(f => {
+            // Find result by filename
+            const result = data.results.find((r: any) => r.filename === f.file.name);
+            if (result) {
+              const newStatus = result.status === 'success' ? 'success' : 'error';
+              // Construct object carefully to satisfy exactOptionalPropertyTypes
+              const newFileState: FileImportStatus = {
+                ...f,
+                status: newStatus,
+              };
+              if (result.error) {
+                newFileState.error = result.error;
+              } else {
+                 // If success, ensure error is removed (though we started from 'f' which might have it? 
+                 // No, 'f' is from 'prev' which was set to 'importing' without error in the step above, 
+                 // BUT 'prev' in this setFiles call refers to the state at the time of THIS update.
+                 // The 'setFiles' above runs first, but this is a new update.
+                 // However, since we are inside an async function after await, the state might have been updated.
+                 // Safest is to destructure 'f' again to be sure.
+                 const { error, ...cleanF } = f;
+                 return { ...cleanF, status: newStatus, ...(result.error ? { error: result.error } : {}) } as FileImportStatus;
+              }
+              return newFileState;
+            }
+            return { ...f, status: 'error', error: 'No result returned' };
+          }));
+        } else {
+           throw new Error('Invalid response format from server');
         }
-
-        // Update status to success
-        setFiles(prev => prev.map((f, idx) => 
-          idx === i ? { ...f, status: 'success' } : f
-        ));
-      } catch (err) {
-        // Update status to error
-        setFiles(prev => prev.map((f, idx) => 
-          idx === i ? { 
-            ...f, 
-            status: 'error', 
-            error: err instanceof Error ? err.message : 'Import failed' 
-          } : f
-        ));
       }
+    } catch (err) {
+      // Network or other error affecting the whole batch
+      setFiles(prev => prev.map(f => ({ 
+        ...f, 
+        status: 'error', 
+        error: err instanceof Error ? err.message : 'Import failed' 
+      })));
     }
 
     setImportComplete(true);
@@ -118,7 +139,6 @@ export function ImportBillModal({ open, onOpenChange, accountId, onImported }: I
     if (importing) return;
     
     setFiles([]);
-    setCurrentIndex(0);
     setImportComplete(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -128,7 +148,6 @@ export function ImportBillModal({ open, onOpenChange, accountId, onImported }: I
 
   const successCount = files.filter(f => f.status === 'success').length;
   const errorCount = files.filter(f => f.status === 'error').length;
-  const progressPercent = files.length > 0 ? ((currentIndex + (importing ? 0.5 : 1)) / files.length) * 100 : 0;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -136,7 +155,7 @@ export function ImportBillModal({ open, onOpenChange, accountId, onImported }: I
         <DialogHeader>
           <DialogTitle>Import Bills from PDF</DialogTitle>
           <DialogDescription>
-            Upload one or more utility bill PDFs to automatically extract bill details using AI.
+            Upload one or more utility bill PDFs. They will be processed in a single batch.
           </DialogDescription>
         </DialogHeader>
 
@@ -145,24 +164,20 @@ export function ImportBillModal({ open, onOpenChange, accountId, onImported }: I
             <div className="flex items-center justify-center space-x-2">
               <Loader2 className="h-6 w-6 animate-spin text-primary" />
               <span className="font-medium">
-                Processing file {currentIndex + 1} of {files.length}...
+                Processing {files.length} file(s)...
               </span>
             </div>
-            <Progress value={progressPercent} className="w-full" />
+            <Progress value={100} className="w-full animate-pulse" />
             <p className="text-sm text-center text-muted-foreground">
-              Currently importing: {files[currentIndex]?.file.name}
+              This may take a minute depending on the number of files.
             </p>
             
             {/* File status list */}
             <div className="max-h-40 overflow-y-auto space-y-2 mt-4">
               {files.map((f, idx) => (
                 <div key={idx} className="flex items-center space-x-2 text-sm">
-                  {f.status === 'success' && <CheckCircle className="h-4 w-4 text-green-500" />}
-                  {f.status === 'error' && <XCircle className="h-4 w-4 text-destructive" />}
                   {f.status === 'importing' && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
-                  {f.status === 'pending' && <div className="h-4 w-4 rounded-full border-2 border-muted" />}
-                  <span className={f.status === 'error' ? 'text-destructive' : ''}>{f.file.name}</span>
-                  {f.error && <span className="text-xs text-destructive">({f.error})</span>}
+                  <span>{f.file.name}</span>
                 </div>
               ))}
             </div>

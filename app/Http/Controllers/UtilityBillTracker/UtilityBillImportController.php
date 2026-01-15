@@ -28,7 +28,8 @@ class UtilityBillImportController extends Controller
         set_time_limit(300);
 
         $validator = Validator::make($request->all(), [
-            'file' => 'required|file|mimes:pdf|max:10240', // 10MB max
+            'files' => 'required|array',
+            'files.*' => 'required|file|mimes:pdf|max:10240', // 10MB max per file
         ]);
 
         if ($validator->fails()) {
@@ -45,28 +46,46 @@ class UtilityBillImportController extends Controller
             return response()->json(['error' => 'Gemini API key is not set. Please set it in your account settings.'], 400);
         }
 
-        $file = $request->file('file');
-        $fileContent = $file->get();
-        $prompt = $this->getPrompt($account->account_type);
+        $files = $request->file('files');
+        
+        // Calculate total size to prevent hitting API limits (approx 20MB limit for inline data)
+        $totalSize = 0;
+        foreach ($files as $file) {
+            $totalSize += $file->getSize();
+        }
+
+        // Limit to 18MB to be safe with base64 overhead and prompt text
+        if ($totalSize > 18 * 1024 * 1024) {
+            return response()->json(['error' => 'Total file size exceeds the batch limit (18MB). Please upload fewer files.'], 422);
+        }
+
+        $prompt = $this->getPrompt($account->account_type, count($files));
+        
+        $parts = [];
+        $parts[] = ['text' => $prompt];
+
+        foreach ($files as $file) {
+            $parts[] = ['text' => 'Filename: ' . $file->getClientOriginalName()];
+            $parts[] = [
+                'inline_data' => [
+                    'mime_type' => 'application/pdf',
+                    'data' => base64_encode($file->get()),
+                ],
+            ];
+        }
 
         try {
+            // Using gemini-2.0-flash-exp for better performance with multiple files if available,
+            // otherwise falling back to the one in use or standard flash.
             $response = Http::withOptions([
                 'timeout' => 180, // 3 minutes timeout
             ])->withHeaders([
                 'x-goog-api-key' => $apiKey,
                 'Content-Type' => 'application/json',
-            ])->post('https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent', [
+            ])->post('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent', [
                 'contents' => [
                     [
-                        'parts' => [
-                            ['text' => $prompt],
-                            [
-                                'inline_data' => [
-                                    'mime_type' => 'application/pdf',
-                                    'data' => base64_encode($fileContent),
-                                ],
-                            ],
-                        ],
+                        'parts' => $parts,
                     ],
                 ],
                 'generationConfig' => [
@@ -75,58 +94,105 @@ class UtilityBillImportController extends Controller
             ]);
 
             if ($response->successful()) {
-                $json_string = $response->json()['candidates'][0]['content']['parts'][0]['text'];
-                $data = json_decode(str_replace(['```json', '```'], '', $json_string), true);
+                $candidate = $response->json()['candidates'][0] ?? null;
+                if (!$candidate) {
+                    throw new \Exception('No candidates returned from Gemini API');
+                }
+                
+                $json_string = $candidate['content']['parts'][0]['text'];
+                $extractedData = json_decode(str_replace(['```json', '```'], '', $json_string), true);
 
-                if (json_last_error() === JSON_ERROR_NONE && is_array($data)) {
-                    // Store the PDF file in S3
-                    $originalFilename = $file->getClientOriginalName();
-                    $storedFilename = UtilityBill::generateStoredFilename($originalFilename);
-                    $s3Path = UtilityBill::generateS3Path($accountId, $storedFilename);
-                    
-                    $uploaded = $this->fileService->uploadContent($fileContent, $s3Path);
-                    
-                    // Create the bill with extracted data
-                    $billData = [
-                        'utility_account_id' => $accountId,
-                        'bill_start_date' => $data['bill_start_date'] ?? null,
-                        'bill_end_date' => $data['bill_end_date'] ?? null,
-                        'due_date' => $data['due_date'] ?? null,
-                        'total_cost' => $data['total_cost'] ?? 0,
-                        'taxes' => $data['taxes'] ?? null,
-                        'fees' => $data['fees'] ?? null,
-                        'status' => 'Unpaid',
-                        'notes' => $data['notes'] ?? null,
-                    ];
+                if (json_last_error() === JSON_ERROR_NONE && is_array($extractedData)) {
+                    $results = [];
 
-                    // Include electricity-specific fields if account type is Electricity
-                    if ($account->account_type === 'Electricity') {
-                        $billData['power_consumed_kwh'] = $data['power_consumed_kwh'] ?? null;
-                        $billData['total_generation_fees'] = $data['total_generation_fees'] ?? null;
-                        $billData['total_delivery_fees'] = $data['total_delivery_fees'] ?? null;
+                    // Map extracted data to files
+                    // We expect the API to return an array of objects.
+                    // Ideally, we match by filename if the API respected that instruction, 
+                    // otherwise we map by index.
+                    
+                    // Create a map of filename -> extracted data for easier lookup
+                    $dataMap = [];
+                    foreach ($extractedData as $item) {
+                        if (isset($item['original_filename'])) {
+                            $dataMap[$item['original_filename']] = $item;
+                        }
                     }
 
-                    // Add PDF file info if upload was successful
-                    if ($uploaded) {
-                        $billData['pdf_original_filename'] = $originalFilename;
-                        $billData['pdf_stored_filename'] = $storedFilename;
-                        $billData['pdf_s3_path'] = $s3Path;
-                        $billData['pdf_file_size_bytes'] = strlen($fileContent);
+                    foreach ($files as $index => $file) {
+                        $originalFilename = $file->getClientOriginalName();
+                        
+                        // Try to find data by filename, otherwise fallback to index if array length matches
+                        $data = $dataMap[$originalFilename] ?? ($extractedData[$index] ?? null);
+
+                        if ($data) {
+                            try {
+                                // Store the PDF file in S3
+                                $storedFilename = UtilityBill::generateStoredFilename($originalFilename);
+                                $s3Path = UtilityBill::generateS3Path($accountId, $storedFilename);
+                                $fileContent = $file->get();
+                                
+                                $uploaded = $this->fileService->uploadContent($fileContent, $s3Path);
+                                
+                                // Create the bill with extracted data
+                                $billData = [
+                                    'utility_account_id' => $accountId,
+                                    'bill_start_date' => $data['bill_start_date'] ?? null,
+                                    'bill_end_date' => $data['bill_end_date'] ?? null,
+                                    'due_date' => $data['due_date'] ?? null,
+                                    'total_cost' => $data['total_cost'] ?? 0,
+                                    'taxes' => $data['taxes'] ?? null,
+                                    'fees' => $data['fees'] ?? null,
+                                    'status' => 'Unpaid',
+                                    'notes' => $data['notes'] ?? null,
+                                ];
+
+                                if ($account->account_type === 'Electricity') {
+                                    $billData['power_consumed_kwh'] = $data['power_consumed_kwh'] ?? null;
+                                    $billData['total_generation_fees'] = $data['total_generation_fees'] ?? null;
+                                    $billData['total_delivery_fees'] = $data['total_delivery_fees'] ?? null;
+                                }
+
+                                if ($uploaded) {
+                                    $billData['pdf_original_filename'] = $originalFilename;
+                                    $billData['pdf_stored_filename'] = $storedFilename;
+                                    $billData['pdf_s3_path'] = $s3Path;
+                                    $billData['pdf_file_size_bytes'] = $file->getSize();
+                                }
+
+                                $bill = UtilityBill::create($billData);
+                                
+                                $results[] = [
+                                    'filename' => $originalFilename,
+                                    'status' => 'success',
+                                    'bill' => $bill,
+                                ];
+                            } catch (\Exception $e) {
+                                Log::error("Failed to process file {$originalFilename}: " . $e->getMessage());
+                                $results[] = [
+                                    'filename' => $originalFilename,
+                                    'status' => 'error',
+                                    'error' => 'Failed to save bill: ' . $e->getMessage(),
+                                ];
+                            }
+                        } else {
+                            $results[] = [
+                                'filename' => $originalFilename,
+                                'status' => 'error',
+                                'error' => 'Could not extract data for this file.',
+                            ];
+                        }
                     }
 
-                    $bill = UtilityBill::create($billData);
-
-                    Log::info('Utility bill import successful for user ID '.$user->id, [
+                    Log::info('Utility bill batch import completed for user ID '.$user->id, [
                         'account_id' => $accountId,
-                        'bill_id' => $bill->id,
-                        'pdf_stored' => $uploaded,
+                        'total_files' => count($files),
+                        'results' => $results,
                     ]);
 
                     return response()->json([
                         'success' => true,
-                        'message' => 'Bill imported successfully',
-                        'bill' => $bill,
-                        'extracted_data' => $data,
+                        'message' => 'Batch import completed',
+                        'results' => $results,
                     ]);
                 } else {
                     Log::error('Failed to decode JSON from Gemini API for utility bill import', [
@@ -136,7 +202,7 @@ class UtilityBillImportController extends Controller
                     ]);
 
                     return response()->json([
-                        'error' => 'Failed to parse the extracted data from the PDF.',
+                        'error' => 'Failed to parse the extracted data from the response.',
                     ], 500);
                 }
             } else {
@@ -152,7 +218,7 @@ class UtilityBillImportController extends Controller
                 }
 
                 return response()->json([
-                    'error' => 'Failed to process the PDF with Gemini API.',
+                    'error' => 'Failed to process the files with Gemini API.',
                 ], 500);
             }
         } catch (Throwable $e) {
@@ -161,16 +227,22 @@ class UtilityBillImportController extends Controller
                 'account_id' => $accountId,
             ]);
 
-            return response()->json(['error' => 'An unexpected error occurred during import.'], 500);
+            return response()->json(['error' => 'An unexpected error occurred during import: ' . $e->getMessage()], 500);
         }
     }
 
-    private function getPrompt(string $accountType): string
+    private function getPrompt(string $accountType, int $fileCount): string
     {
-        $basePrompt = <<<'PROMPT'
-Analyze the provided utility bill PDF document and extract the following fields in JSON format.
+        $basePrompt = <<<PROMPT
+Analyze the provided {$fileCount} utility bill PDF document(s).
+I have provided each file preceded by "Filename: [name]".
 
-**JSON Fields:**
+For EACH file, extract the following fields.
+Return a SINGLE JSON ARRAY containing {$fileCount} objects, one for each file.
+Each object MUST include the `original_filename` to identify which file it belongs to.
+
+**JSON Fields per object:**
+- `original_filename`: The filename provided in the text preceding the file.
 - `bill_start_date`: Billing period start date (YYYY-MM-DD)
 - `bill_end_date`: Billing period end date (YYYY-MM-DD)
 - `due_date`: Payment due date (YYYY-MM-DD)
@@ -194,7 +266,7 @@ PROMPT;
 
         $basePrompt .= <<<'PROMPT'
 
-Return a single JSON object with the extracted fields. Use null for any fields that cannot be determined from the document.
+Return ONLY the JSON array.
 PROMPT;
 
         return $basePrompt;
