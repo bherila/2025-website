@@ -564,6 +564,7 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
         users={companyUsers}
         onSuccess={fetchTimeEntries}
         entry={editingEntry}
+        lastProjectId={data?.entries && data.entries.length > 0 ? data.entries[0]?.project?.id.toString() : undefined}
       />
       </div>
       </>

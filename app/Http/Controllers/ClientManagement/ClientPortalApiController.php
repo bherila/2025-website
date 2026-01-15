@@ -35,6 +35,22 @@ class ClientPortalApiController extends Controller
     }
 
     /**
+     * Get all projects for a company.
+     */
+    public function getProjects($slug)
+    {
+        $company = ClientCompany::where('slug', $slug)->firstOrFail();
+        Gate::authorize('ClientCompanyMember', $company->id);
+
+        return Cache::remember("client_portal_projects_{$slug}", 60, function () use ($company) {
+            return ClientProject::where('client_company_id', $company->id)
+                ->withCount(['tasks', 'timeEntries'])
+                ->orderBy('name')
+                ->get();
+        });
+    }
+
+    /**
      * Create a new project.
      */
     public function createProject(Request $request, $slug)

@@ -16,9 +16,10 @@ interface NewTimeEntryModalProps {
   users: User[]
   onSuccess: () => void
   entry?: TimeEntry | null
+  lastProjectId?: string
 }
 
-export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, users, onSuccess, entry }: NewTimeEntryModalProps) {
+export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, users, onSuccess, entry, lastProjectId }: NewTimeEntryModalProps) {
   const [time, setTime] = useState('')
   const [description, setDescription] = useState('')
   const [projectId, setProjectId] = useState('')
@@ -56,14 +57,17 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
       setDateWorked(new Date().toISOString().split('T')[0])
       setJobType('Software Development')
       setIsBillable(true)
-      // Automatically select project if only one exists
+      
+      // Automatically select project if only one exists, or use the last one used
       if (projects.length === 1) {
         setProjectId(projects[0]!.id.toString())
+      } else if (lastProjectId && projects.some(p => p.id.toString() === lastProjectId)) {
+        setProjectId(lastProjectId)
       } else {
         setProjectId('')
       }
     }
-  }, [entry, open, currentUser, projects])
+  }, [entry, open, currentUser, projects, lastProjectId])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
