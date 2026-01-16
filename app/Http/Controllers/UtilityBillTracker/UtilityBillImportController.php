@@ -27,12 +27,62 @@ class UtilityBillImportController extends Controller
         // Set execution time limit to 5 minutes to handle Gemini API requests
         set_time_limit(300);
 
+        // Validate files. Use a tolerant validator closure because some clients or proxies
+        // may present PDFs with an unexpected MIME type (e.g. application/octet-stream).
         $validator = Validator::make($request->all(), [
             'files' => 'required|array',
-            'files.*' => 'required|file|mimes:pdf|max:10240', // 10MB max per file
+            'files.*' => [
+                'required',
+                'file',
+                'max:10240', // 10MB max per file
+                function ($attribute, $value, $fail) {
+                    if (! $value || ! $value->isValid()) {
+                        return $fail('The ' . $attribute . ' upload is invalid.');
+                    }
+
+                    $ext = strtolower($value->getClientOriginalExtension() ?? '');
+                    $clientMime = $value->getClientMimeType() ?? '';
+                    $guessMime = $value->getMimeType() ?? '';
+
+                    // Accept if extension is pdf, or either the client-supplied or guessed MIME contains 'pdf',
+                    // or if it's application/octet-stream (some uploads are detected as that).
+                    if ($ext !== 'pdf' && stripos($clientMime, 'pdf') === false && stripos($guessMime, 'pdf') === false && $clientMime !== 'application/octet-stream' && $guessMime !== 'application/octet-stream') {
+                        return $fail('The ' . $attribute . ' must be a PDF file. Detected extension: ' . $ext . ', clientMime: ' . $clientMime . ', guessedMime: ' . $guessMime);
+                    }
+                },
+            ],
         ]);
 
         if ($validator->fails()) {
+            // Add diagnostic logging about the uploaded files to help debug client-side issues.
+            try {
+                $fileDebug = [];
+                $allFiles = $request->allFiles();
+                $filesArr = $allFiles['files'] ?? [];
+                foreach ($filesArr as $i => $f) {
+                    if (! $f) {
+                        $fileDebug[] = ['index' => $i, 'file' => null];
+                        continue;
+                    }
+                    $fileDebug[] = [
+                        'index' => $i,
+                        'original_name' => $f->getClientOriginalName(),
+                        'original_extension' => $f->getClientOriginalExtension(),
+                        'client_mime' => $f->getClientMimeType(),
+                        'guessed_mime' => $f->getMimeType(),
+                        'size' => $f->getSize(),
+                        'is_valid' => $f->isValid(),
+                    ];
+                }
+
+                Log::warning('Utility bill import validation failed; file diagnostics attached', [
+                    'validation_errors' => $validator->errors()->toArray(),
+                    'files' => $fileDebug,
+                ]);
+            } catch (Throwable $e) {
+                Log::warning('Utility bill import validation failed, additionally failed to gather file diagnostics: ' . $e->getMessage());
+            }
+
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
@@ -75,14 +125,14 @@ class UtilityBillImportController extends Controller
         }
 
         try {
-            // Using gemini-2.0-flash-exp for better performance with multiple files if available,
+            // Using gemini-3-flash-preview for better performance with multiple files if available,
             // otherwise falling back to the one in use or standard flash.
             $response = Http::withOptions([
                 'timeout' => 180, // 3 minutes timeout
             ])->withHeaders([
                 'x-goog-api-key' => $apiKey,
                 'Content-Type' => 'application/json',
-            ])->post('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent', [
+            ])->post('https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent', [
                 'contents' => [
                     [
                         'parts' => $parts,
