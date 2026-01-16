@@ -85,7 +85,7 @@ export const ApiKeySection: React.FC<ApiKeySectionProps> = ({
         <CardHeader>
           <CardTitle>Gemini API Key</CardTitle>
           <CardDescription>
-            Status: {user?.gemini_api_key ? `Set to key ending in ${user.gemini_api_key}` : 'Not Set'}
+            Status: {user?.gemini_api_key ? `✅ Set to key ending in ${user.gemini_api_key}` : 'Not Set'}
           </CardDescription>
         </CardHeader>
         <CardContent>

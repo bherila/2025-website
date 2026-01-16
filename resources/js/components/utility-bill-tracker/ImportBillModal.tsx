@@ -230,7 +230,7 @@ export function ImportBillModal({ open, onOpenChange, accountId, onImported }: I
                   <Upload className="h-12 w-12 text-muted-foreground" />
                   <p className="font-medium">Click to select PDF files</p>
                   <p className="text-sm text-muted-foreground">
-                    Maximum 10MB per file. Select multiple files at once.
+                    Maximum 6MB total. Select multiple files at once.
                   </p>
                 </div>
                 <input
@@ -270,7 +270,7 @@ export function ImportBillModal({ open, onOpenChange, accountId, onImported }: I
               )}
 
               <p className="mt-4 text-xs text-muted-foreground">
-                Note: You must have a Gemini API key configured in your account settings to use this feature.
+                Note: You must have a Gemini API key configured in your <a href="/dashboard" className="underline">account settings</a> to use this feature.
               </p>
             </div>
 
