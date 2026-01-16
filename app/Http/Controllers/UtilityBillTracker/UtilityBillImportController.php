@@ -192,6 +192,10 @@ class UtilityBillImportController extends Controller
                                     'total_cost' => $data['total_cost'] ?? 0,
                                     'taxes' => $data['taxes'] ?? null,
                                     'fees' => $data['fees'] ?? null,
+                                    'discounts' => $data['discounts'] ?? null,
+                                    'credits' => $data['credits'] ?? null,
+                                    'payments_received' => $data['payments_received'] ?? null,
+                                    'previous_unpaid_balance' => $data['previous_unpaid_balance'] ?? null,
                                     'status' => 'Unpaid',
                                     'notes' => $data['notes'] ?? null,
                                 ];
@@ -299,6 +303,10 @@ Each object MUST include the `original_filename` to identify which file it belon
 - `total_cost`: Total amount due (numeric, in dollars)
 - `taxes`: Total taxes charged on the bill (numeric, in dollars)
 - `fees`: Total fees charged on the bill, excluding taxes (numeric, in dollars)
+- `discounts`: Total discounts applied to the bill (numeric, in dollars). Only include realized discounts, not potential ones.
+- `credits`: Total credits applied to the bill (numeric, in dollars)
+- `payments_received`: Total payments received during the period (numeric, in dollars)
+- `previous_unpaid_balance`: Previous unpaid balance carried over (numeric, in dollars)
 - `notes`: Any relevant notes or account information extracted from the bill (optional, string)
 PROMPT;
 

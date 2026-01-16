@@ -49,6 +49,10 @@ class UtilityBillApiController extends Controller
             'notes' => 'nullable|string',
             'taxes' => 'nullable|numeric|min:0',
             'fees' => 'nullable|numeric|min:0',
+            'discounts' => 'nullable|numeric|min:0',
+            'credits' => 'nullable|numeric|min:0',
+            'payments_received' => 'nullable|numeric|min:0',
+            'previous_unpaid_balance' => 'nullable|numeric|min:0',
         ];
 
         // Add electricity-specific validation if account type is Electricity
@@ -74,6 +78,10 @@ class UtilityBillApiController extends Controller
             'notes' => $request->notes,
             'taxes' => $request->taxes,
             'fees' => $request->fees,
+            'discounts' => $request->discounts,
+            'credits' => $request->credits,
+            'payments_received' => $request->payments_received,
+            'previous_unpaid_balance' => $request->previous_unpaid_balance,
         ];
 
         // Include electricity-specific fields if account type is Electricity
@@ -123,6 +131,10 @@ class UtilityBillApiController extends Controller
             'notes' => 'nullable|string',
             'taxes' => 'nullable|numeric|min:0',
             'fees' => 'nullable|numeric|min:0',
+            'discounts' => 'nullable|numeric|min:0',
+            'credits' => 'nullable|numeric|min:0',
+            'payments_received' => 'nullable|numeric|min:0',
+            'previous_unpaid_balance' => 'nullable|numeric|min:0',
         ];
 
         // Add electricity-specific validation if account type is Electricity
@@ -147,6 +159,10 @@ class UtilityBillApiController extends Controller
             'notes' => $request->notes,
             'taxes' => $request->taxes,
             'fees' => $request->fees,
+            'discounts' => $request->discounts,
+            'credits' => $request->credits,
+            'payments_received' => $request->payments_received,
+            'previous_unpaid_balance' => $request->previous_unpaid_balance,
         ];
 
         // Include electricity-specific fields if account type is Electricity

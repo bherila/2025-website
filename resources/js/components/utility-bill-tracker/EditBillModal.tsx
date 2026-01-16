@@ -36,6 +36,10 @@ export function EditBillModal({
     total_cost: '',
     taxes: '',
     fees: '',
+    discounts: '',
+    credits: '',
+    payments_received: '',
+    previous_unpaid_balance: '',
     status: 'Unpaid' as 'Paid' | 'Unpaid',
     notes: '',
     power_consumed_kwh: '',
@@ -60,6 +64,10 @@ export function EditBillModal({
           total_cost: bill.total_cost,
           taxes: bill.taxes || '',
           fees: bill.fees || '',
+          discounts: bill.discounts || '',
+          credits: bill.credits || '',
+          payments_received: bill.payments_received || '',
+          previous_unpaid_balance: bill.previous_unpaid_balance || '',
           status: bill.status,
           notes: bill.notes || '',
           power_consumed_kwh: bill.power_consumed_kwh || '',
@@ -75,6 +83,10 @@ export function EditBillModal({
           total_cost: '',
           taxes: '',
           fees: '',
+          discounts: '',
+          credits: '',
+          payments_received: '',
+          previous_unpaid_balance: '',
           status: 'Unpaid',
           notes: '',
           power_consumed_kwh: '',
@@ -98,6 +110,10 @@ export function EditBillModal({
         total_cost: parseFloat(formData.total_cost) || 0,
         taxes: formData.taxes ? parseFloat(formData.taxes) : null,
         fees: formData.fees ? parseFloat(formData.fees) : null,
+        discounts: formData.discounts ? parseFloat(formData.discounts) : null,
+        credits: formData.credits ? parseFloat(formData.credits) : null,
+        payments_received: formData.payments_received ? parseFloat(formData.payments_received) : null,
+        previous_unpaid_balance: formData.previous_unpaid_balance ? parseFloat(formData.previous_unpaid_balance) : null,
         status: formData.status,
         notes: formData.notes || null,
       };
@@ -275,6 +291,60 @@ export function EditBillModal({
                   min="0"
                   value={formData.fees}
                   onChange={(e) => handleInputChange('fees', e.target.value)}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="discounts">Discounts ($)</Label>
+                <Input
+                  id="discounts"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.discounts}
+                  onChange={(e) => handleInputChange('discounts', e.target.value)}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="credits">Credits ($)</Label>
+                <Input
+                  id="credits"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.credits}
+                  onChange={(e) => handleInputChange('credits', e.target.value)}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="payments_received">Payments Received ($)</Label>
+                <Input
+                  id="payments_received"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.payments_received}
+                  onChange={(e) => handleInputChange('payments_received', e.target.value)}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="previous_unpaid_balance">Prev. Unpaid Balance ($)</Label>
+                <Input
+                  id="previous_unpaid_balance"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.previous_unpaid_balance}
+                  onChange={(e) => handleInputChange('previous_unpaid_balance', e.target.value)}
                   placeholder="0.00"
                 />
               </div>

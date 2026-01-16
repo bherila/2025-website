@@ -19,6 +19,10 @@ export interface UtilityBill {
   total_cost: string; // Stored as decimal string
   taxes: string | null; // Tax amount
   fees: string | null; // Fees amount
+  discounts: string | null;
+  credits: string | null;
+  payments_received: string | null;
+  previous_unpaid_balance: string | null;
   status: 'Paid' | 'Unpaid';
   notes: string | null;
   // Electricity-specific fields
@@ -72,6 +76,10 @@ export interface CreateUtilityBillRequest {
   total_cost: number;
   taxes?: number | null;
   fees?: number | null;
+  discounts?: number | null;
+  credits?: number | null;
+  payments_received?: number | null;
+  previous_unpaid_balance?: number | null;
   status: 'Paid' | 'Unpaid';
   notes?: string | null;
   power_consumed_kwh?: number | null;

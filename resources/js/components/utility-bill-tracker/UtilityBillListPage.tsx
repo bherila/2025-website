@@ -292,6 +292,10 @@ export function UtilityBillListPage({ accountId, accountName, accountType }: Uti
                       <TableHead className="text-right">Delivery</TableHead>
                     </>
                   )}
+                  <TableHead className="text-right">Discounts</TableHead>
+                  <TableHead className="text-right">Credits</TableHead>
+                  <TableHead className="text-right">Payments</TableHead>
+                  <TableHead className="text-right">Prev. Balance</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Linked</TableHead>
                   <TableHead>Notes</TableHead>
@@ -327,6 +331,18 @@ export function UtilityBillListPage({ accountId, accountName, accountType }: Uti
                         </TableCell>
                       </>
                     )}
+                    <TableCell className="text-right">
+                      {bill.discounts ? formatCurrency(bill.discounts) : '-'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {bill.credits ? formatCurrency(bill.credits) : '-'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {bill.payments_received ? formatCurrency(bill.payments_received) : '-'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {bill.previous_unpaid_balance ? formatCurrency(bill.previous_unpaid_balance) : '-'}
+                    </TableCell>
                     <TableCell>
                       <Badge 
                         variant={bill.status === 'Paid' ? 'outline' : 'destructive'}
