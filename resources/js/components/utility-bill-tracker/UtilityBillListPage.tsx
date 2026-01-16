@@ -13,7 +13,7 @@ import { ImportBillModal } from './ImportBillModal';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { LinkBillModal } from './LinkBillModal';
 import type { UtilityAccount, UtilityBill } from '@/types/utility-bill-tracker';
-import { formatDate } from '@/lib/DateHelper';
+import { formatDateForInput } from '@/lib/DateHelper';
 import { formatCurrency } from '@/lib/formatCurrency';
 
 interface UtilityBillListPageProps {
@@ -282,6 +282,7 @@ export function UtilityBillListPage({ accountId, accountName, accountType }: Uti
                 <TableRow>
                   <TableHead>Bill Period</TableHead>
                   <TableHead>Due Date</TableHead>
+                  {isElectricity && <TableHead className="text-right">Cost/kWh</TableHead>}
                   <TableHead className="text-right">Total Cost</TableHead>
                   <TableHead className="text-right">Taxes</TableHead>
                   <TableHead className="text-right">Fees</TableHead>
@@ -306,9 +307,16 @@ export function UtilityBillListPage({ accountId, accountName, accountType }: Uti
                 {bills.map((bill) => (
                   <TableRow key={bill.id}>
                     <TableCell>
-                      {formatDate(bill.bill_start_date)} - {formatDate(bill.bill_end_date)}
+                      {formatDateForInput(bill.bill_start_date)} - {formatDateForInput(bill.bill_end_date)}
                     </TableCell>
-                    <TableCell>{formatDate(bill.due_date)}</TableCell>
+                    <TableCell>{formatDateForInput(bill.due_date)}</TableCell>
+                    {isElectricity && (
+                      <TableCell className="text-right text-muted-foreground">
+                        {bill.power_consumed_kwh && parseFloat(bill.power_consumed_kwh) > 0 
+                          ? formatCurrency(parseFloat(bill.total_cost) / parseFloat(bill.power_consumed_kwh)) 
+                          : '-'}
+                      </TableCell>
+                    )}
                     <TableCell className="text-right font-medium">
                       {formatCurrency(bill.total_cost)}
                     </TableCell>
