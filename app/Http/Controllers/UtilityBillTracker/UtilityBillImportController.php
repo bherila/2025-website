@@ -30,14 +30,14 @@ class UtilityBillImportController extends Controller
         // Validate files. Use a tolerant validator closure because some clients or proxies
         // may present PDFs with an unexpected MIME type (e.g. application/octet-stream).
         $validator = Validator::make($request->all(), [
-            'files' => 'required|array',
+            'files' => 'required|array|max:100',
             'files.*' => [
                 'required',
                 'file',
-                'max:10240', // 10MB max per file
+                'max:10240', // 10MB max per file (individual check, though total is stricter)
                 function ($attribute, $value, $fail) {
                     if (! $value || ! $value->isValid()) {
-                        return $fail('The ' . $attribute . ' upload is invalid.');
+                        return $fail('The '.$attribute.' upload is invalid.');
                     }
 
                     $ext = strtolower($value->getClientOriginalExtension() ?? '');
@@ -47,7 +47,7 @@ class UtilityBillImportController extends Controller
                     // Accept if extension is pdf, or either the client-supplied or guessed MIME contains 'pdf',
                     // or if it's application/octet-stream (some uploads are detected as that).
                     if ($ext !== 'pdf' && stripos($clientMime, 'pdf') === false && stripos($guessMime, 'pdf') === false && $clientMime !== 'application/octet-stream' && $guessMime !== 'application/octet-stream') {
-                        return $fail('The ' . $attribute . ' must be a PDF file. Detected extension: ' . $ext . ', clientMime: ' . $clientMime . ', guessedMime: ' . $guessMime);
+                        return $fail('The '.$attribute.' must be a PDF file. Detected extension: '.$ext.', clientMime: '.$clientMime.', guessedMime: '.$guessMime);
                     }
                 },
             ],
@@ -62,6 +62,7 @@ class UtilityBillImportController extends Controller
                 foreach ($filesArr as $i => $f) {
                     if (! $f) {
                         $fileDebug[] = ['index' => $i, 'file' => null];
+
                         continue;
                     }
                     $fileDebug[] = [
@@ -80,7 +81,7 @@ class UtilityBillImportController extends Controller
                     'files' => $fileDebug,
                 ]);
             } catch (Throwable $e) {
-                Log::warning('Utility bill import validation failed, additionally failed to gather file diagnostics: ' . $e->getMessage());
+                Log::warning('Utility bill import validation failed, additionally failed to gather file diagnostics: '.$e->getMessage());
             }
 
             return response()->json(['errors' => $validator->errors()], 422);
@@ -97,25 +98,25 @@ class UtilityBillImportController extends Controller
         }
 
         $files = $request->file('files');
-        
-        // Calculate total size to prevent hitting API limits (approx 20MB limit for inline data)
+
+        // Calculate total size to prevent hitting API limits
         $totalSize = 0;
         foreach ($files as $file) {
             $totalSize += $file->getSize();
         }
 
-        // Limit to 18MB to be safe with base64 overhead and prompt text
-        if ($totalSize > 18 * 1024 * 1024) {
-            return response()->json(['error' => 'Total file size exceeds the batch limit (18MB). Please upload fewer files.'], 422);
+        // Limit to 6MB
+        if ($totalSize > 6 * 1024 * 1024) {
+            return response()->json(['error' => 'Total file size exceeds the batch limit (6MB). Please upload fewer files.'], 422);
         }
 
         $prompt = $this->getPrompt($account->account_type, count($files));
-        
+
         $parts = [];
         $parts[] = ['text' => $prompt];
 
         foreach ($files as $file) {
-            $parts[] = ['text' => 'Filename: ' . $file->getClientOriginalName()];
+            $parts[] = ['text' => 'Filename: '.$file->getClientOriginalName()];
             $parts[] = [
                 'inline_data' => [
                     'mime_type' => 'application/pdf',
@@ -145,10 +146,10 @@ class UtilityBillImportController extends Controller
 
             if ($response->successful()) {
                 $candidate = $response->json()['candidates'][0] ?? null;
-                if (!$candidate) {
+                if (! $candidate) {
                     throw new \Exception('No candidates returned from Gemini API');
                 }
-                
+
                 $json_string = $candidate['content']['parts'][0]['text'];
                 $extractedData = json_decode(str_replace(['```json', '```'], '', $json_string), true);
 
@@ -157,9 +158,9 @@ class UtilityBillImportController extends Controller
 
                     // Map extracted data to files
                     // We expect the API to return an array of objects.
-                    // Ideally, we match by filename if the API respected that instruction, 
+                    // Ideally, we match by filename if the API respected that instruction,
                     // otherwise we map by index.
-                    
+
                     // Create a map of filename -> extracted data for easier lookup
                     $dataMap = [];
                     foreach ($extractedData as $item) {
@@ -170,7 +171,7 @@ class UtilityBillImportController extends Controller
 
                     foreach ($files as $index => $file) {
                         $originalFilename = $file->getClientOriginalName();
-                        
+
                         // Try to find data by filename, otherwise fallback to index if array length matches
                         $data = $dataMap[$originalFilename] ?? ($extractedData[$index] ?? null);
 
@@ -180,9 +181,9 @@ class UtilityBillImportController extends Controller
                                 $storedFilename = UtilityBill::generateStoredFilename($originalFilename);
                                 $s3Path = UtilityBill::generateS3Path($accountId, $storedFilename);
                                 $fileContent = $file->get();
-                                
+
                                 $uploaded = $this->fileService->uploadContent($fileContent, $s3Path);
-                                
+
                                 // Create the bill with extracted data
                                 $billData = [
                                     'utility_account_id' => $accountId,
@@ -214,18 +215,18 @@ class UtilityBillImportController extends Controller
                                 }
 
                                 $bill = UtilityBill::create($billData);
-                                
+
                                 $results[] = [
                                     'filename' => $originalFilename,
                                     'status' => 'success',
                                     'bill' => $bill,
                                 ];
                             } catch (\Exception $e) {
-                                Log::error("Failed to process file {$originalFilename}: " . $e->getMessage());
+                                Log::error("Failed to process file {$originalFilename}: ".$e->getMessage());
                                 $results[] = [
                                     'filename' => $originalFilename,
                                     'status' => 'error',
-                                    'error' => 'Failed to save bill: ' . $e->getMessage(),
+                                    'error' => 'Failed to save bill: '.$e->getMessage(),
                                 ];
                             }
                         } else {
@@ -281,7 +282,7 @@ class UtilityBillImportController extends Controller
                 'account_id' => $accountId,
             ]);
 
-            return response()->json(['error' => 'An unexpected error occurred during import: ' . $e->getMessage()], 500);
+            return response()->json(['error' => 'An unexpected error occurred during import: '.$e->getMessage()], 500);
         }
     }
 

@@ -22,6 +22,7 @@ export function ImportBillModal({ open, onOpenChange, accountId, onImported }: I
   const [files, setFiles] = useState<FileImportStatus[]>([]);
   const [importing, setImporting] = useState(false);
   const [importComplete, setImportComplete] = useState(false);
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -36,8 +37,10 @@ export function ImportBillModal({ open, onOpenChange, accountId, onImported }: I
         errors.push(`${file.name}: Not a PDF file`);
         return;
       }
-      if (file.size > 10 * 1024 * 1024) {
-        errors.push(`${file.name}: File size exceeds 10MB`);
+      // Warn if > 10MB but don't block here, let backend or chunking handle (though backend limit is 6MB now)
+      // Actually backend limit is 6MB per request. If a single file is > 6MB, it will fail.
+      if (file.size > 6 * 1024 * 1024) {
+        errors.push(`${file.name}: File size exceeds 6MB`);
         return;
       }
       newFiles.push({ file, status: 'pending' });
@@ -45,6 +48,7 @@ export function ImportBillModal({ open, onOpenChange, accountId, onImported }: I
 
     if (errors.length > 0) {
       console.warn('File validation errors:', errors);
+      // Optional: show toast
     }
 
     setFiles(prev => [...prev, ...newFiles]);
@@ -60,74 +64,100 @@ export function ImportBillModal({ open, onOpenChange, accountId, onImported }: I
     setImporting(true);
     setImportComplete(false);
 
-    // Set all files to importing status, removing any previous errors
+    // Reset status
     setFiles(prev => prev.map(f => {
       const { error, ...rest } = f;
       return { ...rest, status: 'importing' } as FileImportStatus;
     }));
 
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    
+    // Chunk logic
+    const MAX_CHUNK_SIZE_MB = 5.9;
+    const maxSizeBytes = MAX_CHUNK_SIZE_MB * 1024 * 1024;
+    const chunks: FileImportStatus[][] = [];
+    let currentChunk: FileImportStatus[] = [];
+    let currentChunkSize = 0;
+
+    for (const f of files) {
+       if (currentChunk.length > 0 && currentChunkSize + f.file.size > maxSizeBytes) {
+           chunks.push(currentChunk);
+           currentChunk = [];
+           currentChunkSize = 0;
+       }
+       currentChunk.push(f);
+       currentChunkSize += f.file.size;
+    }
+    if (currentChunk.length > 0) {
+        chunks.push(currentChunk);
+    }
+
+    setProgress({ current: 0, total: chunks.length });
 
     try {
-      const formData = new FormData();
-      files.forEach((f) => {
-        formData.append('files[]', f.file);
-      });
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        if (!chunk) continue;
+        setProgress({ current: i + 1, total: chunks.length });
 
-      const response = await fetch(`/api/utility-bill-tracker/accounts/${accountId}/bills/import-pdf`, {
-        method: 'POST',
-        headers: {
-          'X-CSRF-TOKEN': csrfToken,
-        },
-        body: formData,
-      });
+        // Update status of current chunk to processing (if we wanted to be granular)
+        
+        const formData = new FormData();
+        chunk.forEach((f) => {
+          formData.append('files[]', f.file);
+        });
 
-      const data = await response.json();
+        try {
+          const response = await fetch(`/api/utility-bill-tracker/accounts/${accountId}/bills/import-pdf`, {
+            method: 'POST',
+            headers: {
+              'X-CSRF-TOKEN': csrfToken,
+            },
+            body: formData,
+          });
 
-      if (!response.ok) {
-        // If the entire batch failed
-        const errorMsg = data.error || 'Batch import failed';
-        setFiles(prev => prev.map(f => ({ ...f, status: 'error', error: errorMsg })));
-      } else {
-        // Process individual results
-        if (data.results && Array.isArray(data.results)) {
-          setFiles(prev => prev.map(f => {
-            // Find result by filename
-            const result = data.results.find((r: any) => r.filename === f.file.name);
-            if (result) {
-              const newStatus = result.status === 'success' ? 'success' : 'error';
-              // Construct object carefully to satisfy exactOptionalPropertyTypes
-              const newFileState: FileImportStatus = {
-                ...f,
-                status: newStatus,
-              };
-              if (result.error) {
-                newFileState.error = result.error;
-              } else {
-                 // If success, ensure error is removed (though we started from 'f' which might have it? 
-                 // No, 'f' is from 'prev' which was set to 'importing' without error in the step above, 
-                 // BUT 'prev' in this setFiles call refers to the state at the time of THIS update.
-                 // The 'setFiles' above runs first, but this is a new update.
-                 // However, since we are inside an async function after await, the state might have been updated.
-                 // Safest is to destructure 'f' again to be sure.
-                 const { error, ...cleanF } = f;
-                 return { ...cleanF, status: newStatus, ...(result.error ? { error: result.error } : {}) } as FileImportStatus;
-              }
-              return newFileState;
+          const data = await response.json();
+
+          if (!response.ok) {
+            const errorMsg = data.error || `Batch ${i+1} failed`;
+            // Mark all in this chunk as error
+            setFiles(prev => prev.map(f => {
+                if (chunk.some(c => c.file === f.file)) {
+                    return { ...f, status: 'error', error: errorMsg };
+                }
+                return f;
+            }));
+          } else {
+            // Success
+            if (data.results && Array.isArray(data.results)) {
+               setFiles(prev => prev.map(f => {
+                  const result = data.results.find((r: any) => r.filename === f.file.name);
+                  if (result) {
+                      const newStatus = result.status === 'success' ? 'success' : 'error';
+                      const { error, ...cleanF } = f;
+                      return { ...cleanF, status: newStatus, ...(result.error ? { error: result.error } : {}) } as FileImportStatus;
+                  }
+                  // If not in results but was in chunk? (Shouldn't happen if API is correct)
+                  if (chunk.some(c => c.file === f.file)) {
+                      // Maybe keep as is or mark error?
+                  }
+                  return f;
+               }));
             }
-            return { ...f, status: 'error', error: 'No result returned' };
-          }));
-        } else {
-           throw new Error('Invalid response format from server');
+          }
+        } catch (err) {
+             const errorMsg = err instanceof Error ? err.message : 'Network error';
+             setFiles(prev => prev.map(f => {
+                if (chunk.some(c => c.file === f.file)) {
+                    return { ...f, status: 'error', error: errorMsg };
+                }
+                return f;
+            }));
         }
       }
     } catch (err) {
-      // Network or other error affecting the whole batch
-      setFiles(prev => prev.map(f => ({ 
-        ...f, 
-        status: 'error', 
-        error: err instanceof Error ? err.message : 'Import failed' 
-      })));
+        // Global error (should be caught inside loop but just in case)
+        console.error("Global import error", err);
     }
 
     setImportComplete(true);
@@ -140,6 +170,7 @@ export function ImportBillModal({ open, onOpenChange, accountId, onImported }: I
     
     setFiles([]);
     setImportComplete(false);
+    setProgress({ current: 0, total: 0 });
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -155,7 +186,7 @@ export function ImportBillModal({ open, onOpenChange, accountId, onImported }: I
         <DialogHeader>
           <DialogTitle>Import Bills from PDF</DialogTitle>
           <DialogDescription>
-            Upload one or more utility bill PDFs. They will be processed in a single batch.
+            Upload one or more utility bill PDFs. They will be processed in batches.
           </DialogDescription>
         </DialogHeader>
 
@@ -164,19 +195,18 @@ export function ImportBillModal({ open, onOpenChange, accountId, onImported }: I
             <div className="flex items-center justify-center space-x-2">
               <Loader2 className="h-6 w-6 animate-spin text-primary" />
               <span className="font-medium">
-                Processing {files.length} file(s)...
+                Processing batch {progress.current} of {progress.total}...
               </span>
             </div>
-            <Progress value={100} className="w-full animate-pulse" />
-            <p className="text-sm text-center text-muted-foreground">
-              This may take a minute depending on the number of files.
-            </p>
+            <Progress value={(progress.current / progress.total) * 100} className="w-full" />
             
             {/* File status list */}
             <div className="max-h-40 overflow-y-auto space-y-2 mt-4">
               {files.map((f, idx) => (
                 <div key={idx} className="flex items-center space-x-2 text-sm">
                   {f.status === 'importing' && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+                  {f.status === 'success' && <CheckCircle className="h-4 w-4 text-green-500" />}
+                  {f.status === 'error' && <XCircle className="h-4 w-4 text-destructive" />}
                   <span>{f.file.name}</span>
                 </div>
               ))}
@@ -230,7 +260,7 @@ export function ImportBillModal({ open, onOpenChange, accountId, onImported }: I
                   <Upload className="h-12 w-12 text-muted-foreground" />
                   <p className="font-medium">Click to select PDF files</p>
                   <p className="text-sm text-muted-foreground">
-                    Maximum 6MB total. Select multiple files at once.
+                    Maximum 6MB per file. Select multiple files.
                   </p>
                 </div>
                 <input

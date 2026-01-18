@@ -8,7 +8,7 @@ import Container from '@/components/container'
 import { savePayslip, fetchPayslips, fetchPayslipYears } from '@/lib/api'
 import TotalsTable from './TotalsTable.client'
 import React, { useState, useEffect } from 'react'
-import { PayslipImportDialog } from './PayslipImportDialog' // Import the new dialog
+import { PayslipImportModal } from './PayslipImportModal' // Import the new dialog
 
 interface PayslipClientProps {
   selectedYear: string
@@ -95,7 +95,7 @@ export default function PayslipClient({ selectedYear: initialSelectedYear, initi
                 <FileSpreadsheet className="mr-2" /> Import TSV
               </a>
             </Button>
-            <PayslipImportDialog onImportSuccess={refreshPayslips} />
+            <PayslipImportModal onImportSuccess={refreshPayslips} />
           </div>
         </div>
 
