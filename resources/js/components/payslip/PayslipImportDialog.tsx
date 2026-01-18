@@ -6,8 +6,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { FileText, Upload, XCircle } from 'lucide-react'
-import { toast } from 'sonner' // Assuming sonner for toasts
-import { importPayslips } from '@/lib/api' // This function will be created next
+import { toast } from 'sonner'
+import { importPayslips } from '@/lib/api'
 
 interface PayslipImportDialogProps {
   onImportSuccess: () => void
@@ -18,6 +18,10 @@ export function PayslipImportDialog({ onImportSuccess }: PayslipImportDialogProp
   const [files, setFiles] = useState<File[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const getTotalSize = (fileList: File[]) => {
+    return fileList.reduce((acc, file) => acc + file.size, 0)
+  }
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
@@ -31,12 +35,20 @@ export function PayslipImportDialog({ onImportSuccess }: PayslipImportDialogProp
         toast.error('Only PDF files are allowed.')
       }
 
-      if (files.length + allowedFiles.length > 10) {
-        toast.error('You can only upload up to 10 files at a time.')
-        setFiles([...files, ...allowedFiles.slice(0, 10 - files.length)])
-      } else {
-        setFiles([...files, ...allowedFiles])
+      const combinedFiles = [...files, ...allowedFiles]
+      
+      if (combinedFiles.length > 100) {
+        toast.error('You can only upload up to 100 files at a time.')
+        return
       }
+      
+      const totalSize = getTotalSize(combinedFiles)
+      if (totalSize > 6 * 1024 * 1024) { // 6MB
+        toast.error('Total file size exceeds 6MB. Please select fewer files.')
+        return
+      }
+
+      setFiles(combinedFiles)
     }
   }
 
@@ -80,7 +92,7 @@ export function PayslipImportDialog({ onImportSuccess }: PayslipImportDialogProp
         <DialogHeader>
           <DialogTitle>Import Payslips</DialogTitle>
           <DialogDescription>
-            Upload up to 10 PDF files. The system will use AI to extract data.
+            Upload up to 100 PDF files (max 6MB total). The system will use AI to extract data.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
@@ -97,12 +109,15 @@ export function PayslipImportDialog({ onImportSuccess }: PayslipImportDialogProp
             />
           </div>
           <div className="mt-2">
+            <div className="text-xs text-muted-foreground mb-2">
+                Selected: {files.length} file(s) - {(getTotalSize(files) / 1024 / 1024).toFixed(2)} MB / 6 MB
+            </div>
             {files.length > 0 && (
-              <ul className="space-y-1 text-sm text-muted-foreground">
+              <ul className="space-y-1 text-sm text-muted-foreground max-h-[200px] overflow-y-auto">
                 {files.map((file, index) => (
                   <li key={index} className="flex items-center justify-between">
-                    <span className="flex items-center">
-                      <FileText className="mr-2 h-4 w-4" /> {file.name}
+                    <span className="flex items-center truncate max-w-[300px]" title={file.name}>
+                      <FileText className="mr-2 h-4 w-4 flex-shrink-0" /> <span className="truncate">{file.name}</span>
                     </span>
                     <Button
                       variant="ghost"
