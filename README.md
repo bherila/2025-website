@@ -1,5 +1,15 @@
 # BWH PHP Project
 
+## Testing
+
+Run tests with:
+
+```bash
+composer test
+```
+
+Tests use an in-memory SQLite database to ensure they never accidentally touch MySQL databases. See [docs/TESTING.md](docs/TESTING.md) for detailed testing documentation.
+
 ## Deployment Instructions
 
 These instructions are for deploying to a cPanel-hosted Apache server with the document root set to `~/public_html`.

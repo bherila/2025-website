@@ -38,6 +38,51 @@ if (div) {
 - **Testing**: `composer test` for PHPUnit; `npm test` for Jest (React components)
 - **Build**: `npm run build` for production assets
 
+## Testing Guidelines
+
+**IMPORTANT**: All tests use SQLite in-memory database, never MySQL. This is a safety feature.
+
+### Test Structure
+- **Feature tests**: Extend `Tests\TestCase`, use `RefreshDatabase` trait for database tests
+- **Unit tests**: Extend `PHPUnit\Framework\TestCase` directly (no database needed)
+
+### Writing Feature Tests
+```php
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
+class MyTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_something(): void
+    {
+        $admin = $this->createAdminUser();  // Helper method
+        $user = $this->createUser();        // Helper method
+        
+        $response = $this->actingAs($admin)->get('/some-route');
+        $response->assertStatus(200);
+    }
+}
+```
+
+### TestCase Helpers
+- `$this->createAdminUser($attributes)` - Creates user with admin role
+- `$this->createUser($attributes)` - Creates user with regular user role
+
+### Schema Files
+- `database/schema/mysql-schema.sql` - Production MySQL schema
+- `database/schema/sqlite-schema.sql` - SQLite schema for tests (RefreshDatabase uses this)
+
+When adding new tables/columns to production, update both schema files.
+
+See [docs/TESTING.md](docs/TESTING.md) for comprehensive testing documentation.
+
 ## Key Conventions
 - **Models**: Use Eloquent relationships (e.g., `FinAccountLineItems` belongs to `FinAccounts`); organize domain-specific models in subdirectories (e.g., `app/Models/ClientManagement/`)
 - **Controllers**: Organize in subdirectories for complex features (e.g., `app/Http/Controllers/ClientManagement/`)

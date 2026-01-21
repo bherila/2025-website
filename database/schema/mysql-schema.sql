@@ -128,6 +128,42 @@ CREATE TABLE `client_company_user` (
   CONSTRAINT `client_company_user_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `client_expenses`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `client_expenses` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `client_company_id` bigint(20) unsigned NOT NULL,
+  `project_id` bigint(20) unsigned DEFAULT NULL,
+  `fin_line_item_id` bigint(20) unsigned DEFAULT NULL,
+  `description` varchar(255) NOT NULL,
+  `amount` decimal(12,2) NOT NULL,
+  `expense_date` date NOT NULL,
+  `is_reimbursable` tinyint(1) NOT NULL DEFAULT 0,
+  `is_reimbursed` tinyint(1) NOT NULL DEFAULT 0,
+  `reimbursed_date` date DEFAULT NULL,
+  `category` varchar(255) DEFAULT NULL,
+  `notes` text DEFAULT NULL,
+  `creator_user_id` bigint(20) unsigned DEFAULT NULL,
+  `client_invoice_line_id` bigint(20) unsigned DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `deleted_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `client_expenses_creator_user_id_foreign` (`creator_user_id`),
+  KEY `client_expenses_client_company_id_index` (`client_company_id`),
+  KEY `client_expenses_project_id_index` (`project_id`),
+  KEY `client_expenses_fin_line_item_id_index` (`fin_line_item_id`),
+  KEY `client_expenses_expense_date_index` (`expense_date`),
+  KEY `client_expenses_is_reimbursable_index` (`is_reimbursable`),
+  KEY `client_expenses_client_invoice_line_id_foreign` (`client_invoice_line_id`),
+  CONSTRAINT `client_expenses_client_company_id_foreign` FOREIGN KEY (`client_company_id`) REFERENCES `client_companies` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `client_expenses_client_invoice_line_id_foreign` FOREIGN KEY (`client_invoice_line_id`) REFERENCES `client_invoice_lines` (`client_invoice_line_id`) ON DELETE SET NULL,
+  CONSTRAINT `client_expenses_creator_user_id_foreign` FOREIGN KEY (`creator_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `client_expenses_fin_line_item_id_foreign` FOREIGN KEY (`fin_line_item_id`) REFERENCES `fin_account_line_items` (`t_id`) ON DELETE SET NULL,
+  CONSTRAINT `client_expenses_project_id_foreign` FOREIGN KEY (`project_id`) REFERENCES `client_projects` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `client_invoice_lines`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -1011,6 +1047,56 @@ CREATE TABLE `users` (
   KEY `users_user_role_index` (`user_role`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `utility_account`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `utility_account` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(20) unsigned NOT NULL,
+  `account_name` varchar(255) NOT NULL,
+  `account_type` varchar(255) NOT NULL,
+  `notes` text DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `utility_account_user_id_index` (`user_id`),
+  CONSTRAINT `utility_account_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `utility_bill`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `utility_bill` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `utility_account_id` bigint(20) unsigned NOT NULL,
+  `bill_start_date` date NOT NULL,
+  `bill_end_date` date NOT NULL,
+  `due_date` date NOT NULL,
+  `total_cost` decimal(14,5) NOT NULL,
+  `status` varchar(255) NOT NULL DEFAULT 'Unpaid',
+  `notes` text DEFAULT NULL,
+  `power_consumed_kwh` decimal(14,5) DEFAULT NULL,
+  `total_generation_fees` decimal(14,5) DEFAULT NULL,
+  `total_delivery_fees` decimal(14,5) DEFAULT NULL,
+  `taxes` decimal(14,5) DEFAULT NULL,
+  `fees` decimal(14,5) DEFAULT NULL,
+  `discounts` decimal(13,4) DEFAULT NULL,
+  `credits` decimal(13,4) DEFAULT NULL,
+  `payments_received` decimal(13,4) DEFAULT NULL,
+  `previous_unpaid_balance` decimal(13,4) DEFAULT NULL,
+  `t_id` bigint(20) unsigned DEFAULT NULL,
+  `pdf_original_filename` varchar(255) DEFAULT NULL,
+  `pdf_stored_filename` varchar(255) DEFAULT NULL,
+  `pdf_s3_path` varchar(255) DEFAULT NULL,
+  `pdf_file_size_bytes` bigint(20) unsigned DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `utility_bill_utility_account_id_index` (`utility_account_id`),
+  KEY `utility_bill_t_id_index` (`t_id`),
+  CONSTRAINT `utility_bill_utility_account_id_foreign` FOREIGN KEY (`utility_account_id`) REFERENCES `utility_account` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `verification`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -1091,3 +1177,8 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (35,'2025_12_23_071
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (36,'2025_12_23_081114_add_client_agreement_id_to_client_invoice_lines_table',16);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (37,'2025_12_27_223125_create_files_tables',17);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (38,'2025_12_28_054636_create_client_invoice_payments_table',18);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (39,'2026_01_11_000001_create_client_expenses_table',19);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (40,'2026_01_12_094817_create_utility_account_table',20);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (41,'2026_01_12_094820_create_utility_bill_table',20);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (42,'2026_01_12_102909_add_columns_to_utility_bill_table',21);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (43,'2026_01_16_055957_add_details_to_utility_bill_table',22);
