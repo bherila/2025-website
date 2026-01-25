@@ -1,11 +1,13 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 import type { ClientInvoicePayment, Invoice, InvoiceLine } from "@/types/client-management";
 import { format } from 'date-fns'
-import { Pencil, PlusCircle, Trash2 } from "lucide-react";
+import { Pencil, PlusCircle, Trash2, Send, Ban, Undo2, RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { fetchWrapper } from "@/fetchWrapper";
@@ -209,6 +211,63 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
                     </Breadcrumb>
                 </div>
 
+                {/* Action buttons row */}
+                {isAdmin && (
+                    <div className="mb-8 flex justify-between items-center gap-4 flex-wrap">
+                        <ButtonGroup>
+                            {invoice.status === 'draft' && (
+                                <Button 
+                                    onClick={handleIssueInvoice} 
+                                    disabled={isRefreshing} 
+                                    className="bg-green-600 hover:bg-green-700 text-white border-green-700 rounded-r-none"
+                                >
+                                    <Send className="mr-2 h-4 w-4" />
+                                    Issue Invoice
+                                </Button>
+                            )}
+                            <Button 
+                                variant="outline" 
+                                onClick={() => { setSelectedPayment(null); setPaymentModalOpen(true); }} 
+                                disabled={isRefreshing}
+                                className={cn(invoice.status === 'draft' && "rounded-l-none")}
+                            >
+                                <PlusCircle className="mr-2 h-4 w-4" />
+                                Add Payment
+                            </Button>
+                            {canVoid && (
+                                <Button 
+                                    variant="outline" 
+                                    onClick={handleVoidInvoice} 
+                                    disabled={isRefreshing} 
+                                    className="text-amber-600 border-amber-200 hover:bg-amber-50"
+                                >
+                                    <Ban className="mr-2 h-4 w-4" />
+                                    Void Invoice
+                                </Button>
+                            )}
+                            {invoice.status === 'void' && (
+                                <>
+                                    <Button variant="outline" onClick={() => handleUnVoidInvoice('issued')} disabled={isRefreshing}>
+                                        <Undo2 className="mr-2 h-4 w-4" />
+                                        Restore as Issued
+                                    </Button>
+                                    <Button variant="outline" onClick={() => handleUnVoidInvoice('draft')} disabled={isRefreshing}>
+                                        <RotateCcw className="mr-2 h-4 w-4" />
+                                        Restore as Draft
+                                    </Button>
+                                </>
+                            )}
+                        </ButtonGroup>
+                        
+                        {isEditable && (
+                            <Button variant="ghost" onClick={handleDeleteInvoice} disabled={isRefreshing} className="text-destructive hover:bg-destructive/10">
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete Invoice
+                            </Button>
+                        )}
+                    </div>
+                )}
+
                 <div className="flex justify-between items-start mb-8">
                     <div>
                         <h1 className="text-3xl font-bold mb-2">Invoice {invoice.invoice_number}</h1>
@@ -320,36 +379,6 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
                             Remaining Balance: ${parseFloat(invoice.remaining_balance).toFixed(2)}
                         </div>
                     </div>
-
-                    {/* Action buttons row */}
-                    {isAdmin && (
-                        <div className="mt-12 flex justify-between items-center bg-muted/30 p-6 rounded-xl border border-border/50">
-                            <div className="flex gap-2 flex-wrap">
-                                {invoice.status === 'draft' && (
-                                    <Button onClick={handleIssueInvoice} disabled={isRefreshing} className="bg-blue-600 hover:bg-blue-700">
-                                        Issue Invoice
-                                    </Button>
-                                )}
-                                <Button variant="secondary" onClick={() => { setSelectedPayment(null); setPaymentModalOpen(true); }} disabled={isRefreshing}>
-                                    <PlusCircle className="mr-2 h-4 w-4" /> Add Payment
-                                </Button>
-                                {canVoid && <Button variant="outline" onClick={handleVoidInvoice} disabled={isRefreshing} className="text-amber-600 border-amber-200 hover:bg-amber-50">Void Invoice</Button>}
-                                {invoice.status === 'void' && (
-                                    <>
-                                        <Button variant="outline" onClick={() => handleUnVoidInvoice('issued')} disabled={isRefreshing}>Restore as Issued</Button>
-                                        <Button variant="outline" onClick={() => handleUnVoidInvoice('draft')} disabled={isRefreshing}>Restore as Draft</Button>
-                                    </>
-                                )}
-                            </div>
-                            
-                            {isEditable && (
-                                <Button variant="ghost" onClick={handleDeleteInvoice} disabled={isRefreshing} className="text-destructive hover:bg-destructive/10">
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    Delete Invoice
-                                </Button>
-                            )}
-                        </div>
-                    )}
                 </div>
 
                 <LineItemEditModal
