@@ -102,6 +102,7 @@ See [docs/TESTING.md](docs/TESTING.md) for comprehensive testing documentation.
 - **Linking**: Transactions can link to related entries (e.g., buys/sells)
 - **Statements**: Balance snapshots with detailed line items in `fin_statement_details`
 - **File Uploads**: Handle CSV imports with validation and parsing logic
+- **Time Entry Splitting**: When generating invoices, if a time entry exceeds the remaining available retainer/rollover hours, the entry MUST be split into two: one row for the billed portion (linked to the invoice) and a replicated row for the unbilled portion (unlinked, to be carried over).
 
 ## File Structure Highlights
 - `app/Models/`: Eloquent models with relationships (organized in subdirectories for complex domains)

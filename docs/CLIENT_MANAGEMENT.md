@@ -1018,6 +1018,23 @@ When `payments_total >= invoice_total`:
 
 When adding a payment via UI, the amount field defaults to the remaining balance, simplifying full-payment entry.
 
+## Time Entry Splitting Logic
+
+To ensure precise tracking of billed and unbilled hours within the carry-over/rollover system, the invoicing service implements a **splitting logic** for time entries.
+
+### How it works:
+1. When generating an invoice, the system calculates the exact number of minutes that can be billed against the current month's available pool (Retainer + Rollover).
+2. If a single `TimeEntry` crosses the threshold of what can be covered by the pool, the system automatically:
+   - **Replicates** the original entry into a new database row.
+   - **Updates the original entry** to match the exact number of minutes that fit in the current invoice, and links it to the invoice line.
+   - **Assigns the remaining minutes** to the new replicated row, leaving it unlinked (`client_invoice_line_id = null`).
+3. The newly created unbilled entry will then naturally roll over to the next billing period as part of the standard "Delayed Billing" or "Rollover" flow.
+
+### Benefits:
+- **Audit Integrity**: Every minute is accounted for and clearly linked to its respective invoice.
+- **Accurate Carry-overs**: Partial hours are never "lost" or "rounded away" between months.
+- **Admin Transparency**: Admins can see the split entries in the portal, ensuring full visibility into why an entry was partially billed.
+
 ## Security
 - All routes protected by authentication middleware
 - Admin gate enforced on admin endpoints

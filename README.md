@@ -1,5 +1,17 @@
 # BWH PHP Project
 
+## Features
+
+### Client Management
+- **Company & User Management**: Track clients and assign users to companies.
+- **Project & Task Tracking**: Manage deliverables per client.
+- **Time Tracking**: Log hours with support for "h:mm" and decimal formats.
+- **Billing & Invoicing**:
+  - Automated monthly invoice generation.
+  - Flexible rollover/carry-over hours system.
+  - **Time Entry Splitting**: Automatically splits time entries that are only partially billed to ensure precise carry-over tracking.
+- **File Management**: S3-integrated file uploads for agreements, tasks, and more.
+
 ## Testing
 
 Run tests with:

@@ -202,11 +202,16 @@ class ClientInvoicingService
             $negativeBalanceFromPrevious = $previousInvoice ?
                 (float) $previousInvoice->negative_hours_balance : 0;
 
-            // Get all billable, uninvoiced time entries for this period
+            // Get all billable time entries for this period that are either unlinked OR linked to the CURRENT invoice (for regeneration)
             $timeEntries = ClientTimeEntry::where('client_company_id', $company->id)
-                ->whereNull('client_invoice_line_id')
                 ->where('is_billable', true)
                 ->whereBetween('date_worked', [$periodStart, $periodEnd])
+                ->where(function($query) use ($invoice) {
+                    $query->whereNull('client_invoice_line_id');
+                    if ($invoice) {
+                        $query->orWhereIn('client_invoice_line_id', $invoice->lineItems->pluck('client_invoice_line_id'));
+                    }
+                })
                 ->orderBy('date_worked')
                 ->get();
 
@@ -441,7 +446,7 @@ class ClientInvoicingService
      */
     protected function linkTimeEntriesToLine($timeEntries, ClientInvoiceLine $line, float $hoursToLink): void
     {
-        $minutesToLink = $hoursToLink * 60;
+        $minutesToLink = (int) round($hoursToLink * 60);
         $minutesLinked = 0;
 
         foreach ($timeEntries as $entry) {
@@ -455,9 +460,34 @@ class ClientInvoicingService
                 break;
             }
 
-            // Link this entry
-            $entry->update(['client_invoice_line_id' => $line->client_invoice_line_id]);
-            $minutesLinked += $entry->minutes_worked;
+            $remainingMinutesNeeded = $minutesToLink - $minutesLinked;
+
+            if ($entry->minutes_worked <= $remainingMinutesNeeded) {
+                // Whole entry fits
+                $entry->update(['client_invoice_line_id' => $line->client_invoice_line_id]);
+                $minutesLinked += $entry->minutes_worked;
+            } else {
+                // Partial fit - must split the entry
+                $availableMinutes = $remainingMinutesNeeded;
+                $overageMinutes = $entry->minutes_worked - $availableMinutes;
+
+                // 1. Create a new entry for the overage (the part that rolls over)
+                $rolledOverEntry = $entry->replicate();
+                $rolledOverEntry->minutes_worked = $overageMinutes;
+                $rolledOverEntry->client_invoice_line_id = null; // Ensure it's unbilled
+                $rolledOverEntry->save();
+
+                // Add to collection so it can be picked up by subsequent calls (e.g. Additional Hours)
+                $timeEntries->push($rolledOverEntry);
+
+                // 2. Update the original entry to represent only the part being billed now
+                $entry->update([
+                    'minutes_worked' => $availableMinutes,
+                    'client_invoice_line_id' => $line->client_invoice_line_id,
+                ]);
+
+                $minutesLinked += $availableMinutes;
+            }
         }
     }
 

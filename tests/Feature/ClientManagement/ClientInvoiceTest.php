@@ -414,6 +414,58 @@ class ClientInvoiceTest extends TestCase
         $this->assertEquals(5, $billedLine->hours);
     }
 
+    public function test_time_entry_is_split_when_partially_billed(): void
+    {
+        // 1. Setup: Agreement with 10h retainer, no rollover
+        $agreement = ClientAgreement::factory()->for($this->company)->create([
+            'monthly_retainer_hours' => 10,
+            'rollover_months' => 0, // No rollover
+            'hourly_rate' => 150.00,
+            'active_date' => Carbon::create(2024, 1, 1)->startOfDay(),
+        ]);
+
+        // 2. Create a single large time entry (15 hours)
+        $originalEntry = ClientTimeEntry::factory()->for($this->company)->create([
+            'user_id' => $this->admin->id,
+            'date_worked' => Carbon::create(2024, 1, 15)->startOfDay(),
+            'minutes_worked' => 15 * 60,
+            'is_billable' => true,
+            'name' => 'Large Task',
+        ]);
+
+        // 3. Generate January invoice
+        // Should only bill 10 hours from the 15 hour entry
+        $invoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2024, 1, 1)->startOfDay(),
+            Carbon::create(2024, 1, 31)->endOfDay(),
+            $agreement
+        );
+
+        // 4. Verify splitting occurred
+        // There should now be TWO entries for this user on this day
+        $entries = ClientTimeEntry::where('user_id', $this->admin->id)->get();
+
+        $this->assertCount(2, $entries, 'Time entry should have been split into two rows');
+
+        $billedPart = $entries->whereNotNull('client_invoice_line_id')->first();
+        $unbilledPart = $entries->whereNull('client_invoice_line_id')->first();
+
+        $this->assertNotNull($billedPart, 'One part should be billed');
+        $this->assertNotNull($unbilledPart, 'One part should remain unbilled');
+
+        $this->assertEquals(10 * 60, $billedPart->minutes_worked, 'Billed part should be exactly 10 hours');
+        $this->assertEquals(5 * 60, $unbilledPart->minutes_worked, 'Unbilled part should be exactly 5 hours');
+        
+        $this->assertEquals('Large Task', $billedPart->name);
+        $this->assertEquals('Large Task', $unbilledPart->name);
+
+        // Verify the invoice correctly reflects the hours
+        $this->assertEquals(15, $invoice->hours_worked); // 15h total work found
+        $this->assertEquals(10, $invoice->retainer_hours_included); // 10h covered by retainer
+        $this->assertEquals(5, $invoice->negative_hours_balance); // 5h debt carried forward
+    }
+
     public function test_regenerating_invoice_preserves_manual_line_items(): void
     {
         // Create a project for time entries
