@@ -467,12 +467,13 @@ class ClientInvoicingService
     protected function generateInvoiceNumber(ClientCompany $company, ClientAgreement $agreement): string
     {
         // Format: {COMPANY_PREFIX}-{YEAR}{MONTH}-{SEQUENCE}
-        $prefix = strtoupper(substr(preg_replace('/[^a-zA-Z0-9]/', '', $company->name), 0, 4));
+        $rawPrefix = strtoupper(substr(preg_replace('/[^a-zA-Z0-9]/', '', $company->company_name), 0, 4));
+        $prefix = $rawPrefix ? $rawPrefix . '-' : '';
         $yearMonth = now()->format('Ym');
 
         // Find the next sequence number for this company
         $lastInvoice = ClientInvoice::where('client_company_id', $company->id)
-            ->where('invoice_number', 'like', "{$prefix}-{$yearMonth}-%")
+            ->where('invoice_number', 'like', "{$rawPrefix}%{$yearMonth}-%")
             ->orderBy('invoice_number', 'desc')
             ->first();
 

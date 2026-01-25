@@ -120,16 +120,31 @@ class ClientPortalAgreementApiController extends Controller
         $cacheKey = "client_portal_invoice_{$slug}_{$invoiceId}_" . ($isAdmin ? 'admin' : 'client');
 
         return Cache::remember($cacheKey, 60, function () use ($company, $invoiceId, $isAdmin) {
-            $query = ClientInvoice::where('client_invoice_id', $invoiceId)
+            $invoice = ClientInvoice::where('client_invoice_id', $invoiceId)
                 ->where('client_company_id', $company->id)
-                ->with(['lineItems', 'payments']);
+                ->with(['lineItems', 'payments'])
+                ->firstOrFail();
 
             // Admins can see all invoices, but clients can only see issued or paid ones.
-            if (! $isAdmin) {
-                $query->whereIn('status', ['issued', 'paid']);
+            if (! $isAdmin && ! in_array($invoice->status, ['issued', 'paid'])) {
+                abort(404);
             }
 
-            return $query->firstOrFail();
+            $data = $invoice->toArray();
+            $data['payments_total'] = $invoice->payments_total;
+            $data['line_items'] = $invoice->lineItems->map(function ($line) {
+                return [
+                    'client_invoice_line_id' => $line->client_invoice_line_id,
+                    'description' => $line->description,
+                    'quantity' => $line->quantity,
+                    'unit_price' => $line->unit_price,
+                    'line_total' => $line->line_total,
+                    'line_type' => $line->line_type,
+                    'hours' => $line->hours,
+                ];
+            });
+
+            return $data;
         });
     }
 }

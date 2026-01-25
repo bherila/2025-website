@@ -144,6 +144,17 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
             }
         }
     }
+
+    const handleDeleteInvoice = async () => {
+        if (confirm('Are you sure you want to delete this invoice? This cannot be undone.')) {
+            try {
+                await fetchWrapper.delete(`/api/client/mgmt/companies/${invoice!.client_company_id}/invoices/${invoiceId}`, {});
+                window.location.href = `/client/portal/${slug}/invoices`;
+            } catch (error) {
+                console.error("Failed to delete invoice", error);
+            }
+        }
+    }
     
     const isEditable = invoice?.status === 'draft';
     const hasPayments = invoice?.payments && invoice.payments.length > 0;
@@ -157,25 +168,19 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
                     <div className="mb-6">
                         <Skeleton className="h-5 w-48" />
                     </div>
-                    <Card>
-                        <CardHeader>
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <Skeleton className="h-8 w-48 mb-2" />
-                                    <Skeleton className="h-4 w-64 mb-1" />
-                                    <Skeleton className="h-4 w-56" />
-                                </div>
-                                <div className="text-right">
-                                    <Skeleton className="h-10 w-32 mb-2" />
-                                    <Skeleton className="h-6 w-16" />
-                                </div>
-                            </div>
-                        </CardHeader>
-                        <CardContent>
-                            <Skeleton className="h-48 w-full mb-4" />
-                            <Skeleton className="h-32 w-full" />
-                        </CardContent>
-                    </Card>
+                    <div className="flex justify-between items-start mb-8">
+                        <div>
+                            <Skeleton className="h-8 w-48 mb-2" />
+                            <Skeleton className="h-4 w-64 mb-1" />
+                            <Skeleton className="h-4 w-56" />
+                        </div>
+                        <div className="text-right">
+                            <Skeleton className="h-10 w-32 mb-2" />
+                            <Skeleton className="h-6 w-16" />
+                        </div>
+                    </div>
+                    <Skeleton className="h-48 w-full mb-4" />
+                    <Skeleton className="h-32 w-full" />
                 </div>
             </>
         )
@@ -204,23 +209,24 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
                     </Breadcrumb>
                 </div>
 
-                <Card>
-                    <CardHeader>
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <CardTitle className="text-2xl">Invoice {invoice.invoice_number}</CardTitle>
-                                <CardDescription>
-                                    For {companyName} <br />
-                                    Period: {format(new Date(invoice.period_start!), 'MMM d, yyyy')} - {format(new Date(invoice.period_end!), 'MMM d, yyyy')}
-                                </CardDescription>
-                            </div>
-                            <div className="text-right">
-                                <div className="text-3xl font-bold">${parseFloat(invoice.invoice_total).toFixed(2)}</div>
-                                <Badge>{invoice.status}</Badge>
-                            </div>
-                        </div>
-                    </CardHeader>
-                    <CardContent>
+                <div className="flex justify-between items-start mb-8">
+                    <div>
+                        <h1 className="text-3xl font-bold mb-2">Invoice {invoice.invoice_number}</h1>
+                        <p className="text-muted-foreground">
+                            For {companyName} <br />
+                            Period: {format(new Date(invoice.period_start!), 'MMM d, yyyy')} - {format(new Date(invoice.period_end!), 'MMM d, yyyy')}
+                        </p>
+                    </div>
+                    <div className="text-right">
+                        <div className="text-4xl font-bold mb-2">${parseFloat(invoice.invoice_total).toFixed(2)}</div>
+                        <Badge variant={invoice.status === 'paid' ? 'default' : 'outline'} className={invoice.status === 'paid' ? 'bg-green-600' : ''}>
+                            {invoice.status.toUpperCase()}
+                        </Badge>
+                    </div>
+                </div>
+
+                <div className="space-y-8">
+                    <section>
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -261,59 +267,73 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
                                 <PlusCircle className="mr-2 h-4 w-4" /> Add Line Item
                             </Button>
                         )}
+                    </section>
 
-                        {/* Payments Section - only show table if there are payments */}
-                        {hasPayments && (
-                            <div className="mt-8">
-                                <h3 className="text-lg font-semibold mb-2">Payments</h3>
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Date</TableHead>
-                                            <TableHead>Amount</TableHead>
-                                            <TableHead>Method</TableHead>
-                                            <TableHead>Notes</TableHead>
-                                            {isAdmin && <TableHead className="text-right">Actions</TableHead>}
+                    {/* Payments Section - only show table if there are payments */}
+                    {hasPayments && (
+                        <section>
+                            <h3 className="text-xl font-semibold mb-4">Payments</h3>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Date</TableHead>
+                                        <TableHead>Amount</TableHead>
+                                        <TableHead>Method</TableHead>
+                                        <TableHead>Notes</TableHead>
+                                        {isAdmin && <TableHead className="text-right">Actions</TableHead>}
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {invoice.payments.map(p => (
+                                        <TableRow key={p.client_invoice_payment_id}>
+                                            <TableCell>{format(new Date(p.payment_date), 'MMM d, yyyy')}</TableCell>
+                                            <TableCell>${parseFloat(p.amount).toFixed(2)}</TableCell>
+                                            <TableCell>{p.payment_method}</TableCell>
+                                            <TableCell>{p.notes}</TableCell>
+                                            {isAdmin && (
+                                                <TableCell className="text-right">
+                                                    <div className="flex justify-end gap-1">
+                                                        <Button variant="ghost" size="icon" onClick={() => { setSelectedPayment(p); setPaymentModalOpen(true); }} disabled={isRefreshing}>
+                                                            <Pencil className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button variant="ghost" size="icon" onClick={() => handleDeletePayment(p)} disabled={isRefreshing}>
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
+                                            )}
                                         </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {invoice.payments.map(p => (
-                                            <TableRow key={p.client_invoice_payment_id}>
-                                                <TableCell>{format(new Date(p.payment_date), 'MMM d, yyyy')}</TableCell>
-                                                <TableCell>${parseFloat(p.amount).toFixed(2)}</TableCell>
-                                                <TableCell>{p.payment_method}</TableCell>
-                                                <TableCell>{p.notes}</TableCell>
-                                                {isAdmin && (
-                                                    <TableCell className="text-right">
-                                                        <div className="flex justify-end gap-1">
-                                                            <Button variant="ghost" size="icon" onClick={() => { setSelectedPayment(p); setPaymentModalOpen(true); }} disabled={isRefreshing}>
-                                                                <Pencil className="h-4 w-4" />
-                                                            </Button>
-                                                            <Button variant="ghost" size="icon" onClick={() => handleDeletePayment(p)} disabled={isRefreshing}>
-                                                                <Trash2 className="h-4 w-4" />
-                                                            </Button>
-                                                        </div>
-                                                    </TableCell>
-                                                )}
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        )}
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </section>
+                    )}
 
-                        <div className="text-right mt-4 font-bold text-lg">
+                    <div className="flex flex-col items-end gap-2 border-t pt-4">
+                        <div className="text-muted-foreground text-sm">
+                            Total Billed: ${parseFloat(invoice.invoice_total).toFixed(2)}
+                        </div>
+                        <div className="text-muted-foreground text-sm">
+                            Total Paid: ${parseFloat(invoice.payments_total || '0').toFixed(2)}
+                        </div>
+                        <div className="text-2xl font-bold">
                             Remaining Balance: ${parseFloat(invoice.remaining_balance).toFixed(2)}
                         </div>
+                    </div>
 
-                        {/* Action buttons row */}
-                        {isAdmin && (
-                            <div className="mt-8 flex gap-2 flex-wrap">
-                                {invoice.status === 'draft' && <Button onClick={handleIssueInvoice} disabled={isRefreshing}>Issue Invoice</Button>}
-                                <Button variant="outline" onClick={() => { setSelectedPayment(null); setPaymentModalOpen(true); }} disabled={isRefreshing}>
+                    {/* Action buttons row */}
+                    {isAdmin && (
+                        <div className="mt-12 flex justify-between items-center bg-muted/30 p-6 rounded-xl border border-border/50">
+                            <div className="flex gap-2 flex-wrap">
+                                {invoice.status === 'draft' && (
+                                    <Button onClick={handleIssueInvoice} disabled={isRefreshing} className="bg-blue-600 hover:bg-blue-700">
+                                        Issue Invoice
+                                    </Button>
+                                )}
+                                <Button variant="secondary" onClick={() => { setSelectedPayment(null); setPaymentModalOpen(true); }} disabled={isRefreshing}>
                                     <PlusCircle className="mr-2 h-4 w-4" /> Add Payment
                                 </Button>
-                                {canVoid && <Button variant="destructive" onClick={handleVoidInvoice} disabled={isRefreshing}>Void Invoice</Button>}
+                                {canVoid && <Button variant="outline" onClick={handleVoidInvoice} disabled={isRefreshing} className="text-amber-600 border-amber-200 hover:bg-amber-50">Void Invoice</Button>}
                                 {invoice.status === 'void' && (
                                     <>
                                         <Button variant="outline" onClick={() => handleUnVoidInvoice('issued')} disabled={isRefreshing}>Restore as Issued</Button>
@@ -321,9 +341,16 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
                                     </>
                                 )}
                             </div>
-                        )}
-                    </CardContent>
-                </Card>
+                            
+                            {isEditable && (
+                                <Button variant="ghost" onClick={handleDeleteInvoice} disabled={isRefreshing} className="text-destructive hover:bg-destructive/10">
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete Invoice
+                                </Button>
+                            )}
+                        </div>
+                    )}
+                </div>
 
                 <LineItemEditModal
                     isOpen={isLineItemModalOpen}

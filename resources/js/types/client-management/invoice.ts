@@ -33,6 +33,7 @@ export interface Invoice {
   line_items: InvoiceLine[];
   payments: ClientInvoicePayment[];
   remaining_balance: string;
+  payments_total: string;
 }
 
 export interface InvoicePreview {
