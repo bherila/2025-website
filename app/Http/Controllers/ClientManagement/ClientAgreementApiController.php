@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientCompany;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
 
 class ClientAgreementApiController extends Controller
@@ -18,11 +17,9 @@ class ClientAgreementApiController extends Controller
     {
         Gate::authorize('Admin');
 
-        return Cache::remember("client_admin_agreements_{$companyId}", 60, function () use ($companyId) {
-            $company = ClientCompany::findOrFail($companyId);
+        $company = ClientCompany::findOrFail($companyId);
 
-            return $company->agreements()->orderBy('active_date', 'desc')->get();
-        });
+        return $company->agreements()->orderBy('active_date', 'desc')->get();
     }
 
     /**
@@ -32,9 +29,7 @@ class ClientAgreementApiController extends Controller
     {
         Gate::authorize('Admin');
 
-        return Cache::remember("client_admin_agreement_{$id}", 60, function () use ($id) {
-            return ClientAgreement::with('clientCompany', 'signedByUser')->findOrFail($id);
-        });
+        return ClientAgreement::with('clientCompany', 'signedByUser')->findOrFail($id);
     }
 
     /**
@@ -66,14 +61,6 @@ class ClientAgreementApiController extends Controller
 
         $agreement->update($validated);
 
-        // Invalidate caches
-        Cache::forget("client_admin_agreement_{$id}");
-        Cache::forget("client_admin_agreements_{$agreement->client_company_id}");
-        if ($agreement->clientCompany) {
-            Cache::forget("client_portal_agreements_{$agreement->clientCompany->slug}");
-            Cache::forget("client_portal_agreement_{$agreement->clientCompany->slug}_{$id}");
-        }
-
         return response()->json([
             'success' => true,
             'agreement' => $agreement->fresh(),
@@ -95,14 +82,6 @@ class ClientAgreementApiController extends Controller
 
         $terminationDate = $validated['termination_date'] ?? now();
         $agreement->terminate(new \DateTime($terminationDate));
-
-        // Invalidate caches
-        Cache::forget("client_admin_agreement_{$id}");
-        Cache::forget("client_admin_agreements_{$agreement->client_company_id}");
-        if ($agreement->clientCompany) {
-            Cache::forget("client_portal_agreements_{$agreement->clientCompany->slug}");
-            Cache::forget("client_portal_agreement_{$agreement->clientCompany->slug}_{$id}");
-        }
 
         return response()->json([
             'success' => true,
@@ -128,14 +107,6 @@ class ClientAgreementApiController extends Controller
         }
 
         $agreement->delete();
-
-        // Invalidate caches
-        Cache::forget("client_admin_agreement_{$id}");
-        Cache::forget("client_admin_agreements_{$companyId}");
-        if ($slug) {
-            Cache::forget("client_portal_agreements_{$slug}");
-            Cache::forget("client_portal_agreement_{$slug}_{$id}");
-        }
 
         return response()->json([
             'success' => true,

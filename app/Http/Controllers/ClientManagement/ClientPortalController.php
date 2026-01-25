@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientInvoice;
 use App\Models\ClientManagement\ClientProject;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
 
 class ClientPortalController extends Controller
@@ -20,19 +19,15 @@ class ClientPortalController extends Controller
 
         Gate::authorize('ClientCompanyMember', $company->id);
 
-        $projects = Cache::remember("client_portal_projects_{$slug}", 60, function () use ($company) {
-            return ClientProject::where('client_company_id', $company->id)
-                ->withCount(['tasks', 'timeEntries'])
-                ->orderBy('name')
-                ->get();
-        });
+        $projects = ClientProject::where('client_company_id', $company->id)
+            ->withCount(['tasks', 'timeEntries'])
+            ->orderBy('name')
+            ->get();
 
-        $agreements = Cache::remember("client_portal_agreements_{$slug}", 60, function () use ($company) {
-            return $company->agreements()
-                ->where('is_visible_to_client', true)
-                ->orderBy('active_date', 'desc')
-                ->get();
-        });
+        $agreements = $company->agreements()
+            ->where('is_visible_to_client', true)
+            ->orderBy('active_date', 'desc')
+            ->get();
 
         return view('client-management.portal.index', [
             'company' => $company,
