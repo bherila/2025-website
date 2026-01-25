@@ -3,7 +3,15 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ArrowLeft, FileText, Receipt, RefreshCw, Loader2 } from 'lucide-react'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { ArrowLeft, FileText, Receipt, RefreshCw, Loader2, ChevronRight } from 'lucide-react'
 import ClientPortalNav from './ClientPortalNav'
 import type { Invoice } from '@/types/client-management/invoice'
 import type { ClientCompany, User } from '@/types/client-management/common'
@@ -197,47 +205,57 @@ export default function ClientPortalInvoicesPage({ slug, companyName }: ClientPo
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
-          {invoices.map(invoice => (
-            <Card key={invoice.client_invoice_id} 
-                  className="cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => window.location.href = `/client/portal/${slug}/invoice/${invoice.client_invoice_id}`}>
-              <CardHeader className="pb-2">
-                <div className="flex justify-between items-center">
-                  <CardTitle className="text-lg">
-                    {invoice.invoice_number || `Invoice #${invoice.client_invoice_id}`}
-                  </CardTitle>
-                  {getStatusBadge(invoice.status)}
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex justify-between items-center">
-                  <div className="space-y-1 text-sm text-muted-foreground">
-                    {invoice.period_start && invoice.period_end && (
-                      <p>Period: {new Date(invoice.period_start).toLocaleDateString()} - {new Date(invoice.period_end).toLocaleDateString()}</p>
-                    )}
-                    {invoice.issue_date && (
-                      <p>Issued: {new Date(invoice.issue_date).toLocaleDateString()}</p>
-                    )}
-                    {invoice.due_date && invoice.status === 'issued' && (
-                      <p>Due: {new Date(invoice.due_date).toLocaleDateString()}</p>
-                    )}
-                    {invoice.paid_date && (
-                      <p className="text-green-600">Paid: {new Date(invoice.paid_date).toLocaleDateString()}</p>
-                    )}
-                  </div>
-                  <div className="text-right">
-                    <p className="text-2xl font-bold">${parseFloat(invoice.invoice_total).toLocaleString()}</p>
-                    {parseFloat(invoice.unused_hours_balance) !== 0 && (
-                      <p className="text-sm text-muted-foreground">
-                        {parseFloat(invoice.unused_hours_balance) > 0 ? 'Unused hours' : 'Hours owed'}: {Math.abs(parseFloat(invoice.unused_hours_balance)).toFixed(2)}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+        <div className="border border-muted/50 rounded-md overflow-hidden bg-card">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50">
+                <TableHead className="py-2">Invoice #</TableHead>
+                <TableHead className="py-2">Period</TableHead>
+                <TableHead className="py-2">Due Date</TableHead>
+                <TableHead className="py-2">Status</TableHead>
+                <TableHead className="text-right py-2">Total</TableHead>
+                <TableHead className="w-[40px] py-2 text-right">
+                  <ChevronRight className="h-3 w-3 ml-auto text-muted-foreground/50" />
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {invoices.map(invoice => (
+                <TableRow 
+                  key={invoice.client_invoice_id} 
+                  className="cursor-pointer group"
+                  onClick={() => window.location.href = `/client/portal/${slug}/invoice/${invoice.client_invoice_id}`}
+                >
+                  <TableCell className="py-3 font-medium">
+                    {invoice.invoice_number || `INV-${invoice.client_invoice_id}`}
+                  </TableCell>
+                  <TableCell className="py-3 text-muted-foreground">
+                    {invoice.period_start && invoice.period_end ? (
+                      <span className="text-xs">
+                        {new Date(invoice.period_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {new Date(invoice.period_end).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </span>
+                    ) : '-'}
+                  </TableCell>
+                  <TableCell className="py-3 text-muted-foreground">
+                    {invoice.status === 'issued' && invoice.due_date ? (
+                      <span className="text-xs">
+                        {new Date(invoice.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </span>
+                    ) : '-'}
+                  </TableCell>
+                  <TableCell className="py-3">
+                    {getStatusBadge(invoice.status)}
+                  </TableCell>
+                  <TableCell className="text-right py-3 font-semibold">
+                    ${parseFloat(invoice.invoice_total).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </TableCell>
+                  <TableCell className="py-3 text-right">
+                    <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       )}
       </div>
