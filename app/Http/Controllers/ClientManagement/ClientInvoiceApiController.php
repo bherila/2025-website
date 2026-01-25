@@ -9,6 +9,7 @@ use App\Models\ClientManagement\ClientInvoicePayment;
 use App\Services\ClientManagement\ClientInvoicingService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 
@@ -19,6 +20,15 @@ class ClientInvoiceApiController extends Controller
     public function __construct(ClientInvoicingService $invoicingService)
     {
         $this->invoicingService = $invoicingService;
+    }
+
+    /**
+     * Clear the portal caches for a company.
+     */
+    protected function clearPortalCache(ClientCompany $company): void
+    {
+        Cache::forget("client_portal_invoices_{$company->slug}_admin");
+        Cache::forget("client_portal_invoices_{$company->slug}_client");
     }
 
     /**
@@ -139,6 +149,8 @@ class ClientInvoiceApiController extends Controller
                 Carbon::parse($request->period_end)
             );
 
+            $this->clearPortalCache($company);
+
             return response()->json([
                 'message' => 'Invoice generated successfully',
                 'invoice' => [
@@ -162,6 +174,8 @@ class ClientInvoiceApiController extends Controller
 
         try {
             $results = $this->invoicingService->generateAllMonthlyInvoices($company);
+
+            $this->clearPortalCache($company);
 
             return response()->json([
                 'message' => 'Invoice generation completed',
@@ -207,6 +221,8 @@ class ClientInvoiceApiController extends Controller
 
         $invoice->update($request->only(['notes', 'due_date']));
 
+        $this->clearPortalCache($company);
+
         return response()->json(['message' => 'Invoice updated successfully']);
     }
 
@@ -227,6 +243,8 @@ class ClientInvoiceApiController extends Controller
 
         $invoice->issue();
 
+        $this->clearPortalCache($company);
+
         return response()->json(['message' => 'Invoice issued successfully']);
     }
 
@@ -246,6 +264,8 @@ class ClientInvoiceApiController extends Controller
         }
 
         $invoice->markPaid();
+
+        $this->clearPortalCache($company);
 
         return response()->json(['message' => 'Invoice marked as paid']);
     }
@@ -278,6 +298,8 @@ class ClientInvoiceApiController extends Controller
         }
 
         $invoice->void();
+
+        $this->clearPortalCache($company);
 
         return response()->json(['message' => 'Invoice voided successfully']);
     }
@@ -325,6 +347,8 @@ class ClientInvoiceApiController extends Controller
 
         $invoice->unVoid($targetStatus);
 
+        $this->clearPortalCache($company);
+
         return response()->json(['message' => 'Invoice status reverted successfully']);
     }
 
@@ -350,6 +374,8 @@ class ClientInvoiceApiController extends Controller
         }
 
         $invoice->delete();
+
+        $this->clearPortalCache($company);
 
         return response()->json(['message' => 'Invoice deleted successfully']);
     }
@@ -391,8 +417,9 @@ class ClientInvoiceApiController extends Controller
 
         $invoice->recalculateTotal();
 
+        $this->clearPortalCache($company);
+
         return response()->json([
-            'message' => 'Line item added successfully',
             'line_item' => [
                 'id' => $line->client_invoice_line_id,
                 'description' => $line->description,
@@ -434,6 +461,8 @@ class ClientInvoiceApiController extends Controller
 
         $invoice->recalculateTotal();
 
+        $this->clearPortalCache($company);
+
         return response()->json([
             'message' => 'Line item removed successfully',
             'new_invoice_total' => $invoice->fresh()->invoice_total,
@@ -471,6 +500,8 @@ class ClientInvoiceApiController extends Controller
         ]);
 
         $invoice->recalculateTotal();
+
+        $this->clearPortalCache($company);
 
         return response()->json([
             'message' => 'Line item updated successfully',
@@ -517,6 +548,8 @@ class ClientInvoiceApiController extends Controller
             $invoice->markPaid($latestPaymentDate);
         }
 
+        $this->clearPortalCache($company);
+
         return response()->json([
             'message' => 'Payment added successfully.',
             'payment' => $payment,
@@ -554,6 +587,8 @@ class ClientInvoiceApiController extends Controller
             }
         }
 
+        $this->clearPortalCache($company);
+
         return response()->json([
             'message' => 'Payment updated successfully.',
             'payment' => $payment->fresh(),
@@ -574,6 +609,8 @@ class ClientInvoiceApiController extends Controller
         if ($invoice->status === 'paid' && $invoice->fresh()->remaining_balance > 0) {
             $invoice->update(['status' => 'issued', 'paid_date' => null]);
         }
+
+        $this->clearPortalCache($company);
 
         return response()->json([
             'message' => 'Payment deleted successfully.',

@@ -91,11 +91,14 @@ class ClientPortalAgreementApiController extends Controller
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
         Gate::authorize('ClientCompanyMember', $company->id);
 
-        return Cache::remember("client_portal_invoices_{$slug}", 60, function () use ($company) {
+        $isAdmin = auth()->user()->hasRole('admin');
+        $cacheKey = "client_portal_invoices_{$slug}_" . ($isAdmin ? 'admin' : 'client');
+
+        return Cache::remember($cacheKey, 60, function () use ($company, $isAdmin) {
             $query = $company->invoices();
 
             // Admins can see all invoices, but clients can only see issued or paid ones.
-            if (! auth()->user()->hasRole('admin')) {
+            if (! $isAdmin) {
                 $query->whereIn('status', ['issued', 'paid']);
             }
 
@@ -113,13 +116,16 @@ class ClientPortalAgreementApiController extends Controller
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
         Gate::authorize('ClientCompanyMember', $company->id);
 
-        return Cache::remember("client_portal_invoice_{$slug}_{$invoiceId}", 60, function () use ($company, $invoiceId) {
+        $isAdmin = auth()->user()->hasRole('admin');
+        $cacheKey = "client_portal_invoice_{$slug}_{$invoiceId}_" . ($isAdmin ? 'admin' : 'client');
+
+        return Cache::remember($cacheKey, 60, function () use ($company, $invoiceId, $isAdmin) {
             $query = ClientInvoice::where('client_invoice_id', $invoiceId)
                 ->where('client_company_id', $company->id)
                 ->with(['lineItems', 'payments']);
 
             // Admins can see all invoices, but clients can only see issued or paid ones.
-            if (! auth()->user()->hasRole('admin')) {
+            if (! $isAdmin) {
                 $query->whereIn('status', ['issued', 'paid']);
             }
 
