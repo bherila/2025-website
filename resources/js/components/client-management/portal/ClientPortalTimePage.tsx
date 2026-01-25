@@ -18,6 +18,7 @@ import type { User, Project } from '@/types/client-management/common'
 import type { TimeEntry, TimeEntriesResponse } from '@/types/client-management/time-entry'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import SummaryTile from '@/components/ui/summary-tile'
+import TimeTrackingMonthSummaryRow from './TimeTrackingMonthSummaryRow'
 
 interface ClientPortalTimePageProps {
   slug: string
@@ -309,47 +310,16 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
                       </div>
 
                       {/* Monthly Summary Tiles */}
-                      {month.has_agreement && typeof remainingPool === 'number' && typeof openingAvailable === 'number' && (
-                        <div className="mt-3 grid grid-cols-2 md:grid-cols-5 gap-3 text-xs text-muted-foreground">
-                          <SummaryTile
-                            title="Contracted Time"
-                            kind="green"
-                            size="small"
-                          >
-                            {formatHours(openingAvailable)}
-                          </SummaryTile>
-                          {month.pre_agreement_hours_applied && month.pre_agreement_hours_applied > 0 ? (
-                            <SummaryTile
-                              title="Carried in"
-                              kind="blue"
-                              size="small"
-                            >
-                              {formatHours(month.pre_agreement_hours_applied)}
-                            </SummaryTile>
-                          ) : null}
-                          <SummaryTile title="Worked" kind="blue" size="small">
-                            {formatHours(month.hours_worked)}
-                          </SummaryTile>
-                          {month.closing && month.closing.hours_used_from_rollover > 0 && (
-                            <SummaryTile title="Rollover Used" size="small">
-                              {formatHours(month.closing.hours_used_from_rollover)}
-                            </SummaryTile>
-                          )}
-                          {month.closing && month.closing.excess_hours > 0 && (
-                            <SummaryTile title="Overage (billed)" kind="red" size="small">
-                              {formatHours(month.closing.excess_hours)}
-                            </SummaryTile>
-                          )}
-                          {month.closing && month.closing.negative_balance && month.closing.negative_balance > 0 ? (
-                            <SummaryTile title="Overage (carried forward)" kind="red" size="small">
-                              {formatHours(month.closing.negative_balance)}
-                            </SummaryTile>
-                          ) : (
-                            <SummaryTile title="Remaining" size="small">
-                              {formatHours(Math.max(0, remainingPool ?? 0))}
-                            </SummaryTile>
-                          )}
-                        </div>
+                      {month.has_agreement && (
+                        <TimeTrackingMonthSummaryRow
+                          openingAvailable={openingAvailable}
+                          preAgreementHoursApplied={month.pre_agreement_hours_applied}
+                          hoursWorked={month.hours_worked}
+                          hoursUsedFromRollover={month.closing?.hours_used_from_rollover}
+                          excessHours={month.closing?.excess_hours}
+                          negativeBalance={month.closing?.negative_balance}
+                          remainingPool={remainingPool}
+                        />
                       )}
                     </CardHeader>
 

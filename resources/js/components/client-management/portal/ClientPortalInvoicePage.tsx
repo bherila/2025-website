@@ -13,6 +13,7 @@ import AddPaymentModal from "./AddPaymentModal";
 import ClientPortalNav from "./ClientPortalNav";
 import LineItemEditModal from "./LineItemEditModal";
 import ClientPortalInvoiceActionButtonRow from "./ClientPortalInvoiceActionButtonRow";
+import TimeTrackingMonthSummaryRow from "./TimeTrackingMonthSummaryRow";
 import {
     Breadcrumb,
     BreadcrumbItem,
@@ -341,6 +342,19 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
                         <div className="text-2xl font-bold">
                             Remaining Balance: ${parseFloat(invoice.remaining_balance).toFixed(2)}
                         </div>
+                    </div>
+
+                    <div className="pt-8 border-t">
+                        <h3 className="text-lg font-semibold mb-2">Hourly Summary</h3>
+                        <p className="text-sm text-muted-foreground mb-4">A breakdown of hours tracked and applied for this billing period. This is for informational purposes only.</p>
+                        <TimeTrackingMonthSummaryRow 
+                            openingAvailable={parseFloat(invoice.retainer_hours_included)}
+                            hoursWorked={parseFloat(invoice.hours_worked)}
+                            hoursUsedFromRollover={parseFloat(invoice.rollover_hours_used)}
+                            excessHours={parseFloat(invoice.hours_billed_at_rate)}
+                            negativeBalance={parseFloat(invoice.negative_hours_balance)}
+                            remainingPool={parseFloat(invoice.unused_hours_balance)}
+                        />
                     </div>
                 </div>
 
