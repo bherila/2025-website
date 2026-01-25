@@ -3,9 +3,10 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ArrowLeft, FileText, Receipt } from 'lucide-react'
+import { ArrowLeft, FileText, Receipt, RefreshCw, Loader2 } from 'lucide-react'
 import ClientPortalNav from './ClientPortalNav'
 import type { Invoice } from '@/types/client-management/invoice'
+import type { ClientCompany, User } from '@/types/client-management/common'
 import {
     Breadcrumb,
     BreadcrumbItem,
@@ -22,15 +23,46 @@ interface ClientPortalInvoicesPageProps {
 
 export default function ClientPortalInvoicesPage({ slug, companyName }: ClientPortalInvoicesPageProps) {
   const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [company, setCompany] = useState<ClientCompany | null>(null)
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [generating, setGenerating] = useState(false)
+
+  const isAdmin = currentUser?.id === 1 || currentUser?.user_role === 'Admin'
 
   useEffect(() => {
     fetchInvoices()
+    fetchCompany()
+    fetchCurrentUser()
   }, [slug])
 
   useEffect(() => {
     document.title = `Invoices | ${companyName}`
   }, [companyName])
+
+  const fetchCurrentUser = async () => {
+    try {
+      const response = await fetch('/api/user')
+      if (response.ok) {
+        const data = await response.json()
+        setCurrentUser(data)
+      }
+    } catch (error) {
+      console.error('Error fetching current user:', error)
+    }
+  }
+
+  const fetchCompany = async () => {
+    try {
+      const response = await fetch(`/api/client/portal/${slug}`)
+      if (response.ok) {
+        const data = await response.json()
+        setCompany(data)
+      }
+    } catch (error) {
+      console.error('Error fetching company:', error)
+    }
+  }
 
   const fetchInvoices = async () => {
     try {
@@ -43,6 +75,33 @@ export default function ClientPortalInvoicesPage({ slug, companyName }: ClientPo
       console.error('Error fetching invoices:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleGenerateInvoices = async () => {
+    if (!company) return
+    
+    setGenerating(true)
+    try {
+      const response = await fetch(`/api/client/mgmt/companies/${company.id}/invoices/generate-all`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+        }
+      })
+
+      if (response.ok) {
+        await fetchInvoices()
+      } else {
+        const error = await response.json()
+        alert(error.error || 'Failed to generate invoices')
+      }
+    } catch (error) {
+      console.error('Error generating invoices:', error)
+      alert('An error occurred while generating invoices')
+    } finally {
+      setGenerating(false)
     }
   }
 
@@ -101,11 +160,32 @@ export default function ClientPortalInvoicesPage({ slug, companyName }: ClientPo
             </BreadcrumbList>
           </Breadcrumb>
         </div>
-        <div className="flex items-center gap-4 mb-6">
-          <Receipt className="h-8 w-8 text-muted-foreground" />
-          <div>
-            <h1 className="text-3xl font-bold">Invoices</h1>
+        <div className="flex items-center justify-between gap-4 mb-6">
+          <div className="flex items-center gap-4">
+            <Receipt className="h-8 w-8 text-muted-foreground" />
+            <div>
+              <h1 className="text-3xl font-bold">Invoices</h1>
+            </div>
           </div>
+          {isAdmin && (
+            <Button 
+              onClick={handleGenerateInvoices} 
+              disabled={generating || !company}
+              variant="outline"
+            >
+              {generating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Generate Invoices
+                </>
+              )}
+            </Button>
+          )}
         </div>
 
       {invoices.length === 0 ? (
