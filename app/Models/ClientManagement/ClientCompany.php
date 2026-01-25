@@ -4,12 +4,13 @@ namespace App\Models\ClientManagement;
 
 use App\Models\User;
 use App\Traits\SerializesDatesAsLocal;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ClientCompany extends Model
 {
-    use SerializesDatesAsLocal, SoftDeletes;
+    use HasFactory, SerializesDatesAsLocal, SoftDeletes;
 
     protected $fillable = [
         'company_name',

@@ -39,14 +39,13 @@ class ClientInvoiceTest extends TestCase
         ]);
 
         // Create a company
-        $this->company = ClientCompany::create([
+        $this->company = ClientCompany::factory()->create([
             'company_name' => 'Test Company',
             'slug' => 'test-company',
         ]);
 
         // Create an active agreement
-        $this->agreement = ClientAgreement::create([
-            'client_company_id' => $this->company->id,
+        $this->agreement = ClientAgreement::factory()->for($this->company)->create([
             'agreement_text' => 'Standard Retainer',
             'monthly_retainer_fee' => 1000.00,
             'monthly_retainer_hours' => 10,
@@ -335,16 +334,13 @@ class ClientInvoiceTest extends TestCase
     public function test_regenerating_invoice_preserves_manual_line_items(): void
     {
         // Create a project for time entries
-        $project = ClientProject::create([
-            'client_company_id' => $this->company->id,
+        $project = ClientProject::factory()->for($this->company)->create([
             'name' => 'Test Project',
             'slug' => 'test-project',
         ]);
 
         // Create time entries for January
-        ClientTimeEntry::create([
-            'client_company_id' => $this->company->id,
-            'project_id' => $project->id,
+        ClientTimeEntry::factory()->for($this->company)->for($project, 'project')->create([
             'user_id' => $this->admin->id,
             'date_worked' => Carbon::create(2024, 1, 15),
             'minutes_worked' => 120, // 2 hours
@@ -382,9 +378,7 @@ class ClientInvoiceTest extends TestCase
         $originalTotal = $invoice->invoice_total;
 
         // Add more time entries
-        ClientTimeEntry::create([
-            'client_company_id' => $this->company->id,
-            'project_id' => $project->id,
+        ClientTimeEntry::factory()->for($this->company)->for($project, 'project')->create([
             'user_id' => $this->admin->id,
             'date_worked' => Carbon::create(2024, 1, 20),
             'minutes_worked' => 180, // 3 hours
@@ -431,16 +425,13 @@ class ClientInvoiceTest extends TestCase
     public function test_regenerating_invoice_does_not_duplicate_system_line_items(): void
     {
         // Create a project for time entries
-        $project = ClientProject::create([
-            'client_company_id' => $this->company->id,
+        $project = ClientProject::factory()->for($this->company)->create([
             'name' => 'Test Project',
             'slug' => 'test-project',
         ]);
 
         // Create initial time entry
-        ClientTimeEntry::create([
-            'client_company_id' => $this->company->id,
-            'project_id' => $project->id,
+        ClientTimeEntry::factory()->for($this->company)->for($project, 'project')->create([
             'user_id' => $this->admin->id,
             'date_worked' => Carbon::create(2024, 1, 15),
             'minutes_worked' => 120,

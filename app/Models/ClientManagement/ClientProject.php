@@ -4,12 +4,13 @@ namespace App\Models\ClientManagement;
 
 use App\Models\User;
 use App\Traits\SerializesDatesAsLocal;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ClientProject extends Model
 {
-    use SerializesDatesAsLocal, SoftDeletes;
+    use HasFactory, SerializesDatesAsLocal, SoftDeletes;
 
     protected $table = 'client_projects';
 
