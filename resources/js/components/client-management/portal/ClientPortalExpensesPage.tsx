@@ -17,6 +17,7 @@ import {
 import ClientPortalNav from './ClientPortalNav'
 import NewExpenseModal from './NewExpenseModal'
 import DeleteExpenseDialog from './DeleteExpenseDialog'
+import SummaryTile from '@/components/ui/summary-tile'
 import type { Project } from '@/types/client-management/common'
 import type { ClientExpense, ExpensesResponse } from '@/types/client-management/expense'
 import {
@@ -155,50 +156,35 @@ export default function ClientPortalExpensesPage({ slug, companyName, companyId 
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <Card>
-            <CardContent className="py-4">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Receipt className="h-4 w-4" />
-                Total Expenses
-              </div>
-              <div className="text-2xl font-semibold mt-1">
-                {formatCurrency(data?.total_amount || 0)}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="py-4">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <DollarSign className="h-4 w-4 text-green-600" />
-                Reimbursable
-              </div>
-              <div className="text-2xl font-semibold text-green-600 mt-1">
-                {formatCurrency(data?.reimbursable_total || 0)}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="py-4">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Clock className="h-4 w-4 text-amber-600" />
-                Pending Reimbursement
-              </div>
-              <div className="text-2xl font-semibold text-amber-600 mt-1">
-                {formatCurrency(data?.pending_reimbursement_total || 0)}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="py-4">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Receipt className="h-4 w-4 text-muted-foreground" />
-                Non-Reimbursable
-              </div>
-              <div className="text-2xl font-semibold mt-1">
-                {formatCurrency(data?.non_reimbursable_total || 0)}
-              </div>
-            </CardContent>
-          </Card>
+          <SummaryTile
+            title="Total Expenses"
+            icon={Receipt}
+          >
+            {formatCurrency(data?.total_amount || 0)}
+          </SummaryTile>
+          
+          <SummaryTile
+            title="Reimbursable"
+            icon={DollarSign}
+            kind="green"
+          >
+            {formatCurrency(data?.reimbursable_total || 0)}
+          </SummaryTile>
+          
+          <SummaryTile
+            title="Pending Reimbursement"
+            icon={Clock}
+            kind="yellow"
+          >
+            {formatCurrency(data?.pending_reimbursement_total || 0)}
+          </SummaryTile>
+          
+          <SummaryTile
+            title="Non-Reimbursable"
+            icon={Receipt}
+          >
+            {formatCurrency(data?.non_reimbursable_total || 0)}
+          </SummaryTile>
         </div>
 
         {/* Expenses Table */}
