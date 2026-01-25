@@ -229,11 +229,40 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
                                 variant="outline" 
                                 onClick={() => { setSelectedPayment(null); setPaymentModalOpen(true); }} 
                                 disabled={isRefreshing}
-                                className={cn(invoice.status === 'draft' && "rounded-l-none")}
+                                className={cn(
+                                    invoice.status === 'draft' && "rounded-none border-l-0",
+                                    invoice.status !== 'draft' && "rounded-r-none"
+                                )}
                             >
                                 <PlusCircle className="mr-2 h-4 w-4" />
                                 Add Payment
                             </Button>
+                            {isEditable && (
+                                <Button 
+                                    variant="outline" 
+                                    onClick={() => { setSelectedLineItem(null); setLineItemModalOpen(true); }} 
+                                    disabled={isRefreshing}
+                                    className="rounded-l-none border-l-0"
+                                >
+                                    <PlusCircle className="mr-2 h-4 w-4" />
+                                    Add Line Item
+                                </Button>
+                            )}
+                            {invoice.status === 'void' && (
+                                <>
+                                    <Button variant="outline" onClick={() => handleUnVoidInvoice('issued')} disabled={isRefreshing} className="rounded-l-none border-l-0">
+                                        <Undo2 className="mr-2 h-4 w-4" />
+                                        Restore as Issued
+                                    </Button>
+                                    <Button variant="outline" onClick={() => handleUnVoidInvoice('draft')} disabled={isRefreshing} className="rounded-l-none border-l-0">
+                                        <RotateCcw className="mr-2 h-4 w-4" />
+                                        Restore as Draft
+                                    </Button>
+                                </>
+                            )}
+                        </ButtonGroup>
+                        
+                        <div className="flex gap-2 items-center">
                             {canVoid && (
                                 <Button 
                                     variant="outline" 
@@ -245,26 +274,13 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
                                     Void Invoice
                                 </Button>
                             )}
-                            {invoice.status === 'void' && (
-                                <>
-                                    <Button variant="outline" onClick={() => handleUnVoidInvoice('issued')} disabled={isRefreshing}>
-                                        <Undo2 className="mr-2 h-4 w-4" />
-                                        Restore as Issued
-                                    </Button>
-                                    <Button variant="outline" onClick={() => handleUnVoidInvoice('draft')} disabled={isRefreshing}>
-                                        <RotateCcw className="mr-2 h-4 w-4" />
-                                        Restore as Draft
-                                    </Button>
-                                </>
+                            {isEditable && (
+                                <Button variant="ghost" onClick={handleDeleteInvoice} disabled={isRefreshing} className="text-destructive hover:bg-destructive/10">
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete Invoice
+                                </Button>
                             )}
-                        </ButtonGroup>
-                        
-                        {isEditable && (
-                            <Button variant="ghost" onClick={handleDeleteInvoice} disabled={isRefreshing} className="text-destructive hover:bg-destructive/10">
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete Invoice
-                            </Button>
-                        )}
+                        </div>
                     </div>
                 )}
 
@@ -321,11 +337,6 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
                                 ))}
                             </TableBody>
                         </Table>
-                        {isAdmin && isEditable && (
-                            <Button variant="outline" className="mt-4" onClick={() => { setSelectedLineItem(null); setLineItemModalOpen(true); }} disabled={isRefreshing}>
-                                <PlusCircle className="mr-2 h-4 w-4" /> Add Line Item
-                            </Button>
-                        )}
                     </section>
 
                     {/* Payments Section - only show table if there are payments */}
