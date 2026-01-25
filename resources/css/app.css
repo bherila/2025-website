@@ -1,18 +1,7 @@
 @import 'tailwindcss';
 @plugin "tailwindcss-animate";
+@plugin "@tailwindcss/typography";
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-/* Add your global styles here */
-
-@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
-@source '../../storage/framework/views/*.php';
-@source '../**/*.blade.php';
-@source '../**/*.js';
-
-/* Tailwind theme tokens mapped to CSS variables */
 @theme {
   --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif,
     'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
@@ -49,6 +38,8 @@
   --color-info: hsl(var(--info));
   --color-info-foreground: hsl(var(--info-foreground));
   --color-info-border: hsl(var(--info-border));
+
+  --color-table-border: var(--table-border);
 }
 
 /* ----------------------------- */
@@ -89,7 +80,6 @@
   --info-foreground: 210 92% 35%;
   --info-border: 210 92% 85%;
 
-  /* Table-specific border (renamed to avoid conflicts) */
   --table-border: #ccc;
 }
 
@@ -140,7 +130,7 @@
 
 @layer base {
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans;
   }
 
   .site-header {
