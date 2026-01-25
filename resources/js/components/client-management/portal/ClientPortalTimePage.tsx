@@ -11,12 +11,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Plus, Clock, Trash2, Pencil, ChevronDown, ChevronRight, TrendingUp, TrendingDown, AlertCircle, Download, HelpCircle, Info } from 'lucide-react'
+import { Plus, Clock, Pencil, ChevronDown, ChevronRight, Download, Info } from 'lucide-react'
 import NewTimeEntryModal from './NewTimeEntryModal'
 import ClientPortalNav from './ClientPortalNav'
-import type { User, Project, Task } from '@/types/client-management/common'
+import type { User, Project } from '@/types/client-management/common'
 import type { TimeEntry, TimeEntriesResponse } from '@/types/client-management/time-entry'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import SummaryTile from '@/components/ui/summary-tile'
 
 interface ClientPortalTimePageProps {
@@ -148,7 +148,7 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
 
   const downloadCSV = () => {
     if (!data?.entries || data.entries.length === 0) return
-    
+
     // Create CSV content
     const headers = ['Date', 'Project', 'Task', 'Description', 'Hours', 'Billable', 'User']
     const rows = data.entries.map(entry => [
@@ -160,12 +160,12 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
       entry.is_billable ? 'Yes' : 'No',
       entry.user?.name || ''
     ])
-    
+
     const csvContent = [
       headers.join(','),
       ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
     ].join('\n')
-    
+
     // Create and download file
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const link = document.createElement('a')
@@ -187,15 +187,15 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
     return (
       <TooltipProvider>
         <>
-        <ClientPortalNav slug={slug} companyName={companyName} currentPage="time" />
-        <div className="container mx-auto px-8 max-w-6xl">
-          <Skeleton className="h-10 w-64 mb-6" />
-          <Skeleton className="h-24 w-full mb-6" />
-          <div className="space-y-4">
-            <Skeleton className="h-32 w-full" />
-            <Skeleton className="h-32 w-full" />
+          <ClientPortalNav slug={slug} companyName={companyName} currentPage="time" />
+          <div className="container mx-auto px-8 max-w-6xl">
+            <Skeleton className="h-10 w-64 mb-6" />
+            <Skeleton className="h-24 w-full mb-6" />
+            <div className="space-y-4">
+              <Skeleton className="h-32 w-full" />
+              <Skeleton className="h-32 w-full" />
+            </div>
           </div>
-        </div>
         </>
       </TooltipProvider>
     )
@@ -204,376 +204,287 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
   return (
     <TooltipProvider>
       <>
-      <ClientPortalNav slug={slug} companyName={companyName} currentPage="time" />
-      <div className="container mx-auto px-8 max-w-6xl">
-        <div className="mb-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold">Time Tracking</h1>
-            </div>
-            <div className="flex gap-2">
-              {data?.entries && data.entries.length > 0 && (
-                <Button variant="outline" onClick={downloadCSV}>
-                  <Download className="mr-2 h-4 w-4" />
-                  Download CSV
-                </Button>
-              )}
-              {isAdmin && (
-                <Button onClick={() => setNewEntryModalOpen(true)}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  New Time Record
-                </Button>
-              )}
+        <ClientPortalNav slug={slug} companyName={companyName} currentPage="time" />
+        <div className="container mx-auto px-8 max-w-6xl">
+          <div className="mb-6">
+            <div className="flex justify-between items-center">
+              <div>
+                <h1 className="text-3xl font-bold">Time Tracking</h1>
+              </div>
+              <div className="flex gap-2">
+                {data?.entries && data.entries.length > 0 && (
+                  <Button variant="outline" onClick={downloadCSV}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Download CSV
+                  </Button>
+                )}
+                {isAdmin && (
+                  <Button onClick={() => setNewEntryModalOpen(true)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    New Time Record
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Summary Bar */}
-        <div className="mb-6">
-          <div className="py-4">
+          {/* Summary Bar */}
+          <div className="mb-6 mt-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-3 rounded-lg border bg-card">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Clock className="h-4 w-4" />
-                  Total Time
-                </div>
-                <div className="text-2xl font-semibold mt-1">{data?.total_time || '0:00'}</div>
-              </div>
-              <div className="p-3 rounded-lg border bg-card">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Badge variant="outline" className="px-2 py-0.5">Billable</Badge>
-                  Hours
-                </div>
-                <div className="text-2xl font-semibold text-green-600 mt-1">{data?.billable_time || '0:00'}</div>
-              </div>
-              <div className="p-3 rounded-lg border bg-info border-info-border">
-                <div className="flex items-center gap-2 text-sm text-info-foreground font-semibold">
-                  <Info className="h-4 w-4" />
-                  Pending Billing
-                </div>
-                <div className="text-xl font-bold text-info-foreground mt-1">
-                  {data?.total_unbilled_hours && data.total_unbilled_hours > 0 ? formatHours(data.total_unbilled_hours) : '0:00'}
-                </div>
-                <p className="text-xs text-info-foreground/90 mt-1">Billable hours from periods without an active agreement.</p>
-              </div>
+              <SummaryTile
+                title="Total Time"
+                icon={Clock}
+              >
+                {data?.total_time || '0:00'}
+              </SummaryTile>
+
+              <SummaryTile
+                title="Billable Hours"
+                icon={Clock}
+                kind="green"
+              >
+                {data?.billable_time || '0:00'}
+              </SummaryTile>
+
+              {data?.total_unbilled_hours && data.total_unbilled_hours > 0 ? (
+                <SummaryTile
+                  title="Pending Billing"
+                  icon={Info}
+                  kind="blue"
+                >
+                  {formatHours(data.total_unbilled_hours)}
+                  <p className="text-[10px] opacity-80 mt-1 leading-tight font-medium">Billable hours from periods without an active agreement.</p>
+                </SummaryTile>
+              ) : null}
             </div>
           </div>
-        </div>
 
-      {(!data?.monthly_data || data.monthly_data.length === 0) ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <Clock className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium mb-2">No time entries yet</h3>
-            <p className="text-muted-foreground mb-4">Start tracking your time</p>
-            {isAdmin && (
-              <Button onClick={() => setNewEntryModalOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                New Time Record
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-4">
-          {data.monthly_data.map(month => {
-            const isExpanded = expandedMonths.has(month.year_month)
-            const monthEntries = entriesByMonth[month.year_month] || []
-            const openingAvailable = month.has_agreement && month.opening ? month.opening.total_available : undefined
-            const remainingPool = month.has_agreement && month.closing
-              ? Math.max(0, (month.closing.unused_hours || 0) + (month.closing.remaining_rollover || 0))
-              : undefined
+          {(!data?.monthly_data || data.monthly_data.length === 0) ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <Clock className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium mb-2">No time entries yet</h3>
+                <p className="text-muted-foreground mb-4">Start tracking your time</p>
+                {isAdmin && (
+                  <Button onClick={() => setNewEntryModalOpen(true)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    New Time Record
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {data.monthly_data.map(month => {
+                const isExpanded = expandedMonths.has(month.year_month)
+                const monthEntries = entriesByMonth[month.year_month] || []
+                const openingAvailable = month.has_agreement && month.opening ? month.opening.total_available : undefined
+                const remainingPool = month.has_agreement && month.closing
+                  ? Math.max(0, (month.closing.unused_hours || 0) + (month.closing.remaining_rollover || 0))
+                  : undefined
 
-            return (
-              <Card key={month.year_month} className="border-none shadow-none bg-transparent">
-                {/* Month Header with Opening Balance */}
-                <CardHeader 
-                  className="cursor-pointer hover:bg-muted/50 transition-colors rounded-lg px-0"
-                  onClick={() => toggleMonth(month.year_month)}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      {isExpanded ? (
-                        <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                      ) : (
-                        <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                      )}
-                      <CardTitle className="text-lg">{formatMonthYear(month.year_month)}</CardTitle>
-                      <Badge variant="outline" className="ml-2">
-                        {month.entries_count} entries
-                      </Badge>
-                    </div>
-                    <div className="text-right">
-                      <span className="font-mono font-semibold text-lg">{month.formatted_hours}</span>
-                      <span className="text-sm text-muted-foreground ml-1">worked</span>
-                    </div>
-                  </div>
-
-                  {/* Opening Balance Info */}
-                  {month.has_agreement && month.opening && (
-                    <div className="mt-3 pt-3 border-t">
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="text-muted-foreground inline-flex items-center gap-1">Retainer <HelpCircle className="h-3 w-3" /></span>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Hours included in this month&apos;s retainer.</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          <span className="font-medium">{formatHours(month.opening.retainer_hours)}</span>
+                return (
+                  <Card key={month.year_month} className="border-none shadow-none bg-transparent">
+                    {/* Month Header with Opening Balance */}
+                    <CardHeader
+                      className="cursor-pointer hover:bg-muted/50 transition-colors rounded-lg px-0 pb-2"
+                      onClick={() => toggleMonth(month.year_month)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          {isExpanded ? (
+                            <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                          )}
+                          <CardTitle className="text-lg">{formatMonthYear(month.year_month)}</CardTitle>
+                          <Badge variant="outline" className="ml-2">
+                            {month.entries_count} entries
+                          </Badge>
                         </div>
-                        {month.opening.rollover_hours > 0 && (
-                          <div className="flex items-center gap-2">
-                            <TrendingUp className="h-4 w-4 text-green-500" />
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="text-muted-foreground inline-flex items-center gap-1">Rollover <HelpCircle className="h-3 w-3" /></span>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Unused hours from prior eligible months.</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                            <span className="font-medium text-green-600">+{formatHours(month.opening.rollover_hours)}</span>
-                          </div>
-                        )}
-                        {month.opening.expired_hours > 0 && (
-                          <div className="flex items-center gap-2">
-                            <TrendingDown className="h-4 w-4 text-orange-500" />
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="text-muted-foreground inline-flex items-center gap-1">Expired <HelpCircle className="h-3 w-3" /></span>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Rollover hours that fell outside the window.</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                            <span className="font-medium text-orange-600">-{formatHours(month.opening.expired_hours)}</span>
-                          </div>
-                        )}
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4 text-primary" />
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="text-muted-foreground inline-flex items-center gap-1">Available <HelpCircle className="h-3 w-3" /></span>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Retainer plus rollover at month start.</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          <span className="font-medium">{formatHours(month.opening.total_available)}</span>
+                        <div className="text-right">
+                          <span className="font-semibold text-lg">{month.formatted_hours}</span>
+                          <span className="text-sm text-muted-foreground ml-1">worked</span>
                         </div>
                       </div>
-                      {month.pre_agreement_hours_applied && month.pre_agreement_hours_applied > 0 && (
-                        <div className="mt-3 rounded-lg border bg-info border-info-border px-3 py-2 text-sm flex items-start gap-2">
-                          <Info className="h-4 w-4 text-info-foreground mt-0.5" />
-                          <div>
-                            <span className="font-semibold text-info-foreground">{formatHours(month.pre_agreement_hours_applied)} carried in</span>
-                            <p className="text-info-foreground/90">Billable hours from months before the agreement start are applied here.</p>
-                          </div>
-                        </div>
-                      )}
-                      {typeof remainingPool === 'number' && typeof openingAvailable === 'number' && (
-                        <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-muted-foreground">
-                          <SummaryTile title={<span>Available (start)</span>}>
+
+                      {/* Monthly Summary Tiles */}
+                      {month.has_agreement && typeof remainingPool === 'number' && typeof openingAvailable === 'number' && (
+                        <div className="mt-3 grid grid-cols-2 md:grid-cols-5 gap-3 text-xs text-muted-foreground">
+                          <SummaryTile
+                            title="Contracted Time"
+                            kind="green"
+                            size="small"
+                          >
                             {formatHours(openingAvailable)}
                           </SummaryTile>
-                          <SummaryTile title={<span>Worked this month</span>}>
+                          {month.pre_agreement_hours_applied && month.pre_agreement_hours_applied > 0 ? (
+                            <SummaryTile
+                              title="Carried in"
+                              kind="blue"
+                              size="small"
+                            >
+                              {formatHours(month.pre_agreement_hours_applied)}
+                            </SummaryTile>
+                          ) : null}
+                          <SummaryTile title="Worked" kind="blue" size="small">
                             {formatHours(month.hours_worked)}
                           </SummaryTile>
-                          <SummaryTile title={<span>Remaining (after work)</span>}>
-                            {formatHours(Math.max(0, remainingPool))}
-                          </SummaryTile>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </CardHeader>
-
-                {/* Expanded Content */}
-                {isExpanded && (
-                  <CardContent className="pt-0 px-0">
-                    <div className="border border-muted/50 rounded-md overflow-hidden">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="bg-muted/50">
-                            <TableHead className="w-[110px] py-2">Date</TableHead>
-                            <TableHead className="py-2">Description</TableHead>
-                            <TableHead className="py-2">User</TableHead>
-                            <TableHead className="text-right py-2">Time</TableHead>
-                            {isAdmin && (
-                              <TableHead className="w-[40px] py-2 text-right">
-                                <Pencil className="h-3 w-3 ml-auto text-muted-foreground/50" />
-                              </TableHead>
-                            )}
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {monthEntries.map((entry, index) => {
-                            const prevEntry = index > 0 ? monthEntries[index - 1] : null
-                            const showDate = !prevEntry || prevEntry.date_worked !== entry.date_worked
-                            const showProject = !prevEntry || prevEntry.project?.id !== entry.project?.id || showDate
-
-                            return (
-                              <TableRow 
-                                key={entry.id}
-                                className={`group ${isAdmin && !entry.is_invoiced ? 'cursor-pointer' : ''}`}
-                                onClick={() => isAdmin && !entry.is_invoiced && openEditModal(entry)}
-                              >
-                                <TableCell className="py-2 align-top">
-                                  {showDate && (
-                                    <span className="text-sm font-medium">
-                                      {new Date(entry.date_worked).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                                    </span>
-                                  )}
-                                </TableCell>
-                                <TableCell className="py-2 align-top">
-                                  <div className="flex flex-col">
-                                     <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold leading-none mb-1">{entry.job_type}</span>
-                                     <span className="text-sm leading-tight mb-2">{entry.name || '--'}</span>
-                                     <div className="flex items-center gap-2 flex-wrap">
-                                      {entry.is_billable && entry.is_invoiced ? (
-                                        <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-green-600 text-green-600 font-bold shrink-0">
-                                          INVOICED
-                                        </Badge>
-                                      ) : (
-                                        <Badge variant={entry.is_billable ? 'default' : 'secondary'} className="text-[9px] px-1 py-0 h-3.5 font-bold shrink-0">
-                                          {entry.is_billable ? 'BILLABLE' : 'NON-BILLABLE'}
-                                        </Badge>
-                                      )}
-                                      {entry.project && (
-                                        <Badge 
-                                          variant="outline" 
-                                          className="text-[9px] px-1 py-0 h-3.5 font-medium border-muted-foreground/30 text-muted-foreground shrink-0"
-                                        >
-                                          {entry.project.name}
-                                        </Badge>
-                                      )}
-                                     </div>
-                                   </div>
-                                </TableCell>
-                                <TableCell className="py-2 align-top">
-                                  <span className="text-sm whitespace-nowrap text-muted-foreground">{abbreviateName(entry.user?.name)}</span>
-                                </TableCell>
-                                <TableCell className="text-right py-2 align-top text-sm">
-                                  {entry.formatted_time}
-                                </TableCell>
-                                {isAdmin && (
-                                  <TableCell className="py-1 align-top text-right">
-                                    {!entry.is_invoiced && (
-                                      <Button 
-                                        variant="ghost" 
-                                        size="icon"
-                                        className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          openEditModal(entry)
-                                        }}
-                                      >
-                                        <Pencil className="h-3 w-3 text-muted-foreground" />
-                                      </Button>
-                                    )}
-                                  </TableCell>
-                                )}
-                              </TableRow>
-                            )
-                          })}
-                        </TableBody>
-                      </Table>
-                    </div>
-
-                    {/* Closing Balance */}
-                    {month.has_agreement && month.closing && (
-                      <div className="mt-6 pt-4 border-t">
-                        <h4 className="text-sm font-semibold mb-3">Month End Summary</h4>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                          {month.closing.unused_hours > 0 && (
-                            <SummaryTile title={<span>Unused (rolls over)</span>}>
-                              {formatHours(month.closing.unused_hours)}
-                            </SummaryTile>
-                          )}
-                          {month.closing.hours_used_from_rollover > 0 && (
-                            <SummaryTile title={<span>Rollover used</span>}>
+                          {month.closing && month.closing.hours_used_from_rollover > 0 && (
+                            <SummaryTile title="Rollover Used" size="small">
                               {formatHours(month.closing.hours_used_from_rollover)}
                             </SummaryTile>
                           )}
-                          {month.closing.remaining_rollover > 0 && (
-                            <SummaryTile title={<span>Rollover remaining</span>}>
-                              {formatHours(month.closing.remaining_rollover)}
+                          {month.closing && month.closing.excess_hours > 0 && (
+                            <SummaryTile title="Overage (billed)" kind="red" size="small">
+                              {formatHours(month.closing.excess_hours)}
                             </SummaryTile>
                           )}
-                          {month.closing.excess_hours > 0 && (
-                            <SummaryTile title={<span>Excess (will be invoiced)</span>}>
-                              <div className="flex items-center gap-1">
-                                <AlertCircle className="h-4 w-4 text-red-500" />
-                                <span className="text-red-600 font-medium">{formatHours(month.closing.excess_hours)}</span>
-                              </div>
+                          {month.closing && month.closing.negative_balance && month.closing.negative_balance > 0 ? (
+                            <SummaryTile title="Overage (carried forward)" kind="red" size="small">
+                              {formatHours(month.closing.negative_balance)}
                             </SummaryTile>
-                          )}
-                          {month.closing.unused_hours === 0 && month.closing.excess_hours === 0 && (
-                            <SummaryTile title={<span>Balance (exact usage)</span>}>
-                              0:00
+                          ) : (
+                            <SummaryTile title="Remaining" size="small">
+                              {formatHours(Math.max(0, remainingPool ?? 0))}
                             </SummaryTile>
                           )}
                         </div>
-                        {month.pre_agreement_hours_applied && month.pre_agreement_hours_applied > 0 && (
-                          <div className="mt-3 text-xs text-muted-foreground">
-                            Includes {formatHours(month.pre_agreement_hours_applied)} billed from pre-agreement work.
+                      )}
+                    </CardHeader>
+
+                    {/* Expanded Content */}
+                    {isExpanded && (
+                      <CardContent className="pt-0 px-0">
+                        <div className="border border-muted/50 rounded-md overflow-hidden">
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="bg-muted/50">
+                                <TableHead className="w-[110px] py-2">Date</TableHead>
+                                <TableHead className="py-2">Description</TableHead>
+                                <TableHead className="py-2">User</TableHead>
+                                <TableHead className="text-right py-2">Time</TableHead>
+                                {isAdmin && (
+                                  <TableHead className="w-[40px] py-2 text-right">
+                                    <Pencil className="h-3 w-3 ml-auto text-muted-foreground/50" />
+                                  </TableHead>
+                                )}
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {monthEntries.map((entry, index) => {
+                                const prevEntry = index > 0 ? monthEntries[index - 1] : null
+                                const showDate = !prevEntry || prevEntry.date_worked !== entry.date_worked
+                                const showProject = !prevEntry || prevEntry.project?.id !== entry.project?.id || showDate
+
+                                return (
+                                  <TableRow
+                                    key={entry.id}
+                                    className={`group ${isAdmin && !entry.is_invoiced ? 'cursor-pointer' : ''}`}
+                                    onClick={() => isAdmin && !entry.is_invoiced && openEditModal(entry)}
+                                  >
+                                    <TableCell className="py-2 align-top">
+                                      {showDate && (
+                                        <span className="text-sm font-medium">
+                                          {new Date(entry.date_worked).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                                        </span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="py-2 align-top">
+                                      <div className="flex flex-col">
+                                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold leading-none mb-1">{entry.job_type}</span>
+                                        <span className="text-sm leading-tight mb-2">{entry.name || '--'}</span>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          {entry.is_billable && entry.is_invoiced ? (
+                                            <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-green-600 text-green-600 font-bold shrink-0">
+                                              INVOICED
+                                            </Badge>
+                                          ) : (
+                                            <Badge variant={entry.is_billable ? 'default' : 'secondary'} className="text-[9px] px-1 py-0 h-3.5 font-bold shrink-0">
+                                              {entry.is_billable ? 'BILLABLE' : 'NON-BILLABLE'}
+                                            </Badge>
+                                          )}
+                                          {entry.project && (
+                                            <Badge
+                                              variant="outline"
+                                              className="text-[9px] px-1 py-0 h-3.5 font-medium border-muted-foreground/30 text-muted-foreground shrink-0"
+                                            >
+                                              {entry.project.name}
+                                            </Badge>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="py-2 align-top">
+                                      <span className="text-sm whitespace-nowrap text-muted-foreground">{abbreviateName(entry.user?.name)}</span>
+                                    </TableCell>
+                                    <TableCell className="text-right py-2 align-top text-sm">
+                                      {entry.formatted_time}
+                                    </TableCell>
+                                    {isAdmin && (
+                                      <TableCell className="py-1 align-top text-right">
+                                        {!entry.is_invoiced && (
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              openEditModal(entry)
+                                            }}
+                                          >
+                                            <Pencil className="h-3 w-3 text-muted-foreground" />
+                                          </Button>
+                                        )}
+                                      </TableCell>
+                                    )}
+                                  </TableRow>
+                                )
+                              })}
+                            </TableBody>
+                          </Table>
+                        </div>
+
+                        {!month.has_agreement && (
+                          <div className="mt-4 p-4 rounded-xl bg-blue-50/30 border border-blue-100 shadow-sm dark:bg-blue-900/10 dark:border-blue-800/50 transition-colors">
+                            <div className="flex items-start gap-3">
+                              <Info className="h-5 w-5 text-blue-700 dark:text-blue-400 mt-0.5" />
+                              <div>
+                                <p className="text-sm font-bold text-blue-800 dark:text-blue-300">
+                                  No active agreement for this period
+                                </p>
+                                {month.unbilled_hours && month.unbilled_hours > 0 ? (
+                                  <p className="text-sm text-blue-700/80 dark:text-blue-400/80 mt-1 font-medium">
+                                    <span className="font-bold text-blue-800 dark:text-blue-300">{formatHours(month.unbilled_hours)}</span> of billable hours will be invoiced when a future agreement becomes active.
+                                  </p>
+                                ) : (
+                                  <p className="text-sm text-blue-700/80 dark:text-blue-400/80 mt-1 font-medium">
+                                    Any billable hours will be invoiced when a future agreement becomes active.
+                                  </p>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         )}
-                      </div>
+                      </CardContent>
                     )}
+                  </Card>
+                )
+              })}
+            </div>
+          )}
 
-                    {!month.has_agreement && (
-                      <div className="mt-4 p-4 rounded-lg bg-info border border-info-border">
-                        <div className="flex items-start gap-3">
-                          <Info className="h-5 w-5 text-info-foreground mt-0.5" />
-                          <div>
-                            <p className="text-sm font-bold text-info-foreground">
-                              No active agreement for this period
-                            </p>
-                            {month.unbilled_hours && month.unbilled_hours > 0 ? (
-                              <p className="text-sm text-info-foreground/90 mt-1">
-                                <strong>{formatHours(month.unbilled_hours)}</strong> of billable hours will be invoiced when a future agreement becomes active.
-                              </p>
-                            ) : (
-                              <p className="text-sm text-info-foreground/90 mt-1">
-                                Any billable hours will be invoiced when a future agreement becomes active.
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                )}
-              </Card>
-            )
-          })}
+          <NewTimeEntryModal
+            open={newEntryModalOpen}
+            onOpenChange={handleModalClose}
+            slug={slug}
+            projects={projects}
+            users={companyUsers}
+            onSuccess={fetchTimeEntries}
+            entry={editingEntry}
+            lastProjectId={data?.entries && data.entries.length > 0 ? data.entries[0]?.project?.id.toString() : undefined}
+          />
         </div>
-      )}
-
-      <NewTimeEntryModal
-        open={newEntryModalOpen}
-        onOpenChange={handleModalClose}
-        slug={slug}
-        projects={projects}
-        users={companyUsers}
-        onSuccess={fetchTimeEntries}
-        entry={editingEntry}
-        lastProjectId={data?.entries && data.entries.length > 0 ? data.entries[0]?.project?.id.toString() : undefined}
-      />
-      </div>
       </>
     </TooltipProvider>
   )

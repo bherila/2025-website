@@ -372,6 +372,7 @@ class ClientPortalApiController extends Controller
                     'expired_hours' => $balance['opening']['expired_hours'],
                     'total_available' => $balance['opening']['total_available'],
                     'negative_offset' => $balance['opening']['negative_offset'],
+                    'invoiced_negative_balance' => $balance['opening']['invoiced_negative_balance'] ?? 0,
                 ],
                 'closing' => [
                     'unused_hours' => $balance['closing']['unused_hours'],
@@ -379,6 +380,7 @@ class ClientPortalApiController extends Controller
                     'hours_used_from_retainer' => $balance['closing']['hours_used_from_retainer'],
                     'hours_used_from_rollover' => $balance['closing']['hours_used_from_rollover'],
                     'remaining_rollover' => $balance['closing']['remaining_rollover'],
+                    'negative_balance' => $balance['closing']['negative_balance'] ?? 0,
                 ],
                 'pre_agreement_hours_applied' => $monthData['pre_agreement_hours_applied'] ?? 0,
             ];

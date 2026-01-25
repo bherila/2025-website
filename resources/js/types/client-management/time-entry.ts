@@ -21,6 +21,7 @@ export interface MonthlyOpeningBalance {
   expired_hours: number
   total_available: number
   negative_offset: number
+  invoiced_negative_balance?: number
 }
 
 export interface MonthlyClosingBalance {
@@ -29,6 +30,7 @@ export interface MonthlyClosingBalance {
   hours_used_from_retainer: number
   hours_used_from_rollover: number
   remaining_rollover: number
+  negative_balance?: number
 }
 
 export interface MonthlyData {

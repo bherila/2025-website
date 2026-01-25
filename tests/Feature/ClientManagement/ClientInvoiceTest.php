@@ -331,6 +331,89 @@ class ClientInvoiceTest extends TestCase
         $this->assertEquals('issued', $invoice->fresh()->status);
     }
 
+    public function test_comprehensive_overage_scenarios(): void
+    {
+        // Setup: Agreement with 10h retainer, 1 month rollover
+        $agreement = ClientAgreement::factory()->for($this->company)->create([
+            'monthly_retainer_hours' => 10,
+            'rollover_months' => 1,
+            'hourly_rate' => 150.00,
+            'active_date' => Carbon::create(2024, 1, 1),
+        ]);
+
+        // Month 1: Under usage (5h worked / 10h avail) -> 5h rollover
+        ClientTimeEntry::factory()->for($this->company)->create([
+            'user_id' => $this->admin->id,
+            'date_worked' => Carbon::create(2024, 1, 15),
+            'minutes_worked' => 5 * 60,
+            'is_billable' => true,
+        ]);
+
+        $m1Invoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2024, 1, 1),
+            Carbon::create(2024, 1, 31),
+            $agreement
+        );
+        $this->assertEquals(5, $m1Invoice->unused_hours_balance);
+
+        // Month 2: Exact usage of retainer + rollover (15h worked / 15h avail)
+        ClientTimeEntry::factory()->for($this->company)->create([
+            'user_id' => $this->admin->id,
+            'date_worked' => Carbon::create(2024, 2, 15),
+            'minutes_worked' => 15 * 60,
+            'is_billable' => true,
+        ]);
+
+        $m2Invoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2024, 2, 1),
+            Carbon::create(2024, 2, 29),
+            $agreement
+        );
+        $this->assertEquals(5, $m2Invoice->rollover_hours_used);
+        $this->assertEquals(0, $m2Invoice->unused_hours_balance);
+        $this->assertEquals(0, $m2Invoice->hours_billed_at_rate);
+
+        // Month 3: Heavy overage (25h worked / 10h avail) -> 15h negative balance
+        ClientTimeEntry::factory()->for($this->company)->create([
+            'user_id' => $this->admin->id,
+            'date_worked' => Carbon::create(2024, 3, 15),
+            'minutes_worked' => 25 * 60,
+            'is_billable' => true,
+        ]);
+
+        $m3Invoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2024, 3, 1),
+            Carbon::create(2024, 3, 31),
+            $agreement
+        );
+        $this->assertEquals(15, $m3Invoice->negative_hours_balance);
+        $this->assertEquals(0, $m3Invoice->hours_billed_at_rate);
+
+        // Month 4: Recovery (0h worked / 10h retainer)
+        // Debt (15h) absorbs Retainer (10h). Remaining Debt (5h) must be billed.
+        $m4Invoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2024, 4, 1),
+            Carbon::create(2024, 4, 30),
+            $agreement
+        );
+        
+        // 5 hours should be billed because the debt exceeded the retainer
+        $this->assertEquals(5, $m4Invoice->hours_billed_at_rate, 'Should bill for the 5h debt that exceeded retainer');
+        $this->assertEquals(0, $m4Invoice->negative_hours_balance);
+        $this->assertEquals(0, $m4Invoice->unused_hours_balance);
+        
+        // Verify invoice lines for Month 4
+        $billedLine = $m4Invoice->lineItems()
+            ->where('line_type', 'additional_hours')
+            ->first();
+        $this->assertNotNull($billedLine);
+        $this->assertEquals(5, $billedLine->hours);
+    }
+
     public function test_regenerating_invoice_preserves_manual_line_items(): void
     {
         // Create a project for time entries

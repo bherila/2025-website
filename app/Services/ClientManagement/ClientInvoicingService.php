@@ -398,52 +398,37 @@ class ClientInvoicingService
         float $negativeBalanceFromPrevious,
         int $rolloverMonths
     ): array {
-        // Start with this month's retainer hours
-        $availableRetainerHours = $retainerHours;
+        // Use RolloverCalculator to ensure consistent logic with the portal UI
+        
+        // Adapter: Treat aggregated rollover hours as "1 month ago" hours
+        // Since the service already filtered by the rollover window, these are all valid
+        $previousMonthsUnused = $rolloverMonths > 0 ? [1 => $rolloverHoursAvailable] : [];
 
-        // If there was a negative balance, offset it first
-        if ($negativeBalanceFromPrevious > 0) {
-            $offsetAmount = min($negativeBalanceFromPrevious, $availableRetainerHours);
-            $availableRetainerHours -= $offsetAmount;
-            $negativeBalanceFromPrevious -= $offsetAmount;
-        }
+        $opening = $this->rolloverCalculator->calculateOpeningBalance(
+            $retainerHours,
+            $previousMonthsUnused,
+            $rolloverMonths,
+            $negativeBalanceFromPrevious
+        );
 
-        // Total hours available = remaining retainer + rollover
-        $totalAvailable = $availableRetainerHours + $rolloverHoursAvailable;
+        $closing = $this->rolloverCalculator->calculateClosingBalance(
+            $opening['total_available'],
+            $hoursWorked,
+            $opening['effective_retainer_hours'],
+            $opening['rollover_hours']
+        );
 
-        // Calculate how hours are consumed
-        $hoursCoveredByRetainer = 0;
-        $rolloverHoursUsed = 0;
-        $hoursBilledAtRate = 0;
-        $unusedHoursBalance = 0;
-        $newNegativeBalance = 0;
-
-        if ($hoursWorked <= $availableRetainerHours) {
-            // All work covered by this month's retainer
-            $hoursCoveredByRetainer = $hoursWorked;
-            $unusedHoursBalance = $availableRetainerHours - $hoursWorked;
-            // Don't add rollover to unused - those stay as-is for future months
-        } elseif ($hoursWorked <= $totalAvailable) {
-            // Need to use some rollover hours
-            $hoursCoveredByRetainer = $availableRetainerHours;
-            $rolloverHoursUsed = $hoursWorked - $availableRetainerHours;
-            $unusedHoursBalance = 0; // Used all of this month's hours
-        } else {
-            // Exceeded all available hours - bill excess at rate
-            $hoursCoveredByRetainer = $availableRetainerHours;
-            $rolloverHoursUsed = $rolloverHoursAvailable;
-            $hoursBilledAtRate = $hoursWorked - $totalAvailable;
-            $unusedHoursBalance = 0;
-            // Note: We only track negative balance if there's no rollover option
-            // With rollover, excess is just billed immediately
-        }
+        // Calculate billable overage
+        // This includes hours that exceeded the previous month's negative balance carry-over capacity
+        // plus any explicit excess hours from this month (though calculator currently defaults to negative balance)
+        $hoursBilledAtRate = $opening['invoiced_negative_balance'] + $closing['excess_hours'];
 
         return [
-            'hours_covered_by_retainer' => round($hoursCoveredByRetainer, 4),
-            'rollover_hours_used' => round($rolloverHoursUsed, 4),
-            'hours_billed_at_rate' => round($hoursBilledAtRate, 4),
-            'unused_hours_balance' => round($unusedHoursBalance, 4),
-            'negative_hours_balance' => round($newNegativeBalance + $negativeBalanceFromPrevious, 4),
+            'hours_covered_by_retainer' => $closing['hours_used_from_retainer'],
+            'rollover_hours_used' => $closing['hours_used_from_rollover'],
+            'hours_billed_at_rate' => $hoursBilledAtRate,
+            'unused_hours_balance' => $closing['unused_hours'],
+            'negative_hours_balance' => $closing['negative_balance'],
         ];
     }
 
