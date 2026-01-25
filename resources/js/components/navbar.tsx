@@ -144,7 +144,7 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies }: Navb
           <button
             type='button'
             onClick={() => setTheme('system')}
-            className={`px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-[#1f1f1e] ${theme === 'system' ? 'bg-gray-100 dark:bg-[#262625]' : ''}`}
+            className={`px-2 py-1.5 transition-colors ${theme === 'system' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-gray-100 dark:hover:bg-[#1f1f1e]'}`}
             title='System'
             aria-pressed={theme === 'system'}
           >
@@ -153,7 +153,7 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies }: Navb
           <button
             type='button'
             onClick={() => setTheme('dark')}
-            className={`px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-[#1f1f1e] ${theme === 'dark' ? 'bg-gray-100 dark:bg-[#262625]' : ''}`}
+            className={`px-2 py-1.5 transition-colors ${theme === 'dark' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-gray-100 dark:hover:bg-[#1f1f1e]'}`}
             title='Dark'
             aria-pressed={theme === 'dark'}
           >
@@ -162,7 +162,7 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies }: Navb
           <button
             type='button'
             onClick={() => setTheme('light')}
-            className={`px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-[#1f1f1e] ${theme === 'light' ? 'bg-gray-100 dark:bg-[#262625]' : ''}`}
+            className={`px-2 py-1.5 transition-colors ${theme === 'light' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-gray-100 dark:hover:bg-[#1f1f1e]'}`}
             title='Light'
             aria-pressed={theme === 'light'}
           >
