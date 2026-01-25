@@ -6,8 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientCompany;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Gate;
 
 class ClientAgreementApiController extends Controller
 {
@@ -20,6 +20,7 @@ class ClientAgreementApiController extends Controller
 
         return Cache::remember("client_admin_agreements_{$companyId}", 60, function () use ($companyId) {
             $company = ClientCompany::findOrFail($companyId);
+
             return $company->agreements()->orderBy('active_date', 'desc')->get();
         });
     }

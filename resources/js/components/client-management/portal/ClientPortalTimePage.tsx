@@ -3,7 +3,15 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Plus, Clock, Trash2, ChevronDown, ChevronRight, TrendingUp, TrendingDown, AlertCircle, Download, HelpCircle, Info } from 'lucide-react'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { Plus, Clock, Trash2, Pencil, ChevronDown, ChevronRight, TrendingUp, TrendingDown, AlertCircle, Download, HelpCircle, Info } from 'lucide-react'
 import NewTimeEntryModal from './NewTimeEntryModal'
 import ClientPortalNav from './ClientPortalNav'
 import type { User, Project, Task } from '@/types/client-management/common'
@@ -26,6 +34,13 @@ function formatHours(hours: number): string {
   const h = Math.floor(hours)
   const m = Math.round((hours - h) * 60)
   return `${h}:${m.toString().padStart(2, '0')}`
+}
+
+function abbreviateName(name: string | null | undefined): string {
+  if (!name) return 'Unknown'
+  const parts = name.trim().split(/\s+/)
+  if (parts.length < 2) return name
+  return `${parts[0]} ${parts[1]![0]}.`
 }
 
 export default function ClientPortalTimePage({ slug, companyName }: ClientPortalTimePageProps) {
@@ -108,26 +123,6 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
     }
   }
 
-  const deleteTimeEntry = async (entryId: number) => {
-    if (!isAdmin) return
-    if (!confirm('Delete this time entry?')) return
-    
-    try {
-      const response = await fetch(`/api/client/portal/${slug}/time-entries/${entryId}`, {
-        method: 'DELETE',
-        headers: {
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
-        }
-      })
-
-      if (response.ok) {
-        fetchTimeEntries()
-      }
-    } catch (error) {
-      console.error('Error deleting time entry:', error)
-    }
-  }
-
   const openEditModal = (entry: TimeEntry) => {
     if (!isAdmin) return
     setEditingEntry(entry)
@@ -187,20 +182,6 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
     acc[yearMonth].push(entry)
     return acc
   }, {} as Record<string, TimeEntry[]>) || {}
-
-  // Group entries within a month by date
-  const groupEntriesByDate = (entries: TimeEntry[]) => {
-    return entries.reduce((acc, entry) => {
-      const date = new Date(entry.date_worked).toLocaleDateString('en-US', { 
-        weekday: 'short',
-        month: 'short', 
-        day: 'numeric' 
-      })
-      if (!acc[date]) acc[date] = []
-      acc[date].push(entry)
-      return acc
-    }, {} as Record<string, TimeEntry[]>)
-  }
 
   if (loading) {
     return (
@@ -298,17 +279,16 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
           {data.monthly_data.map(month => {
             const isExpanded = expandedMonths.has(month.year_month)
             const monthEntries = entriesByMonth[month.year_month] || []
-            const entriesByDate = groupEntriesByDate(monthEntries)
             const openingAvailable = month.has_agreement && month.opening ? month.opening.total_available : undefined
             const remainingPool = month.has_agreement && month.closing
               ? Math.max(0, (month.closing.unused_hours || 0) + (month.closing.remaining_rollover || 0))
               : undefined
 
             return (
-              <Card key={month.year_month}>
+              <Card key={month.year_month} className="border-none shadow-none bg-transparent">
                 {/* Month Header with Opening Balance */}
                 <CardHeader 
-                  className="cursor-pointer hover:bg-muted/50 transition-colors"
+                  className="cursor-pointer hover:bg-muted/50 transition-colors rounded-lg px-0"
                   onClick={() => toggleMonth(month.year_month)}
                 >
                   <div className="flex items-center justify-between">
@@ -422,67 +402,94 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
 
                 {/* Expanded Content */}
                 {isExpanded && (
-                  <CardContent className="pt-0">
-                    {/* Time Entries by Date */}
-                    <div className="space-y-4">
-                      {Object.entries(entriesByDate).map(([date, entries]) => (
-                        <div key={date}>
-                          <h4 className="text-sm font-medium text-muted-foreground mb-2">{date}</h4>
-                          <div className="space-y-2">
-                            {entries.map(entry => (
-                              <div 
+                  <CardContent className="pt-0 px-0">
+                    <div className="border border-muted/50 rounded-md overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-muted/50">
+                            <TableHead className="w-[110px] py-2">Date</TableHead>
+                            <TableHead className="py-2">Description</TableHead>
+                            <TableHead className="py-2">User</TableHead>
+                            <TableHead className="text-right py-2">Time</TableHead>
+                            {isAdmin && (
+                              <TableHead className="w-[40px] py-2 text-right">
+                                <Pencil className="h-3 w-3 ml-auto text-muted-foreground/50" />
+                              </TableHead>
+                            )}
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {monthEntries.map((entry, index) => {
+                            const prevEntry = index > 0 ? monthEntries[index - 1] : null
+                            const showDate = !prevEntry || prevEntry.date_worked !== entry.date_worked
+                            const showProject = !prevEntry || prevEntry.project?.id !== entry.project?.id || showDate
+
+                            return (
+                              <TableRow 
                                 key={entry.id}
-                                className={`flex items-center justify-between p-3 rounded-lg bg-card ${isAdmin && !entry.is_invoiced ? 'cursor-pointer hover:bg-muted/30 transition-colors' : ''}`}
+                                className={`group ${isAdmin && !entry.is_invoiced ? 'cursor-pointer' : ''}`}
                                 onClick={() => isAdmin && !entry.is_invoiced && openEditModal(entry)}
                               >
-                                <div className="flex items-center gap-4">
-                                  <span className="font-mono font-medium w-12">{entry.formatted_time}</span>
-                                  <span className="text-muted-foreground text-sm">{entry.job_type}</span>
-                                  <div className="flex items-center gap-2">
-                                    <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium">
-                                      {entry.user?.name?.split(' ').map(n => n[0]).join('') || '?'}
-                                    </div>
-                                    <span className="text-sm">{entry.user?.name || 'Unknown'}</span>
-                                  </div>
-                                  <div className="text-sm">
-                                    {entry.project && (
-                                      <a href={`/client/portal/${slug}/project/${entry.project.slug}`} 
-                                         className="text-blue-600 hover:underline"
-                                         onClick={(e) => e.stopPropagation()}>
-                                        {entry.project.name}
-                                      </a>
+                                <TableCell className="py-2 align-top">
+                                  {showDate && (
+                                    <span className="text-sm font-medium">
+                                      {new Date(entry.date_worked).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                                    </span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="py-2 align-top">
+                                  <div className="flex flex-col">
+                                     <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold leading-none mb-1">{entry.job_type}</span>
+                                     <span className="text-sm leading-tight mb-2">{entry.name || '--'}</span>
+                                     <div className="flex items-center gap-2 flex-wrap">
+                                      {entry.is_billable && entry.is_invoiced ? (
+                                        <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-green-600 text-green-600 font-bold shrink-0">
+                                          INVOICED
+                                        </Badge>
+                                      ) : (
+                                        <Badge variant={entry.is_billable ? 'default' : 'secondary'} className="text-[9px] px-1 py-0 h-3.5 font-bold shrink-0">
+                                          {entry.is_billable ? 'BILLABLE' : 'NON-BILLABLE'}
+                                        </Badge>
+                                      )}
+                                      {entry.project && (
+                                        <Badge 
+                                          variant="outline" 
+                                          className="text-[9px] px-1 py-0 h-3.5 font-medium border-muted-foreground/30 text-muted-foreground shrink-0"
+                                        >
+                                          {entry.project.name}
+                                        </Badge>
+                                      )}
+                                     </div>
+                                   </div>
+                                </TableCell>
+                                <TableCell className="py-2 align-top">
+                                  <span className="text-sm whitespace-nowrap text-muted-foreground">{abbreviateName(entry.user?.name)}</span>
+                                </TableCell>
+                                <TableCell className="text-right py-2 align-top text-sm">
+                                  {entry.formatted_time}
+                                </TableCell>
+                                {isAdmin && (
+                                  <TableCell className="py-1 align-top text-right">
+                                    {!entry.is_invoiced && (
+                                      <Button 
+                                        variant="ghost" 
+                                        size="icon"
+                                        className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          openEditModal(entry)
+                                        }}
+                                      >
+                                        <Pencil className="h-3 w-3 text-muted-foreground" />
+                                      </Button>
                                     )}
-                                    {entry.name && <span className="text-muted-foreground ml-1">- {entry.name}</span>}
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  {entry.is_billable && entry.is_invoiced ? (
-                                    <Badge variant="outline" className="text-xs border-green-600 text-green-600">
-                                      INVOICED
-                                    </Badge>
-                                  ) : (
-                                    <Badge variant={entry.is_billable ? 'default' : 'secondary'} className="text-xs">
-                                      {entry.is_billable ? 'BILLABLE' : 'NON-BILLABLE'}
-                                    </Badge>
-                                  )}
-                                  {isAdmin && !entry.is_invoiced && (
-                                    <Button 
-                                      variant="ghost" 
-                                      size="sm"
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        deleteTimeEntry(entry.id)
-                                      }}
-                                    >
-                                      <Trash2 className="h-4 w-4 text-muted-foreground" />
-                                    </Button>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
+                                  </TableCell>
+                                )}
+                              </TableRow>
+                            )
+                          })}
+                        </TableBody>
+                      </Table>
                     </div>
 
                     {/* Closing Balance */}

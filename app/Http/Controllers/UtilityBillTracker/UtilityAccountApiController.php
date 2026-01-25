@@ -4,7 +4,6 @@ namespace App\Http\Controllers\UtilityBillTracker;
 
 use App\Http\Controllers\Controller;
 use App\Models\UtilityBillTracker\UtilityAccount;
-use App\Models\UtilityBillTracker\UtilityBill;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 

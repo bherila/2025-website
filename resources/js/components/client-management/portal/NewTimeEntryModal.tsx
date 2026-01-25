@@ -5,8 +5,17 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Trash2 } from 'lucide-react'
 import type { User, Project, Task } from '@/types/client-management/common'
 import type { TimeEntry } from '@/types/client-management/time-entry'
+
+function getLocalISODate(): string {
+  const date = new Date()
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
 
 interface NewTimeEntryModalProps {
   open: boolean
@@ -16,7 +25,7 @@ interface NewTimeEntryModalProps {
   users: User[]
   onSuccess: () => void
   entry?: TimeEntry | null
-  lastProjectId?: string
+  lastProjectId?: string | undefined
 }
 
 export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, users, onSuccess, entry, lastProjectId }: NewTimeEntryModalProps) {
@@ -24,7 +33,7 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
   const [description, setDescription] = useState('')
   const [projectId, setProjectId] = useState('')
   const [userId, setUserId] = useState('')
-  const [dateWorked, setDateWorked] = useState(new Date().toISOString().split('T')[0])
+  const [dateWorked, setDateWorked] = useState(getLocalISODate())
   const [jobType, setJobType] = useState('Software Development')
   const [isBillable, setIsBillable] = useState(true)
   const [loading, setLoading] = useState(false)
@@ -46,7 +55,7 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
       setDescription(entry.name || '')
       setProjectId(entry.project?.id.toString() || '')
       setUserId(entry.user?.id.toString() || '')
-      setDateWorked(entry.date_worked ? entry.date_worked.split(' ')[0]! : new Date().toISOString().split('T')[0])
+      setDateWorked(entry.date_worked ? entry.date_worked.split(' ')[0]! : getLocalISODate())
       setJobType(entry.job_type || 'Software Development')
       setIsBillable(entry.is_billable ?? true)
     } else if (open) {
@@ -54,7 +63,7 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
       setTime('')
       setDescription('')
       setUserId(currentUser?.id.toString() || '')
-      setDateWorked(new Date().toISOString().split('T')[0])
+      setDateWorked(getLocalISODate())
       setJobType('Software Development')
       setIsBillable(true)
       
@@ -116,6 +125,30 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
     } catch (error) {
       console.error(`Error ${entry ? 'updating' : 'creating'} time entry:`, error)
       setError(`Failed to ${entry ? 'update' : 'create'} time entry`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!entry) return
+    if (!confirm('Delete this time entry?')) return
+    
+    setLoading(true)
+    try {
+      const response = await fetch(`/api/client/portal/${slug}/time-entries/${entry.id}`, {
+        method: 'DELETE',
+        headers: {
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+        }
+      })
+
+      if (response.ok) {
+        onSuccess()
+        onOpenChange(false)
+      }
+    } catch (error) {
+      console.error('Error deleting time entry:', error)
     } finally {
       setLoading(false)
     }
@@ -236,13 +269,30 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
             </Label>
           </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={loading || !time.trim() || !projectId}>
-              {loading ? 'Saving...' : (entry ? 'Save Changes' : 'Add Time Record')}
-            </Button>
+          <DialogFooter className="flex justify-between items-center sm:justify-between w-full">
+            <div className="flex-1">
+              {entry && (
+                <Button 
+                  type="button" 
+                  variant="ghost" 
+                  size="sm"
+                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={handleDelete}
+                  disabled={loading}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Record
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={loading || !time.trim() || !projectId}>
+                {loading ? 'Saving...' : (entry ? 'Save Changes' : 'Add Time Record')}
+              </Button>
+            </div>
           </DialogFooter>
         </form>
       </DialogContent>

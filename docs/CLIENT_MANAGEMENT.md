@@ -309,14 +309,19 @@ Location: `resources/js/components/client-management/portal/`
 
 **ClientPortalTimePage.tsx**
 - Time tracking interface with monthly groupings
-- Shows time entries grouped by month (most recent first)
+- Shows time entries in a clean tabular format within each month
 - Each month displays:
   - **Opening Balance**: Retainer hours + rollover from previous months - expired hours
-  - **Time entries** with project, task, description, job type, hours
+  - **Table of entries**: Date, Description (including job type, status badges, and project badge), User (abbreviated), and Time
   - **Closing Balance**: Unused hours available to roll over, excess hours to be invoiced
+- **UI Features**:
+    - Abbreviated user names (e.g., "Ben Herila" → "Ben H.")
+    - Consolidation of repeated dates (only shows date on first row of the day)
+    - Action column with Edit button (Pencil icon) for admins
+    - Clean, borderless card layout with lightened table borders
 - Color-coded balance indicators (green for positive, red for negative)
 - Collapsible month sections for better navigation
-- Uses shadcn/ui Card, Button, Table, Collapsible, Skeleton components
+- Uses shadcn/ui Card, Button, Table, Badge, Tooltip, Skeleton components
 
 **NewProjectModal.tsx**
 - Modal for creating new projects
@@ -329,10 +334,14 @@ Location: `resources/js/components/client-management/portal/`
 - Uses shadcn/ui Dialog, Input, Textarea, Select components
 
 **NewTimeEntryModal.tsx**
-- Modal for logging time
-- Project, task, time, description, job type fields
-- Time input accepts "h:mm" or decimal hours
-- Uses shadcn/ui Dialog, Input, Textarea, Select components
+- Unified modal for logging and editing time
+- Fields: Project, Date, Time, Description, User, Job Type, Billable status
+- **Smart Defaults**: 
+    - Date defaults to the local computer's current date
+    - Remembers last used project ID
+- **integrated Actions**: Includes a "Delete Record" button when in edit mode
+- Time input accepts "h:mm" or decimal hours (e.g., "1:30" or "1.5")
+- Uses shadcn/ui Dialog, Input, Textarea, Select, Checkbox components
 
 ### Styling
 - Uses shadcn/ui components with Tailwind CSS
@@ -1107,6 +1116,9 @@ Tests include:
 - [ ] Time entries grouped by month (most recent first)
 - [ ] Opening balance shows retainer + rollover - expired
 - [ ] Closing balance shows unused or excess hours
+- [ ] Tabular format with consolidated Date and Project columns
+- [ ] User names abbreviated correctly (e.g., "Ben H.")
+- [ ] Edit icon (Pencil) appears in header and rows (Admin only)
 - [ ] Color coding correct (green positive, red negative)
 - [ ] Month sections collapsible
 - [ ] Skeleton loading state displays correctly

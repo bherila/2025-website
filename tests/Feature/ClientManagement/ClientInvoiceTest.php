@@ -4,8 +4,6 @@ namespace Tests\Feature\ClientManagement;
 
 use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientCompany;
-use App\Models\ClientManagement\ClientInvoice;
-use App\Models\ClientManagement\ClientInvoicePayment;
 use App\Models\ClientManagement\ClientProject;
 use App\Models\ClientManagement\ClientTimeEntry;
 use App\Models\User;

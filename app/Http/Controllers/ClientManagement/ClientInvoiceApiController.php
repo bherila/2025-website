@@ -319,7 +319,7 @@ class ClientInvoiceApiController extends Controller
         }
 
         $targetStatus = $request->input('status', 'issued');
-        if (!in_array($targetStatus, ['issued', 'draft'])) {
+        if (! in_array($targetStatus, ['issued', 'draft'])) {
             return response()->json(['error' => 'Target status must be "issued" or "draft"'], 400);
         }
 
@@ -447,7 +447,7 @@ class ClientInvoiceApiController extends Controller
     {
         Gate::authorize('Admin');
 
-        if ($invoice->client_company_id != $company->id || !$invoice->isEditable()) {
+        if ($invoice->client_company_id != $company->id || ! $invoice->isEditable()) {
             abort(403);
         }
 
@@ -462,7 +462,7 @@ class ClientInvoiceApiController extends Controller
         if ($line->line_type === 'retainer' || $line->line_type === 'additional_hours') {
             return response()->json(['error' => 'Cannot edit system-generated line items.'], 400);
         }
-        
+
         $line->update([
             'description' => $request->description,
             'quantity' => $request->quantity,
@@ -489,6 +489,7 @@ class ClientInvoiceApiController extends Controller
         if ($invoice->client_company_id != $company->id) {
             abort(404);
         }
+
         return response()->json($invoice->payments()->orderBy('payment_date', 'desc')->get());
     }
 
@@ -522,23 +523,23 @@ class ClientInvoiceApiController extends Controller
             'invoice' => $invoice->fresh(['payments']),
         ], 201);
     }
-    
+
     public function updatePayment(Request $request, ClientCompany $company, ClientInvoice $invoice, ClientInvoicePayment $payment)
     {
         Gate::authorize('Admin');
         if ($invoice->client_company_id != $company->id || $payment->client_invoice_id != $invoice->client_invoice_id) {
             abort(404);
         }
-    
+
         $request->validate([
             'amount' => 'required|numeric|min:0.01',
             'payment_date' => 'required|date',
             'payment_method' => 'required|string|in:Credit Card,ACH,Wire,Check,Other',
             'notes' => 'nullable|string',
         ]);
-    
+
         $payment->update($request->all());
-    
+
         // Update invoice status
         $invoiceFresh = $invoice->fresh(['payments']);
         if ($invoiceFresh->remaining_balance <= 0) {
@@ -552,7 +553,7 @@ class ClientInvoiceApiController extends Controller
                 $invoice->update(['status' => 'issued', 'paid_date' => null]);
             }
         }
-    
+
         return response()->json([
             'message' => 'Payment updated successfully.',
             'payment' => $payment->fresh(),

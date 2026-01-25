@@ -121,7 +121,7 @@ class DelayedBillingTest extends TestCase
         // Retainer covers all 5 current hours (under 10 hour limit)
         // Delayed billing should charge for the 5 pre-agreement hours
         $delayedBillingLine = $lineItems->first(function ($line) {
-            return $line->line_type === 'additional_hours' && 
+            return $line->line_type === 'additional_hours' &&
                    str_contains($line->description, 'Prior Period');
         });
 
@@ -176,7 +176,7 @@ class DelayedBillingTest extends TestCase
         $delayedBillingLine = $invoice->lineItems()
             ->where('description', 'LIKE', '%Prior Period%')
             ->first();
-        
+
         $this->assertNotNull($delayedBillingLine, 'Invoice should include a delayed billing line item');
 
         // Check invoice total includes delayed billing
@@ -224,7 +224,7 @@ class DelayedBillingTest extends TestCase
         $delayedBillingLine = $invoice->lineItems()
             ->where('description', 'LIKE', '%Prior Period%')
             ->first();
-        
+
         $this->assertNull($delayedBillingLine, 'Invoice should not include delayed billing for non-billable entries');
         $this->assertEquals(1000.00, $invoice->invoice_total); // Just retainer
     }
@@ -273,7 +273,7 @@ class DelayedBillingTest extends TestCase
         $delayedBillingLine = $februaryInvoice->lineItems()
             ->where('description', 'LIKE', '%Prior Period%')
             ->first();
-        
+
         $this->assertNull($delayedBillingLine, 'Invoice should not include delayed billing for already-invoiced entries');
     }
 

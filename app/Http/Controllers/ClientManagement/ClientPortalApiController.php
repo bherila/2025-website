@@ -11,8 +11,8 @@ use App\Models\User;
 use App\Services\ClientManagement\RolloverCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Gate;
 
 class ClientPortalApiController extends Controller
 {

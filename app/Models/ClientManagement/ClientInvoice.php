@@ -129,7 +129,7 @@ class ClientInvoice extends Model
     /**
      * Mark the invoice as paid.
      *
-     * @param \Carbon\Carbon|string|null $paidDate The date the invoice was paid. Defaults to now().
+     * @param  \Carbon\Carbon|string|null  $paidDate  The date the invoice was paid. Defaults to now().
      */
     public function markPaid($paidDate = null): void
     {
@@ -152,14 +152,14 @@ class ClientInvoice extends Model
     /**
      * Revert a voided invoice to issued or draft status.
      *
-     * @param string $targetStatus The status to revert to ('issued' or 'draft')
+     * @param  string  $targetStatus  The status to revert to ('issued' or 'draft')
      */
     public function unVoid(string $targetStatus = 'issued'): void
     {
-        if (!in_array($targetStatus, ['issued', 'draft'])) {
+        if (! in_array($targetStatus, ['issued', 'draft'])) {
             throw new \InvalidArgumentException('Target status must be "issued" or "draft"');
         }
-        
+
         $this->update([
             'status' => $targetStatus,
         ]);

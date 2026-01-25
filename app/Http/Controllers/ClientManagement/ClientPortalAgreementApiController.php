@@ -7,8 +7,8 @@ use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientInvoice;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Gate;
 
 class ClientPortalAgreementApiController extends Controller
 {

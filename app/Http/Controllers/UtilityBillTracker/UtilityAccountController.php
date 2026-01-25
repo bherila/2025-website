@@ -21,7 +21,7 @@ class UtilityAccountController extends Controller
     public function bills(int $id)
     {
         $account = UtilityAccount::findOrFail($id);
-        
+
         return view('utility-bill-tracker.bills', [
             'account_id' => $account->id,
             'account_name' => $account->account_name,

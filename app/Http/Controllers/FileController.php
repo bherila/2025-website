@@ -13,8 +13,6 @@ use App\Models\Files\FileForProject;
 use App\Models\Files\FileForTask;
 use App\Models\FinAccounts;
 use App\Services\FileStorageService;
-use App\Traits\HasFileStorage;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -577,7 +575,7 @@ class FileController extends Controller
     protected function validateCompanyAccess(string $companySlug, bool $requireAdmin = false): ClientCompany
     {
         $user = Auth::user();
-        if (!$user) {
+        if (! $user) {
             abort(401);
         }
 
@@ -595,7 +593,7 @@ class FileController extends Controller
         // Check if user is assigned to this company
         $hasAccess = $company->users()->where('user_id', $user->id)->exists();
 
-        if (!$hasAccess) {
+        if (! $hasAccess) {
             abort(403, 'You do not have access to this company.');
         }
 

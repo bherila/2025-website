@@ -170,7 +170,7 @@ class ClientInvoicingService
             ->where(function ($query) use ($periodStart, $periodEnd) {
                 // Overlap exists if: existing.start < new.end AND existing.end > new.start
                 $query->where('period_start', '<', $periodEnd)
-                      ->where('period_end', '>', $periodStart);
+                    ->where('period_end', '>', $periodStart);
             })
             ->when($invoice, function ($query) use ($invoice) {
                 // Exclude the current invoice if updating a draft
@@ -180,9 +180,9 @@ class ClientInvoicingService
 
         if ($overlappingInvoice) {
             throw new \Exception(
-                "An invoice (#{$overlappingInvoice->invoice_number}) already exists for an overlapping period " .
-                "({$overlappingInvoice->period_start->format('M d, Y')} - {$overlappingInvoice->period_end->format('M d, Y')}). " .
-                "Please choose a different date range or void the existing invoice first."
+                "An invoice (#{$overlappingInvoice->invoice_number}) already exists for an overlapping period ".
+                "({$overlappingInvoice->period_start->format('M d, Y')} - {$overlappingInvoice->period_end->format('M d, Y')}). ".
+                'Please choose a different date range or void the existing invoice first.'
             );
         }
 
@@ -255,16 +255,16 @@ class ClientInvoicingService
                 // Only delete system-generated line items (preserve manual items like 'expense' and 'adjustment')
                 // System-generated line types: retainer, additional_hours, credit
                 $systemGeneratedTypes = ['retainer', 'additional_hours', 'credit'];
-                
+
                 $systemLines = $invoice->lineItems()
                     ->whereIn('line_type', $systemGeneratedTypes)
                     ->get();
-                
+
                 // Unlink time entries from system-generated lines
                 foreach ($systemLines as $line) {
                     $line->timeEntries()->update(['client_invoice_line_id' => null]);
                 }
-                
+
                 // Delete only system-generated line items
                 $invoice->lineItems()
                     ->whereIn('line_type', $systemGeneratedTypes)

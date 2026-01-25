@@ -1,0 +1,706 @@
+{
+    "entries": [
+        {
+            "id": 25,
+            "project_id": 2,
+            "client_company_id": 1,
+            "task_id": null,
+            "name": "Implement Team, Facilities pages ahead of Diego (providing examples for him to follow)",
+            "minutes_worked": 60,
+            "date_worked": "2026-01-24 00:00:00",
+            "user_id": 1,
+            "creator_user_id": 1,
+            "is_billable": true,
+            "job_type": "Software Development",
+            "client_invoice_line_id": null,
+            "created_at": "2026-01-25 06:51:29",
+            "updated_at": "2026-01-25 06:51:29",
+            "deleted_at": null,
+            "formatted_time": "1:00",
+            "is_invoiced": false,
+            "user": {
+                "id": 1,
+                "name": "Ben Herila",
+                "email": "ben@herila.net"
+            },
+            "project": {
+                "id": 2,
+                "name": "VetVet app",
+                "slug": "vetvet-app"
+            },
+            "task": null
+        },
+        {
+            "id": 24,
+            "project_id": 2,
+            "client_company_id": 1,
+            "task_id": null,
+            "name": "Implemented backend api, eloquent models for db schema, standup w\/ Diego, code review, hiring discussions w\/ Dean",
+            "minutes_worked": 60,
+            "date_worked": "2026-01-24 00:00:00",
+            "user_id": 1,
+            "creator_user_id": 1,
+            "is_billable": true,
+            "job_type": "Software Development",
+            "client_invoice_line_id": null,
+            "created_at": "2026-01-25 03:13:57",
+            "updated_at": "2026-01-25 03:13:57",
+            "deleted_at": null,
+            "formatted_time": "1:00",
+            "is_invoiced": false,
+            "user": {
+                "id": 1,
+                "name": "Ben Herila",
+                "email": "ben@herila.net"
+            },
+            "project": {
+                "id": 2,
+                "name": "VetVet app",
+                "slug": "vetvet-app"
+            },
+            "task": null
+        },
+        {
+            "id": 23,
+            "project_id": 2,
+            "client_company_id": 1,
+            "task_id": null,
+            "name": "Follow-ups with Diego",
+            "minutes_worked": 60,
+            "date_worked": "2026-01-22 00:00:00",
+            "user_id": 1,
+            "creator_user_id": 1,
+            "is_billable": true,
+            "job_type": "Software Development",
+            "client_invoice_line_id": null,
+            "created_at": "2026-01-23 04:56:39",
+            "updated_at": "2026-01-23 04:56:43",
+            "deleted_at": null,
+            "formatted_time": "1:00",
+            "is_invoiced": false,
+            "user": {
+                "id": 1,
+                "name": "Ben Herila",
+                "email": "ben@herila.net"
+            },
+            "project": {
+                "id": 2,
+                "name": "VetVet app",
+                "slug": "vetvet-app"
+            },
+            "task": null
+        },
+        {
+            "id": 22,
+            "project_id": 2,
+            "client_company_id": 1,
+            "task_id": null,
+            "name": "User login and signup system",
+            "minutes_worked": 60,
+            "date_worked": "2026-01-21 00:00:00",
+            "user_id": 1,
+            "creator_user_id": 1,
+            "is_billable": true,
+            "job_type": "Software Development",
+            "client_invoice_line_id": null,
+            "created_at": "2026-01-22 08:15:18",
+            "updated_at": "2026-01-23 04:56:54",
+            "deleted_at": null,
+            "formatted_time": "1:00",
+            "is_invoiced": false,
+            "user": {
+                "id": 1,
+                "name": "Ben Herila",
+                "email": "ben@herila.net"
+            },
+            "project": {
+                "id": 2,
+                "name": "VetVet app",
+                "slug": "vetvet-app"
+            },
+            "task": null
+        },
+        {
+            "id": 21,
+            "project_id": 2,
+            "client_company_id": 1,
+            "task_id": null,
+            "name": "Response re: QB desktop",
+            "minutes_worked": 10,
+            "date_worked": "2026-01-21 00:00:00",
+            "user_id": 1,
+            "creator_user_id": 1,
+            "is_billable": true,
+            "job_type": "Software Development",
+            "client_invoice_line_id": null,
+            "created_at": "2026-01-22 06:13:18",
+            "updated_at": "2026-01-22 06:13:18",
+            "deleted_at": null,
+            "formatted_time": "0:10",
+            "is_invoiced": false,
+            "user": {
+                "id": 1,
+                "name": "Ben Herila",
+                "email": "ben@herila.net"
+            },
+            "project": {
+                "id": 2,
+                "name": "VetVet app",
+                "slug": "vetvet-app"
+            },
+            "task": null
+        },
+        {
+            "id": 20,
+            "project_id": 2,
+            "client_company_id": 1,
+            "task_id": null,
+            "name": "Code review @alejo",
+            "minutes_worked": 10,
+            "date_worked": "2026-01-21 00:00:00",
+            "user_id": 1,
+            "creator_user_id": 1,
+            "is_billable": true,
+            "job_type": "Software Development",
+            "client_invoice_line_id": null,
+            "created_at": "2026-01-22 06:13:05",
+            "updated_at": "2026-01-22 06:13:05",
+            "deleted_at": null,
+            "formatted_time": "0:10",
+            "is_invoiced": false,
+            "user": {
+                "id": 1,
+                "name": "Ben Herila",
+                "email": "ben@herila.net"
+            },
+            "project": {
+                "id": 2,
+                "name": "VetVet app",
+                "slug": "vetvet-app"
+            },
+            "task": null
+        },
+        {
+            "id": 19,
+            "project_id": 2,
+            "client_company_id": 1,
+            "task_id": null,
+            "name": "Set up production environment and ci deployment scripts",
+            "minutes_worked": 90,
+            "date_worked": "2026-01-20 00:00:00",
+            "user_id": 1,
+            "creator_user_id": 1,
+            "is_billable": true,
+            "job_type": "Software Development",
+            "client_invoice_line_id": null,
+            "created_at": "2026-01-22 06:12:47",
+            "updated_at": "2026-01-22 06:12:47",
+            "deleted_at": null,
+            "formatted_time": "1:30",
+            "is_invoiced": false,
+            "user": {
+                "id": 1,
+                "name": "Ben Herila",
+                "email": "ben@herila.net"
+            },
+            "project": {
+                "id": 2,
+                "name": "VetVet app",
+                "slug": "vetvet-app"
+            },
+            "task": null
+        },
+        {
+            "id": 18,
+            "project_id": 2,
+            "client_company_id": 1,
+            "task_id": null,
+            "name": "Review and comment db schema",
+            "minutes_worked": 30,
+            "date_worked": "2026-01-19 00:00:00",
+            "user_id": 1,
+            "creator_user_id": 1,
+            "is_billable": true,
+            "job_type": "Software Development",
+            "client_invoice_line_id": null,
+            "created_at": "2026-01-19 19:49:56",
+            "updated_at": "2026-01-19 19:49:56",
+            "deleted_at": null,
+            "formatted_time": "0:30",
+            "is_invoiced": false,
+            "user": {
+                "id": 1,
+                "name": "Ben Herila",
+                "email": "ben@herila.net"
+            },
+            "project": {
+                "id": 2,
+                "name": "VetVet app",
+                "slug": "vetvet-app"
+            },
+            "task": null
+        },
+        {
+            "id": 17,
+            "project_id": 2,
+            "client_company_id": 1,
+            "task_id": null,
+            "name": "Updated github tasks (incl small follow up about cloudflare R2  needing billing, and Facundo onboarding)",
+            "minutes_worked": 15,
+            "date_worked": "2026-01-18 00:00:00",
+            "user_id": 1,
+            "creator_user_id": 1,
+            "is_billable": true,
+            "job_type": "Project Management",
+            "client_invoice_line_id": null,
+            "created_at": "2026-01-19 19:49:45",
+            "updated_at": "2026-01-19 19:49:45",
+            "deleted_at": null,
+            "formatted_time": "0:15",
+            "is_invoiced": false,
+            "user": {
+                "id": 1,
+                "name": "Ben Herila",
+                "email": "ben@herila.net"
+            },
+            "project": {
+                "id": 2,
+                "name": "VetVet app",
+                "slug": "vetvet-app"
+            },
+            "task": null
+        },
+        {
+            "id": 16,
+            "project_id": 2,
+            "client_company_id": 1,
+            "task_id": null,
+            "name": "post-call follow ups (looking into cloudflare set up, creating github repo, issues), follow up re: Facundo",
+            "minutes_worked": 15,
+            "date_worked": "2026-01-17 00:00:00",
+            "user_id": 1,
+            "creator_user_id": 1,
+            "is_billable": true,
+            "job_type": "Software Development",
+            "client_invoice_line_id": null,
+            "created_at": "2026-01-18 09:32:18",
+            "updated_at": "2026-01-18 09:32:38",
+            "deleted_at": null,
+            "formatted_time": "0:15",
+            "is_invoiced": false,
+            "user": {
+                "id": 1,
+                "name": "Ben Herila",
+                "email": "ben@herila.net"
+            },
+            "project": {
+                "id": 2,
+                "name": "VetVet app",
+                "slug": "vetvet-app"
+            },
+            "task": null
+        },
+        {
+            "id": 15,
+            "project_id": 2,
+            "client_company_id": 1,
+            "task_id": null,
+            "name": "call with Alejo",
+            "minutes_worked": 45,
+            "date_worked": "2026-01-17 00:00:00",
+            "user_id": 1,
+            "creator_user_id": 1,
+            "is_billable": true,
+            "job_type": "Software Development",
+            "client_invoice_line_id": null,
+            "created_at": "2026-01-18 09:31:36",
+            "updated_at": "2026-01-18 09:31:36",
+            "deleted_at": null,
+            "formatted_time": "0:45",
+            "is_invoiced": false,
+            "user": {
+                "id": 1,
+                "name": "Ben Herila",
+                "email": "ben@herila.net"
+            },
+            "project": {
+                "id": 2,
+                "name": "VetVet app",
+                "slug": "vetvet-app"
+            },
+            "task": null
+        },
+        {
+            "id": 12,
+            "project_id": 2,
+            "client_company_id": 1,
+            "task_id": null,
+            "name": "Email\/follow ups- briefly interviewed Alejo for updated skills (result=PASS)",
+            "minutes_worked": 10,
+            "date_worked": "2026-01-11 00:00:00",
+            "user_id": 1,
+            "creator_user_id": 1,
+            "is_billable": true,
+            "job_type": "Support",
+            "client_invoice_line_id": null,
+            "created_at": "2026-01-12 05:57:57",
+            "updated_at": "2026-01-12 05:58:27",
+            "deleted_at": null,
+            "formatted_time": "0:10",
+            "is_invoiced": false,
+            "user": {
+                "id": 1,
+                "name": "Ben Herila",
+                "email": "ben@herila.net"
+            },
+            "project": {
+                "id": 2,
+                "name": "VetVet app",
+                "slug": "vetvet-app"
+            },
+            "task": null
+        },
+        {
+            "id": 11,
+            "project_id": 2,
+            "client_company_id": 1,
+            "task_id": null,
+            "name": "Hiring summary email, follow-ups",
+            "minutes_worked": 30,
+            "date_worked": "2026-01-10 00:00:00",
+            "user_id": 1,
+            "creator_user_id": 1,
+            "is_billable": true,
+            "job_type": "Support",
+            "client_invoice_line_id": null,
+            "created_at": "2026-01-10 22:56:52",
+            "updated_at": "2026-01-10 22:56:52",
+            "deleted_at": null,
+            "formatted_time": "0:30",
+            "is_invoiced": false,
+            "user": {
+                "id": 1,
+                "name": "Ben Herila",
+                "email": "ben@herila.net"
+            },
+            "project": {
+                "id": 2,
+                "name": "VetVet app",
+                "slug": "vetvet-app"
+            },
+            "task": null
+        },
+        {
+            "id": 10,
+            "project_id": 2,
+            "client_company_id": 1,
+            "task_id": null,
+            "name": "Intro Alejo",
+            "minutes_worked": 10,
+            "date_worked": "2026-01-09 00:00:00",
+            "user_id": 1,
+            "creator_user_id": 1,
+            "is_billable": true,
+            "job_type": "Support",
+            "client_invoice_line_id": null,
+            "created_at": "2026-01-10 06:24:55",
+            "updated_at": "2026-01-10 06:25:01",
+            "deleted_at": null,
+            "formatted_time": "0:10",
+            "is_invoiced": false,
+            "user": {
+                "id": 1,
+                "name": "Ben Herila",
+                "email": "ben@herila.net"
+            },
+            "project": {
+                "id": 2,
+                "name": "VetVet app",
+                "slug": "vetvet-app"
+            },
+            "task": null
+        },
+        {
+            "id": 9,
+            "project_id": 2,
+            "client_company_id": 1,
+            "task_id": null,
+            "name": "Email response re: Daniel",
+            "minutes_worked": 20,
+            "date_worked": "2026-01-09 00:00:00",
+            "user_id": 1,
+            "creator_user_id": 1,
+            "is_billable": true,
+            "job_type": "Support",
+            "client_invoice_line_id": null,
+            "created_at": "2026-01-09 22:55:48",
+            "updated_at": "2026-01-09 22:55:48",
+            "deleted_at": null,
+            "formatted_time": "0:20",
+            "is_invoiced": false,
+            "user": {
+                "id": 1,
+                "name": "Ben Herila",
+                "email": "ben@herila.net"
+            },
+            "project": {
+                "id": 2,
+                "name": "VetVet app",
+                "slug": "vetvet-app"
+            },
+            "task": null
+        },
+        {
+            "id": 7,
+            "project_id": 2,
+            "client_company_id": 1,
+            "task_id": null,
+            "name": "Review agency proposals and respond",
+            "minutes_worked": 30,
+            "date_worked": "2026-01-08 00:00:00",
+            "user_id": 1,
+            "creator_user_id": 1,
+            "is_billable": true,
+            "job_type": "Support",
+            "client_invoice_line_id": null,
+            "created_at": "2026-01-09 07:49:45",
+            "updated_at": "2026-01-09 07:49:45",
+            "deleted_at": null,
+            "formatted_time": "0:30",
+            "is_invoiced": false,
+            "user": {
+                "id": 1,
+                "name": "Ben Herila",
+                "email": "ben@herila.net"
+            },
+            "project": {
+                "id": 2,
+                "name": "VetVet app",
+                "slug": "vetvet-app"
+            },
+            "task": null
+        },
+        {
+            "id": 8,
+            "project_id": 2,
+            "client_company_id": 1,
+            "task_id": null,
+            "name": "Review agency proposals and respond",
+            "minutes_worked": 30,
+            "date_worked": "2026-01-07 00:00:00",
+            "user_id": 1,
+            "creator_user_id": 1,
+            "is_billable": true,
+            "job_type": "Support",
+            "client_invoice_line_id": null,
+            "created_at": "2026-01-09 07:50:06",
+            "updated_at": "2026-01-09 07:50:06",
+            "deleted_at": null,
+            "formatted_time": "0:30",
+            "is_invoiced": false,
+            "user": {
+                "id": 1,
+                "name": "Ben Herila",
+                "email": "ben@herila.net"
+            },
+            "project": {
+                "id": 2,
+                "name": "VetVet app",
+                "slug": "vetvet-app"
+            },
+            "task": null
+        },
+        {
+            "id": 6,
+            "project_id": 2,
+            "client_company_id": 1,
+            "task_id": null,
+            "name": "Document review (contract)",
+            "minutes_worked": 30,
+            "date_worked": "2025-12-26 00:00:00",
+            "user_id": 1,
+            "creator_user_id": 1,
+            "is_billable": false,
+            "job_type": "Other",
+            "client_invoice_line_id": null,
+            "created_at": "2025-12-28 04:59:34",
+            "updated_at": "2025-12-28 04:59:47",
+            "deleted_at": null,
+            "formatted_time": "0:30",
+            "is_invoiced": false,
+            "user": {
+                "id": 1,
+                "name": "Ben Herila",
+                "email": "ben@herila.net"
+            },
+            "project": {
+                "id": 2,
+                "name": "VetVet app",
+                "slug": "vetvet-app"
+            },
+            "task": null
+        },
+        {
+            "id": 5,
+            "project_id": 2,
+            "client_company_id": 1,
+            "task_id": null,
+            "name": "Reviewed proposals from 2 firms and email summary",
+            "minutes_worked": 60,
+            "date_worked": "2025-12-26 00:00:00",
+            "user_id": 1,
+            "creator_user_id": 1,
+            "is_billable": true,
+            "job_type": "Support",
+            "client_invoice_line_id": null,
+            "created_at": "2025-12-28 04:59:10",
+            "updated_at": "2025-12-28 04:59:16",
+            "deleted_at": null,
+            "formatted_time": "1:00",
+            "is_invoiced": false,
+            "user": {
+                "id": 1,
+                "name": "Ben Herila",
+                "email": "ben@herila.net"
+            },
+            "project": {
+                "id": 2,
+                "name": "VetVet app",
+                "slug": "vetvet-app"
+            },
+            "task": null
+        },
+        {
+            "id": 4,
+            "project_id": 2,
+            "client_company_id": 1,
+            "task_id": null,
+            "name": "Document review (contract)",
+            "minutes_worked": 30,
+            "date_worked": "2025-12-22 00:00:00",
+            "user_id": 1,
+            "creator_user_id": 1,
+            "is_billable": false,
+            "job_type": "Other",
+            "client_invoice_line_id": null,
+            "created_at": "2025-12-23 07:54:03",
+            "updated_at": "2025-12-28 04:59:52",
+            "deleted_at": null,
+            "formatted_time": "0:30",
+            "is_invoiced": false,
+            "user": {
+                "id": 1,
+                "name": "Ben Herila",
+                "email": "ben@herila.net"
+            },
+            "project": {
+                "id": 2,
+                "name": "VetVet app",
+                "slug": "vetvet-app"
+            },
+            "task": null
+        },
+        {
+            "id": 3,
+            "project_id": 2,
+            "client_company_id": 1,
+            "task_id": null,
+            "name": "Intro call 2 - Details",
+            "minutes_worked": 30,
+            "date_worked": "2025-12-19 00:00:00",
+            "user_id": 1,
+            "creator_user_id": 1,
+            "is_billable": false,
+            "job_type": "Meeting",
+            "client_invoice_line_id": null,
+            "created_at": "2025-12-23 07:53:02",
+            "updated_at": "2025-12-25 07:07:29",
+            "deleted_at": null,
+            "formatted_time": "0:30",
+            "is_invoiced": false,
+            "user": {
+                "id": 1,
+                "name": "Ben Herila",
+                "email": "ben@herila.net"
+            },
+            "project": {
+                "id": 2,
+                "name": "VetVet app",
+                "slug": "vetvet-app"
+            },
+            "task": null
+        },
+        {
+            "id": 2,
+            "project_id": 2,
+            "client_company_id": 1,
+            "task_id": null,
+            "name": "Intro call",
+            "minutes_worked": 30,
+            "date_worked": "2025-12-15 00:00:00",
+            "user_id": 1,
+            "creator_user_id": 1,
+            "is_billable": false,
+            "job_type": "Meeting",
+            "client_invoice_line_id": null,
+            "created_at": "2025-12-23 07:52:38",
+            "updated_at": "2025-12-25 07:07:42",
+            "deleted_at": null,
+            "formatted_time": "0:30",
+            "is_invoiced": false,
+            "user": {
+                "id": 1,
+                "name": "Ben Herila",
+                "email": "ben@herila.net"
+            },
+            "project": {
+                "id": 2,
+                "name": "VetVet app",
+                "slug": "vetvet-app"
+            },
+            "task": null
+        }
+    ],
+    "monthly_data": [
+        {
+            "year_month": "2026-01",
+            "has_agreement": true,
+            "entries_count": 17,
+            "hours_worked": 10.75,
+            "formatted_hours": "9:45",
+            "retainer_hours": 10,
+            "rollover_months": 1,
+            "opening": {
+                "retainer_hours": 10,
+                "rollover_hours": 0,
+                "expired_hours": 0,
+                "total_available": 10,
+                "negative_offset": 0
+            },
+            "closing": {
+                "unused_hours": 0,
+                "excess_hours": 0,
+                "hours_used_from_retainer": 10,
+                "hours_used_from_rollover": 0,
+                "remaining_rollover": 0
+            },
+            "pre_agreement_hours_applied": 1
+        },
+        {
+            "year_month": "2025-12",
+            "has_agreement": false,
+            "entries_count": 5,
+            "hours_worked": 1,
+            "formatted_hours": "1:00",
+            "unbilled_hours": 1,
+            "opening": null,
+            "closing": null,
+            "will_be_billed_in_next_agreement": true
+        }
+    ],
+    "total_time": "12:45",
+    "total_minutes": 765,
+    "billable_time": "10:45",
+    "billable_minutes": 645,
+    "total_unbilled_hours": 0
+}

@@ -90,7 +90,8 @@ class UtilityBill extends Model
     public static function generateStoredFilename(string $originalFilename): string
     {
         $extension = pathinfo($originalFilename, PATHINFO_EXTENSION);
-        return uniqid('bill_', true) . '.' . $extension;
+
+        return uniqid('bill_', true).'.'.$extension;
     }
 
     /**

@@ -138,7 +138,7 @@ export function LinkBillModal({ open, onOpenChange, accountId, bill, onLinked }:
               <div className="text-center text-sm text-muted-foreground">
                 {formatDate(bill.linked_transaction.t_date)} - {formatCurrency(bill.linked_transaction.t_amt)}
                 <br />
-                {bill.linked_transaction.t_description}
+                {bill.linked_transaction.t_desc}
               </div>
             )}
             <DialogFooter className="mt-4">
@@ -205,11 +205,11 @@ export function LinkBillModal({ open, onOpenChange, accountId, bill, onLinked }:
                   {transactions.map((tx) => (
                     <TableRow key={tx.t_id}>
                       <TableCell>{formatDate(tx.t_date)}</TableCell>
-                      <TableCell className="max-w-[100px] truncate" title={tx.acct_name}>
-                        {tx.acct_name}
+                      <TableCell className="max-w-[100px] truncate" title={tx.account_name}>
+                        {tx.account_name}
                       </TableCell>
-                      <TableCell className="max-w-[150px] truncate" title={tx.t_description || ''}>
-                        {tx.t_description || '-'}
+                      <TableCell className="max-w-[150px] truncate" title={tx.t_desc || ''}>
+                        {tx.t_desc || '-'}
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         {formatCurrency(tx.t_amt)}

@@ -29,6 +29,7 @@ class ClientExpenseApiController extends Controller
                 if ($expense->finLineItem) {
                     $data['fin_line_item']['account_name'] = $expense->finLineItem->account?->acct_name;
                 }
+
                 return $data;
             });
 
@@ -70,9 +71,9 @@ class ClientExpenseApiController extends Controller
         ]);
 
         // Verify fin_line_item_id exists if provided
-        if (!empty($validated['fin_line_item_id'])) {
+        if (! empty($validated['fin_line_item_id'])) {
             $finLineItem = FinAccountLineItems::find($validated['fin_line_item_id']);
-            if (!$finLineItem) {
+            if (! $finLineItem) {
                 return response()->json(['error' => 'Finance line item not found'], 404);
             }
         }
@@ -93,7 +94,7 @@ class ClientExpenseApiController extends Controller
         ]);
 
         $expense->load(['project:id,name,slug', 'creator:id,name', 'finLineItem']);
-        
+
         if ($expense->finLineItem) {
             $expense->fin_line_item['account_name'] = $expense->finLineItem->account?->acct_name;
         }
@@ -113,7 +114,7 @@ class ClientExpenseApiController extends Controller
         }
 
         $expense->load(['project:id,name,slug', 'creator:id,name', 'finLineItem']);
-        
+
         $data = $expense->toArray();
         if ($expense->finLineItem) {
             $data['fin_line_item']['account_name'] = $expense->finLineItem->account?->acct_name;
@@ -149,7 +150,7 @@ class ClientExpenseApiController extends Controller
         // Verify fin_line_item_id exists if provided
         if (isset($validated['fin_line_item_id']) && $validated['fin_line_item_id'] !== null) {
             $finLineItem = FinAccountLineItems::find($validated['fin_line_item_id']);
-            if (!$finLineItem) {
+            if (! $finLineItem) {
                 return response()->json(['error' => 'Finance line item not found'], 404);
             }
         }
@@ -157,7 +158,7 @@ class ClientExpenseApiController extends Controller
         $expense->update($validated);
 
         $expense->load(['project:id,name,slug', 'creator:id,name', 'finLineItem']);
-        
+
         $data = $expense->toArray();
         if ($expense->finLineItem) {
             $data['fin_line_item']['account_name'] = $expense->finLineItem->account?->acct_name;
@@ -193,7 +194,7 @@ class ClientExpenseApiController extends Controller
             return response()->json(['error' => 'Expense does not belong to this company'], 404);
         }
 
-        if (!$expense->is_reimbursable) {
+        if (! $expense->is_reimbursable) {
             return response()->json(['error' => 'This expense is not marked as reimbursable'], 400);
         }
 
@@ -225,7 +226,7 @@ class ClientExpenseApiController extends Controller
         ]);
 
         $finLineItem = FinAccountLineItems::find($validated['fin_line_item_id']);
-        if (!$finLineItem) {
+        if (! $finLineItem) {
             return response()->json(['error' => 'Finance line item not found'], 404);
         }
 

@@ -18,7 +18,8 @@ class ClientPortalMonthlyBalancesTest extends TestCase
         $controller = new ClientPortalApiController;
 
         // Stub company that returns an active agreement starting 2026-01-01
-        $company = new class extends ClientCompany {
+        $company = new class extends ClientCompany
+        {
             public ClientAgreement $agreement;
 
             public function activeAgreement()

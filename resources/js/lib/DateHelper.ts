@@ -71,7 +71,7 @@ export function parseDate(str: string | undefined | null | Date): DateContainer 
 export function formatDateForInput(dateString: string | null | undefined): string {
   if (!dateString) return '';
   // API might return "YYYY-MM-DD HH:MM:SS" or ISO string
-  return dateString.split(/[ T]/)[0];
+  return dateString.split(/[ T]/)[0] ?? '';
 }
 
 /**

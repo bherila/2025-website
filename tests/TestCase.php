@@ -3,7 +3,6 @@
 namespace Tests;
 
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
-use Tests\CreatesApplication;
 
 /**
  * Base test case for all tests.
@@ -17,8 +16,6 @@ abstract class TestCase extends BaseTestCase
 
     /**
      * Setup the test environment.
-     *
-     * @return void
      */
     protected function setUp(): void
     {
@@ -34,8 +31,6 @@ abstract class TestCase extends BaseTestCase
      *
      * This is a critical safety check to prevent tests from accidentally
      * running against MySQL databases (which might contain production data).
-     *
-     * @return void
      */
     protected function assertDatabaseIsSqlite(): void
     {
@@ -44,9 +39,9 @@ abstract class TestCase extends BaseTestCase
 
         if ($driver !== 'sqlite') {
             $this->fail(
-                "SAFETY ERROR: Tests must use SQLite database, not '{$driver}'. " .
-                "Check that phpunit.xml sets DB_CONNECTION=sqlite and DB_DATABASE=:memory:. " .
-                "This prevents tests from accidentally modifying MySQL databases."
+                "SAFETY ERROR: Tests must use SQLite database, not '{$driver}'. ".
+                'Check that phpunit.xml sets DB_CONNECTION=sqlite and DB_DATABASE=:memory:. '.
+                'This prevents tests from accidentally modifying MySQL databases.'
             );
         }
     }
@@ -54,8 +49,7 @@ abstract class TestCase extends BaseTestCase
     /**
      * Create a user with admin role for testing.
      *
-     * @param array $attributes Additional attributes for the user
-     * @return \App\Models\User
+     * @param  array  $attributes  Additional attributes for the user
      */
     protected function createAdminUser(array $attributes = []): \App\Models\User
     {
@@ -67,8 +61,7 @@ abstract class TestCase extends BaseTestCase
     /**
      * Create a regular user for testing.
      *
-     * @param array $attributes Additional attributes for the user
-     * @return \App\Models\User
+     * @param  array  $attributes  Additional attributes for the user
      */
     protected function createUser(array $attributes = []): \App\Models\User
     {

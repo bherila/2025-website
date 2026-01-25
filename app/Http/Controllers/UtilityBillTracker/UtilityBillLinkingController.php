@@ -22,7 +22,7 @@ class UtilityBillLinkingController extends Controller
 
         // Verify account and bill belong to user
         UtilityAccount::findOrFail($accountId);
-        
+
         $bill = UtilityBill::where('utility_account_id', $accountId)
             ->where('id', $billId)
             ->firstOrFail();
@@ -95,7 +95,7 @@ class UtilityBillLinkingController extends Controller
 
         // Verify account and bill belong to user
         UtilityAccount::findOrFail($accountId);
-        
+
         $bill = UtilityBill::where('utility_account_id', $accountId)
             ->where('id', $billId)
             ->firstOrFail();
@@ -124,12 +124,12 @@ class UtilityBillLinkingController extends Controller
     {
         // Verify account and bill belong to user
         UtilityAccount::findOrFail($accountId);
-        
+
         $bill = UtilityBill::where('utility_account_id', $accountId)
             ->where('id', $billId)
             ->firstOrFail();
 
-        if (!$bill->t_id) {
+        if (! $bill->t_id) {
             return response()->json(['error' => 'Bill is not linked to any transaction'], 400);
         }
 

@@ -226,7 +226,7 @@ class UtilityBillApiController extends Controller
             ->where('id', $billId)
             ->firstOrFail();
 
-        if (!$bill->pdf_s3_path) {
+        if (! $bill->pdf_s3_path) {
             return response()->json(['error' => 'No PDF file attached to this bill'], 404);
         }
 
@@ -250,7 +250,7 @@ class UtilityBillApiController extends Controller
             ->where('id', $billId)
             ->firstOrFail();
 
-        if (!$bill->pdf_s3_path) {
+        if (! $bill->pdf_s3_path) {
             return response()->json(['error' => 'No PDF file attached to this bill'], 404);
         }
 
