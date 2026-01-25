@@ -12,116 +12,143 @@
 @source '../**/*.blade.php';
 @source '../**/*.js';
 
-/* Define semantic color tokens used across the app */
+/* Tailwind theme tokens mapped to CSS variables */
 @theme {
-  --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-      'Segoe UI Symbol', 'Noto Color Emoji';
-  
-  /* Add semantic colors */
+  --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif,
+    'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
   --color-navbar: hsl(var(--navbar));
-  /* shadcn-compatible tokens */
+
   --color-primary: hsl(var(--primary));
   --color-primary-foreground: hsl(var(--primary-foreground));
+
   --color-secondary: hsl(var(--secondary));
   --color-secondary-foreground: hsl(var(--secondary-foreground));
+
   --color-muted: hsl(var(--muted));
   --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
   --color-destructive: hsl(var(--destructive));
   --color-destructive-foreground: hsl(var(--destructive-foreground));
+
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
-  --color-accent: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
+
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
+
   --color-popover: hsl(var(--popover));
   --color-popover-foreground: hsl(var(--popover-foreground));
+
   --color-info: hsl(var(--info));
   --color-info-foreground: hsl(var(--info-foreground));
   --color-info-border: hsl(var(--info-border));
 }
 
-/* Light/Dark color values */
-:root {
-  /* Nearly white background, nearly black text */
-  --background: 0 0% 99%;
-  --foreground: 0 0% 10%;
-  /* Navbar is slightly darker than background in light mode */
-  --navbar: 0 0% 95%;
+/* ----------------------------- */
+/* Light Mode                    */
+/* ----------------------------- */
 
-  /* shadcn base light palette */
+:root {
+  --background: 0 0% 97%;
+  --foreground: 0 0% 10%;
+  --navbar: 0 0% 92%;
+
   --primary: 240 5.9% 10%;
   --primary-foreground: 0 0% 98%;
-  --secondary: 240 4.8% 95.9%;
+
+  --secondary: 240 4.8% 94%;
   --secondary-foreground: 240 5.9% 10%;
-  --muted: 240 4.8% 95.9%;
-  --muted-foreground: 240 3.8% 46.1%;
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 240 5.9% 90%;
-  --input: 240 5.9% 90%;
-  --ring: 240 5% 64.9%;
-  --accent: 240 4.8% 95.9%;
+
+  --muted: 240 4.8% 93%;
+  --muted-foreground: 240 3.8% 46%;
+
+  --accent: 240 4.8% 93%;
   --accent-foreground: 240 5.9% 10%;
+
+  --destructive: 0 84% 55%;
+  --destructive-foreground: 0 0% 98%;
+
+  --border: 240 5.9% 85%;
+  --input: 240 5.9% 85%;
+  --ring: 240 5% 60%;
+
   --card: 0 0% 100%;
   --card-foreground: 240 10% 3.9%;
+
   --popover: 0 0% 100%;
   --popover-foreground: 0 0% 10%;
-  --info: 210 100% 97%;
-  --info-foreground: 210 92% 38%;
-  --info-border: 210 92% 90%;
-  /* softer border colors for tables */
-  --border: 0 0% 80%; /* #ccc equivalent */
-  --color-border: #ccc;
+
+  --info: 210 100% 96%;
+  --info-foreground: 210 92% 35%;
+  --info-border: 210 92% 85%;
+
+  /* Table-specific border (renamed to avoid conflicts) */
+  --table-border: #ccc;
 }
 
+/* ----------------------------- */
+/* Dark Mode                     */
+/* ----------------------------- */
+
 .dark {
-  /* Almost black background, almost white text */
   --background: 0 0% 6%;
   --foreground: 0 0% 96%;
-  /* Navbar is slightly lighter than background in dark mode */
   --navbar: 0 0% 10%;
 
-  /* shadcn base dark palette */
   --primary: 0 0% 98%;
   --primary-foreground: 240 5.9% 10%;
-  --secondary: 240 3.7% 15.9%;
+
+  --secondary: 240 3.7% 16%;
   --secondary-foreground: 0 0% 98%;
-  --muted: 240 3.7% 15.9%;
-  --muted-foreground: 240 5% 64.9%;
-  --destructive: 0 72.2% 50.6%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 240 3.7% 15.9%;
-  --input: 240 3.7% 15.9%;
-  --ring: 240 4.9% 83.9%;
-  --accent: 240 3.7% 15.9%;
+
+  --muted: 240 3.7% 16%;
+  --muted-foreground: 240 5% 65%;
+
+  --accent: 240 3.7% 16%;
   --accent-foreground: 0 0% 98%;
-  --card: 240 10% 3.9%;
+
+  --destructive: 0 72% 50%;
+  --destructive-foreground: 0 0% 98%;
+
+  --border: 240 3.7% 20%;
+  --input: 240 3.7% 20%;
+  --ring: 240 4.9% 84%;
+
+  --card: 240 10% 4%;
   --card-foreground: 0 0% 98%;
+
   --popover: 0 0% 6%;
   --popover-foreground: 0 0% 96%;
+
   --info: 215 25% 12%;
   --info-foreground: 210 100% 80%;
   --info-border: 215 25% 22%;
-  /* softer border colors for tables */
-  --border: 0 0% 20%; /* #333 equivalent */
-  --color-border: #333;
+
+  --table-border: #333;
 }
 
-/* Apply globally so individual pages/components don't repeat classes */
+/* ----------------------------- */
+/* Base Layer                    */
+/* ----------------------------- */
+
 @layer base {
   body {
     @apply bg-background text-foreground;
   }
+
   .site-header {
     @apply bg-navbar;
   }
-  
-  /* Default paragraph color (theme-aware, shadcn-compatible) */
-  p, li {
+
+  p,
+  li {
     @apply text-muted-foreground;
   }
 
@@ -129,13 +156,13 @@
     @apply text-primary hover:underline;
   }
 
-  /* Ensure Tailwind `border-b` and other border utilities use our theme variable for tables */
+  /* Ensure table borders use the dedicated table border variable */
   table,
   thead,
   tbody,
   tr,
   th,
   td {
-    border-color: var(--color-border);
+    border-color: var(--table-border);
   }
 }
