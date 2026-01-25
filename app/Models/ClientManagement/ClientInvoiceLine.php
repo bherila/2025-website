@@ -35,6 +35,17 @@ class ClientInvoiceLine extends Model
     ];
 
     /**
+     * The "booted" method of the model.
+     */
+    protected static function booted()
+    {
+        static::deleting(function ($line) {
+            // Unlink time entries linked to this line
+            $line->timeEntries()->update(['client_invoice_line_id' => null]);
+        });
+    }
+
+    /**
      * Get the invoice this line belongs to.
      */
     public function invoice()

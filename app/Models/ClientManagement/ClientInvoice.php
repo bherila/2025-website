@@ -52,6 +52,19 @@ class ClientInvoice extends Model
     ];
 
     /**
+     * The "booted" method of the model.
+     */
+    protected static function booted()
+    {
+        static::deleting(function ($invoice) {
+            // Delete associated line items (this will trigger ClientInvoiceLine's deleting event)
+            foreach ($invoice->lineItems as $line) {
+                $line->delete();
+            }
+        });
+    }
+
+    /**
      * Get the client company for this invoice.
      */
     public function clientCompany()
@@ -144,6 +157,11 @@ class ClientInvoice extends Model
      */
     public function void(): void
     {
+        // Unlink time entries from this invoice's lines so they can be re-billed
+        foreach ($this->lineItems as $line) {
+            $line->timeEntries()->update(['client_invoice_line_id' => null]);
+        }
+
         $this->update([
             'status' => 'void',
         ]);

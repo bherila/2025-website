@@ -292,11 +292,6 @@ class ClientInvoiceApiController extends Controller
             return response()->json(['error' => 'Paid invoices cannot be voided'], 400);
         }
 
-        // Unlink time entries from this invoice's lines
-        foreach ($invoice->lineItems as $line) {
-            $line->timeEntries()->update(['client_invoice_line_id' => null]);
-        }
-
         $invoice->void();
 
         $this->clearPortalCache($company);
@@ -365,12 +360,6 @@ class ClientInvoiceApiController extends Controller
 
         if ($invoice->status !== 'draft') {
             return response()->json(['error' => 'Only draft invoices can be deleted'], 400);
-        }
-
-        // Unlink time entries
-        foreach ($invoice->lineItems as $line) {
-            $line->timeEntries()->update(['client_invoice_line_id' => null]);
-            $line->delete();
         }
 
         $invoice->delete();
@@ -455,8 +444,6 @@ class ClientInvoiceApiController extends Controller
             return response()->json(['error' => 'Cannot remove the retainer line item'], 400);
         }
 
-        // Unlink any time entries
-        $line->timeEntries()->update(['client_invoice_line_id' => null]);
         $line->delete();
 
         $invoice->recalculateTotal();
