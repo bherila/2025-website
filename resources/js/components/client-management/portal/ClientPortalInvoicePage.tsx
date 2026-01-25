@@ -248,28 +248,41 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
                                     <TableHead className="text-right">Quantity</TableHead>
                                     <TableHead className="text-right">Unit Price</TableHead>
                                     <TableHead className="text-right">Total</TableHead>
-                                    {isAdmin && isEditable && <TableHead className="text-right">Actions</TableHead>}
+                                    {isAdmin && (
+                                        <TableHead className="w-[40px] py-2 text-right">
+                                            <Pencil className="h-3 w-3 ml-auto text-muted-foreground/50" />
+                                        </TableHead>
+                                    )}
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {invoice.line_items.map(item => (
-                                    <TableRow key={item.client_invoice_line_id}>
+                                    <TableRow 
+                                        key={item.client_invoice_line_id}
+                                        className={`group ${isAdmin && isEditable ? 'cursor-pointer' : ''}`}
+                                        onClick={() => isAdmin && isEditable && !isRefreshing && (setSelectedLineItem(item), setLineItemModalOpen(true))}
+                                    >
                                         <TableCell>{item.description}</TableCell>
                                         <TableCell className="text-right">{parseFloat(item.quantity).toFixed(2)}</TableCell>
                                         <TableCell className="text-right">${parseFloat(item.unit_price).toFixed(2)}</TableCell>
                                         <TableCell className="text-right">${parseFloat(item.line_total).toFixed(2)}</TableCell>
-                                        {isAdmin && isEditable && (
-                                            <TableCell className="text-right">
-                                                <div className="flex justify-end gap-1">
-                                                    <Button variant="ghost" size="icon" onClick={() => { setSelectedLineItem(item); setLineItemModalOpen(true); }} disabled={isRefreshing}>
-                                                        <Pencil className="h-4 w-4" />
+                                        {isAdmin && (
+                                            <TableCell className="py-1 align-top text-right">
+                                                {isEditable && (
+                                                    <Button 
+                                                        variant="ghost" 
+                                                        size="icon" 
+                                                        className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                        onClick={(e) => { 
+                                                            e.stopPropagation();
+                                                            setSelectedLineItem(item); 
+                                                            setLineItemModalOpen(true); 
+                                                        }} 
+                                                        disabled={isRefreshing}
+                                                    >
+                                                        <Pencil className="h-4 w-4 text-muted-foreground" />
                                                     </Button>
-                                                    {item.line_type !== 'retainer' && (
-                                                        <Button variant="ghost" size="icon" onClick={() => handleDeleteLineItem(item)} disabled={isRefreshing}>
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
-                                                    )}
-                                                </div>
+                                                )}
                                             </TableCell>
                                         )}
                                     </TableRow>

@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Trash2 } from "lucide-react"
 import type { InvoiceLine } from "@/types/client-management"
 import { useEffect, useState } from "react"
 
@@ -79,13 +80,31 @@ export default function LineItemEditModal({ isOpen, onClose, lineItem, onSave, o
                         <Input id="unit-price" type="number" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} className="col-span-3" />
                     </div>
                 </div>
-                <DialogFooter>
-                    {onDelete && lineItem && (
-                        <Button variant="destructive" onClick={() => onDelete(lineItem)} disabled={isSaving}>
-                            Delete
-                        </Button>
-                    )}
-                    <Button onClick={handleSave} disabled={isSaving}>Save changes</Button>
+                <DialogFooter className="flex justify-between items-center sm:justify-between w-full">
+                    <div className="flex-1">
+                        {onDelete && lineItem?.client_invoice_line_id && lineItem.line_type !== 'retainer' && (
+                            <Button 
+                                type="button"
+                                variant="ghost" 
+                                size="sm"
+                                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                onClick={() => {
+                                    if (confirm('Are you sure you want to delete this line item?')) {
+                                        onDelete(lineItem);
+                                        onClose();
+                                    }
+                                }} 
+                                disabled={isSaving}
+                            >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete Item
+                            </Button>
+                        )}
+                    </div>
+                    <div className="flex gap-2">
+                        <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+                        <Button onClick={handleSave} disabled={isSaving}>Save changes</Button>
+                    </div>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
