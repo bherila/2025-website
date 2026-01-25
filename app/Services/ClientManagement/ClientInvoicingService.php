@@ -484,7 +484,7 @@ class ClientInvoicingService
             $seq = 1;
         }
 
-        return sprintf('%s-%s-%03d', $prefix, $yearMonth, $seq);
+        return sprintf('%s%s-%03d', $prefix, $yearMonth, $seq);
     }
 
     /**
