@@ -16,7 +16,7 @@ import NewTimeEntryModal from './NewTimeEntryModal'
 import ClientPortalNav from './ClientPortalNav'
 import type { User, Project } from '@/types/client-management/common'
 import type { TimeEntry, TimeEntriesResponse } from '@/types/client-management/time-entry'
-import { TooltipProvider } from '@/components/ui/tooltip'
+import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import SummaryTile from '@/components/ui/summary-tile'
 import TimeTrackingMonthSummaryRow from './TimeTrackingMonthSummaryRow'
 
@@ -370,9 +370,23 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
                                               INVOICED
                                             </Badge>
                                           ) : (
-                                            <Badge variant={entry.is_billable ? 'default' : 'secondary'} className="text-[9px] px-1 py-0 h-3.5 font-bold shrink-0">
-                                              {entry.is_billable ? 'BILLABLE' : 'NON-BILLABLE'}
-                                            </Badge>
+                                            <>
+                                              <Badge variant={entry.is_billable ? 'default' : 'secondary'} className="text-[9px] px-1 py-0 h-3.5 font-bold shrink-0">
+                                                {entry.is_billable ? 'BILLABLE' : 'NON-BILLABLE'}
+                                              </Badge>
+                                              {entry.is_billable && !entry.is_invoiced && entry.date_worked < new Date().toISOString().slice(0, 8) + '01' && (
+                                                <Tooltip>
+                                                  <TooltipTrigger>
+                                                    <Badge variant="destructive" className="text-[9px] px-1 py-0 h-3.5 font-bold shrink-0">
+                                                      CARRY-FORWARD
+                                                    </Badge>
+                                                  </TooltipTrigger>
+                                                  <TooltipContent>
+                                                    <p>This item will be carried-over and invoiced in the next billing period</p>
+                                                  </TooltipContent>
+                                                </Tooltip>
+                                              )}
+                                            </>
                                           )}
                                           {entry.project && (
                                             <Badge

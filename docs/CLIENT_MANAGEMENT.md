@@ -496,6 +496,46 @@ const fileManager = useFileManagement({
 
 ## Billing & Invoicing System
 
+### Overview
+The billing and invoicing system handles automatic invoice generation with retainer-based billing, rollover hours, and proper tracking of carried-forward work. It supports flexible agreement terms that accommodate startup cash flow needs.
+
+### Core Concepts
+
+#### Delayed Billing vs Negative Balance
+The system uses two mechanisms for tracking work that exceeds available hours:
+
+1. **Delayed Billing (Unbilled Time Entries)**: When time entries are split during invoice generation (e.g., 25h entry split into 10h billed + 15h unbilled), the unbilled portion becomes actual time entry records that carry forward to the next billing period. These represent concrete work done that hasn't been invoiced yet.
+
+2. **Negative Balance (Numeric Tracking)**: When no time entries exist but hours exceed available hours, a numeric negative balance is recorded. This represents a debt to be offset by future retainer hours.
+
+**Critical Rule**: These two mechanisms are mutually exclusive to avoid double-counting. If delayed billing time entries exist for a period, the numeric negative balance is NOT used for that period.
+
+#### Billing Priority
+When generating invoices, work is processed in the following order:
+
+1. **Delayed Billing (from previous periods)**: Processed FIRST and MUST be either covered by available hours (retainer + rollover) or billed immediately at the hourly rate. These hours will NOT be carried forward again.
+
+2. **Current Period Work**: Processed with remaining available hours. If current period work exceeds available hours, it creates negative balance for the next month (unless immediate billing is configured).
+
+3. **Hour Allocation**:
+   - Retainer hours are applied first
+   - Then rollover hours (FIFO - oldest first)
+   - Then billing at hourly rate for excess
+
+### Time Entry Splitting
+When a time entry exceeds remaining available hours during invoice generation, the system automatically splits it:
+- **Billed portion**: Linked to the invoice line item
+- **Unbilled portion**: Replicated as a separate time entry with `client_invoice_line_id = NULL`
+
+The unbilled portion will be picked up as delayed billing in the next invoice generation.
+
+### Invoice Line Items
+Generated invoices contain the following line item types:
+
+1. **Monthly Retainer**: Fixed monthly fee covering the contracted hours
+2. **Additional Hours**: Any hours beyond retainer + rollover, prefixed with "Additional:" and billed at the hourly rate
+3. **Rollover Credit**: Informational $0 line showing rollover hours applied
+
 ### Database Schema
 
 #### `client_agreements` table

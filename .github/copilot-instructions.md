@@ -103,6 +103,9 @@ See [docs/TESTING.md](docs/TESTING.md) for comprehensive testing documentation.
 - **Statements**: Balance snapshots with detailed line items in `fin_statement_details`
 - **File Uploads**: Handle CSV imports with validation and parsing logic
 - **Time Entry Splitting**: When generating invoices, if a time entry exceeds the remaining available retainer/rollover hours, the entry MUST be split into two: one row for the billed portion (linked to the invoice) and a replicated row for the unbilled portion (unlinked, to be carried over).
+- **Delayed Billing vs Negative Balance**: Two mechanisms for tracking work beyond available hours - delayed billing (actual unbilled time entry records from previous periods) and negative balance (numeric field). These are MUTUALLY EXCLUSIVE to avoid double-counting. If delayed billing entries exist, do NOT also use the negative balance for that period. Delayed billing is processed FIRST and must be covered or billed immediately; it will NOT be carried forward again.
+- **Invoice Line Items**: Additional hours (beyond retainer + rollover) are prefixed with "Additional:" in the line item description (e.g., "Additional: Hours @ $150/hr").
+- **Carry-Forward UI Indicator**: On the Time Tracking page, unbilled billable time entries from past months display a "CARRY-FORWARD" badge (destructive variant) with a tooltip explaining they will be invoiced in the next billing period.
 
 ## File Structure Highlights
 - `app/Models/`: Eloquent models with relationships (organized in subdirectories for complex domains)
