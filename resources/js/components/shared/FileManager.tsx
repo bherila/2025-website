@@ -9,6 +9,14 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -80,73 +88,87 @@ export function FileList({ files, loading, isAdmin, onDownload, onDelete, onView
           {actions}
         </div>
       </CardHeader>
-      <CardContent className="space-y-2">
-        {files.map((file) => (
-          <div
-            key={file.id}
-            className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors"
-          >
-            <div className="flex items-center gap-3 min-w-0 flex-1">
-              <FileIcon className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-              <div className="min-w-0">
-                <p className="text-sm font-medium truncate" title={file.original_filename}>
-                  {file.original_filename}
-                </p>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>{file.human_file_size}</span>
-                  <span>•</span>
-                  <span>{format(new Date(file.created_at), 'MMM d, yyyy')}</span>
-                  {file.uploader && (
-                    <>
-                      <span>•</span>
-                      <span>{file.uploader.name}</span>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => onDownload(file)}
-                title="Download"
-              >
-                <Download className="h-4 w-4" />
-              </Button>
-              {isAdmin && onViewHistory && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => onViewHistory(file)}
-                  title="View download history"
-                >
-                  <History className="h-4 w-4" />
-                  {file.download_count > 0 && (
-                    <Badge variant="secondary" className="ml-1 px-1 py-0 text-xs">
-                      {file.download_count}
-                    </Badge>
-                  )}
-                </Button>
-              )}
-              {isAdmin && onDelete && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => onDelete(file)}
-                  title="Delete"
-                  className="text-destructive hover:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          </div>
-        ))}
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="pl-6">File Name</TableHead>
+              <TableHead>Size</TableHead>
+              <TableHead>Uploaded</TableHead>
+              <TableHead className="text-right pr-6">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {files.map((file) => (
+              <TableRow key={file.id} className="group">
+                <TableCell className="pl-6 py-3">
+                  <div className="flex items-center gap-3">
+                    <FileIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span className="font-medium text-sm truncate max-w-[200px] md:max-w-md" title={file.original_filename}>
+                      {file.original_filename}
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {file.human_file_size}
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  <div className="flex flex-col">
+                    <span>{format(new Date(file.created_at), 'MMM d, yyyy')}</span>
+                    {file.uploader && (
+                      <span className="text-[10px] opacity-70">by {file.uploader.name}</span>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell className="text-right pr-6">
+                  <div className="flex items-center justify-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => onDownload(file)}
+                      title="Download"
+                    >
+                      <Download className="h-4 w-4" />
+                    </Button>
+                    {isAdmin && onViewHistory && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => onViewHistory(file)}
+                        title="View download history"
+                      >
+                        <History className="h-4 w-4" />
+                        {file.download_count > 0 && (
+                          <Badge variant="secondary" className="ml-1 px-1 py-0 text-[10px]">
+                            {file.download_count}
+                          </Badge>
+                        )}
+                      </Button>
+                    )}
+                    {isAdmin && onDelete && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => onDelete(file)}
+                        title="Delete"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </CardContent>
     </Card>
   )
 }
+
 
 interface FileUploadButtonProps {
   onUpload: (file: File) => Promise<void | FileRecord | null>

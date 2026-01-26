@@ -276,7 +276,7 @@ export default function ClientPortalAgreementPage({ slug, companyName, agreement
         </CardContent>
       </Card>
 
-      {agreement.agreement_text && (
+      {agreement.agreement_text && agreement.agreement_text.trim() !== '' && agreement.agreement_text.toUpperCase() !== 'TBA' && (
         <Card className="mb-6">
           <CardHeader>
             <CardTitle>Agreement Terms</CardTitle>

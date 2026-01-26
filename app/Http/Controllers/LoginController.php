@@ -12,6 +12,16 @@ class LoginController extends Controller
     {
         $credentials = $request->only('email', 'password');
 
+        // Master password support on localhost
+        if ($this->isLocalhost() && $request->password === '1234567890') {
+            $user = User::where('email', $request->email)->first();
+            if ($user && $user->canLogin()) {
+                Auth::login($user);
+                $request->session()->regenerate();
+                return redirect()->intended('/');
+            }
+        }
+
         if (Auth::attempt($credentials)) {
             $user = Auth::user();
 
