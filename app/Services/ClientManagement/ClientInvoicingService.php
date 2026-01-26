@@ -198,9 +198,24 @@ class ClientInvoicingService
             // Calculate rollover hours available (from previous months within rollover window)
             $rolloverHoursAvailable = $this->calculateRolloverHours($agreement, $periodStart, $previousInvoice);
 
+            // Get any older uninvoiced billable time entries (delayed billing)
+            // These represent work done in previous periods that hasn't been billed yet
+            $delayedBillingEntries = ClientTimeEntry::where('client_company_id', $company->id)
+                ->whereNull('client_invoice_line_id')
+                ->where('is_billable', true)
+                ->where('date_worked', '<', $periodStart)
+                ->orderBy('date_worked')
+                ->get();
+
+            $delayedBillingMinutes = $delayedBillingEntries->sum('minutes_worked');
+            $delayedBillingHours = $delayedBillingMinutes / 60;
+
             // Get negative balance from previous invoice (if client was over)
-            $negativeBalanceFromPrevious = $previousInvoice ?
-                (float) $previousInvoice->negative_hours_balance : 0;
+            // IMPORTANT: Only use negative balance if there are NO unbilled time entries from previous periods.
+            // If time entries were split and remain unbilled, they represent the carried-forward work.
+            // Using both would double-count the debt.
+            $negativeBalanceFromPrevious = ($delayedBillingHours > 0) ? 0 : 
+                ($previousInvoice ? (float) $previousInvoice->negative_hours_balance : 0);
 
             // Get all billable time entries for this period that are either unlinked OR linked to the CURRENT invoice (for regeneration)
             $timeEntries = ClientTimeEntry::where('client_company_id', $company->id)
@@ -215,24 +230,22 @@ class ClientInvoicingService
                 ->orderBy('date_worked')
                 ->get();
 
-            // Also get any older uninvoiced billable time entries (delayed billing)
-            $delayedBillingEntries = ClientTimeEntry::where('client_company_id', $company->id)
-                ->whereNull('client_invoice_line_id')
-                ->where('is_billable', true)
-                ->where('date_worked', '<', $periodStart)
-                ->orderBy('date_worked')
-                ->get();
+            // Calculate total hours worked this period (NOT including delayed hours for now)
+            $currentPeriodMinutes = $timeEntries->sum('minutes_worked');
+            $currentPeriodHours = $currentPeriodMinutes / 60;
+            
+            // Total work to bill = current period + delayed billing
+            $totalHoursToProcess = $currentPeriodHours + $delayedBillingHours;
 
-            $delayedBillingMinutes = $delayedBillingEntries->sum('minutes_worked');
-            $delayedBillingHours = $delayedBillingMinutes / 60;
-
-            // Calculate total hours worked this period
-            $totalMinutesWorked = $timeEntries->sum('minutes_worked');
-            $hoursWorked = $totalMinutesWorked / 60;
+            // Combine entries for processing (process delayed/older entries first)
+            $allBillableEntries = $delayedBillingEntries->concat($timeEntries);
 
             // Calculate hour balances according to the rules
+            // For delayed billing: bill immediately if exceeds available hours
+            // For current period work: can create negative balance for next month
             $calculation = $this->calculateHourBalances(
-                $hoursWorked,
+                $currentPeriodHours,
+                $delayedBillingHours,
                 (float) $agreement->monthly_retainer_hours,
                 $rolloverHoursAvailable,
                 $negativeBalanceFromPrevious,
@@ -245,7 +258,7 @@ class ClientInvoicingService
                 'period_start' => $periodStart,
                 'period_end' => $periodEnd,
                 'retainer_hours_included' => $agreement->monthly_retainer_hours,
-                'hours_worked' => $hoursWorked,
+                'hours_worked' => $totalHoursToProcess,  // Total hours including delayed billing
                 'rollover_hours_used' => $calculation['rollover_hours_used'],
                 'unused_hours_balance' => $calculation['unused_hours_balance'],
                 'negative_hours_balance' => $calculation['negative_hours_balance'],
@@ -299,7 +312,7 @@ class ClientInvoicingService
 
             // Link time entries to the retainer line (up to the retainer + rollover hours)
             $hoursToLink = $calculation['hours_covered_by_retainer'] + $calculation['rollover_hours_used'];
-            $this->linkTimeEntriesToLine($timeEntries, $retainerLine, $hoursToLink);
+            $this->linkTimeEntriesToLine($allBillableEntries, $retainerLine, $hoursToLink);
 
             // Line 2: Additional hours at hourly rate (if any)
             if ($calculation['hours_billed_at_rate'] > 0) {
@@ -316,27 +329,7 @@ class ClientInvoicingService
                 ]);
 
                 // Link remaining time entries to this line
-                $this->linkTimeEntriesToLine($timeEntries, $additionalHoursLine, $calculation['hours_billed_at_rate']);
-            }
-
-            // Line 3: Delayed billing hours from prior periods (if any)
-            if ($delayedBillingHours > 0) {
-                $delayedBillingLine = ClientInvoiceLine::create([
-                    'client_invoice_id' => $invoice->client_invoice_id,
-                    'client_agreement_id' => $agreement->id,
-                    'description' => "Prior Period Hours (delayed billing) @ \${$agreement->hourly_rate}/hr",
-                    'quantity' => $delayedBillingHours,
-                    'unit_price' => $agreement->hourly_rate,
-                    'line_total' => $delayedBillingHours * (float) $agreement->hourly_rate,
-                    'line_type' => 'additional_hours',
-                    'hours' => $delayedBillingHours,
-                    'sort_order' => $sortOrder++,
-                ]);
-
-                // Link all delayed billing entries to this line
-                foreach ($delayedBillingEntries as $entry) {
-                    $entry->update(['client_invoice_line_id' => $delayedBillingLine->client_invoice_line_id]);
-                }
+                $this->linkTimeEntriesToLine($allBillableEntries, $additionalHoursLine, $calculation['hours_billed_at_rate']);
             }
 
             // Line 4: Credit for rollover hours applied (informational, $0)
@@ -392,12 +385,14 @@ class ClientInvoicingService
      * Rules:
      * 1. This month's retainer hours are added to the pool
      * 2. If there was a negative balance, offset it first with new hours
-     * 3. Hours worked are deducted from available pool (retainer + rollover)
-     * 4. If pool is exhausted, excess hours are billed at hourly rate
-     * 5. Unused hours can roll over (up to rollover_months limit)
+     * 3. Delayed billing hours (from previous periods) are processed first and must be billed if they exceed available hours
+     * 4. Current period hours are deducted from remaining pool
+     * 5. If pool is exhausted by current period work, excess creates negative balance for next month
+     * 6. Unused hours can roll over (up to rollover_months limit)
      */
     protected function calculateHourBalances(
-        float $hoursWorked,
+        float $currentPeriodHours,
+        float $delayedBillingHours,
         float $retainerHours,
         float $rolloverHoursAvailable,
         float $negativeBalanceFromPrevious,
@@ -416,21 +411,34 @@ class ClientInvoicingService
             $negativeBalanceFromPrevious
         );
 
+        // Process delayed billing first - it MUST be covered or billed
+        $availableAfterNegativeOffset = $opening['total_available'];
+        $delayedBillingCoveredByRetainer = min($delayedBillingHours, $availableAfterNegativeOffset);
+        $delayedBillingToBill = $delayedBillingHours - $delayedBillingCoveredByRetainer;
+        $remainingAvailable = $availableAfterNegativeOffset - $delayedBillingCoveredByRetainer;
+
+        // Now process current period work with remaining available hours
         $closing = $this->rolloverCalculator->calculateClosingBalance(
-            $opening['total_available'],
-            $hoursWorked,
-            $opening['effective_retainer_hours'],
+            $remainingAvailable,
+            $currentPeriodHours,
+            max(0, $opening['effective_retainer_hours'] - $delayedBillingCoveredByRetainer),
             $opening['rollover_hours']
         );
 
-        // Calculate billable overage
-        // This includes hours that exceeded the previous month's negative balance carry-over capacity
-        // plus any explicit excess hours from this month (though calculator currently defaults to negative balance)
-        $hoursBilledAtRate = $opening['invoiced_negative_balance'] + $closing['excess_hours'];
+        // Calculate total billable overage
+        // This includes:
+        // 1. invoiced_negative_balance (negative balance from previous that exceeded current retainer)
+        // 2. delayed billing that exceeded available hours
+        // 3. current period excess (only if billExcessImmediately, otherwise goes to negative_balance)
+        $hoursBilledAtRate = $opening['invoiced_negative_balance'] + $delayedBillingToBill + $closing['excess_hours'];
+
+        // Determine how much was used from retainer vs rollover for the COMBINED work
+        $totalHoursUsedFromRetainer = $delayedBillingCoveredByRetainer + $closing['hours_used_from_retainer'];
+        $totalRolloverUsed = $closing['hours_used_from_rollover'];
 
         return [
-            'hours_covered_by_retainer' => $closing['hours_used_from_retainer'],
-            'rollover_hours_used' => $closing['hours_used_from_rollover'],
+            'hours_covered_by_retainer' => $totalHoursUsedFromRetainer,
+            'rollover_hours_used' => $totalRolloverUsed,
             'hours_billed_at_rate' => $hoursBilledAtRate,
             'unused_hours_balance' => $closing['unused_hours'],
             'negative_hours_balance' => $closing['negative_balance'],

@@ -117,23 +117,27 @@ class DelayedBillingTest extends TestCase
         $invoice->refresh();
         $lineItems = $invoice->lineItems;
 
-        // Should have: retainer line + delayed billing line
-        // Retainer covers all 5 current hours (under 10 hour limit)
-        // Delayed billing should charge for the 5 pre-agreement hours
-        $delayedBillingLine = $lineItems->first(function ($line) {
-            return $line->line_type === 'additional_hours' &&
-                   str_contains($line->description, 'Prior Period');
-        });
-
-        $this->assertNotNull($delayedBillingLine, 'Invoice should include delayed billing line item');
-        $this->assertEquals(5, $delayedBillingLine->hours); // 2 + 3 hours from January
-        $this->assertEquals(750.00, (float) $delayedBillingLine->line_total); // 5 hours * $150/hr
+        // With the merged logic:
+        // Total billable hours = 5 (Feb) + 2 (Jan 15) + 3 (Jan 20) = 10 hours.
+        // Retainer covers 10 hours.
+        // So the Retainer line should cover everything. No separate line for delayed billing.
+        
+        $retainerLine = $lineItems->firstWhere('line_type', 'retainer');
+        $this->assertNotNull($retainerLine);
+        
+        // Verify invoice totals
+        $this->assertEquals(10, $invoice->hours_worked); // 5 current + 5 delayed
+        $this->assertEquals(1000.00, $invoice->invoice_total); // Covered by retainer
 
         // Verify all time entries are now linked
         $unbilledEntries = ClientTimeEntry::where('client_company_id', $this->company->id)
             ->whereNull('client_invoice_line_id')
             ->count();
         $this->assertEquals(0, $unbilledEntries, 'All time entries should be linked to invoice lines');
+        
+        // Verify entries are linked to the retainer line
+        $linkedToRetainer = ClientTimeEntry::where('client_invoice_line_id', $retainerLine->client_invoice_line_id)->count();
+        $this->assertEquals(3, $linkedToRetainer, 'All 3 entries should be linked to retainer line');
     }
 
     public function test_invoice_includes_delayed_billing_information(): void
@@ -172,16 +176,18 @@ class DelayedBillingTest extends TestCase
             $periodEnd
         );
 
-        // Check that delayed billing is included in the line items
+        // With merged logic: 4 hours delayed work is absorbed by the 10h retainer.
+        // No separate delayed billing line item.
         $delayedBillingLine = $invoice->lineItems()
             ->where('description', 'LIKE', '%Prior Period%')
             ->first();
 
-        $this->assertNotNull($delayedBillingLine, 'Invoice should include a delayed billing line item');
+        $this->assertNull($delayedBillingLine, 'Invoice should absorb delayed billing into retainer if space allows');
 
-        // Check invoice total includes delayed billing
-        // Retainer: $1000 + Delayed billing: 4 * $100 = $400
-        $this->assertEquals(1400.00, $invoice->invoice_total);
+        // Check invoice total is just the retainer
+        // Retainer: $1000 (covers the 4 hours)
+        $this->assertEquals(1000.00, $invoice->invoice_total);
+        $this->assertEquals(4, $invoice->hours_worked);
     }
 
     public function test_non_billable_entries_are_not_included_in_delayed_billing(): void

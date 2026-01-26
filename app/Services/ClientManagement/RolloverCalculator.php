@@ -101,7 +101,8 @@ class RolloverCalculator
         float $totalAvailable,
         float $hoursWorked,
         float $retainerHours,
-        float $rolloverHours
+        float $rolloverHours,
+        bool $billExcessImmediately = false
     ): array {
         $hoursUsedFromRetainer = 0.0;
         $hoursUsedFromRollover = 0.0;
@@ -123,8 +124,14 @@ class RolloverCalculator
             // Case B: Exceeded all available hours
             $hoursUsedFromRetainer = $retainerHours;
             $hoursUsedFromRollover = $rolloverHours;
-            $excessHours = 0.0; // Excess creates negative balance for next month, not billed immediately
-            $negativeBalance = $hoursWorked - $totalAvailable;
+            
+            if ($billExcessImmediately) {
+                $excessHours = $hoursWorked - $totalAvailable;
+                $negativeBalance = 0.0;
+            } else {
+                $excessHours = 0.0; 
+                $negativeBalance = $hoursWorked - $totalAvailable;
+            }
         }
 
         return [
