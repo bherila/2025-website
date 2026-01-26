@@ -388,7 +388,7 @@ export default function ClientPortalAgreementPage({ slug, companyName, agreement
               {invoices.map((invoice) => (
                 <a
                   key={invoice.client_invoice_id}
-                  href={`/client/portal/${slug}/invoices/${invoice.client_invoice_id}`}
+                  href={`/client/portal/${slug}/invoice/${invoice.client_invoice_id}`}
                   className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
                 >
                   <div>

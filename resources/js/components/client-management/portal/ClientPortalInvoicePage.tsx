@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { ClientInvoicePayment, Invoice, InvoiceLine } from "@/types/client-management";
 import { format } from 'date-fns'
 import { Pencil, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 
 import { fetchWrapper } from "@/fetchWrapper";
 
@@ -273,9 +273,8 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
                             </TableHeader>
                             <TableBody>
                                 {invoice.line_items.map(item => (
-                                    <>
+                                    <React.Fragment key={item.client_invoice_line_id}>
                                         <TableRow 
-                                            key={item.client_invoice_line_id}
                                             className={`group ${isAdmin && isEditable ? 'cursor-pointer' : ''}`}
                                             onClick={() => isAdmin && isEditable && !isRefreshing && (setSelectedLineItem(item), setLineItemModalOpen(true))}
                                         >
@@ -311,7 +310,7 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
                                                         <ul className="list-disc list-inside space-y-0.5">
                                                             {item.time_entries.map((entry, idx) => (
                                                                 <li key={idx}>
-                                                                    {entry.description} ({(entry.minutes_worked / 60).toFixed(2)}h)
+                                                                    {entry.name} ({(entry.minutes_worked / 60).toFixed(2)}h)
                                                                 </li>
                                                             ))}
                                                         </ul>
@@ -319,7 +318,7 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
                                                 </TableCell>
                                             </TableRow>
                                         )}
-                                    </>
+                                    </React.Fragment>
                                 ))}
                             </TableBody>
                         </Table>
