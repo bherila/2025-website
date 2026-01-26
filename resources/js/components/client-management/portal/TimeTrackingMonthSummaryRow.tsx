@@ -1,5 +1,6 @@
 import React from 'react'
 import SummaryTile from '@/components/ui/summary-tile'
+import { formatHours } from '@/lib/formatHours'
 
 interface TimeTrackingMonthSummaryRowProps {
   openingAvailable?: number | undefined
@@ -9,12 +10,6 @@ interface TimeTrackingMonthSummaryRowProps {
   excessHours?: number | undefined
   negativeBalance?: number | undefined
   remainingPool?: number | undefined
-}
-
-function formatHours(hours: number): string {
-  const h = Math.floor(hours)
-  const m = Math.round((hours - h) * 60)
-  return `${h}:${m.toString().padStart(2, '0')}`
 }
 
 export default function TimeTrackingMonthSummaryRow({

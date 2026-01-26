@@ -10,6 +10,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import React, { useEffect, useState } from "react";
 
 import { fetchWrapper } from "@/fetchWrapper";
+import { formatHours } from "@/lib/formatHours";
 
 import AddPaymentModal from "./AddPaymentModal";
 import ClientPortalNav from "./ClientPortalNav";
@@ -279,7 +280,12 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
                                             onClick={() => isAdmin && isEditable && !isRefreshing && (setSelectedLineItem(item), setLineItemModalOpen(true))}
                                         >
                                             <TableCell>{item.description}</TableCell>
-                                            <TableCell className="text-right">{parseFloat(item.quantity).toFixed(2)}</TableCell>
+                                            <TableCell className="text-right">
+                                                {item.line_type === 'additional_hours' || (item.line_type === 'retainer' && item.hours)
+                                                    ? formatHours(parseFloat(item.quantity))
+                                                    : parseFloat(item.quantity).toFixed(2)
+                                                }
+                                            </TableCell>
                                             <TableCell className="text-right">${parseFloat(item.unit_price).toFixed(2)}</TableCell>
                                             <TableCell className="text-right">${parseFloat(item.line_total).toFixed(2)}</TableCell>
                                             {isAdmin && (
@@ -310,7 +316,7 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
                                                         <ul className="list-disc list-inside space-y-0.5">
                                                             {item.time_entries.map((entry, idx) => (
                                                                 <li key={idx}>
-                                                                    {entry.name} ({(entry.minutes_worked / 60).toFixed(2)}h)
+                                                                    {entry.name} ({formatHours(entry.minutes_worked / 60)})
                                                                 </li>
                                                             ))}
                                                         </ul>

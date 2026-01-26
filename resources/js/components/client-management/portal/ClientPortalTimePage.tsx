@@ -19,6 +19,7 @@ import type { TimeEntry, TimeEntriesResponse } from '@/types/client-management/t
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import SummaryTile from '@/components/ui/summary-tile'
 import TimeTrackingMonthSummaryRow from './TimeTrackingMonthSummaryRow'
+import { formatHours } from '@/lib/formatHours'
 
 interface ClientPortalTimePageProps {
   slug: string
@@ -29,12 +30,6 @@ function formatMonthYear(yearMonth: string): string {
   const [year, month] = yearMonth.split('-')
   const date = new Date(parseInt(year!), parseInt(month!) - 1)
   return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-}
-
-function formatHours(hours: number): string {
-  const h = Math.floor(hours)
-  const m = Math.round((hours - h) * 60)
-  return `${h}:${m.toString().padStart(2, '0')}`
 }
 
 function abbreviateName(name: string | null | undefined): string {
