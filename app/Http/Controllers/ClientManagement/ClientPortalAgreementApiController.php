@@ -117,6 +117,7 @@ class ClientPortalAgreementApiController extends Controller
         $data = $invoice->toArray();
         $data['payments_total'] = $invoice->payments_total;
         $data['line_items'] = $invoice->lineItems->map(function ($line) {
+            $timeEntries = $line->timeEntries()->select('description', 'minutes_worked')->get();
             return [
                 'client_invoice_line_id' => $line->client_invoice_line_id,
                 'description' => $line->description,
@@ -125,6 +126,7 @@ class ClientPortalAgreementApiController extends Controller
                 'line_total' => $line->line_total,
                 'line_type' => $line->line_type,
                 'hours' => $line->hours,
+                'time_entries' => $timeEntries,
             ];
         });
 

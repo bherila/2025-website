@@ -343,6 +343,36 @@ Location: `resources/js/components/client-management/portal/`
 - Time input accepts "h:mm" or decimal hours (e.g., "1:30" or "1.5")
 - Uses shadcn/ui Dialog, Input, Textarea, Select, Checkbox components
 
+**ClientPortalAgreementPage.tsx**
+- Service agreement details and signing interface
+- **Agreement Summary section** with help tooltips:
+  - Effective Date - tooltip explains when billing begins
+  - Monthly Retainer - tooltip explains the fixed monthly fee
+  - Hours Included - tooltip explains hours covered by retainer
+  - Hourly Rate (Additional) - tooltip explains rate for overage hours
+  - Rollover Period - tooltip explains rollover window (hidden if 0 or null)
+- Help icons (?) use HelpCircle from lucide-react with Tooltip component
+- **Signed badge** displayed in green (`bg-green-600`) when agreement is signed
+- **Invoices section** below Agreement Files showing all invoices for this agreement
+  - Lists invoice number, period dates, total amount, and status badge
+  - Status badges use green color for paid invoices
+  - Clickable links to individual invoice pages
+- File upload and management for agreement documents
+- Signing interface with name and title fields
+- Uses shadcn/ui Card, Badge, Tooltip, Skeleton components
+
+**ClientPortalInvoicePage.tsx**
+- Invoice detail page with line items and payments
+- **Show Detail toggle switch** in top-right corner above line items table
+  - When enabled, displays time entry descriptions as indented bullet list below each line item
+  - Shows description and hours for each time entry (e.g., "Meeting with client (2.50h)")
+  - Uses muted background color for detail rows
+- Invoice actions (Issue, Void, Add Payment, etc.) for admins
+- Line item editing capabilities for draft invoices
+- Payment history with edit/delete actions
+- Hourly summary section showing hour balances
+- Uses shadcn/ui Table, Badge, Button, Switch, Label components
+
 ### Styling
 - Uses shadcn/ui components with Tailwind CSS
 - Follows existing finance module patterns
@@ -533,8 +563,10 @@ The unbilled portion will be picked up as delayed billing in the next invoice ge
 Generated invoices contain the following line item types:
 
 1. **Monthly Retainer**: Fixed monthly fee covering the contracted hours
-2. **Additional Hours**: Any hours beyond retainer + rollover, prefixed with "Additional:" and billed at the hourly rate
+2. **Additional time**: Any hours beyond retainer + rollover, billed at the hourly rate (e.g., "Additional time @ $150/hr"). When the "Show Detail" switch is enabled on the invoice page, a bullet list of the time entry descriptions appears indented below this line item.
 3. **Rollover Credit**: Informational $0 line showing rollover hours applied
+
+The invoice page includes a "Show Detail" toggle switch in the top-right corner above the line items table. When enabled, it displays the underlying time entry descriptions for each line item as an indented bullet list, showing both the description and hours for each entry.
 
 ### Database Schema
 

@@ -104,8 +104,11 @@ See [docs/TESTING.md](docs/TESTING.md) for comprehensive testing documentation.
 - **File Uploads**: Handle CSV imports with validation and parsing logic
 - **Time Entry Splitting**: When generating invoices, if a time entry exceeds the remaining available retainer/rollover hours, the entry MUST be split into two: one row for the billed portion (linked to the invoice) and a replicated row for the unbilled portion (unlinked, to be carried over).
 - **Delayed Billing vs Negative Balance**: Two mechanisms for tracking work beyond available hours - delayed billing (actual unbilled time entry records from previous periods) and negative balance (numeric field). These are MUTUALLY EXCLUSIVE to avoid double-counting. If delayed billing entries exist, do NOT also use the negative balance for that period. Delayed billing is processed FIRST and must be covered or billed immediately; it will NOT be carried forward again.
-- **Invoice Line Items**: Additional hours (beyond retainer + rollover) are prefixed with "Additional:" in the line item description (e.g., "Additional: Hours @ $150/hr").
+- **Invoice Line Items**: Additional hours (beyond retainer + rollover) are labeled "Additional time" in the line item description (e.g., "Additional time @ $150/hr"). The invoice API includes `time_entries` array for each line item with description and minutes_worked fields.
+- **Invoice Detail Display**: The invoice page includes a "Show Detail" toggle switch (Switch component) in the top-right corner above the table. When enabled, time entry descriptions appear as indented bullet lists below each line item, showing description and hours (e.g., "Meeting with client (2.50h)").
 - **Carry-Forward UI Indicator**: On the Time Tracking page, unbilled billable time entries from past months display a "CARRY-FORWARD" badge (destructive variant) with a tooltip explaining they will be invoiced in the next billing period.
+- **Agreement Page Help Icons**: Agreement Summary items display help icons (HelpCircle from lucide-react) with Tooltip components explaining each term. Rollover Period is hidden completely if value is 0 or null. Signed badge uses green color (`bg-green-600`).
+- **Agreement Invoices Section**: Below Agreement Files, display a section listing all invoices related to the agreement with invoice number, period dates, total amount, and status badge (green for paid).
 
 ## File Structure Highlights
 - `app/Models/`: Eloquent models with relationships (organized in subdirectories for complex domains)

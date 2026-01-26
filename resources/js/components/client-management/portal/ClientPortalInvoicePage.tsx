@@ -1,6 +1,8 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { ClientInvoicePayment, Invoice, InvoiceLine } from "@/types/client-management";
 import { format } from 'date-fns'
@@ -38,6 +40,7 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
     const [isPaymentModalOpen, setPaymentModalOpen] = useState(false)
     const [selectedLineItem, setSelectedLineItem] = useState<InvoiceLine | null>(null)
     const [selectedPayment, setSelectedPayment] = useState<ClientInvoicePayment | null>(null)
+    const [showDetail, setShowDetail] = useState(false)
 
     const fetchInvoice = async (isRefresh = false) => {
         if (isRefresh) {
@@ -242,6 +245,18 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
 
                 <div className="space-y-8">
                     <section>
+                        <div className="flex justify-end items-center mb-4">
+                            <div className="flex items-center space-x-2">
+                                <Switch
+                                    id="show-detail"
+                                    checked={showDetail}
+                                    onCheckedChange={setShowDetail}
+                                />
+                                <Label htmlFor="show-detail" className="text-sm cursor-pointer">
+                                    Show Detail
+                                </Label>
+                            </div>
+                        </div>
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -258,35 +273,53 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
                             </TableHeader>
                             <TableBody>
                                 {invoice.line_items.map(item => (
-                                    <TableRow 
-                                        key={item.client_invoice_line_id}
-                                        className={`group ${isAdmin && isEditable ? 'cursor-pointer' : ''}`}
-                                        onClick={() => isAdmin && isEditable && !isRefreshing && (setSelectedLineItem(item), setLineItemModalOpen(true))}
-                                    >
-                                        <TableCell>{item.description}</TableCell>
-                                        <TableCell className="text-right">{parseFloat(item.quantity).toFixed(2)}</TableCell>
-                                        <TableCell className="text-right">${parseFloat(item.unit_price).toFixed(2)}</TableCell>
-                                        <TableCell className="text-right">${parseFloat(item.line_total).toFixed(2)}</TableCell>
-                                        {isAdmin && (
-                                            <TableCell className="py-1 align-top text-right">
-                                                {isEditable && (
-                                                    <Button 
-                                                        variant="ghost" 
-                                                        size="icon" 
-                                                        className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                        onClick={(e) => { 
-                                                            e.stopPropagation();
-                                                            setSelectedLineItem(item); 
-                                                            setLineItemModalOpen(true); 
-                                                        }} 
-                                                        disabled={isRefreshing}
-                                                    >
-                                                        <Pencil className="h-4 w-4 text-muted-foreground" />
-                                                    </Button>
-                                                )}
-                                            </TableCell>
+                                    <>
+                                        <TableRow 
+                                            key={item.client_invoice_line_id}
+                                            className={`group ${isAdmin && isEditable ? 'cursor-pointer' : ''}`}
+                                            onClick={() => isAdmin && isEditable && !isRefreshing && (setSelectedLineItem(item), setLineItemModalOpen(true))}
+                                        >
+                                            <TableCell>{item.description}</TableCell>
+                                            <TableCell className="text-right">{parseFloat(item.quantity).toFixed(2)}</TableCell>
+                                            <TableCell className="text-right">${parseFloat(item.unit_price).toFixed(2)}</TableCell>
+                                            <TableCell className="text-right">${parseFloat(item.line_total).toFixed(2)}</TableCell>
+                                            {isAdmin && (
+                                                <TableCell className="py-1 align-top text-right">
+                                                    {isEditable && (
+                                                        <Button 
+                                                            variant="ghost" 
+                                                            size="icon" 
+                                                            className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                            onClick={(e) => { 
+                                                                e.stopPropagation();
+                                                                setSelectedLineItem(item); 
+                                                                setLineItemModalOpen(true); 
+                                                            }} 
+                                                            disabled={isRefreshing}
+                                                        >
+                                                            <Pencil className="h-4 w-4 text-muted-foreground" />
+                                                        </Button>
+                                                    )}
+                                                </TableCell>
+                                            )}
+                                        </TableRow>
+                                        {showDetail && item.time_entries && item.time_entries.length > 0 && (
+                                            <TableRow key={`${item.client_invoice_line_id}-details`}>
+                                                <TableCell colSpan={isAdmin ? 5 : 4} className="bg-muted/30 py-2">
+                                                    <div className="pl-6 text-sm text-muted-foreground">
+                                                        <div className="font-medium mb-1">Time Entries:</div>
+                                                        <ul className="list-disc list-inside space-y-0.5">
+                                                            {item.time_entries.map((entry, idx) => (
+                                                                <li key={idx}>
+                                                                    {entry.description} ({(entry.minutes_worked / 60).toFixed(2)}h)
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
                                         )}
-                                    </TableRow>
+                                    </>
                                 ))}
                             </TableBody>
                         </Table>

@@ -6,7 +6,8 @@ import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { AlertCircle, ArrowLeft, FileText, Check } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { AlertCircle, FileText, Check, HelpCircle } from 'lucide-react'
 import ClientPortalNav from './ClientPortalNav'
 import { FileList, FileUploadButton, FileHistoryModal, DeleteFileModal, useFileManagement } from '@/components/shared/FileManager'
 import type { ClientAgreement } from '@/types/client-management/client-agreement'
@@ -27,6 +28,8 @@ export default function ClientPortalAgreementPage({ slug, companyName, agreement
   const [showSignForm, setShowSignForm] = useState(false)
   const [signName, setSignName] = useState('')
   const [signTitle, setSignTitle] = useState('')
+  const [invoices, setInvoices] = useState<any[]>([])
+  const [loadingInvoices, setLoadingInvoices] = useState(true)
 
   // File management
   const fileManager = useFileManagement({
@@ -39,6 +42,7 @@ export default function ClientPortalAgreementPage({ slug, companyName, agreement
   useEffect(() => {
     fetchAgreement()
     fileManager.fetchFiles()
+    fetchInvoices()
   }, [agreementId])
 
   useEffect(() => {
@@ -61,6 +65,22 @@ export default function ClientPortalAgreementPage({ slug, companyName, agreement
       setError('Failed to load agreement')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchInvoices = async () => {
+    try {
+      const response = await fetch(`/api/client/portal/${slug}/invoices`)
+      if (response.ok) {
+        const data = await response.json()
+        // Filter invoices for this agreement
+        const agreementInvoices = data.filter((inv: any) => inv.client_agreement_id === agreementId)
+        setInvoices(agreementInvoices)
+      }
+    } catch (error) {
+      console.error('Error fetching invoices:', error)
+    } finally {
+      setLoadingInvoices(false)
     }
   }
 
@@ -141,7 +161,7 @@ export default function ClientPortalAgreementPage({ slug, companyName, agreement
             <h1 className="text-3xl font-bold">Service Agreement</h1>
           </div>
           <div className="ml-auto flex gap-2">
-            {isSigned && <Badge variant="default"><Check className="mr-1 h-3 w-3" /> Signed</Badge>}
+            {isSigned && <Badge className="bg-green-600 hover:bg-green-700"><Check className="mr-1 h-3 w-3" /> Signed</Badge>}
             {isTerminated && <Badge variant="destructive">Terminated</Badge>}
             {!isSigned && !isTerminated && <Badge variant="secondary">Awaiting Signature</Badge>}
           </div>
@@ -166,39 +186,93 @@ export default function ClientPortalAgreementPage({ slug, companyName, agreement
           <CardTitle>Agreement Summary</CardTitle>
         </CardHeader>
         <CardContent>
-          <dl className="grid grid-cols-2 gap-4">
-            <div>
-              <dt className="text-sm text-muted-foreground">Effective Date</dt>
-              <dd className="font-medium">{new Date(agreement.active_date).toLocaleDateString()}</dd>
-            </div>
-            <div>
-              <dt className="text-sm text-muted-foreground">Monthly Retainer</dt>
-              <dd className="font-medium">${parseFloat(agreement.monthly_retainer_fee).toLocaleString()}</dd>
-            </div>
-            <div>
-              <dt className="text-sm text-muted-foreground">Hours Included</dt>
-              <dd className="font-medium">{agreement.monthly_retainer_hours} hours/month</dd>
-            </div>
-            <div>
-              <dt className="text-sm text-muted-foreground">Hourly Rate (Additional)</dt>
-              <dd className="font-medium">${parseFloat(agreement.hourly_rate).toLocaleString()}/hour</dd>
-            </div>
-            <div>
-              <dt className="text-sm text-muted-foreground">Rollover Period</dt>
-              <dd className="font-medium">{agreement.rollover_months} month(s)</dd>
-            </div>
-            {agreement.agreement_link && (
+          <TooltipProvider>
+            <dl className="grid grid-cols-2 gap-4">
               <div>
-                <dt className="text-sm text-muted-foreground">Full Agreement</dt>
-                <dd>
-                  <a href={agreement.agreement_link} target="_blank" rel="noopener noreferrer" 
-                     className="text-blue-600 hover:underline">
-                    View Document →
-                  </a>
-                </dd>
+                <dt className="text-sm text-muted-foreground flex items-center gap-1">
+                  Effective Date
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-3.5 w-3.5 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="max-w-xs">The date when this service agreement becomes active and billing begins.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </dt>
+                <dd className="font-medium">{new Date(agreement.active_date).toLocaleDateString()}</dd>
               </div>
-            )}
-          </dl>
+              <div>
+                <dt className="text-sm text-muted-foreground flex items-center gap-1">
+                  Monthly Retainer
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-3.5 w-3.5 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="max-w-xs">The fixed monthly fee that covers the contracted hours of service each month.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </dt>
+                <dd className="font-medium">${parseFloat(agreement.monthly_retainer_fee).toLocaleString()}</dd>
+              </div>
+              <div>
+                <dt className="text-sm text-muted-foreground flex items-center gap-1">
+                  Hours Included
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-3.5 w-3.5 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="max-w-xs">The number of service hours included with your monthly retainer fee.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </dt>
+                <dd className="font-medium">{agreement.monthly_retainer_hours} hours/month</dd>
+              </div>
+              <div>
+                <dt className="text-sm text-muted-foreground flex items-center gap-1">
+                  Hourly Rate (Additional)
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-3.5 w-3.5 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="max-w-xs">The rate charged for any hours worked beyond your monthly retainer hours and available rollover hours.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </dt>
+                <dd className="font-medium">${parseFloat(agreement.hourly_rate).toLocaleString()}/hour</dd>
+              </div>
+              {agreement.rollover_months > 0 && (
+                <div>
+                  <dt className="text-sm text-muted-foreground flex items-center gap-1">
+                    Rollover Period
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="h-3.5 w-3.5 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="max-w-xs">The number of months that unused retainer hours can be carried forward. After this period, unused hours expire.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </dt>
+                  <dd className="font-medium">{agreement.rollover_months} month(s)</dd>
+                </div>
+              )}
+              {agreement.agreement_link && (
+                <div>
+                  <dt className="text-sm text-muted-foreground">Full Agreement</dt>
+                  <dd>
+                    <a href={agreement.agreement_link} target="_blank" rel="noopener noreferrer" 
+                       className="text-blue-600 hover:underline">
+                      View Document →
+                    </a>
+                  </dd>
+                </div>
+              )}
+            </dl>
+          </TooltipProvider>
         </CardContent>
       </Card>
 
@@ -294,6 +368,53 @@ export default function ClientPortalAgreementPage({ slug, companyName, agreement
         title="Agreement Files"
         actions={isAdmin && <FileUploadButton onUpload={fileManager.uploadFile} />}
       />
+
+      {/* Invoices Section */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Invoices</CardTitle>
+          <CardDescription>Invoices generated under this service agreement</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loadingInvoices ? (
+            <div className="space-y-2">
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+            </div>
+          ) : invoices.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No invoices have been issued yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {invoices.map((invoice) => (
+                <a
+                  key={invoice.client_invoice_id}
+                  href={`/client/portal/${slug}/invoices/${invoice.client_invoice_id}`}
+                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                >
+                  <div>
+                    <div className="font-medium">
+                      {invoice.invoice_number || `Invoice #${invoice.client_invoice_id}`}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {invoice.period_start && invoice.period_end && (
+                        <>{new Date(invoice.period_start).toLocaleDateString()} - {new Date(invoice.period_end).toLocaleDateString()}</>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="text-right">
+                      <div className="font-medium">${parseFloat(invoice.invoice_total).toFixed(2)}</div>
+                      <Badge variant={invoice.status === 'paid' ? 'default' : 'outline'} className={invoice.status === 'paid' ? 'bg-green-600' : ''}>
+                        {invoice.status.toUpperCase()}
+                      </Badge>
+                    </div>
+                  </div>
+                </a>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <FileHistoryModal
         file={fileManager.historyFile}

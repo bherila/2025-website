@@ -10,6 +10,7 @@ export interface InvoiceLine {
   line_total: string;
   line_type: string;
   hours: string | null;
+  time_entries?: { description: string; minutes_worked: number }[];
 }
 
 export interface Invoice {

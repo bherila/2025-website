@@ -319,7 +319,7 @@ class ClientInvoicingService
                 $additionalHoursLine = ClientInvoiceLine::create([
                     'client_invoice_id' => $invoice->client_invoice_id,
                     'client_agreement_id' => $agreement->id,
-                    'description' => "Additional: Hours @ \${$agreement->hourly_rate}/hr",
+                    'description' => "Additional time @ \${$agreement->hourly_rate}/hr",
                     'quantity' => $calculation['hours_billed_at_rate'],
                     'unit_price' => $agreement->hourly_rate,
                     'line_total' => $calculation['hours_billed_at_rate'] * (float) $agreement->hourly_rate,
