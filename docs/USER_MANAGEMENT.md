@@ -69,9 +69,11 @@ Users authenticate with email and password. Upon successful authentication:
 3. If valid, the `last_login_date` is updated
 
 ### Localhost Development Mode
-When running on localhost, an additional "Dev Login" button appears that allows:
-- Logging in as any user with a blank password
-- This feature is **only available on localhost** for development/testing
+When running on localhost, two developer-friendly features are available:
+1. **Master Password**: You can log in as any user using the password `1234567890`.
+2. **Dev Login Button**: A button appears that allows logging in as any user with a blank password.
+
+This feature is **only available on localhost** for development/testing.
 
 ## Database Schema
 

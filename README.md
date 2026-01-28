@@ -12,6 +12,12 @@
   - **Time Entry Splitting**: Automatically splits time entries that are only partially billed to ensure precise carry-over tracking.
 - **File Management**: S3-integrated file uploads for agreements, tasks, and more.
 
+## Local Development
+
+When running locally (`APP_ENV=local` or `APP_URL` contains `localhost`):
+- **Master Password**: You can log in as ANY user using the password `1234567890`.
+- **Dev Login**: A "Dev Login" button appears on the login page for quick access (allows blank password).
+
 ## Testing
 
 Run tests with:

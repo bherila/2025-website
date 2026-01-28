@@ -76,6 +76,7 @@ tests/
 │   │   ├── ClientInvoiceTest.php
 │   │   └── DelayedBillingTest.php
 │   ├── ExampleTest.php
+│   ├── MasterPasswordLoginTest.php
 │   └── UserRolesFeatureTest.php
 └── Unit/                  # Unit tests (no database)
     ├── ClientPortalMonthlyBalancesTest.php

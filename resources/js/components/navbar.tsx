@@ -67,7 +67,7 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies }: Navb
         <a href='/' className='select-none'>
           <h1 className='text-lg font-semibold tracking-tight'>Ben Herila</h1>
         </a>
-        <ul className='hidden md:flex items-center gap-4 text-sm'>
+        <ul className='hidden md:flex items-center gap-4 text-sm print:hidden'>
           <li><a className='hover:underline underline-offset-4' href='/recipes'>Recipes</a></li>
           <li><a className='hover:underline underline-offset-4' href='/projects'>Projects</a></li>
           <li ref={toolsRef} className='relative'>
@@ -138,7 +138,7 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies }: Navb
       </div>
 
       {/* Right: Theme toggle + external link + auth */}
-      <div className='flex items-center gap-3'>
+      <div className='flex items-center gap-3 print:hidden'>
         {/* Tri-state theme toggle */}
         <div className='inline-flex items-center overflow-hidden rounded-md border border-gray-200 dark:border-[#3E3E3A]'>
           <button

@@ -9,7 +9,15 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-import { Home, FolderOpen, Clock, FileText, ChevronDown, Receipt } from 'lucide-react'
+import { Home, FolderOpen, Clock, FileText, ChevronDown, Receipt, ChevronRight } from 'lucide-react'
+import {
+    Breadcrumb,
+    BreadcrumbItem,
+    BreadcrumbLink,
+    BreadcrumbList,
+    BreadcrumbPage,
+    BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 
 interface Project {
   id: number
@@ -22,6 +30,8 @@ interface ClientPortalNavProps {
   companyName: string
   currentPage: 'home' | 'project' | 'time' | 'invoices' | 'invoice' | 'agreement' | 'expenses'
   currentProjectSlug?: string
+  projectName?: string
+  invoiceNumber?: string
   projects?: Project[]
 }
 
@@ -30,6 +40,8 @@ export default function ClientPortalNav({
   companyName, 
   currentPage, 
   currentProjectSlug,
+  projectName,
+  invoiceNumber,
   projects: initialProjects 
 }: ClientPortalNavProps) {
   const [projects, setProjects] = useState<Project[]>(initialProjects || [])
@@ -67,7 +79,7 @@ export default function ClientPortalNav({
   ]
 
   return (
-    <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 mb-6">
+    <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 mb-6 print:hidden">
       <div className="container mx-auto px-8 max-w-6xl">
         <div className="flex h-14 items-center justify-between">
           {/* Left side: Company name, Home, Projects dropdown */}
@@ -166,6 +178,77 @@ export default function ClientPortalNav({
           </div>
         </div>
       </div>
+      
+      {/* Breadcrumbs Row */}
+      {currentPage !== 'home' && (
+        <div className="container mx-auto px-8 max-w-6xl pb-4">
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbLink href={`/client/portal/${slug}`}>Home</BreadcrumbLink>
+              </BreadcrumbItem>
+              
+              {currentPage === 'time' && (
+                <>
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem>
+                    <BreadcrumbPage>Time Records</BreadcrumbPage>
+                  </BreadcrumbItem>
+                </>
+              )}
+
+              {currentPage === 'expenses' && (
+                <>
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem>
+                    <BreadcrumbPage>Expenses</BreadcrumbPage>
+                  </BreadcrumbItem>
+                </>
+              )}
+
+              {currentPage === 'invoices' && (
+                <>
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem>
+                    <BreadcrumbPage>Invoices</BreadcrumbPage>
+                  </BreadcrumbItem>
+                </>
+              )}
+
+              {currentPage === 'invoice' && (
+                <>
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem>
+                    <BreadcrumbLink href={`/client/portal/${slug}/invoices`}>Invoices</BreadcrumbLink>
+                  </BreadcrumbItem>
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem>
+                    <BreadcrumbPage>{invoiceNumber ? `Invoice ${invoiceNumber}` : 'Invoice'}</BreadcrumbPage>
+                  </BreadcrumbItem>
+                </>
+              )}
+
+              {currentPage === 'project' && (
+                <>
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem>
+                    <BreadcrumbPage>{projectName || 'Project'}</BreadcrumbPage>
+                  </BreadcrumbItem>
+                </>
+              )}
+
+              {currentPage === 'agreement' && (
+                <>
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem>
+                    <BreadcrumbPage>Agreement</BreadcrumbPage>
+                  </BreadcrumbItem>
+                </>
+              )}
+            </BreadcrumbList>
+          </Breadcrumb>
+        </div>
+      )}
     </nav>
   )
 }

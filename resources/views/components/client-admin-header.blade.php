@@ -1,7 +1,7 @@
 @props(['company' => null])
 
 @if(auth()->check() && (auth()->id() === 1 || auth()->user()->user_role === 'Admin'))
-<div class="container mx-auto px-8 pt-4 max-w-6xl">
+<div class="container mx-auto px-8 pt-4 max-w-6xl print:hidden">
     <div class="bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4 mb-4 flex justify-between items-center">
         <div>
             <a href="/client/mgmt" class="text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1">

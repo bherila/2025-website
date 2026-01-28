@@ -34,7 +34,7 @@ export default function ClientPortalInvoiceActionButtonRow({
     if (!isAdmin) return null;
 
     return (
-        <div className="mb-8 flex justify-between items-center gap-4 flex-wrap">
+        <div className="mb-8 flex justify-between items-center gap-4 flex-wrap print:hidden">
             <ButtonGroup>
                 {invoice.status === 'draft' && (
                     <Button

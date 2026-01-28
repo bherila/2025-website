@@ -17,14 +17,6 @@ import ClientPortalNav from "./ClientPortalNav";
 import LineItemEditModal from "./LineItemEditModal";
 import ClientPortalInvoiceActionButtonRow from "./ClientPortalInvoiceActionButtonRow";
 import TimeTrackingMonthSummaryRow from "./TimeTrackingMonthSummaryRow";
-import {
-    Breadcrumb,
-    BreadcrumbItem,
-    BreadcrumbLink,
-    BreadcrumbList,
-    BreadcrumbPage,
-    BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
 
 interface ClientPortalInvoicePageProps {
     slug: string;
@@ -168,7 +160,12 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
     if (isLoading || !invoice) {
         return (
             <>
-                <ClientPortalNav slug={slug} companyName={companyName} currentPage="invoice" />
+                <ClientPortalNav 
+                    slug={slug} 
+                    companyName={companyName} 
+                    currentPage="invoice" 
+                    invoiceNumber={invoice?.invoice_number}
+                />
                 <div className="container mx-auto px-8 max-w-5xl">
                     <div className="mb-6">
                         <Skeleton className="h-5 w-48" />
@@ -193,27 +190,14 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
 
     return (
         <>
-            <ClientPortalNav slug={slug} companyName={companyName} currentPage="invoice" />
+            <ClientPortalNav 
+                slug={slug} 
+                companyName={companyName} 
+                currentPage="invoice" 
+                invoiceNumber={invoice.invoice_number} 
+            />
             
             <div className="container mx-auto px-8 max-w-5xl">
-                <div className="mb-6">
-                    <Breadcrumb>
-                        <BreadcrumbList>
-                            <BreadcrumbItem>
-                                <BreadcrumbLink href={`/client/portal/${slug}`}>Home</BreadcrumbLink>
-                            </BreadcrumbItem>
-                            <BreadcrumbSeparator />
-                            <BreadcrumbItem>
-                                <BreadcrumbLink href={`/client/portal/${slug}/invoices`}>Invoices</BreadcrumbLink>
-                            </BreadcrumbItem>
-                            <BreadcrumbSeparator />
-                            <BreadcrumbItem>
-                                <BreadcrumbPage>Invoice {invoice.invoice_number}</BreadcrumbPage>
-                            </BreadcrumbItem>
-                        </BreadcrumbList>
-                    </Breadcrumb>
-                </div>
-
                 <ClientPortalInvoiceActionButtonRow
                     invoice={invoice}
                     isAdmin={isAdmin}

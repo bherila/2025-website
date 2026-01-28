@@ -140,7 +140,13 @@ export default function ClientPortalProjectPage({ slug, companyName, projectSlug
   if (loading) {
     return (
       <>
-        <ClientPortalNav slug={slug} companyName={companyName} currentPage="project" currentProjectSlug={projectSlug} />
+        <ClientPortalNav 
+          slug={slug} 
+          companyName={companyName} 
+          currentPage="project" 
+          currentProjectSlug={projectSlug} 
+          projectName={projectName}
+        />
         <div className="container mx-auto px-8 max-w-7xl">
           <div className="mb-6">
             <Skeleton className="h-10 w-64" />
@@ -162,7 +168,13 @@ export default function ClientPortalProjectPage({ slug, companyName, projectSlug
 
   return (
     <>
-      <ClientPortalNav slug={slug} companyName={companyName} currentPage="project" currentProjectSlug={projectSlug} />
+      <ClientPortalNav 
+        slug={slug} 
+        companyName={companyName} 
+        currentPage="project" 
+        currentProjectSlug={projectSlug} 
+        projectName={projectName}
+      />
       <div className="container mx-auto px-8 max-w-7xl">
         <div className="mb-6">
           <div className="flex justify-between items-center">

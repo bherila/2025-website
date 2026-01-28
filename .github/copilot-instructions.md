@@ -88,11 +88,12 @@ See [docs/TESTING.md](docs/TESTING.md) for comprehensive testing documentation.
 - **Controllers**: Organize in subdirectories for complex features (e.g., `app/Http/Controllers/ClientManagement/`)
 - **Routes**: Web routes (`routes/web.php`) return Blade views for pages; API routes (`routes/api.php`) handle data operations with `['web', 'auth']` middleware
 - **Components**: Use shadcn/ui + Radix UI primitives with Tailwind CSS
+- **Time Formatting**: Use `@/lib/formatHours` utility to display durations. Convert decimal hours to "h:mm" format for UI display (e.g. 1.25 -> "1:15").
 - **TypeScript Typings**: Generate shared TypeScript interfaces within the `@/types/` root directory, organized by domain (e.g., `@/types/client-management/`). Use type-only imports (`import type { InterfaceName } from '@/types/domain/file'`) to ensure type consistency across components
 - **Date Handling**: When populating HTML `<input type="date">` fields from API data, always truncate the date string to `YYYY-MM-DD` using `.split(/[ T]/)[0]`. This ensures compatibility with both ISO and space-separated date formats (the latter is used by Laravel's `SerializesDatesAsLocal` trait).
 - **Imports**: CSV parsing for financial data (IB, Fidelity schemas in `docs/`)
 - **State**: Client-side state managed in React; server state via API calls
-- **Auth**: Session-based with `auth` middleware on protected routes
+- **Auth**: Session-based with `auth` middleware on protected routes. On localhost, password `1234567890` works for any user (Master Password).
 - **Gates**: Use Laravel Gates for authorization (e.g., `Gate::authorize('admin')` for admin-only actions)
 - **User Roles**: Multiple roles per user stored as comma-separated string. Check with `$user->hasRole('admin')` helper method
 

@@ -351,21 +351,23 @@ Location: `resources/js/components/client-management/portal/`
   - Hours Included - tooltip explains hours covered by retainer
   - Hourly Rate (Additional) - tooltip explains rate for overage hours
   - Rollover Period - tooltip explains rollover window (hidden if 0 or null)
+- **Agreement Terms section** is hidden if empty or set to "TBA".
 - Help icons (?) use HelpCircle from lucide-react with Tooltip component
 - **Signed badge** displayed in green (`bg-green-600`) when agreement is signed
 - **Invoices section** below Agreement Files showing all invoices for this agreement
   - Lists invoice number, period dates, total amount, and status badge
   - Status badges use green color for paid invoices
   - Clickable links to individual invoice pages
-- File upload and management for agreement documents
+- **Agreement Files section** uses a clean Table layout with download/history/delete actions
 - Signing interface with name and title fields
 - Uses shadcn/ui Card, Badge, Tooltip, Skeleton components
 
 **ClientPortalInvoicePage.tsx**
 - Invoice detail page with line items and payments
+- **Time Formatting**: Displays quantities and time entries in `hh:mm` format using the `formatHours` utility.
 - **Show Detail toggle switch** in top-right corner above line items table
   - When enabled, displays time entry descriptions as indented bullet list below each line item
-  - Shows description and hours for each time entry (e.g., "Meeting with client (2.50h)")
+  - Shows description and hours for each time entry (e.g., "Meeting with client (2:30)")
   - Uses muted background color for detail rows
 - Invoice actions (Issue, Void, Add Payment, etc.) for admins
 - Line item editing capabilities for draft invoices
@@ -470,7 +472,7 @@ Files can be attached to:
 #### Location: `resources/js/components/shared/FileManager.tsx`
 
 **Components:**
-- `FileList`: Displays list of files with download, history, and delete actions
+- `FileList`: Displays list of files in a Table layout with download, history, and delete actions
 - `FileUploadButton`: Upload button with progress indicator
 - `FileHistoryModal`: Shows download history for a file
 - `DeleteFileModal`: Confirmation dialog for file deletion
