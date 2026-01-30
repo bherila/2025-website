@@ -130,7 +130,7 @@ class RolloverCalculatorTest extends TestCase
         $this->assertEquals(7.0, $result['total_available']);
     }
 
-    public function test_opening_balance_negative_offset_capped_at_retainer(): void
+    public function test_opening_balance_negative_offset_carried_forward(): void
     {
         // Negative balance exceeds retainer hours
         $result = $this->calculator->calculateOpeningBalance(
@@ -141,8 +141,9 @@ class RolloverCalculatorTest extends TestCase
         );
 
         $this->assertEquals(10.0, $result['retainer_hours']);
-        $this->assertEquals(10.0, $result['negative_offset']); // Capped at retainer
-        $this->assertEquals(5.0, $result['invoiced_negative_balance']); // Remaining 5 hours invoiced
+        $this->assertEquals(10.0, $result['negative_offset']); // Capped at retainer for pool calculation
+        $this->assertEquals(0.0, $result['invoiced_negative_balance']); // No longer billed immediately
+        $this->assertEquals(5.0, $result['remaining_negative_balance']); // Remaining 5 hours tracked
         $this->assertEquals(0.0, $result['effective_retainer_hours']);
         $this->assertEquals(0.0, $result['total_available']);
     }

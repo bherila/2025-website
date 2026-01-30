@@ -73,11 +73,12 @@ class ClientInvoiceLine extends Model
     }
 
     /**
-     * Get the expenses linked to this invoice line.
+     * Parse the quantity string into total minutes.
+     * Handles both decimal (e.g., "1.5") and h:mm (e.g., "1:30") formats.
      */
-    public function expenses()
+    public function parseQuantityToMinutes(): int
     {
-        return $this->hasMany(ClientExpense::class, 'client_invoice_line_id', 'client_invoice_line_id');
+        return ClientTimeEntry::parseTimeToMinutes($this->quantity);
     }
 
     /**
@@ -85,7 +86,21 @@ class ClientInvoiceLine extends Model
      */
     public function calculateTotal(): void
     {
-        $this->line_total = $this->quantity * $this->unit_price;
-        $this->save();
+        $qtyStr = trim($this->quantity);
+        
+        // If it's a time-based line (h:mm or h suffix), parse it
+        if (strpos($qtyStr, ':') !== false || str_ends_with(strtolower($qtyStr), 'h')) {
+            $minutes = $this->parseQuantityToMinutes();
+            $quantity = $minutes / 60;
+        } else {
+            // Otherwise treat as a raw numeric value (decimal hours or flat quantity)
+            $quantity = (float) $qtyStr;
+        }
+
+        $this->line_total = $quantity * $this->unit_price;
+        
+        if ($this->exists) {
+            $this->save();
+        }
     }
 }

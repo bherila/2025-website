@@ -17,6 +17,31 @@ function getLocalISODate(): string {
   return `${year}-${month}-${day}`
 }
 
+function parseTimeToMinutes(timeString: string): number {
+  const str = timeString.trim().toLowerCase()
+  
+  // h:mm format
+  const colonMatch = str.match(/^(\d+):(\d{1,2})$/)
+  if (colonMatch) {
+    return (parseInt(colonMatch[1]!) * 60) + parseInt(colonMatch[2]!)
+  }
+  
+  // decimal or decimal with h suffix
+  const hMatch = str.match(/^(\d*(?:\.\d+)?)h?$/)
+  if (hMatch && hMatch[1] !== '') {
+    return Math.round(parseFloat(hMatch[1]!) * 60)
+  }
+  
+  return 0
+}
+
+function formatMinutesToTime(minutes: number): string {
+  if (minutes <= 0) return ''
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return `${h}:${m.toString().padStart(2, '0')}`
+}
+
 interface NewTimeEntryModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -170,15 +195,42 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
           
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="time">Enter time (e.g. 1:30 or 1.5) *</Label>
+              <Label htmlFor="time">Enter time (e.g. 1:30, 1.5, or 1.5h) *</Label>
               <Input
                 id="time"
                 value={time}
                 onChange={(e) => setTime(e.target.value)}
-                placeholder="1:30 or 1.5"
+                placeholder="1:30, 1.5, or 1.5h"
                 required
                 autoFocus={!entry}
               />
+              <div className="flex flex-wrap gap-1 mt-1">
+                {[ -15, -5, 5, 15 ].map((inc) => (
+                  <Button
+                    key={inc}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-[10px]"
+                    onClick={() => {
+                      const currentMins = parseTimeToMinutes(time)
+                      const newMins = Math.max(0, currentMins + inc)
+                      setTime(formatMinutesToTime(newMins))
+                    }}
+                  >
+                    {inc > 0 ? `+${inc}` : inc}m
+                  </Button>
+                ))}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-[10px]"
+                  onClick={() => setTime('')}
+                >
+                  Clear
+                </Button>
+              </div>
             </div>
             
             <div className="space-y-2">

@@ -139,7 +139,7 @@ Location: `app/Models/ClientManagement/TimeEntry.php`
 - `creator()`: Belongs to `User` (creator_user_id)
 
 **Methods:**
-- `parseTimeToMinutes(string $timeString)`: Static method that parses "h:mm" or decimal hours to minutes
+- `parseTimeToMinutes(string $timeString)`: Static method that parses "h:mm", decimal hours, or hours with 'h' suffix (e.g., "1.5h") to minutes. Case-insensitive.
 
 #### `App\Models\User` (extended)
 Added relationship:
@@ -339,8 +339,9 @@ Location: `resources/js/components/client-management/portal/`
 - **Smart Defaults**: 
     - Date defaults to the local computer's current date
     - Remembers last used project ID
-- **integrated Actions**: Includes a "Delete Record" button when in edit mode
-- Time input accepts "h:mm" or decimal hours (e.g., "1:30" or "1.5")
+- **Integrated Actions**: Includes a "Delete Record" button when in edit mode
+- **Quick Buttons**: Provides +/- 5 and 15 minute increment buttons for easy time adjustment
+- Time input accepts "h:mm", decimal hours, or hours with 'h' suffix (e.g., "1:30", "1.5", or "1.5h")
 - Uses shadcn/ui Dialog, Input, Textarea, Select, Checkbox components
 
 **ClientPortalAgreementPage.tsx**
@@ -535,39 +536,32 @@ The billing and invoicing system handles automatic invoice generation with prior
 
 #### Prior-Month Billing Model
 When an invoice is generated for month M (e.g., February 2024):
-- **Time entries from month M-1** (e.g., January 2024) are included and dated as the last day of M-1
-- **Retainer fee for month M** is included and dated as the first day of M
-- **Reimbursable expenses** up to the invoice date are included with their original expense dates
+- **Time entries from month M-1** (e.g., January 2024) are included and dated as the last day of M-1. These are covered by the available pool (retainer + rollover - negative balance).
+- **Retainer fee for month M** is included and dated as the first day of M. This retainer adds to the available pool.
+- **Reimbursable expenses** up to the invoice date are included with their original expense dates.
 
-This ensures work is billed after it's completed, while the retainer is always charged in advance.
+This "give and take" model ensures work is billed after completion, while allowing negative balances from high-activity months to be offset by future retainer hours.
 
 #### Rollover Hours
-Unused retainer hours can roll over to future months (configurable via `rollover_months` in agreements):
+Unused retainer hours can roll over to future months (configurable via `rollover_months` in agreements). The calculation uses a chronological balance pool:
 - **rollover_months = 0**: No rollover; unused hours are lost
 - **rollover_months = 1**: Hours can only be used in the month they're earned  
 - **rollover_months = 2+**: Hours roll over for N-1 additional months
-
-The rollover calculation uses FIFO (First In, First Out) - oldest hours are used first.
+- **Negative Balance**: If hours worked exceed available pool, the difference is carried forward as a negative balance rather than billed immediately.
 
 #### Hourly Rate Determination
-When billing work that exceeds available hours:
-- The hourly rate is always taken from the **active agreement for the invoice month (M)**
-- This ensures consistent pricing regardless of when the work was performed
+While most hours are covered by the pool at $0 additional cost, any manual line items or eventual overage billing uses the hourly rate from the **active agreement for the invoice month (M)**.
 
 ### Invoice Line Items
 Generated invoices contain the following line item types (in order):
 
-1. **Prior-Month Retainer** (`prior_month_retainer`): Time entries from M-1 covered by retainer hours. Line total is $0, dated last day of M-1. Shows hours and links to time entries with their original dates. Quantity is formatted as "h:mm".
+1. **Prior-Month Work** (`prior_month_retainer`): Time entries from M-1. In the "give and take" model, these are generally included at $0, dated last day of M-1. Shows total hours and links to time entries with their original dates. Quantity is ALWAYS formatted as "h:mm".
 
-2. **Additional Hours** (`additional_hours`): Time from M-1 exceeding available hours (retainer + rollover), billed at hourly rate. Dated last day of M-1. Quantity is formatted as "h:mm".
+2. **Retainer Fee** (`retainer`): Monthly retainer fee for month M. Description includes the date (e.g., "Monthly Retainer (10 hours) - Feb 1, 2024"). Dated first day of M. Quantity is "1".
 
-3. **Prior-Month Billable** (`prior_month_billable`): Work from M-1 when no retainer existed in that month, billed at M's hourly rate. Dated last day of M-1. Quantity is formatted as "h:mm".
+3. **Balance Update** (`credit`): Informational $0 line showing rollover hours used or negative balance carried forward.
 
-4. **Retainer Fee** (`retainer`): Monthly retainer fee for month M. Description includes the date (e.g., "Monthly Retainer (10 hours) - Feb 1, 2024"). Dated first day of M. Quantity is "1".
-
-5. **Rollover Credit** (`credit`): Informational $0 line showing rollover hours applied (if any). Quantity is formatted as "h:mm".
-
-6. **Expenses** (`expense`): Reimbursable expenses incurred up to the invoice date. Each expense line uses its original expense date. Quantity is "1".
+4. **Expenses** (`expense`): Reimbursable expenses incurred up to the invoice date. Each expense line uses its original expense date. Quantity is "1".
 
 #### Invoice Period
 The invoice `period_start` and `period_end` dates are determined by the line item dates:
@@ -762,24 +756,24 @@ The rollover calculation uses FIFO (First In, First Out) for tracking which hour
 
 ### Delayed Billing
 
-Delayed billing allows billable time entries to be tracked and eventually invoiced, even when they are created during periods without an active agreement.
+Delayed billing allows billable time entries from periods without an active agreement to be tracked and eventually applied to the future retainer pool.
 
 **How It Works:**
 
-1. **Time Entry Creation Without Agreement**: When billable time entries are created for a client company that has no active agreement, those entries are marked as billable but remain uninvoiced.
+1. **Time Entry Creation Without Agreement**: Billable time entries created during a period without an active agreement are treated as having 0 retainer hours.
 
-2. **UI Warning**: The Time Records page displays an amber warning for months where there is no active agreement, showing the number of unbilled hours that are pending.
+2. **UI Warning**: The Time Records page displays an amber warning for months where there is no active agreement, showing the unbilled hours that are being carried forward.
 
-3. **Invoice Generation**: When an invoice is generated for a period with an active agreement, the invoicing system automatically includes all prior unbilled time entries as a "Prior Period Hours (delayed billing)" line item.
+3. **Invoicing**: When an agreement becomes active, these hours are automatically included in the chronological balance calculation as a negative starting balance (offset by future retainer hours).
 
-4. **Billing Rate**: Delayed billing hours are charged at the current agreement's hourly rate.
+4. **Audit Trail**: The invoice includes a $0 line item for prior-month work, and an informational line item showing how much negative balance was carried forward.
 
 **Example Scenario:**
 
 | Month | Agreement Status | Hours Worked | Result |
 |-------|-----------------|--------------|--------|
-| January | None | 5h | 5h marked as unbilled, warning shown |
-| February | Active ($150/hr, 10h retainer) | 8h | Invoice includes: Retainer $1000 + Prior Period Hours 5h × $150 = $750 |
+| January | None | 5h | 5h negative balance carried forward |
+| February | Active (10h retainer) | 8h | Pool: 10h retainer - 5h Jan - 8h Feb = 3h negative balance carried forward to March. |
 
 **API Response:**
 

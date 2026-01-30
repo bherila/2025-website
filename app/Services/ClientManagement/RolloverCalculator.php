@@ -65,11 +65,16 @@ class RolloverCalculator
 
         if ($previousNegativeBalance > 0) {
             $negativeOffset = min($previousNegativeBalance, $retainerHours);
-            $invoicedNegativeBalance = max(0, $previousNegativeBalance - $retainerHours);
+            // In the "give and take" model, we carry forward the remaining negative balance
+            // instead of billing it immediately.
+            $invoicedNegativeBalance = 0.0; 
             $effectiveRetainerHours = $retainerHours - $negativeOffset;
         }
 
         $totalAvailable = $effectiveRetainerHours + $rolloverHours;
+        
+        // The remaining negative balance after applying retainer
+        $remainingNegativeBalance = max(0, $previousNegativeBalance - $retainerHours);
 
         return [
             'retainer_hours' => round($retainerHours, 4),
@@ -77,8 +82,9 @@ class RolloverCalculator
             'expired_hours' => round($expiredHours, 4),
             'total_available' => round($totalAvailable, 4),
             'negative_offset' => round($negativeOffset, 4),
-            'invoiced_negative_balance' => round($invoicedNegativeBalance, 4),
+            'invoiced_negative_balance' => round($invoicedNegativeBalance, 4), // Kept for BC but should be 0
             'effective_retainer_hours' => round($effectiveRetainerHours, 4),
+            'remaining_negative_balance' => round($remainingNegativeBalance, 4),
         ];
     }
 
@@ -89,6 +95,7 @@ class RolloverCalculator
      * @param  float  $hoursWorked  Hours worked during the month
      * @param  float  $retainerHours  This month's retainer hours (for categorizing usage)
      * @param  float  $rolloverHours  Available rollover hours from previous months
+     * @param  float  $remainingNegativeBalance  Negative balance that was too large to be offset by retainer
      * @return array{
      *   hours_used_from_retainer: float,
      *   hours_used_from_rollover: float,
@@ -102,13 +109,14 @@ class RolloverCalculator
         float $hoursWorked,
         float $retainerHours,
         float $rolloverHours,
-        bool $billExcessImmediately = false
+        bool $billExcessImmediately = false,
+        float $remainingNegativeBalance = 0.0
     ): array {
         $hoursUsedFromRetainer = 0.0;
         $hoursUsedFromRollover = 0.0;
         $unusedHours = 0.0;
         $excessHours = 0.0;
-        $negativeBalance = 0.0;
+        $negativeBalance = $remainingNegativeBalance;
 
         if ($hoursWorked <= $retainerHours) {
             // Case C: All work covered by retainer, remainder rolls over
@@ -119,7 +127,6 @@ class RolloverCalculator
             $hoursUsedFromRetainer = $retainerHours;
             $hoursUsedFromRollover = $hoursWorked - $retainerHours;
             $unusedHours = 0.0; // Used all of this month's hours
-            // Note: Remaining rollover hours are tracked separately
         } else {
             // Case B: Exceeded all available hours
             $hoursUsedFromRetainer = $retainerHours;
@@ -127,10 +134,9 @@ class RolloverCalculator
             
             if ($billExcessImmediately) {
                 $excessHours = $hoursWorked - $totalAvailable;
-                $negativeBalance = 0.0;
             } else {
                 $excessHours = 0.0; 
-                $negativeBalance = $hoursWorked - $totalAvailable;
+                $negativeBalance += ($hoursWorked - $totalAvailable);
             }
         }
 
@@ -159,7 +165,8 @@ class RolloverCalculator
         float $hoursWorked,
         array $previousMonthsUnused,
         int $rolloverMonths,
-        float $previousNegativeBalance = 0.0
+        float $previousNegativeBalance = 0.0,
+        bool $billExcessImmediately = false
     ): array {
         $opening = $this->calculateOpeningBalance(
             $retainerHours,
@@ -172,7 +179,9 @@ class RolloverCalculator
             $opening['total_available'],
             $hoursWorked,
             $opening['effective_retainer_hours'],
-            $opening['rollover_hours']
+            $opening['rollover_hours'],
+            $billExcessImmediately,
+            $opening['remaining_negative_balance']
         );
 
         return [
@@ -186,10 +195,11 @@ class RolloverCalculator
      * Calculate hour balances for multiple months in sequence.
      *
      * @param  array  $months  Array of months with retainer_hours, hours_worked, year_month keys
-     * @param  int  $rolloverMonths  Number of months hours can roll over
+     * @param  int  $rollover_months  Number of months hours can roll over
+     * @param  bool  $billExcessImmediately  Whether to bill excess hours immediately or carry them forward as negative balance
      * @return array Array of month summaries
      */
-    public function calculateMultipleMonths(array $months, int $rolloverMonths): array
+    public function calculateMultipleMonths(array $months, int $rolloverMonths, bool $billExcessImmediately = false): array
     {
         $results = [];
         $unusedByMonth = []; // Track unused hours by month for rollover calculation
@@ -220,7 +230,8 @@ class RolloverCalculator
                 $hoursWorked,
                 $previousMonthsUnused,
                 $rolloverMonths,
-                $previousNegativeBalance
+                $previousNegativeBalance,
+                $billExcessImmediately
             );
 
             // Deduct used rollover hours from the history stack (FIFO)

@@ -369,15 +369,15 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
                                               <Badge variant={entry.is_billable ? 'default' : 'secondary'} className="text-[9px] px-1 py-0 h-3.5 font-bold shrink-0">
                                                 {entry.is_billable ? 'BILLABLE' : 'NON-BILLABLE'}
                                               </Badge>
-                                              {entry.is_billable && !entry.is_invoiced && entry.date_worked < new Date().toISOString().slice(0, 8) + '01' && (
+                                              {entry.is_billable && !entry.is_invoiced && (
                                                 <Tooltip>
                                                   <TooltipTrigger>
-                                                    <Badge variant="destructive" className="text-[9px] px-1 py-0 h-3.5 font-bold shrink-0">
-                                                      CARRY-FORWARD
+                                                    <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5 font-bold shrink-0">
+                                                      APPLIED TO POOL
                                                     </Badge>
                                                   </TooltipTrigger>
                                                   <TooltipContent>
-                                                    <p>This item will be carried-over and invoiced in the next billing period</p>
+                                                    <p>This item will be applied against your retainer/rollover pool in a future billing period</p>
                                                   </TooltipContent>
                                                 </Tooltip>
                                               )}

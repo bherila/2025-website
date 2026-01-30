@@ -368,12 +368,10 @@ class ClientInvoiceApiController extends Controller
 
         $request->validate([
             'description' => 'required|string|max:255',
-            'quantity' => 'required|numeric|min:0',
+            'quantity' => 'required|string',
             'unit_price' => 'required|numeric',
             'line_type' => 'required|in:expense,adjustment,credit',
         ]);
-
-        $lineTotal = $request->quantity * $request->unit_price;
 
         $maxSortOrder = $invoice->lineItems()->max('sort_order') ?? 0;
 
@@ -381,11 +379,12 @@ class ClientInvoiceApiController extends Controller
             'description' => $request->description,
             'quantity' => $request->quantity,
             'unit_price' => $request->unit_price,
-            'line_total' => $lineTotal,
+            'line_total' => 0, // Will be calculated below
             'line_type' => $request->line_type,
             'sort_order' => $maxSortOrder + 1,
         ]);
 
+        $line->calculateTotal();
         $invoice->recalculateTotal();
 
         return response()->json([
@@ -447,7 +446,7 @@ class ClientInvoiceApiController extends Controller
 
         $request->validate([
             'description' => 'required|string|max:255',
-            'quantity' => 'required|numeric|min:0',
+            'quantity' => 'required|string',
             'unit_price' => 'required|numeric',
         ]);
 
@@ -461,9 +460,9 @@ class ClientInvoiceApiController extends Controller
             'description' => $request->description,
             'quantity' => $request->quantity,
             'unit_price' => $request->unit_price,
-            'line_total' => $request->quantity * $request->unit_price,
         ]);
 
+        $line->calculateTotal();
         $invoice->recalculateTotal();
 
         return response()->json([

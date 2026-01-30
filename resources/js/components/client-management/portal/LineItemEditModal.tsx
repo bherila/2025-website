@@ -71,7 +71,7 @@ export default function LineItemEditModal({ isOpen, onClose, lineItem, onSave, o
                         <Label htmlFor="quantity" className="text-right">
                             Quantity
                         </Label>
-                        <Input id="quantity" type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} className="col-span-3" />
+                        <Input id="quantity" type="text" placeholder="1 or 1:30" value={quantity} onChange={(e) => setQuantity(e.target.value)} className="col-span-3" />
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="unit-price" className="text-right">

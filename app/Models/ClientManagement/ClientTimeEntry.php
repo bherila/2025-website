@@ -41,7 +41,7 @@ class ClientTimeEntry extends Model
      */
     public static function parseTimeToMinutes(string $timeString): int
     {
-        $timeString = trim($timeString);
+        $timeString = trim(strtolower($timeString));
 
         // Check for h:mm format
         if (preg_match('/^(\d+):(\d{1,2})$/', $timeString, $matches)) {
@@ -51,9 +51,9 @@ class ClientTimeEntry extends Model
             return ($hours * 60) + $minutes;
         }
 
-        // Check for decimal hours format (e.g., 1.5)
-        if (is_numeric($timeString)) {
-            $hours = (float) $timeString;
+        // Check for decimal hours format with optional 'h' suffix (e.g., 1.5 or 1.5h)
+        if (preg_match('/^(\d*(?:\.\d+)?)h?$/', $timeString, $matches) && $matches[1] !== '') {
+            $hours = (float) $matches[1];
 
             return (int) round($hours * 60);
         }
