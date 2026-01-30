@@ -228,6 +228,7 @@ CREATE TABLE `client_invoice_lines` (
   `line_total` REAL NOT NULL DEFAULT 0.00,
   `line_type` TEXT NOT NULL DEFAULT 'retainer',
   `hours` REAL,
+  `line_date` TEXT,
   `sort_order` INTEGER NOT NULL DEFAULT 0,
   `created_at` TEXT,
   `updated_at` TEXT,

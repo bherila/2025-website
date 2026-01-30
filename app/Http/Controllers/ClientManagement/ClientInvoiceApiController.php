@@ -114,7 +114,15 @@ class ClientInvoiceApiController extends Controller
                     'line_total' => $line->line_total,
                     'line_type' => $line->line_type,
                     'hours' => $line->hours,
+                    'line_date' => $line->line_date?->toDateString(),
                     'time_entries_count' => $line->timeEntries->count(),
+                    'time_entries' => $line->timeEntries->map(function ($entry) {
+                        return [
+                            'name' => $entry->name,
+                            'minutes_worked' => $entry->minutes_worked,
+                            'date_worked' => $entry->date_worked?->toDateString(),
+                        ];
+                    }),
                 ];
             }),
         ]);

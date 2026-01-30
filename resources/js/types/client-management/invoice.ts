@@ -2,6 +2,12 @@ import type { ClientInvoicePayment } from './invoice-payment';
 
 export type { ClientInvoicePayment };
 
+export interface InvoiceLineTimeEntry {
+  name: string;
+  minutes_worked: number;
+  date_worked: string | null;
+}
+
 export interface InvoiceLine {
   client_invoice_line_id: number;
   description: string;
@@ -10,7 +16,8 @@ export interface InvoiceLine {
   line_total: string;
   line_type: string;
   hours: string | null;
-  time_entries?: { name: string; minutes_worked: number }[];
+  line_date: string | null;
+  time_entries?: InvoiceLineTimeEntry[];
 }
 
 export interface Invoice {

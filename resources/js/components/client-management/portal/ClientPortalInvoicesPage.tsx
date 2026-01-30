@@ -80,7 +80,7 @@ export default function ClientPortalInvoicesPage({ slug, companyName }: ClientPo
 
   const handleGenerateInvoices = async () => {
     if (!company) return
-    
+
     setGenerating(true)
     try {
       const response = await fetch(`/api/client/mgmt/companies/${company.id}/invoices/generate-all`, {
@@ -143,19 +143,20 @@ export default function ClientPortalInvoicesPage({ slug, companyName }: ClientPo
     )
   }
 
-      return (
-      <>
-        <ClientPortalNav slug={slug} companyName={companyName} currentPage="invoices" />
-        <div className="container mx-auto px-8 max-w-4xl">
-          <div className="flex items-center justify-between gap-4 mb-6">          <div className="flex items-center gap-4">
+  return (
+    <>
+      <ClientPortalNav slug={slug} companyName={companyName} currentPage="invoices" />
+      <div className="container mx-auto px-8 max-w-4xl">
+        <div className="flex items-center justify-between gap-4 mb-6">
+          <div className="flex items-center gap-4">
             <Receipt className="h-8 w-8 text-muted-foreground" />
             <div>
               <h1 className="text-3xl font-bold">Invoices</h1>
             </div>
           </div>
           {isAdmin && (
-            <Button 
-              onClick={handleGenerateInvoices} 
+            <Button
+              onClick={handleGenerateInvoices}
               disabled={generating || !company}
               variant="outline"
             >
@@ -174,68 +175,68 @@ export default function ClientPortalInvoicesPage({ slug, companyName }: ClientPo
           )}
         </div>
 
-      {invoices.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <FileText className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium mb-2">No invoices yet</h3>
-            <p className="text-muted-foreground">Invoices will appear here once they are issued.</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="border border-muted/50 rounded-md overflow-hidden bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50">
-                <TableHead className="py-2">Invoice #</TableHead>
-                <TableHead className="py-2">Period</TableHead>
-                <TableHead className="py-2">Due Date</TableHead>
-                <TableHead className="py-2">Status</TableHead>
-                <TableHead className="text-right py-2">Total</TableHead>
-                <TableHead className="w-[40px] py-2 text-right">
-                  <ChevronRight className="h-3 w-3 ml-auto text-muted-foreground/50" />
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {invoices.map(invoice => (
-                <TableRow 
-                  key={invoice.client_invoice_id} 
-                  className="cursor-pointer group"
-                  onClick={() => window.location.href = `/client/portal/${slug}/invoice/${invoice.client_invoice_id}`}
-                >
-                  <TableCell className="py-3 font-medium">
-                    {invoice.invoice_number || `INV-${invoice.client_invoice_id}`}
-                  </TableCell>
-                  <TableCell className="py-3 text-muted-foreground">
-                    {invoice.period_start && invoice.period_end ? (
-                      <span className="text-xs">
-                        {new Date(invoice.period_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {new Date(invoice.period_end).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </span>
-                    ) : '-'}
-                  </TableCell>
-                  <TableCell className="py-3 text-muted-foreground">
-                    {invoice.status === 'issued' && invoice.due_date ? (
-                      <span className="text-xs">
-                        {new Date(invoice.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </span>
-                    ) : '-'}
-                  </TableCell>
-                  <TableCell className="py-3">
-                    {getStatusBadge(invoice.status)}
-                  </TableCell>
-                  <TableCell className="text-right py-3 font-semibold">
-                    ${parseFloat(invoice.invoice_total).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </TableCell>
-                  <TableCell className="py-3 text-right">
-                    <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </TableCell>
+        {invoices.length === 0 ? (
+          <Card>
+            <CardContent className="py-12 text-center">
+              <FileText className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-medium mb-2">No invoices yet</h3>
+              <p className="text-muted-foreground">Invoices will appear here once they are issued.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="border border-muted/50 rounded-md overflow-hidden bg-card">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="py-2">Invoice #</TableHead>
+                  <TableHead className="py-2">Period</TableHead>
+                  <TableHead className="py-2">Due Date</TableHead>
+                  <TableHead className="py-2">Status</TableHead>
+                  <TableHead className="text-right py-2">Total</TableHead>
+                  <TableHead className="w-[40px] py-2 text-right">
+                    <ChevronRight className="h-3 w-3 ml-auto text-muted-foreground/50" />
+                  </TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+              </TableHeader>
+              <TableBody>
+                {invoices.map(invoice => (
+                  <TableRow
+                    key={invoice.client_invoice_id}
+                    className="cursor-pointer group"
+                    onClick={() => window.location.href = `/client/portal/${slug}/invoice/${invoice.client_invoice_id}`}
+                  >
+                    <TableCell className="py-3 font-medium">
+                      {invoice.invoice_number || `INV-${invoice.client_invoice_id}`}
+                    </TableCell>
+                    <TableCell className="py-3 text-muted-foreground">
+                      {invoice.period_start && invoice.period_end ? (
+                        <span className="text-xs">
+                          {new Date(invoice.period_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {new Date(invoice.period_end).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      ) : '-'}
+                    </TableCell>
+                    <TableCell className="py-3 text-muted-foreground">
+                      {invoice.status === 'issued' && invoice.due_date ? (
+                        <span className="text-xs">
+                          {new Date(invoice.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      ) : '-'}
+                    </TableCell>
+                    <TableCell className="py-3">
+                      {getStatusBadge(invoice.status)}
+                    </TableCell>
+                    <TableCell className="text-right py-3 font-semibold">
+                      ${parseFloat(invoice.invoice_total).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </TableCell>
+                    <TableCell className="py-3 text-right">
+                      <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
       </div>
     </>
   )

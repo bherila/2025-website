@@ -4,6 +4,7 @@ namespace App\Services\ClientManagement;
 
 use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientCompany;
+use App\Models\ClientManagement\ClientExpense;
 use App\Models\ClientManagement\ClientInvoice;
 use App\Models\ClientManagement\ClientInvoiceLine;
 use App\Models\ClientManagement\ClientTimeEntry;
@@ -13,14 +14,19 @@ use Illuminate\Support\Facades\DB;
 /**
  * Service for generating client invoices with rollover hour logic.
  *
- * Per agreement terms:
- * - Each month includes a set number of retainer hours
- * - Unused hours can roll over for N months (rollover_months from agreement)
- * - If client goes over in a month, rollover hours are used first (FIFO)
- * - If still over after using rollover, excess is billed at hourly rate
- * - If client was previously negative, new month's hours offset the negative first
+ * Invoice Structure (for month M):
+ * 1. Prior-month time entries included in retainer (dated last day of M-1, $0)
+ * 2. Additional work beyond retainer fee (dated last day of M-1, charged at hourly rate)
+ * 3. Billable work from prior month with no retainer (dated last day of M-1, charged at hourly rate)
+ * 4. Monthly retainer fee for month M (dated first day of M)
+ * 5. Reimbursable expenses (dated per expense date)
  *
- * Uses RolloverCalculator for all rollover logic calculations.
+ * Rules:
+ * - Invoice date is always the date the invoice is generated
+ * - Retainer fee line item is always dated as the first day of month M
+ * - Prior-month work is dated as the last day of month M-1
+ * - Hourly rate is determined by the active agreement for month M
+ * - Time entry subitems display their original dates
  */
 class ClientInvoicingService
 {
@@ -129,8 +135,8 @@ class ClientInvoicingService
      * Generate an invoice for a specific billing period.
      *
      * @param  ClientCompany  $company  The client company
-     * @param  Carbon  $periodStart  Start of billing period
-     * @param  Carbon  $periodEnd  End of billing period
+     * @param  Carbon  $periodStart  Start of billing period (first day of month M)
+     * @param  Carbon  $periodEnd  End of billing period (last day of month M)
      * @param  ClientAgreement|null  $agreement  The agreement to use (defaults to active agreement)
      * @return ClientInvoice The generated invoice
      *
@@ -164,16 +170,13 @@ class ClientInvoicingService
         }
 
         // Check for overlapping periods with other invoices for the same company
-        // (excluding the current invoice if updating a draft, and excluding voided invoices)
         $overlappingInvoice = ClientInvoice::where('client_company_id', $company->id)
             ->whereNotIn('status', ['void'])
             ->where(function ($query) use ($periodStart, $periodEnd) {
-                // Overlap exists if: existing.start < new.end AND existing.end > new.start
                 $query->where('period_start', '<', $periodEnd)
                     ->where('period_end', '>', $periodStart);
             })
             ->when($invoice, function ($query) use ($invoice) {
-                // Exclude the current invoice if updating a draft
                 $query->where('client_invoice_id', '!=', $invoice->client_invoice_id);
             })
             ->first();
@@ -187,6 +190,10 @@ class ClientInvoicingService
         }
 
         return DB::transaction(function () use ($company, $agreement, $periodStart, $periodEnd, $invoice) {
+            // Calculate prior month boundaries (M-1)
+            $priorMonthEnd = $periodStart->copy()->subDay(); // Last day of M-1
+            $priorMonthStart = $priorMonthEnd->copy()->startOfMonth(); // First day of M-1
+
             // Get the previous invoice to carry forward any balances
             $previousInvoice = ClientInvoice::where('client_company_id', $company->id)
                 ->where('client_agreement_id', $agreement->id)
@@ -198,71 +205,61 @@ class ClientInvoicingService
             // Calculate rollover hours available (from previous months within rollover window)
             $rolloverHoursAvailable = $this->calculateRolloverHours($agreement, $periodStart, $previousInvoice);
 
-            // Get any older uninvoiced billable time entries (delayed billing)
-            // These represent work done in previous periods that hasn't been billed yet
-            $delayedBillingEntries = ClientTimeEntry::where('client_company_id', $company->id)
+            // Get unbilled time entries from the prior month (M-1)
+            $priorMonthEntries = ClientTimeEntry::where('client_company_id', $company->id)
                 ->whereNull('client_invoice_line_id')
                 ->where('is_billable', true)
-                ->where('date_worked', '<', $periodStart)
+                ->whereBetween('date_worked', [$priorMonthStart, $priorMonthEnd])
                 ->orderBy('date_worked')
                 ->get();
 
-            $delayedBillingMinutes = $delayedBillingEntries->sum('minutes_worked');
-            $delayedBillingHours = $delayedBillingMinutes / 60;
+            $priorMonthMinutes = $priorMonthEntries->sum('minutes_worked');
+            $priorMonthHours = $priorMonthMinutes / 60;
 
-            // Get negative balance from previous invoice (if client was over)
-            // IMPORTANT: Only use negative balance if there are NO unbilled time entries from previous periods.
-            // If time entries were split and remain unbilled, they represent the carried-forward work.
-            // Using both would double-count the debt.
-            $negativeBalanceFromPrevious = ($delayedBillingHours > 0) ? 0 : 
-                ($previousInvoice ? (float) $previousInvoice->negative_hours_balance : 0);
+            // Determine if prior month had a retainer - check if agreement was active in prior month
+            $priorMonthHadRetainer = $agreement->active_date <= $priorMonthEnd && 
+                ($agreement->termination_date === null || $agreement->termination_date >= $priorMonthStart);
 
-            // Get all billable time entries for this period that are either unlinked OR linked to the CURRENT invoice (for regeneration)
-            $timeEntries = ClientTimeEntry::where('client_company_id', $company->id)
-                ->where('is_billable', true)
-                ->whereBetween('date_worked', [$periodStart, $periodEnd])
-                ->where(function($query) use ($invoice) {
-                    $query->whereNull('client_invoice_line_id');
-                    if ($invoice) {
-                        $query->orWhereIn('client_invoice_line_id', $invoice->lineItems->pluck('client_invoice_line_id'));
-                    }
-                })
-                ->orderBy('date_worked')
-                ->get();
+            // Get negative balance from previous invoice
+            $negativeBalanceFromPrevious = $previousInvoice ? (float) $previousInvoice->negative_hours_balance : 0;
 
-            // Calculate total hours worked this period (NOT including delayed hours for now)
-            $currentPeriodMinutes = $timeEntries->sum('minutes_worked');
-            $currentPeriodHours = $currentPeriodMinutes / 60;
-            
-            // Total work to bill = current period + delayed billing
-            $totalHoursToProcess = $currentPeriodHours + $delayedBillingHours;
+            // Calculate hour balances
+            $retainerHours = (float) $agreement->monthly_retainer_hours;
+            $hourlyRate = (float) $agreement->hourly_rate;
 
-            // Combine entries for processing (process delayed/older entries first)
-            $allBillableEntries = $delayedBillingEntries->concat($timeEntries);
+            // Calculate how prior month hours are handled
+            $priorMonthCoveredByRetainer = 0;
+            $priorMonthOverage = 0;
+            $priorMonthBillableNoRetainer = 0;
 
-            // Calculate hour balances according to the rules
-            // For delayed billing: bill immediately if exceeds available hours
-            // For current period work: can create negative balance for next month
-            $calculation = $this->calculateHourBalances(
-                $currentPeriodHours,
-                $delayedBillingHours,
-                (float) $agreement->monthly_retainer_hours,
-                $rolloverHoursAvailable,
-                $negativeBalanceFromPrevious,
-                (int) $agreement->rollover_months
-            );
+            if ($priorMonthHadRetainer && $priorMonthHours > 0) {
+                // Prior month had retainer - calculate coverage
+                $availableForPriorMonth = $retainerHours + $rolloverHoursAvailable - $negativeBalanceFromPrevious;
+                $priorMonthCoveredByRetainer = min($priorMonthHours, max(0, $availableForPriorMonth));
+                $priorMonthOverage = max(0, $priorMonthHours - $priorMonthCoveredByRetainer);
+            } elseif ($priorMonthHours > 0) {
+                // Prior month had no retainer - all hours are billable
+                $priorMonthBillableNoRetainer = $priorMonthHours;
+            }
 
+            // Calculate closing balances
+            $totalHoursUsed = $priorMonthCoveredByRetainer;
+            $rolloverUsed = max(0, min($rolloverHoursAvailable, max(0, $totalHoursUsed - $retainerHours + $negativeBalanceFromPrevious)));
+            $unusedHoursBalance = max(0, $retainerHours + $rolloverHoursAvailable - $negativeBalanceFromPrevious - $totalHoursUsed);
+            $hoursBilledAtRate = $priorMonthOverage + $priorMonthBillableNoRetainer;
+
+            // Prepare invoice data
             $invoiceData = [
                 'client_company_id' => $company->id,
                 'client_agreement_id' => $agreement->id,
                 'period_start' => $periodStart,
                 'period_end' => $periodEnd,
-                'retainer_hours_included' => $agreement->monthly_retainer_hours,
-                'hours_worked' => $totalHoursToProcess,  // Total hours including delayed billing
-                'rollover_hours_used' => $calculation['rollover_hours_used'],
-                'unused_hours_balance' => $calculation['unused_hours_balance'],
-                'negative_hours_balance' => $calculation['negative_hours_balance'],
-                'hours_billed_at_rate' => $calculation['hours_billed_at_rate'],
+                'retainer_hours_included' => $retainerHours,
+                'hours_worked' => $priorMonthHours,
+                'rollover_hours_used' => $rolloverUsed,
+                'unused_hours_balance' => $unusedHoursBalance,
+                'negative_hours_balance' => 0, // New logic doesn't use negative balance
+                'hours_billed_at_rate' => $hoursBilledAtRate,
                 'status' => 'draft',
             ];
 
@@ -270,88 +267,280 @@ class ClientInvoicingService
                 // Update existing draft invoice
                 $invoice->update($invoiceData);
 
-                // Only delete system-generated line items (preserve manual items like 'expense' and 'adjustment')
-                // System-generated line types: retainer, additional_hours, credit
-                $systemGeneratedTypes = ['retainer', 'additional_hours', 'credit'];
+                // Delete system-generated line items (preserve manual items)
+                $systemGeneratedTypes = ['retainer', 'additional_hours', 'credit', 'prior_month_retainer', 'prior_month_billable'];
 
                 $systemLines = $invoice->lineItems()
                     ->whereIn('line_type', $systemGeneratedTypes)
                     ->get();
 
-                // Unlink time entries from system-generated lines
                 foreach ($systemLines as $line) {
                     $line->timeEntries()->update(['client_invoice_line_id' => null]);
+                    $line->expenses()->update(['client_invoice_line_id' => null]);
                 }
 
-                // Delete only system-generated line items
                 $invoice->lineItems()
                     ->whereIn('line_type', $systemGeneratedTypes)
                     ->delete();
+                
+                // Also unlink expenses that were linked to expense-type lines for this invoice
+                $expenseLines = $invoice->lineItems()->where('line_type', 'expense')->get();
+                foreach ($expenseLines as $line) {
+                    $line->expenses()->update(['client_invoice_line_id' => null]);
+                }
+                $invoice->lineItems()->where('line_type', 'expense')->delete();
             } else {
                 // Create a new invoice
                 $invoiceData['invoice_number'] = $this->generateInvoiceNumber($company, $agreement);
-                $invoiceData['invoice_total'] = 0; // Will calculate after line items
+                $invoiceData['invoice_total'] = 0;
                 $invoice = ClientInvoice::create($invoiceData);
             }
 
-            // Create line items
             $sortOrder = 1;
 
-            // Line 1: Monthly retainer fee (always)
-            $retainerLine = ClientInvoiceLine::create([
-                'client_invoice_id' => $invoice->client_invoice_id,
-                'client_agreement_id' => $agreement->id,
-                'description' => "Monthly Retainer ({$agreement->monthly_retainer_hours} hours)",
-                'quantity' => 1,
-                'unit_price' => $agreement->monthly_retainer_fee,
-                'line_total' => $agreement->monthly_retainer_fee,
-                'line_type' => 'retainer',
-                'hours' => $agreement->monthly_retainer_hours,
-                'sort_order' => $sortOrder++,
-            ]);
-
-            // Link time entries to the retainer line (up to the retainer + rollover hours)
-            $hoursToLink = $calculation['hours_covered_by_retainer'] + $calculation['rollover_hours_used'];
-            $this->linkTimeEntriesToLine($allBillableEntries, $retainerLine, $hoursToLink);
-
-            // Line 2: Additional hours at hourly rate (if any)
-            if ($calculation['hours_billed_at_rate'] > 0) {
-                $additionalHoursLine = ClientInvoiceLine::create([
+            // Line 1: Prior-month time entries included in retainer ($0)
+            if ($priorMonthCoveredByRetainer > 0) {
+                $coveredEntries = $this->selectEntriesUpToHours($priorMonthEntries, $priorMonthCoveredByRetainer);
+                
+                $priorRetainerLine = ClientInvoiceLine::create([
                     'client_invoice_id' => $invoice->client_invoice_id,
                     'client_agreement_id' => $agreement->id,
-                    'description' => "Additional time @ \${$agreement->hourly_rate}/hr",
-                    'quantity' => $calculation['hours_billed_at_rate'],
-                    'unit_price' => $agreement->hourly_rate,
-                    'line_total' => $calculation['hours_billed_at_rate'] * (float) $agreement->hourly_rate,
-                    'line_type' => 'additional_hours',
-                    'hours' => $calculation['hours_billed_at_rate'],
+                    'description' => 'Work items included in prior month retainer',
+                    'quantity' => $this->formatHoursForQuantity($priorMonthCoveredByRetainer),
+                    'unit_price' => 0,
+                    'line_total' => 0,
+                    'line_type' => 'prior_month_retainer',
+                    'hours' => $priorMonthCoveredByRetainer,
+                    'line_date' => $priorMonthEnd,
                     'sort_order' => $sortOrder++,
                 ]);
 
-                // Link remaining time entries to this line
-                $this->linkTimeEntriesToLine($allBillableEntries, $additionalHoursLine, $calculation['hours_billed_at_rate']);
+                $this->linkTimeEntriesToLine($coveredEntries, $priorRetainerLine);
             }
 
-            // Line 4: Credit for rollover hours applied (informational, $0)
-            if ($calculation['rollover_hours_used'] > 0) {
+            // Line 2: Additional work beyond retainer fee (overage from prior month)
+            if ($priorMonthOverage > 0) {
+                $overageEntries = $priorMonthEntries->filter(fn($e) => $e->client_invoice_line_id === null);
+                
+                $overageLine = ClientInvoiceLine::create([
+                    'client_invoice_id' => $invoice->client_invoice_id,
+                    'client_agreement_id' => $agreement->id,
+                    'description' => 'Additional work beyond retainer fee',
+                    'quantity' => $this->formatHoursForQuantity($priorMonthOverage),
+                    'unit_price' => $hourlyRate,
+                    'line_total' => $priorMonthOverage * $hourlyRate,
+                    'line_type' => 'additional_hours',
+                    'hours' => $priorMonthOverage,
+                    'line_date' => $priorMonthEnd,
+                    'sort_order' => $sortOrder++,
+                ]);
+
+                $this->linkAllEntriesToLine($overageEntries, $overageLine);
+            }
+
+            // Line 3: Billable work from prior month (no retainer in that month)
+            if ($priorMonthBillableNoRetainer > 0) {
+                $billableLine = ClientInvoiceLine::create([
+                    'client_invoice_id' => $invoice->client_invoice_id,
+                    'client_agreement_id' => $agreement->id,
+                    'description' => 'Billable work from prior month',
+                    'quantity' => $this->formatHoursForQuantity($priorMonthBillableNoRetainer),
+                    'unit_price' => $hourlyRate,
+                    'line_total' => $priorMonthBillableNoRetainer * $hourlyRate,
+                    'line_type' => 'prior_month_billable',
+                    'hours' => $priorMonthBillableNoRetainer,
+                    'line_date' => $priorMonthEnd,
+                    'sort_order' => $sortOrder++,
+                ]);
+
+                $this->linkAllEntriesToLine($priorMonthEntries, $billableLine);
+            }
+
+            // Line 4: Monthly retainer fee for month M (dated first day of M)
+            ClientInvoiceLine::create([
+                'client_invoice_id' => $invoice->client_invoice_id,
+                'client_agreement_id' => $agreement->id,
+                'description' => "Monthly Retainer ({$agreement->monthly_retainer_hours} hours) - " . $periodStart->format('M j, Y'),
+                'quantity' => '1',
+                'unit_price' => $agreement->monthly_retainer_fee,
+                'line_total' => $agreement->monthly_retainer_fee,
+                'line_type' => 'retainer',
+                'hours' => $retainerHours,
+                'line_date' => $periodStart,
+                'sort_order' => $sortOrder++,
+            ]);
+
+            // Line 5: Rollover hours applied (informational, $0)
+            if ($rolloverUsed > 0) {
                 ClientInvoiceLine::create([
                     'client_invoice_id' => $invoice->client_invoice_id,
                     'client_agreement_id' => $agreement->id,
                     'description' => 'Rollover Hours Applied (from previous months)',
-                    'quantity' => $calculation['rollover_hours_used'],
+                    'quantity' => $this->formatHoursForQuantity($rolloverUsed),
                     'unit_price' => 0,
                     'line_total' => 0,
                     'line_type' => 'credit',
-                    'hours' => $calculation['rollover_hours_used'],
+                    'hours' => $rolloverUsed,
+                    'line_date' => $periodStart,
                     'sort_order' => $sortOrder++,
                 ]);
             }
 
+            // Line 6+: Reimbursable expenses (dated per expense date)
+            $this->addReimbursableExpenses($company, $invoice, $periodEnd, $sortOrder);
+
             // Calculate and update total
             $invoice->recalculateTotal();
 
+            // Update period_start and period_end based on actual line item dates
+            $this->updateInvoicePeriodFromLineItems($invoice);
+
             return $invoice->fresh(['lineItems']);
         });
+    }
+
+    /**
+     * Add reimbursable expenses to the invoice.
+     */
+    protected function addReimbursableExpenses(
+        ClientCompany $company,
+        ClientInvoice $invoice,
+        Carbon $invoiceDate,
+        int &$sortOrder
+    ): void {
+        // Get all un-invoiced reimbursable expenses up to and including the invoice date
+        $expenses = ClientExpense::where('client_company_id', $company->id)
+            ->where('is_reimbursable', true)
+            ->whereNull('client_invoice_line_id')
+            ->where('expense_date', '<=', $invoiceDate)
+            ->orderBy('expense_date')
+            ->get();
+
+        foreach ($expenses as $expense) {
+            $line = ClientInvoiceLine::create([
+                'client_invoice_id' => $invoice->client_invoice_id,
+                'client_agreement_id' => $invoice->client_agreement_id,
+                'description' => $expense->description,
+                'quantity' => 1,
+                'unit_price' => $expense->amount,
+                'line_total' => $expense->amount,
+                'line_type' => 'expense',
+                'hours' => null,
+                'line_date' => $expense->expense_date,
+                'sort_order' => $sortOrder++,
+            ]);
+
+            // Link expense to invoice line
+            $expense->update(['client_invoice_line_id' => $line->client_invoice_line_id]);
+        }
+    }
+
+    /**
+     * Select time entries up to the specified hours limit.
+     */
+    protected function selectEntriesUpToHours($entries, float $hoursLimit): \Illuminate\Support\Collection
+    {
+        $minutesLimit = (int) round($hoursLimit * 60);
+        $minutesSelected = 0;
+        $selectedEntries = collect();
+
+        foreach ($entries as $entry) {
+            if ($entry->client_invoice_line_id !== null) {
+                continue;
+            }
+
+            if ($minutesSelected >= $minutesLimit) {
+                break;
+            }
+
+            $remainingNeeded = $minutesLimit - $minutesSelected;
+
+            if ($entry->minutes_worked <= $remainingNeeded) {
+                $selectedEntries->push($entry);
+                $minutesSelected += $entry->minutes_worked;
+            } else {
+                // Partial entry - split it
+                $overageMinutes = $entry->minutes_worked - $remainingNeeded;
+
+                // Create a new entry for the overage
+                $rolledOverEntry = $entry->replicate();
+                $rolledOverEntry->minutes_worked = $overageMinutes;
+                $rolledOverEntry->client_invoice_line_id = null;
+                $rolledOverEntry->save();
+
+                // Update original entry to the billed portion
+                $entry->minutes_worked = $remainingNeeded;
+                $entry->save();
+
+                $selectedEntries->push($entry);
+                $minutesSelected += $remainingNeeded;
+            }
+        }
+
+        return $selectedEntries;
+    }
+
+    /**
+     * Link all provided time entries to an invoice line.
+     */
+    protected function linkAllEntriesToLine($entries, ClientInvoiceLine $line): void
+    {
+        foreach ($entries as $entry) {
+            if ($entry->client_invoice_line_id === null) {
+                $entry->update(['client_invoice_line_id' => $line->client_invoice_line_id]);
+            }
+        }
+    }
+
+    /**
+     * Link time entries to an invoice line.
+     */
+    protected function linkTimeEntriesToLine($entries, ClientInvoiceLine $line): void
+    {
+        foreach ($entries as $entry) {
+            $entry->update(['client_invoice_line_id' => $line->client_invoice_line_id]);
+        }
+    }
+
+    /**
+     * Update invoice period_start and period_end based on actual line item dates.
+     * Expands the period to include the full range from earliest to latest line_date,
+     * but never contracts it smaller than the original billing period.
+     */
+    protected function updateInvoicePeriodFromLineItems(ClientInvoice $invoice): void
+    {
+        $lineItems = $invoice->lineItems()->whereNotNull('line_date')->get();
+
+        if ($lineItems->isEmpty()) {
+            return;
+        }
+
+        $earliestLineDate = $lineItems->min('line_date');
+        $latestLineDate = $lineItems->max('line_date');
+
+        // Expand period to include line item dates, but don't contract
+        $newPeriodStart = min($invoice->period_start, $earliestLineDate);
+        $newPeriodEnd = max($invoice->period_end, $latestLineDate);
+
+        $invoice->update([
+            'period_start' => $newPeriodStart,
+            'period_end' => $newPeriodEnd,
+        ]);
+    }
+
+    /**
+     * Format hours as h:mm string for invoice line quantity display.
+     * 
+     * @param float $hours Decimal hours (e.g., 1.5)
+     * @return string Formatted as "h:mm" (e.g., "1:30")
+     */
+    protected function formatHoursForQuantity(float $hours): string
+    {
+        $totalMinutes = (int) round($hours * 60);
+        $h = intdiv($totalMinutes, 60);
+        $m = $totalMinutes % 60;
+        
+        return sprintf('%d:%02d', $h, $m);
     }
 
     /**
@@ -380,136 +569,14 @@ class ClientInvoicingService
     }
 
     /**
-     * Calculate hour balances according to the billing rules.
-     *
-     * Rules:
-     * 1. This month's retainer hours are added to the pool
-     * 2. If there was a negative balance, offset it first with new hours
-     * 3. Delayed billing hours (from previous periods) are processed first and must be billed if they exceed available hours
-     * 4. Current period hours are deducted from remaining pool
-     * 5. If pool is exhausted by current period work, excess creates negative balance for next month
-     * 6. Unused hours can roll over (up to rollover_months limit)
-     */
-    protected function calculateHourBalances(
-        float $currentPeriodHours,
-        float $delayedBillingHours,
-        float $retainerHours,
-        float $rolloverHoursAvailable,
-        float $negativeBalanceFromPrevious,
-        int $rolloverMonths
-    ): array {
-        // Use RolloverCalculator to ensure consistent logic with the portal UI
-        
-        // Adapter: Treat aggregated rollover hours as "1 month ago" hours
-        // Since the service already filtered by the rollover window, these are all valid
-        $previousMonthsUnused = $rolloverMonths > 0 ? [1 => $rolloverHoursAvailable] : [];
-
-        $opening = $this->rolloverCalculator->calculateOpeningBalance(
-            $retainerHours,
-            $previousMonthsUnused,
-            $rolloverMonths,
-            $negativeBalanceFromPrevious
-        );
-
-        // Process delayed billing first - it MUST be covered or billed
-        $availableAfterNegativeOffset = $opening['total_available'];
-        $delayedBillingCoveredByRetainer = min($delayedBillingHours, $availableAfterNegativeOffset);
-        $delayedBillingToBill = $delayedBillingHours - $delayedBillingCoveredByRetainer;
-        $remainingAvailable = $availableAfterNegativeOffset - $delayedBillingCoveredByRetainer;
-
-        // Now process current period work with remaining available hours
-        $closing = $this->rolloverCalculator->calculateClosingBalance(
-            $remainingAvailable,
-            $currentPeriodHours,
-            max(0, $opening['effective_retainer_hours'] - $delayedBillingCoveredByRetainer),
-            $opening['rollover_hours']
-        );
-
-        // Calculate total billable overage
-        // This includes:
-        // 1. invoiced_negative_balance (negative balance from previous that exceeded current retainer)
-        // 2. delayed billing that exceeded available hours
-        // 3. current period excess (only if billExcessImmediately, otherwise goes to negative_balance)
-        $hoursBilledAtRate = $opening['invoiced_negative_balance'] + $delayedBillingToBill + $closing['excess_hours'];
-
-        // Determine how much was used from retainer vs rollover for the COMBINED work
-        $totalHoursUsedFromRetainer = $delayedBillingCoveredByRetainer + $closing['hours_used_from_retainer'];
-        $totalRolloverUsed = $closing['hours_used_from_rollover'];
-
-        return [
-            'hours_covered_by_retainer' => $totalHoursUsedFromRetainer,
-            'rollover_hours_used' => $totalRolloverUsed,
-            'hours_billed_at_rate' => $hoursBilledAtRate,
-            'unused_hours_balance' => $closing['unused_hours'],
-            'negative_hours_balance' => $closing['negative_balance'],
-        ];
-    }
-
-    /**
-     * Link time entries to an invoice line.
-     *
-     * @param  \Illuminate\Support\Collection  $timeEntries  Collection of time entries (modified in place)
-     * @param  ClientInvoiceLine  $line  The invoice line to link to
-     * @param  float  $hoursToLink  Maximum hours to link to this line
-     */
-    protected function linkTimeEntriesToLine($timeEntries, ClientInvoiceLine $line, float $hoursToLink): void
-    {
-        $minutesToLink = (int) round($hoursToLink * 60);
-        $minutesLinked = 0;
-
-        foreach ($timeEntries as $entry) {
-            // Skip if already linked
-            if ($entry->client_invoice_line_id !== null) {
-                continue;
-            }
-
-            // Skip if we've linked enough
-            if ($minutesLinked >= $minutesToLink) {
-                break;
-            }
-
-            $remainingMinutesNeeded = $minutesToLink - $minutesLinked;
-
-            if ($entry->minutes_worked <= $remainingMinutesNeeded) {
-                // Whole entry fits
-                $entry->update(['client_invoice_line_id' => $line->client_invoice_line_id]);
-                $minutesLinked += $entry->minutes_worked;
-            } else {
-                // Partial fit - must split the entry
-                $availableMinutes = $remainingMinutesNeeded;
-                $overageMinutes = $entry->minutes_worked - $availableMinutes;
-
-                // 1. Create a new entry for the overage (the part that rolls over)
-                $rolledOverEntry = $entry->replicate();
-                $rolledOverEntry->minutes_worked = $overageMinutes;
-                $rolledOverEntry->client_invoice_line_id = null; // Ensure it's unbilled
-                $rolledOverEntry->save();
-
-                // Add to collection so it can be picked up by subsequent calls (e.g. Additional Hours)
-                $timeEntries->push($rolledOverEntry);
-
-                // 2. Update the original entry to represent only the part being billed now
-                $entry->update([
-                    'minutes_worked' => $availableMinutes,
-                    'client_invoice_line_id' => $line->client_invoice_line_id,
-                ]);
-
-                $minutesLinked += $availableMinutes;
-            }
-        }
-    }
-
-    /**
      * Generate a unique invoice number.
      */
     protected function generateInvoiceNumber(ClientCompany $company, ClientAgreement $agreement): string
     {
-        // Format: {COMPANY_PREFIX}-{YEAR}{MONTH}-{SEQUENCE}
         $rawPrefix = strtoupper(substr(preg_replace('/[^a-zA-Z0-9]/', '', $company->company_name), 0, 4));
         $prefix = $rawPrefix ? $rawPrefix . '-' : '';
         $yearMonth = now()->format('Ym');
 
-        // Find the next sequence number for this company
         $lastInvoice = ClientInvoice::where('client_company_id', $company->id)
             ->where('invoice_number', 'like', "{$rawPrefix}%{$yearMonth}-%")
             ->orderBy('invoice_number', 'desc')

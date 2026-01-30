@@ -15,8 +15,10 @@ use Tests\TestCase;
 /**
  * Feature tests for delayed billing functionality.
  *
- * Delayed billing allows billable time entries created during periods
- * without an active agreement to be billed when an agreement becomes active.
+ * With the prior-month billing model:
+ * - Invoice for month M bills work from month M-1
+ * - Time entries from before the agreement are billed as "prior_month_billable" at hourly rate
+ * - Once an agreement is active, prior month work is covered by retainer if within limits
  */
 class DelayedBillingTest extends TestCase
 {
@@ -89,18 +91,12 @@ class DelayedBillingTest extends TestCase
             'is_active' => true,
         ]);
 
-        // Create time entry for February (during agreement)
-        ClientTimeEntry::create([
-            'client_company_id' => $this->company->id,
-            'project_id' => $this->project->id,
-            'user_id' => $this->user->id,
-            'date_worked' => Carbon::create(2024, 2, 15),
-            'minutes_worked' => 300, // 5 hours
-            'name' => 'February work',
-            'is_billable' => true,
-        ]);
-
         // Generate invoice for February
+        // With prior-month billing model:
+        // - Prior month (January) had NO retainer (agreement started Feb)
+        // - January entries (5 hours) billed as "prior_month_billable" at $150/hr = $750
+        // - Retainer line for February = $1000
+        // - Total = $1750
         $periodStart = Carbon::create(2024, 2, 1);
         $periodEnd = Carbon::create(2024, 2, 29);
 
@@ -117,27 +113,25 @@ class DelayedBillingTest extends TestCase
         $invoice->refresh();
         $lineItems = $invoice->lineItems;
 
-        // With the merged logic:
-        // Total billable hours = 5 (Feb) + 2 (Jan 15) + 3 (Jan 20) = 10 hours.
-        // Retainer covers 10 hours.
-        // So the Retainer line should cover everything. No separate line for delayed billing.
-        
+        // With prior-month billing: January entries billed as prior_month_billable
+        $billableLine = $lineItems->firstWhere('line_type', 'prior_month_billable');
+        $this->assertNotNull($billableLine, 'Should have prior_month_billable line for pre-agreement work');
+        $this->assertEquals(5, (float) $billableLine->hours); // 2 + 3 = 5 hours
+        $this->assertEquals(750.00, (float) $billableLine->line_total); // 5 * $150
+
         $retainerLine = $lineItems->firstWhere('line_type', 'retainer');
         $this->assertNotNull($retainerLine);
         
         // Verify invoice totals
-        $this->assertEquals(10, $invoice->hours_worked); // 5 current + 5 delayed
-        $this->assertEquals(1000.00, $invoice->invoice_total); // Covered by retainer
+        $this->assertEquals(5, (float) $invoice->hours_worked); // Only January hours (prior month)
+        $this->assertEquals(1750.00, (float) $invoice->invoice_total); // $750 + $1000
 
-        // Verify all time entries are now linked
-        $unbilledEntries = ClientTimeEntry::where('client_company_id', $this->company->id)
-            ->whereNull('client_invoice_line_id')
+        // Verify all time entries from January are now linked
+        $linkedEntries = ClientTimeEntry::where('client_company_id', $this->company->id)
+            ->whereBetween('date_worked', [Carbon::create(2024, 1, 1), Carbon::create(2024, 1, 31)])
+            ->whereNotNull('client_invoice_line_id')
             ->count();
-        $this->assertEquals(0, $unbilledEntries, 'All time entries should be linked to invoice lines');
-        
-        // Verify entries are linked to the retainer line
-        $linkedToRetainer = ClientTimeEntry::where('client_invoice_line_id', $retainerLine->client_invoice_line_id)->count();
-        $this->assertEquals(3, $linkedToRetainer, 'All 3 entries should be linked to retainer line');
+        $this->assertEquals(2, $linkedEntries, 'All 2 January entries should be linked to invoice lines');
     }
 
     public function test_invoice_includes_delayed_billing_information(): void
@@ -166,7 +160,11 @@ class DelayedBillingTest extends TestCase
             'is_active' => true,
         ]);
 
-        // Generate invoice
+        // Generate invoice for February
+        // With prior-month billing:
+        // - January (no retainer) has 4 hours billed as prior_month_billable at $100/hr = $400
+        // - Retainer for February = $1000
+        // - Total = $1400
         $periodStart = Carbon::create(2024, 2, 1);
         $periodEnd = Carbon::create(2024, 2, 29);
 
@@ -176,18 +174,18 @@ class DelayedBillingTest extends TestCase
             $periodEnd
         );
 
-        // With merged logic: 4 hours delayed work is absorbed by the 10h retainer.
-        // No separate delayed billing line item.
-        $delayedBillingLine = $invoice->lineItems()
-            ->where('description', 'LIKE', '%Prior Period%')
+        // Check for prior_month_billable line
+        $billableLine = $invoice->lineItems()
+            ->where('line_type', 'prior_month_billable')
             ->first();
 
-        $this->assertNull($delayedBillingLine, 'Invoice should absorb delayed billing into retainer if space allows');
+        $this->assertNotNull($billableLine, 'Invoice should have prior_month_billable line for pre-agreement work');
+        $this->assertEquals(4, (float) $billableLine->hours);
+        $this->assertEquals(400.00, (float) $billableLine->line_total);
 
-        // Check invoice total is just the retainer
-        // Retainer: $1000 (covers the 4 hours)
-        $this->assertEquals(1000.00, $invoice->invoice_total);
-        $this->assertEquals(4, $invoice->hours_worked);
+        // Check invoice total
+        $this->assertEquals(1400.00, (float) $invoice->invoice_total); // $400 + $1000
+        $this->assertEquals(4, (float) $invoice->hours_worked);
     }
 
     public function test_non_billable_entries_are_not_included_in_delayed_billing(): void

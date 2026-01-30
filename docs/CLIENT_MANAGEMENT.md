@@ -529,46 +529,65 @@ const fileManager = useFileManagement({
 ## Billing & Invoicing System
 
 ### Overview
-The billing and invoicing system handles automatic invoice generation with retainer-based billing, rollover hours, and proper tracking of carried-forward work. It supports flexible agreement terms that accommodate startup cash flow needs.
+The billing and invoicing system handles automatic invoice generation with prior-month billing, retainer-based pricing, rollover hours, and reimbursable expense tracking. Invoices are generated at the start of month M and include work from the prior month (M-1) plus the retainer fee for the current month (M).
 
 ### Core Concepts
 
-#### Delayed Billing vs Negative Balance
-The system uses two mechanisms for tracking work that exceeds available hours:
+#### Prior-Month Billing Model
+When an invoice is generated for month M (e.g., February 2024):
+- **Time entries from month M-1** (e.g., January 2024) are included and dated as the last day of M-1
+- **Retainer fee for month M** is included and dated as the first day of M
+- **Reimbursable expenses** up to the invoice date are included with their original expense dates
 
-1. **Delayed Billing (Unbilled Time Entries)**: When time entries are split during invoice generation (e.g., 25h entry split into 10h billed + 15h unbilled), the unbilled portion becomes actual time entry records that carry forward to the next billing period. These represent concrete work done that hasn't been invoiced yet.
+This ensures work is billed after it's completed, while the retainer is always charged in advance.
 
-2. **Negative Balance (Numeric Tracking)**: When no time entries exist but hours exceed available hours, a numeric negative balance is recorded. This represents a debt to be offset by future retainer hours.
+#### Rollover Hours
+Unused retainer hours can roll over to future months (configurable via `rollover_months` in agreements):
+- **rollover_months = 0**: No rollover; unused hours are lost
+- **rollover_months = 1**: Hours can only be used in the month they're earned  
+- **rollover_months = 2+**: Hours roll over for N-1 additional months
 
-**Critical Rule**: These two mechanisms are mutually exclusive to avoid double-counting. If delayed billing time entries exist for a period, the numeric negative balance is NOT used for that period.
+The rollover calculation uses FIFO (First In, First Out) - oldest hours are used first.
 
-#### Billing Priority
-When generating invoices, work is processed in the following order:
-
-1. **Delayed Billing (from previous periods)**: Processed FIRST and MUST be either covered by available hours (retainer + rollover) or billed immediately at the hourly rate. These hours will NOT be carried forward again.
-
-2. **Current Period Work**: Processed with remaining available hours. If current period work exceeds available hours, it creates negative balance for the next month (unless immediate billing is configured).
-
-3. **Hour Allocation**:
-   - Retainer hours are applied first
-   - Then rollover hours (FIFO - oldest first)
-   - Then billing at hourly rate for excess
-
-### Time Entry Splitting
-When a time entry exceeds remaining available hours during invoice generation, the system automatically splits it:
-- **Billed portion**: Linked to the invoice line item
-- **Unbilled portion**: Replicated as a separate time entry with `client_invoice_line_id = NULL`
-
-The unbilled portion will be picked up as delayed billing in the next invoice generation.
+#### Hourly Rate Determination
+When billing work that exceeds available hours:
+- The hourly rate is always taken from the **active agreement for the invoice month (M)**
+- This ensures consistent pricing regardless of when the work was performed
 
 ### Invoice Line Items
-Generated invoices contain the following line item types:
+Generated invoices contain the following line item types (in order):
 
-1. **Monthly Retainer**: Fixed monthly fee covering the contracted hours
-2. **Additional time**: Any hours beyond retainer + rollover, billed at the hourly rate (e.g., "Additional time @ $150/hr"). When the "Show Detail" switch is enabled on the invoice page, a bullet list of the time entry descriptions appears indented below this line item.
-3. **Rollover Credit**: Informational $0 line showing rollover hours applied
+1. **Prior-Month Retainer** (`prior_month_retainer`): Time entries from M-1 covered by retainer hours. Line total is $0, dated last day of M-1. Shows hours and links to time entries with their original dates. Quantity is formatted as "h:mm".
 
-The invoice page includes a "Show Detail" toggle switch in the top-right corner above the line items table. When enabled, it displays the underlying time entry descriptions for each line item as an indented bullet list, showing both the description and hours for each entry.
+2. **Additional Hours** (`additional_hours`): Time from M-1 exceeding available hours (retainer + rollover), billed at hourly rate. Dated last day of M-1. Quantity is formatted as "h:mm".
+
+3. **Prior-Month Billable** (`prior_month_billable`): Work from M-1 when no retainer existed in that month, billed at M's hourly rate. Dated last day of M-1. Quantity is formatted as "h:mm".
+
+4. **Retainer Fee** (`retainer`): Monthly retainer fee for month M. Description includes the date (e.g., "Monthly Retainer (10 hours) - Feb 1, 2024"). Dated first day of M. Quantity is "1".
+
+5. **Rollover Credit** (`credit`): Informational $0 line showing rollover hours applied (if any). Quantity is formatted as "h:mm".
+
+6. **Expenses** (`expense`): Reimbursable expenses incurred up to the invoice date. Each expense line uses its original expense date. Quantity is "1".
+
+#### Invoice Period
+The invoice `period_start` and `period_end` dates are determined by the line item dates:
+- **period_start**: The earliest `line_date` among all line items, or the original billing period start (whichever is earlier)
+- **period_end**: The latest `line_date` among all line items, or the original billing period end (whichever is later)
+
+This ensures the displayed period accurately reflects the date range of all billed items.
+
+#### Draft Invoice Regeneration
+When regenerating a draft invoice (e.g., when new time entries are added):
+- All system-generated line items are deleted (retainer, prior_month_retainer, prior_month_billable, additional_hours, credit, expense)
+- All linked time entries and expenses are unlinked
+- New line items are generated with updated calculations
+- Manual adjustments (line_type = 'adjustment') are preserved
+
+#### Time Entry Detail Display
+The invoice page includes a "Show Detail" toggle switch in the top-right corner (default: ON). When enabled, it displays the underlying time entry descriptions for each line item as an indented bullet list, showing the description, hours, and original date_worked for each entry.
+
+#### Page Title
+The invoice page title includes the invoice number for easy identification (e.g., "Invoice ABC-202402-001 - Company Name").
 
 ### Database Schema
 
@@ -628,11 +647,13 @@ Individual line items on invoices.
 - `client_invoice_line_id`: Primary key
 - `client_invoice_id`: Foreign key to `client_invoices`
 - `description`: Line item description (required)
-- `quantity`: Quantity (decimal 10,4)
+- `quantity`: Quantity as string (varchar 20) - formatted as "h:mm" for time-based lines or "1" for flat items
 - `unit_price`: Price per unit (decimal 10,2)
 - `line_total`: Calculated total (decimal 10,2)
-- `line_type`: retainer, hourly, expense, adjustment (string)
+- `line_type`: retainer, additional_hours, prior_month_retainer, prior_month_billable, expense, adjustment, credit (string)
+- `line_date`: Date associated with the line item (date, nullable) - e.g., last day of prior month for work, first day of current month for retainer
 - `hours`: Hours if applicable (decimal 8,2, nullable)
+- `sort_order`: Display order (integer)
 - `created_at`, `updated_at`: Timestamps
 
 ### Models

@@ -23,14 +23,15 @@ class ClientInvoiceLine extends Model
         'line_total',
         'line_type',
         'hours',
+        'line_date',
         'sort_order',
     ];
 
     protected $casts = [
-        'quantity' => 'decimal:4',
         'unit_price' => 'decimal:2',
         'line_total' => 'decimal:2',
         'hours' => 'decimal:4',
+        'line_date' => 'date',
         'sort_order' => 'integer',
     ];
 
@@ -42,6 +43,8 @@ class ClientInvoiceLine extends Model
         static::deleting(function ($line) {
             // Unlink time entries linked to this line
             $line->timeEntries()->update(['client_invoice_line_id' => null]);
+            // Unlink expenses linked to this line
+            $line->expenses()->update(['client_invoice_line_id' => null]);
         });
     }
 
@@ -67,6 +70,14 @@ class ClientInvoiceLine extends Model
     public function timeEntries()
     {
         return $this->hasMany(ClientTimeEntry::class, 'client_invoice_line_id', 'client_invoice_line_id');
+    }
+
+    /**
+     * Get the expenses linked to this invoice line.
+     */
+    public function expenses()
+    {
+        return $this->hasMany(ClientExpense::class, 'client_invoice_line_id', 'client_invoice_line_id');
     }
 
     /**

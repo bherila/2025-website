@@ -29,9 +29,9 @@ interface ClientPortalNavProps {
   slug: string
   companyName: string
   currentPage: 'home' | 'project' | 'time' | 'invoices' | 'invoice' | 'agreement' | 'expenses'
-  currentProjectSlug?: string
-  projectName?: string
-  invoiceNumber?: string
+  currentProjectSlug?: string | undefined
+  projectName?: string | undefined
+  invoiceNumber?: string | undefined
   projects?: Project[]
 }
 

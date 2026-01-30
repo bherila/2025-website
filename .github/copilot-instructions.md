@@ -103,11 +103,18 @@ See [docs/TESTING.md](docs/TESTING.md) for comprehensive testing documentation.
 - **Linking**: Transactions can link to related entries (e.g., buys/sells)
 - **Statements**: Balance snapshots with detailed line items in `fin_statement_details`
 - **File Uploads**: Handle CSV imports with validation and parsing logic
-- **Time Entry Splitting**: When generating invoices, if a time entry exceeds the remaining available retainer/rollover hours, the entry MUST be split into two: one row for the billed portion (linked to the invoice) and a replicated row for the unbilled portion (unlinked, to be carried over).
-- **Delayed Billing vs Negative Balance**: Two mechanisms for tracking work beyond available hours - delayed billing (actual unbilled time entry records from previous periods) and negative balance (numeric field). These are MUTUALLY EXCLUSIVE to avoid double-counting. If delayed billing entries exist, do NOT also use the negative balance for that period. Delayed billing is processed FIRST and must be covered or billed immediately; it will NOT be carried forward again.
-- **Invoice Line Items**: Additional hours (beyond retainer + rollover) are labeled "Additional time" in the line item description (e.g., "Additional time @ $150/hr"). The invoice API includes `time_entries` array for each line item with description and minutes_worked fields.
-- **Invoice Detail Display**: The invoice page includes a "Show Detail" toggle switch (Switch component) in the top-right corner above the table. When enabled, time entry descriptions appear as indented bullet lists below each line item, showing description and hours (e.g., "Meeting with client (2.50h)").
-- **Carry-Forward UI Indicator**: On the Time Tracking page, unbilled billable time entries from past months display a "CARRY-FORWARD" badge (destructive variant) with a tooltip explaining they will be invoiced in the next billing period.
+- **Prior-Month Billing**: Invoices for month M bill work from M-1 (dated last day of M-1) plus retainer for M (dated first day of M). Time entries from prior month are included at $0 if covered by retainer, or charged at hourly rate if overage.
+- **Invoice Line Types**: `prior_month_retainer` ($0, work covered by retainer), `additional_hours` (overage), `prior_month_billable` (work when no retainer), `retainer` (monthly fee), `expense` (reimbursable costs), `credit` (rollover info), `adjustment` (manual adjustments).
+- **Invoice Line Dates**: Each line has a `line_date` field. Prior-month work lines use last day of M-1; retainer uses first day of M; expenses use their original expense date.
+- **Invoice Period**: `period_start` and `period_end` are expanded to include all line item dates. Prior-month work may cause period_start to be in the previous month.
+- **Invoice Time Entry Dates**: API response includes `time_entries` array with `date_worked` for each entry, enabling display of original work dates in detail view.
+- **Invoice Detail Display**: The invoice page includes a "Show Detail" toggle switch (Switch component) in the top-right corner above the table (default: ON). When enabled, time entry descriptions appear as indented bullet lists below each line item, showing description, hours, and original date.
+- **Invoice Quantity Formatting**: Retainer quantity="1", time-based lines use "h:mm" format (e.g., "2:30"), expenses quantity="1".
+- **Invoice Retainer Description**: Monthly Retainer line includes the date in description (e.g., "Monthly Retainer (10 hours) - Feb 1, 2024").
+- **Invoice Page Title**: Browser title includes invoice number (e.g., "Invoice ABC-202402-001 - Company Name").
+- **Draft Invoice Regeneration**: When regenerating draft invoices, all time/expense links are cleared and system lines deleted before rebuilding. Manual adjustments are preserved.
+- **Rollover Hours**: Unused retainer hours roll over based on `rollover_months` in agreement. FIFO ordering - oldest hours used first, oldest hours expire first.
+- **Reimbursable Expenses**: Expenses with `is_reimbursable=true` and `expense_date <= invoice_end_date` are auto-included. Each creates a separate invoice line with its original expense date.
 - **Agreement Page Help Icons**: Agreement Summary items display help icons (HelpCircle from lucide-react) with Tooltip components explaining each term. Rollover Period is hidden completely if value is 0 or null. Signed badge uses green color (`bg-green-600`).
 - **Agreement Invoices Section**: Below Agreement Files, display a section listing all invoices related to the agreement with invoice number, period dates, total amount, and status badge (green for paid).
 
