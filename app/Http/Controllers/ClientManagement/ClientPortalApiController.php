@@ -302,6 +302,7 @@ class ClientPortalApiController extends Controller
 
         // Calculate balances using RolloverCalculator
         $calculator = new RolloverCalculator;
+        /** @var \App\Services\ClientManagement\DataTransferObjects\MonthSummary[] $balances */
         $balances = $calculator->calculateMultipleMonths(
             $months,
             (int) $agreement->rollover_months
@@ -320,22 +321,22 @@ class ClientPortalApiController extends Controller
                 'retainer_hours' => $monthData['retainer_hours'],
                 'rollover_months' => $agreement->rollover_months,
                 'opening' => [
-                    'retainer_hours' => $balance['opening']['retainer_hours'],
-                    'rollover_hours' => $balance['opening']['rollover_hours'],
-                    'expired_hours' => $balance['opening']['expired_hours'],
-                    'total_available' => $balance['opening']['total_available'],
-                    'negative_offset' => $balance['opening']['negative_offset'],
-                    'invoiced_negative_balance' => $balance['opening']['invoiced_negative_balance'] ?? 0,
+                    'retainer_hours' => $balance->opening->retainerHours,
+                    'rollover_hours' => $balance->opening->rolloverHours,
+                    'expired_hours' => $balance->opening->expiredHours,
+                    'total_available' => $balance->opening->totalAvailable,
+                    'negative_offset' => $balance->opening->negativeOffset,
+                    'invoiced_negative_balance' => $balance->opening->invoicedNegativeBalance,
                 ],
                 'closing' => [
-                    'unused_hours' => $balance['closing']['unused_hours'],
-                    'excess_hours' => $balance['closing']['excess_hours'],
-                    'hours_used_from_retainer' => $balance['closing']['hours_used_from_retainer'],
-                    'hours_used_from_rollover' => $balance['closing']['hours_used_from_rollover'],
-                    'remaining_rollover' => $balance['closing']['remaining_rollover'],
-                    'negative_balance' => $balance['closing']['negative_balance'] ?? 0,
+                    'unused_hours' => $balance->closing->unusedHours,
+                    'excess_hours' => $balance->closing->excessHours,
+                    'hours_used_from_retainer' => $balance->closing->hoursUsedFromRetainer,
+                    'hours_used_from_rollover' => $balance->closing->hoursUsedFromRollover,
+                    'remaining_rollover' => $balance->closing->remainingRollover,
+                    'negative_balance' => $balance->closing->negativeBalance,
                 ],
-                'unbilled_hours' => $monthData['is_pre_agreement'] ? $balance['closing']['negative_balance'] : 0,
+                'unbilled_hours' => $monthData['is_pre_agreement'] ? $balance->closing->negativeBalance : 0,
                 'will_be_billed_in_next_agreement' => $monthData['is_pre_agreement'],
             ];
         }

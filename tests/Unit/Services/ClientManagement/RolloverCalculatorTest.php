@@ -37,11 +37,11 @@ class RolloverCalculatorTest extends TestCase
             previousNegativeBalance: 0.0
         );
 
-        $this->assertEquals(10.0, $result['retainer_hours']);
-        $this->assertEquals(0.0, $result['rollover_hours']);
-        $this->assertEquals(0.0, $result['expired_hours']);
-        $this->assertEquals(10.0, $result['total_available']);
-        $this->assertEquals(0.0, $result['negative_offset']);
+        $this->assertEquals(10.0, $result->retainerHours);
+        $this->assertEquals(0.0, $result->rolloverHours);
+        $this->assertEquals(0.0, $result->expiredHours);
+        $this->assertEquals(10.0, $result->totalAvailable);
+        $this->assertEquals(0.0, $result->negativeOffset);
     }
 
     public function test_opening_balance_with_rollover_from_previous_month(): void
@@ -53,10 +53,10 @@ class RolloverCalculatorTest extends TestCase
             previousNegativeBalance: 0.0
         );
 
-        $this->assertEquals(10.0, $result['retainer_hours']);
-        $this->assertEquals(5.0, $result['rollover_hours']);
-        $this->assertEquals(0.0, $result['expired_hours']);
-        $this->assertEquals(15.0, $result['total_available']);
+        $this->assertEquals(10.0, $result->retainerHours);
+        $this->assertEquals(5.0, $result->rolloverHours);
+        $this->assertEquals(0.0, $result->expiredHours);
+        $this->assertEquals(15.0, $result->totalAvailable);
     }
 
     public function test_opening_balance_with_expired_hours(): void
@@ -74,10 +74,10 @@ class RolloverCalculatorTest extends TestCase
             previousNegativeBalance: 0.0
         );
 
-        $this->assertEquals(10.0, $result['retainer_hours']);
-        $this->assertEquals(8.0, $result['rollover_hours']); // 3 + 5
-        $this->assertEquals(2.0, $result['expired_hours']);
-        $this->assertEquals(18.0, $result['total_available']);
+        $this->assertEquals(10.0, $result->retainerHours);
+        $this->assertEquals(8.0, $result->rolloverHours); // 3 + 5
+        $this->assertEquals(2.0, $result->expiredHours);
+        $this->assertEquals(18.0, $result->totalAvailable);
     }
 
     public function test_opening_balance_with_one_month_rollover(): void
@@ -93,10 +93,10 @@ class RolloverCalculatorTest extends TestCase
             previousNegativeBalance: 0.0
         );
 
-        $this->assertEquals(10.0, $result['retainer_hours']);
-        $this->assertEquals(5.0, $result['rollover_hours']);
-        $this->assertEquals(3.0, $result['expired_hours']);
-        $this->assertEquals(15.0, $result['total_available']);
+        $this->assertEquals(10.0, $result->retainerHours);
+        $this->assertEquals(5.0, $result->rolloverHours);
+        $this->assertEquals(3.0, $result->expiredHours);
+        $this->assertEquals(15.0, $result->totalAvailable);
     }
 
     public function test_opening_balance_with_zero_rollover(): void
@@ -109,10 +109,10 @@ class RolloverCalculatorTest extends TestCase
             previousNegativeBalance: 0.0
         );
 
-        $this->assertEquals(10.0, $result['retainer_hours']);
-        $this->assertEquals(0.0, $result['rollover_hours']);
-        $this->assertEquals(5.0, $result['expired_hours']);
-        $this->assertEquals(10.0, $result['total_available']);
+        $this->assertEquals(10.0, $result->retainerHours);
+        $this->assertEquals(0.0, $result->rolloverHours);
+        $this->assertEquals(5.0, $result->expiredHours);
+        $this->assertEquals(10.0, $result->totalAvailable);
     }
 
     public function test_opening_balance_with_negative_offset(): void
@@ -124,10 +124,10 @@ class RolloverCalculatorTest extends TestCase
             previousNegativeBalance: 3.0 // 3 hours to offset
         );
 
-        $this->assertEquals(10.0, $result['retainer_hours']);
-        $this->assertEquals(3.0, $result['negative_offset']);
-        $this->assertEquals(7.0, $result['effective_retainer_hours']);
-        $this->assertEquals(7.0, $result['total_available']);
+        $this->assertEquals(10.0, $result->retainerHours);
+        $this->assertEquals(3.0, $result->negativeOffset);
+        $this->assertEquals(7.0, $result->effectiveRetainerHours);
+        $this->assertEquals(7.0, $result->totalAvailable);
     }
 
     public function test_opening_balance_negative_offset_carried_forward(): void
@@ -140,12 +140,12 @@ class RolloverCalculatorTest extends TestCase
             previousNegativeBalance: 15.0
         );
 
-        $this->assertEquals(10.0, $result['retainer_hours']);
-        $this->assertEquals(10.0, $result['negative_offset']); // Capped at retainer for pool calculation
-        $this->assertEquals(0.0, $result['invoiced_negative_balance']); // No longer billed immediately
-        $this->assertEquals(5.0, $result['remaining_negative_balance']); // Remaining 5 hours tracked
-        $this->assertEquals(0.0, $result['effective_retainer_hours']);
-        $this->assertEquals(0.0, $result['total_available']);
+        $this->assertEquals(10.0, $result->retainerHours);
+        $this->assertEquals(10.0, $result->negativeOffset); // Capped at retainer for pool calculation
+        $this->assertEquals(0.0, $result->invoicedNegativeBalance); // No longer billed immediately
+        $this->assertEquals(5.0, $result->remainingNegativeBalance); // Remaining 5 hours tracked
+        $this->assertEquals(0.0, $result->effectiveRetainerHours);
+        $this->assertEquals(0.0, $result->totalAvailable);
     }
 
     // =========================================================================
@@ -162,11 +162,11 @@ class RolloverCalculatorTest extends TestCase
             rolloverHours: 0.0
         );
 
-        $this->assertEquals(7.0, $result['hours_used_from_retainer']);
-        $this->assertEquals(0.0, $result['hours_used_from_rollover']);
-        $this->assertEquals(3.0, $result['unused_hours']); // Will roll over
-        $this->assertEquals(0.0, $result['excess_hours']);
-        $this->assertEquals(0.0, $result['negative_balance']);
+        $this->assertEquals(7.0, $result->hoursUsedFromRetainer);
+        $this->assertEquals(0.0, $result->hoursUsedFromRollover);
+        $this->assertEquals(3.0, $result->unusedHours); // Will roll over
+        $this->assertEquals(0.0, $result->excessHours);
+        $this->assertEquals(0.0, $result->negativeBalance);
     }
 
     public function test_closing_balance_case_a_uses_rollover_hours(): void
@@ -179,11 +179,11 @@ class RolloverCalculatorTest extends TestCase
             rolloverHours: 5.0
         );
 
-        $this->assertEquals(10.0, $result['hours_used_from_retainer']);
-        $this->assertEquals(3.0, $result['hours_used_from_rollover']);
-        $this->assertEquals(0.0, $result['unused_hours']);
-        $this->assertEquals(0.0, $result['excess_hours']);
-        $this->assertEquals(2.0, $result['remaining_rollover']); // 5 - 3 = 2
+        $this->assertEquals(10.0, $result->hoursUsedFromRetainer);
+        $this->assertEquals(3.0, $result->hoursUsedFromRollover);
+        $this->assertEquals(0.0, $result->unusedHours);
+        $this->assertEquals(0.0, $result->excessHours);
+        $this->assertEquals(2.0, $result->remainingRollover); // 5 - 3 = 2
     }
 
     public function test_closing_balance_case_b_exceeds_all_available(): void
@@ -196,12 +196,12 @@ class RolloverCalculatorTest extends TestCase
             rolloverHours: 5.0
         );
 
-        $this->assertEquals(10.0, $result['hours_used_from_retainer']);
-        $this->assertEquals(5.0, $result['hours_used_from_rollover']);
-        $this->assertEquals(0.0, $result['unused_hours']);
-        $this->assertEquals(0.0, $result['excess_hours']); // Not billed immediately
-        $this->assertEquals(5.0, $result['negative_balance']); // Carried forward
-        $this->assertEquals(0.0, $result['remaining_rollover']);
+        $this->assertEquals(10.0, $result->hoursUsedFromRetainer);
+        $this->assertEquals(5.0, $result->hoursUsedFromRollover);
+        $this->assertEquals(0.0, $result->unusedHours);
+        $this->assertEquals(0.0, $result->excessHours); // Not billed immediately
+        $this->assertEquals(5.0, $result->negativeBalance); // Carried forward
+        $this->assertEquals(0.0, $result->remainingRollover);
     }
 
     public function test_closing_balance_exact_retainer_usage(): void
@@ -213,9 +213,9 @@ class RolloverCalculatorTest extends TestCase
             rolloverHours: 0.0
         );
 
-        $this->assertEquals(10.0, $result['hours_used_from_retainer']);
-        $this->assertEquals(0.0, $result['unused_hours']);
-        $this->assertEquals(0.0, $result['excess_hours']);
+        $this->assertEquals(10.0, $result->hoursUsedFromRetainer);
+        $this->assertEquals(0.0, $result->unusedHours);
+        $this->assertEquals(0.0, $result->excessHours);
     }
 
     // =========================================================================
@@ -232,10 +232,10 @@ class RolloverCalculatorTest extends TestCase
             previousNegativeBalance: 0.0
         );
 
-        $this->assertEquals(10.0, $result['opening']['retainer_hours']);
-        $this->assertEquals(10.0, $result['opening']['total_available']);
-        $this->assertEquals(8.0, $result['hours_worked']);
-        $this->assertEquals(2.0, $result['closing']['unused_hours']);
+        $this->assertEquals(10.0, $result->opening->retainerHours);
+        $this->assertEquals(10.0, $result->opening->totalAvailable);
+        $this->assertEquals(8.0, $result->hoursWorked);
+        $this->assertEquals(2.0, $result->closing->unusedHours);
     }
 
     public function test_month_summary_with_rollover_used(): void
@@ -248,13 +248,13 @@ class RolloverCalculatorTest extends TestCase
             previousNegativeBalance: 0.0
         );
 
-        $this->assertEquals(10.0, $result['opening']['retainer_hours']);
-        $this->assertEquals(5.0, $result['opening']['rollover_hours']);
-        $this->assertEquals(15.0, $result['opening']['total_available']);
-        $this->assertEquals(12.0, $result['hours_worked']);
-        $this->assertEquals(10.0, $result['closing']['hours_used_from_retainer']);
-        $this->assertEquals(2.0, $result['closing']['hours_used_from_rollover']);
-        $this->assertEquals(3.0, $result['closing']['remaining_rollover']);
+        $this->assertEquals(10.0, $result->opening->retainerHours);
+        $this->assertEquals(5.0, $result->opening->rolloverHours);
+        $this->assertEquals(15.0, $result->opening->totalAvailable);
+        $this->assertEquals(12.0, $result->hoursWorked);
+        $this->assertEquals(10.0, $result->closing->hoursUsedFromRetainer);
+        $this->assertEquals(2.0, $result->closing->hoursUsedFromRollover);
+        $this->assertEquals(3.0, $result->closing->remainingRollover);
     }
 
     // =========================================================================
@@ -272,13 +272,13 @@ class RolloverCalculatorTest extends TestCase
         $results = $this->calculator->calculateMultipleMonths($months, rolloverMonths: 3);
 
         // Month 1: 7 worked, 3 unused
-        $this->assertEquals(3.0, $results[0]['closing']['unused_hours']);
+        $this->assertEquals(3.0, $results[0]->closing->unusedHours);
 
         // Month 2: 10 retainer + 3 rollover = 13 available, 8 worked
-        $this->assertEquals(3.0, $results[1]['opening']['rollover_hours']);
-        $this->assertEquals(13.0, $results[1]['opening']['total_available']);
+        $this->assertEquals(3.0, $results[1]->opening->rolloverHours);
+        $this->assertEquals(13.0, $results[1]->opening->totalAvailable);
         // Only 2 unused from this month's retainer (8 worked out of 10)
-        $this->assertEquals(2.0, $results[1]['closing']['unused_hours']);
+        $this->assertEquals(2.0, $results[1]->closing->unusedHours);
     }
 
     public function test_multiple_months_case_a_uses_rollover(): void
@@ -292,14 +292,14 @@ class RolloverCalculatorTest extends TestCase
         $results = $this->calculator->calculateMultipleMonths($months, rolloverMonths: 3);
 
         // Month 1: 5 worked, 5 unused
-        $this->assertEquals(5.0, $results[0]['closing']['unused_hours']);
+        $this->assertEquals(5.0, $results[0]->closing->unusedHours);
 
         // Month 2: Uses rollover for excess
-        $this->assertEquals(5.0, $results[1]['opening']['rollover_hours']);
-        $this->assertEquals(15.0, $results[1]['opening']['total_available']);
-        $this->assertEquals(10.0, $results[1]['closing']['hours_used_from_retainer']);
-        $this->assertEquals(3.0, $results[1]['closing']['hours_used_from_rollover']);
-        $this->assertEquals(0.0, $results[1]['closing']['excess_hours']);
+        $this->assertEquals(5.0, $results[1]->opening->rolloverHours);
+        $this->assertEquals(15.0, $results[1]->opening->totalAvailable);
+        $this->assertEquals(10.0, $results[1]->closing->hoursUsedFromRetainer);
+        $this->assertEquals(3.0, $results[1]->closing->hoursUsedFromRollover);
+        $this->assertEquals(0.0, $results[1]->closing->excessHours);
     }
 
     public function test_multiple_months_case_b_exceeds_rollover(): void
@@ -313,15 +313,15 @@ class RolloverCalculatorTest extends TestCase
         $results = $this->calculator->calculateMultipleMonths($months, rolloverMonths: 3);
 
         // Month 1: 7 worked, 3 unused
-        $this->assertEquals(3.0, $results[0]['closing']['unused_hours']);
+        $this->assertEquals(3.0, $results[0]->closing->unusedHours);
 
         // Month 2: 10 retainer + 3 rollover = 13 available, 20 worked = 7 negative balance
-        $this->assertEquals(3.0, $results[1]['opening']['rollover_hours']);
-        $this->assertEquals(13.0, $results[1]['opening']['total_available']);
-        $this->assertEquals(10.0, $results[1]['closing']['hours_used_from_retainer']);
-        $this->assertEquals(3.0, $results[1]['closing']['hours_used_from_rollover']);
-        $this->assertEquals(0.0, $results[1]['closing']['excess_hours']);
-        $this->assertEquals(7.0, $results[1]['closing']['negative_balance']);
+        $this->assertEquals(3.0, $results[1]->opening->rolloverHours);
+        $this->assertEquals(13.0, $results[1]->opening->totalAvailable);
+        $this->assertEquals(10.0, $results[1]->closing->hoursUsedFromRetainer);
+        $this->assertEquals(3.0, $results[1]->closing->hoursUsedFromRollover);
+        $this->assertEquals(0.0, $results[1]->closing->excessHours);
+        $this->assertEquals(7.0, $results[1]->closing->negativeBalance);
     }
 
     public function test_multiple_months_with_zero_rollover(): void
@@ -335,14 +335,14 @@ class RolloverCalculatorTest extends TestCase
         $results = $this->calculator->calculateMultipleMonths($months, rolloverMonths: 0);
 
         // Month 1: 5 worked, 5 unused (but won't roll over)
-        $this->assertEquals(5.0, $results[0]['closing']['unused_hours']);
+        $this->assertEquals(5.0, $results[0]->closing->unusedHours);
 
         // Month 2: Only 10 available (no rollover), 12 worked = 2 excess
-        $this->assertEquals(0.0, $results[1]['opening']['rollover_hours']);
-        $this->assertEquals(5.0, $results[1]['opening']['expired_hours']);
-        $this->assertEquals(10.0, $results[1]['opening']['total_available']);
-        $this->assertEquals(0.0, $results[1]['closing']['excess_hours']);
-        $this->assertEquals(2.0, $results[1]['closing']['negative_balance']);
+        $this->assertEquals(0.0, $results[1]->opening->rolloverHours);
+        $this->assertEquals(5.0, $results[1]->opening->expiredHours);
+        $this->assertEquals(10.0, $results[1]->opening->totalAvailable);
+        $this->assertEquals(0.0, $results[1]->closing->excessHours);
+        $this->assertEquals(2.0, $results[1]->closing->negativeBalance);
     }
 
     public function test_multiple_months_hours_expire_after_rollover_window(): void
@@ -357,16 +357,16 @@ class RolloverCalculatorTest extends TestCase
         $results = $this->calculator->calculateMultipleMonths($months, rolloverMonths: 2);
 
         // Month 1: 5 unused
-        $this->assertEquals(5.0, $results[0]['closing']['unused_hours']);
+        $this->assertEquals(5.0, $results[0]->closing->unusedHours);
 
         // Month 2: 5 rollover from Jan + 10 retainer, 6 used, 4 unused from Feb's retainer
-        $this->assertEquals(5.0, $results[1]['opening']['rollover_hours']);
-        $this->assertEquals(4.0, $results[1]['closing']['unused_hours']);
+        $this->assertEquals(5.0, $results[1]->opening->rolloverHours);
+        $this->assertEquals(4.0, $results[1]->closing->unusedHours);
 
         // Month 3: Jan's 5 hours are 2 months old. rollover_months=2 means they are still valid.
         // Feb's 4 hours are 1 month old. Valid.
         // Total rollover = 5 + 4 = 9.
-        $this->assertEquals(9.0, $results[2]['opening']['rollover_hours']);
+        $this->assertEquals(9.0, $results[2]->opening->rolloverHours);
         // Actually Jan's hours would have been used in Feb, so let's verify
         // The 5 hours from Jan rolled to Feb, Feb had 6 worked out of 10 retainer
         // So 4 unused from Feb, and Jan's 5 rollover wasn't needed
@@ -387,23 +387,23 @@ class RolloverCalculatorTest extends TestCase
         $results = $this->calculator->calculateMultipleMonths($months, rolloverMonths: 3);
 
         // Month 1: 5 unused
-        $this->assertEquals(5.0, $results[0]['closing']['unused_hours']);
+        $this->assertEquals(5.0, $results[0]->closing->unusedHours);
 
         // Month 2: Had 5 rollover, used 10 from retainer (exactly), 0 from rollover
-        $this->assertEquals(5.0, $results[1]['opening']['rollover_hours']);
-        $this->assertEquals(15.0, $results[1]['opening']['total_available']);
-        $this->assertEquals(10.0, $results[1]['closing']['hours_used_from_retainer']);
-        $this->assertEquals(0.0, $results[1]['closing']['hours_used_from_rollover']);
-        $this->assertEquals(0.0, $results[1]['closing']['unused_hours']); // Used exactly retainer
+        $this->assertEquals(5.0, $results[1]->opening->rolloverHours);
+        $this->assertEquals(15.0, $results[1]->opening->totalAvailable);
+        $this->assertEquals(10.0, $results[1]->closing->hoursUsedFromRetainer);
+        $this->assertEquals(0.0, $results[1]->closing->hoursUsedFromRollover);
+        $this->assertEquals(0.0, $results[1]->closing->unusedHours); // Used exactly retainer
 
         // Month 3: Still has 5 rollover from Jan (Feb had 0 unused)
-        $this->assertEquals(5.0, $results[2]['opening']['rollover_hours']);
-        $this->assertEquals(15.0, $results[2]['opening']['total_available']);
+        $this->assertEquals(5.0, $results[2]->opening->rolloverHours);
+        $this->assertEquals(15.0, $results[2]->opening->totalAvailable);
         // 18 worked: 10 from retainer + 5 from rollover + 3 negative balance
-        $this->assertEquals(10.0, $results[2]['closing']['hours_used_from_retainer']);
-        $this->assertEquals(5.0, $results[2]['closing']['hours_used_from_rollover']);
-        $this->assertEquals(0.0, $results[2]['closing']['excess_hours']);
-        $this->assertEquals(3.0, $results[2]['closing']['negative_balance']);
+        $this->assertEquals(10.0, $results[2]->closing->hoursUsedFromRetainer);
+        $this->assertEquals(5.0, $results[2]->closing->hoursUsedFromRollover);
+        $this->assertEquals(0.0, $results[2]->closing->excessHours);
+        $this->assertEquals(3.0, $results[2]->closing->negativeBalance);
     }
 
     public function test_full_year_scenario(): void
@@ -422,12 +422,12 @@ class RolloverCalculatorTest extends TestCase
 
         // Verify no negative hours in any month (excess is tracked, not negative balance)
         foreach ($results as $month) {
-            $this->assertGreaterThanOrEqual(0, $month['closing']['unused_hours']);
-            $this->assertGreaterThanOrEqual(0, $month['closing']['excess_hours']);
+            $this->assertGreaterThanOrEqual(0, $month->closing->unusedHours);
+            $this->assertGreaterThanOrEqual(0, $month->closing->excessHours);
         }
 
         // June should have negative balance hours (high usage month)
-        $this->assertGreaterThan(0, $results[5]['closing']['negative_balance']);
+        $this->assertGreaterThan(0, $results[5]->closing->negativeBalance);
     }
 
     // =========================================================================
@@ -444,8 +444,8 @@ class RolloverCalculatorTest extends TestCase
             previousNegativeBalance: 0.0
         );
 
-        $this->assertEquals(0.0, $result['hours_worked']);
-        $this->assertEquals(10.0, $result['closing']['unused_hours']);
+        $this->assertEquals(0.0, $result->hoursWorked);
+        $this->assertEquals(10.0, $result->closing->unusedHours);
     }
 
     public function test_fractional_hours(): void
@@ -458,10 +458,10 @@ class RolloverCalculatorTest extends TestCase
             previousNegativeBalance: 0.0
         );
 
-        $this->assertEquals(10.5, $result['opening']['retainer_hours']);
-        $this->assertEquals(2.75, $result['opening']['rollover_hours']);
-        $this->assertEquals(7.25, $result['hours_worked']);
-        $this->assertEquals(3.25, $result['closing']['unused_hours']);
+        $this->assertEquals(10.5, $result->opening->retainerHours);
+        $this->assertEquals(2.75, $result->opening->rolloverHours);
+        $this->assertEquals(7.25, $result->hoursWorked);
+        $this->assertEquals(3.25, $result->closing->unusedHours);
     }
 
     public function test_very_large_rollover_window(): void
@@ -482,8 +482,8 @@ class RolloverCalculatorTest extends TestCase
         );
 
         // All 5 months of unused hours should roll over
-        $this->assertEquals(12.0, $result['rollover_hours']); // 2+3+1+4+2
-        $this->assertEquals(0.0, $result['expired_hours']);
+        $this->assertEquals(12.0, $result->rolloverHours); // 2+3+1+4+2
+        $this->assertEquals(0.0, $result->expiredHours);
     }
 
     public function test_status_description_excess(): void

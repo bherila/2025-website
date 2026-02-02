@@ -2,6 +2,10 @@
 
 namespace App\Services\ClientManagement;
 
+use App\Services\ClientManagement\DataTransferObjects\ClosingBalance;
+use App\Services\ClientManagement\DataTransferObjects\MonthSummary;
+use App\Services\ClientManagement\DataTransferObjects\OpeningBalance;
+
 /**
  * Calculates rollover hour balances for client retainer agreements.
  *
@@ -29,20 +33,14 @@ class RolloverCalculator
      *                                       indexed by months ago (1 = last month, 2 = two months ago, etc.)
      * @param  int  $rolloverMonths  Number of months hours can roll over (1 = no rollover)
      * @param  float  $previousNegativeBalance  Negative balance carried from previous month
-     * @return array{
-     *   retainer_hours: float,
-     *   rollover_hours: float,
-     *   expired_hours: float,
-     *   total_available: float,
-     *   negative_offset: float
-     * }
+     * @return OpeningBalance
      */
     public function calculateOpeningBalance(
         float $retainerHours,
         array $previousMonthsUnused,
         int $rolloverMonths,
         float $previousNegativeBalance = 0.0
-    ): array {
+    ): OpeningBalance {
         $rolloverHours = 0.0;
         $expiredHours = 0.0;
 
@@ -67,25 +65,25 @@ class RolloverCalculator
             $negativeOffset = min($previousNegativeBalance, $retainerHours);
             // In the "give and take" model, we carry forward the remaining negative balance
             // instead of billing it immediately.
-            $invoicedNegativeBalance = 0.0; 
+            $invoicedNegativeBalance = 0.0;
             $effectiveRetainerHours = $retainerHours - $negativeOffset;
         }
 
         $totalAvailable = $effectiveRetainerHours + $rolloverHours;
-        
+
         // The remaining negative balance after applying retainer
         $remainingNegativeBalance = max(0, $previousNegativeBalance - $retainerHours);
 
-        return [
-            'retainer_hours' => round($retainerHours, 4),
-            'rollover_hours' => round($rolloverHours, 4),
-            'expired_hours' => round($expiredHours, 4),
-            'total_available' => round($totalAvailable, 4),
-            'negative_offset' => round($negativeOffset, 4),
-            'invoiced_negative_balance' => round($invoicedNegativeBalance, 4), // Kept for BC but should be 0
-            'effective_retainer_hours' => round($effectiveRetainerHours, 4),
-            'remaining_negative_balance' => round($remainingNegativeBalance, 4),
-        ];
+        return new OpeningBalance(
+            retainerHours: round($retainerHours, 4),
+            rolloverHours: round($rolloverHours, 4),
+            expiredHours: round($expiredHours, 4),
+            totalAvailable: round($totalAvailable, 4),
+            negativeOffset: round($negativeOffset, 4),
+            invoicedNegativeBalance: round($invoicedNegativeBalance, 4),
+            effectiveRetainerHours: round($effectiveRetainerHours, 4),
+            remainingNegativeBalance: round($remainingNegativeBalance, 4),
+        );
     }
 
     /**
@@ -96,13 +94,7 @@ class RolloverCalculator
      * @param  float  $retainerHours  This month's retainer hours (for categorizing usage)
      * @param  float  $rolloverHours  Available rollover hours from previous months
      * @param  float  $remainingNegativeBalance  Negative balance that was too large to be offset by retainer
-     * @return array{
-     *   hours_used_from_retainer: float,
-     *   hours_used_from_rollover: float,
-     *   unused_hours: float,
-     *   excess_hours: float,
-     *   negative_balance: float
-     * }
+     * @return ClosingBalance
      */
     public function calculateClosingBalance(
         float $totalAvailable,
@@ -111,7 +103,7 @@ class RolloverCalculator
         float $rolloverHours,
         bool $billExcessImmediately = false,
         float $remainingNegativeBalance = 0.0
-    ): array {
+    ): ClosingBalance {
         $hoursUsedFromRetainer = 0.0;
         $hoursUsedFromRollover = 0.0;
         $unusedHours = 0.0;
@@ -131,23 +123,23 @@ class RolloverCalculator
             // Case B: Exceeded all available hours
             $hoursUsedFromRetainer = $retainerHours;
             $hoursUsedFromRollover = $rolloverHours;
-            
+
             if ($billExcessImmediately) {
                 $excessHours = $hoursWorked - $totalAvailable;
             } else {
-                $excessHours = 0.0; 
+                $excessHours = 0.0;
                 $negativeBalance += ($hoursWorked - $totalAvailable);
             }
         }
 
-        return [
-            'hours_used_from_retainer' => round($hoursUsedFromRetainer, 4),
-            'hours_used_from_rollover' => round($hoursUsedFromRollover, 4),
-            'unused_hours' => round($unusedHours, 4),
-            'excess_hours' => round($excessHours, 4),
-            'negative_balance' => round($negativeBalance, 4),
-            'remaining_rollover' => round(max(0, $rolloverHours - $hoursUsedFromRollover), 4),
-        ];
+        return new ClosingBalance(
+            hoursUsedFromRetainer: round($hoursUsedFromRetainer, 4),
+            hoursUsedFromRollover: round($hoursUsedFromRollover, 4),
+            unusedHours: round($unusedHours, 4),
+            excessHours: round($excessHours, 4),
+            negativeBalance: round($negativeBalance, 4),
+            remainingRollover: round(max(0, $rolloverHours - $hoursUsedFromRollover), 4),
+        );
     }
 
     /**
@@ -158,7 +150,7 @@ class RolloverCalculator
      * @param  array  $previousMonthsUnused  Unused hours from previous months by month index
      * @param  int  $rolloverMonths  Number of months hours can roll over
      * @param  float  $previousNegativeBalance  Negative balance from previous month
-     * @return array Complete month summary with all balance information
+     * @return MonthSummary
      */
     public function calculateMonthSummary(
         float $retainerHours,
@@ -166,8 +158,9 @@ class RolloverCalculator
         array $previousMonthsUnused,
         int $rolloverMonths,
         float $previousNegativeBalance = 0.0,
-        bool $billExcessImmediately = false
-    ): array {
+        bool $billExcessImmediately = false,
+        string $yearMonth = ''
+    ): MonthSummary {
         $opening = $this->calculateOpeningBalance(
             $retainerHours,
             $previousMonthsUnused,
@@ -176,19 +169,21 @@ class RolloverCalculator
         );
 
         $closing = $this->calculateClosingBalance(
-            $opening['total_available'],
+            $opening->totalAvailable,
             $hoursWorked,
-            $opening['effective_retainer_hours'],
-            $opening['rollover_hours'],
+            $opening->effectiveRetainerHours,
+            $opening->rolloverHours,
             $billExcessImmediately,
-            $opening['remaining_negative_balance']
+            $opening->remainingNegativeBalance
         );
 
-        return [
-            'opening' => $opening,
-            'hours_worked' => round($hoursWorked, 4),
-            'closing' => $closing,
-        ];
+        return new MonthSummary(
+            opening: $opening,
+            closing: $closing,
+            hoursWorked: round($hoursWorked, 4),
+            yearMonth: $yearMonth,
+            retainerHours: $retainerHours
+        );
     }
 
     /**
@@ -197,7 +192,7 @@ class RolloverCalculator
      * @param  array  $months  Array of months with retainer_hours, hours_worked, year_month keys
      * @param  int  $rollover_months  Number of months hours can roll over
      * @param  bool  $billExcessImmediately  Whether to bill excess hours immediately or carry them forward as negative balance
-     * @return array Array of month summaries
+     * @return array<MonthSummary> Array of month summaries
      */
     public function calculateMultipleMonths(array $months, int $rolloverMonths, bool $billExcessImmediately = false): array
     {
@@ -221,8 +216,12 @@ class RolloverCalculator
 
             // Get negative balance from previous month if any
             $previousNegativeBalance = 0.0;
-            if ($index > 0 && isset($results[$index - 1]['closing']['negative_balance'])) {
-                $previousNegativeBalance = $results[$index - 1]['closing']['negative_balance'];
+            if ($index > 0) {
+                /** @var MonthSummary $prevSummary */
+                $prevSummary = $results[$index - 1];
+                if ($prevSummary->closing->negativeBalance > 0) {
+                    $previousNegativeBalance = $prevSummary->closing->negativeBalance;
+                }
             }
 
             $summary = $this->calculateMonthSummary(
@@ -231,75 +230,13 @@ class RolloverCalculator
                 $previousMonthsUnused,
                 $rolloverMonths,
                 $previousNegativeBalance,
-                $billExcessImmediately
+                $billExcessImmediately,
+                $yearMonth
             );
 
             // Deduct used rollover hours from the history stack (FIFO)
-            $usedRollover = $summary['closing']['hours_used_from_rollover'];
+            $usedRollover = $summary->closing->hoursUsedFromRollover;
             if ($usedRollover > 0) {
-                // unusedByMonth is chronological (FIFO)
-                foreach ($unusedByMonth as $key => $amount) {
-                    if ($usedRollover <= 0) {
-                        break;
-                    }
-
-                    // Only deduct from months that were actually eligible for rollover
-                    // We need to check if this specific month key was eligible.
-                    // But since we built previousMonthsUnused from all valid unusedByMonth,
-                    // and assuming calculateOpeningBalance summed them all...
-                    // Wait, calculateOpeningBalance filters based on rolloverMonths.
-                    // We should only deduct from those that passed the filter.
-
-                    // Recalculate monthsAgo for this key
-                    // We need to know the index relative to current processing month
-                    // This is complicated to do inside this loop cleanly without re-logic.
-
-                    // SIMPLIFICATION:
-                    // If we assume the caller provided months in order, and we are processing chronologically.
-                    // The entries in unusedByMonth are those that haven't been pruned.
-                    // Pruning happens at the end of the loop.
-                    // But we only want to deduct from "valid" rollover sources.
-                    // If an entry is too old (will expire this month), it contributed to expiredHours, NOT rolloverHours.
-                    // So we shouldn't deduct usedRollover from it?
-                    // Or should we? If it expired, it wasn't used.
-                    // So we should only deduct from monthsAgo <= rolloverMonths.
-
-                    // We can find the key in monthKeys
-                    $keyIndex = array_search($key, $monthKeys);
-                    // monthKeys contains keys UP TO this iteration? No, unusedByMonth grows.
-                    // monthKeys was snapshot at start of loop.
-                    // Let's rely on calculating monthsAgo.
-                    // The current month is $index.
-                    // The stored month index is implicit? No.
-
-                    // Easier: Iterate previousMonthsUnused which has monthsAgo keys.
-                    // But previousMonthsUnused is a copy. We need to update unusedByMonth.
-                    // We can map monthsAgo back to the key?
-                    // $monthKeys[$monthCount - $monthsAgo] ?
-
-                    // Let's just iterate unusedByMonth and check eligibility.
-                    // We need the "age" of the entry relative to current processing.
-                    // We don't store the date object, just the string key.
-                    // But we know unusedByMonth keys are ordered.
-                    // The ones at the end are newest.
-                    // The ones at the start are oldest.
-
-                    // Total count in unusedByMonth is $monthCount (at start of loop).
-                    // Iterate $i from 0 to $monthCount - 1.
-                    // Age = $monthCount - $i.
-                    // If Age <= rolloverMonths: It is eligible.
-
-                    $take = min($amount, $usedRollover);
-
-                    // Determine age of this entry
-                    // We can't easily know age without the full list logic.
-                    // But we used $monthKeys earlier.
-                    // $monthKeys[$i] corresponds to $unusedByMonth key at index $i.
-
-                    // Let's iterate using the index $i from the earlier loop
-                    // But we are outside that loop.
-                }
-
                 // Re-implementation of deduction logic using monthKeys
                 foreach ($monthKeys as $i => $key) {
                     if ($usedRollover <= 0) {
@@ -322,13 +259,12 @@ class RolloverCalculator
                 }
             }
 
-            $summary['year_month'] = $yearMonth;
             $results[] = $summary;
 
             // Track this month's unused hours for future rollover calculations
             // Only track if there are unused hours
-            if ($summary['closing']['unused_hours'] > 0) {
-                $unusedByMonth[$yearMonth] = $summary['closing']['unused_hours'];
+            if ($summary->closing->unusedHours > 0) {
+                $unusedByMonth[$yearMonth] = $summary->closing->unusedHours;
             }
 
             // Remove expired months from tracking (beyond rollover window)
@@ -344,48 +280,48 @@ class RolloverCalculator
     /**
      * Get a human-readable description of the hour balance status.
      *
-     * @param  array  $monthSummary  The summary from calculateMonthSummary
+     * @param  MonthSummary  $monthSummary  The summary from calculateMonthSummary
      * @return string Description of the status
      */
-    public function getStatusDescription(array $monthSummary): string
+    public function getStatusDescription(MonthSummary $monthSummary): string
     {
-        $opening = $monthSummary['opening'];
-        $closing = $monthSummary['closing'];
+        $opening = $monthSummary->opening;
+        $closing = $monthSummary->closing;
 
         $parts = [];
 
-        if (isset($opening['invoiced_negative_balance']) && $opening['invoiced_negative_balance'] > 0) {
+        if ($opening->invoicedNegativeBalance > 0) {
             $parts[] = sprintf(
                 'Previous negative balance exceeded retainer by %.2f hours (billed at hourly rate)',
-                $opening['invoiced_negative_balance']
+                $opening->invoicedNegativeBalance
             );
         }
 
-        if ($closing['negative_balance'] > 0) {
+        if ($closing->negativeBalance > 0) {
             $parts[] = sprintf(
                 'Negative balance of %.2f hours carried forward to next month',
-                $closing['negative_balance']
+                $closing->negativeBalance
             );
         }
 
-        if ($closing['excess_hours'] > 0) {
+        if ($closing->excessHours > 0) {
             $parts[] = sprintf(
                 'Exceeded by %.2f hours (billed at hourly rate)',
-                $closing['excess_hours']
+                $closing->excessHours
             );
         }
 
-        if ($closing['unused_hours'] > 0) {
+        if ($closing->unusedHours > 0) {
             $parts[] = sprintf(
                 '%.2f unused hours will roll over',
-                $closing['unused_hours']
+                $closing->unusedHours
             );
         }
 
-        if ($closing['hours_used_from_rollover'] > 0) {
+        if ($closing->hoursUsedFromRollover > 0) {
             $parts[] = sprintf(
                 'Used %.2f rollover hours',
-                $closing['hours_used_from_rollover']
+                $closing->hoursUsedFromRollover
             );
         }
 

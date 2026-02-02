@@ -11,6 +11,9 @@ use App\Models\ClientManagement\ClientTimeEntry;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Services\ClientManagement\DataTransferObjects\ClosingBalance;
+use App\Services\ClientManagement\DataTransferObjects\MonthSummary;
+use App\Services\ClientManagement\DataTransferObjects\OpeningBalance;
 
 /**
  * Service for generating client invoices with rollover hour logic.
@@ -230,8 +233,11 @@ class ClientInvoicingService
                 $currentCalculationDate->addMonth();
             }
 
+
+
             // Calculate balances chronologically
             $calculator = new RolloverCalculator();
+            /** @var MonthSummary[] $allBalances */
             $allBalances = $calculator->calculateMultipleMonths($months, (int) $agreement->rollover_months);
 
             // Get unbilled time entries from the prior month (M-1)
@@ -247,9 +253,10 @@ class ClientInvoicingService
 
             // Find balance for the current invoice month (M)
             $currentMonthKey = $periodEnd->format('Y-m');
+            /** @var MonthSummary|null $currentMonthBalance */
             $currentMonthBalance = null;
             foreach ($allBalances as $balance) {
-                if ($balance['year_month'] === $currentMonthKey) {
+                if ($balance->yearMonth === $currentMonthKey) {
                     $currentMonthBalance = $balance;
                     break;
                 }
@@ -260,28 +267,30 @@ class ClientInvoicingService
 
             // If still null (e.g. no agreement/calculation history), start fresh
             if (!$currentMonthBalance) {
-                $currentMonthBalance = [
-                    'opening' => [
-                        'retainer_hours' => (float) $agreement->monthly_retainer_hours,
-                        'rollover_hours' => 0,
-                        'expired_hours' => 0,
-                        'total_available' => (float) $agreement->monthly_retainer_hours,
-                        'negative_offset' => 0,
-                        'invoiced_negative_balance' => 0,
-                        'effective_retainer_hours' => (float) $agreement->monthly_retainer_hours,
-                        'remaining_negative_balance' => 0,
-                    ],
-                    'hours_worked' => 0,
-                    'closing' => [
-                        'hours_used_from_retainer' => 0,
-                        'hours_used_from_rollover' => 0,
-                        'unused_hours' => (float) $agreement->monthly_retainer_hours,
-                        'excess_hours' => 0,
-                        'negative_balance' => 0,
-                        'remaining_rollover' => 0,
-                    ],
-                    'year_month' => $currentMonthKey,
-                ];
+                $retainer = (float) $agreement->monthly_retainer_hours;
+                $currentMonthBalance = new MonthSummary(
+                    opening: new OpeningBalance(
+                        retainerHours: $retainer,
+                        rolloverHours: 0,
+                        expiredHours: 0,
+                        totalAvailable: $retainer,
+                        negativeOffset: 0,
+                        invoicedNegativeBalance: 0,
+                        effectiveRetainerHours: $retainer,
+                        remainingNegativeBalance: 0
+                    ),
+                    closing: new ClosingBalance(
+                        hoursUsedFromRetainer: 0,
+                        hoursUsedFromRollover: 0,
+                        unusedHours: $retainer,
+                        excessHours: 0,
+                        negativeBalance: 0,
+                        remainingRollover: 0
+                    ),
+                    hoursWorked: 0,
+                    yearMonth: $currentMonthKey,
+                    retainerHours: $retainer
+                );
             }
 
             // Prepare invoice data
@@ -292,9 +301,9 @@ class ClientInvoicingService
                 'period_end' => $periodEnd,
                 'retainer_hours_included' => (float) $agreement->monthly_retainer_hours,
                 'hours_worked' => $priorMonthEntries->sum('minutes_worked') / 60,
-                'rollover_hours_used' => $currentMonthBalance['closing']['hours_used_from_rollover'],
-                'unused_hours_balance' => $currentMonthBalance['closing']['unused_hours'],
-                'negative_hours_balance' => $currentMonthBalance['closing']['negative_balance'],
+                'rollover_hours_used' => $currentMonthBalance->closing->hoursUsedFromRollover,
+                'unused_hours_balance' => $currentMonthBalance->closing->unusedHours,
+                'negative_hours_balance' => $currentMonthBalance->closing->negativeBalance,
                 'hours_billed_at_rate' => 0, // We'll set this if we decide to bill overage
                 'status' => 'draft',
             ];
@@ -335,18 +344,19 @@ class ClientInvoicingService
                 $m_limit = 0;
 
                 // 1. Determine M-1 Limit
+                /** @var MonthSummary|null $priorMonthBalance */
                 $priorMonthBalance = null;
                 foreach ($allBalances as $balance) {
-                    if ($balance['year_month'] === $priorMonthEnd->format('Y-m')) {
+                    if ($balance->yearMonth === $priorMonthEnd->format('Y-m')) {
                         $priorMonthBalance = $balance;
                         break;
                     }
                 }
-                $m1_limit = $priorMonthBalance ? $priorMonthBalance['opening']['total_available'] : 0;
+                $m1_limit = $priorMonthBalance ? $priorMonthBalance->opening->totalAvailable : 0;
 
                 // 2. Determine M Limit (Negative Offset)
                 // This is how much of M's retainer is successfully used to cover the backlog
-                $m_limit = $currentMonthBalance['opening']['negative_offset'] ?? 0;
+                $m_limit = $currentMonthBalance->opening->negativeOffset ?? 0;
 
                 // --- STAGE 1: Covered by M-1 ---
                 $entriesToProcess = $priorMonthEntries;
@@ -449,8 +459,8 @@ class ClientInvoicingService
             // Available = Total Available (opening) - Remaining Negative Balance (opening)
             // If Available < 1, CatchUp = 1 - Available
 
-            $opening = $currentMonthBalance['opening'];
-            $available = $opening['total_available'] - $opening['remaining_negative_balance'];
+            $opening = $currentMonthBalance->opening;
+            $available = $opening->totalAvailable - $opening->remainingNegativeBalance;
 
             if ($available < 1) {
                 // Minimum required availability is 1 hour
@@ -482,7 +492,7 @@ class ClientInvoicingService
                 // If CatchUp > Old Remaining (meaning we are crossing from negative to positive availability),
                 // then Negative becomes 0.
 
-                $oldRemainingNegative = $opening['remaining_negative_balance'];
+                $oldRemainingNegative = $opening->remainingNegativeBalance;
 
                 $newNegativeBalance = max(0, $oldRemainingNegative - $catchUpHours);
 
@@ -496,25 +506,25 @@ class ClientInvoicingService
                 ]);
 
                 // Update local variable for the informational text below
-                if (isset($currentMonthBalance['closing'])) {
+                if ($currentMonthBalance->closing) {
                     // Update the closing balance to reflect that we've paid down the debt
                     // Note: 'negative_balance' in closing usually reflects total debt.
                     // We reduce it by the amount we just paid off (catchUpHours).
                     // But we must check against what was supposedly remaining.
                     // The closing balance includes new work.
                     // If we paid down OLD debt, the closing debt is reduced by that amount.
-                    $currentMonthBalance['closing']['negative_balance'] = max(0, $currentMonthBalance['closing']['negative_balance'] - $catchUpHours);
+                    $currentMonthBalance->closing->negativeBalance = max(0, $currentMonthBalance->closing->negativeBalance - $catchUpHours);
                 }
             }
 
             // Informational rollover/negative balance line
-            if ($currentMonthBalance && ($currentMonthBalance['closing']['hours_used_from_rollover'] > 0 || $currentMonthBalance['closing']['negative_balance'] > 0)) {
+            if ($currentMonthBalance && ($currentMonthBalance->closing->hoursUsedFromRollover > 0 || $currentMonthBalance->closing->negativeBalance > 0)) {
                 $desc = 'Balance update: ';
-                if ($currentMonthBalance['closing']['hours_used_from_rollover'] > 0) {
-                    $desc .= "Used {$currentMonthBalance['closing']['hours_used_from_rollover']}h rollover. ";
+                if ($currentMonthBalance->closing->hoursUsedFromRollover > 0) {
+                    $desc .= "Used {$currentMonthBalance->closing->hoursUsedFromRollover}h rollover. ";
                 }
-                if ($currentMonthBalance['closing']['negative_balance'] > 0) {
-                    $desc .= "Negative balance of {$currentMonthBalance['closing']['negative_balance']}h carried forward to {$periodStart->copy()->addMonth()->format('F Y')}. ";
+                if ($currentMonthBalance->closing->negativeBalance > 0) {
+                    $desc .= "Negative balance of {$currentMonthBalance->closing->negativeBalance}h carried forward to {$periodStart->copy()->addMonth()->format('F Y')}. ";
                 }
 
                 ClientInvoiceLine::create([
