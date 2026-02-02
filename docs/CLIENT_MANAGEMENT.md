@@ -529,61 +529,18 @@ const fileManager = useFileManagement({
 
 ## Billing & Invoicing System
 
-### Overview
-The billing and invoicing system handles automatic invoice generation with prior-month billing, retainer-based pricing, rollover hours, and reimbursable expense tracking. Invoices are generated at the start of month M and include work from the prior month (M-1) plus the retainer fee for the current month (M).
+> **Note:** Detailed documentation for the Billing & Invoicing system has been moved to [CLIENT_MANAGEMENT_BILLING.md](CLIENT_MANAGEMENT_BILLING.md).
 
-### Core Concepts
-
-#### Prior-Month Billing Model
-When an invoice is generated for month M (e.g., February 2024):
-- **Time entries from month M-1** (e.g., January 2024) are included and dated as the last day of M-1. These are covered by the available pool (retainer + rollover - negative balance).
-- **Retainer fee for month M** is included and dated as the first day of M. This retainer adds to the available pool.
-- **Reimbursable expenses** up to the invoice date are included with their original expense dates.
-
-This "give and take" model ensures work is billed after completion, while allowing negative balances from high-activity months to be offset by future retainer hours.
-
-#### Rollover Hours
-Unused retainer hours can roll over to future months (configurable via `rollover_months` in agreements). The calculation uses a chronological balance pool:
-- **rollover_months = 0**: No rollover; unused hours are lost
-- **rollover_months = 1**: Hours can only be used in the month they're earned  
-- **rollover_months = 2+**: Hours roll over for N-1 additional months
-- **Negative Balance**: If hours worked exceed available pool, the difference is carried forward as a negative balance rather than billed immediately.
-
-#### Hourly Rate Determination
-While most hours are covered by the pool at $0 additional cost, any manual line items or eventual overage billing uses the hourly rate from the **active agreement for the invoice month (M)**.
-
-### Invoice Line Items
-Generated invoices contain the following line item types (in order):
-
-1. **Prior-Month Work** (`prior_month_retainer`): Time entries from M-1. In the "give and take" model, these are generally included at $0, dated last day of M-1. Shows total hours and links to time entries with their original dates. Quantity is ALWAYS formatted as "h:mm".
-
-2. **Retainer Fee** (`retainer`): Monthly retainer fee for month M. Description includes the date (e.g., "Monthly Retainer (10 hours) - Feb 1, 2024"). Dated first day of M. Quantity is "1".
-
-3. **Balance Update** (`credit`): Informational $0 line showing rollover hours used or negative balance carried forward.
-
-4. **Expenses** (`expense`): Reimbursable expenses incurred up to the invoice date. Each expense line uses its original expense date. Quantity is "1".
-
-#### Invoice Period
-The invoice `period_start` and `period_end` dates are determined by the line item dates:
-- **period_start**: The earliest `line_date` among all line items, or the original billing period start (whichever is earlier)
-- **period_end**: The latest `line_date` among all line items, or the original billing period end (whichever is later)
-
-This ensures the displayed period accurately reflects the date range of all billed items.
-
-#### Draft Invoice Regeneration
-When regenerating a draft invoice (e.g., when new time entries are added):
-- All system-generated line items are deleted (retainer, prior_month_retainer, prior_month_billable, additional_hours, credit, expense)
-- All linked time entries and expenses are unlinked
-- New line items are generated with updated calculations
-- Manual adjustments (line_type = 'adjustment') are preserved
-
-#### Time Entry Detail Display
-The invoice page includes a "Show Detail" toggle switch in the top-right corner (default: ON). When enabled, it displays the underlying time entry descriptions for each line item as an indented bullet list, showing the description, hours, and original date_worked for each entry.
-
-#### Page Title
-The invoice page title includes the invoice number for easy identification (e.g., "Invoice ABC-202402-001 - Company Name").
+### Quick Summary
+- **Model**: Prior-month billing ("Give and Take")
+- **Key Features**:
+  - Retainer-based pricing
+  - Rollover hours
+  - **Minimum Availability Rule** (Catch-up billing)
+  - Reimbursable expense tracking
 
 ### Database Schema
+
 
 #### `client_agreements` table
 Stores service agreement terms between the admin and client companies.

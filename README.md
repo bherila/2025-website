@@ -9,6 +9,7 @@
 - **Billing & Invoicing**:
   - Automated monthly invoice generation.
   - Flexible rollover/carry-over hours system.
+  - **Minimum Availability Rule**: Automatically bills "catch-up hours" if carried-forward debt reduces new month availability below 1 hour.
   - **Time Entry Splitting**: Automatically splits time entries that are only partially billed to ensure precise carry-over tracking.
 - **File Management**: S3-integrated file uploads for agreements, tasks, and more.
 

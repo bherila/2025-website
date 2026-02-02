@@ -728,12 +728,23 @@ class ClientInvoiceTest extends TestCase
             Carbon::create(2024, 2, 29)
         );
 
-        // Should NOT have additional_hours line
-        $overageLine = $febInvoice->lineItems->firstWhere('line_type', 'additional_hours');
-        $this->assertNull($overageLine);
+        // With Minimum Availability Rule:
+        // Jan Overage: 15h (25 - 10).
+        // Feb Opening: Retainer 10h. Backlog 15h.
+        // Available: 10 - 15 = -5h.
+        // Less than 1h available -> Trigger Catch-up Billing.
+        // Deficit: 1 - (-5) = 6h catch-up.
 
-        // Should have 5h negative balance (15h from Jan offset by 10h in Feb)
-        $this->assertEquals(5, (float) $febInvoice->fresh()->negative_hours_balance);
+        // Should HAVE additional_hours line for catch-up
+        $items = $febInvoice->lineItems->where('line_type', 'additional_hours');
+        $this->assertTrue($items->count() > 0, 'Should trigger catch-up billing');
+        $catchUpLine = $items->first();
+        $this->assertEquals(6.0, $catchUpLine->hours);
+
+        // Should have 0 negative balance (paid off by catch-up)
+        // And 1h unused.
+        $this->assertEquals(0, (float) $febInvoice->fresh()->negative_hours_balance);
+        $this->assertEquals(1, (float) $febInvoice->fresh()->unused_hours_balance);
     }
     public function test_time_entry_is_split_when_partially_billed(): void
     {
@@ -892,5 +903,80 @@ class ClientInvoiceTest extends TestCase
         $this->actingAs($this->admin)
             ->deleteJson("/api/client/mgmt/companies/{$otherCompany->id}/invoices/{$invoice->client_invoice_id}")
             ->assertStatus(404);
+    }
+
+
+    public function test_excessive_overage_triggers_catch_up_billing(): void
+    {
+        // Scenario:
+        // Month 1 (Jan): Retainer 2h. Worked 10h.
+        // Result Jan: 2h retainer used. 8h overage carried forward (negative balance).
+        //
+        // Month 2 (Feb): Retainer 2h.
+        // Opening Month 2: 2h (new) - 8h (carried) = -6h available.
+        // Rule: Must have at least 1h available.
+        // Deficit to cover: Target (1h) - Current (-6h) = 7h needed.
+        // Action: Bill 7h as "catch up" / additional hours.
+        // Final Month 2 Availability: -6h + 7h (billed) = 1h available.
+
+        // 1. Setup Agreement: 2h retainer
+        $this->agreement->update([
+            'monthly_retainer_hours' => 2,
+            'hourly_rate' => 150,
+            'rollover_months' => 3, // Enable rollover logic
+            'active_date' => Carbon::create(2024, 1, 1),
+        ]);
+
+        // 2. Create Work in Jan (10h)
+        ClientTimeEntry::factory()->create([
+            'client_company_id' => $this->company->id,
+            'minutes_worked' => 10 * 60,
+            'date_worked' => Carbon::create(2024, 1, 15),
+            'is_billable' => true,
+        ]);
+
+        // 3. Generate Jan Invoice (to establish the carried forward balance)
+        $invoiceJan = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2024, 1, 1),
+            Carbon::create(2024, 1, 31)
+        );
+        $invoiceJan->issue(); // Finalize it so it affects calculation
+
+        // Verify Jan Invoice
+        // Should have 2h retainer, 0 billed overage (carried forward)
+        $this->assertEquals(0, $invoiceJan->hours_billed_at_rate);
+        // We can't easily check internal calculation state on the invoice model directly without correct setup,
+        // but let's blindly trust the carry forward logic works as per previous tests for now.
+
+        // 4. Generate Feb Invoice
+        $invoiceFeb = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2024, 2, 1),
+            Carbon::create(2024, 2, 29)
+        );
+
+        // 5. Assertions for Feb
+        // Retainer Line: 2h @ $0 (covered by monthly fee)
+        // Catch-up Line: 7h @ $150
+        // Total Invoice: Retainer Fee + (7 * 150)
+
+        $catchUpLine = $invoiceFeb->lineItems()
+            ->where('line_type', 'additional_hours')
+            ->first();
+
+        $this->assertNotNull($catchUpLine, 'Should have an additional_hours line for catch-up billing');
+        $this->assertEquals(7, $catchUpLine->hours, 'Should bill 7 catch-up hours');
+        $this->assertEquals(7 * 150, $catchUpLine->line_total);
+
+        // Verify Negative Balance Reduced
+        // The Invoice model stores snapshot of balances.
+        // unused_hours_balance should be 1.0 (the target available)
+        // negative_hours_balance should be 0 (since we paid it off to get positive) OR
+        // depending on how we want to represent it:
+        // Originally -8 carried. +2 new retainer = -6. +7 billed = +1.
+        // So negative balance is gone.
+        $this->assertEquals(0, $invoiceFeb->negative_hours_balance);
+        $this->assertEquals(1, $invoiceFeb->unused_hours_balance);
     }
 }

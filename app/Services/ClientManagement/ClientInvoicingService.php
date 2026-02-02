@@ -438,6 +438,77 @@ class ClientInvoicingService
                 'sort_order' => $sortOrder++,
             ]);
 
+            // --- Minimum Availability Rule (Catch-up Billing) ---
+            // If the carried forward negative balance consumes so much of the new retainer
+            // that the client has less than 1 hour available, we simply bill them for the difference
+            // to bring them back to 1 hour available.
+
+            // --- Minimum Availability Rule (Catch-up Billing) ---
+            // If the carried forward negative balance consumes so much of the new retainer
+            // that the client has less than 1 hour available, we simply bill them for the difference
+            // to bring them back to 1 hour available.
+
+            // Available = Total Available (opening) - Remaining Negative Balance (opening)
+            // If Available < 1, CatchUp = 1 - Available
+
+            $opening = $currentMonthBalance['opening'];
+            $available = $opening['total_available'] - $opening['remaining_negative_balance'];
+
+            if ($available < 1) {
+                // Minimum required availability is 1 hour
+                $targetAvailable = 1.0;
+                $catchUpHours = $targetAvailable - $available;
+
+                // Add billable line item
+                ClientInvoiceLine::create([
+                    'client_invoice_id' => $invoice->client_invoice_id,
+                    'client_agreement_id' => $agreement->id,
+                    'description' => "Catch-up hours to restore minimum availability ({$this->formatHoursForQuantity($catchUpHours)} billed to ensure 1h available)",
+                    'quantity' => $this->formatHoursForQuantity($catchUpHours),
+                    'unit_price' => $agreement->hourly_rate,
+                    'line_total' => $catchUpHours * $agreement->hourly_rate,
+                    'line_type' => 'additional_hours',
+                    'hours' => $catchUpHours,
+                    'line_date' => $periodStart,
+                    'sort_order' => $sortOrder++,
+                ]);
+
+                // Adjust Invoice Balances
+                // By billing catchUpHours, we effectively pay off that amount of debt.
+                // Or if we were just low on availability (e.g. 0.5 available), we add credit.
+
+                // The logical "remaining negative balance" should decrease.
+                // The "unused hours" should increase to hit target.
+
+                // New Remaining Negative = Old Remaining Negative - CatchUp.
+                // If CatchUp > Old Remaining (meaning we are crossing from negative to positive availability),
+                // then Negative becomes 0.
+
+                $oldRemainingNegative = $opening['remaining_negative_balance'];
+
+                $newNegativeBalance = max(0, $oldRemainingNegative - $catchUpHours);
+
+                // If we caught up to exactly 1h, then unused is 1h.
+                $newUnusedBalance = 1.0;
+
+                $invoice->update([
+                    'negative_hours_balance' => $newNegativeBalance,
+                    'unused_hours_balance' => $newUnusedBalance,
+                    'hours_billed_at_rate' => $catchUpHours,
+                ]);
+
+                // Update local variable for the informational text below
+                if (isset($currentMonthBalance['closing'])) {
+                    // Update the closing balance to reflect that we've paid down the debt
+                    // Note: 'negative_balance' in closing usually reflects total debt.
+                    // We reduce it by the amount we just paid off (catchUpHours).
+                    // But we must check against what was supposedly remaining.
+                    // The closing balance includes new work.
+                    // If we paid down OLD debt, the closing debt is reduced by that amount.
+                    $currentMonthBalance['closing']['negative_balance'] = max(0, $currentMonthBalance['closing']['negative_balance'] - $catchUpHours);
+                }
+            }
+
             // Informational rollover/negative balance line
             if ($currentMonthBalance && ($currentMonthBalance['closing']['hours_used_from_rollover'] > 0 || $currentMonthBalance['closing']['negative_balance'] > 0)) {
                 $desc = 'Balance update: ';
