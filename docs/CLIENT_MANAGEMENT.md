@@ -772,8 +772,8 @@ Delayed billing allows billable time entries from periods without an active agre
 
 | Month | Agreement Status | Hours Worked | Result |
 |-------|-----------------|--------------|--------|
-| January | None | 5h | 5h negative balance carried forward |
-| February | Active (10h retainer) | 8h | Pool: 10h retainer - 5h Jan - 8h Feb = 3h negative balance carried forward to March. |
+| January | None | 5h | 5h unused balance carried forward (tracked for future) |
+| February | Active (10h retainer) | 8h | Pool: 10h retainer. Work: 5h (Jan) + 8h (Feb) = 13h. 10h used, 3h negative balance carried forward (or billed if no rollover). |
 
 **API Response:**
 

@@ -49,7 +49,7 @@ class ClientInvoicingService
     public function generateAllMonthlyInvoices(ClientCompany $company): array
     {
         $agreement = $company->activeAgreement();
-        if (! $agreement) {
+        if (!$agreement) {
             throw new \Exception('No active agreement found for this client company.');
         }
 
@@ -81,7 +81,7 @@ class ClientInvoicingService
                         'period' => $periodStart->format('Y-m'),
                         'invoice_id' => $existingInvoice->client_invoice_id,
                         'status' => $existingInvoice->status,
-                        'reason' => 'Invoice already exists with status: '.$existingInvoice->status,
+                        'reason' => 'Invoice already exists with status: ' . $existingInvoice->status,
                     ];
                 } else {
                     // Re-generate if draft
@@ -150,9 +150,9 @@ class ClientInvoicingService
         ?ClientAgreement $agreement = null
     ): ClientInvoice {
         // Get the active agreement if not provided
-        if (! $agreement) {
+        if (!$agreement) {
             $agreement = $company->activeAgreement();
-            if (! $agreement) {
+            if (!$agreement) {
                 throw new \Exception('No active agreement found for this client company.');
             }
         }
@@ -184,8 +184,8 @@ class ClientInvoicingService
 
         if ($overlappingInvoice) {
             throw new \Exception(
-                "An invoice (#{$overlappingInvoice->invoice_number}) already exists for an overlapping period ".
-                "({$overlappingInvoice->period_start->format('M d, Y')} - {$overlappingInvoice->period_end->format('M d, Y')}). ".
+                "An invoice (#{$overlappingInvoice->invoice_number}) already exists for an overlapping period " .
+                "({$overlappingInvoice->period_start->format('M d, Y')} - {$overlappingInvoice->period_end->format('M d, Y')}). " .
                 'Please choose a different date range or void the existing invoice first.'
             );
         }
@@ -193,17 +193,17 @@ class ClientInvoicingService
         return DB::transaction(function () use ($company, $agreement, $periodStart, $periodEnd, $invoice) {
             // Get all months from agreement start OR earliest time entry to current period end
             $agreementStart = Carbon::parse($agreement->active_date)->startOfMonth();
-            
+
             $earliestEntryDate = ClientTimeEntry::where('client_company_id', $company->id)
                 ->where('is_billable', true)
                 ->min('date_worked');
-            
-            $calculationStart = $earliestEntryDate 
+
+            $calculationStart = $earliestEntryDate
                 ? min($agreementStart, Carbon::parse($earliestEntryDate)->startOfMonth())
                 : $agreementStart;
 
             $calculationEnd = $periodEnd->copy()->startOfMonth();
-            
+
             // Collect all billable minutes by month
             $allEntries = ClientTimeEntry::where('client_company_id', $company->id)
                 ->where('is_billable', true)
@@ -217,7 +217,7 @@ class ClientInvoicingService
                 $monthKey = $currentCalculationDate->format('Y-m');
                 $monthEntries = $allEntries->get($monthKey, collect());
                 $minutesWorked = $monthEntries->sum('minutes_worked');
-                
+
                 $isPreAgreement = $monthKey < $agreementStart->format('Y-m');
                 $months[] = [
                     'year_month' => $monthKey,
@@ -234,7 +234,7 @@ class ClientInvoicingService
             // Get unbilled time entries from the prior month (M-1)
             $priorMonthEnd = $periodStart->copy()->subDay(); // Last day of M-1
             $priorMonthStart = $priorMonthEnd->copy()->startOfMonth(); // First day of M-1
-            
+
             $priorMonthEntries = ClientTimeEntry::where('client_company_id', $company->id)
                 ->whereNull('client_invoice_line_id')
                 ->where('is_billable', true)
@@ -252,8 +252,34 @@ class ClientInvoicingService
                 }
             }
 
-            // Fallback to end of balances if not found (shouldn't happen with our loop)
-            $currentMonthBalance = $currentMonthBalance ?: end($allBalances);
+            // Fallback to end of balances if not found (shouldn't happen with our loop unless empty)
+            $currentMonthBalance = $currentMonthBalance ?: (empty($allBalances) ? null : end($allBalances));
+
+            // If still null (e.g. no agreement/calculation history), start fresh
+            if (!$currentMonthBalance) {
+                $currentMonthBalance = [
+                    'opening' => [
+                        'retainer_hours' => (float) $agreement->monthly_retainer_hours,
+                        'rollover_hours' => 0,
+                        'expired_hours' => 0,
+                        'total_available' => (float) $agreement->monthly_retainer_hours,
+                        'negative_offset' => 0,
+                        'invoiced_negative_balance' => 0,
+                        'effective_retainer_hours' => (float) $agreement->monthly_retainer_hours,
+                        'remaining_negative_balance' => 0,
+                    ],
+                    'hours_worked' => 0,
+                    'closing' => [
+                        'hours_used_from_retainer' => 0,
+                        'hours_used_from_rollover' => 0,
+                        'unused_hours' => (float) $agreement->monthly_retainer_hours,
+                        'excess_hours' => 0,
+                        'negative_balance' => 0,
+                        'remaining_rollover' => 0,
+                    ],
+                    'year_month' => $currentMonthKey,
+                ];
+            }
 
             // Prepare invoice data
             $invoiceData = [
@@ -281,7 +307,7 @@ class ClientInvoicingService
                     $line->timeEntries()->update(['client_invoice_line_id' => null]);
                 }
                 $invoice->lineItems()->whereIn('line_type', $systemGeneratedTypes)->delete();
-                
+
                 $expenseLines = $invoice->lineItems()->where('line_type', 'expense')->get();
                 foreach ($expenseLines as $line) {
                     $line->expenses()->update(['client_invoice_line_id' => null]);
@@ -501,7 +527,7 @@ class ClientInvoicingService
         $totalMinutes = (int) round($hours * 60);
         $h = intdiv($totalMinutes, 60);
         $m = $totalMinutes % 60;
-        
+
         return sprintf('%d:%02d', $h, $m);
     }
 
@@ -536,7 +562,7 @@ class ClientInvoicingService
     protected function generateInvoiceNumber(ClientCompany $company, ClientAgreement $agreement): string
     {
         $rawPrefix = strtoupper(substr(preg_replace('/[^a-zA-Z0-9]/', '', $company->company_name), 0, 4));
-        $prefix = $rawPrefix ? $rawPrefix . '-' : '';
+        $prefix = $rawPrefix ? "$rawPrefix-" : '';
         $yearMonth = now()->format('Ym');
 
         $lastInvoice = ClientInvoice::where('client_company_id', $company->id)

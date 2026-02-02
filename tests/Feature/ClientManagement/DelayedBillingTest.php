@@ -92,11 +92,12 @@ class DelayedBillingTest extends TestCase
         ]);
 
         // Generate invoice for February
-        // With prior-month billing model:
+        // With prior-month billing model (User Request Update):
         // - Prior month (January) had NO retainer (agreement started Feb)
-        // - January entries (5 hours) billed as "prior_month_billable" at $150/hr = $750
+        // - BUT January entries (5 hours) are retroactively covered by the agreement's logic
+        // - They appear as "prior_month_retainer" at $0
         // - Retainer line for February = $1000
-        // - Total = $1750
+        // - Total = $1000
         $periodStart = Carbon::create(2024, 2, 1);
         $periodEnd = Carbon::create(2024, 2, 29);
 
@@ -113,18 +114,22 @@ class DelayedBillingTest extends TestCase
         $invoice->refresh();
         $lineItems = $invoice->lineItems;
 
-        // With prior-month billing: January entries billed as prior_month_billable
+        // Should NOT be billed as prior_month_billable
         $billableLine = $lineItems->firstWhere('line_type', 'prior_month_billable');
-        $this->assertNotNull($billableLine, 'Should have prior_month_billable line for pre-agreement work');
-        $this->assertEquals(5, (float) $billableLine->hours); // 2 + 3 = 5 hours
-        $this->assertEquals(750.00, (float) $billableLine->line_total); // 5 * $150
+        $this->assertNull($billableLine, 'Should NOT have prior_month_billable line (retroactively covered)');
+
+        // Should be covered by retainer logic (prior_month_retainer)
+        $priorRetainerLine = $lineItems->firstWhere('line_type', 'prior_month_retainer');
+        $this->assertNotNull($priorRetainerLine, 'Should have prior_month_retainer line');
+        $this->assertEquals(5, (float) $priorRetainerLine->hours);
+        $this->assertEquals(0, (float) $priorRetainerLine->line_total);
 
         $retainerLine = $lineItems->firstWhere('line_type', 'retainer');
         $this->assertNotNull($retainerLine);
-        
+
         // Verify invoice totals
-        $this->assertEquals(5, (float) $invoice->hours_worked); // Only January hours (prior month)
-        $this->assertEquals(1750.00, (float) $invoice->invoice_total); // $750 + $1000
+        $this->assertEquals(5, (float) $invoice->hours_worked);
+        $this->assertEquals(1000.00, (float) $invoice->invoice_total); // Just retainer
 
         // Verify all time entries from January are now linked
         $linkedEntries = ClientTimeEntry::where('client_company_id', $this->company->id)
@@ -161,10 +166,16 @@ class DelayedBillingTest extends TestCase
         ]);
 
         // Generate invoice for February
-        // With prior-month billing:
-        // - January (no retainer) has 4 hours billed as prior_month_billable at $100/hr = $400
+        // With prior-month billing (Revised):
+        // - January (no retainer) has 4 hours
+        // - These are retroactively covered by Feb agreement -> $0 line
         // - Retainer for February = $1000
-        // - Total = $1400
+        // - Total = $1000
+        // - Balance logic should show negative balance carry forward?
+        //   Dec/Jan: 4h worked. 0h available. -4h balance.
+        //   Feb: 10h retainer. 0h worked. 10h available.
+        //   Feb opening: applies -4h offset. 6h remaining.
+
         $periodStart = Carbon::create(2024, 2, 1);
         $periodEnd = Carbon::create(2024, 2, 29);
 
@@ -174,17 +185,23 @@ class DelayedBillingTest extends TestCase
             $periodEnd
         );
 
-        // Check for prior_month_billable line
+        // Check for prior_month_billable line (Should NOT exist)
         $billableLine = $invoice->lineItems()
             ->where('line_type', 'prior_month_billable')
             ->first();
 
-        $this->assertNotNull($billableLine, 'Invoice should have prior_month_billable line for pre-agreement work');
-        $this->assertEquals(4, (float) $billableLine->hours);
-        $this->assertEquals(400.00, (float) $billableLine->line_total);
+        $this->assertNull($billableLine, 'Should NOT have prior_month_billable line');
+
+        // Should have prior_month_retainer
+        $retainerWorkLine = $invoice->lineItems()
+            ->where('line_type', 'prior_month_retainer')
+            ->first();
+        $this->assertNotNull($retainerWorkLine);
+        $this->assertEquals(4, (float) $retainerWorkLine->hours);
+        $this->assertEquals(0, (float) $retainerWorkLine->line_total);
 
         // Check invoice total
-        $this->assertEquals(1400.00, (float) $invoice->invoice_total); // $400 + $1000
+        $this->assertEquals(1000.00, (float) $invoice->invoice_total); // Just retainer
         $this->assertEquals(4, (float) $invoice->hours_worked);
     }
 
