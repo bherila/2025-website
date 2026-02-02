@@ -88,7 +88,7 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
             console.error("Failed to delete line item", error);
         }
     }
-    
+
     const handleSavePayment = async (payment: Partial<ClientInvoicePayment>) => {
         const url = payment.client_invoice_payment_id
             ? `/api/client/mgmt/companies/${invoice!.client_company_id}/invoices/${invoiceId}/payments/${payment.client_invoice_payment_id}`
@@ -159,7 +159,7 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
             }
         }
     }
-    
+
     const isEditable = invoice?.status === 'draft';
     const hasPayments = invoice?.payments && invoice.payments.length > 0;
     const canVoid = !!(invoice && invoice.status !== 'void' && invoice.status !== 'paid' && !hasPayments);
@@ -167,10 +167,10 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
     if (isLoading || !invoice) {
         return (
             <>
-                <ClientPortalNav 
-                    slug={slug} 
-                    companyName={companyName} 
-                    currentPage="invoice" 
+                <ClientPortalNav
+                    slug={slug}
+                    companyName={companyName}
+                    currentPage="invoice"
                     invoiceNumber={invoice?.invoice_number ?? undefined}
                 />
                 <div className="container mx-auto px-8 max-w-5xl">
@@ -197,13 +197,13 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
 
     return (
         <>
-            <ClientPortalNav 
-                slug={slug} 
-                companyName={companyName} 
-                currentPage="invoice" 
-                invoiceNumber={invoice.invoice_number ?? undefined} 
+            <ClientPortalNav
+                slug={slug}
+                companyName={companyName}
+                currentPage="invoice"
+                invoiceNumber={invoice.invoice_number ?? undefined}
             />
-            
+
             <div className="container mx-auto px-8 max-w-5xl">
                 <ClientPortalInvoiceActionButtonRow
                     invoice={invoice}
@@ -266,26 +266,30 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
                             <TableBody>
                                 {invoice.line_items.map(item => (
                                     <React.Fragment key={item.client_invoice_line_id}>
-                                        <TableRow 
+                                        <TableRow
                                             className={`group ${isAdmin && isEditable ? 'cursor-pointer' : ''}`}
                                             onClick={() => isAdmin && isEditable && !isRefreshing && (setSelectedLineItem(item), setLineItemModalOpen(true))}
                                         >
                                             <TableCell>{item.description}</TableCell>
                                             <TableCell className="text-right">{item.quantity}</TableCell>
-                                            <TableCell className="text-right">${parseFloat(item.unit_price).toFixed(2)}</TableCell>
-                                            <TableCell className="text-right">${parseFloat(item.line_total).toFixed(2)}</TableCell>
+                                            <TableCell className="text-right">
+                                                {parseFloat(item.unit_price) === 0 ? '-' : `$${parseFloat(item.unit_price).toFixed(2)}`}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                {parseFloat(item.line_total) === 0 ? '-' : `$${parseFloat(item.line_total).toFixed(2)}`}
+                                            </TableCell>
                                             {isAdmin && (
                                                 <TableCell className="py-1 align-top text-right">
                                                     {isEditable && (
-                                                        <Button 
-                                                            variant="ghost" 
-                                                            size="icon" 
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
                                                             className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                            onClick={(e) => { 
+                                                            onClick={(e) => {
                                                                 e.stopPropagation();
-                                                                setSelectedLineItem(item); 
-                                                                setLineItemModalOpen(true); 
-                                                            }} 
+                                                                setSelectedLineItem(item);
+                                                                setLineItemModalOpen(true);
+                                                            }}
                                                             disabled={isRefreshing}
                                                         >
                                                             <Pencil className="h-4 w-4 text-muted-foreground" />
@@ -376,7 +380,7 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
                     <div className="pt-8 border-t">
                         <h3 className="text-lg font-semibold mb-2">Hourly Summary</h3>
                         <p className="text-sm text-muted-foreground mb-4">A breakdown of hours tracked and applied for this billing period. This is for informational purposes only.</p>
-                        <TimeTrackingMonthSummaryRow 
+                        <TimeTrackingMonthSummaryRow
                             openingAvailable={parseFloat(invoice.retainer_hours_included)}
                             hoursWorked={parseFloat(invoice.hours_worked)}
                             hoursUsedFromRollover={parseFloat(invoice.rollover_hours_used)}
