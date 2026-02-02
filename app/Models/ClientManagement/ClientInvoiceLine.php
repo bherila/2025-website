@@ -65,6 +65,14 @@ class ClientInvoiceLine extends Model
     }
 
     /**
+     * Get the expenses linked to this invoice line.
+     */
+    public function expenses()
+    {
+        return $this->hasMany(ClientExpense::class, 'client_invoice_line_id', 'client_invoice_line_id');
+    }
+
+    /**
      * Get the time entries linked to this invoice line.
      */
     public function timeEntries()
@@ -87,7 +95,7 @@ class ClientInvoiceLine extends Model
     public function calculateTotal(): void
     {
         $qtyStr = trim($this->quantity);
-        
+
         // If it's a time-based line (h:mm or h suffix), parse it
         if (strpos($qtyStr, ':') !== false || str_ends_with(strtolower($qtyStr), 'h')) {
             $minutes = $this->parseQuantityToMinutes();
@@ -98,7 +106,7 @@ class ClientInvoiceLine extends Model
         }
 
         $this->line_total = $quantity * $this->unit_price;
-        
+
         if ($this->exists) {
             $this->save();
         }

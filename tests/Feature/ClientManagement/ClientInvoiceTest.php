@@ -807,4 +807,90 @@ class ClientInvoiceTest extends TestCase
         $this->assertEquals(2 * 60, $remainderEntry->minutes_worked);
         $this->assertEquals($twoHourLine->client_invoice_line_id, $remainderEntry->client_invoice_line_id);
     }
+
+    // ==========================================
+    // Delete / Destroy Tests
+    // ==========================================
+
+    public function test_admin_can_delete_draft_invoice(): void
+    {
+        // 1. Setup: Create invoice with time entries and expenses
+        $entry = ClientTimeEntry::factory()->create([
+            'client_company_id' => $this->company->id,
+            'minutes_worked' => 120,
+            'date_worked' => Carbon::create(2024, 1, 10),
+            'is_billable' => true,
+        ]);
+
+        $expense = ClientExpense::create([
+            'client_company_id' => $this->company->id,
+            'description' => 'Test Expense',
+            'amount' => 50.00,
+            'expense_date' => Carbon::create(2024, 2, 15),
+            'is_reimbursable' => true,
+            'creator_user_id' => $this->admin->id,
+        ]);
+
+        $invoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2024, 2, 1),
+            Carbon::create(2024, 2, 29)
+        );
+
+        $entry->refresh();
+        $expense->refresh();
+
+        $this->assertNotNull($entry->client_invoice_line_id);
+        $this->assertEquals($invoice->client_invoice_id, $entry->invoiceLine->invoice->client_invoice_id);
+
+        $this->assertTrue($expense->isInvoiced());
+        $this->assertNotNull($expense->client_invoice_line_id);
+        $this->assertEquals($invoice->client_invoice_id, $expense->invoiceLine->client_invoice_id);
+
+        // 2. Action: Delete Invoice via API
+        $this->actingAs($this->admin)
+            ->deleteJson("/api/client/mgmt/companies/{$this->company->id}/invoices/{$invoice->client_invoice_id}")
+            ->assertStatus(200);
+
+        // 3. Verify: Invoice and Lines Soft Deleted
+        $this->assertSoftDeleted('client_invoices', ['client_invoice_id' => $invoice->client_invoice_id]);
+        $this->assertSoftDeleted('client_invoice_lines', ['client_invoice_id' => $invoice->client_invoice_id]);
+
+        // 4. Verify: Time Entries and Expenses Unlinked
+        $entry->refresh();
+        $expense->refresh();
+
+        $this->assertNull($entry->client_invoice_line_id);
+        $this->assertNull($expense->client_invoice_line_id);
+    }
+
+    public function test_cannot_delete_issued_invoice(): void
+    {
+        $invoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2024, 2, 1),
+            Carbon::create(2024, 2, 29)
+        );
+
+        $invoice->issue();
+
+        $this->actingAs($this->admin)
+            ->deleteJson("/api/client/mgmt/companies/{$this->company->id}/invoices/{$invoice->client_invoice_id}")
+            ->assertStatus(400)
+            ->assertJson(['error' => 'Only draft invoices can be deleted']);
+    }
+
+    public function test_cannot_delete_invoice_from_other_company(): void
+    {
+        $otherCompany = ClientCompany::factory()->create();
+        $invoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2024, 2, 1),
+            Carbon::create(2024, 2, 29)
+        );
+
+        $this->actingAs($this->admin)
+            ->deleteJson("/api/client/mgmt/companies/{$otherCompany->id}/invoices/{$invoice->client_invoice_id}")
+            ->assertStatus(404);
+    }
 }

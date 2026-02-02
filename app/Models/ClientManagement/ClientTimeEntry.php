@@ -14,7 +14,7 @@ class ClientTimeEntry extends Model
 
     protected $table = 'client_time_entries';
 
-    protected $appends = ['is_invoiced'];
+    protected $appends = ['is_invoiced', 'client_invoice'];
 
     protected $fillable = [
         'project_id',
@@ -142,5 +142,13 @@ class ClientTimeEntry extends Model
     public function getFormattedTimeAttribute(): string
     {
         return self::formatMinutesAsTime($this->minutes_worked);
+    }
+
+    /**
+     * Get the associated invoice via the line item.
+     */
+    public function getClientInvoiceAttribute()
+    {
+        return $this->invoiceLine?->invoice;
     }
 }
