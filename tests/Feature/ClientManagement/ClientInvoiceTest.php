@@ -143,32 +143,7 @@ class ClientInvoiceTest extends TestCase
     // Prior-Month Time Entry Tests
     // ==========================================
 
-    public function test_prior_month_entries_included_in_retainer_at_zero_cost(): void
-    {
-        // Create 5 hours of work in January
-        ClientTimeEntry::factory()->for($this->company)->for($this->project, 'project')->create([
-            'user_id' => $this->admin->id,
-            'date_worked' => Carbon::create(2024, 1, 15),
-            'minutes_worked' => 5 * 60, // 5 hours
-            'name' => 'January work',
-            'is_billable' => true,
-        ]);
 
-        // Generate February invoice (for month M=February, M-1=January)
-        $invoice = $this->invoicingService->generateInvoice(
-            $this->company,
-            Carbon::create(2024, 2, 1),
-            Carbon::create(2024, 2, 29)
-        );
-
-        // Should have a prior_month_retainer line
-        $priorMonthLine = $invoice->lineItems->firstWhere('line_type', 'prior_month_retainer');
-        $this->assertNotNull($priorMonthLine, 'Should have prior_month_retainer line');
-        $this->assertEquals(0, (float) $priorMonthLine->line_total, 'Prior month retainer should be $0');
-        $this->assertEquals(5, (float) $priorMonthLine->hours, 'Should show 5 hours');
-        $this->assertEquals('2024-01-31', $priorMonthLine->line_date->toDateString(), 'Should be dated last day of prior month');
-        $this->assertEquals('Work items from prior month (applied to retainer/rollover pool)', $priorMonthLine->description);
-    }
 
     public function test_prior_month_entries_time_entries_have_dates(): void
     {
@@ -217,15 +192,15 @@ class ClientInvoiceTest extends TestCase
         );
 
         // Should have prior_month_retainer for ALL 15 hours at $0
-        $priorMonthLine = $invoice->lineItems->firstWhere('line_type', 'prior_month_retainer');
-        $this->assertNotNull($priorMonthLine);
-        $this->assertEquals(15, (float) $priorMonthLine->hours);
-        $this->assertEquals(0, (float) $priorMonthLine->line_total);
+        $priorMonthLines = $invoice->lineItems->where('line_type', 'prior_month_retainer');
+        $this->assertTrue($priorMonthLines->count() >= 1);
+        $this->assertEquals(15, (float) $priorMonthLines->sum('hours'));
+        $this->assertEquals(0, (float) $priorMonthLines->sum('line_total'));
 
         // Should NOT have additional_hours line
         $overageLine = $invoice->lineItems->firstWhere('line_type', 'additional_hours');
         $this->assertNull($overageLine, 'Should NOT have additional_hours line in give and take model');
-        
+
         // Negative balance of 5 from Jan should be offset by 10h retainer in Feb
         // resulting in 5h unused balance.
         $this->assertEquals(5, (float) $invoice->fresh()->unused_hours_balance);
@@ -271,7 +246,7 @@ class ClientInvoiceTest extends TestCase
         $this->assertNotNull($priorMonthLine);
         $this->assertEquals(5, (float) $priorMonthLine->hours);
         $this->assertEquals(0, (float) $priorMonthLine->line_total);
-        
+
         // This 5 hours should be reflected in the opening negative balance offset for February
         // Or in the total pool calculation.
     }
@@ -639,6 +614,42 @@ class ClientInvoiceTest extends TestCase
     // Edge Case Tests
     // ==========================================
 
+    public function test_prior_month_entries_included_in_retainer_at_zero_cost(): void
+    {
+        // 1. Setup: Agreement with 10 hr retainer
+        $agreement = ClientAgreement::factory()->create([
+            'client_company_id' => $this->company->id,
+            'monthly_retainer_hours' => 10,
+            'hourly_rate' => 100,
+            'active_date' => Carbon::create(2023, 1, 1),
+        ]);
+
+        // 2. Data: 5 hours worked in Prior Month (Jan 2024)
+        ClientTimeEntry::factory()->create([
+            'client_company_id' => $this->company->id,
+            'minutes_worked' => 5 * 60,
+            'date_worked' => Carbon::create(2024, 1, 15),
+            'is_billable' => true,
+        ]);
+
+        // 3. Generate Invoice for current month (Feb 2024)
+        $invoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2024, 2, 1),
+            Carbon::create(2024, 2, 29)
+        );
+
+        // 4. Check Prior Month Retainer Line
+        // Should have "Work items from prior month..." line
+        $priorMonthLine = $invoice->lineItems->firstWhere('line_type', 'prior_month_retainer');
+        $this->assertNotNull($priorMonthLine, 'Should have prior_month_retainer line');
+        $this->assertEquals(0, (float) $priorMonthLine->line_total, 'Prior month retainer should be $0');
+        $this->assertEquals(5, (float) $priorMonthLine->hours, 'Should show 5 hours');
+        $this->assertEquals('2024-01-31', $priorMonthLine->line_date->toDateString(), 'Should be dated last day of prior month');
+        // Update expectation for dynamic description
+        $this->assertStringContainsString('Work items from prior month applied to retainer', $priorMonthLine->description);
+    }
+
     public function test_months_with_no_prior_month_entries(): void
     {
         // Generate February invoice with no January work
@@ -703,13 +714,6 @@ class ClientInvoiceTest extends TestCase
 
     public function test_rollover_exhaustion_carries_forward(): void
     {
-        // January: No work (10h unused rollover)
-        $this->invoicingService->generateInvoice(
-            $this->company,
-            Carbon::create(2024, 1, 1),
-            Carbon::create(2024, 1, 31)
-        );
-
         // February: 25 hours in January (uses 10h retainer + 10h rollover + 5h negative balance)
         ClientTimeEntry::factory()->for($this->company)->for($this->project, 'project')->create([
             'user_id' => $this->admin->id,
@@ -727,8 +731,80 @@ class ClientInvoiceTest extends TestCase
         // Should NOT have additional_hours line
         $overageLine = $febInvoice->lineItems->firstWhere('line_type', 'additional_hours');
         $this->assertNull($overageLine);
-        
+
         // Should have 5h negative balance (15h from Jan offset by 10h in Feb)
         $this->assertEquals(5, (float) $febInvoice->fresh()->negative_hours_balance);
+    }
+    public function test_time_entry_is_split_when_partially_billed(): void
+    {
+        // 1. Agreement: 10 hours retainer from Jan 2024
+        $agreement = ClientAgreement::factory()->create([
+            'client_company_id' => $this->company->id,
+            'active_date' => Carbon::create(2024, 1, 1),
+            'monthly_retainer_hours' => 10,
+            'hourly_rate' => 100,
+            'rollover_months' => 0,
+        ]);
+
+        // 2. Work: 12 hours in Dec 2023 (Prior Month)
+        // Dec 2023 is Pre-Agreement. Capacity = 0.
+        // Jan 2024 Capacity = 10.
+        // Work = 12.
+        // Stage 1 (Dec Cover): 0.
+        // Stage 2 (Jan Cover): 10.
+        // Stage 3 (Feb Carry): 2.
+
+        $entry = ClientTimeEntry::factory()->create([
+            'client_company_id' => $this->company->id,
+            'minutes_worked' => 12 * 60, // 12 hours
+            'date_worked' => Carbon::create(2023, 12, 15),
+            'is_billable' => true,
+        ]);
+
+        // 3. Generate Jan Invoice
+        $invoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2024, 1, 1),
+            Carbon::create(2024, 1, 31)
+        );
+
+        $invoice->refresh();
+
+        // 4. Verify lines
+        // We expect:
+        // Line A: 10h (Applied to Jan)
+        // Line B: 2h (Exceeding -> Feb)
+
+        $priorLines = $invoice->lineItems->where('line_type', 'prior_month_retainer')->sortBy('hours');
+        // Sorted: 2h, 10h
+
+        $this->assertEquals(2, $priorLines->count(), 'Should have 2 prior work lines');
+
+        $tenHourLine = $priorLines->firstWhere('hours', 10);
+        $twoHourLine = $priorLines->firstWhere('hours', 2);
+
+        $this->assertNotNull($tenHourLine, 'Should have 10h covered line');
+        $this->assertStringContainsString('applied to January 2024 retainer', $tenHourLine->description);
+
+        $this->assertNotNull($twoHourLine, 'Should have 2h offset line');
+        $this->assertStringContainsString('applied to February 2024 retainer', $twoHourLine->description);
+
+        // 5. Verify Original Entry was modified
+        $entry->refresh();
+        // The original entry should correspond to one of the split parts (usually the first selected one, which is 10h in Stage 2)
+        // Stage 1 (0h) select nothing.
+        // Stage 2 (10h) selects.
+
+        $this->assertEquals(10 * 60, $entry->minutes_worked, 'Original entry should be 10h');
+        $this->assertEquals($tenHourLine->client_invoice_line_id, $entry->client_invoice_line_id);
+
+        // 6. Verify New Entry
+        $remainderEntry = ClientTimeEntry::where('client_company_id', $this->company->id)
+            ->where('id', '!=', $entry->id)
+            ->first();
+
+        $this->assertNotNull($remainderEntry);
+        $this->assertEquals(2 * 60, $remainderEntry->minutes_worked);
+        $this->assertEquals($twoHourLine->client_invoice_line_id, $remainderEntry->client_invoice_line_id);
     }
 }

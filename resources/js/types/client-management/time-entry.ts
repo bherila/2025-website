@@ -12,6 +12,10 @@ export interface TimeEntry {
   user: User | null
   project: Project | null
   task: Task | null
+  client_invoice?: {
+    client_invoice_id: number
+    invoice_number: string
+  }
   created_at: string
 }
 

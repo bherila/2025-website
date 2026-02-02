@@ -203,13 +203,13 @@ class ClientPortalApiController extends Controller
         Gate::authorize('ClientCompanyMember', $company->id);
 
         $entries = ClientTimeEntry::where('client_company_id', $company->id)
-            ->with(['user:id,name,email', 'project:id,name,slug', 'task:id,name'])
+            ->with(['user:id,name,email', 'project:id,name,slug', 'task:id,name', 'invoiceLine.invoice:client_invoice_id,invoice_number'])
             ->orderBy('date_worked', 'desc')
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($entry) {
-                $entry->formatted_time = $entry->formatted_time;
-
+                // Manually map the nested invoice relationship to the expected structure
+                $entry->client_invoice = $entry->invoiceLine?->invoice;
                 return $entry;
             });
 

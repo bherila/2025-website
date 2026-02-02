@@ -321,24 +321,107 @@ class ClientInvoicingService
 
             $sortOrder = 1;
 
-            // In the "give and take" model, all work in M-1 is "covered" by the retainer/rollover/negative balance
-            // so we link it all to a $0 line item.
+            // Line 3: Prior Month Work
+            // Split into 3 buckets:
+            // a) Covered by Prior Month (M-1) Retainer
+            // b) Covered by Current Month (M) Retainer (Negative Balance Offset)
+            // c) Carried Forward to Next Month (M+1) (Remaining Negative Balance)
             if ($priorMonthEntries->count() > 0) {
-                $priorMonthHours = $priorMonthEntries->sum('minutes_worked') / 60;
-                $priorRetainerLine = ClientInvoiceLine::create([
-                    'client_invoice_id' => $invoice->client_invoice_id,
-                    'client_agreement_id' => $agreement->id,
-                    'description' => 'Work items from prior month (applied to retainer/rollover pool)',
-                    'quantity' => $this->formatHoursForQuantity($priorMonthHours),
-                    'unit_price' => 0,
-                    'line_total' => 0,
-                    'line_type' => 'prior_month_retainer',
-                    'hours' => $priorMonthHours,
-                    'line_date' => $priorMonthEnd,
-                    'sort_order' => $sortOrder++,
-                ]);
+                // Buckets
+                $m1_limit = 0;
+                $m_limit = 0;
 
-                $this->linkAllEntriesToLine($priorMonthEntries, $priorRetainerLine);
+                // 1. Determine M-1 Limit
+                $priorMonthBalance = null;
+                foreach ($allBalances as $balance) {
+                    if ($balance['year_month'] === $priorMonthEnd->format('Y-m')) {
+                        $priorMonthBalance = $balance;
+                        break;
+                    }
+                }
+                $m1_limit = $priorMonthBalance ? $priorMonthBalance['opening']['total_available'] : 0;
+
+                // 2. Determine M Limit (Negative Offset)
+                // This is how much of M's retainer is successfully used to cover the backlog
+                $m_limit = $currentMonthBalance['opening']['negative_offset'] ?? 0;
+
+                // --- STAGE 1: Covered by M-1 ---
+                $entriesToProcess = $priorMonthEntries;
+                $coveredByM1 = $this->selectEntriesUpToHours($entriesToProcess, $m1_limit);
+
+                if ($coveredByM1->count() > 0) {
+                    $hours = $coveredByM1->sum('minutes_worked') / 60;
+                    $line = ClientInvoiceLine::create([
+                        'client_invoice_id' => $invoice->client_invoice_id,
+                        'client_agreement_id' => $agreement->id,
+                        'description' => "Work items from prior month applied to retainer ({$this->formatHoursForQuantity($hours)} applied to {$priorMonthEnd->format('F Y')} retainer)",
+                        'quantity' => $this->formatHoursForQuantity($hours),
+                        'unit_price' => 0,
+                        'line_total' => 0,
+                        'line_type' => 'prior_month_retainer',
+                        'hours' => $hours,
+                        'line_date' => $priorMonthEnd,
+                        'sort_order' => $sortOrder++,
+                    ]);
+                    $this->linkTimeEntriesToLine($coveredByM1, $line);
+                }
+
+                // Refresh remaining unlinked entries for Stage 2
+                $remainingEntries = ClientTimeEntry::where('client_company_id', $company->id)
+                    ->whereNull('client_invoice_line_id')
+                    ->where('is_billable', true)
+                    ->whereBetween('date_worked', [$priorMonthStart, $priorMonthEnd])
+                    ->orderBy('date_worked')
+                    ->get();
+
+                // --- STAGE 2: Covered by M ---
+                if ($remainingEntries->count() > 0 && $m_limit > 0) {
+                    $coveredByM = $this->selectEntriesUpToHours($remainingEntries, $m_limit);
+
+                    if ($coveredByM->count() > 0) {
+                        $hours = $coveredByM->sum('minutes_worked') / 60;
+                        $line = ClientInvoiceLine::create([
+                            'client_invoice_id' => $invoice->client_invoice_id,
+                            'client_agreement_id' => $agreement->id,
+                            'description' => "Work items from prior month applied to retainer ({$this->formatHoursForQuantity($hours)} applied to {$periodStart->format('F Y')} retainer)",
+                            'quantity' => $this->formatHoursForQuantity($hours),
+                            'unit_price' => 0,
+                            'line_total' => 0,
+                            'line_type' => 'prior_month_retainer',
+                            'hours' => $hours,
+                            'line_date' => $priorMonthEnd,
+                            'sort_order' => $sortOrder++,
+                        ]);
+                        $this->linkTimeEntriesToLine($coveredByM, $line);
+                    }
+                }
+
+                // Refresh remaining unlinked entries for Stage 3
+                $finalEntries = ClientTimeEntry::where('client_company_id', $company->id)
+                    ->whereNull('client_invoice_line_id')
+                    ->where('is_billable', true)
+                    ->whereBetween('date_worked', [$priorMonthStart, $priorMonthEnd])
+                    ->orderBy('date_worked')
+                    ->get();
+
+                // --- STAGE 3: Carried Forward ---
+                if ($finalEntries->count() > 0) {
+                    $hours = $finalEntries->sum('minutes_worked') / 60;
+                    $nextMonthName = $periodStart->copy()->addMonth()->format('F Y');
+                    $line = ClientInvoiceLine::create([
+                        'client_invoice_id' => $invoice->client_invoice_id,
+                        'client_agreement_id' => $agreement->id,
+                        'description' => "Work items from prior month exceeding retainer ({$this->formatHoursForQuantity($hours)} applied to {$nextMonthName} retainer)",
+                        'quantity' => $this->formatHoursForQuantity($hours),
+                        'unit_price' => 0,
+                        'line_total' => 0,
+                        'line_type' => 'prior_month_retainer',
+                        'hours' => $hours,
+                        'line_date' => $priorMonthEnd,
+                        'sort_order' => $sortOrder++,
+                    ]);
+                    $this->linkTimeEntriesToLine($finalEntries, $line);
+                }
             }
 
             // Line 4: Monthly retainer fee for month M
@@ -362,7 +445,7 @@ class ClientInvoicingService
                     $desc .= "Used {$currentMonthBalance['closing']['hours_used_from_rollover']}h rollover. ";
                 }
                 if ($currentMonthBalance['closing']['negative_balance'] > 0) {
-                    $desc .= "Negative balance of {$currentMonthBalance['closing']['negative_balance']}h carried forward. ";
+                    $desc .= "Negative balance of {$currentMonthBalance['closing']['negative_balance']}h carried forward to {$periodStart->copy()->addMonth()->format('F Y')}. ";
                 }
 
                 ClientInvoiceLine::create([
