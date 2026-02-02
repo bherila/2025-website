@@ -205,7 +205,7 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
                 autoFocus={!entry}
               />
               <div className="flex flex-wrap gap-1 mt-1">
-                {[ -15, -5, 5, 15 ].map((inc) => (
+                {[ 5, 15 ].map((inc) => (
                   <Button
                     key={inc}
                     type="button"
@@ -228,7 +228,7 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
                   className="h-7 px-2 text-[10px]"
                   onClick={() => setTime('')}
                 >
-                  Clear
+                  &times;
                 </Button>
               </div>
             </div>
