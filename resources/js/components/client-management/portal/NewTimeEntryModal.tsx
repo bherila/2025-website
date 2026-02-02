@@ -17,26 +17,32 @@ function getLocalISODate(): string {
   return `${year}-${month}-${day}`
 }
 
-function parseTimeToMinutes(timeString: string): number {
-  const str = timeString.trim().toLowerCase()
-  
+export function parseTimeToMinutes(timeString: string): number | null {
+  const str = (timeString || '').trim().toLowerCase()
+  if (!str) return null
+
   // h:mm format
   const colonMatch = str.match(/^(\d+):(\d{1,2})$/)
   if (colonMatch) {
-    return (parseInt(colonMatch[1]!) * 60) + parseInt(colonMatch[2]!)
+    const h = parseInt(colonMatch[1]!)
+    const m = parseInt(colonMatch[2]!)
+    if (m >= 0 && m < 60) return h * 60 + m
+    return null
   }
-  
-  // decimal or decimal with h suffix
-  const hMatch = str.match(/^(\d*(?:\.\d+)?)h?$/)
-  if (hMatch && hMatch[1] !== '') {
-    return Math.round(parseFloat(hMatch[1]!) * 60)
+
+  // decimal or decimal with h suffix (e.g. 1.5 or 1.5h)
+  const hMatch = str.match(/^(\d+(?:\.\d+)?)(h)?$/)
+  if (hMatch) {
+    const value = parseFloat(hMatch[1]!)
+    if (Number.isFinite(value)) return Math.round(value * 60)
+    return null
   }
-  
-  return 0
+
+  return null
 }
 
-function formatMinutesToTime(minutes: number): string {
-  if (minutes <= 0) return ''
+export function formatMinutesToTime(minutes: number): string {
+  if (!minutes || minutes <= 0) return '0:00'
   const h = Math.floor(minutes / 60)
   const m = minutes % 60
   return `${h}:${m.toString().padStart(2, '0')}`
@@ -76,7 +82,14 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
   // Initialize state from entry if in edit mode
   useEffect(() => {
     if (entry && open) {
-      setTime(entry.formatted_time || '')
+      // Prefer formatted_time, but fall back to minutes_worked when needed
+      if (entry.formatted_time) {
+        setTime(entry.formatted_time)
+      } else if (typeof entry.minutes_worked === 'number') {
+        setTime(formatMinutesToTime(entry.minutes_worked))
+      } else {
+        setTime('')
+      }
       setDescription(entry.name || '')
       setProjectId(entry.project?.id.toString() || '')
       setUserId(entry.user?.id.toString() || '')
@@ -109,6 +122,13 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
 
     setLoading(true)
     setError(null)
+    // Validate time parsing before submitting
+    const minutes = parseTimeToMinutes(time)
+    if (minutes === null || minutes <= 0) {
+      setError('Please enter a valid time (e.g. 1:30 or 1.5).')
+      setLoading(false)
+      return
+    }
     
     try {
       const url = entry 
@@ -213,7 +233,7 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
                     size="sm"
                     className="h-7 px-2 text-[10px]"
                     onClick={() => {
-                      const currentMins = parseTimeToMinutes(time)
+                      const currentMins = parseTimeToMinutes(time) ?? 0
                       const newMins = Math.max(0, currentMins + inc)
                       setTime(formatMinutesToTime(newMins))
                     }}
@@ -341,7 +361,7 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={loading || !time.trim() || !projectId}>
+              <Button type="submit" disabled={loading || !time.trim() || !projectId || parseTimeToMinutes(time) === null || parseTimeToMinutes(time) === 0}>
                 {loading ? 'Saving...' : (entry ? 'Save Changes' : 'Add Time Record')}
               </Button>
             </div>
