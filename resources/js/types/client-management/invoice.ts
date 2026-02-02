@@ -42,6 +42,8 @@ export interface Invoice {
   payments: ClientInvoicePayment[];
   remaining_balance: string;
   payments_total: string;
+  previous_invoice_id?: number | null;
+  next_invoice_id?: number | null;
 }
 
 export interface InvoicePreview {

@@ -130,6 +130,36 @@ class ClientPortalAgreementApiController extends Controller
             ];
         });
 
+        // Get previous and next invoice IDs
+        $navQuery = ClientInvoice::where('client_company_id', $company->id);
+        if (! $isAdmin) {
+            $navQuery->whereIn('status', ['issued', 'paid']);
+        }
+
+        $data['previous_invoice_id'] = (clone $navQuery)
+            ->where(function ($q) use ($invoice) {
+                $q->where('period_start', '<', $invoice->period_start)
+                    ->orWhere(function ($q2) use ($invoice) {
+                        $q2->where('period_start', '=', $invoice->period_start)
+                            ->where('client_invoice_id', '<', $invoice->client_invoice_id);
+                    });
+            })
+            ->orderBy('period_start', 'desc')
+            ->orderBy('client_invoice_id', 'desc')
+            ->value('client_invoice_id');
+
+        $data['next_invoice_id'] = (clone $navQuery)
+            ->where(function ($q) use ($invoice) {
+                $q->where('period_start', '>', $invoice->period_start)
+                    ->orWhere(function ($q2) use ($invoice) {
+                        $q2->where('period_start', '=', $invoice->period_start)
+                            ->where('client_invoice_id', '>', $invoice->client_invoice_id);
+                    });
+            })
+            ->orderBy('period_start', 'asc')
+            ->orderBy('client_invoice_id', 'asc')
+            ->value('client_invoice_id');
+
         return $data;
     }
 }

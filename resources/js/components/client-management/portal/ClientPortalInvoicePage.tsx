@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { ClientInvoicePayment, Invoice, InvoiceLine } from "@/types/client-management";
 import { format } from 'date-fns'
-import { Pencil, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-react";
 import React, { useEffect, useState } from "react";
 
 import { fetchWrapper } from "@/fetchWrapper";
@@ -222,10 +222,38 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
                 <div className="flex justify-between items-start mb-8">
                     <div>
                         <h1 className="text-3xl font-bold mb-2">Invoice {invoice.invoice_number}</h1>
-                        <p className="text-muted-foreground">
+                        <div className="text-muted-foreground">
                             For {companyName} <br />
-                            Period: {format(new Date(invoice.period_start!), 'MMM d, yyyy')} - {format(new Date(invoice.period_end!), 'MMM d, yyyy')}
-                        </p>
+                            <div className="flex items-center gap-2">
+                                <span>Period: {format(new Date(invoice.period_start!), 'MMM d, yyyy')} - {format(new Date(invoice.period_end!), 'MMM d, yyyy')}</span>
+                                {(invoice.previous_invoice_id || invoice.next_invoice_id) && (
+                                    <span className="inline-flex items-center gap-1 ml-1 print:hidden">
+                                        {invoice.previous_invoice_id && (
+                                            <Button
+                                                variant="outline"
+                                                size="icon"
+                                                className="h-6 w-6 p-0"
+                                                onClick={() => window.location.href = `/client/portal/${slug}/invoice/${invoice.previous_invoice_id}`}
+                                                title="Previous Invoice"
+                                            >
+                                                <ChevronLeft className="h-3 w-3" />
+                                            </Button>
+                                        )}
+                                        {invoice.next_invoice_id && (
+                                            <Button
+                                                variant="outline"
+                                                size="icon"
+                                                className="h-6 w-6 p-0"
+                                                onClick={() => window.location.href = `/client/portal/${slug}/invoice/${invoice.next_invoice_id}`}
+                                                title="Next Invoice"
+                                            >
+                                                <ChevronRight className="h-3 w-3" />
+                                            </Button>
+                                        )}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
                     </div>
                     <div className="text-right">
                         <div className="text-4xl font-bold mb-2">${parseFloat(invoice.invoice_total).toFixed(2)}</div>
