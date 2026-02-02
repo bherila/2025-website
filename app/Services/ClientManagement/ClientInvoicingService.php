@@ -219,6 +219,9 @@ class ClientInvoicingService
                 $minutesWorked = $monthEntries->sum('minutes_worked');
 
                 $isPreAgreement = $monthKey < $agreementStart->format('Y-m');
+
+
+
                 $months[] = [
                     'year_month' => $monthKey,
                     'retainer_hours' => $isPreAgreement ? 0.0 : (float) $agreement->monthly_retainer_hours,
@@ -437,11 +440,6 @@ class ClientInvoicingService
                 'line_date' => $periodStart,
                 'sort_order' => $sortOrder++,
             ]);
-
-            // --- Minimum Availability Rule (Catch-up Billing) ---
-            // If the carried forward negative balance consumes so much of the new retainer
-            // that the client has less than 1 hour available, we simply bill them for the difference
-            // to bring them back to 1 hour available.
 
             // --- Minimum Availability Rule (Catch-up Billing) ---
             // If the carried forward negative balance consumes so much of the new retainer

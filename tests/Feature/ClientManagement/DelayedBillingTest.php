@@ -85,8 +85,8 @@ class DelayedBillingTest extends TestCase
             'monthly_retainer_fee' => 1000.00,
             'monthly_retainer_hours' => 10,
             'hourly_rate' => 150.00,
-            'start_date' => Carbon::create(2024, 2, 1),
-            'end_date' => null,
+            'active_date' => Carbon::create(2024, 2, 1),
+            'termination_date' => null,
             'rollover_months' => 3,
             'is_active' => true,
         ]);
@@ -159,8 +159,8 @@ class DelayedBillingTest extends TestCase
             'monthly_retainer_fee' => 1000.00,
             'monthly_retainer_hours' => 10,
             'hourly_rate' => 100.00,
-            'start_date' => Carbon::create(2024, 2, 1),
-            'end_date' => null,
+            'active_date' => Carbon::create(2024, 2, 1),
+            'termination_date' => null,
             'rollover_months' => 3,
             'is_active' => true,
         ]);
@@ -225,8 +225,8 @@ class DelayedBillingTest extends TestCase
             'monthly_retainer_fee' => 1000.00,
             'monthly_retainer_hours' => 10,
             'hourly_rate' => 100.00,
-            'start_date' => Carbon::create(2024, 2, 1),
-            'end_date' => null,
+            'active_date' => Carbon::create(2024, 2, 1),
+            'termination_date' => null,
             'rollover_months' => 3,
             'is_active' => true,
         ]);
@@ -259,8 +259,8 @@ class DelayedBillingTest extends TestCase
             'monthly_retainer_fee' => 1000.00,
             'monthly_retainer_hours' => 10,
             'hourly_rate' => 100.00,
-            'start_date' => Carbon::create(2024, 1, 1), // Earlier start
-            'end_date' => null,
+            'active_date' => Carbon::create(2024, 1, 1), // Earlier start
+            'termination_date' => null,
             'rollover_months' => 3,
             'is_active' => true,
         ]);
