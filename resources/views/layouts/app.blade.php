@@ -18,7 +18,7 @@
         } catch (e) { /* no-op */ }
       })();
     </script>
-    @vite(['resources/css/app.css', 'resources/js/navbar.tsx'])
+    @vite(['resources/css/app.css', 'resources/js/navbar.tsx', 'resources/js/back-to-top.tsx'])
     @stack('head')
     <script>(_=>{let a})()</script>
   </head>
@@ -38,6 +38,8 @@
     <footer class="border-t border-gray-200 dark:border-[#3E3E3A] py-6 text-sm text-center text-gray-600 dark:text-[#A1A09A]">
       © {{ date('Y') }} Ben Herila
     </footer>
+
+    <div id="back-to-top"></div>
 
     @stack('scripts')
   </body>
