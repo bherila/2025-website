@@ -11,6 +11,7 @@ export default defineConfig({
         'resources/css/app.css',
         'resources/js/app.jsx',
         'resources/js/navbar.tsx',
+        'resources/js/back-to-top.tsx',
         'resources/js/finance.tsx',
         'resources/js/finance-account-maintenance.tsx',
         'resources/js/home.tsx',
