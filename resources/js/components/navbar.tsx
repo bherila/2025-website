@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { Laptop, Moon, Sun, ChevronDown } from 'lucide-react';
+import { Laptop, Moon, Sun, ChevronDown, Menu, X } from 'lucide-react';
 
 type ClientCompany = {
   id: number;
@@ -30,6 +30,11 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies }: Navb
   const [clientsOpen, setClientsOpen] = useState(false);
   const clientsRef = useRef<HTMLLIElement | null>(null);
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
+  const [mobileClientsOpen, setMobileClientsOpen] = useState(false);
+  const mobileMenuRef = useRef<HTMLDivElement | null>(null);
+
   const [theme, setTheme] = useState<ThemeMode>(() => (localStorage.getItem('theme') as ThemeMode) || 'system');
 
   useEffect(() => {
@@ -44,6 +49,11 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies }: Navb
       }
       if (clientsRef.current && !clientsRef.current.contains(e.target as Node)) {
         setClientsOpen(false);
+      }
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target as Node)) {
+        setMobileMenuOpen(false);
+        setMobileToolsOpen(false);
+        setMobileClientsOpen(false);
       }
     };
     document.addEventListener('mousedown', handler);
@@ -64,9 +74,21 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies }: Navb
     <nav className='mx-auto max-w-7xl px-4 py-3 flex items-center justify-between gap-4'>
       {/* Left: Branding + Main nav */}
       <div className='flex items-center gap-6'>
-        <a href='/' className='select-none'>
-          <h1 className='text-lg font-semibold tracking-tight'>Ben Herila</h1>
-        </a>
+        <div className='flex items-center gap-2'>
+          {/* Mobile menu button */}
+          <button
+            type='button'
+            onClick={() => setMobileMenuOpen((v) => !v)}
+            className='md:hidden p-2 hover:bg-gray-100 dark:hover:bg-[#1f1f1e] rounded-md'
+            aria-label='Toggle menu'
+            aria-expanded={mobileMenuOpen}
+          >
+            {mobileMenuOpen ? <X className='w-5 h-5' /> : <Menu className='w-5 h-5' />}
+          </button>
+          <a href='/' className='select-none'>
+            <h1 className='text-lg font-semibold tracking-tight'>Ben Herila</h1>
+          </a>
+        </div>
         <ul className='hidden md:flex items-center gap-4 text-sm print:hidden'>
           <li><a className='hover:underline underline-offset-4' href='/recipes'>Recipes</a></li>
           <li><a className='hover:underline underline-offset-4' href='/projects'>Projects</a></li>
@@ -136,6 +158,106 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies }: Navb
           )}
         </ul>
       </div>
+
+      {/* Mobile menu - Full screen overlay on small screens */}
+      {mobileMenuOpen && (
+        <div
+          ref={mobileMenuRef}
+          className='md:hidden fixed inset-0 top-[60px] z-40 bg-white dark:bg-[#161615] overflow-y-auto'
+          role='menu'
+        >
+          <div className='px-4 py-2 space-y-1'>
+            <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base' href='/recipes'>
+              Recipes
+            </a>
+            <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base' href='/projects'>
+              Projects
+            </a>
+            
+            {/* Tools section in mobile menu */}
+            <div>
+              <button
+                type='button'
+                className='w-full flex items-center justify-between px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base'
+                onClick={() => setMobileToolsOpen((v) => !v)}
+                aria-expanded={mobileToolsOpen}
+              >
+                <span>Tools</span>
+                <ChevronDown className={`w-4 h-4 transition-transform ${mobileToolsOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {mobileToolsOpen && (
+                <div className='pl-4 space-y-1'>
+                  <div className='px-3 py-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]'>Finance</div>
+                  <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/finance/rsu'>
+                    Finance RSU
+                  </a>
+                  <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/finance/payslips'>
+                    Finance Payslips
+                  </a>
+                  <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/finance/accounts'>
+                    Finance Accounts
+                  </a>
+                  <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/utility-bill-tracker'>
+                    Utility Bill Tracker
+                  </a>
+                  <div className='px-3 pt-2 pb-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]'>Utilities</div>
+                  <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/tools/maxmin'>
+                    MaxMin
+                  </a>
+                  <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/tools/license-manager'>
+                    License Manager
+                  </a>
+                  <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/tools/bingo'>
+                    Bingo Card Generator
+                  </a>
+                  <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/tools/irs-f461'>
+                    Capital Loss Carryover Worksheet
+                  </a>
+                  {authenticated && isAdmin && (
+                    <>
+                      <div className='px-3 pt-2 pb-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]'>Admin</div>
+                      <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/admin/users'>
+                        User Management
+                      </a>
+                      <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/client/mgmt'>
+                        Client Management
+                      </a>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Client Portal section in mobile menu */}
+            {authenticated && clientCompanies && clientCompanies.length > 0 && (
+              <div>
+                <button
+                  type='button'
+                  className='w-full flex items-center justify-between px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base'
+                  onClick={() => setMobileClientsOpen((v) => !v)}
+                  aria-expanded={mobileClientsOpen}
+                >
+                  <span>Client Portal</span>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${mobileClientsOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {mobileClientsOpen && (
+                  <div className='pl-4 space-y-1'>
+                    {clientCompanies.map((company) => (
+                      <a
+                        key={company.id}
+                        className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm truncate'
+                        href={`/client/portal/${company.slug}`}
+                      >
+                        {company.company_name}
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Right: Theme toggle + external link + auth */}
       <div className='flex items-center gap-3 print:hidden'>
