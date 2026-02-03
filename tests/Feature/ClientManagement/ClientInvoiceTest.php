@@ -746,8 +746,11 @@ class ClientInvoiceTest extends TestCase
         $this->assertEquals(0, (float) $febInvoice->fresh()->negative_hours_balance);
         $this->assertEquals(1, (float) $febInvoice->fresh()->unused_hours_balance);
     }
-    public function test_time_entry_is_split_when_partially_billed(): void
+    public function test_time_entry_is_split_with_catchup_billing(): void
     {
+        // This test verifies that a time entry is split when it partially fits in the current month's 
+        // retainer offset (limited by the 1h availability rule) and the remainder triggers catch-up billing.
+
         // 1. Agreement: 10 hours retainer from Jan 2024
         $agreement = ClientAgreement::factory()->create([
             'client_company_id' => $this->company->id,
@@ -760,10 +763,9 @@ class ClientInvoiceTest extends TestCase
         // 2. Work: 12 hours in Dec 2023 (Prior Month)
         // Dec 2023 is Pre-Agreement. Capacity = 0.
         // Jan 2024 Capacity = 10.
-        // Work = 12.
-        // Stage 1 (Dec Cover): 0.
-        // Stage 2 (Jan Cover): 10.
-        // Stage 3 (Feb Carry): 2.
+        // Rule: Offset capped at 10-1 = 9h.
+        // Work = 12. 
+        // Billed: 9h (Applied to Jan) + 3h (Catch-up).
 
         $entry = ClientTimeEntry::factory()->create([
             'client_company_id' => $this->company->id,
@@ -782,41 +784,101 @@ class ClientInvoiceTest extends TestCase
         $invoice->refresh();
 
         // 4. Verify lines
-        // We expect:
-        // Line A: 10h (Applied to Jan)
-        // Line B: 2h (Exceeding -> Feb)
+        $priorLines = $invoice->lineItems->where('line_type', 'prior_month_retainer');
+        $catchUpLine = $invoice->lineItems->firstWhere('line_type', 'additional_hours');
 
-        $priorLines = $invoice->lineItems->where('line_type', 'prior_month_retainer')->sortBy('hours');
-        // Sorted: 2h, 10h
+        $this->assertEquals(1, $priorLines->count(), 'Should have 1 prior work line (capped)');
+        $this->assertNotNull($catchUpLine, 'Should have catch-up line');
 
-        $this->assertEquals(2, $priorLines->count(), 'Should have 2 prior work lines');
+        $nineHourLine = $priorLines->first();
+        $this->assertEquals(9, $nineHourLine->hours);
+        $this->assertEquals(3, $catchUpLine->hours);
 
-        $tenHourLine = $priorLines->firstWhere('hours', 10);
-        $twoHourLine = $priorLines->firstWhere('hours', 2);
-
-        $this->assertNotNull($tenHourLine, 'Should have 10h covered line');
-        $this->assertStringContainsString('applied to January 2024 retainer', $tenHourLine->description);
-
-        $this->assertNotNull($twoHourLine, 'Should have 2h offset line');
-        $this->assertStringContainsString('applied to February 2024 retainer', $twoHourLine->description);
-
-        // 5. Verify Original Entry was modified
+        // 5. Verify Original Entry was split correctly
         $entry->refresh();
-        // The original entry should correspond to one of the split parts (usually the first selected one, which is 10h in Stage 2)
-        // Stage 1 (0h) select nothing.
-        // Stage 2 (10h) selects.
+        $this->assertEquals(9 * 60, $entry->minutes_worked);
+        $this->assertEquals($nineHourLine->client_invoice_line_id, $entry->client_invoice_line_id);
 
-        $this->assertEquals(10 * 60, $entry->minutes_worked, 'Original entry should be 10h');
-        $this->assertEquals($tenHourLine->client_invoice_line_id, $entry->client_invoice_line_id);
+        $rolledOverEntry = ClientTimeEntry::where('client_invoice_line_id', $catchUpLine->client_invoice_line_id)->first();
+        $this->assertNotNull($rolledOverEntry);
+        $this->assertEquals(3 * 60, $rolledOverEntry->minutes_worked);
+    }
 
-        // 6. Verify New Entry
-        $remainderEntry = ClientTimeEntry::where('client_company_id', $this->company->id)
-            ->where('id', '!=', $entry->id)
-            ->first();
+    public function test_time_entry_is_split_without_catchup_billing(): void
+    {
+        // This test verifies that a time entry is split when it crosses from M-1's remaining 
+        // retainer capacity into M's retainer offset, while keeping availability >= 1h.
 
-        $this->assertNotNull($remainderEntry);
-        $this->assertEquals(2 * 60, $remainderEntry->minutes_worked);
-        $this->assertEquals($twoHourLine->client_invoice_line_id, $remainderEntry->client_invoice_line_id);
+        // 1. Agreement: 10 hours retainer from Dec 2023
+        $agreement = ClientAgreement::factory()->create([
+            'client_company_id' => $this->company->id,
+            'active_date' => Carbon::create(2023, 12, 1),
+            'monthly_retainer_hours' => 10,
+            'hourly_rate' => 100,
+            'rollover_months' => 0,
+        ]);
+
+        // 2. December Activity: 8 hours worked (2h remaining)
+        ClientTimeEntry::factory()->create([
+            'client_company_id' => $this->company->id,
+            'minutes_worked' => 8 * 60,
+            'date_worked' => Carbon::create(2023, 12, 5),
+            'is_billable' => true,
+        ]);
+
+        // Generate Dec invoice to finalize unused balance
+        $invoiceDec = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2023, 12, 1),
+            Carbon::create(2023, 12, 31),
+            $agreement
+        );
+        $invoiceDec->issue();
+
+        // 3. New Work Item for Dec (5h): should split 2h (Dec) / 3h (Jan)
+        $entry = ClientTimeEntry::factory()->create([
+            'client_company_id' => $this->company->id,
+            'minutes_worked' => 5 * 60,
+            'date_worked' => Carbon::create(2023, 12, 15),
+            'is_billable' => true,
+        ]);
+
+        // 4. Generate Jan Invoice
+        $invoiceJan = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2024, 1, 1),
+            Carbon::create(2024, 1, 31),
+            $agreement
+        );
+
+        $invoiceJan->refresh();
+
+        // 5. Verify Split
+        // Stage 1 (Dec Cover): 2h
+        // Stage 2 (Jan Cover): 3h
+        // Available Jan: 10 - 3 = 7h (>= 1h, no catch-up)
+
+        $priorLines = $invoiceJan->lineItems->where('line_type', 'prior_month_retainer')->sortBy('hours');
+        $this->assertEquals(2, $priorLines->count());
+
+        $twoHourLine = $priorLines->firstWhere('hours', 2);
+        $threeHourLine = $priorLines->firstWhere('hours', 3);
+
+        $this->assertNotNull($twoHourLine);
+        $this->assertNotNull($threeHourLine);
+        $this->assertStringContainsString('applied to December 2023 retainer', $twoHourLine->description);
+        $this->assertStringContainsString('applied to January 2024 retainer', $threeHourLine->description);
+
+        $this->assertNull($invoiceJan->lineItems->firstWhere('line_type', 'additional_hours'));
+
+        // Verify Entry Splitting
+        $entry->refresh();
+        $this->assertEquals(2 * 60, $entry->minutes_worked);
+        $this->assertEquals($twoHourLine->client_invoice_line_id, $entry->client_invoice_line_id);
+
+        $rolledOverEntry = ClientTimeEntry::where('client_invoice_line_id', $threeHourLine->client_invoice_line_id)->first();
+        $this->assertNotNull($rolledOverEntry);
+        $this->assertEquals(3 * 60, $rolledOverEntry->minutes_worked);
     }
 
     // ==========================================
@@ -978,5 +1040,100 @@ class ClientInvoiceTest extends TestCase
         // So negative balance is gone.
         $this->assertEquals(0, $invoiceFeb->negative_hours_balance);
         $this->assertEquals(1, $invoiceFeb->unused_hours_balance);
+    }
+
+    public function test_catch_up_billing_links_time_entries_and_prevents_double_application(): void
+    {
+        // 1. Setup: Agreement with 2 hr retainer from Jan 2026
+        $agreement = ClientAgreement::factory()->create([
+            'client_company_id' => $this->company->id,
+            'monthly_retainer_hours' => 2,
+            'monthly_retainer_fee' => 600,
+            'hourly_rate' => 250,
+            'active_date' => Carbon::create(2026, 1, 1),
+            'rollover_months' => 3,
+        ]);
+
+        // 3. Generate January Invoice (Retainer only)
+        $invoiceJan = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2026, 1, 1),
+            Carbon::create(2026, 1, 31)
+        );
+        $invoiceJan->issue();
+        $invoiceJan->refresh();
+
+        // 2. January Activity: 10 hours worked (unbilled)
+        $janWork = ClientTimeEntry::factory()->create([
+            'client_company_id' => $this->company->id,
+            'minutes_worked' => 10 * 60,
+            'date_worked' => Carbon::create(2026, 1, 15),
+            'name' => 'System upgrade',
+            'is_billable' => true,
+        ]);
+
+        // 4. Generate February Invoice (Catch-up triggered)
+        // Jan Overage: 8h.
+        // Feb Opening: Retainer 2h. Backlog 8h.
+        // Stage 1 (Jan Retainer): 2h. (Remaining debt: 8h)
+        // Stage 2 (Feb Retainer Offset): 1h (leaving 1h available? No, wait)
+        // Actually:
+        // Opening Available = 2h (Feb) - 8h (Jan debt) = -6h.
+        // Target = 1h.
+        // CatchUp = 1 - (-6) = 7h.
+
+        $invoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2026, 2, 1),
+            Carbon::create(2026, 2, 28)
+        );
+
+        $invoice->refresh();
+
+        // 5. Verify Line Items
+        // Expected:
+        // - Retainer ($600)
+        // - Applied to Jan (2h @ $0)
+        // - Applied to Feb (1h @ $0)
+        // - Catch-up (7h @ $250)
+        // - NO "Applied to March" line
+
+        $lines = $invoice->lineItems;
+
+        $retainerLine = $lines->firstWhere('line_type', 'retainer');
+        $priorMonthLines = $lines->where('line_type', 'prior_month_retainer');
+        $catchUpLine = $lines->firstWhere('line_type', 'additional_hours');
+
+        $this->assertNotNull($catchUpLine, 'Catch-up line should be present');
+        $this->assertEquals(7.0, (float) $catchUpLine->hours);
+        $this->assertEquals(7 * 250, (float) $catchUpLine->line_total);
+
+        // Verify no redundant "exceeding retainer" line
+        $carriedForwardLine = $priorMonthLines->filter(function ($l) {
+            return str_contains($l->description, 'exceeding retainer');
+        })->first();
+        $this->assertNull($carriedForwardLine, 'Should NOT have redundant carried forward line if billed as catch-up');
+
+        // Verify time entry linking
+        // The original 10h entry should have been split into multiple entries now.
+        $entries = ClientTimeEntry::where('name', 'System upgrade')->where('client_company_id', $this->company->id)->get();
+
+        // Total minutes should still be 10h
+        $this->assertEquals(10 * 60, $entries->sum('minutes_worked'));
+
+        // Check linking
+        $appliedToJanLine = $priorMonthLines->first(fn($l) => str_contains($l->description, 'January 2026 retainer'));
+        $appliedToFebLine = $priorMonthLines->first(fn($l) => str_contains($l->description, 'February 2026 retainer'));
+
+        $this->assertNotNull($appliedToJanLine);
+        $this->assertNotNull($appliedToFebLine);
+
+        $appliedToJan = $entries->where('client_invoice_line_id', $appliedToJanLine->client_invoice_line_id);
+        $appliedToFeb = $entries->where('client_invoice_line_id', $appliedToFebLine->client_invoice_line_id);
+        $linkedToCatchUp = $entries->where('client_invoice_line_id', $catchUpLine->client_invoice_line_id);
+
+        $this->assertEquals(2.0, $appliedToJan->sum('minutes_worked') / 60);
+        $this->assertEquals(1.0, $appliedToFeb->sum('minutes_worked') / 60);
+        $this->assertEquals(7.0, $linkedToCatchUp->sum('minutes_worked') / 60);
     }
 }

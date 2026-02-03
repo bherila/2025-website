@@ -250,6 +250,14 @@ class ClientInvoicingService
                 ->whereBetween('date_worked', [$priorMonthStart, $priorMonthEnd])
                 ->orderBy('date_worked')
                 ->get();
+            $priorMonthKey = $priorMonthStart->format('Y-m');
+
+            $currentMonthEntries = ClientTimeEntry::where('client_company_id', $company->id)
+                ->whereNull('client_invoice_line_id')
+                ->where('is_billable', true)
+                ->whereBetween('date_worked', [$periodStart, $periodEnd])
+                ->orderBy('date_worked')
+                ->get();
 
             // Find balance for the current invoice month (M)
             $currentMonthKey = $periodEnd->format('Y-m');
@@ -300,7 +308,7 @@ class ClientInvoicingService
                 'period_start' => $periodStart,
                 'period_end' => $periodEnd,
                 'retainer_hours_included' => (float) $agreement->monthly_retainer_hours,
-                'hours_worked' => $priorMonthEntries->sum('minutes_worked') / 60,
+                'hours_worked' => ($priorMonthEntries->sum('minutes_worked') + $currentMonthEntries->sum('minutes_worked')) / 60,
                 'rollover_hours_used' => $currentMonthBalance->closing->hoursUsedFromRollover,
                 'unused_hours_balance' => $currentMonthBalance->closing->unusedHours,
                 'negative_hours_balance' => $currentMonthBalance->closing->negativeBalance,
@@ -333,30 +341,43 @@ class ClientInvoicingService
 
             $sortOrder = 1;
 
-            // Line 3: Prior Month Work
-            // Split into 3 buckets:
-            // a) Covered by Prior Month (M-1) Retainer
-            // b) Covered by Current Month (M) Retainer (Negative Balance Offset)
-            // c) Carried Forward to Next Month (M+1) (Remaining Negative Balance)
-            if ($priorMonthEntries->count() > 0) {
-                // Buckets
-                $m1_limit = 0;
-                $m_limit = 0;
+            // --- PRIOR MONTH WORK & BALANCE ADJUSTMENTS ---
+            // Process unbilled work from M-1 and/or address pre-existing debt from previous invoices.
 
-                // 1. Determine M-1 Limit
-                /** @var MonthSummary|null $priorMonthBalance */
-                $priorMonthBalance = null;
-                foreach ($allBalances as $balance) {
-                    if ($balance->yearMonth === $priorMonthEnd->format('Y-m')) {
-                        $priorMonthBalance = $balance;
-                        break;
-                    }
+            // 1. Determine M-1 Limit
+            /** @var MonthSummary|null $priorMonthBalance */
+            $priorMonthBalance = null;
+            foreach ($allBalances as $balance) {
+                if ($balance->yearMonth === $priorMonthEnd->format('Y-m')) {
+                    $priorMonthBalance = $balance;
+                    break;
                 }
-                $m1_limit = $priorMonthBalance ? $priorMonthBalance->opening->totalAvailable : 0;
+            }
+            $history = ClientInvoice::where('client_agreement_id', $agreement->id)
+                ->where('period_end', '<', $periodStart)
+                ->whereNotIn('status', ['void'])
+                ->orderBy('period_start', 'asc')
+                ->get();
+            $m1_invoice = $history->first(fn($inv) => $inv->period_start->format('Y-m') === $priorMonthKey);
+            $alreadyBilledM1 = $m1_invoice ? $m1_invoice->hours_worked : 0;
 
-                // 2. Determine M Limit (Negative Offset)
-                // This is how much of M's retainer is successfully used to cover the backlog
-                $m_limit = $currentMonthBalance->opening->negativeOffset ?? 0;
+            // m1_limit: Portion of the NOW-CALCULATED M-1 pool usage that belongs to the NEW entries.
+            $m1_limit = 0;
+            if ($priorMonthBalance && $priorMonthBalance->closing) {
+                $totalUsedM1 = $priorMonthBalance->closing->hoursUsedFromRetainer + $priorMonthBalance->closing->hoursUsedFromRollover;
+                $poolInvoicedM1 = min($alreadyBilledM1, $priorMonthBalance->opening->totalAvailable);
+                $m1_limit = max(0, $totalUsedM1 - $poolInvoicedM1);
+            }
+
+            // 2. Determine M Limit (Negative Offset)
+            // Capped at (retainer - 1) to preserve availability buffer.
+            $m_limit = min(
+                $currentMonthBalance->opening->negativeOffset ?? 0,
+                max(0.0, (float) $agreement->monthly_retainer_hours - 1.0)
+            );
+
+            // --- STAGE 1 & 2: Process Unbilled Prior Month Entries ---
+            if ($priorMonthEntries->count() > 0) {
 
                 // --- STAGE 1: Covered by M-1 ---
                 $entriesToProcess = $priorMonthEntries;
@@ -409,32 +430,84 @@ class ClientInvoicingService
                     }
                 }
 
-                // Refresh remaining unlinked entries for Stage 3
-                $finalEntries = ClientTimeEntry::where('client_company_id', $company->id)
+            }
+
+            // --- STAGE 3: Catch-up Billing & Carry Forward ---
+            // Refresh remaining unlinked entries for Catch-up and/or Stage 3
+            // (We do this regardless of entry count so catch-up can trigger on pre-existing debt)
+            $finalRemaining = ClientTimeEntry::where('client_company_id', $company->id)
+                ->whereNull('client_invoice_line_id')
+                ->where('is_billable', true)
+                ->whereBetween('date_worked', [$priorMonthStart, $priorMonthEnd])
+                ->orderBy('date_worked')
+                ->get();
+
+            // --- Minimum Availability Rule (Catch-up Billing) ---
+            $opening = $currentMonthBalance->opening;
+            $available = (float) $opening->totalAvailable - (float) $opening->remainingNegativeBalance;
+
+            if ($available < 1) {
+                $targetAvailable = 1.0;
+                $catchUpHours = $targetAvailable - $available;
+
+                $catchUpLine = ClientInvoiceLine::create([
+                    'client_invoice_id' => $invoice->client_invoice_id,
+                    'client_agreement_id' => $agreement->id,
+                    'description' => "Catch-up hours to restore minimum availability ({$this->formatHoursForQuantity($catchUpHours)} billed to ensure 1h available)",
+                    'quantity' => $this->formatHoursForQuantity($catchUpHours),
+                    'unit_price' => $agreement->hourly_rate,
+                    'line_total' => $catchUpHours * $agreement->hourly_rate,
+                    'line_type' => 'additional_hours',
+                    'hours' => $catchUpHours,
+                    'line_date' => $periodStart,
+                    'sort_order' => $sortOrder++,
+                ]);
+
+                // Link entries to catch-up line (if any remain unbilled)
+                $toLink = $this->selectEntriesUpToHours($finalRemaining, $catchUpHours);
+                if ($toLink->count() > 0) {
+                    $this->linkTimeEntriesToLine($toLink, $catchUpLine);
+                }
+
+                // Refresh finalRemaining for carried forward line
+                $finalRemaining = ClientTimeEntry::where('client_company_id', $company->id)
                     ->whereNull('client_invoice_line_id')
                     ->where('is_billable', true)
                     ->whereBetween('date_worked', [$priorMonthStart, $priorMonthEnd])
                     ->orderBy('date_worked')
                     ->get();
 
-                // --- STAGE 3: Carried Forward ---
-                if ($finalEntries->count() > 0) {
-                    $hours = $finalEntries->sum('minutes_worked') / 60;
-                    $nextMonthName = $periodStart->copy()->addMonth()->format('F Y');
-                    $line = ClientInvoiceLine::create([
-                        'client_invoice_id' => $invoice->client_invoice_id,
-                        'client_agreement_id' => $agreement->id,
-                        'description' => "Work items from prior month exceeding retainer ({$this->formatHoursForQuantity($hours)} applied to {$nextMonthName} retainer)",
-                        'quantity' => $this->formatHoursForQuantity($hours),
-                        'unit_price' => 0,
-                        'line_total' => 0,
-                        'line_type' => 'prior_month_retainer',
-                        'hours' => $hours,
-                        'line_date' => $priorMonthEnd,
-                        'sort_order' => $sortOrder++,
-                    ]);
-                    $this->linkTimeEntriesToLine($finalEntries, $line);
+                // Update balances
+                $oldRemainingNegative = (float) $opening->remainingNegativeBalance;
+                $newNegativeBalance = max(0, $oldRemainingNegative - $catchUpHours);
+                $invoice->update([
+                    'negative_hours_balance' => $newNegativeBalance,
+                    'unused_hours_balance' => 1.0,
+                    'hours_billed_at_rate' => $catchUpHours,
+                ]);
+
+                if ($currentMonthBalance->closing) {
+                    $currentMonthBalance->closing->negativeBalance = max(0, $currentMonthBalance->closing->negativeBalance - $catchUpHours);
                 }
+            }
+
+            // Carry forward any still-unlinked prior month work
+            if ($finalRemaining->count() > 0) {
+                $hours = $finalRemaining->sum('minutes_worked') / 60;
+                $nextMonthName = $periodStart->copy()->addMonth()->format('F Y');
+                $line = ClientInvoiceLine::create([
+                    'client_invoice_id' => $invoice->client_invoice_id,
+                    'client_agreement_id' => $agreement->id,
+                    'description' => "Work items from prior month exceeding retainer ({$this->formatHoursForQuantity($hours)} applied to {$nextMonthName} retainer)",
+                    'quantity' => $this->formatHoursForQuantity($hours),
+                    'unit_price' => 0,
+                    'line_total' => 0,
+                    'line_type' => 'prior_month_retainer',
+                    'hours' => $hours,
+                    'line_date' => $priorMonthEnd,
+                    'sort_order' => $sortOrder++,
+                ]);
+                $this->linkTimeEntriesToLine($finalRemaining, $line);
             }
 
             // Line 4: Monthly retainer fee for month M
@@ -451,71 +524,23 @@ class ClientInvoicingService
                 'sort_order' => $sortOrder++,
             ]);
 
-            // --- Minimum Availability Rule (Catch-up Billing) ---
-            // If the carried forward negative balance consumes so much of the new retainer
-            // that the client has less than 1 hour available, we simply bill them for the difference
-            // to bring them back to 1 hour available.
-
-            // Available = Total Available (opening) - Remaining Negative Balance (opening)
-            // If Available < 1, CatchUp = 1 - Available
-
-            $opening = $currentMonthBalance->opening;
-            $available = $opening->totalAvailable - $opening->remainingNegativeBalance;
-
-            if ($available < 1) {
-                // Minimum required availability is 1 hour
-                $targetAvailable = 1.0;
-                $catchUpHours = $targetAvailable - $available;
-
-                // Add billable line item
-                ClientInvoiceLine::create([
+            if ($currentMonthEntries->count() > 0) {
+                $m_hours = $currentMonthEntries->sum('minutes_worked') / 60;
+                $m_line = ClientInvoiceLine::create([
                     'client_invoice_id' => $invoice->client_invoice_id,
                     'client_agreement_id' => $agreement->id,
-                    'description' => "Catch-up hours to restore minimum availability ({$this->formatHoursForQuantity($catchUpHours)} billed to ensure 1h available)",
-                    'quantity' => $this->formatHoursForQuantity($catchUpHours),
-                    'unit_price' => $agreement->hourly_rate,
-                    'line_total' => $catchUpHours * $agreement->hourly_rate,
-                    'line_type' => 'additional_hours',
-                    'hours' => $catchUpHours,
+                    'description' => "Work items from current month applied to retainer ({$this->formatHoursForQuantity($m_hours)} applied to {$periodStart->format('F Y')} retainer)",
+                    'quantity' => $this->formatHoursForQuantity($m_hours),
+                    'unit_price' => 0,
+                    'line_total' => 0,
+                    'line_type' => 'prior_month_retainer', // We'll reuse this type for consistent styling/linking
+                    'hours' => $m_hours,
                     'line_date' => $periodStart,
                     'sort_order' => $sortOrder++,
                 ]);
-
-                // Adjust Invoice Balances
-                // By billing catchUpHours, we effectively pay off that amount of debt.
-                // Or if we were just low on availability (e.g. 0.5 available), we add credit.
-
-                // The logical "remaining negative balance" should decrease.
-                // The "unused hours" should increase to hit target.
-
-                // New Remaining Negative = Old Remaining Negative - CatchUp.
-                // If CatchUp > Old Remaining (meaning we are crossing from negative to positive availability),
-                // then Negative becomes 0.
-
-                $oldRemainingNegative = $opening->remainingNegativeBalance;
-
-                $newNegativeBalance = max(0, $oldRemainingNegative - $catchUpHours);
-
-                // If we caught up to exactly 1h, then unused is 1h.
-                $newUnusedBalance = 1.0;
-
-                $invoice->update([
-                    'negative_hours_balance' => $newNegativeBalance,
-                    'unused_hours_balance' => $newUnusedBalance,
-                    'hours_billed_at_rate' => $catchUpHours,
-                ]);
-
-                // Update local variable for the informational text below
-                if ($currentMonthBalance->closing) {
-                    // Update the closing balance to reflect that we've paid down the debt
-                    // Note: 'negative_balance' in closing usually reflects total debt.
-                    // We reduce it by the amount we just paid off (catchUpHours).
-                    // But we must check against what was supposedly remaining.
-                    // The closing balance includes new work.
-                    // If we paid down OLD debt, the closing debt is reduced by that amount.
-                    $currentMonthBalance->closing->negativeBalance = max(0, $currentMonthBalance->closing->negativeBalance - $catchUpHours);
-                }
+                $this->linkTimeEntriesToLine($currentMonthEntries, $m_line);
             }
+
 
             // Informational rollover/negative balance line
             if ($currentMonthBalance && ($currentMonthBalance->closing->hoursUsedFromRollover > 0 || $currentMonthBalance->closing->negativeBalance > 0)) {
