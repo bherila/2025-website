@@ -79,11 +79,11 @@ class InvoicingExamplesTest extends TestCase
             'is_billable' => true,
         ]);
 
-        // Generate February invoice
+        // Generate February invoice (covering January work period)
         $invoice = $this->invoicingService->generateInvoice(
             $this->company,
-            Carbon::create(2024, 2, 1),
-            Carbon::create(2024, 2, 29)
+            Carbon::create(2024, 1, 1),
+            Carbon::create(2024, 1, 31)
         );
 
         // Assert invoice was created
@@ -147,11 +147,11 @@ class InvoicingExamplesTest extends TestCase
             'is_billable' => true,
         ]);
 
-        // Generate February invoice
+        // Generate February invoice (covering January work period)
         $invoice = $this->invoicingService->generateInvoice(
             $this->company,
-            Carbon::create(2024, 2, 1),
-            Carbon::create(2024, 2, 29)
+            Carbon::create(2024, 1, 1),
+            Carbon::create(2024, 1, 31)
         );
 
         $invoice->refresh();
@@ -202,11 +202,11 @@ class InvoicingExamplesTest extends TestCase
             'is_billable' => true,
         ]);
 
-        // Generate February invoice
+        // Generate February invoice (covering January work period)
         $invoice = $this->invoicingService->generateInvoice(
             $this->company,
-            Carbon::create(2024, 2, 1),
-            Carbon::create(2024, 2, 29)
+            Carbon::create(2024, 1, 1),
+            Carbon::create(2024, 1, 31)
         );
 
         $invoice->refresh();
@@ -257,7 +257,7 @@ class InvoicingExamplesTest extends TestCase
             'is_billable' => true,
         ]);
 
-        // Generate January invoice (should show 4h unused)
+        // Generate February invoice covering January work (should show 4h unused)
         $janInvoice = $this->invoicingService->generateInvoice(
             $this->company,
             Carbon::create(2024, 1, 1),
@@ -277,7 +277,7 @@ class InvoicingExamplesTest extends TestCase
             'is_billable' => true,
         ]);
 
-        // Generate February invoice
+        // Generate March invoice covering February work
         $febInvoice = $this->invoicingService->generateInvoice(
             $this->company,
             Carbon::create(2024, 2, 1),
