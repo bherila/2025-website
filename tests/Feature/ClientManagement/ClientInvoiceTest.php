@@ -790,18 +790,18 @@ class ClientInvoiceTest extends TestCase
         $this->assertEquals(1, $priorLines->count(), 'Should have 1 prior work line (capped)');
         $this->assertNotNull($catchUpLine, 'Should have catch-up line');
 
-        $nineHourLine = $priorLines->first();
-        $this->assertEquals(9, $nineHourLine->hours);
+        $tenHourLine = $priorLines->first();
+        $this->assertEquals(10, $tenHourLine->hours);
         $this->assertEquals(3, $catchUpLine->hours);
 
         // 5. Verify Original Entry was split correctly
         $entry->refresh();
-        $this->assertEquals(9 * 60, $entry->minutes_worked);
-        $this->assertEquals($nineHourLine->client_invoice_line_id, $entry->client_invoice_line_id);
+        $this->assertEquals(10 * 60, $entry->minutes_worked);
+        $this->assertEquals($tenHourLine->client_invoice_line_id, $entry->client_invoice_line_id);
 
         $rolledOverEntry = ClientTimeEntry::where('client_invoice_line_id', $catchUpLine->client_invoice_line_id)->first();
         $this->assertNotNull($rolledOverEntry);
-        $this->assertEquals(3 * 60, $rolledOverEntry->minutes_worked);
+        $this->assertEquals(2 * 60, $rolledOverEntry->minutes_worked);
     }
 
     public function test_time_entry_is_split_without_catchup_billing(): void
@@ -1147,7 +1147,7 @@ class ClientInvoiceTest extends TestCase
         $linkedToCatchUp = $entries->where('client_invoice_line_id', $catchUpLine->client_invoice_line_id);
 
         $this->assertEquals(2.0, $appliedToJan->sum('minutes_worked') / 60);
-        $this->assertEquals(1.0, $appliedToFeb->sum('minutes_worked') / 60);
-        $this->assertEquals(7.0, $linkedToCatchUp->sum('minutes_worked') / 60);
+        $this->assertEquals(2.0, $appliedToFeb->sum('minutes_worked') / 60);
+        $this->assertEquals(6.0, $linkedToCatchUp->sum('minutes_worked') / 60);
     }
 }
