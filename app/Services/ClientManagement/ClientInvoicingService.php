@@ -313,6 +313,16 @@ class ClientInvoicingService
             // Calculate cumulative balance including catch-up billing
             $cumulativeSnapshot = $this->calculateCumulativeBalanceSnapshot($agreement, $periodEnd, $allBalances);
 
+            // Find balance for the work period month to get rollover usage
+            $workMonthKey = $periodEnd->format('Y-m');
+            $workMonthBalance = null;
+            foreach ($allBalances as $balance) {
+                if ($balance->yearMonth === $workMonthKey) {
+                    $workMonthBalance = $balance;
+                    break;
+                }
+            }
+
             // Prepare invoice data
             $invoiceData = [
                 'client_company_id' => $company->id,
@@ -321,7 +331,7 @@ class ClientInvoicingService
                 'period_end' => $periodEnd,
                 'retainer_hours_included' => (float) $agreement->monthly_retainer_hours,
                 'hours_worked' => $priorMonthEntries->sum('minutes_worked') / 60,
-                'rollover_hours_used' => $currentMonthBalance->closing->hoursUsedFromRollover,
+                'rollover_hours_used' => $workMonthBalance ? $workMonthBalance->closing->hoursUsedFromRollover : 0,
                 'unused_hours_balance' => $cumulativeSnapshot['unused'],
                 'negative_hours_balance' => $cumulativeSnapshot['negative'],
                 'hours_billed_at_rate' => 0, // We'll set this if we decide to bill overage
@@ -516,13 +526,14 @@ class ClientInvoicingService
      */
     protected function calculateCumulativeBalanceSnapshot(ClientAgreement $agreement, Carbon $periodEnd, array $allBalances): array
     {
-        $retainerMonthStart = $periodEnd->copy()->addDay()->startOfMonth();
-        $targetMonthKey = $retainerMonthStart->format('Y-m');
+        // The unused hours balance should reflect the state AFTER processing the work period
+        // So we look at the work period month, not the retainer month
+        $workMonthKey = $periodEnd->format('Y-m');
 
-        // Find calculator summary for target month
+        // Find calculator summary for work month
         $summary = null;
         foreach ($allBalances as $b) {
-            if ($b->yearMonth === $targetMonthKey) {
+            if ($b->yearMonth === $workMonthKey) {
                 $summary = $b;
                 break;
             }
