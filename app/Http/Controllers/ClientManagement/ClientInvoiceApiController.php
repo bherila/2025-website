@@ -80,6 +80,32 @@ class ClientInvoiceApiController extends Controller
 
         $invoice->load(['agreement', 'lineItems.timeEntries', 'payments']);
 
+        // Calculate hours breakdown: carried-in (previous months) vs current month
+        $periodStart = $invoice->period_start;
+        $carriedInHours = 0;
+        $currentMonthHours = 0;
+
+        foreach ($invoice->lineItems as $line) {
+            if (in_array($line->line_type, ['prior_month_retainer', 'prior_month_billable', 'additional_hours'])) {
+                $lineHours = $line->hours ?? 0;
+                
+                // Check if line_date is before period_start (carried-in from previous months)
+                if ($line->line_date && $line->line_date < $periodStart) {
+                    $carriedInHours += $lineHours;
+                } else {
+                    // Count time entries by their date_worked
+                    foreach ($line->timeEntries as $entry) {
+                        $entryHours = $entry->minutes_worked / 60;
+                        if ($entry->date_worked && $entry->date_worked < $periodStart) {
+                            $carriedInHours += $entryHours;
+                        } else {
+                            $currentMonthHours += $entryHours;
+                        }
+                    }
+                }
+            }
+        }
+
         return response()->json([
             'id' => $invoice->client_invoice_id,
             'invoice_number' => $invoice->invoice_number,
@@ -91,6 +117,8 @@ class ClientInvoiceApiController extends Controller
             'due_date' => $invoice->due_date?->toDateString(),
             'paid_date' => $invoice->paid_date?->toDateString(),
             'hours_worked' => $invoice->hours_worked,
+            'carried_in_hours' => $carriedInHours,
+            'current_month_hours' => $currentMonthHours,
             'retainer_hours_included' => $invoice->retainer_hours_included,
             'unused_hours_balance' => $invoice->unused_hours_balance,
             'negative_hours_balance' => $invoice->negative_hours_balance,

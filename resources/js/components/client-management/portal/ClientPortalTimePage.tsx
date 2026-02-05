@@ -307,6 +307,7 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
                       {/* Monthly Summary Tiles */}
                       {month.has_agreement && (
                         <TimeTrackingMonthSummaryRow
+                          displayMode="time_page"
                           openingAvailable={openingAvailable}
                           preAgreementHoursApplied={month.pre_agreement_hours_applied}
                           hoursWorked={month.hours_worked}
@@ -364,15 +365,7 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
                                             entry.client_invoice ? (
                                               <a href={`/client/portal/${slug}/invoices/${entry.client_invoice.client_invoice_id}`} className="no-underline">
                                                 <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-green-600 text-green-600 font-bold shrink-0 text-uppercase hover:bg-green-50">
-                                                  {entry.client_invoice.invoice_date ? (
-                                                    (() => {
-                                                      // Parse date without timezone shifting (date is YYYY-MM-DD)
-                                                      const [year, month, day] = entry.client_invoice.invoice_date.split('-').map(Number)
-                                                      return `Invoiced: ${month}/${day}/${String(year).slice(-2)}`
-                                                    })()
-                                                  ) : (
-                                                    `Invoice #${entry.client_invoice.invoice_number.split('-').pop()}`
-                                                  )}
+                                                  Invoiced
                                                 </Badge>
                                               </a>
                                             ) : (
@@ -381,23 +374,9 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
                                               </Badge>
                                             )
                                           ) : (
-                                            <>
-                                              <Badge variant={entry.is_billable ? 'default' : 'secondary'} className="text-[9px] px-1 py-0 h-3.5 font-bold shrink-0">
-                                                {entry.is_billable ? 'BILLABLE' : 'NON-BILLABLE'}
-                                              </Badge>
-                                              {entry.is_billable && !entry.is_invoiced && (
-                                                <Tooltip>
-                                                  <TooltipTrigger>
-                                                    <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5 font-bold shrink-0 text-uppercase">
-                                                      Rollover
-                                                    </Badge>
-                                                  </TooltipTrigger>
-                                                  <TooltipContent>
-                                                    <p>This item will be applied against your retainer/rollover pool in a future billing period</p>
-                                                  </TooltipContent>
-                                                </Tooltip>
-                                              )}
-                                            </>
+                                            <Badge variant={entry.is_billable ? 'default' : 'secondary'} className="text-[9px] px-1 py-0 h-3.5 font-bold shrink-0">
+                                              {entry.is_billable ? 'BILLABLE' : 'NON-BILLABLE'}
+                                            </Badge>
                                           )}
                                           {entry.project && (
                                             <Badge

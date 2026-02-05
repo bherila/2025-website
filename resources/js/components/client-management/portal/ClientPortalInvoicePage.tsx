@@ -409,7 +409,10 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
                         <h3 className="text-lg font-semibold mb-2">Hourly Summary</h3>
                         <p className="text-sm text-muted-foreground mb-4">A breakdown of hours tracked and applied for this billing period. This is for informational purposes only.</p>
                         <TimeTrackingMonthSummaryRow
+                            displayMode="invoice_page"
                             openingAvailable={parseFloat(invoice.retainer_hours_included)}
+                            carriedInHours={invoice.carried_in_hours}
+                            currentMonthHours={invoice.current_month_hours}
                             hoursWorked={parseFloat(invoice.hours_worked)}
                             hoursUsedFromRollover={parseFloat(invoice.rollover_hours_used)}
                             catchUpHoursBilled={parseFloat(invoice.hours_billed_at_rate)}

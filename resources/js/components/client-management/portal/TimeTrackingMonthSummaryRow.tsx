@@ -5,6 +5,8 @@ import { formatHours } from '@/lib/formatHours'
 interface TimeTrackingMonthSummaryRowProps {
   openingAvailable?: number | undefined
   preAgreementHoursApplied?: number | undefined
+  carriedInHours?: number | undefined
+  currentMonthHours?: number | undefined
   hoursWorked: number
   hoursUsedFromRollover?: number | undefined
   excessHours?: number | undefined
@@ -12,11 +14,15 @@ interface TimeTrackingMonthSummaryRowProps {
   remainingPool?: number | undefined
   catchUpHoursBilled?: number | undefined
   finalBalance?: number | undefined
+  // Display mode: 'time_page' or 'invoice_page'
+  displayMode?: 'time_page' | 'invoice_page'
 }
 
 export default function TimeTrackingMonthSummaryRow({
   openingAvailable,
   preAgreementHoursApplied,
+  carriedInHours,
+  currentMonthHours,
   hoursWorked,
   hoursUsedFromRollover,
   excessHours,
@@ -24,7 +30,11 @@ export default function TimeTrackingMonthSummaryRow({
   remainingPool,
   catchUpHoursBilled,
   finalBalance,
+  displayMode = 'time_page',
 }: TimeTrackingMonthSummaryRowProps) {
+  // For invoice page, show breakdown if available
+  const isInvoicePage = displayMode === 'invoice_page' || (carriedInHours !== undefined || currentMonthHours !== undefined);
+  
   return (
     <div className="mt-3 grid grid-cols-2 md:grid-cols-5 gap-3 text-xs text-muted-foreground">
       {typeof openingAvailable === 'number' && (
@@ -46,9 +56,25 @@ export default function TimeTrackingMonthSummaryRow({
         </SummaryTile>
       )}
 
-      <SummaryTile title="Hours Worked" size="small">
-        {formatHours(hoursWorked)}
-      </SummaryTile>
+      {/* Show breakdown on invoice page if data available */}
+      {isInvoicePage && typeof carriedInHours === 'number' && carriedInHours > 0 && (
+        <SummaryTile title="Carried-In Hours (Prior Months)" kind="blue" size="small">
+          {formatHours(carriedInHours)}
+        </SummaryTile>
+      )}
+
+      {isInvoicePage && typeof currentMonthHours === 'number' && currentMonthHours > 0 && (
+        <SummaryTile title="Current Month Hours" size="small">
+          {formatHours(currentMonthHours)}
+        </SummaryTile>
+      )}
+
+      {/* Show total hours worked if not showing breakdown, or as fallback */}
+      {!isInvoicePage && (
+        <SummaryTile title="Hours Worked" size="small">
+          {formatHours(hoursWorked)}
+        </SummaryTile>
+      )}
 
       {typeof hoursUsedFromRollover === 'number' && hoursUsedFromRollover > 0 && (
         <SummaryTile title="Rollover Used" size="small">
@@ -78,7 +104,7 @@ export default function TimeTrackingMonthSummaryRow({
         if (typeof fb === 'number') {
           if (fb > 0) {
             return (
-              <SummaryTile title="Hours Available This Month" kind="green" size="small">
+              <SummaryTile title="Remaining Balance" kind="green" size="small">
                 {formatHours(fb)}
               </SummaryTile>
             )

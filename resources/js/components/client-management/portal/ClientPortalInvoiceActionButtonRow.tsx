@@ -41,35 +41,11 @@ export default function ClientPortalInvoiceActionButtonRow({
     return (
         <div className="mb-8 flex justify-between items-center gap-4 flex-wrap print:hidden">
             <ButtonGroup>
-                {invoice.status === 'draft' && (
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <span>
-                                <Button
-                                    onClick={onIssue}
-                                    disabled={isRefreshing || !canIssueInvoice}
-                                    className="bg-green-600 hover:bg-green-700 text-white border-green-700 rounded-r-none"
-                                >
-                                    <Send className="mr-2 h-4 w-4" />
-                                    Issue Invoice
-                                </Button>
-                            </span>
-                        </TooltipTrigger>
-                        {isPeriodEndInFuture && (
-                            <TooltipContent>
-                                Cannot issue invoice until after the period ends ({new Date(invoice.period_end!).toLocaleDateString()})
-                            </TooltipContent>
-                        )}
-                    </Tooltip>
-                )}
                 <Button
                     variant="outline"
                     onClick={onAddPayment}
                     disabled={isRefreshing}
-                    className={cn(
-                        invoice.status === 'draft' && "rounded-none border-l-0",
-                        invoice.status !== 'draft' && "rounded-r-none"
-                    )}
+                    className="rounded-r-none"
                 >
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Add Payment
@@ -100,6 +76,27 @@ export default function ClientPortalInvoiceActionButtonRow({
             </ButtonGroup>
 
             <div className="flex gap-2 items-center">
+                {invoice.status === 'draft' && (
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <span>
+                                <Button
+                                    onClick={onIssue}
+                                    disabled={isRefreshing || !canIssueInvoice}
+                                    className="bg-green-600 hover:bg-green-700 text-white border-green-700"
+                                >
+                                    <Send className="mr-2 h-4 w-4" />
+                                    Issue Invoice
+                                </Button>
+                            </span>
+                        </TooltipTrigger>
+                        {isPeriodEndInFuture && (
+                            <TooltipContent>
+                                Cannot issue invoice until after the period ends ({new Date(invoice.period_end!).toLocaleDateString()})
+                            </TooltipContent>
+                        )}
+                    </Tooltip>
+                )}
                 {canVoid && (
                     <Button
                         variant="outline"
@@ -108,13 +105,13 @@ export default function ClientPortalInvoiceActionButtonRow({
                         className="text-amber-600 border-amber-200 hover:bg-amber-50"
                     >
                         <Ban className="mr-2 h-4 w-4" />
-                        Void Invoice
+                        Void
                     </Button>
                 )}
                 {isEditable && (
                     <Button variant="ghost" onClick={onDelete} disabled={isRefreshing} className="text-destructive hover:bg-destructive/10">
                         <Trash2 className="mr-2 h-4 w-4" />
-                        Delete Invoice
+                        Delete
                     </Button>
                 )}
             </div>

@@ -356,7 +356,7 @@ class ClientInvoicingService
                 }
                 $invoice->lineItems()->where('line_type', 'expense')->delete();
             } else {
-                $invoiceData['invoice_number'] = $this->generateInvoiceNumber($company, $agreement);
+                $invoiceData['invoice_number'] = $this->generateInvoiceNumber($company, $agreement, $periodEnd);
                 $invoiceData['invoice_total'] = 0;
                 $invoice = ClientInvoice::create($invoiceData);
             }
@@ -806,12 +806,13 @@ class ClientInvoicingService
 
     /**
      * Generate a unique invoice number.
+     * Uses the YYYYMM of the period_end date to ensure invoice numbers match the billing period.
      */
-    protected function generateInvoiceNumber(ClientCompany $company, ClientAgreement $agreement): string
+    protected function generateInvoiceNumber(ClientCompany $company, ClientAgreement $agreement, Carbon $periodEnd): string
     {
         $rawPrefix = strtoupper(substr(preg_replace('/[^a-zA-Z0-9]/', '', $company->company_name), 0, 4));
         $prefix = $rawPrefix ? "$rawPrefix-" : '';
-        $yearMonth = now()->format('Ym');
+        $yearMonth = $periodEnd->format('Ym');
 
         $lastInvoice = ClientInvoice::where('client_company_id', $company->id)
             ->where('invoice_number', 'like', "{$rawPrefix}%{$yearMonth}-%")

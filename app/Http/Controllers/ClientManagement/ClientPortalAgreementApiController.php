@@ -106,7 +106,7 @@ class ClientPortalAgreementApiController extends Controller
 
         $invoice = ClientInvoice::where('client_invoice_id', $invoiceId)
             ->where('client_company_id', $company->id)
-            ->with(['lineItems', 'payments'])
+            ->with(['lineItems.timeEntries', 'payments'])
             ->firstOrFail();
 
         // Admins can see all invoices, but clients can only see issued or paid ones.
@@ -114,10 +114,38 @@ class ClientPortalAgreementApiController extends Controller
             abort(404);
         }
 
+        // Calculate hours breakdown: carried-in (previous months) vs current month
+        $periodStart = $invoice->period_start;
+        $carriedInHours = 0;
+        $currentMonthHours = 0;
+
+        foreach ($invoice->lineItems as $line) {
+            if (in_array($line->line_type, ['prior_month_retainer', 'prior_month_billable', 'additional_hours'])) {
+                $lineHours = $line->hours ?? 0;
+                
+                // Check if line_date is before period_start (carried-in from previous months)
+                if ($line->line_date && $line->line_date < $periodStart) {
+                    $carriedInHours += $lineHours;
+                } else {
+                    // Count time entries by their date_worked
+                    foreach ($line->timeEntries as $entry) {
+                        $entryHours = $entry->minutes_worked / 60;
+                        if ($entry->date_worked && $entry->date_worked < $periodStart) {
+                            $carriedInHours += $entryHours;
+                        } else {
+                            $currentMonthHours += $entryHours;
+                        }
+                    }
+                }
+            }
+        }
+
         $data = $invoice->toArray();
         $data['payments_total'] = $invoice->payments_total;
+        $data['carried_in_hours'] = $carriedInHours;
+        $data['current_month_hours'] = $currentMonthHours;
         $data['line_items'] = $invoice->lineItems->map(function ($line) {
-            $timeEntries = $line->timeEntries()->select('name', 'minutes_worked')->get();
+            $timeEntries = $line->timeEntries()->select('name', 'minutes_worked', 'date_worked')->get();
             return [
                 'client_invoice_line_id' => $line->client_invoice_line_id,
                 'description' => $line->description,
