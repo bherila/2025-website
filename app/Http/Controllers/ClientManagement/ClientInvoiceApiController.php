@@ -233,6 +233,11 @@ class ClientInvoiceApiController extends Controller
             return response()->json(['error' => 'Only draft invoices can be issued'], 400);
         }
 
+        // Check if period_end is in the future
+        if ($invoice->period_end && $invoice->period_end->isFuture()) {
+            return response()->json(['error' => 'Cannot issue invoice until after the period ends'], 400);
+        }
+
         $invoice->issue();
 
         return response()->json(['message' => 'Invoice issued successfully']);
