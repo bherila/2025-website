@@ -208,9 +208,9 @@ export default function StackedBalanceChart({ data, labels, isNegative, isRetire
               borderRadius: '4px',
               color: '#ffffff',
             }}
-            formatter={(value: number) => currency(Math.abs(value)).format()}
-            labelFormatter={(date: string) => {
-              if (date.includes('Q')) {
+            formatter={(value: number | undefined) => value !== undefined ? currency(Math.abs(value)).format() : ''}
+            labelFormatter={(date: any) => {
+              if (typeof date === 'string' && date.includes('Q')) {
                 const [year, quarter] = date.split('-')
                 return `${quarter} ${year}`
               }

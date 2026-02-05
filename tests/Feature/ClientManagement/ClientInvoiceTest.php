@@ -1193,4 +1193,33 @@ class ClientInvoiceTest extends TestCase
         $response->assertStatus(200);
         $this->assertEquals('issued', $invoice->fresh()->status);
     }
+
+    public function test_invoice_number_uses_period_end_date()
+    {
+        // Create a time entry in January 2025
+        ClientTimeEntry::create([
+            'client_company_id' => $this->company->id,
+            'user_id' => $this->admin->id,
+            'project_id' => $this->project->id,
+            'date_worked' => '2025-01-15',
+            'minutes_worked' => 120,
+            'name' => 'Work in January',
+            'is_billable' => true,
+        ]);
+
+        // Generate invoice for January work period (period_end: 2025-01-31)
+        // Invoice number should use 202501 from period_end, not current date
+        $periodStart = Carbon::parse('2025-01-01');
+        $periodEnd = Carbon::parse('2025-01-31');
+        
+        $invoice = $this->invoicingService->generateInvoice($this->company, $periodStart, $periodEnd);
+        
+        // Check that invoice number contains 202501 (YYYYMM of period_end)
+        $this->assertStringContainsString('202501', $invoice->invoice_number);
+        
+        // Check format: PREFIX-YYYYMM-NNN
+        $parts = explode('-', $invoice->invoice_number);
+        $this->assertCount(3, $parts, 'Invoice number should have format PREFIX-YYYYMM-NNN');
+        $this->assertEquals('202501', $parts[1], 'Middle section should be 202501 from period_end');
+    }
 }

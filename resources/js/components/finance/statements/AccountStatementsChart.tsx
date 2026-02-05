@@ -31,8 +31,8 @@ export default function AccountStatementsChart({ balanceHistory }: { balanceHist
               borderRadius: '4px',
               color: '#ffffff',
             }}
-            formatter={(value: number) => value.toFixed(2)}
-            labelFormatter={(date: number) => format(new Date(date), 'MMM ’yy')}
+            formatter={(value: number | undefined) => value !== undefined ? value.toFixed(2) : ''}
+            labelFormatter={(date: any) => format(new Date(Number(date)), "MMM 'yy")}
           />
           <Line type="monotone" dataKey="balance" stroke="#1976D2" dot={false} />
         </LineChart>
