@@ -32,7 +32,7 @@ export default function AccountStatementsChart({ balanceHistory }: { balanceHist
               color: '#ffffff',
             }}
             formatter={(value: number | undefined) => value !== undefined ? value.toFixed(2) : ''}
-            labelFormatter={(date: any) => format(new Date(Number(date)), "MMM 'yy")}
+            labelFormatter={(date: React.ReactNode) => format(new Date(Number(date ?? 0)), "MMM 'yy")}
           />
           <Line type="monotone" dataKey="balance" stroke="#1976D2" dot={false} />
         </LineChart>
