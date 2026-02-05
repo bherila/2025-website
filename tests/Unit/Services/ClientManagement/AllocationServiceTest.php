@@ -28,7 +28,6 @@ class AllocationServiceTest extends TestCase
         // Create three fragments with same merge keys, all unlinked
         ClientTimeEntry::create([
             'project_id' => $project->id,
-            'project_id' => $project->id,
             'client_company_id' => $company->id,
             'user_id' => $user->id,
             'name' => 'Task A',
@@ -41,7 +40,6 @@ class AllocationServiceTest extends TestCase
 
         ClientTimeEntry::create([
             'project_id' => $project->id,
-            'project_id' => $project->id,
             'client_company_id' => $company->id,
             'user_id' => $user->id,
             'name' => 'Task A',
@@ -53,7 +51,6 @@ class AllocationServiceTest extends TestCase
         ]);
 
         ClientTimeEntry::create([
-            'project_id' => $project->id,
             'project_id' => $project->id,
             'client_company_id' => $company->id,
             'user_id' => $user->id,
