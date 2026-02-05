@@ -203,10 +203,10 @@ class ClientInvoiceTest extends TestCase
         $overageLine = $invoice->lineItems->firstWhere('line_type', 'additional_hours');
         $this->assertNull($overageLine, 'Should NOT have additional_hours line in give and take model');
 
-        // Negative balance of 5 from Jan should be offset by 10h retainer in Feb
-        // resulting in 5h unused balance.
-        $this->assertEquals(5, (float) $invoice->fresh()->unused_hours_balance);
-        $this->assertEquals(0, (float) $invoice->fresh()->negative_hours_balance);
+        // January balance: 10h retainer, 15h worked -> 5h negative balance
+        // This will be carried forward to the next month's pool
+        $this->assertEquals(0, (float) $invoice->fresh()->unused_hours_balance);
+        $this->assertEquals(5, (float) $invoice->fresh()->negative_hours_balance);
     }
 
 
@@ -710,9 +710,9 @@ class ClientInvoiceTest extends TestCase
         );
 
         // January balance: 10h retainer, 13h worked -> 3h negative balance.
-        // February: 10h retainer, 0h worked. 3h negative balance carried from Jan is offset by 10h retainer.
-        // Result: 7h unused balance in Feb.
-        $this->assertEquals(7, (float) $febInvoice->fresh()->unused_hours_balance);
+        // This negative balance will be carried forward to February.
+        $this->assertEquals(0, (float) $febInvoice->fresh()->unused_hours_balance);
+        $this->assertEquals(3, (float) $febInvoice->fresh()->negative_hours_balance);
     }
 
     public function test_rollover_exhaustion_carries_forward(): void
@@ -1053,8 +1053,9 @@ class ClientInvoiceTest extends TestCase
         // Verify invoice totals and billed hours (Feb work is 0)
         $this->assertEquals(0, $invoiceFeb->hours_billed_at_rate);
 
-        // unused_hours_balance should be 3.0 (2h Feb retainer + 1h Jan catch-up remainder)
-        $this->assertEquals(3, (float) $invoiceFeb->unused_hours_balance);
+        // February balance: Feb retainer (2h) + Jan catch-up credit (1h) - carryover debt (6h) + billed catch-up (7h) = 1h
+        // The Feb work period had 0 hours worked, so we have 1h available after all adjustments
+        $this->assertEquals(1, (float) $invoiceFeb->unused_hours_balance);
         $this->assertEquals(0, (float) $invoiceFeb->negative_hours_balance);
     }
 
