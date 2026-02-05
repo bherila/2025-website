@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Ban, PlusCircle, RotateCcw, Send, Trash2, Undo2 } from "lucide-react";
 import type { Invoice } from "@/types/client-management";
@@ -33,18 +34,33 @@ export default function ClientPortalInvoiceActionButtonRow({
 }: ClientPortalInvoiceActionButtonRowProps) {
     if (!isAdmin) return null;
 
+    // Check if period_end is in the future
+    const isPeriodEndInFuture = invoice.period_end && new Date(invoice.period_end) > new Date();
+    const canIssueInvoice = invoice.status === 'draft' && !isPeriodEndInFuture;
+
     return (
         <div className="mb-8 flex justify-between items-center gap-4 flex-wrap print:hidden">
             <ButtonGroup>
                 {invoice.status === 'draft' && (
-                    <Button
-                        onClick={onIssue}
-                        disabled={isRefreshing}
-                        className="bg-green-600 hover:bg-green-700 text-white border-green-700 rounded-r-none"
-                    >
-                        <Send className="mr-2 h-4 w-4" />
-                        Issue Invoice
-                    </Button>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <span>
+                                <Button
+                                    onClick={onIssue}
+                                    disabled={isRefreshing || !canIssueInvoice}
+                                    className="bg-green-600 hover:bg-green-700 text-white border-green-700 rounded-r-none"
+                                >
+                                    <Send className="mr-2 h-4 w-4" />
+                                    Issue Invoice
+                                </Button>
+                            </span>
+                        </TooltipTrigger>
+                        {isPeriodEndInFuture && (
+                            <TooltipContent>
+                                Cannot issue invoice until after the period ends ({new Date(invoice.period_end!).toLocaleDateString()})
+                            </TooltipContent>
+                        )}
+                    </Tooltip>
                 )}
                 <Button
                     variant="outline"

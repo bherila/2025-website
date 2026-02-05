@@ -1153,4 +1153,44 @@ class ClientInvoiceTest extends TestCase
         $this->assertEquals(2.0, $appliedToFeb->sum('minutes_worked') / 60);
         $this->assertEquals(6.0, $linkedToCatchUp->sum('minutes_worked') / 60);
     }
+
+    public function test_cannot_issue_invoice_with_future_period_end(): void
+    {
+        // Create an invoice with a period_end in the future
+        $futureDate = Carbon::now()->addDays(7);
+        $invoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            $futureDate->copy()->startOfMonth(),
+            $futureDate->copy()->endOfMonth()
+        );
+
+        $this->assertEquals('draft', $invoice->status);
+
+        // Attempt to issue the invoice via API
+        $response = $this->actingAs($this->admin)
+            ->postJson("/api/client/mgmt/companies/{$this->company->id}/invoices/{$invoice->client_invoice_id}/issue");
+
+        // Should fail with validation error
+        $response->assertStatus(400);
+        $response->assertJson(['error' => 'Cannot issue invoice until after the period ends']);
+    }
+
+    public function test_can_issue_invoice_with_past_period_end(): void
+    {
+        // Create an invoice with a period_end in the past
+        $invoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2024, 1, 1),
+            Carbon::create(2024, 1, 31)
+        );
+
+        $this->assertEquals('draft', $invoice->status);
+
+        // Issue the invoice via API
+        $response = $this->actingAs($this->admin)
+            ->postJson("/api/client/mgmt/companies/{$this->company->id}/invoices/{$invoice->client_invoice_id}/issue");
+
+        $response->assertStatus(200);
+        $this->assertEquals('issued', $invoice->fresh()->status);
+    }
 }
