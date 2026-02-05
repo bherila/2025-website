@@ -31,6 +31,7 @@ export default function ClientAgreementShowPage({ agreementId, companyId, compan
     agreement_text: '',
     agreement_link: '',
     monthly_retainer_hours: '',
+    catch_up_threshold_hours: '1',
     rollover_months: 1,
     hourly_rate: '',
     monthly_retainer_fee: '',
@@ -52,6 +53,7 @@ export default function ClientAgreementShowPage({ agreementId, companyId, compan
           agreement_text: data.agreement_text || '',
           agreement_link: data.agreement_link || '',
           monthly_retainer_hours: data.monthly_retainer_hours || '',
+          catch_up_threshold_hours: data.catch_up_threshold_hours || '1',
           rollover_months: data.rollover_months || 1,
           hourly_rate: data.hourly_rate || '',
           monthly_retainer_fee: data.monthly_retainer_fee || '',
@@ -289,6 +291,21 @@ export default function ClientAgreementShowPage({ agreementId, companyId, compan
                 disabled={!isEditable}
               />
               <p className="text-xs text-muted-foreground">Number of months unused hours can roll over</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="catch_up_threshold_hours">Catch-up Threshold Hours</Label>
+              <Input
+                id="catch_up_threshold_hours"
+                type="number"
+                min="0"
+                step="0.01"
+                value={formData.catch_up_threshold_hours}
+                onChange={(e) => setFormData({ ...formData, catch_up_threshold_hours: e.target.value })}
+                disabled={!isEditable}
+              />
+              <p className="text-xs text-muted-foreground">
+                Minimum availability hours after retainer allocation (0 to {formData.monthly_retainer_hours || 'retainer hours'})
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="agreement_link">Agreement Link</Label>

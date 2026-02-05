@@ -10,6 +10,7 @@ export interface ClientAgreement {
   client_company_signed_name: string | null
   client_company_signed_title: string | null
   monthly_retainer_hours: string
+  catch_up_threshold_hours: string
   rollover_months: number
   hourly_rate: string
   monthly_retainer_fee: string
