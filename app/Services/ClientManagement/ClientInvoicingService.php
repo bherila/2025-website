@@ -252,13 +252,6 @@ class ClientInvoicingService
                 ->get();
             $priorMonthKey = $priorMonthStart->format('Y-m');
 
-            $currentMonthEntries = ClientTimeEntry::where('client_company_id', $company->id)
-                ->whereNull('client_invoice_line_id')
-                ->where('is_billable', true)
-                ->whereBetween('date_worked', [$periodStart, $periodEnd])
-                ->orderBy('date_worked')
-                ->get();
-
             // Find balance for the current invoice month (M)
             $currentMonthKey = $periodEnd->format('Y-m');
             /** @var MonthSummary|null $currentMonthBalance */
@@ -308,7 +301,7 @@ class ClientInvoicingService
                 'period_start' => $periodStart,
                 'period_end' => $periodEnd,
                 'retainer_hours_included' => (float) $agreement->monthly_retainer_hours,
-                'hours_worked' => ($priorMonthEntries->sum('minutes_worked') + $currentMonthEntries->sum('minutes_worked')) / 60,
+                'hours_worked' => $priorMonthEntries->sum('minutes_worked') / 60,
                 'rollover_hours_used' => $currentMonthBalance->closing->hoursUsedFromRollover,
                 'unused_hours_balance' => $currentMonthBalance->closing->unusedHours,
                 'negative_hours_balance' => $currentMonthBalance->closing->negativeBalance,
@@ -523,23 +516,6 @@ class ClientInvoicingService
                 'line_date' => $periodStart,
                 'sort_order' => $sortOrder++,
             ]);
-
-            if ($currentMonthEntries->count() > 0) {
-                $m_hours = $currentMonthEntries->sum('minutes_worked') / 60;
-                $m_line = ClientInvoiceLine::create([
-                    'client_invoice_id' => $invoice->client_invoice_id,
-                    'client_agreement_id' => $agreement->id,
-                    'description' => "Work items from current month applied to retainer ({$this->formatHoursForQuantity($m_hours)} applied to {$periodStart->format('F Y')} retainer)",
-                    'quantity' => $this->formatHoursForQuantity($m_hours),
-                    'unit_price' => 0,
-                    'line_total' => 0,
-                    'line_type' => 'prior_month_retainer', // We'll reuse this type for consistent styling/linking
-                    'hours' => $m_hours,
-                    'line_date' => $periodStart,
-                    'sort_order' => $sortOrder++,
-                ]);
-                $this->linkTimeEntriesToLine($currentMonthEntries, $m_line);
-            }
 
 
             // Informational rollover/negative balance line

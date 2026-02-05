@@ -818,15 +818,16 @@ class ClientInvoiceTest extends TestCase
             'rollover_months' => 0,
         ]);
 
-        // 2. December Activity: 8 hours worked (2h remaining)
-        ClientTimeEntry::factory()->create([
+        // 2. December Activity: 8 hours worked
+        // Note: Under prior-month billing, this is billed in Jan, NOT Dec.
+        $entry8h = ClientTimeEntry::factory()->create([
             'client_company_id' => $this->company->id,
             'minutes_worked' => 8 * 60,
             'date_worked' => Carbon::create(2023, 12, 5),
             'is_billable' => true,
         ]);
 
-        // Generate Dec invoice to finalize unused balance
+        // Generate Dec invoice (Should have 0 billed hours, just retainer)
         $invoiceDec = $this->invoicingService->generateInvoice(
             $this->company,
             Carbon::create(2023, 12, 1),
@@ -835,8 +836,14 @@ class ClientInvoiceTest extends TestCase
         );
         $invoiceDec->issue();
 
-        // 3. New Work Item for Dec (5h): should split 2h (Dec) / 3h (Jan)
-        $entry = ClientTimeEntry::factory()->create([
+        // 3. New Work Item for Dec (5h):
+        // Total Dec work = 8h + 5h = 13h.
+        // Dec Capacity = 10h.
+        // Jan Capacity = 10h (Offset limit = 9h).
+        // Result:
+        // - 10h applied to Dec Retainer (8h entry + 2h from new entry).
+        // - 3h applied to Jan Retainer (Remaining 3h from new entry).
+        $entry5h = ClientTimeEntry::factory()->create([
             'client_company_id' => $this->company->id,
             'minutes_worked' => 5 * 60,
             'date_worked' => Carbon::create(2023, 12, 15),
@@ -854,31 +861,38 @@ class ClientInvoiceTest extends TestCase
         $invoiceJan->refresh();
 
         // 5. Verify Split
-        // Stage 1 (Dec Cover): 2h
+        // Stage 1 (Dec Cover): 10h
         // Stage 2 (Jan Cover): 3h
-        // Available Jan: 10 - 3 = 7h (>= 1h, no catch-up)
 
         $priorLines = $invoiceJan->lineItems->where('line_type', 'prior_month_retainer')->sortBy('hours');
         $this->assertEquals(2, $priorLines->count());
 
-        $twoHourLine = $priorLines->firstWhere('hours', 2);
+        $tenHourLine = $priorLines->firstWhere('hours', 10);
         $threeHourLine = $priorLines->firstWhere('hours', 3);
 
-        $this->assertNotNull($twoHourLine);
-        $this->assertNotNull($threeHourLine);
-        $this->assertStringContainsString('applied to December 2023 retainer', $twoHourLine->description);
+        $this->assertNotNull($tenHourLine, 'Should have a 10h line applied to Dec');
+        $this->assertNotNull($threeHourLine, 'Should have a 3h line applied to Jan');
+        $this->assertStringContainsString('applied to December 2023 retainer', $tenHourLine->description);
         $this->assertStringContainsString('applied to January 2024 retainer', $threeHourLine->description);
 
         $this->assertNull($invoiceJan->lineItems->firstWhere('line_type', 'additional_hours'));
 
-        // Verify Entry Splitting
-        $entry->refresh();
-        $this->assertEquals(2 * 60, $entry->minutes_worked);
-        $this->assertEquals($twoHourLine->client_invoice_line_id, $entry->client_invoice_line_id);
+        // Verify Entry Splitting for the 5h entry
+        $entry5h->refresh();
+        // The original entry should be reduced to 2h (to fill the 10h bucket with the 8h entry)
+        $this->assertEquals(2 * 60, $entry5h->minutes_worked);
+        $this->assertEquals($tenHourLine->client_invoice_line_id, $entry5h->client_invoice_line_id);
 
-        $rolledOverEntry = ClientTimeEntry::where('client_invoice_line_id', $threeHourLine->client_invoice_line_id)->first();
+        // The rolled over part should be 3h
+        $rolledOverEntry = ClientTimeEntry::where('client_invoice_line_id', $threeHourLine->client_invoice_line_id)
+            ->whereDate('date_worked', '2023-12-15')
+            ->first();
         $this->assertNotNull($rolledOverEntry);
         $this->assertEquals(3 * 60, $rolledOverEntry->minutes_worked);
+        
+        // Verify 8h entry is linked to the 10h line
+        $entry8h->refresh();
+        $this->assertEquals($tenHourLine->client_invoice_line_id, $entry8h->client_invoice_line_id);
     }
 
     // ==========================================

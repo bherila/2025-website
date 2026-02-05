@@ -266,7 +266,7 @@ class DelayedBillingTest extends TestCase
         ]);
 
         // Create time entry for January
-        ClientTimeEntry::create([
+        $janEntry = ClientTimeEntry::create([
             'client_company_id' => $this->company->id,
             'project_id' => $this->project->id,
             'user_id' => $this->user->id,
@@ -276,12 +276,19 @@ class DelayedBillingTest extends TestCase
             'is_billable' => true,
         ]);
 
-        // Generate January invoice (this will link the time entry)
+        // Generate January invoice
+        // Note: With new logic, this does NOT automatically link January work.
         $januaryInvoice = $this->invoicingService->generateInvoice(
             $this->company,
             Carbon::create(2024, 1, 1),
             Carbon::create(2024, 1, 31)
         );
+
+        // Manually link the entry to simulate it being "already invoiced" (e.g. from legacy invoice or manual add)
+        // We need to create a dummy line item or just link it to the retainer line for testing purposes
+        // (though retainer line usually doesn't have entries linked, the service checks `client_invoice_line_id` IS NOT NULL)
+        $retainerLine = $januaryInvoice->lineItems->firstWhere('line_type', 'retainer');
+        $janEntry->update(['client_invoice_line_id' => $retainerLine->client_invoice_line_id]);
 
         // Generate February invoice
         $februaryInvoice = $this->invoicingService->generateInvoice(
@@ -291,11 +298,12 @@ class DelayedBillingTest extends TestCase
         );
 
         // No delayed billing since January entry was already invoiced
-        $delayedBillingLine = $februaryInvoice->lineItems()
-            ->where('description', 'LIKE', '%Prior Period%')
+        // We check for 'prior_month_retainer' or 'additional_hours' which would appear if the entry was picked up.
+        $priorMonthLine = $februaryInvoice->lineItems()
+            ->whereIn('line_type', ['prior_month_retainer', 'additional_hours'])
             ->first();
 
-        $this->assertNull($delayedBillingLine, 'Invoice should not include delayed billing for already-invoiced entries');
+        $this->assertNull($priorMonthLine, 'Invoice should not include already-invoiced entries');
     }
 
     public function test_api_endpoint_shows_unbilled_hours_for_periods_without_agreement(): void
