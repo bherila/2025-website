@@ -311,7 +311,7 @@ Location: `resources/js/components/client-management/portal/`
 - Time tracking interface with monthly groupings
 - Shows time entries in a clean tabular format within each month
 - Each month displays:
-  - **Opening Balance**: Retainer hours + rollover from previous months - expired hours
+  - **Hours Available This Month**: Retainer hours + cumulative rollover - previous overages. Updated from "Positive Balance" for clarity.
   - **Table of entries**: Date, Description (including job type, status badges, and project badge), User (abbreviated), and Time
   - **Closing Balance**: Unused hours available to roll over, excess hours to be invoiced
 - **UI Features**:
@@ -319,7 +319,8 @@ Location: `resources/js/components/client-management/portal/`
     - Consolidation of repeated dates (only shows date on first row of the day)
     - Action column with Edit button (Pencil icon) for admins
     - Clean, borderless card layout with lightened table borders
-- Color-coded balance indicators (green for positive, red for negative)
+- **Color-coded balance indicators**: Green for positive availability, red for negative deficit
+- **Validation**: Blocks time entry edits/deletes in periods covered by Issued invoices.
 - Collapsible month sections for better navigation
 - Uses shadcn/ui Card, Button, Table, Badge, Tooltip, Skeleton components
 
@@ -555,10 +556,27 @@ Stores service agreement terms between the admin and client companies.
 - `client_company_signed_title`: Title of client signatory (nullable)
 - `client_company_signed_user_id`: User who signed for client (nullable)
 - `monthly_retainer_hours`: Hours included per month (decimal 8,2)
-- `rollover_months`: Number of months unused hours can roll over (default 0)
+- `catch_up_threshold_hours`: Minimum availability hours after retainer allocation (decimal 8,2, default 1.0)
+- `rollover_months`: Number of months unused hours can roll over (integer, default 1)
 - `hourly_rate`: Rate for hours beyond retainer (decimal 8,2)
 - `monthly_retainer_fee`: Fixed monthly fee (decimal 10,2)
 - `created_at`, `updated_at`: Timestamps
+
+**Catch-up Threshold Hours:**
+- **Purpose**: Ensures minimum availability for future work by billing catch-up hours when needed
+- **Default**: 1.0 hour
+- **Valid Range**: 0 to `monthly_retainer_hours` (inclusive)
+- **Validation**: Enforced at model level (on save) and API level (on create/update)
+- **Behavior**: When prior month work consumes retainer capacity, the system bills catch-up hours to maintain at least `catch_up_threshold_hours` of availability for the current month
+- **Example**: If retainer is 10 hours and 9 hours of prior month work is allocated, 1 hour of catch-up is billed to restore minimum availability (assuming threshold = 1.0)
+
+**Rollover Months Semantics:**
+- **`rollover_months = 0`**: No rollover - unused hours from a month expire immediately (must be used in that month)
+- **`rollover_months = 1`**: Hours can roll over to the next month only (N+1), then expire
+- **`rollover_months = 2`**: Hours can roll over for one additional month after being earned (available in N, N+1, N+2)
+- **`rollover_months = N`**: Hours can roll over for N-1 additional months (available for N total months)
+- **FIFO Consumption**: When multiple months of rollover are available, oldest hours are consumed first
+- **FIFO Expiry**: Oldest unused hours expire first when they exceed the rollover window
 
 #### `client_invoices` table
 Stores invoices generated for clients.
@@ -566,9 +584,9 @@ Stores invoices generated for clients.
 - `client_company_id`: Foreign key to `client_companies`
 - `client_agreement_id`: Foreign key to `client_agreements`
 - `invoice_number`: Unique invoice number (string, nullable)
-- `period_start`: Billing period start date
-- `period_end`: Billing period end date
-- `retainer_hours_included`: Hours included in retainer for this period (decimal 8,2)
+- `period_start`: Work period start date (first day of M-1)
+- `period_end`: Work period end date (last day of M-1)
+- `retainer_hours_included`: Hours included in retainer for month M (decimal 8,2)
 - `hours_worked`: Total hours worked in period (decimal 8,2)
 - `rollover_hours_used`: Hours from rollover applied (decimal 8,2)
 - `unused_hours_balance`: Hours remaining after period (decimal 8,2)
@@ -710,6 +728,66 @@ The rollover calculation uses FIFO (First In, First Out) for tracking which hour
 | Over retainer, has rollover | 10h | 14h | 5h | Uses 4h rollover, 1h rollover remains |
 | Over retainer, insufficient rollover | 10h | 18h | 5h | Uses all 5h rollover, 3h billed extra |
 | Hours expire | 10h | 6h | 8h (3mo old) | 4h expire, 4h new unused |
+
+### Time Entry Splitting & Allocation
+
+The invoicing system uses deterministic time entry splitting to allocate work across different capacity pools. When a single time entry spans multiple allocation types, it is split into fragments.
+
+**Allocation Order (Deterministic):**
+
+1. **Prior Month Retainer**: Hours allocated against the prior month's retainer capacity
+2. **Current Month Retainer**: Hours allocated against the current month's retainer capacity  
+3. **Catch-up Threshold**: Hours billed to maintain minimum availability (based on `catch_up_threshold_hours`)
+4. **Billable Catch-up**: Remaining hours billed at hourly rate
+
+**Time Entry Fragment Splitting:**
+
+When a time entry needs to be split:
+- The system creates new `ClientTimeEntry` records for each fragment
+- Each fragment is linked to exactly one invoice line via `client_invoice_line_id`
+- Fragments maintain original metadata (date, user, description, project, task)
+- Splitting is deterministic (same inputs always produce same outputs)
+- Chronological ordering (by date + ID) ensures stable allocation
+
+**Fragment Recombination:**
+
+When invoices are deleted or regenerated:
+- Unlinked fragments (where `client_invoice_line_id` is NULL) can be recombined
+- Recombination only occurs when ALL fragments with matching merge keys are unlinked
+- **Merge Keys**: date_worked, user_id, name (description), project_id, task_id
+- Fragments still linked to other invoices are NOT recombined
+- Recombination sums the minutes from matching fragments into a single entry
+
+**Example Splitting Scenario:**
+
+```
+Time Entry: 10 hours on Jan 15, 2024
+Agreement: retainer = 2h, catch_up_threshold = 1h
+
+Splits into 4 fragments:
+- Fragment A: 2.0h → Prior month retainer allocation (line_type: prior_month_retainer)
+- Fragment B: 2.0h → Current month retainer allocation (line_type: prior_month_retainer)  
+- Fragment C: 1.0h → Catch-up threshold allocation (line_type: additional_hours)
+- Fragment D: 5.0h → Billable catch-up allocation (line_type: additional_hours)
+```
+
+**Invoice Line Types:**
+
+| Line Type | Description | Price | When Used |
+|-----------|-------------|-------|-----------|
+| `prior_month_retainer` | Prior month work covered by retainer | $0 | Work from M-1 covered by retainer pool |
+| `additional_hours` | Catch-up or billable overage | Hourly rate | When work exceeds retainer capacity or threshold enforcement |
+| `retainer` | Monthly retainer fee | Fixed fee | Every invoice for the current month |
+| `expense` | Reimbursable expenses | Actual cost | Client expenses needing reimbursement |
+| `adjustment` | Manual adjustments | Variable | Admin-added corrections or special charges |
+| `credit` | Informational credits | $0 | Balance adjustments or credits |
+
+**Services Architecture:**
+
+- **`TimeEntrySplitter`**: Handles deterministic allocation and fragment creation
+- **`AllocationService`**: Manages fragment recombination and allocation tracking
+- **`RolloverCalculator`**: Calculates opening/closing balances with FIFO rollover
+- **`ClientInvoicingService`**: Orchestrates invoice generation using above services
 
 ### Delayed Billing
 

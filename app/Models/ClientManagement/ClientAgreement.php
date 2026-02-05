@@ -25,6 +25,7 @@ class ClientAgreement extends Model
         'client_company_signed_name',
         'client_company_signed_title',
         'monthly_retainer_hours',
+        'catch_up_threshold_hours',
         'rollover_months',
         'hourly_rate',
         'monthly_retainer_fee',
@@ -36,6 +37,7 @@ class ClientAgreement extends Model
         'termination_date' => 'datetime',
         'client_company_signed_date' => 'datetime',
         'monthly_retainer_hours' => 'decimal:2',
+        'catch_up_threshold_hours' => 'decimal:2',
         'hourly_rate' => 'decimal:2',
         'monthly_retainer_fee' => 'decimal:2',
         'rollover_months' => 'integer',
@@ -114,5 +116,38 @@ class ClientAgreement extends Model
         $this->update([
             'termination_date' => $terminationDate ?? now(),
         ]);
+    }
+
+    /**
+     * Validate catch_up_threshold_hours is within valid range.
+     * 
+     * @throws \InvalidArgumentException If catch_up_threshold_hours is invalid
+     */
+    public function validateCatchUpThreshold(): void
+    {
+        $threshold = (float) $this->catch_up_threshold_hours;
+        $retainerHours = (float) $this->monthly_retainer_hours;
+        
+        if ($threshold < 0 || $threshold > $retainerHours) {
+            throw new \InvalidArgumentException(
+                "catch_up_threshold_hours must be between 0 and monthly_retainer_hours ({$retainerHours}). Got: {$threshold}"
+            );
+        }
+    }
+
+    /**
+     * The "booted" method of the model.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (ClientAgreement $agreement) {
+            // Set default catch_up_threshold_hours if not set
+            if ($agreement->catch_up_threshold_hours === null) {
+                $agreement->catch_up_threshold_hours = 1.0;
+            }
+            
+            // Validate on save
+            $agreement->validateCatchUpThreshold();
+        });
     }
 }

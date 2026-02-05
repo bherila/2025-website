@@ -10,6 +10,8 @@ interface TimeTrackingMonthSummaryRowProps {
   excessHours?: number | undefined
   negativeBalance?: number | undefined
   remainingPool?: number | undefined
+  catchUpHoursBilled?: number | undefined
+  finalBalance?: number | undefined
 }
 
 export default function TimeTrackingMonthSummaryRow({
@@ -20,30 +22,31 @@ export default function TimeTrackingMonthSummaryRow({
   excessHours,
   negativeBalance,
   remainingPool,
+  catchUpHoursBilled,
+  finalBalance,
 }: TimeTrackingMonthSummaryRowProps) {
   return (
     <div className="mt-3 grid grid-cols-2 md:grid-cols-5 gap-3 text-xs text-muted-foreground">
       {typeof openingAvailable === 'number' && (
         <SummaryTile
           title="Monthly Retainer"
-          kind="green"
           size="small"
         >
           {formatHours(openingAvailable)}
         </SummaryTile>
       )}
 
-      {typeof preAgreementHoursApplied === 'number' && preAgreementHoursApplied > 0 && (
+      {typeof preAgreementHoursApplied === 'number' && preAgreementHoursApplied !== 0 && (
         <SummaryTile
-          title="Carried In"
-          kind="blue"
+          title={preAgreementHoursApplied > 0 ? 'Carried In' : 'Carried In (Offset)'}
+          kind={preAgreementHoursApplied > 0 ? 'blue' : 'red'}
           size="small"
         >
-          {formatHours(preAgreementHoursApplied)}
+          {formatHours(Math.abs(preAgreementHoursApplied))}
         </SummaryTile>
       )}
 
-      <SummaryTile title="Hours Worked (Prior period)" kind="blue" size="small">
+      <SummaryTile title="Hours Worked" size="small">
         {formatHours(hoursWorked)}
       </SummaryTile>
 
@@ -59,17 +62,45 @@ export default function TimeTrackingMonthSummaryRow({
         </SummaryTile>
       )}
 
-      {typeof negativeBalance === 'number' && negativeBalance > 0 ? (
-        <SummaryTile title="Overage (Carried Forward)" kind="red" size="small">
-          {formatHours(negativeBalance)}
+      {/* Catch-up billed this month */}
+      {typeof catchUpHoursBilled === 'number' && catchUpHoursBilled > 0 && (
+        <SummaryTile title="Catch-up Hours Billed" kind="red" size="small">
+          {formatHours(catchUpHoursBilled)}
         </SummaryTile>
-      ) : (
-        typeof remainingPool === 'number' && (
-          <SummaryTile title="Unused (Carried Forward)" size="small">
-            {formatHours(Math.max(0, remainingPool))}
-          </SummaryTile>
-        )
       )}
+
+      {/* Month-end balance: prefer explicit finalBalance prop, otherwise derive from remainingPool/negativeBalance */}
+      {(() => {
+        const fb = typeof finalBalance === 'number'
+          ? finalBalance
+          : (typeof remainingPool === 'number' ? remainingPool : (typeof negativeBalance === 'number' ? -negativeBalance : undefined));
+
+        if (typeof fb === 'number') {
+          if (fb > 0) {
+            return (
+              <SummaryTile title="Hours Available This Month" kind="green" size="small">
+                {formatHours(fb)}
+              </SummaryTile>
+            )
+          }
+
+          if (fb < 0) {
+            return (
+              <SummaryTile title="Negative Balance (Carried Forward)" kind="red" size="small">
+                {formatHours(Math.abs(fb))}
+              </SummaryTile>
+            )
+          }
+
+          return (
+            <SummaryTile title="Balance" size="small">
+              {formatHours(0)}
+            </SummaryTile>
+          )
+        }
+
+        return null
+      })()}
     </div>
   )
 }

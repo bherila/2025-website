@@ -73,6 +73,7 @@ CREATE TABLE `client_agreements` (
   `client_company_signed_name` varchar(255) DEFAULT NULL,
   `client_company_signed_title` varchar(255) DEFAULT NULL,
   `monthly_retainer_hours` decimal(8,2) NOT NULL DEFAULT 0.00,
+  `catch_up_threshold_hours` decimal(8,2) NOT NULL DEFAULT 1.00,
   `rollover_months` int(11) NOT NULL DEFAULT 1,
   `hourly_rate` decimal(10,2) NOT NULL DEFAULT 0.00,
   `monthly_retainer_fee` decimal(10,2) NOT NULL DEFAULT 0.00,

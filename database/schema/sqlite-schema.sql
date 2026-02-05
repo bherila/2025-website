@@ -161,6 +161,7 @@ CREATE TABLE `client_agreements` (
   `client_company_signed_name` TEXT,
   `client_company_signed_title` TEXT,
   `monthly_retainer_hours` REAL NOT NULL DEFAULT 0.00,
+  `catch_up_threshold_hours` REAL NOT NULL DEFAULT 1.00,
   `rollover_months` INTEGER NOT NULL DEFAULT 1,
   `hourly_rate` REAL NOT NULL DEFAULT 0.00,
   `monthly_retainer_fee` REAL NOT NULL DEFAULT 0.00,
