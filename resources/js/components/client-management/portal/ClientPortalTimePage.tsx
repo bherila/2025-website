@@ -275,6 +275,8 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
                 const isExpanded = expandedMonths.has(month.year_month)
                 const monthEntries = entriesByMonth[month.year_month] || []
                 const openingAvailable = month.has_agreement && month.opening ? month.opening.total_available : undefined
+                const monthlyRetainer = month.has_agreement && month.opening ? month.opening.retainer_hours : undefined
+                const negativeOffsetThisMonth = month.has_agreement && month.opening ? month.opening.negative_offset : undefined
                 const remainingPool = month.has_agreement && month.closing
                   ? Math.max(0, (month.closing.unused_hours || 0) + (month.closing.remaining_rollover || 0))
                   : undefined
@@ -308,6 +310,8 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
                       {month.has_agreement && (
                         <TimeTrackingMonthSummaryRow
                           displayMode="time_page"
+                          monthlyRetainer={monthlyRetainer}
+                          negativeOffsetThisMonth={negativeOffsetThisMonth}
                           openingAvailable={openingAvailable}
                           preAgreementHoursApplied={month.pre_agreement_hours_applied}
                           hoursWorked={month.hours_worked}

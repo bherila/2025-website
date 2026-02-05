@@ -3,6 +3,8 @@ import SummaryTile from '@/components/ui/summary-tile'
 import { formatHours } from '@/lib/formatHours'
 
 interface TimeTrackingMonthSummaryRowProps {
+  monthlyRetainer?: number | undefined
+  negativeOffsetThisMonth?: number | undefined
   openingAvailable?: number | undefined
   preAgreementHoursApplied?: number | undefined
   carriedInHours?: number | undefined
@@ -19,6 +21,8 @@ interface TimeTrackingMonthSummaryRowProps {
 }
 
 export default function TimeTrackingMonthSummaryRow({
+  monthlyRetainer,
+  negativeOffsetThisMonth,
   openingAvailable,
   preAgreementHoursApplied,
   carriedInHours,
@@ -37,7 +41,29 @@ export default function TimeTrackingMonthSummaryRow({
   
   return (
     <div className="mt-3 grid grid-cols-2 md:grid-cols-5 gap-3 text-xs text-muted-foreground">
-      {typeof openingAvailable === 'number' && (
+      {/* On Time page: Show monthly retainer separately if available */}
+      {displayMode === 'time_page' && typeof monthlyRetainer === 'number' && (
+        <SummaryTile
+          title="Monthly Retainer"
+          size="small"
+        >
+          {formatHours(monthlyRetainer)}
+        </SummaryTile>
+      )}
+
+      {/* On Time page: Show negative offset separately if > 0 */}
+      {displayMode === 'time_page' && typeof negativeOffsetThisMonth === 'number' && negativeOffsetThisMonth > 0 && (
+        <SummaryTile
+          title="Prev Month Overage (Subtracted)"
+          kind="red"
+          size="small"
+        >
+          {formatHours(negativeOffsetThisMonth)}
+        </SummaryTile>
+      )}
+
+      {/* On Invoice page or when openingAvailable is provided without separate retainer */}
+      {(displayMode === 'invoice_page' || !monthlyRetainer) && typeof openingAvailable === 'number' && (
         <SummaryTile
           title="Monthly Retainer"
           size="small"
