@@ -80,6 +80,9 @@ class ClientInvoiceApiController extends Controller
 
         $invoice->load(['agreement', 'lineItems.timeEntries', 'payments']);
 
+        // Calculate hours breakdown using model method
+        $hoursBreakdown = $invoice->calculateHoursBreakdown();
+
         return response()->json([
             'id' => $invoice->client_invoice_id,
             'invoice_number' => $invoice->invoice_number,
@@ -91,6 +94,8 @@ class ClientInvoiceApiController extends Controller
             'due_date' => $invoice->due_date?->toDateString(),
             'paid_date' => $invoice->paid_date?->toDateString(),
             'hours_worked' => $invoice->hours_worked,
+            'carried_in_hours' => $hoursBreakdown['carried_in_hours'],
+            'current_month_hours' => $hoursBreakdown['current_month_hours'],
             'retainer_hours_included' => $invoice->retainer_hours_included,
             'unused_hours_balance' => $invoice->unused_hours_balance,
             'negative_hours_balance' => $invoice->negative_hours_balance,

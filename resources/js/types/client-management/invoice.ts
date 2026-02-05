@@ -33,6 +33,8 @@ export interface Invoice {
   period_end: string | null;
   retainer_hours_included: string;
   hours_worked: string;
+  carried_in_hours?: number;
+  current_month_hours?: number;
   rollover_hours_used: string;
   unused_hours_balance: string;
   negative_hours_balance: string;

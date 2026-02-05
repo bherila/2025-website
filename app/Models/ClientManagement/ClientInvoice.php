@@ -193,6 +193,46 @@ class ClientInvoice extends Model
     }
 
     /**
+     * Calculate hours breakdown: carried-in (previous months) vs current month.
+     * 
+     * @return array{carried_in_hours: float, current_month_hours: float}
+     */
+    public function calculateHoursBreakdown(): array
+    {
+        $this->loadMissing('lineItems.timeEntries');
+        
+        $periodStart = $this->period_start;
+        $carriedInHours = 0;
+        $currentMonthHours = 0;
+
+        foreach ($this->lineItems as $line) {
+            if (in_array($line->line_type, ['prior_month_retainer', 'prior_month_billable', 'additional_hours'])) {
+                $lineHours = $line->hours ?? 0;
+                
+                // Check if line_date is before period_start (carried-in from previous months)
+                if ($line->line_date && $line->line_date < $periodStart) {
+                    $carriedInHours += $lineHours;
+                } else {
+                    // Count time entries by their date_worked
+                    foreach ($line->timeEntries as $entry) {
+                        $entryHours = $entry->minutes_worked / 60;
+                        if ($entry->date_worked && $entry->date_worked < $periodStart) {
+                            $carriedInHours += $entryHours;
+                        } else {
+                            $currentMonthHours += $entryHours;
+                        }
+                    }
+                }
+            }
+        }
+
+        return [
+            'carried_in_hours' => $carriedInHours,
+            'current_month_hours' => $currentMonthHours,
+        ];
+    }
+
+    /**
      * Get the route key for the model.
      */
     public function getRouteKeyName(): string

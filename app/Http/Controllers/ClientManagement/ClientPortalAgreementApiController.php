@@ -106,7 +106,7 @@ class ClientPortalAgreementApiController extends Controller
 
         $invoice = ClientInvoice::where('client_invoice_id', $invoiceId)
             ->where('client_company_id', $company->id)
-            ->with(['lineItems', 'payments'])
+            ->with(['lineItems.timeEntries', 'payments'])
             ->firstOrFail();
 
         // Admins can see all invoices, but clients can only see issued or paid ones.
@@ -114,10 +114,15 @@ class ClientPortalAgreementApiController extends Controller
             abort(404);
         }
 
+        // Calculate hours breakdown using model method
+        $hoursBreakdown = $invoice->calculateHoursBreakdown();
+
         $data = $invoice->toArray();
         $data['payments_total'] = $invoice->payments_total;
+        $data['carried_in_hours'] = $hoursBreakdown['carried_in_hours'];
+        $data['current_month_hours'] = $hoursBreakdown['current_month_hours'];
         $data['line_items'] = $invoice->lineItems->map(function ($line) {
-            $timeEntries = $line->timeEntries()->select('name', 'minutes_worked')->get();
+            $timeEntries = $line->timeEntries()->select('name', 'minutes_worked', 'date_worked')->get();
             return [
                 'client_invoice_line_id' => $line->client_invoice_line_id,
                 'description' => $line->description,

@@ -208,13 +208,14 @@ export default function StackedBalanceChart({ data, labels, isNegative, isRetire
               borderRadius: '4px',
               color: '#ffffff',
             }}
-            formatter={(value: number) => currency(Math.abs(value)).format()}
-            labelFormatter={(date: string) => {
-              if (date.includes('Q')) {
-                const [year, quarter] = date.split('-')
+            formatter={(value: number | undefined) => value !== undefined ? currency(Math.abs(value)).format() : ''}
+            labelFormatter={(date: React.ReactNode) => {
+              const dateStr = String(date ?? '');
+              if (dateStr.includes('Q')) {
+                const [year, quarter] = dateStr.split('-')
                 return `${quarter} ${year}`
               }
-              return format(new Date(date), "MMM 'yy")
+              return format(new Date(dateStr), "MMM 'yy")
             }}
           />
           {balanceKeys.map((key, index) => {

@@ -69,7 +69,12 @@ export default function ClientPortalInvoicesPage({ slug, companyName }: ClientPo
       const response = await fetch(`/api/client/portal/${slug}/invoices`)
       if (response.ok) {
         const data = await response.json()
-        setInvoices(data)
+        // Sort by period_end ascending
+        const sorted = data.sort((a: Invoice, b: Invoice) => {
+          if (!a.period_end || !b.period_end) return 0
+          return new Date(a.period_end).getTime() - new Date(b.period_end).getTime()
+        })
+        setInvoices(sorted)
       }
     } catch (error) {
       console.error('Error fetching invoices:', error)
@@ -105,7 +110,16 @@ export default function ClientPortalInvoicesPage({ slug, companyName }: ClientPo
     }
   }
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, invoice: Invoice) => {
+    // For draft invoices with period_end in the future, show "Upcoming"
+    if (status === 'draft' && invoice.period_end) {
+      const periodEnd = new Date(invoice.period_end);
+      const now = new Date();
+      if (periodEnd > now) {
+        return <Badge variant="outline" className="border-blue-600 text-blue-600">Upcoming</Badge>
+      }
+    }
+    
     switch (status) {
       case 'paid':
         return <Badge variant="default" className="bg-green-600">Paid</Badge>
@@ -223,7 +237,7 @@ export default function ClientPortalInvoicesPage({ slug, companyName }: ClientPo
                       ) : '-'}
                     </TableCell>
                     <TableCell className="py-3">
-                      {getStatusBadge(invoice.status)}
+                      {getStatusBadge(invoice.status, invoice)}
                     </TableCell>
                     <TableCell className="text-right py-3 font-semibold">
                       ${parseFloat(invoice.invoice_total).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
