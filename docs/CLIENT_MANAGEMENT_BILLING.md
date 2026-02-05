@@ -66,6 +66,16 @@ The invoice `period_start` and `period_end` specifically represent the **work pe
 
 Unlike the previous implementation, the retainer fee line (dated the 1st of M) does **not** expand the invoice period. This prevents overlapping period errors when generating subsequent work invoices.
 
+## Invoice Balance Fields
+The invoice tracks several balance fields that reflect the state at the end of the work period:
+
+- **`unused_hours_balance`**: Unused hours remaining at the end of the work period (M-1). For example, if the work period is Jan 1-31, this shows the unused hours from January's pool after processing January's work.
+- **`negative_hours_balance`**: Negative hours (debt) carried forward from the work period.
+- **`rollover_hours_used`**: Hours from previous months' rollover that were used during the work period.
+- **`hours_billed_at_rate`**: Additional hours billed at the hourly rate (catch-up billing or manual overages).
+
+These balances are calculated based on the work month, not the retainer month, to accurately reflect the state after processing the work covered by the invoice.
+
 ## Billing Validation & Automation
 
 ### Time Entry Validation
