@@ -364,7 +364,15 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
                                             entry.client_invoice ? (
                                               <a href={`/client/portal/${slug}/invoices/${entry.client_invoice.client_invoice_id}`} className="no-underline">
                                                 <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-green-600 text-green-600 font-bold shrink-0 text-uppercase hover:bg-green-50">
-                                                  Invoiced: #{entry.client_invoice.invoice_number.split('-').pop()}
+                                                  {entry.client_invoice.invoice_date ? (
+                                                    (() => {
+                                                      // Parse date without timezone shifting (date is YYYY-MM-DD)
+                                                      const [year, month, day] = entry.client_invoice.invoice_date.split('-').map(Number)
+                                                      return `Invoiced: ${month}/${day}/${String(year).slice(-2)}`
+                                                    })()
+                                                  ) : (
+                                                    `Invoice #${entry.client_invoice.invoice_number.split('-').pop()}`
+                                                  )}
                                                 </Badge>
                                               </a>
                                             ) : (

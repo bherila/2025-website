@@ -412,7 +412,7 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
                             openingAvailable={parseFloat(invoice.retainer_hours_included)}
                             hoursWorked={parseFloat(invoice.hours_worked)}
                             hoursUsedFromRollover={parseFloat(invoice.rollover_hours_used)}
-                            excessHours={parseFloat(invoice.hours_billed_at_rate)}
+                            catchUpHoursBilled={parseFloat(invoice.hours_billed_at_rate)}
                             negativeBalance={parseFloat(invoice.negative_hours_balance)}
                             remainingPool={parseFloat(invoice.unused_hours_balance)}
                         />

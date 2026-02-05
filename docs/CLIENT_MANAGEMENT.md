@@ -311,7 +311,7 @@ Location: `resources/js/components/client-management/portal/`
 - Time tracking interface with monthly groupings
 - Shows time entries in a clean tabular format within each month
 - Each month displays:
-  - **Opening Balance**: Retainer hours + rollover from previous months - expired hours
+  - **Hours Available This Month**: Retainer hours + cumulative rollover - previous overages. Updated from "Positive Balance" for clarity.
   - **Table of entries**: Date, Description (including job type, status badges, and project badge), User (abbreviated), and Time
   - **Closing Balance**: Unused hours available to roll over, excess hours to be invoiced
 - **UI Features**:
@@ -319,7 +319,8 @@ Location: `resources/js/components/client-management/portal/`
     - Consolidation of repeated dates (only shows date on first row of the day)
     - Action column with Edit button (Pencil icon) for admins
     - Clean, borderless card layout with lightened table borders
-- Color-coded balance indicators (green for positive, red for negative)
+- **Color-coded balance indicators**: Green for positive availability, red for negative deficit
+- **Validation**: Blocks time entry edits/deletes in periods covered by Issued invoices.
 - Collapsible month sections for better navigation
 - Uses shadcn/ui Card, Button, Table, Badge, Tooltip, Skeleton components
 
@@ -583,9 +584,9 @@ Stores invoices generated for clients.
 - `client_company_id`: Foreign key to `client_companies`
 - `client_agreement_id`: Foreign key to `client_agreements`
 - `invoice_number`: Unique invoice number (string, nullable)
-- `period_start`: Billing period start date
-- `period_end`: Billing period end date
-- `retainer_hours_included`: Hours included in retainer for this period (decimal 8,2)
+- `period_start`: Work period start date (first day of M-1)
+- `period_end`: Work period end date (last day of M-1)
+- `retainer_hours_included`: Hours included in retainer for month M (decimal 8,2)
 - `hours_worked`: Total hours worked in period (decimal 8,2)
 - `rollover_hours_used`: Hours from rollover applied (decimal 8,2)
 - `unused_hours_balance`: Hours remaining after period (decimal 8,2)

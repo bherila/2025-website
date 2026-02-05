@@ -98,8 +98,8 @@ class DelayedBillingTest extends TestCase
         // - They appear as "prior_month_retainer" at $0
         // - Retainer line for February = $1000
         // - Total = $1000
-        $periodStart = Carbon::create(2024, 2, 1);
-        $periodEnd = Carbon::create(2024, 2, 29);
+        $periodStart = Carbon::create(2024, 1, 1);
+        $periodEnd = Carbon::create(2024, 1, 31);
 
         $invoice = $this->invoicingService->generateInvoice(
             $this->company,
@@ -176,8 +176,8 @@ class DelayedBillingTest extends TestCase
         //   Feb: 10h retainer. 0h worked. 10h available.
         //   Feb opening: applies -4h offset. 6h remaining.
 
-        $periodStart = Carbon::create(2024, 2, 1);
-        $periodEnd = Carbon::create(2024, 2, 29);
+        $periodStart = Carbon::create(2024, 1, 1);
+        $periodEnd = Carbon::create(2024, 1, 31);
 
         $invoice = $this->invoicingService->generateInvoice(
             $this->company,
@@ -232,8 +232,8 @@ class DelayedBillingTest extends TestCase
         ]);
 
         // Generate invoice
-        $periodStart = Carbon::create(2024, 2, 1);
-        $periodEnd = Carbon::create(2024, 2, 29);
+        $periodStart = Carbon::create(2024, 1, 1);
+        $periodEnd = Carbon::create(2024, 1, 31);
 
         $invoice = $this->invoicingService->generateInvoice(
             $this->company,

@@ -7,11 +7,12 @@ The billing and invoicing system handles automatic invoice generation with prior
 
 ### Prior-Month Billing Model
 When an invoice is generated for month M (e.g., February 2024):
-- **Time entries from month M-1** (e.g., January 2024) are included and dated as the last day of M-1. These are covered by the available pool (retainer + rollover - negative balance).
-- **Retainer fee for month M** is included and dated as the first day of M. This retainer adds to the available pool.
-- **Reimbursable expenses** up to the invoice date are included with their original expense dates.
+- **Work Period (M-1)**: The invoice `period_start` and `period_end` represent the month work was performed (e.g., Jan 1 - Jan 31).
+- **Time entries from month M-1** are included and generally dated as the last day of M-1. These are covered by the available pool (retainer + rollover).
+- **Retainer fee for month M** is included and dated as the first day of M.
+- **Reimbursable expenses** up to the invoice generation date are included with their original dates.
 
-This "give and take" model ensures work is billed after completion, while allowing negative balances from high-activity months to be offset by future retainer hours.
+This model ensures work is billed after completion, while the retainer fee provides availability for the upcoming month.
 
 ### Rollover Hours
 Unused retainer hours can roll over to future months (configurable via `rollover_months` in agreements). The calculation uses a chronological balance pool:
@@ -59,11 +60,23 @@ Generated invoices contain the following line item types (in order):
 5. **Expenses** (`expense`): Reimbursable expenses incurred up to the invoice date. Each expense line uses its original expense date. Quantity is "1".
 
 ## Invoice Period
-The invoice `period_start` and `period_end` dates are determined by the line item dates:
-- **period_start**: The earliest `line_date` among all line items, or the original billing period start (whichever is earlier)
-- **period_end**: The latest `line_date` among all line items, or the original billing period end (whichever is later)
+The invoice `period_start` and `period_end` specifically represent the **work period** being billed (usually M-1):
+- **period_start**: The first day of the work month (e.g., 2024-01-01).
+- **period_end**: The last day of the work month (e.g., 2024-01-31).
 
-This ensures the displayed period accurately reflects the date range of all billed items.
+Unlike the previous implementation, the retainer fee line (dated the 1st of M) does **not** expand the invoice period. This prevents overlapping period errors when generating subsequent work invoices.
+
+## Billing Validation & Automation
+
+### Time Entry Validation
+To maintain the integrity of financial records, the system enforces the following rules in the Client Portal:
+- **Block Edits/Deletes**: Users cannot edit or delete time entries if they are linked to an invoice with **Issued**, **Paid**, or **Void** status.
+- **Block New Entries**: Users cannot create new time entries for a date that falls within the period of an already **Issued** invoice.
+
+### Automatic Draft Generation
+To ensure a continuous billing cycle:
+- When a user logs a time entry for a date past the current `period_end` of existing invoices, the system automatically triggers the generation of a **Draft** invoice for that next work period.
+- This ensures that a "bucket" (retainer pool) is always ready to receive work entries.
 
 ## Draft Invoice Regeneration
 When regenerating a draft invoice (e.g., when new time entries are added):

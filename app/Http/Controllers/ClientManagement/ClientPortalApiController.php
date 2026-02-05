@@ -4,10 +4,12 @@ namespace App\Http\Controllers\ClientManagement;
 
 use App\Http\Controllers\Controller;
 use App\Models\ClientManagement\ClientCompany;
+use App\Models\ClientManagement\ClientInvoice;
 use App\Models\ClientManagement\ClientProject;
 use App\Models\ClientManagement\ClientTask;
 use App\Models\ClientManagement\ClientTimeEntry;
 use App\Models\User;
+use App\Services\ClientManagement\ClientInvoicingService;
 use App\Services\ClientManagement\RolloverCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -209,7 +211,13 @@ class ClientPortalApiController extends Controller
             ->get()
             ->map(function ($entry) {
                 // Manually map the nested invoice relationship to the expected structure
-                $entry->client_invoice = $entry->invoiceLine?->invoice;
+                $ci = $entry->invoiceLine?->invoice;
+                if ($ci) {
+                    $entry->client_invoice = $ci;
+                    $entry->client_invoice->invoice_date = $ci->issue_date ? $ci->issue_date->toDateString() : null;
+                } else {
+                    $entry->client_invoice = null;
+                }
                 return $entry;
             });
 
@@ -403,6 +411,25 @@ class ClientPortalApiController extends Controller
             unset($validated['time']);
         }
 
+        // Check if date_worked falls within an issued invoice period
+        $dateWorked = $validated['date_worked'] ?? null;
+        if ($dateWorked) {
+            $issuedInvoice = ClientInvoice::where('client_company_id', $company->id)
+                ->whereIn('status', ['issued', 'paid'])
+                ->where('period_start', '<=', $dateWorked)
+                ->where('period_end', '>=', $dateWorked)
+                ->first();
+
+            if ($issuedInvoice) {
+                return response()->json([
+                    'error' => 'Cannot add time entries to periods covered by issued invoices. The period ' .
+                        $issuedInvoice->period_start->format('M j, Y') . ' - ' .
+                        $issuedInvoice->period_end->format('M j, Y') .
+                        ' is already invoiced.'
+                ], 403);
+            }
+        }
+
         if ($isUpdate) {
             $entry = ClientTimeEntry::where('client_company_id', $company->id)->findOrFail($entryId);
             if ($entry->isInvoiced()) {
@@ -422,6 +449,14 @@ class ClientPortalApiController extends Controller
                 'is_billable' => $validated['is_billable'] ?? true,
                 'job_type' => $validated['job_type'] ?? 'Software Development',
             ]);
+
+            // Auto-generate next month's draft invoice if this entry warrants it
+            try {
+                $this->maybeGenerateNextInvoice($company, $validated['date_worked']);
+            } catch (\Exception $e) {
+                // Log but don't fail the time entry creation
+                \Log::warning('Auto-invoice generation failed: ' . $e->getMessage());
+            }
         }
 
         return response()->json(
@@ -448,5 +483,41 @@ class ClientPortalApiController extends Controller
         $entry->delete();
 
         return response()->json(['success' => true]);
+    }
+
+    /**
+     * Auto-generate next month's draft invoice if needed when a time entry is created.
+     *
+     * If a time entry is created for a month that doesn't yet have a draft invoice,
+     * generate one. This ensures that as time entries are logged, the corresponding
+     * invoices are created proactively.
+     */
+    private function maybeGenerateNextInvoice(ClientCompany $company, string $dateWorked): void
+    {
+        $agreement = $company->activeAgreement();
+        if (!$agreement) {
+            return;
+        }
+
+        // The work period containing this time entry
+        $entryDate = \Carbon\Carbon::parse($dateWorked);
+        $workPeriodStart = $entryDate->copy()->startOfMonth();
+        $workPeriodEnd = $entryDate->copy()->endOfMonth();
+
+        // Check if a draft invoice already exists for this work period
+        $existingInvoice = ClientInvoice::where('client_company_id', $company->id)
+            ->where('period_start', $workPeriodStart)
+            ->where('period_end', $workPeriodEnd)
+            ->whereNotIn('status', ['void'])
+            ->first();
+
+        if ($existingInvoice) {
+            // Invoice exists; if it's a draft it will be updated during next billing run
+            return;
+        }
+
+        // No invoice for this period yet - generate a draft
+        $invoicingService = app(ClientInvoicingService::class);
+        $invoicingService->generateInvoice($company, $workPeriodStart, $workPeriodEnd, $agreement);
     }
 }
