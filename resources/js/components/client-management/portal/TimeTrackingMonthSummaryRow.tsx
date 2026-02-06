@@ -144,11 +144,8 @@ export default function TimeTrackingMonthSummaryRow({
             )
           }
 
-          return (
-            <SummaryTile title="Balance" size="small">
-              {formatHours(0)}
-            </SummaryTile>
-          )
+          // Don't show balance tile if it's exactly 0
+          return null
         }
 
         return null

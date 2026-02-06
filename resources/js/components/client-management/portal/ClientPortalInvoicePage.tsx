@@ -98,8 +98,11 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
         try {
             await fetchWrapper[method](url, payment);
             fetchInvoice(true);
-        } catch (error) {
+        } catch (error: any) {
             console.error("Failed to save payment", error);
+            // Show error message to user
+            const message = error?.message || "Failed to save payment. Please check the payment amount.";
+            alert(message);
         }
     }
 
@@ -257,8 +260,19 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
                     </div>
                     <div className="text-right">
                         <div className="text-4xl font-bold mb-2">${parseFloat(invoice.invoice_total).toFixed(2)}</div>
-                        <Badge variant={invoice.status === 'paid' ? 'default' : 'outline'} className={invoice.status === 'paid' ? 'bg-green-600' : ''}>
-                            {invoice.status.toUpperCase()}
+                        <Badge 
+                            variant={invoice.status === 'paid' ? 'default' : 'outline'} 
+                            className={
+                                invoice.status === 'paid' 
+                                    ? 'bg-green-600' 
+                                    : (invoice.status === 'issued' && parseFloat(invoice.payments_total || '0') > 0 && parseFloat(invoice.remaining_balance) > 0)
+                                    ? 'bg-blue-600 text-white'
+                                    : ''
+                            }
+                        >
+                            {invoice.status === 'issued' && parseFloat(invoice.payments_total || '0') > 0 && parseFloat(invoice.remaining_balance) > 0
+                                ? 'PARTIALLY PAID'
+                                : invoice.status.toUpperCase()}
                         </Badge>
                     </div>
                 </div>
@@ -364,26 +378,37 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
                                         <TableHead>Amount</TableHead>
                                         <TableHead>Method</TableHead>
                                         <TableHead>Notes</TableHead>
-                                        {isAdmin && <TableHead className="text-right">Actions</TableHead>}
+                                        {isAdmin && <TableHead className="w-[40px] py-2 text-right">
+                                            <Pencil className="h-3 w-3 ml-auto text-muted-foreground/50" />
+                                        </TableHead>}
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {invoice.payments.map(p => (
-                                        <TableRow key={p.client_invoice_payment_id}>
+                                        <TableRow 
+                                            key={p.client_invoice_payment_id}
+                                            className={`group ${isAdmin ? 'cursor-pointer' : ''}`}
+                                            onClick={() => isAdmin && !isRefreshing && (setSelectedPayment(p), setPaymentModalOpen(true))}
+                                        >
                                             <TableCell>{format(new Date(p.payment_date), 'MMM d, yyyy')}</TableCell>
                                             <TableCell>${parseFloat(p.amount).toFixed(2)}</TableCell>
                                             <TableCell>{p.payment_method}</TableCell>
                                             <TableCell>{p.notes}</TableCell>
                                             {isAdmin && (
-                                                <TableCell className="text-right">
-                                                    <div className="flex justify-end gap-1">
-                                                        <Button variant="ghost" size="icon" onClick={() => { setSelectedPayment(p); setPaymentModalOpen(true); }} disabled={isRefreshing}>
-                                                            <Pencil className="h-4 w-4" />
-                                                        </Button>
-                                                        <Button variant="ghost" size="icon" onClick={() => handleDeletePayment(p)} disabled={isRefreshing}>
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
-                                                    </div>
+                                                <TableCell className="py-1 align-top text-right">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setSelectedPayment(p);
+                                                            setPaymentModalOpen(true);
+                                                        }}
+                                                        disabled={isRefreshing}
+                                                    >
+                                                        <Pencil className="h-4 w-4 text-muted-foreground" />
+                                                    </Button>
                                                 </TableCell>
                                             )}
                                         </TableRow>
