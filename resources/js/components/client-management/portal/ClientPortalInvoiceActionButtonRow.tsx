@@ -37,25 +37,28 @@ export default function ClientPortalInvoiceActionButtonRow({
     // Check if period_end is in the future
     const isPeriodEndInFuture = invoice.period_end && new Date(invoice.period_end) > new Date();
     const canIssueInvoice = invoice.status === 'draft' && !isPeriodEndInFuture;
+    const isFullyPaid = invoice.status === 'paid';
 
     return (
         <div className="mb-8 flex justify-between items-center gap-4 flex-wrap print:hidden">
             <ButtonGroup>
-                <Button
-                    variant="outline"
-                    onClick={onAddPayment}
-                    disabled={isRefreshing}
-                    className="rounded-r-none"
-                >
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Add Payment
-                </Button>
+                {!isFullyPaid && (
+                    <Button
+                        variant="outline"
+                        onClick={onAddPayment}
+                        disabled={isRefreshing}
+                        className="rounded-r-none"
+                    >
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Add Payment
+                    </Button>
+                )}
                 {isEditable && (
                     <Button
                         variant="outline"
                         onClick={onAddLineItem}
                         disabled={isRefreshing}
-                        className="rounded-l-none border-l-0"
+                        className={cn(!isFullyPaid && "rounded-l-none border-l-0")}
                     >
                         <PlusCircle className="mr-2 h-4 w-4" />
                         Add Line Item

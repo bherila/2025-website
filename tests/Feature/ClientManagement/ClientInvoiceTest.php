@@ -1222,4 +1222,90 @@ class ClientInvoiceTest extends TestCase
         $this->assertCount(3, $parts, 'Invoice number should have format PREFIX-YYYYMM-NNN');
         $this->assertEquals('202501', $parts[1], 'Middle section should be 202501 from period_end');
     }
+
+    // ==========================================
+    // Payment Validation Tests
+    // ==========================================
+
+    public function test_payment_api_prevents_overpayment(): void
+    {
+        $invoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2024, 2, 1),
+            Carbon::create(2024, 2, 29)
+        );
+
+        $invoice->issue();
+        $invoiceTotal = (float) $invoice->invoice_total;
+
+        // Try to add payment larger than invoice total
+        $response = $this->actingAs($this->admin)
+            ->postJson("/api/client/mgmt/companies/{$this->company->id}/invoices/{$invoice->client_invoice_id}/payments", [
+                'amount' => $invoiceTotal + 100,
+                'payment_date' => '2024-03-01',
+                'payment_method' => 'Credit Card',
+            ]);
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'message' => 'Payment amount exceeds remaining balance.',
+            ]);
+    }
+
+    public function test_payment_update_api_prevents_overpayment(): void
+    {
+        $invoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2024, 2, 1),
+            Carbon::create(2024, 2, 29)
+        );
+
+        $invoice->issue();
+        $invoiceTotal = (float) $invoice->invoice_total;
+
+        // Add initial payment
+        $payment = $invoice->payments()->create([
+            'amount' => 100.00,
+            'payment_date' => '2024-03-01',
+            'payment_method' => 'Credit Card',
+        ]);
+
+        // Try to update payment to exceed total
+        $response = $this->actingAs($this->admin)
+            ->putJson("/api/client/mgmt/companies/{$this->company->id}/invoices/{$invoice->client_invoice_id}/payments/{$payment->client_invoice_payment_id}", [
+                'amount' => $invoiceTotal + 100,
+                'payment_date' => '2024-03-01',
+                'payment_method' => 'Credit Card',
+            ]);
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'message' => 'Updated payment amount would exceed invoice total.',
+            ]);
+    }
+
+    public function test_invoice_marked_as_paid_when_fully_paid(): void
+    {
+        $invoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2024, 2, 1),
+            Carbon::create(2024, 2, 29)
+        );
+
+        $invoice->issue();
+        $invoiceTotal = (float) $invoice->invoice_total;
+
+        // Add payment equal to invoice total
+        $this->actingAs($this->admin)
+            ->postJson("/api/client/mgmt/companies/{$this->company->id}/invoices/{$invoice->client_invoice_id}/payments", [
+                'amount' => $invoiceTotal,
+                'payment_date' => '2024-03-01',
+                'payment_method' => 'Credit Card',
+            ])
+            ->assertStatus(201);
+
+        $freshInvoice = $invoice->fresh();
+        $this->assertEquals('paid', $freshInvoice->status);
+        $this->assertNotNull($freshInvoice->paid_date);
+    }
 }

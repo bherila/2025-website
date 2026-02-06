@@ -510,6 +510,18 @@ class ClientInvoiceApiController extends Controller
             'notes' => 'nullable|string',
         ]);
 
+        // Check if payment amount would exceed remaining balance
+        $invoiceFresh = $invoice->fresh(['payments']);
+        $remainingBalance = (float) $invoiceFresh->remaining_balance;
+        $paymentAmount = (float) $request->input('amount');
+        
+        if ($paymentAmount > $remainingBalance) {
+            return response()->json([
+                'message' => 'Payment amount exceeds remaining balance.',
+                'remaining_balance' => number_format($remainingBalance, 2),
+            ], 422);
+        }
+
         $payment = $invoice->payments()->create($request->all());
 
         // Update invoice status if fully paid
@@ -540,6 +552,21 @@ class ClientInvoiceApiController extends Controller
             'payment_method' => 'required|string|in:Credit Card,ACH,Wire,Check,Other',
             'notes' => 'nullable|string',
         ]);
+
+        // Check if updated payment amount would exceed remaining balance
+        // (remaining balance + current payment amount - new payment amount should be >= 0)
+        $invoiceFresh = $invoice->fresh(['payments']);
+        $remainingBalance = (float) $invoiceFresh->remaining_balance;
+        $currentPaymentAmount = (float) $payment->amount;
+        $newPaymentAmount = (float) $request->input('amount');
+        $balanceAfterUpdate = $remainingBalance + $currentPaymentAmount - $newPaymentAmount;
+        
+        if ($balanceAfterUpdate < 0) {
+            return response()->json([
+                'message' => 'Updated payment amount would exceed invoice total.',
+                'max_payment_amount' => number_format($remainingBalance + $currentPaymentAmount, 2),
+            ], 422);
+        }
 
         $payment->update($request->all());
 

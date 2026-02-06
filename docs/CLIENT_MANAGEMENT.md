@@ -917,6 +917,39 @@ PUT    /api/client/mgmt/companies/{company}/invoices/{invoice}/payments/{payment
 DELETE /api/client/mgmt/companies/{company}/invoices/{invoice}/payments/{payment}
 ```
 
+#### Payment API Details
+
+**GET `/api/client/mgmt/companies/{company}/invoices/{invoice}/payments`**
+- Returns array of all payments for the invoice, ordered by payment_date descending
+- Response includes: payment_id, amount, payment_date, payment_method, notes
+
+**POST `/api/client/mgmt/companies/{company}/invoices/{invoice}/payments`**
+- Creates a new payment for the invoice
+- Request body: `{ amount, payment_date, payment_method, notes? }`
+- Validation:
+  - `amount`: Required, numeric, min:0.01
+  - `payment_date`: Required, valid date
+  - `payment_method`: Required, one of: Credit Card, ACH, Wire, Check, Other
+  - `notes`: Optional, string
+- **Overpayment Protection**: Returns 422 error if payment amount exceeds remaining balance
+- Auto-marks invoice as "paid" when `remaining_balance <= 0`, setting `paid_date` to latest payment date
+- Returns 201 with payment object and updated invoice
+
+**PUT `/api/client/mgmt/companies/{company}/invoices/{invoice}/payments/{payment}`**
+- Updates an existing payment
+- Request body: Same as POST
+- Validation: Same as POST
+- **Overpayment Protection**: Returns 422 error if updated total payments would exceed invoice total
+- Auto-updates invoice status:
+  - Sets status to "paid" if `remaining_balance <= 0`
+  - Reverts status to "issued" if `remaining_balance > 0` (e.g., after reducing payment)
+- Returns 200 with updated payment and invoice
+
+**DELETE `/api/client/mgmt/companies/{company}/invoices/{invoice}/payments/{payment}`**
+- Deletes a payment
+- Auto-updates invoice status: If invoice was "paid" and `remaining_balance > 0` after deletion, reverts status to "issued" and clears `paid_date`
+- Returns 200 with updated invoice
+
 ### Unit Tests
 
 #### `tests/Unit/Services/ClientManagement/RolloverCalculatorTest.php`
