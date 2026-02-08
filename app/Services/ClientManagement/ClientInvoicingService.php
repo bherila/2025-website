@@ -252,6 +252,17 @@ class ClientInvoicingService
             /** @var MonthSummary[] $allBalances */
             $allBalances = $calculator->calculateMultipleMonths($months, (int) $agreement->rollover_months);
 
+            Log::debug('Rollover Calculation Results', [
+                'months' => $months,
+                'results' => collect($allBalances)->map(fn($b) => [
+                    'm' => $b->yearMonth,
+                    'used_rollover' => $b->closing->hoursUsedFromRollover,
+                    'unused' => $b->closing->unusedHours,
+                    'opening_avail' => $b->opening->totalAvailable,
+                    'opening_offset' => $b->opening->negativeOffset
+                ])
+            ]);
+
             // With the new period semantics, periodStart/periodEnd IS the work period (M-1)
             // The retainer month (M) is the month after periodEnd
             $workPeriodStart = $periodStart;
@@ -281,6 +292,16 @@ class ClientInvoicingService
 
             // Fallback to end of balances if not found (shouldn't happen with our loop unless empty)
             $currentMonthBalance = $currentMonthBalance ?: (empty($allBalances) ? null : end($allBalances));
+
+            // Also find the balance for the work month (M-1)
+            $workMonthBalance = null;
+            foreach ($allBalances as $balance) {
+                if ($balance->yearMonth === $priorMonthKey) {
+                    $workMonthBalance = $balance;
+                    break;
+                }
+            }
+            $workMonthBalance = $workMonthBalance ?: $currentMonthBalance;
 
             // If still null (e.g. no agreement/calculation history), start fresh
             if (!$currentMonthBalance) {
@@ -312,16 +333,6 @@ class ClientInvoicingService
 
             // Calculate cumulative balance including catch-up billing
             $cumulativeSnapshot = $this->calculateCumulativeBalanceSnapshot($agreement, $periodEnd, $allBalances);
-
-            // Find balance for the work period month to get rollover usage
-            $workMonthKey = $periodEnd->format('Y-m');
-            $workMonthBalance = null;
-            foreach ($allBalances as $balance) {
-                if ($balance->yearMonth === $workMonthKey) {
-                    $workMonthBalance = $balance;
-                    break;
-                }
-            }
 
             // Prepare invoice data
             $invoiceData = [
@@ -395,17 +406,11 @@ class ClientInvoicingService
             $m1_invoice = $history->first(fn($inv) => $inv->period_start->format('Y-m') === $priorMonthKey);
             $alreadyBilledM1 = $m1_invoice ? $m1_invoice->hours_worked : 0;
 
-            $priorMonthCapacity = 0;
-            if ($priorMonthBalance && $priorMonthBalance->closing) {
-                $totalUsedM1 = $priorMonthBalance->closing->hoursUsedFromRetainer + $priorMonthBalance->closing->hoursUsedFromRollover;
-                $poolInvoicedM1 = min($alreadyBilledM1, $priorMonthBalance->opening->totalAvailable);
-                $priorMonthCapacity = max(0, $totalUsedM1 - $poolInvoicedM1);
-            }
-
-            // Calculate current month capacity (use full retainer)
+            // Calculate capacities:
+            // 1. Prior Month Capacity: What Jan has itself (including Jan's rollover from Dec)
+            // 2. Current Month Capacity: What Feb has available to cover Jan's overage (M retainer)
+            $priorMonthCapacity = $priorMonthBalance ? $priorMonthBalance->opening->totalAvailable : 0;
             $currentMonthCapacity = (float) $agreement->monthly_retainer_hours;
-
-            // Get catch-up threshold from agreement
             $catchUpThreshold = (float) ($agreement->catch_up_threshold_hours ?? 1.0);
 
             // Use TimeEntrySplitter to allocate time entries
@@ -461,8 +466,10 @@ class ClientInvoicingService
             }
 
             // Catch-up threshold + billable catch-up fragments combined into one line
-            // Also add buffer if remaining capacity after allocation is below threshold
-            $remainingCapacityAfterAllocation = $currentMonthCapacity - $plan->totalCurrentMonthRetainerHours;
+            // Also add buffer if remaining capacity after allocation is below threshold.
+            // Capacity remaining is the sum of unused M-1 pool and unused M debt-coverage pool.
+            $remainingCapacityAfterAllocation = ($priorMonthCapacity - $plan->totalPriorMonthRetainerHours) +
+                ($currentMonthCapacity - $plan->totalCurrentMonthRetainerHours);
             $bufferNeeded = max(0, $catchUpThreshold - $remainingCapacityAfterAllocation);
             $totalCatchupHours = $plan->totalCatchUpHours + $plan->totalBillableCatchupHours + $bufferNeeded;
 
@@ -491,8 +498,13 @@ class ClientInvoicingService
                 // The catch-up billing pays for the overage and restores the threshold
                 $invoice->update([
                     'hours_billed_at_rate' => $totalCatchupHours,
-                    'negative_hours_balance' => 0,
-                    'unused_hours_balance' => min($catchUpThreshold, $remainingCapacityAfterAllocation + $bufferNeeded),
+                ]);
+
+                // Re-calculate the balance snapshot now that we have hours_billed_at_rate set
+                $cumulativeSnapshot = $this->calculateCumulativeBalanceSnapshot($agreement, $periodEnd, $allBalances);
+                $invoice->update([
+                    'negative_hours_balance' => $cumulativeSnapshot['negative'],
+                    'unused_hours_balance' => $cumulativeSnapshot['unused'],
                 ]);
             }
 
@@ -549,24 +561,11 @@ class ClientInvoicingService
             ->where('period_end', '<=', $periodEnd)
             ->sum('hours_billed_at_rate');
 
-        // Total worked hours up to period end
-        $totalWorked = ClientTimeEntry::where('client_company_id', $agreement->client_company_id)
-            ->where('is_billable', true)
-            ->where('date_worked', '<=', $periodEnd)
-            ->sum('minutes_worked') / 60;
+        // We report based on the OPENING balance of the target month (Month M),
+        // which includes the effect of M-1's work and M's retainer.
+        $netNegative = $summary->opening->remainingNegativeBalance;
+        $netUnused = $summary->opening->totalAvailable;
 
-        // The calculator already knows about retainer hours and worked hours.
-        // We just need to offset its final result by totalBilledOverages.
-        $netNegative = max(0, $summary->closing->negativeBalance - $totalBilledOverages);
-        $netUnused = $summary->closing->unusedHours;
-
-        if ($summary->closing->negativeBalance > 0 && $totalBilledOverages > 0) {
-            // If negative balance was reduced or flipped to positive
-            $overageCredit = $totalBilledOverages - $summary->closing->negativeBalance;
-            if ($overageCredit > 0) {
-                $netUnused += $overageCredit;
-            }
-        }
 
         return [
             'unused' => round($netUnused, 4),
