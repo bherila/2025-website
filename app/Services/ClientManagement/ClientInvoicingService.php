@@ -561,11 +561,18 @@ class ClientInvoicingService
             ->where('period_end', '<=', $periodEnd)
             ->sum('hours_billed_at_rate');
 
-        // We report based on the OPENING balance of the target month (Month M),
-        // which includes the effect of M-1's work and M's retainer.
-        $netNegative = $summary->opening->remainingNegativeBalance;
-        $netUnused = $summary->opening->totalAvailable;
+        // The calculator only knows about retainer vs worked hours.
+        // We need to apply the "debt payoff" from any overage/catch-up billing.
+        $rawNegative = $summary->opening->remainingNegativeBalance;
+        $rawUnused = $summary->opening->totalAvailable;
 
+        // Apply overage billing to reduce negative balance first, then add to unused pool
+        $netNegative = max(0, $rawNegative - $totalBilledOverages);
+        $netUnused = $rawUnused;
+
+        if ($totalBilledOverages > $rawNegative) {
+            $netUnused += ($totalBilledOverages - $rawNegative);
+        }
 
         return [
             'unused' => round($netUnused, 4),
