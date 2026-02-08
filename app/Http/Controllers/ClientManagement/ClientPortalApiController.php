@@ -34,6 +34,21 @@ class ClientPortalApiController extends Controller
     }
 
     /**
+     * Get all companies the user has access to.
+     */
+    public function getAccessibleCompanies()
+    {
+        $user = Auth::user();
+        if ($user->hasRole('admin')) {
+            return ClientCompany::orderBy('company_name')->get(['id', 'company_name', 'slug']);
+        }
+
+        return $user->clientCompanies()
+            ->orderBy('company_name')
+            ->get(['id', 'company_name', 'slug']);
+    }
+
+    /**
      * Get all projects for a company.
      */
     public function getProjects($slug)

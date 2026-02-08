@@ -43,12 +43,13 @@ interface Task {
 interface ClientPortalProjectPageProps {
   slug: string
   companyName: string
+  companyId: number
   projectSlug: string
   projectName: string
   isAdmin?: boolean
 }
 
-export default function ClientPortalProjectPage({ slug, companyName, projectSlug, projectName, isAdmin = false }: ClientPortalProjectPageProps) {
+export default function ClientPortalProjectPage({ slug, companyName, companyId, projectSlug, projectName, isAdmin = false }: ClientPortalProjectPageProps) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [newTaskModalOpen, setNewTaskModalOpen] = useState(false)
@@ -143,6 +144,8 @@ export default function ClientPortalProjectPage({ slug, companyName, projectSlug
         <ClientPortalNav 
           slug={slug} 
           companyName={companyName} 
+          companyId={companyId}
+          isAdmin={isAdmin}
           currentPage="project" 
           currentProjectSlug={projectSlug} 
           projectName={projectName}
@@ -171,6 +174,8 @@ export default function ClientPortalProjectPage({ slug, companyName, projectSlug
       <ClientPortalNav 
         slug={slug} 
         companyName={companyName} 
+        companyId={companyId}
+        isAdmin={isAdmin}
         currentPage="project" 
         currentProjectSlug={projectSlug} 
         projectName={projectName}

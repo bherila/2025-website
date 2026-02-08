@@ -15,11 +15,12 @@ import type { ClientAgreement } from '@/types/client-management/client-agreement
 interface ClientPortalAgreementPageProps {
   slug: string
   companyName: string
+  companyId: number
   agreementId: number
   isAdmin: boolean
 }
 
-export default function ClientPortalAgreementPage({ slug, companyName, agreementId, isAdmin }: ClientPortalAgreementPageProps) {
+export default function ClientPortalAgreementPage({ slug, companyName, companyId, agreementId, isAdmin }: ClientPortalAgreementPageProps) {
   const [agreement, setAgreement] = useState<ClientAgreement | null>(null)
   const [loading, setLoading] = useState(true)
   const [signing, setSigning] = useState(false)
@@ -125,7 +126,7 @@ export default function ClientPortalAgreementPage({ slug, companyName, agreement
   if (loading) {
     return (
       <>
-        <ClientPortalNav slug={slug} companyName={companyName} currentPage="agreement" />
+        <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="agreement" />
         <div className="container mx-auto px-8 max-w-4xl">
           <Card>
             <CardHeader>
@@ -153,7 +154,7 @@ export default function ClientPortalAgreementPage({ slug, companyName, agreement
 
   return (
     <>
-      <ClientPortalNav slug={slug} companyName={companyName} currentPage="agreement" />
+      <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="agreement" />
       <div className="container mx-auto px-8 max-w-4xl">
         <div className="flex items-center gap-4 mb-6">
           <FileText className="h-8 w-8 text-muted-foreground" />

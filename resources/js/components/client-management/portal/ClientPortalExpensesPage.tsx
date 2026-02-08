@@ -33,6 +33,7 @@ interface ClientPortalExpensesPageProps {
   slug: string
   companyName: string
   companyId: number
+  isAdmin?: boolean
 }
 
 function formatCurrency(amount: number): string {
@@ -50,7 +51,7 @@ function formatDate(dateString: string): string {
   })
 }
 
-export default function ClientPortalExpensesPage({ slug, companyName, companyId }: ClientPortalExpensesPageProps) {
+export default function ClientPortalExpensesPage({ slug, companyName, companyId, isAdmin = false }: ClientPortalExpensesPageProps) {
   const [data, setData] = useState<ExpensesResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
@@ -127,7 +128,7 @@ export default function ClientPortalExpensesPage({ slug, companyName, companyId 
   if (loading) {
     return (
       <>
-        <ClientPortalNav slug={slug} companyName={companyName} currentPage="expenses" />
+        <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="expenses" />
         <div className="container mx-auto px-8 max-w-6xl">
           <Skeleton className="h-10 w-64 mb-6" />
           <Skeleton className="h-24 w-full mb-6" />
@@ -139,7 +140,7 @@ export default function ClientPortalExpensesPage({ slug, companyName, companyId 
 
   return (
     <>
-      <ClientPortalNav slug={slug} companyName={companyName} currentPage="expenses" />
+      <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="expenses" />
       <div className="container mx-auto px-8 max-w-6xl">
         <div className="mb-6">
           <div className="flex justify-between items-center">

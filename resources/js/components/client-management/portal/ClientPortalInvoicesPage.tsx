@@ -19,38 +19,24 @@ import type { ClientCompany, User } from '@/types/client-management/common'
 interface ClientPortalInvoicesPageProps {
   slug: string
   companyName: string
+  companyId: number
+  isAdmin?: boolean
 }
 
-export default function ClientPortalInvoicesPage({ slug, companyName }: ClientPortalInvoicesPageProps) {
+export default function ClientPortalInvoicesPage({ slug, companyName, companyId, isAdmin = false }: ClientPortalInvoicesPageProps) {
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [company, setCompany] = useState<ClientCompany | null>(null)
-  const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
-
-  const isAdmin = currentUser?.id === 1 || currentUser?.user_role === 'Admin'
 
   useEffect(() => {
     fetchInvoices()
     fetchCompany()
-    fetchCurrentUser()
   }, [slug])
 
   useEffect(() => {
     document.title = `Invoices | ${companyName}`
   }, [companyName])
-
-  const fetchCurrentUser = async () => {
-    try {
-      const response = await fetch('/api/user')
-      if (response.ok) {
-        const data = await response.json()
-        setCurrentUser(data)
-      }
-    } catch (error) {
-      console.error('Error fetching current user:', error)
-    }
-  }
 
   const fetchCompany = async () => {
     try {
@@ -135,7 +121,7 @@ export default function ClientPortalInvoicesPage({ slug, companyName }: ClientPo
   if (loading) {
     return (
       <>
-        <ClientPortalNav slug={slug} companyName={companyName} currentPage="invoices" />
+        <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="invoices" />
         <div className="container mx-auto px-8 max-w-4xl">
           <div className="space-y-4">
             {[1, 2, 3].map(i => (
@@ -159,7 +145,7 @@ export default function ClientPortalInvoicesPage({ slug, companyName }: ClientPo
 
   return (
     <>
-      <ClientPortalNav slug={slug} companyName={companyName} currentPage="invoices" />
+      <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="invoices" />
       <div className="container mx-auto px-8 max-w-4xl">
         <div className="flex items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-4">

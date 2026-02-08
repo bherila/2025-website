@@ -124,6 +124,7 @@ Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/expen
 Route::middleware(['web', 'auth'])->delete('/client/mgmt/companies/{company}/expenses/{expense}/link-finance', [App\Http\Controllers\ClientManagement\ClientExpenseApiController::class, 'unlinkFromFinanceLineItem']);
 
 // Client Portal API routes
+Route::middleware(['web', 'auth'])->get('/client/portal/companies', [ClientPortalApiController::class, 'getAccessibleCompanies']);
 Route::middleware(['web', 'auth'])->get('/client/portal/{slug}', [ClientPortalApiController::class, 'getCompany']);
 Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/projects', [ClientPortalApiController::class, 'getProjects']);
 Route::middleware(['web', 'auth'])->post('/client/portal/{slug}/projects', [ClientPortalApiController::class, 'createProject']);

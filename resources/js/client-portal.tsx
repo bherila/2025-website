@@ -32,6 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
     root.render(<ClientPortalIndexPage 
       slug={indexDiv.dataset.slug!}
       companyName={indexDiv.dataset.companyName!}
+      companyId={parseInt(indexDiv.dataset.companyId!)}
       isAdmin={indexDiv.dataset.isAdmin === 'true'}
       initialProjects={initialProjects}
       initialAgreements={initialAgreements}
@@ -44,6 +45,8 @@ document.addEventListener('DOMContentLoaded', () => {
     root.render(<ClientPortalTimePage 
       slug={timeDiv.dataset.slug!}
       companyName={timeDiv.dataset.companyName!}
+      companyId={parseInt(timeDiv.dataset.companyId!)}
+      isAdmin={timeDiv.dataset.isAdmin === 'true'}
     />)
   }
 
@@ -53,6 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
     root.render(<ClientPortalProjectPage 
       slug={projectDiv.dataset.slug!}
       companyName={projectDiv.dataset.companyName!}
+      companyId={parseInt(projectDiv.dataset.companyId!)}
       projectSlug={projectDiv.dataset.projectSlug!}
       projectName={projectDiv.dataset.projectName!}
       isAdmin={projectDiv.dataset.isAdmin === 'true'}
@@ -65,6 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
     root.render(<ClientPortalAgreementPage 
       slug={agreementDiv.dataset.slug!}
       companyName={agreementDiv.dataset.companyName!}
+      companyId={parseInt(agreementDiv.dataset.companyId!)}
       agreementId={parseInt(agreementDiv.dataset.agreementId!)}
       isAdmin={agreementDiv.dataset.isAdmin === 'true'}
     />)
@@ -76,6 +81,8 @@ document.addEventListener('DOMContentLoaded', () => {
     root.render(<ClientPortalInvoicesPage 
       slug={invoicesDiv.dataset.slug!}
       companyName={invoicesDiv.dataset.companyName!}
+      companyId={parseInt(invoicesDiv.dataset.companyId!)}
+      isAdmin={invoicesDiv.dataset.isAdmin === 'true'}
     />)
   }
 
@@ -85,6 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
     root.render(<ClientPortalInvoicePage 
       slug={invoiceDiv.dataset.slug!}
       companyName={invoiceDiv.dataset.companyName!}
+      companyId={parseInt(invoiceDiv.dataset.companyId!)}
       invoiceId={parseInt(invoiceDiv.dataset.invoiceId!)}
       isAdmin={invoiceDiv.dataset.isAdmin === 'true'}
     />)
@@ -97,6 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
       slug={expensesDiv.dataset.slug!}
       companyName={expensesDiv.dataset.companyName!}
       companyId={parseInt(expensesDiv.dataset.companyId!)}
+      isAdmin={expensesDiv.dataset.isAdmin === 'true'}
     />)
   }
 })

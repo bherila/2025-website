@@ -7,9 +7,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-import { Home, FolderOpen, Clock, FileText, ChevronDown, Receipt, ChevronRight } from 'lucide-react'
+import { Home, FolderOpen, Clock, FileText, ChevronDown, Receipt, Settings } from 'lucide-react'
 import {
     Breadcrumb,
     BreadcrumbItem,
@@ -25,6 +26,12 @@ interface Project {
   slug: string
 }
 
+interface Company {
+  id: number
+  company_name: string
+  slug: string
+}
+
 interface ClientPortalNavProps {
   slug: string
   companyName: string
@@ -33,6 +40,8 @@ interface ClientPortalNavProps {
   projectName?: string | undefined
   invoiceNumber?: string | undefined
   projects?: Project[]
+  isAdmin?: boolean
+  companyId?: number
 }
 
 export default function ClientPortalNav({ 
@@ -42,15 +51,20 @@ export default function ClientPortalNav({
   currentProjectSlug,
   projectName,
   invoiceNumber,
-  projects: initialProjects 
+  projects: initialProjects,
+  isAdmin = false,
+  companyId
 }: ClientPortalNavProps) {
   const [projects, setProjects] = useState<Project[]>(initialProjects || [])
-  const [loading, setLoading] = useState(!initialProjects)
+  const [companies, setCompanies] = useState<Company[]>([])
+  const [loadingProjects, setLoadingProjects] = useState(!initialProjects)
+  const [loadingCompanies, setLoadingCompanies] = useState(true)
 
   useEffect(() => {
     if (!initialProjects) {
       fetchProjects()
     }
+    fetchCompanies()
   }, [slug, initialProjects])
 
   const fetchProjects = async () => {
@@ -63,20 +77,25 @@ export default function ClientPortalNav({
     } catch (error) {
       console.error('Error fetching projects:', error)
     } finally {
-      setLoading(false)
+      setLoadingProjects(false)
+    }
+  }
+
+  const fetchCompanies = async () => {
+    try {
+      const response = await fetch('/api/client/portal/companies')
+      if (response.ok) {
+        const data = await response.json()
+        setCompanies(data)
+      }
+    } catch (error) {
+      console.error('Error fetching companies:', error)
+    } finally {
+      setLoadingCompanies(false)
     }
   }
 
   const currentProject = projects.find(p => p.slug === currentProjectSlug)
-
-  const navItems = [
-    {
-      key: 'home',
-      label: 'Home',
-      href: `/client/portal/${slug}`,
-      icon: Home,
-    },
-  ]
 
   return (
     <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 mb-6 print:hidden">
@@ -84,12 +103,46 @@ export default function ClientPortalNav({
         <div className="flex h-14 items-center justify-between">
           {/* Left side: Company name, Home, Projects dropdown */}
           <div className="flex items-center gap-6">
-            <a 
-              href={`/client/portal/${slug}`} 
-              className="font-semibold text-lg hover:text-primary transition-colors"
-            >
-              {companyName}
-            </a>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="font-semibold text-lg hover:text-primary transition-colors px-2 gap-1 h-auto">
+                  {companyName}
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                {loadingCompanies ? (
+                  <DropdownMenuItem disabled>Loading companies...</DropdownMenuItem>
+                ) : companies.length === 0 ? (
+                  <DropdownMenuItem disabled>No companies available</DropdownMenuItem>
+                ) : (
+                  <>
+                    {companies.map(company => (
+                      <DropdownMenuItem key={company.id} asChild>
+                        <a 
+                          href={`/client/portal/${company.slug}`}
+                          className={cn(
+                            slug === company.slug && 'bg-accent font-medium'
+                          )}
+                        >
+                          {company.company_name}
+                        </a>
+                      </DropdownMenuItem>
+                    ))}
+                    {isAdmin && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem asChild>
+                          <a href="/client/mgmt">
+                            All Companies
+                          </a>
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             <div className="flex items-center gap-1">
               {/* Home link */}
@@ -154,7 +207,7 @@ export default function ClientPortalNav({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-56">
-                  {loading ? (
+                  {loadingProjects ? (
                     <DropdownMenuItem disabled>Loading...</DropdownMenuItem>
                   ) : projects.length === 0 ? (
                     <DropdownMenuItem disabled>No projects</DropdownMenuItem>
@@ -176,6 +229,18 @@ export default function ClientPortalNav({
               </DropdownMenu>
             </div>
           </div>
+
+          {/* Right side: Manage Company button */}
+          {isAdmin && companyId && (
+            <div className="flex items-center">
+              <Button variant="outline" size="sm" asChild className="gap-2">
+                <a href={`/client/mgmt/${companyId}`}>
+                  <Settings className="h-4 w-4" />
+                  Manage Company
+                </a>
+              </Button>
+            </div>
+          )}
         </div>
       </div>
       

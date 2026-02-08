@@ -21,11 +21,12 @@ import TimeTrackingMonthSummaryRow from "./TimeTrackingMonthSummaryRow";
 interface ClientPortalInvoicePageProps {
     slug: string;
     companyName: string;
+    companyId: number;
     invoiceId: number;
     isAdmin: boolean;
 }
 
-export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, isAdmin }: ClientPortalInvoicePageProps) {
+export default function ClientPortalInvoicePage({ slug, companyName, companyId, invoiceId, isAdmin }: ClientPortalInvoicePageProps) {
     const [invoice, setInvoice] = useState<Invoice | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [isRefreshing, setIsRefreshing] = useState(false)
@@ -173,6 +174,8 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
                 <ClientPortalNav
                     slug={slug}
                     companyName={companyName}
+                    companyId={companyId}
+                    isAdmin={isAdmin}
                     currentPage="invoice"
                     invoiceNumber={invoice?.invoice_number ?? undefined}
                 />
@@ -203,6 +206,8 @@ export default function ClientPortalInvoicePage({ slug, companyName, invoiceId, 
             <ClientPortalNav
                 slug={slug}
                 companyName={companyName}
+                companyId={companyId}
+                isAdmin={isAdmin}
                 currentPage="invoice"
                 invoiceNumber={invoice.invoice_number ?? undefined}
             />

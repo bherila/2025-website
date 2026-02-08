@@ -1,8 +1,11 @@
 @extends('layouts.app')
 
 @section('content')
-<x-client-admin-header :company="$company" />
-<div id="ClientPortalTimePage" data-slug="{{ $slug }}" data-company-name="{{ $company->company_name }}"></div>
+<div id="ClientPortalTimePage" 
+     data-slug="{{ $slug }}" 
+     data-company-name="{{ $company->company_name }}"
+     data-company-id="{{ $company->id }}"
+     data-is-admin="{{ auth()->user()?->hasRole('admin') ? 'true' : 'false' }}"></div>
 @endsection
 
 @push('scripts')

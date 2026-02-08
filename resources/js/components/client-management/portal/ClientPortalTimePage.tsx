@@ -24,6 +24,8 @@ import { formatHours } from '@/lib/formatHours'
 interface ClientPortalTimePageProps {
   slug: string
   companyName: string
+  companyId: number
+  isAdmin?: boolean
 }
 
 function formatMonthYear(yearMonth: string): string {
@@ -39,7 +41,7 @@ function abbreviateName(name: string | null | undefined): string {
   return `${parts[0]} ${parts[1]![0]}.`
 }
 
-export default function ClientPortalTimePage({ slug, companyName }: ClientPortalTimePageProps) {
+export default function ClientPortalTimePage({ slug, companyName, companyId, isAdmin = false }: ClientPortalTimePageProps) {
   const [data, setData] = useState<TimeEntriesResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [newEntryModalOpen, setNewEntryModalOpen] = useState(false)
@@ -47,9 +49,6 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
   const [projects, setProjects] = useState<Project[]>([])
   const [companyUsers, setCompanyUsers] = useState<User[]>([])
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
-  const [currentUser, setCurrentUser] = useState<User | null>(null)
-
-  const isAdmin = currentUser?.id === 1 || currentUser?.user_role === 'Admin'
 
   useEffect(() => {
     document.title = `Time: ${companyName}`
@@ -59,7 +58,6 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
     fetchTimeEntries()
     fetchProjects()
     fetchCompanyUsers()
-    fetchCurrentUser()
   }, [slug])
 
   useEffect(() => {
@@ -68,18 +66,6 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
       setExpandedMonths(new Set([data.monthly_data[0].year_month]))
     }
   }, [data?.monthly_data])
-
-  const fetchCurrentUser = async () => {
-    try {
-      const response = await fetch('/api/user')
-      if (response.ok) {
-        const data = await response.json()
-        setCurrentUser(data)
-      }
-    } catch (error) {
-      console.error('Error fetching current user:', error)
-    }
-  }
 
   const fetchTimeEntries = async () => {
     try {
@@ -183,7 +169,7 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
     return (
       <TooltipProvider>
         <>
-          <ClientPortalNav slug={slug} companyName={companyName} currentPage="time" />
+          <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="time" />
           <div className="container mx-auto px-8 max-w-6xl">
             <Skeleton className="h-10 w-64 mb-6" />
             <Skeleton className="h-24 w-full mb-6" />
@@ -200,7 +186,7 @@ export default function ClientPortalTimePage({ slug, companyName }: ClientPortal
   return (
     <TooltipProvider>
       <>
-        <ClientPortalNav slug={slug} companyName={companyName} currentPage="time" />
+        <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="time" />
         <div className="container mx-auto px-8 max-w-6xl">
           <div className="mb-6">
             <div className="flex justify-between items-center">

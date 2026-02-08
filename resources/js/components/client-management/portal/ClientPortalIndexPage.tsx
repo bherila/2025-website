@@ -20,6 +20,7 @@ import NewProjectModal from './NewProjectModal'
 interface ClientPortalIndexPageProps {
   slug: string
   companyName: string
+  companyId: number
   isAdmin?: boolean
   initialProjects?: Project[]
   initialAgreements?: Agreement[]
@@ -28,6 +29,7 @@ interface ClientPortalIndexPageProps {
 export default function ClientPortalIndexPage({ 
   slug, 
   companyName, 
+  companyId,
   isAdmin = false,
   initialProjects = [],
   initialAgreements = []
@@ -67,6 +69,8 @@ export default function ClientPortalIndexPage({
       <ClientPortalNav 
         slug={slug} 
         companyName={companyName} 
+        companyId={companyId}
+        isAdmin={isAdmin}
         currentPage="home"
         projects={projects}
       />
