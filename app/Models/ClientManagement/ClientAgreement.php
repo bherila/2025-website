@@ -141,11 +141,17 @@ class ClientAgreement extends Model
     protected static function booted(): void
     {
         static::saving(function (ClientAgreement $agreement) {
+            $retainerHours = (float) $agreement->monthly_retainer_hours;
+
             // Set default catch_up_threshold_hours if not set
             if ($agreement->catch_up_threshold_hours === null) {
                 // Default to 1.0, but cap at monthly_retainer_hours
-                $retainerHours = (float) $agreement->monthly_retainer_hours;
                 $agreement->catch_up_threshold_hours = min(1.0, $retainerHours);
+            }
+            
+            // Automatically cap if threshold exceeds retainer hours
+            if ($agreement->catch_up_threshold_hours > $retainerHours) {
+                $agreement->catch_up_threshold_hours = $retainerHours;
             }
             
             // Validate on save

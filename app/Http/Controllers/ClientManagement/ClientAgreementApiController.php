@@ -57,8 +57,11 @@ class ClientAgreementApiController extends Controller
                 'nullable',
                 'numeric',
                 'min:0',
-                function ($attribute, $value, $fail) use ($request) {
-                    $retainerHours = $request->input('monthly_retainer_hours', 0);
+                function ($attribute, $value, $fail) use ($request, $agreement) {
+                    $retainerHours = $request->has('monthly_retainer_hours') 
+                        ? $request->input('monthly_retainer_hours') 
+                        : $agreement->monthly_retainer_hours;
+                    
                     if ($value > $retainerHours) {
                         $fail("The catch-up threshold hours cannot exceed monthly retainer hours ({$retainerHours}).");
                     }
