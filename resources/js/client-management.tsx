@@ -1,8 +1,9 @@
 import { createRoot } from 'react-dom/client'
-import ClientManagementIndexPage from '@/components/client-management/ClientManagementIndexPage'
-import ClientManagementCreatePage from '@/components/client-management/ClientManagementCreatePage'
-import ClientManagementShowPage from '@/components/client-management/ClientManagementShowPage'
+
 import ClientAgreementShowPage from '@/components/client-management/ClientAgreementShowPage'
+import ClientManagementCreatePage from '@/components/client-management/ClientManagementCreatePage'
+import ClientManagementIndexPage from '@/components/client-management/ClientManagementIndexPage'
+import ClientManagementShowPage from '@/components/client-management/ClientManagementShowPage'
 
 document.addEventListener('DOMContentLoaded', () => {
   const indexDiv = document.getElementById('ClientManagementIndexPage')

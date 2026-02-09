@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react'
+import { ChevronDown, ChevronUp, Clock,DollarSign, Plus } from 'lucide-react'
+import { useEffect,useState } from 'react'
+
+import ClientAdminActions from '@/components/client-management/ClientAdminActions'
+import InvitePeopleModal from '@/components/client-management/InvitePeopleModal'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ChevronDown, ChevronUp, Plus, DollarSign, Clock } from 'lucide-react'
-import InvitePeopleModal from '@/components/client-management/InvitePeopleModal'
-import ClientAdminActions from '@/components/client-management/ClientAdminActions'
-import type { User, ClientCompany } from '@/types/client-management/common'
+import type { ClientCompany } from '@/types/client-management/common'
 
 function formatLastLogin(lastLogin: string | null | undefined): string {
   if (!lastLogin) return 'never logged in'

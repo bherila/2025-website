@@ -1,16 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from '@/components/ui/dropdown-menu'
-import { cn } from '@/lib/utils'
-import { Home, FolderOpen, Clock, FileText, ChevronDown, Receipt, Settings } from 'lucide-react'
+import { ChevronDown, Clock, FileText, FolderOpen, Home, Receipt, Settings } from 'lucide-react'
+import { useCallback, useEffect,useState } from 'react'
+
 import {
     Breadcrumb,
     BreadcrumbItem,
@@ -19,6 +11,15 @@ import {
     BreadcrumbPage,
     BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { cn } from '@/lib/utils'
 
 interface Project {
   id: number
@@ -60,14 +61,7 @@ export default function ClientPortalNav({
   const [loadingProjects, setLoadingProjects] = useState(!initialProjects)
   const [loadingCompanies, setLoadingCompanies] = useState(true)
 
-  useEffect(() => {
-    if (!initialProjects) {
-      fetchProjects()
-    }
-    fetchCompanies()
-  }, [slug, initialProjects])
-
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
     try {
       const response = await fetch(`/api/client/portal/${slug}/projects`)
       if (response.ok) {
@@ -79,9 +73,9 @@ export default function ClientPortalNav({
     } finally {
       setLoadingProjects(false)
     }
-  }
+  }, [slug])
 
-  const fetchCompanies = async () => {
+  const fetchCompanies = useCallback(async () => {
     try {
       const response = await fetch('/api/client/portal/companies')
       if (response.ok) {
@@ -93,7 +87,14 @@ export default function ClientPortalNav({
     } finally {
       setLoadingCompanies(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (!initialProjects) {
+      fetchProjects()
+    }
+    fetchCompanies()
+  }, [initialProjects, fetchProjects, fetchCompanies])
 
   const currentProject = projects.find(p => p.slug === currentProjectSlug)
 

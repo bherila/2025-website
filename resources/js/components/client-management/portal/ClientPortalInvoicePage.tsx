@@ -1,21 +1,21 @@
+import { format } from 'date-fns'
+import { ChevronLeft, ChevronRight, Pencil } from "lucide-react";
+import React, { useCallback, useEffect, useState } from "react";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { ClientInvoicePayment, Invoice, InvoiceLine } from "@/types/client-management";
-import { format } from 'date-fns'
-import { ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-react";
-import React, { useEffect, useState } from "react";
-
 import { fetchWrapper } from "@/fetchWrapper";
 import { formatHours } from "@/lib/formatHours";
+import type { ClientInvoicePayment, Invoice, InvoiceLine } from "@/types/client-management";
 
 import AddPaymentModal from "./AddPaymentModal";
+import ClientPortalInvoiceActionButtonRow from "./ClientPortalInvoiceActionButtonRow";
 import ClientPortalNav from "./ClientPortalNav";
 import LineItemEditModal from "./LineItemEditModal";
-import ClientPortalInvoiceActionButtonRow from "./ClientPortalInvoiceActionButtonRow";
 import TimeTrackingMonthSummaryRow from "./TimeTrackingMonthSummaryRow";
 
 interface ClientPortalInvoicePageProps {
@@ -36,7 +36,7 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
     const [selectedPayment, setSelectedPayment] = useState<ClientInvoicePayment | null>(null)
     const [showDetail, setShowDetail] = useState(true)
 
-    const fetchInvoice = async (isRefresh = false) => {
+    const fetchInvoice = useCallback(async (isRefresh = false) => {
         if (isRefresh) {
             setIsRefreshing(true)
         } else {
@@ -54,11 +54,11 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                 setIsLoading(false)
             }
         }
-    }
+    }, [slug, invoiceId])
 
     useEffect(() => {
         fetchInvoice()
-    }, [invoiceId])
+    }, [fetchInvoice])
 
     // Update page title with invoice number
     useEffect(() => {

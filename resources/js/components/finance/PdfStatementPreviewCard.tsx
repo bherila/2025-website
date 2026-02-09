@@ -1,7 +1,9 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useState } from 'react'
+
 import { Button } from '@/components/ui/button'
-import { StatementDetailsModal, type StatementInfo, type StatementDetail } from './StatementDetailsModal'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+
+import { type StatementDetail,StatementDetailsModal, type StatementInfo } from './StatementDetailsModal'
 
 interface PdfStatementPreviewCardProps {
   statementInfo: StatementInfo | undefined

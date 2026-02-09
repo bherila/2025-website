@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react'
-import { fetchWrapper } from '@/fetchWrapper'
+import React, { useEffect, useMemo,useState } from 'react'
+
+import { Alert, AlertDescription,AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter,DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+import { Table, TableBody, TableCell,TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
-import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
+import { fetchWrapper } from '@/fetchWrapper'
 
 interface ProductKey {
   id: number
@@ -90,7 +91,7 @@ const LicenseManager: React.FC = () => {
   }
 
   const processedRows = useMemo(() => {
-    let filteredRows = productKeys.filter(
+    const filteredRows = productKeys.filter(
       (row) =>
         (!productNameFilter || (row.product_name || '').toLowerCase().includes(productNameFilter.toLowerCase())) &&
         (!productKeyFilter || (row.product_key || '').toLowerCase().includes(productKeyFilter.toLowerCase())) &&

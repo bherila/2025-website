@@ -1,6 +1,6 @@
+import { ArrowUp } from 'lucide-react';
 import * as React from 'react';
 import { useEffect, useState } from 'react';
-import { ArrowUp } from 'lucide-react';
 
 export default function BackToTop() {
   const [isVisible, setIsVisible] = useState(false);

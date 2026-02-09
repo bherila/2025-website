@@ -1,7 +1,7 @@
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
+import { parseOptionDescription } from '@/data/finance/StockOptionUtil'
 import { parseDate } from '@/lib/DateHelper'
 import { splitDelimitedText } from '@/lib/splitDelimitedText'
-import { parseOptionDescription } from '@/data/finance/StockOptionUtil'
 
 interface FidelityColumnMapping {
   dateCol: number

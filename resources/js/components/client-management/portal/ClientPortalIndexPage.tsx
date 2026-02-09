@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react'
-
 import { Clock, FolderOpen, Plus } from 'lucide-react'
+import { useCallback,useEffect, useState } from 'react'
 
 import {
   DeleteFileModal,
@@ -46,6 +45,15 @@ export default function ClientPortalIndexPage({
     deleteUrlPattern: (fileId) => `/api/client/portal/${slug}/files/${fileId}`,
   })
 
+  const fetchTimeEntries = useCallback(async () => {
+    try {
+      // Preload time entries into cache (data not directly used here)
+      await fetch(`/api/client/portal/${slug}/time-entries`)
+    } catch (error) {
+      console.error('Error preloading time entries:', error)
+    }
+  }, [slug])
+
   useEffect(() => {
     document.title = `Client Home: ${companyName}`
   }, [companyName])
@@ -53,16 +61,7 @@ export default function ClientPortalIndexPage({
   useEffect(() => {
     fetchTimeEntries()
     fileManager.fetchFiles()
-  }, [slug])
-
-  const fetchTimeEntries = async () => {
-    try {
-      // Preload time entries into cache (data not directly used here)
-      await fetch(`/api/client/portal/${slug}/time-entries`)
-    } catch (error) {
-      console.error('Error preloading time entries:', error)
-    }
-  }
+  }, [fetchTimeEntries, fileManager])
 
   return (
     <>

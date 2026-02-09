@@ -1,16 +1,18 @@
-import { useState, useEffect } from 'react'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { AlertCircle, Check, FileText, HelpCircle } from 'lucide-react'
+import { useCallback, useEffect,useState } from 'react'
+
+import { DeleteFileModal, FileHistoryModal, FileList, FileUploadButton, useFileManagement } from '@/components/shared/FileManager'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardFooter,CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { AlertCircle, FileText, Check, HelpCircle } from 'lucide-react'
-import ClientPortalNav from './ClientPortalNav'
-import { FileList, FileUploadButton, FileHistoryModal, DeleteFileModal, useFileManagement } from '@/components/shared/FileManager'
 import type { ClientAgreement } from '@/types/client-management/client-agreement'
+
+import ClientPortalNav from './ClientPortalNav'
 
 interface ClientPortalAgreementPageProps {
   slug: string
@@ -40,19 +42,7 @@ export default function ClientPortalAgreementPage({ slug, companyName, companyId
     deleteUrlPattern: (fileId) => `/api/client/portal/${slug}/agreements/${agreementId}/files/${fileId}`,
   })
 
-  useEffect(() => {
-    fetchAgreement()
-    fileManager.fetchFiles()
-    fetchInvoices()
-  }, [agreementId])
-
-  useEffect(() => {
-    if (agreement) {
-      document.title = `Agreement | Client Portal`
-    }
-  }, [agreement])
-
-  const fetchAgreement = async () => {
+  const fetchAgreement = useCallback(async () => {
     try {
       const response = await fetch(`/api/client/portal/${slug}/agreements/${agreementId}`)
       if (response.ok) {
@@ -67,9 +57,9 @@ export default function ClientPortalAgreementPage({ slug, companyName, companyId
     } finally {
       setLoading(false)
     }
-  }
+  }, [slug, agreementId])
 
-  const fetchInvoices = async () => {
+  const fetchInvoices = useCallback(async () => {
     try {
       const response = await fetch(`/api/client/portal/${slug}/invoices`)
       if (response.ok) {
@@ -83,7 +73,19 @@ export default function ClientPortalAgreementPage({ slug, companyName, companyId
     } finally {
       setLoadingInvoices(false)
     }
-  }
+  }, [slug, agreementId])
+
+  useEffect(() => {
+    fetchAgreement()
+    fileManager.fetchFiles()
+    fetchInvoices()
+  }, [agreementId, fetchAgreement, fetchInvoices, fileManager])
+
+  useEffect(() => {
+    if (agreement) {
+      document.title = `Agreement | Client Portal`
+    }
+  }, [agreement])
 
   const handleSign = async () => {
     if (!signName.trim() || !signTitle.trim()) {

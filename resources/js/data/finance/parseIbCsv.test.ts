@@ -1,5 +1,6 @@
-import { parseIbCsv, parseIbCsvTrades, isIbCsvFormat } from './parseIbCsv'
-import { parseMultiSectionCsv, getSectionNames } from '@/lib/multiCsvParser'
+import { getSectionNames,parseMultiSectionCsv } from '@/lib/multiCsvParser'
+
+import { isIbCsvFormat,parseIbCsv, parseIbCsvTrades } from './parseIbCsv'
 
 describe('parseIbCsv function', () => {
   describe('multiCsvParser', () => {

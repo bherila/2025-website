@@ -1,21 +1,12 @@
 'use client'
 
-import { useState, useRef } from 'react'
-
 import { format } from 'date-fns'
-import { Download, FileIcon, History, Loader2, Trash2, Upload, X } from 'lucide-react'
+import { Download, FileIcon, History, Loader2, Trash2, Upload } from 'lucide-react'
+import { useRef,useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import {
   Dialog,
   DialogContent,
@@ -24,6 +15,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
 import type { DownloadHistoryEntry, DownloadResponse, FileHistoryResponse, FileRecord, UploadUrlResponse } from '@/types/files'
 

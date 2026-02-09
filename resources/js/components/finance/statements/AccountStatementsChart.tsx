@@ -1,6 +1,6 @@
 'use client'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { format } from 'date-fns'
+import { CartesianGrid, Line, LineChart, ResponsiveContainer,Tooltip, XAxis, YAxis } from 'recharts'
 
 export default function AccountStatementsChart({ balanceHistory }: { balanceHistory: [number, number][] }) {
   const data = balanceHistory.map(([date, balance]) => ({

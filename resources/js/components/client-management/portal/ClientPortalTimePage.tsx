@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react'
+import { ChevronDown, ChevronRight, Clock, Download, Info,Pencil, Plus } from 'lucide-react'
+import { useCallback, useEffect,useState } from 'react'
+
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import SummaryTile from '@/components/ui/summary-tile'
 import {
   Table,
   TableBody,
@@ -11,15 +14,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Plus, Clock, Pencil, ChevronDown, ChevronRight, Download, Info } from 'lucide-react'
-import NewTimeEntryModal from './NewTimeEntryModal'
-import ClientPortalNav from './ClientPortalNav'
-import type { User, Project } from '@/types/client-management/common'
-import type { TimeEntry, TimeEntriesResponse } from '@/types/client-management/time-entry'
-import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
-import SummaryTile from '@/components/ui/summary-tile'
-import TimeTrackingMonthSummaryRow from './TimeTrackingMonthSummaryRow'
+import {TooltipProvider } from '@/components/ui/tooltip'
 import { formatHours } from '@/lib/formatHours'
+import type { Project,User } from '@/types/client-management/common'
+import type { TimeEntriesResponse,TimeEntry } from '@/types/client-management/time-entry'
+
+import ClientPortalNav from './ClientPortalNav'
+import NewTimeEntryModal from './NewTimeEntryModal'
+import TimeTrackingMonthSummaryRow from './TimeTrackingMonthSummaryRow'
 
 interface ClientPortalTimePageProps {
   slug: string
@@ -54,20 +56,7 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, isA
     document.title = `Time: ${companyName}`
   }, [companyName])
 
-  useEffect(() => {
-    fetchTimeEntries()
-    fetchProjects()
-    fetchCompanyUsers()
-  }, [slug])
-
-  useEffect(() => {
-    // Expand first month by default
-    if (data?.monthly_data && data.monthly_data.length > 0 && data.monthly_data[0]) {
-      setExpandedMonths(new Set([data.monthly_data[0].year_month]))
-    }
-  }, [data?.monthly_data])
-
-  const fetchTimeEntries = async () => {
+  const fetchTimeEntries = useCallback(async () => {
     try {
       const response = await fetch(`/api/client/portal/${slug}/time-entries`)
       if (response.ok) {
@@ -79,9 +68,9 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, isA
     } finally {
       setLoading(false)
     }
-  }
+  }, [slug])
 
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
     try {
       const response = await fetch(`/api/client/portal/${slug}/projects`)
       if (response.ok) {
@@ -91,9 +80,9 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, isA
     } catch (error) {
       console.error('Error fetching projects:', error)
     }
-  }
+  }, [slug])
 
-  const fetchCompanyUsers = async () => {
+  const fetchCompanyUsers = useCallback(async () => {
     try {
       const response = await fetch(`/api/client/portal/${slug}`)
       if (response.ok) {
@@ -103,7 +92,20 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, isA
     } catch (error) {
       console.error('Error fetching company users:', error)
     }
-  }
+  }, [slug])
+
+  useEffect(() => {
+    fetchTimeEntries()
+    fetchProjects()
+    fetchCompanyUsers()
+  }, [fetchTimeEntries, fetchProjects, fetchCompanyUsers])
+
+  useEffect(() => {
+    // Expand first month by default
+    if (data?.monthly_data && data.monthly_data.length > 0 && data.monthly_data[0]) {
+      setExpandedMonths(new Set([data.monthly_data[0].year_month]))
+    }
+  }, [data?.monthly_data])
 
   const openEditModal = (entry: TimeEntry) => {
     if (!isAdmin) return

@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react'
-
 import { format } from 'date-fns'
 import { Calendar, Check, EyeOff, Plus, Star } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
 
 import {
   DeleteFileModal,
@@ -71,13 +70,7 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
     document.title = `Project: ${projectName} | ${companyName}`
   }, [projectName, companyName])
 
-  useEffect(() => {
-    fetchTasks()
-    fetchCompanyUsers()
-    fileManager.fetchFiles()
-  }, [slug, projectSlug])
-
-  const fetchTasks = async () => {
+  const fetchTasks = useCallback(async () => {
     try {
       const response = await fetch(`/api/client/portal/${slug}/projects/${projectSlug}/tasks`)
       if (response.ok) {
@@ -89,9 +82,9 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
     } finally {
       setLoading(false)
     }
-  }
+  }, [slug, projectSlug])
 
-  const fetchCompanyUsers = async () => {
+  const fetchCompanyUsers = useCallback(async () => {
     try {
       const response = await fetch(`/api/client/portal/${slug}`)
       if (response.ok) {
@@ -101,7 +94,13 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
     } catch (error) {
       console.error('Error fetching company users:', error)
     }
-  }
+  }, [slug])
+
+  useEffect(() => {
+    fetchTasks()
+    fetchCompanyUsers()
+    fileManager.fetchFiles()
+  }, [fetchTasks, fetchCompanyUsers, fileManager])
 
   const toggleTaskComplete = async (task: Task) => {
     setTogglingTasks(prev => new Set(prev).add(task.id))

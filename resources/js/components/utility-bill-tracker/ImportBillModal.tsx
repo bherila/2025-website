@@ -1,6 +1,7 @@
+import { CheckCircle, FileText, Loader2, Upload, X,XCircle } from 'lucide-react';
 import * as React from 'react';
-import { useState, useRef } from 'react';
-import { Upload, FileText, Loader2, CheckCircle, XCircle, X } from 'lucide-react';
+import { useRef,useState } from 'react';
+
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';

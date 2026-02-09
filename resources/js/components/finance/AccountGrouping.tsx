@@ -1,10 +1,12 @@
-import { Badge } from '@/components/ui/badge'
-import { formatDistance } from 'date-fns'
-import { TableHeader, TableRow, TableHead, TableBody, TableFooter, TableCell } from '@/components/ui/table'
-import { Table } from '@/components/ui/table'
 import currency from 'currency.js'
-import EditBalanceDisplay from './EditBalanceDisplay'
+import { formatDistance } from 'date-fns'
+
 import Link from '@/components/link'
+import { Badge } from '@/components/ui/badge'
+import { TableBody, TableCell,TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Table } from '@/components/ui/table'
+
+import EditBalanceDisplay from './EditBalanceDisplay'
 
 interface AccountGroupingItem {
   when_closed: Date | null

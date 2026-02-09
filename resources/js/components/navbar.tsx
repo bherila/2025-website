@@ -1,6 +1,6 @@
+import { ChevronDown, Laptop, Menu, Moon, Sun, X } from 'lucide-react';
 import * as React from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { Laptop, Moon, Sun, ChevronDown, Menu, X } from 'lucide-react';
 
 type ClientCompany = {
   id: number;
@@ -295,7 +295,7 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies }: Navb
         <a
           href='https://ac.bherila.net'
           target='_blank'
-          rel='nofollow noopener'
+          rel="nofollow noopener noreferrer"
           className='hidden sm:inline-block px-3 py-1.5 rounded border border-gray-200 dark:border-[#3E3E3A] hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm'
         >
           ActiveCollab

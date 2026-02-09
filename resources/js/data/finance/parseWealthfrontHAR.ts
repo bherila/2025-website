@@ -1,6 +1,7 @@
+import { z } from 'zod'
+
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { parseDate } from '@/lib/DateHelper'
-import { z } from 'zod'
 
 export function parseWealthfrontHAR(text: string): AccountLineItem[] {
   const data: AccountLineItem[] = []

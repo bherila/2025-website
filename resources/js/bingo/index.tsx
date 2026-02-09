@@ -1,11 +1,13 @@
 import React, { useMemo, useState } from 'react'
 import ReactDOM from 'react-dom/client'
+
 import Container from '@/components/container'
 import MainTitle from '@/components/MainTitle'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+
+import BingoCard from './BingoCard'
 import type { BingoData } from './BingoForm'
 import BingoForm from './BingoForm'
-import BingoCard from './BingoCard'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 function createRandomSquareArray<T>(N: number, L: T[]): T[][] {
   if (L.length < N * N) {

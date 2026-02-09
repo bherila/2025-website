@@ -1,25 +1,20 @@
-import { useState, useEffect } from 'react'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
 import { 
-  Plus, 
-  Trash2, 
-  Receipt, 
-  DollarSign, 
-  ExternalLink, 
   CheckCircle2,
   Clock,
+  DollarSign, 
+  ExternalLink, 
   Link as LinkIcon,
-  Unlink
+  Plus, 
+  Receipt, 
+  Trash2
 } from 'lucide-react'
-import ClientPortalNav from './ClientPortalNav'
-import NewExpenseModal from './NewExpenseModal'
-import DeleteExpenseDialog from './DeleteExpenseDialog'
+import { useCallback, useEffect,useState } from 'react'
+
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import SummaryTile from '@/components/ui/summary-tile'
-import type { Project } from '@/types/client-management/common'
-import type { ClientExpense, ExpensesResponse } from '@/types/client-management/expense'
 import {
   Table,
   TableBody,
@@ -28,6 +23,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import type { Project } from '@/types/client-management/common'
+import type { ClientExpense, ExpensesResponse } from '@/types/client-management/expense'
+
+import ClientPortalNav from './ClientPortalNav'
+import DeleteExpenseDialog from './DeleteExpenseDialog'
+import NewExpenseModal from './NewExpenseModal'
 
 interface ClientPortalExpensesPageProps {
   slug: string
@@ -64,12 +65,7 @@ export default function ClientPortalExpensesPage({ slug, companyName, companyId,
     document.title = `Expenses: ${companyName}`
   }, [companyName])
 
-  useEffect(() => {
-    fetchExpenses()
-    fetchProjects()
-  }, [slug, companyId])
-
-  const fetchExpenses = async () => {
+  const fetchExpenses = useCallback(async () => {
     try {
       const response = await fetch(`/api/client/mgmt/companies/${companyId}/expenses`)
       if (response.ok) {
@@ -81,9 +77,9 @@ export default function ClientPortalExpensesPage({ slug, companyName, companyId,
     } finally {
       setLoading(false)
     }
-  }
+  }, [companyId])
 
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
     try {
       const response = await fetch(`/api/client/portal/${slug}/projects`)
       if (response.ok) {
@@ -93,7 +89,12 @@ export default function ClientPortalExpensesPage({ slug, companyName, companyId,
     } catch (error) {
       console.error('Error fetching projects:', error)
     }
-  }
+  }, [slug])
+
+  useEffect(() => {
+    fetchExpenses()
+    fetchProjects()
+  }, [fetchExpenses, fetchProjects])
 
   const handleMarkReimbursed = async (expense: ClientExpense) => {
     try {

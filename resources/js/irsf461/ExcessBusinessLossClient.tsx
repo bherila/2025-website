@@ -1,12 +1,14 @@
 'use client'
-import React, { useState } from 'react'
-import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
 import currency from 'currency.js'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
+import React, { useState } from 'react'
+
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Table, TableBody, TableCell,TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { formatFriendlyAmount } from '@/lib/formatCurrency'
 import { DialogForm1040View } from '@/lib/tax/form1040'
 import { DialogSchedule1View } from '@/lib/tax/schedule1'
-import { formatFriendlyAmount } from '@/lib/formatCurrency'
+
 import { calculateExcessBusinessLoss } from './ExcessBusinessLossCalculation'
 
 const TAX_YEARS = 11
@@ -96,7 +98,7 @@ export default function ExcessBusinessLossClient() {
   }
 
   // Track carryforward NOL and disallowed loss
-  let carryforward = 0
+  const carryforward = 0
   const tableRows = calculateExcessBusinessLoss({ rows, isSingle, override_f461_line15: f461_line15 })
   return (
     <>

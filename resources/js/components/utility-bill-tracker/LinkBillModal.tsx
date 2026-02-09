@@ -1,12 +1,13 @@
+import { CheckCircle,Link2, Loader2, Search, Unlink } from 'lucide-react';
 import * as React from 'react';
-import { useState, useEffect } from 'react';
-import { Loader2, Search, Link2, Unlink, CheckCircle } from 'lucide-react';
+import { useCallback, useEffect,useState } from 'react';
+
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import type { UtilityBill, LinkableTransaction } from '@/types/utility-bill-tracker';
 import { formatDate } from '@/lib/DateHelper';
 import { formatCurrency } from '@/lib/formatCurrency';
+import type { LinkableTransaction,UtilityBill } from '@/types/utility-bill-tracker';
 
 interface LinkBillModalProps {
   open: boolean;
@@ -23,7 +24,7 @@ export function LinkBillModal({ open, onOpenChange, accountId, bill, onLinked }:
   const [transactions, setTransactions] = useState<LinkableTransaction[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchLinkableTransactions = async () => {
+  const fetchLinkableTransactions = useCallback(async () => {
     if (!bill) return;
     
     setLoading(true);
@@ -45,13 +46,13 @@ export function LinkBillModal({ open, onOpenChange, accountId, bill, onLinked }:
     } finally {
       setLoading(false);
     }
-  };
+  }, [accountId, bill]);
 
   useEffect(() => {
     if (open && bill) {
       fetchLinkableTransactions();
     }
-  }, [open, bill?.id]);
+  }, [open, bill, fetchLinkableTransactions]);
 
   const handleLink = async (tId: number) => {
     if (!bill) return;

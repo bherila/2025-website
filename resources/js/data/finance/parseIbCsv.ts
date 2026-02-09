@@ -10,12 +10,13 @@
  * - Trades section contains stock and options transactions
  * - Financial Instrument Information section contains option details
  */
-import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
-import { parseMultiSectionCsv, getSection, type ParsedMultiCsv } from '@/lib/multiCsvParser'
-import { parseDate } from '@/lib/DateHelper'
-import { parseOptionDescription } from '@/data/finance/StockOptionUtil'
 import dayjs from 'dayjs'
 import customParseFormat from 'dayjs/plugin/customParseFormat'
+
+import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
+import { parseOptionDescription } from '@/data/finance/StockOptionUtil'
+import { parseDate } from '@/lib/DateHelper'
+import { getSection, type ParsedMultiCsv,parseMultiSectionCsv } from '@/lib/multiCsvParser'
 
 dayjs.extend(customParseFormat)
 
@@ -308,9 +309,9 @@ function parseTradeRow(
   const priceStr = row['T. Price'] || '0'
   const commFee = row['Comm/Fee'] || '0'
   const proceeds = row['Proceeds'] || '0'
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   const realizedPL = row['Realized P/L'] || '0'
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   const mtmPL = row['MTM P/L'] || '0'
   const codes = row['Code'] || ''
 
@@ -522,7 +523,7 @@ function parseStatementInfo(parsed: ParsedMultiCsv): IbStatementInfo {
         case 'BrokerName':
           info.brokerName = fieldValue
           break
-        case 'Period':
+        case 'Period': {
           info.period = fieldValue
           // Parse period dates: "October 1, 2025 - October 31, 2025"
           const periodMatch = fieldValue.match(/^(.+?)\s*-\s*(.+)$/)
@@ -533,6 +534,7 @@ function parseStatementInfo(parsed: ParsedMultiCsv): IbStatementInfo {
             info.periodEnd = endDate?.formatYMD() ?? null
           }
           break
+        }
         case 'WhenGenerated':
           info.whenGenerated = fieldValue
           break

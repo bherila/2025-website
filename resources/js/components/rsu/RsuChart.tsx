@@ -1,9 +1,10 @@
 'use client'
 
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import type { IAward } from '@/types/finance'
-import _ from 'lodash'
 import currency from 'currency.js'
+import _ from 'lodash'
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer,Tooltip, XAxis, YAxis } from 'recharts'
+
+import type { IAward } from '@/types/finance'
 
 const colors = ['#D32F2F', '#FF8F00', '#FFD600', '#388E3C', '#1976D2', '#7B1FA2']
 

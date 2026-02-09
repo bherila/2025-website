@@ -1,8 +1,9 @@
 import React from 'react'
-import { formatFriendlyAmount } from '@/lib/formatCurrency'
-import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Table, TableBody, TableCell,TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { formatFriendlyAmount } from '@/lib/formatCurrency'
 
 export interface ScheduleDData {
   // Part I - Short-Term Capital Gains and Losses

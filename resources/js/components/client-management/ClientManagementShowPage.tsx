@@ -1,15 +1,17 @@
-import { useState, useEffect } from 'react'
+import { ArrowLeft, ExternalLink, FileText,X } from 'lucide-react'
+import { useCallback,useEffect,useState } from 'react'
+
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Badge } from '@/components/ui/badge'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { X, ArrowLeft, ExternalLink, FileText } from 'lucide-react'
+import type {ClientCompany } from '@/types/client-management/common'
+
 import ClientAdminActions from './ClientAdminActions'
-import type { User, ClientCompany, Agreement } from '@/types/client-management/common'
 
 interface ClientManagementShowPageProps {
   companyId: number
@@ -46,11 +48,7 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
     }
   }, [alertInfo])
 
-  useEffect(() => {
-    fetchCompany()
-  }, [companyId])
-
-  const fetchCompany = async () => {
+  const fetchCompany = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetch(`/api/client/mgmt/companies/${companyId}`);
@@ -77,7 +75,11 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
     } finally {
       setLoading(false)
     }
-  }
+  }, [companyId])
+
+  useEffect(() => {
+    fetchCompany()
+  }, [fetchCompany])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

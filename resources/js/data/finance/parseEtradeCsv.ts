@@ -1,6 +1,8 @@
+import { z } from 'zod'
+
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { parseDate } from '@/lib/DateHelper'
-import { z } from 'zod'
+
 import { parseOptionDescription } from './StockOptionUtil'
 
 export function parseEtradeCsv(text: string): AccountLineItem[] {
@@ -40,7 +42,7 @@ export function parseEtradeCsv(text: string): AccountLineItem[] {
     if (!rawLine || !rawLine.trim()) continue
 
     // Simple CSV split (inputs here don't contain embedded commas with quotes in examples)
-    const cols = rawLine.split(',').map((c) => c.replace(/\"/g, '').trim())
+    const cols = rawLine.split(',').map((c) => c.replace(/"/g, '').trim())
 
     try {
       if (headerType === 'v1') {
@@ -60,7 +62,7 @@ export function parseEtradeCsv(text: string): AccountLineItem[] {
       } else if (headerType === 'v2') {
         // Expected columns: TransactionDate,TransactionType,SecurityType,Symbol,Quantity,Amount,Price,Commission,Description
         if (cols.length < 9) continue
-        let symbolCandidate = cols[3] || ''
+        const symbolCandidate = cols[3] || ''
         let symbol: string | undefined = symbolCandidate || undefined
         if (symbol && (symbol.length > 20 || symbol.includes(' '))) {
           const opt = parseOptionDescription(symbolCandidate) || parseOptionDescription(cols[8] || '')

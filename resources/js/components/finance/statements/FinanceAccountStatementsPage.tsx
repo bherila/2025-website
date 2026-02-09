@@ -1,31 +1,31 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
-import { fetchWrapper } from '@/fetchWrapper'
-import { Spinner } from '@/components/ui/spinner'
-import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
-import AccountStatementsChart from './AccountStatementsChart'
+import { Paperclip, Pencil,Trash2 as Delete } from 'lucide-react'
+import { useCallback,useEffect, useState } from 'react'
+
+import { DeleteFileModal, FileList, FileUploadButton, useFileManagement } from '@/components/shared/FileManager'
 import {
   AlertDialog,
-  AlertDialogTrigger,
-  AlertDialogContent,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogCancel,
   AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
-  DialogTitle,
   DialogDescription,
+  DialogTitle,
 } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Trash2 as Delete, Paperclip, Pencil } from 'lucide-react'
+import { Spinner } from '@/components/ui/spinner'
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { FileList, FileUploadButton, DeleteFileModal, useFileManagement } from '@/components/shared/FileManager'
+import { fetchWrapper } from '@/fetchWrapper'
 
-import { StatementDetailsModal, type StatementInfo, type StatementDetail } from '../StatementDetailsModal';
+import { type StatementDetail,StatementDetailsModal, type StatementInfo } from '../StatementDetailsModal';
+import AccountStatementsChart from './AccountStatementsChart'
 import AllStatementsModal from './AllStatementsModal';
 
 interface StatementSnapshot {
@@ -69,21 +69,22 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
     deleteUrlPattern: (fileId) => `/api/finance/${id}/files/${fileId}`,
   })
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const fetchedData = await fetchWrapper.get(`/api/finance/${id}/balance-timeseries`)
-        setStatements(fetchedData)
-        setIsLoading(false)
-      } catch (error) {
-        console.error('Error fetching statements:', error)
-        setStatements([])
-        setIsLoading(false)
-      }
+  const fetchData = useCallback(async () => {
+    try {
+      const fetchedData = await fetchWrapper.get(`/api/finance/${id}/balance-timeseries`)
+      setStatements(fetchedData)
+      setIsLoading(false)
+    } catch (error) {
+      console.error('Error fetching statements:', error)
+      setStatements([])
+      setIsLoading(false)
     }
+  }, [id])
+
+  useEffect(() => {
     fetchData()
     fileManager.fetchFiles()
-  }, [id, fetchKey])
+  }, [fetchData, fetchKey, fileManager])
 
   const statementHistory = statements?.map((statement, index) => {
     const prev = statements[index - 1]

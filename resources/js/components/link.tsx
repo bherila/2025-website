@@ -1,5 +1,6 @@
-import { cn } from '@/lib/utils'
 import { ExternalLink } from 'lucide-react'
+
+import { cn } from '@/lib/utils'
 
 interface CustomLinkProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
   noUnderline?: boolean

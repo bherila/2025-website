@@ -1,18 +1,19 @@
 'use client'
 
+import currency from 'currency.js'
 import { useEffect, useState } from 'react'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Card } from '@/components/ui/card'
-import { Spinner } from '@/components/ui/spinner'
-import { fetchWrapper } from '@/fetchWrapper'
-import type { IAward } from '@/types/finance'
-import { RsuByVestDate } from '@/components/rsu/RsuByVestDate'
+
+import Container from '@/components/container'
 import { RsuByAward } from '@/components/rsu/RsuByAward'
+import { RsuByVestDate } from '@/components/rsu/RsuByVestDate'
 import RsuChart from '@/components/rsu/RsuChart'
 import RsuSubNav from '@/components/rsu/RsuSubNav'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import currency from 'currency.js'
-import Container from '@/components/container'
+import { Card } from '@/components/ui/card'
+import { Spinner } from '@/components/ui/spinner'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Tabs, TabsContent,TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { fetchWrapper } from '@/fetchWrapper'
+import type { IAward } from '@/types/finance'
 
 export default function RSUPage() {
   const [loading, setLoading] = useState(true)

@@ -1,12 +1,17 @@
-import { render, fireEvent, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import ImportTransactions from '@/components/finance/ImportTransactions';
+
+import { fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
-import type { AccountLineItem } from '@/data/finance/AccountLineItem';
+
+import ImportTransactions from '@/components/finance/ImportTransactions';
 import { fetchWrapper } from '@/fetchWrapper';
 
 // Mock the child component
-jest.mock('@/components/finance/TransactionsTable', () => () => <div data-testid="transactions-table" />);
+jest.mock('@/components/finance/TransactionsTable', () => {
+  const MockTransactionsTable = () => <div data-testid="transactions-table" />;
+  MockTransactionsTable.displayName = 'TransactionsTable';
+  return MockTransactionsTable;
+});
 
 jest.mock('@/components/ui/button', () => ({
     Button: ({ children, ...props }: { children: React.ReactNode }) => <button {...props}>{children}</button>,

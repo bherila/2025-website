@@ -1,20 +1,34 @@
 'use client'
-import { Button } from '@/components/ui/button'
-import type { fin_payslip } from './payslipDbCols'
-import { PlusCircle, FileSpreadsheet } from 'lucide-react'
-import { PayslipTable } from './PayslipTable'
-import { cols } from './config/payslipColumnsConfig'
+import { FileSpreadsheet,PlusCircle } from 'lucide-react'
+import React, { useEffect,useState } from 'react'
+
 import Container from '@/components/container'
-import { savePayslip, fetchPayslips, fetchPayslipYears } from '@/lib/api'
-import TotalsTable from './TotalsTable.client'
-import React, { useState, useEffect } from 'react'
+import { Button } from '@/components/ui/button'
+import { fetchPayslips, fetchPayslipYears,savePayslip } from '@/lib/api'
+
+import { cols } from './config/payslipColumnsConfig'
+import type { fin_payslip } from './payslipDbCols'
 import { PayslipImportModal } from './PayslipImportModal' // Import the new dialog
+import { PayslipTable } from './PayslipTable'
+import TotalsTable from './TotalsTable.client'
 
 interface PayslipClientProps {
   selectedYear: string
   initialData: fin_payslip[]
   initialYears: string[]
 }
+
+// Define EmptyState outside of render
+const EmptyState = ({ selectedYear }: { selectedYear: string }) => (
+  <div className="flex flex-col items-center justify-center space-y-4 py-16 text-center">
+    <div className="text-muted-foreground">No payslips found for the selected year</div>
+    <Button asChild>
+      <a href={`/finance/payslips/entry?year=${selectedYear}`}>
+        <PlusCircle className="mr-2" /> Add Payslip
+      </a>
+    </Button>
+  </div>
+)
 
 export default function PayslipClient({ selectedYear: initialSelectedYear, initialData: initialPayslipData, initialYears: initialAvailableYears }: PayslipClientProps): React.ReactElement {
   const [selectedYear, setSelectedYear] = useState(initialSelectedYear);
@@ -58,17 +72,6 @@ export default function PayslipClient({ selectedYear: initialSelectedYear, initi
     data.length > dataThroughQ3.length ? ['Q4 (Full Year)', data] : undefined,
   ].filter(Boolean) as [string, fin_payslip[]][]
 
-  const EmptyState = () => (
-    <div className="flex flex-col items-center justify-center space-y-4 py-16 text-center">
-      <div className="text-muted-foreground">No payslips found for the selected year</div>
-      <Button asChild>
-        <a href={`/finance/payslips/entry?year=${selectedYear}`}>
-          <PlusCircle className="mr-2" /> Add Payslip
-        </a>
-      </Button>
-    </div>
-  )
-
   return (
     <Container fluid>
       <div className="w-full my-2">
@@ -108,7 +111,7 @@ export default function PayslipClient({ selectedYear: initialSelectedYear, initi
       </div>
 
       {data.length === 0 ? (
-        <EmptyState />
+        <EmptyState selectedYear={selectedYear} />
       ) : (
         <>
           <PayslipTable data={data} cols={cols} onRowEdited={editRow} />

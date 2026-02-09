@@ -1,14 +1,15 @@
-import { useState, useEffect } from 'react'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Checkbox } from '@/components/ui/checkbox'
+import { AlertCircle, ArrowLeft, Check, FileText, X } from 'lucide-react'
+import { useCallback,useEffect,useState } from 'react'
+
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardFooter,CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
-import { AlertCircle, ArrowLeft, FileText, Check, X } from 'lucide-react'
+import { Textarea } from '@/components/ui/textarea'
 import type { ClientAgreement } from '@/types/client-management/client-agreement'
 
 interface ClientAgreementShowPageProps {
@@ -38,11 +39,7 @@ export default function ClientAgreementShowPage({ agreementId, companyId, compan
     is_visible_to_client: false,
   })
 
-  useEffect(() => {
-    fetchAgreement()
-  }, [agreementId])
-
-  const fetchAgreement = async () => {
+  const fetchAgreement = useCallback(async () => {
     try {
       const response = await fetch(`/api/client/mgmt/agreements/${agreementId}`)
       if (response.ok) {
@@ -66,7 +63,11 @@ export default function ClientAgreementShowPage({ agreementId, companyId, compan
     } finally {
       setLoading(false)
     }
-  }
+  }, [agreementId])
+
+  useEffect(() => {
+    fetchAgreement()
+  }, [fetchAgreement])
 
   const handleSave = async () => {
     setSaving(true)

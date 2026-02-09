@@ -1,10 +1,11 @@
 'use client'
-import { useState, useCallback } from 'react'
-import ImportTransactions from './ImportTransactions'
+import { useCallback,useState } from 'react'
+
 import Container from '@/components/container'
-import { type AccountLineItem } from '@/data/finance/AccountLineItem'
 import { Button } from '@/components/ui/button'
 import { type IbStatementData } from '@/data/finance/parseIbCsv'
+
+import ImportTransactions from './ImportTransactions'
 
 export default function ImportTransactionsClient({ id, accountName }: { id: number; accountName: string }) {
   const [importFinished, setImportFinished] = useState(false)

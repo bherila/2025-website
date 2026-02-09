@@ -1,4 +1,5 @@
 import { createRoot } from 'react-dom/client'
+
 import FinanceAccountMaintenancePage from '@/components/finance/FinanceAccountMaintenancePage'
 
 document.addEventListener('DOMContentLoaded', () => {
