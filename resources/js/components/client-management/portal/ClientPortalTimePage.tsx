@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react'
+import { ChevronDown, ChevronRight, Clock, Download, Info,Pencil, Plus } from 'lucide-react'
+import { useEffect,useState } from 'react'
+
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import SummaryTile from '@/components/ui/summary-tile'
 import {
   Table,
   TableBody,
@@ -11,15 +14,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Plus, Clock, Pencil, ChevronDown, ChevronRight, Download, Info } from 'lucide-react'
-import NewTimeEntryModal from './NewTimeEntryModal'
-import ClientPortalNav from './ClientPortalNav'
-import type { User, Project } from '@/types/client-management/common'
-import type { TimeEntry, TimeEntriesResponse } from '@/types/client-management/time-entry'
-import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
-import SummaryTile from '@/components/ui/summary-tile'
-import TimeTrackingMonthSummaryRow from './TimeTrackingMonthSummaryRow'
+import {TooltipProvider } from '@/components/ui/tooltip'
 import { formatHours } from '@/lib/formatHours'
+import type { Project,User } from '@/types/client-management/common'
+import type { TimeEntriesResponse,TimeEntry } from '@/types/client-management/time-entry'
+
+import ClientPortalNav from './ClientPortalNav'
+import NewTimeEntryModal from './NewTimeEntryModal'
+import TimeTrackingMonthSummaryRow from './TimeTrackingMonthSummaryRow'
 
 interface ClientPortalTimePageProps {
   slug: string

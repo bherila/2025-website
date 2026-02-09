@@ -1,8 +1,10 @@
 'use client'
-import { Table, TableBody, TableRow, TableCell, TableHeader, TableHead } from '@/components/ui/table'
-import { Badge } from '@/components/ui/badge'
-import { calculateTax } from '@/lib/tax/taxBracket'
 import currency from 'currency.js'
+
+import { Badge } from '@/components/ui/badge'
+import { Table, TableBody, TableCell, TableHead,TableHeader, TableRow } from '@/components/ui/table'
+import { calculateTax } from '@/lib/tax/taxBracket'
+
 import type { fin_payslip } from './payslipDbCols'
 
 function totalTaxableIncomeBeforeSubtractions(data: fin_payslip[]) {

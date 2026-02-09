@@ -1,13 +1,17 @@
 import './bootstrap';
+
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+
+import { CTAs } from '@/components/ctas';
 import CustomLink from '@/components/link';
 import MainTitle from '@/components/MainTitle';
-import { CTAs } from '@/components/ctas';
-import { createRoot } from 'react-dom/client';
-import React from 'react';
+
+// Define Line component outside of render
+const Line = ({ children }: { children: React.ReactNode }) => <p className="py-2">{children}</p>
 
 function Home() {
   const Im = <>I&rsquo;m</>
-  const Line = ({ children }: { children: React.ReactNode }) => <p className="py-2">{children}</p>
   return (
     <div className="max-w-2xl mx-auto">
       <MainTitle>Hi, {Im} Ben</MainTitle>

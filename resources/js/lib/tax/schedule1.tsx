@@ -1,11 +1,12 @@
 import React from 'react'
-import { formatFriendlyAmount } from '@/lib/formatCurrency'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
-import type { Form461Data } from '@/lib/tax/form461'
-import { Form461View, form461, DialogForm461View } from '@/lib/tax/form461'
-import type { ScheduleDData } from '@/lib/tax/scheduleD'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Table, TableBody, TableCell,TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { formatFriendlyAmount } from '@/lib/formatCurrency'
+import type { Form461Data } from '@/lib/tax/form461'
+import {form461, Form461View } from '@/lib/tax/form461'
+import type { ScheduleDData } from '@/lib/tax/scheduleD'
 
 export interface Schedule1Data {
   sch1_line3: number
@@ -97,7 +98,7 @@ export function schedule1({
   // Enter here and on Form 1040, 1040-SR, or 1040-NR, line 10
   // For now, assume these lines are zero or not provided in the function arguments
   // You can add more arguments to the function if you need to populate these lines
-  let adjustments =
+  const adjustments =
     0 + // line 11
     0 + // line 12
     0 + // line 13

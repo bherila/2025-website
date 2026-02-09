@@ -1,7 +1,8 @@
 import cn from 'classnames'
+import type { ReactNode } from 'react'
+
 import CustomLink from '@/components/link'
 import { ModalImage } from '@/components/modal-image'
-import type { ReactNode } from 'react'
 
 export default function ImageAndText({
   children,

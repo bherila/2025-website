@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import ReactMarkdown from 'react-markdown';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+
 import Container from '@/components/container';
+import { CTAs } from '@/components/ctas';
 import MainTitle from '@/components/MainTitle';
 import { ModalImage } from '@/components/modal-image';
-import { CTAs } from '@/components/ctas';
 import { RecipeDisplayItem } from '@/components/recipe-display-item';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
+import { Button } from '@/components/ui/button';
 
 interface Recipe {
     slug: string;

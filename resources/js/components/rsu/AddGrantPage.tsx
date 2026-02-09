@@ -1,14 +1,15 @@
 'use client'
 
+import currency from 'currency.js'
 import { useState } from 'react'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Input } from '@/components/ui/input'
+
+import RsuSubNav from '@/components/rsu/RsuSubNav'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import currency from 'currency.js'
+import { Input } from '@/components/ui/input'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
 import type { IAward } from '@/types/finance'
-import RsuSubNav from '@/components/rsu/RsuSubNav'
 
 export default function AddGrantPage() {
   const [shares, setShares] = useState<string>('')

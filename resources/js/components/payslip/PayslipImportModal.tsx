@@ -1,12 +1,13 @@
 'use client'
 
-import React, { useState, useRef } from 'react'
+import { FileText, Loader2,Upload, XCircle } from 'lucide-react'
+import React, { useRef,useState } from 'react'
+import { toast } from 'sonner'
+
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { FileText, Upload, XCircle, Loader2 } from 'lucide-react'
-import { toast } from 'sonner'
 import { importPayslips } from '@/lib/api'
 
 interface PayslipImportModalProps {
@@ -83,7 +84,7 @@ export function PayslipImportModal({ onImportSuccess }: PayslipImportModalProps)
 
     let successCount = 0;
     let failCount = 0;
-    let errors: string[] = [];
+    const errors: string[] = [];
 
     try {
       for (let i = 0; i < chunks.length; i++) {

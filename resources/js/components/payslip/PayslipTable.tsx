@@ -1,17 +1,19 @@
 'use client'
 
-import _ from 'lodash'
+import classnames from 'classnames'
 import currency from 'currency.js'
+import _ from 'lodash'
+import { Edit } from 'lucide-react'
 import { useState } from 'react'
+
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Button } from '@/components/ui/button'
-import { Edit } from 'lucide-react'
-import { Checkbox } from '@/components/ui/checkbox'
+import { updatePayslipEstimatedStatus } from '@/lib/api'
+
 import type { fin_payslip, fin_payslip_col, pay_data } from './payslipDbCols'
 import PopoverContent from './PopoverContent'
-import { updatePayslipEstimatedStatus } from '@/lib/api'
-import classnames from 'classnames'
 
 export interface payslip_table_col {
   field:
@@ -133,7 +135,7 @@ export function PayslipTable(props: Props) {
     }
 
     return data.some((row) => {
-      // @ts-ignore
+      // @ts-expect-error - Dynamic field access
       const value = row[col.field]
       return value !== null && value !== 0 && value !== ''
     })

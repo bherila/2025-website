@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ChevronRight,FileText, Loader2, Receipt, RefreshCw } from 'lucide-react'
+import { useEffect,useState } from 'react'
+
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
@@ -11,10 +13,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { ArrowLeft, FileText, Receipt, RefreshCw, Loader2, ChevronRight } from 'lucide-react'
-import ClientPortalNav from './ClientPortalNav'
+import type { ClientCompany } from '@/types/client-management/common'
 import type { Invoice } from '@/types/client-management/invoice'
-import type { ClientCompany, User } from '@/types/client-management/common'
+
+import ClientPortalNav from './ClientPortalNav'
 
 interface ClientPortalInvoicesPageProps {
   slug: string

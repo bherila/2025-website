@@ -38,6 +38,8 @@ export interface Invoice {
   rollover_hours_used: string;
   unused_hours_balance: string;
   negative_hours_balance: string;
+  starting_unused_hours: string;
+  starting_negative_hours: string;
   hours_billed_at_rate: string;
   notes: string | null;
   line_items: InvoiceLine[];

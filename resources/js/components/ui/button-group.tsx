@@ -1,7 +1,8 @@
 import * as React from "react"
+
 import { cn } from "@/lib/utils"
 
-interface ButtonGroupProps extends React.HTMLAttributes<HTMLDivElement> {}
+type ButtonGroupProps = React.HTMLAttributes<HTMLDivElement>;
 
 const ButtonGroup = React.forwardRef<HTMLDivElement, ButtonGroupProps>(
   ({ className, ...props }, ref) => (

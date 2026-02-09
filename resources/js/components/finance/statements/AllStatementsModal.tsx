@@ -1,11 +1,12 @@
 'use client'
 
+import currency from 'currency.js';
 import { useEffect, useState } from 'react';
-import { fetchWrapper } from '@/fetchWrapper';
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Spinner } from '@/components/ui/spinner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import currency from 'currency.js';
+import { fetchWrapper } from '@/fetchWrapper';
 
 interface AllDetails {
   statement_closing_date: string;

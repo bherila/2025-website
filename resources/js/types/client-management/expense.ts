@@ -1,4 +1,4 @@
-import type { User, Project } from './common'
+import type { Project,User } from './common'
 
 export interface ClientExpense {
   id: number

@@ -1,15 +1,16 @@
 import React from 'react'
-import type { Schedule1Data } from '@/lib/tax/schedule1'
-import { schedule1, DialogSchedule1View } from '@/lib/tax/schedule1'
-import type { Form172Data, Form172Inputs } from '@/lib/tax/form172'
-import { DialogForm172View, form172, Form172View } from '@/lib/tax/form172'
-import type { ScheduleDData } from '@/lib/tax/scheduleD'
-import { scheduleD, DialogScheduleDView } from '@/lib/tax/scheduleD'
-import { formatFriendlyAmount } from '@/lib/formatCurrency'
-import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table'
+
 import { Button } from '@/components/ui/button'
 import { DialogHeader } from '@/components/ui/dialog'
-import { Dialog, DialogTrigger, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogTitle,DialogTrigger } from '@/components/ui/dialog'
+import { Table, TableBody, TableCell,TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { formatFriendlyAmount } from '@/lib/formatCurrency'
+import type { Form172Data } from '@/lib/tax/form172'
+import { DialogForm172View, form172 } from '@/lib/tax/form172'
+import type { Schedule1Data } from '@/lib/tax/schedule1'
+import { DialogSchedule1View,schedule1 } from '@/lib/tax/schedule1'
+import type { ScheduleDData } from '@/lib/tax/scheduleD'
+import { DialogScheduleDView,scheduleD } from '@/lib/tax/scheduleD'
 
 export interface Form1040Data {
   // Income

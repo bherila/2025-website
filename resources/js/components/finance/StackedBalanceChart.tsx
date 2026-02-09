@@ -1,13 +1,14 @@
 'use client'
 
-import { useState } from 'react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts'
 import currency from 'currency.js'
 import { format } from 'date-fns'
+import { useState } from 'react'
+import { Bar, BarChart, CartesianGrid, LabelList,ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+
+import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { formatFriendlyAmount } from '@/lib/formatCurrency'
-import { Button } from '@/components/ui/button'
 
 const colors = [
   // Blues

@@ -1,4 +1,5 @@
 import currency from 'currency.js'
+
 import { splitDelimitedText } from '../splitDelimitedText'
 
 interface TaxTableRow {
@@ -140,18 +141,18 @@ export function calculateTax(
   )
   taxTable.sort((a, b) => a.minIncome.value - b.minIncome.value)
 
-  let taxes: TaxCalculationResult['taxes'] = []
+  const taxes: TaxCalculationResult['taxes'] = []
   let totalTax = currency(0)
 
   for (const row of taxTable) {
     if (taxableIncome.intValue > row.maxIncome.intValue) {
-      let incomeInBracket = row.maxIncome.subtract(row.minIncome)
-      let tax = incomeInBracket.multiply(row.taxRate)
+      const incomeInBracket = row.maxIncome.subtract(row.minIncome)
+      const tax = incomeInBracket.multiply(row.taxRate)
       taxes.push({ tax, amt: incomeInBracket, bracket: row.taxRate })
       totalTax = totalTax.add(tax)
     } else if (taxableIncome.intValue > row.minIncome.intValue) {
-      let incomeInBracket = taxableIncome.subtract(row.minIncome)
-      let tax = incomeInBracket.multiply(row.taxRate)
+      const incomeInBracket = taxableIncome.subtract(row.minIncome)
+      const tax = incomeInBracket.multiply(row.taxRate)
       taxes.push({ tax, amt: incomeInBracket, bracket: row.taxRate })
       totalTax = totalTax.add(tax)
       break

@@ -87,7 +87,8 @@ export interface CreateUtilityBillRequest {
   total_delivery_fees?: number | null;
 }
 
-export interface UpdateUtilityBillRequest extends CreateUtilityBillRequest {}
+// UpdateUtilityBillRequest has the same shape as CreateUtilityBillRequest
+export type UpdateUtilityBillRequest = CreateUtilityBillRequest;
 
 export interface ImportBillResponse {
   success: boolean;

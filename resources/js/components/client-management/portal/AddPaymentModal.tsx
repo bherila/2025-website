@@ -1,8 +1,9 @@
+import { useEffect, useState } from "react"
+
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -11,7 +12,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { ClientInvoicePayment } from "@/types/client-management"
-import { useEffect, useState } from "react"
 
 interface AddPaymentModalProps {
     isOpen: boolean

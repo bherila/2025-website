@@ -1,13 +1,14 @@
 import { createRoot } from 'react-dom/client'
+
 import AccountNavigation from '@/components/finance/AccountNavigation'
-import SummaryClient from '@/components/finance/SummaryClient'
+import DuplicatesPage from '@/components/finance/DuplicatesPage'
 import FinanceAccountsPage from '@/components/finance/FinanceAccountsPage'
 import FinanceAccountTransactionsPage from '@/components/finance/FinanceAccountTransactionsPage'
-import FinanceAccountStatementsPage from '@/components/finance/statements/FinanceAccountStatementsPage'
 import ImportTransactionsClient from '@/components/finance/ImportTransactionsClient'
-import DuplicatesPage from '@/components/finance/DuplicatesPage'
 import LinkerPage from '@/components/finance/LinkerPage'
 import ManageTagsPage from '@/components/finance/ManageTagsPage'
+import FinanceAccountStatementsPage from '@/components/finance/statements/FinanceAccountStatementsPage'
+import SummaryClient from '@/components/finance/SummaryClient'
 
 document.addEventListener('DOMContentLoaded', () => {
   const navDiv = document.getElementById('AccountNavigation')

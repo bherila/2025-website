@@ -119,4 +119,4 @@ export function StatementDetailsModal({
 }
 
 // Re-export types for convenience
-export type { StatementInfo, StatementDetail }
+export type { StatementDetail,StatementInfo }

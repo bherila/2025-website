@@ -1,9 +1,9 @@
 'use client'
+import AccountMaintenanceClient from '@/components/finance/AccountMaintenanceClient'
+import { DeleteAccountSection } from '@/components/finance/DeleteAccountSection'
+import { EditAccountFlags } from '@/components/finance/EditAccountFlags'
 import MainTitle from '@/components/MainTitle'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import AccountMaintenanceClient from '@/components/finance/AccountMaintenanceClient'
-import { EditAccountFlags } from '@/components/finance/EditAccountFlags'
-import { DeleteAccountSection } from '@/components/finance/DeleteAccountSection'
 
 export default function FinanceAccountMaintenancePage({
   accountId,

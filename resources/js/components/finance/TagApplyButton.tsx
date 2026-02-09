@@ -1,8 +1,9 @@
 'use client'
+import { CheckIcon } from 'lucide-react'
 import { useState } from 'react'
+
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
-import { CheckIcon } from 'lucide-react'
 
 interface Props {
   tagId: number

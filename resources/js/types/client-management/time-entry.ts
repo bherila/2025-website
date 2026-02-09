@@ -1,4 +1,4 @@
-import type { User, Project, Task } from './common'
+import type { Project, Task,User } from './common'
 
 export interface TimeEntry {
   id: number

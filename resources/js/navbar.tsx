@@ -1,4 +1,5 @@
-import { createRoot, hydrateRoot } from 'react-dom/client';
+import { createRoot } from 'react-dom/client';
+
 import Navbar from '@/components/navbar';
 
 const mount = document.getElementById('navbar');

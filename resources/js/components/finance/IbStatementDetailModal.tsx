@@ -1,3 +1,5 @@
+import currency from 'currency.js'
+
 import {
   Dialog,
   DialogContent,
@@ -11,7 +13,6 @@ import {
   TabsList,
   TabsTrigger,
 } from '@/components/ui/tabs'
-import currency from 'currency.js'
 import type { IbStatementData } from '@/data/finance/parseIbCsv'
 
 /**

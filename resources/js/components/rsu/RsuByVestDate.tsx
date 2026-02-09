@@ -1,8 +1,9 @@
-import type { IAward } from '@/types/finance'
-import _ from 'lodash'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { vestStyle } from '@/components/rsu/vestStyle'
 import currency from 'currency.js'
+import _ from 'lodash'
+
+import { vestStyle } from '@/components/rsu/vestStyle'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import type { IAward } from '@/types/finance'
 
 export function RsuByVestDate(props: { rsu: IAward[] }) {
   const { rsu } = props

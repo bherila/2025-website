@@ -1,9 +1,10 @@
 'use client'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import currency from 'currency.js'
 import { Edit } from 'lucide-react'
 import { createRef, useState } from 'react'
-import currency from 'currency.js'
+
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 export default function EditBalanceDisplay({ acct_id, defaultBalance, onUpdate }: { acct_id: number; defaultBalance: string; onUpdate: () => void }) {
   const [balance, setBalance] = useState(defaultBalance)

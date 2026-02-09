@@ -3,14 +3,15 @@
  * Tries multiple parsers in sequence to determine the file format.
  */
 import { ZodError } from 'zod'
+
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { parseEtradeCsv } from '@/data/finance/parseEtradeCsv'
+import { parseFidelityCsv } from '@/data/finance/parseFidelityCsv'
+import { type IbStatementData,parseIbCsv } from '@/data/finance/parseIbCsv'
 import { parseQuickenQFX } from '@/data/finance/parseQuickenQFX'
 import { parseWealthfrontHAR } from '@/data/finance/parseWealthfrontHAR'
-import { parseFidelityCsv } from '@/data/finance/parseFidelityCsv'
-import { parseIbCsv, type IbStatementData } from '@/data/finance/parseIbCsv'
-import { splitDelimitedText } from '@/lib/splitDelimitedText'
 import { parseDate } from '@/lib/DateHelper'
+import { splitDelimitedText } from '@/lib/splitDelimitedText'
 
 export interface ParseImportDataResult {
   /** Parsed transaction data, or null if no valid transactions found */

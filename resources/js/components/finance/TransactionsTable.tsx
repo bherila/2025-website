@@ -1,18 +1,9 @@
 'use client'
 import './TransactionsTable.css'
+
 import currency from 'currency.js'
 import { useEffect, useMemo, useState } from 'react'
-import type { AccountLineItem } from '@/data/finance/AccountLineItem'
-import { Badge } from '@/components/ui/badge'
-import { Spinner } from '@/components/ui/spinner'
-import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
 
-import { Table } from '@/components/ui/table'
-import { ClearFilterButton } from './ClearFilterButton'
-import { TagApplyButton } from './TagApplyButton'
-import TransactionDetailsModal from './TransactionDetailsModal'
-import TransactionLinkModal from './TransactionLinkModal'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,8 +14,19 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { fetchWrapper } from '@/fetchWrapper'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
+import { Table } from '@/components/ui/table'
+import type { AccountLineItem } from '@/data/finance/AccountLineItem'
 import { isDuplicateTransaction } from '@/data/finance/isDuplicateTransaction'
+import { fetchWrapper } from '@/fetchWrapper'
+import { cn } from '@/lib/utils'
+
+import { ClearFilterButton } from './ClearFilterButton'
+import { TagApplyButton } from './TagApplyButton'
+import TransactionDetailsModal from './TransactionDetailsModal'
+import TransactionLinkModal from './TransactionLinkModal'
 
 interface Props {
   data: AccountLineItem[]

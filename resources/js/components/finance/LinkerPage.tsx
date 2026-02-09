@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import currency from 'currency.js'
+import { useCallback,useEffect, useState } from 'react'
+
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Spinner } from '@/components/ui/spinner'
 import { fetchWrapper } from '@/fetchWrapper'
 import { 
@@ -11,7 +13,6 @@ import {
   YEAR_CHANGED_EVENT,
   type YearSelection 
 } from '@/lib/financeRouteBuilder'
-import currency from 'currency.js'
 
 interface Transaction {
   t_id: number

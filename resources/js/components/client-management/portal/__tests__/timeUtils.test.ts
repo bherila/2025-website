@@ -1,4 +1,4 @@
-import { parseTimeToMinutes, formatMinutesToTime } from '../NewTimeEntryModal'
+import { formatMinutesToTime,parseTimeToMinutes } from '../NewTimeEntryModal'
 
 describe('parseTimeToMinutes', () => {
   test('parses h:mm correctly', () => {

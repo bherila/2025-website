@@ -1,5 +1,7 @@
 import currency from 'currency.js'
+
 import type { IbStatementData } from '@/data/finance/parseIbCsv'
+
 import { IbStatementDetailModal } from './IbStatementDetailModal'
 
 /**

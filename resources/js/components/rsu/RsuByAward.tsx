@@ -1,7 +1,8 @@
-import type { IAward } from '@/types/finance'
-import _ from 'lodash'
 import currency from 'currency.js'
+import _ from 'lodash'
+
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import type { IAward } from '@/types/finance'
 
 export function RsuByAward(props: { rsu: IAward[] }) {
   const { rsu } = props

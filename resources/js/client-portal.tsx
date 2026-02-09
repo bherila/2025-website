@@ -1,12 +1,12 @@
 import { createRoot } from 'react-dom/client'
-import ClientPortalIndexPage from '@/components/client-management/portal/ClientPortalIndexPage'
-import ClientPortalTimePage from '@/components/client-management/portal/ClientPortalTimePage'
-import ClientPortalProjectPage from '@/components/client-management/portal/ClientPortalProjectPage'
+
 import ClientPortalAgreementPage from '@/components/client-management/portal/ClientPortalAgreementPage'
-import ClientPortalInvoicesPage from '@/components/client-management/portal/ClientPortalInvoicesPage'
-import ClientPortalInvoicePage from '@/components/client-management/portal/ClientPortalInvoicePage'
 import ClientPortalExpensesPage from '@/components/client-management/portal/ClientPortalExpensesPage'
-import ClientAdminActions from '@/components/client-management/ClientAdminActions'
+import ClientPortalIndexPage from '@/components/client-management/portal/ClientPortalIndexPage'
+import ClientPortalInvoicePage from '@/components/client-management/portal/ClientPortalInvoicePage'
+import ClientPortalInvoicesPage from '@/components/client-management/portal/ClientPortalInvoicesPage'
+import ClientPortalProjectPage from '@/components/client-management/portal/ClientPortalProjectPage'
+import ClientPortalTimePage from '@/components/client-management/portal/ClientPortalTimePage'
 
 document.addEventListener('DOMContentLoaded', () => {
   // Mount admin actions if available (legacy mounting - no longer used, kept for compatibility)

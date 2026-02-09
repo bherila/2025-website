@@ -1,11 +1,12 @@
-import { useForm, Controller } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { Controller,useForm } from 'react-hook-form'
+import { z } from 'zod'
+
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Textarea } from '@/components/ui/textarea'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
 
 const formSchema = z.object({
   itemsList: z.string().min(1, 'At least one item is required'),
