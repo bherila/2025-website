@@ -1,7 +1,7 @@
 'use client'
 
 import currency from 'currency.js'
-import { useEffect, useMemo,useState } from 'react'
+import { useCallback, useEffect, useMemo,useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter,DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -57,23 +57,7 @@ export default function TransactionLinkModal({
     return currentAmt.add(totalLinkedAmt).value === 0
   }, [transaction.t_amt, parentTransaction, childTransactions])
 
-  // Load link data when modal opens
-  useEffect(() => {
-    if (isOpen && transaction.t_id) {
-      loadLinkData()
-    }
-  }, [isOpen, transaction.t_id])
-
-  // Only load linkable transactions if not already balanced
-  useEffect(() => {
-    if (isOpen && transaction.t_id && !isLoading && !isBalanced) {
-      loadLinkableTransactions()
-    } else if (isBalanced) {
-      setLinkableTransactions([])
-    }
-  }, [isOpen, transaction.t_id, isLoading, isBalanced])
-
-  const loadLinkData = async () => {
+  const loadLinkData = useCallback(async () => {
     try {
       setIsLoading(true)
       const data = await fetchWrapper.get(`/api/finance/transactions/${transaction.t_id}/links`)
@@ -85,16 +69,32 @@ export default function TransactionLinkModal({
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [transaction.t_id])
 
-  const loadLinkableTransactions = async () => {
+  const loadLinkableTransactions = useCallback(async () => {
     try {
       const data = await fetchWrapper.get(`/api/finance/transactions/${transaction.t_id}/linkable`)
       setLinkableTransactions(data.potential_matches || [])
     } catch (e) {
       console.error('Failed to load linkable transactions:', e)
     }
-  }
+  }, [transaction.t_id])
+
+  // Load link data when modal opens
+  useEffect(() => {
+    if (isOpen && transaction.t_id) {
+      loadLinkData()
+    }
+  }, [isOpen, transaction.t_id, loadLinkData])
+
+  // Only load linkable transactions if not already balanced
+  useEffect(() => {
+    if (isOpen && transaction.t_id && !isLoading && !isBalanced) {
+      loadLinkableTransactions()
+    } else if (isBalanced) {
+      setLinkableTransactions([])
+    }
+  }, [isOpen, transaction.t_id, isLoading, isBalanced, loadLinkableTransactions])
 
   const handleLink = async (targetTransactionId: number) => {
     try {

@@ -1,6 +1,6 @@
 import { format } from 'date-fns'
 import { ChevronLeft, ChevronRight, Pencil } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,7 +36,7 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
     const [selectedPayment, setSelectedPayment] = useState<ClientInvoicePayment | null>(null)
     const [showDetail, setShowDetail] = useState(true)
 
-    const fetchInvoice = async (isRefresh = false) => {
+    const fetchInvoice = useCallback(async (isRefresh = false) => {
         if (isRefresh) {
             setIsRefreshing(true)
         } else {
@@ -54,11 +54,11 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                 setIsLoading(false)
             }
         }
-    }
+    }, [slug, invoiceId])
 
     useEffect(() => {
         fetchInvoice()
-    }, [invoiceId])
+    }, [fetchInvoice])
 
     // Update page title with invoice number
     useEffect(() => {

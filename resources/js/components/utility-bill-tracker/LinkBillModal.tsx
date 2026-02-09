@@ -1,6 +1,6 @@
 import { CheckCircle,Link2, Loader2, Search, Unlink } from 'lucide-react';
 import * as React from 'react';
-import { useEffect,useState } from 'react';
+import { useCallback, useEffect,useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -24,7 +24,7 @@ export function LinkBillModal({ open, onOpenChange, accountId, bill, onLinked }:
   const [transactions, setTransactions] = useState<LinkableTransaction[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchLinkableTransactions = async () => {
+  const fetchLinkableTransactions = useCallback(async () => {
     if (!bill) return;
     
     setLoading(true);
@@ -46,13 +46,13 @@ export function LinkBillModal({ open, onOpenChange, accountId, bill, onLinked }:
     } finally {
       setLoading(false);
     }
-  };
+  }, [accountId, bill]);
 
   useEffect(() => {
     if (open && bill) {
       fetchLinkableTransactions();
     }
-  }, [open, bill?.id]);
+  }, [open, bill?.id, fetchLinkableTransactions]);
 
   const handleLink = async (tId: number) => {
     if (!bill) return;

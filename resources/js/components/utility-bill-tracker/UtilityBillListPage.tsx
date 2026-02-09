@@ -1,6 +1,6 @@
 import { ArrowLeft, Download,Link2, Pencil, Plus, Trash2, Upload } from 'lucide-react';
 import * as React from 'react';
-import { useEffect,useState } from 'react';
+import { useCallback, useEffect,useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -44,7 +44,7 @@ export function UtilityBillListPage({ accountId, accountName, accountType }: Uti
 
   const isElectricity = accountType === 'Electricity';
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const [accountRes, billsRes] = await Promise.all([
@@ -72,11 +72,11 @@ export function UtilityBillListPage({ accountId, accountName, accountType }: Uti
     } finally {
       setLoading(false);
     }
-  };
+  }, [accountId]);
 
   useEffect(() => {
     fetchData();
-  }, [accountId]);
+  }, [fetchData]);
 
   const handleSaveNotes = async () => {
     setSavingNotes(true);

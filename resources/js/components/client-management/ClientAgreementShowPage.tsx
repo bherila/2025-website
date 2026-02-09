@@ -1,5 +1,5 @@
 import { AlertCircle, ArrowLeft, Check, FileText, X } from 'lucide-react'
-import { useEffect,useState } from 'react'
+import { useCallback,useEffect,useState } from 'react'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -39,11 +39,7 @@ export default function ClientAgreementShowPage({ agreementId, companyId, compan
     is_visible_to_client: false,
   })
 
-  useEffect(() => {
-    fetchAgreement()
-  }, [agreementId])
-
-  const fetchAgreement = async () => {
+  const fetchAgreement = useCallback(async () => {
     try {
       const response = await fetch(`/api/client/mgmt/agreements/${agreementId}`)
       if (response.ok) {
@@ -67,7 +63,11 @@ export default function ClientAgreementShowPage({ agreementId, companyId, compan
     } finally {
       setLoading(false)
     }
-  }
+  }, [agreementId])
+
+  useEffect(() => {
+    fetchAgreement()
+  }, [fetchAgreement])
 
   const handleSave = async () => {
     setSaving(true)

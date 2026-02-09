@@ -8,7 +8,7 @@ import {
   Receipt, 
   Trash2
 } from 'lucide-react'
-import { useEffect,useState } from 'react'
+import { useCallback, useEffect,useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -65,12 +65,7 @@ export default function ClientPortalExpensesPage({ slug, companyName, companyId,
     document.title = `Expenses: ${companyName}`
   }, [companyName])
 
-  useEffect(() => {
-    fetchExpenses()
-    fetchProjects()
-  }, [slug, companyId])
-
-  const fetchExpenses = async () => {
+  const fetchExpenses = useCallback(async () => {
     try {
       const response = await fetch(`/api/client/mgmt/companies/${companyId}/expenses`)
       if (response.ok) {
@@ -82,9 +77,9 @@ export default function ClientPortalExpensesPage({ slug, companyName, companyId,
     } finally {
       setLoading(false)
     }
-  }
+  }, [companyId])
 
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
     try {
       const response = await fetch(`/api/client/portal/${slug}/projects`)
       if (response.ok) {
@@ -94,7 +89,12 @@ export default function ClientPortalExpensesPage({ slug, companyName, companyId,
     } catch (error) {
       console.error('Error fetching projects:', error)
     }
-  }
+  }, [slug])
+
+  useEffect(() => {
+    fetchExpenses()
+    fetchProjects()
+  }, [fetchExpenses, fetchProjects])
 
   const handleMarkReimbursed = async (expense: ClientExpense) => {
     try {

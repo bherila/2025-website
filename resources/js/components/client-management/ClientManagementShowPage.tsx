@@ -1,5 +1,5 @@
 import { ArrowLeft, ExternalLink, FileText,X } from 'lucide-react'
-import { useEffect,useState } from 'react'
+import { useCallback,useEffect,useState } from 'react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -48,11 +48,7 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
     }
   }, [alertInfo])
 
-  useEffect(() => {
-    fetchCompany()
-  }, [companyId])
-
-  const fetchCompany = async () => {
+  const fetchCompany = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetch(`/api/client/mgmt/companies/${companyId}`);
@@ -79,7 +75,11 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
     } finally {
       setLoading(false)
     }
-  }
+  }, [companyId])
+
+  useEffect(() => {
+    fetchCompany()
+  }, [fetchCompany])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

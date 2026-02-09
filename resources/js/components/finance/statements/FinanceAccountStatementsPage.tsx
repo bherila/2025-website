@@ -69,21 +69,22 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
     deleteUrlPattern: (fileId) => `/api/finance/${id}/files/${fileId}`,
   })
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const fetchedData = await fetchWrapper.get(`/api/finance/${id}/balance-timeseries`)
-        setStatements(fetchedData)
-        setIsLoading(false)
-      } catch (error) {
-        console.error('Error fetching statements:', error)
-        setStatements([])
-        setIsLoading(false)
-      }
+  const fetchData = useCallback(async () => {
+    try {
+      const fetchedData = await fetchWrapper.get(`/api/finance/${id}/balance-timeseries`)
+      setStatements(fetchedData)
+      setIsLoading(false)
+    } catch (error) {
+      console.error('Error fetching statements:', error)
+      setStatements([])
+      setIsLoading(false)
     }
+  }, [id])
+
+  useEffect(() => {
     fetchData()
     fileManager.fetchFiles()
-  }, [id, fetchKey])
+  }, [fetchData, fetchKey, fileManager])
 
   const statementHistory = statements?.map((statement, index) => {
     const prev = statements[index - 1]

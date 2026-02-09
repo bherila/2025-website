@@ -1,4 +1,4 @@
-import { useEffect,useState } from 'react'
+import { useCallback, useEffect,useState } from 'react'
 
 import { DeleteFileModal, FileList, FileUploadButton, useFileManagement } from '@/components/shared/FileManager'
 import { Button } from '@/components/ui/button'
@@ -65,6 +65,10 @@ export default function EditTaskModal({ open, onOpenChange, task, slug, projectS
     deleteUrlPattern: (fileId) => `/api/client/portal/${slug}/projects/${projectSlug}/tasks/${task.id}/files/${fileId}`,
   })
 
+  const fetchFiles = useCallback(() => {
+    fileManager.fetchFiles()
+  }, [fileManager])
+
   useEffect(() => {
     setName(task.name)
     setDescription(task.description || '')
@@ -72,8 +76,8 @@ export default function EditTaskModal({ open, onOpenChange, task, slug, projectS
     setAssigneeId(task.assignee?.id.toString() || '')
     setIsHighPriority(task.is_high_priority)
     setIsHiddenFromClients(task.is_hidden_from_clients)
-    fileManager.fetchFiles()
-  }, [task])
+    fetchFiles()
+  }, [task, fetchFiles])
 
   const handleUpdateTask = async (e: React.FormEvent) => {
     e.preventDefault()

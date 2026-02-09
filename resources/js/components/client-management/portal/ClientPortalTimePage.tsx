@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight, Clock, Download, Info,Pencil, Plus } from 'lucide-react'
-import { useEffect,useState } from 'react'
+import { useCallback, useEffect,useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -56,20 +56,7 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, isA
     document.title = `Time: ${companyName}`
   }, [companyName])
 
-  useEffect(() => {
-    fetchTimeEntries()
-    fetchProjects()
-    fetchCompanyUsers()
-  }, [slug])
-
-  useEffect(() => {
-    // Expand first month by default
-    if (data?.monthly_data && data.monthly_data.length > 0 && data.monthly_data[0]) {
-      setExpandedMonths(new Set([data.monthly_data[0].year_month]))
-    }
-  }, [data?.monthly_data])
-
-  const fetchTimeEntries = async () => {
+  const fetchTimeEntries = useCallback(async () => {
     try {
       const response = await fetch(`/api/client/portal/${slug}/time-entries`)
       if (response.ok) {
@@ -81,9 +68,9 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, isA
     } finally {
       setLoading(false)
     }
-  }
+  }, [slug])
 
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
     try {
       const response = await fetch(`/api/client/portal/${slug}/projects`)
       if (response.ok) {
@@ -93,9 +80,9 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, isA
     } catch (error) {
       console.error('Error fetching projects:', error)
     }
-  }
+  }, [slug])
 
-  const fetchCompanyUsers = async () => {
+  const fetchCompanyUsers = useCallback(async () => {
     try {
       const response = await fetch(`/api/client/portal/${slug}`)
       if (response.ok) {
@@ -105,7 +92,20 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, isA
     } catch (error) {
       console.error('Error fetching company users:', error)
     }
-  }
+  }, [slug])
+
+  useEffect(() => {
+    fetchTimeEntries()
+    fetchProjects()
+    fetchCompanyUsers()
+  }, [fetchTimeEntries, fetchProjects, fetchCompanyUsers])
+
+  useEffect(() => {
+    // Expand first month by default
+    if (data?.monthly_data && data.monthly_data.length > 0 && data.monthly_data[0]) {
+      setExpandedMonths(new Set([data.monthly_data[0].year_month]))
+    }
+  }, [data?.monthly_data])
 
   const openEditModal = (entry: TimeEntry) => {
     if (!isAdmin) return

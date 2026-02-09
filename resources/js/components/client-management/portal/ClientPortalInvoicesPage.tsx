@@ -1,5 +1,5 @@
 import { ChevronRight,FileText, Loader2, Receipt, RefreshCw } from 'lucide-react'
-import { useEffect,useState } from 'react'
+import { useCallback, useEffect,useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -31,16 +31,7 @@ export default function ClientPortalInvoicesPage({ slug, companyName, companyId,
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
 
-  useEffect(() => {
-    fetchInvoices()
-    fetchCompany()
-  }, [slug])
-
-  useEffect(() => {
-    document.title = `Invoices | ${companyName}`
-  }, [companyName])
-
-  const fetchCompany = async () => {
+  const fetchCompany = useCallback(async () => {
     try {
       const response = await fetch(`/api/client/portal/${slug}`)
       if (response.ok) {
@@ -50,9 +41,9 @@ export default function ClientPortalInvoicesPage({ slug, companyName, companyId,
     } catch (error) {
       console.error('Error fetching company:', error)
     }
-  }
+  }, [slug])
 
-  const fetchInvoices = async () => {
+  const fetchInvoices = useCallback(async () => {
     try {
       const response = await fetch(`/api/client/portal/${slug}/invoices`)
       if (response.ok) {
@@ -69,7 +60,16 @@ export default function ClientPortalInvoicesPage({ slug, companyName, companyId,
     } finally {
       setLoading(false)
     }
-  }
+  }, [slug])
+
+  useEffect(() => {
+    fetchInvoices()
+    fetchCompany()
+  }, [fetchInvoices, fetchCompany])
+
+  useEffect(() => {
+    document.title = `Invoices | ${companyName}`
+  }, [companyName])
 
   const handleGenerateInvoices = async () => {
     if (!company) return

@@ -1,5 +1,5 @@
 import { AlertCircle, Check, FileText, HelpCircle } from 'lucide-react'
-import { useEffect,useState } from 'react'
+import { useCallback, useEffect,useState } from 'react'
 
 import { DeleteFileModal, FileHistoryModal, FileList, FileUploadButton, useFileManagement } from '@/components/shared/FileManager'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -42,19 +42,7 @@ export default function ClientPortalAgreementPage({ slug, companyName, companyId
     deleteUrlPattern: (fileId) => `/api/client/portal/${slug}/agreements/${agreementId}/files/${fileId}`,
   })
 
-  useEffect(() => {
-    fetchAgreement()
-    fileManager.fetchFiles()
-    fetchInvoices()
-  }, [agreementId])
-
-  useEffect(() => {
-    if (agreement) {
-      document.title = `Agreement | Client Portal`
-    }
-  }, [agreement])
-
-  const fetchAgreement = async () => {
+  const fetchAgreement = useCallback(async () => {
     try {
       const response = await fetch(`/api/client/portal/${slug}/agreements/${agreementId}`)
       if (response.ok) {
@@ -69,9 +57,9 @@ export default function ClientPortalAgreementPage({ slug, companyName, companyId
     } finally {
       setLoading(false)
     }
-  }
+  }, [slug, agreementId])
 
-  const fetchInvoices = async () => {
+  const fetchInvoices = useCallback(async () => {
     try {
       const response = await fetch(`/api/client/portal/${slug}/invoices`)
       if (response.ok) {
@@ -85,7 +73,19 @@ export default function ClientPortalAgreementPage({ slug, companyName, companyId
     } finally {
       setLoadingInvoices(false)
     }
-  }
+  }, [slug, agreementId])
+
+  useEffect(() => {
+    fetchAgreement()
+    fileManager.fetchFiles()
+    fetchInvoices()
+  }, [agreementId, fetchAgreement, fetchInvoices, fileManager])
+
+  useEffect(() => {
+    if (agreement) {
+      document.title = `Agreement | Client Portal`
+    }
+  }, [agreement])
 
   const handleSign = async () => {
     if (!signName.trim() || !signTitle.trim()) {
