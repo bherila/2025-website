@@ -52,7 +52,7 @@ export function LinkBillModal({ open, onOpenChange, accountId, bill, onLinked }:
     if (open && bill) {
       fetchLinkableTransactions();
     }
-  }, [open, bill?.id, fetchLinkableTransactions]);
+  }, [open, bill, fetchLinkableTransactions]);
 
   const handleLink = async (tId: number) => {
     if (!bill) return;
