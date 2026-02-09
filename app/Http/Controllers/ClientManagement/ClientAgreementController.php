@@ -42,6 +42,7 @@ class ClientAgreementController extends Controller
             'client_company_id' => $company->id,
             'active_date' => now(),
             'monthly_retainer_hours' => 10,
+            'catch_up_threshold_hours' => 1.0,
             'rollover_months' => 1,
             'hourly_rate' => $company->default_hourly_rate ?? 0,
             'monthly_retainer_fee' => 0,
