@@ -31,6 +31,8 @@ class ClientInvoice extends Model
         'rollover_hours_used',
         'unused_hours_balance',
         'negative_hours_balance',
+        'starting_unused_hours',
+        'starting_negative_hours',
         'hours_billed_at_rate',
         'status',
         'notes',
@@ -48,6 +50,8 @@ class ClientInvoice extends Model
         'rollover_hours_used' => 'decimal:4',
         'unused_hours_balance' => 'decimal:4',
         'negative_hours_balance' => 'decimal:4',
+        'starting_unused_hours' => 'decimal:4',
+        'starting_negative_hours' => 'decimal:4',
         'hours_billed_at_rate' => 'decimal:4',
     ];
 

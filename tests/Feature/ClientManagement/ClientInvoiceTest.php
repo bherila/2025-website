@@ -744,10 +744,15 @@ class ClientInvoiceTest extends TestCase
         $catchUpLine = $items->first();
         $this->assertEquals(6.0, $catchUpLine->hours);
 
-        // Should have 0 negative balance (paid off by catch-up)
-        // And 1h unused.
-        $this->assertEquals(0, (float) $janInvoice->fresh()->negative_hours_balance);
-        $this->assertEquals(1, (float) $janInvoice->fresh()->unused_hours_balance);
+        // January Overage: 15h. Catch-up billed: 6h.
+        // Debt payoff model: 15h debt - 6h billed = 9h remaining debt.
+        // Final state at start of Feb: Starts with 1h available (the restored threshold).
+        $this->assertEquals(9, (float) $janInvoice->fresh()->negative_hours_balance);
+        $this->assertEquals(0, (float) $janInvoice->fresh()->unused_hours_balance);
+        
+        // At start of FEB (starting balances)
+        $this->assertEquals(0, (float) $janInvoice->fresh()->starting_negative_hours);
+        $this->assertEquals(1, (float) $janInvoice->fresh()->starting_unused_hours);
     }
     public function test_time_entry_is_split_with_catchup_billing(): void
     {

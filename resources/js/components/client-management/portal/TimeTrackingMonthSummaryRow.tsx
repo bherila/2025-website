@@ -15,6 +15,8 @@ interface TimeTrackingMonthSummaryRowProps {
   negativeBalance?: number | undefined
   remainingPool?: number | undefined
   catchUpHoursBilled?: number | undefined
+  startingUnusedHours?: number | undefined
+  startingNegativeHours?: number | undefined
   finalBalance?: number | undefined
   // Display mode: 'time_page' or 'invoice_page'
   displayMode?: 'time_page' | 'invoice_page'
@@ -33,6 +35,8 @@ export default function TimeTrackingMonthSummaryRow({
   negativeBalance,
   remainingPool,
   catchUpHoursBilled,
+  startingUnusedHours,
+  startingNegativeHours,
   finalBalance,
   displayMode = 'time_page',
 }: TimeTrackingMonthSummaryRowProps) {
@@ -121,11 +125,17 @@ export default function TimeTrackingMonthSummaryRow({
         </SummaryTile>
       )}
 
-      {/* Month-end balance: prefer explicit finalBalance prop, otherwise derive from remainingPool/negativeBalance */}
+      {/* Month-end balance: prefer explicit finalBalance prop, otherwise derive from starting balances (on invoice) or remainingPool/negativeBalance */}
       {(() => {
-        const fb = typeof finalBalance === 'number'
-          ? finalBalance
-          : (typeof remainingPool === 'number' ? remainingPool : (typeof negativeBalance === 'number' ? -negativeBalance : undefined));
+        let fb = finalBalance;
+        
+        if (fb === undefined) {
+          if (displayMode === 'invoice_page' && (startingUnusedHours !== undefined || startingNegativeHours !== undefined)) {
+            fb = (startingUnusedHours || 0) - (startingNegativeHours || 0);
+          } else if (remainingPool !== undefined || negativeBalance !== undefined) {
+            fb = (remainingPool || 0) - (negativeBalance || 0);
+          }
+        }
 
         if (typeof fb === 'number') {
           if (fb > 0) {

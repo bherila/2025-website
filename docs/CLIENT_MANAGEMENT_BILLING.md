@@ -67,14 +67,23 @@ The invoice `period_start` and `period_end` specifically represent the **work pe
 Unlike the previous implementation, the retainer fee line (dated the 1st of M) does **not** expand the invoice period. This prevents overlapping period errors when generating subsequent work invoices.
 
 ## Invoice Balance Fields
-The invoice tracks several balance fields that reflect the state at the **start of the retainer month (Month M)**, after accounting for all work performed in the work period (M-1) and any catch-up billing triggered:
+The invoice tracks several balance fields that reflect the state at different points in time:
 
-- **`unused_hours_balance`**: Net availability at the start of Month M. This includes the retainer for Month M, minus any remaining debt from M-1, plus any buffer added by the Minimum Availability Rule.
-- **`negative_hours_balance`**: Any remaining negative hours (debt) that could not be cleared by the retainer for Month M or by catch-up billing. 
+### Work Period Balances (End of Month M-1)
+These fields reflect the state **after** processing all work performed in the work period (M-1) but **before** the retainer for Month M is applied. These are primarily used for historical reporting and test validation.
+
+- **`unused_hours_balance`**: Unused hours remaining from the Month M-1 pool after processing all work in that month.
+- **`negative_hours_balance`**: Negative hours (debt) carried forward from the Month M-1 work period.
 - **`rollover_hours_used`**: Hours from previous months' rollover that were used during the work period (M-1).
 - **`hours_billed_at_rate`**: Additional hours billed at the hourly rate (catch-up billing or manual overages).
 
-These balances are calculated to reflect the "Starting Pool" for the upcoming month (M), providing the client with a clear picture of their available capacity after the current invoice is paid.
+### Starting Balances (Start of Month M)
+These fields reflect the "Starting Pool" for the upcoming month (M), providing the client with a clear picture of their available capacity after accounting for the current invoice's retainer and catch-up billing.
+
+- **`starting_unused_hours`**: Net availability at the start of Month M. This includes the retainer for Month M, minus any remaining debt from M-1, plus any buffer added by the Minimum Availability Rule (catch-up).
+- **`starting_negative_hours`**: Any remaining negative hours (debt) that could not be cleared by the retainer for Month M or by catch-up billing.
+
+These balances are calculated to ensure the client has a predictable starting point for the next billing cycle.
 
 ## Billing Validation & Automation
 

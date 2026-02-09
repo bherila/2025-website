@@ -448,6 +448,8 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                             catchUpHoursBilled={parseFloat(invoice.hours_billed_at_rate)}
                             negativeBalance={parseFloat(invoice.negative_hours_balance)}
                             remainingPool={parseFloat(invoice.unused_hours_balance)}
+                            startingUnusedHours={parseFloat(invoice.starting_unused_hours)}
+                            startingNegativeHours={parseFloat(invoice.starting_negative_hours)}
                         />
                     </div>
                 </div>

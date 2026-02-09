@@ -334,6 +334,33 @@ class ClientInvoicingService
             // Calculate cumulative balance including catch-up billing
             $cumulativeSnapshot = $this->calculateCumulativeBalanceSnapshot($agreement, $periodEnd, $allBalances);
 
+            // Find balance for the work period month (M-1) to get end-of-period state for tests
+            $workMonthKey = $periodEnd->format('Y-m');
+            $workMonthBalance = null;
+            foreach ($allBalances as $balance) {
+                if ($balance->yearMonth === $workMonthKey) {
+                    $workMonthBalance = $balance;
+                    break;
+                }
+            }
+
+            // Total hours billed at rate in history up to this period (including this one)
+            $totalBilledOverages = ClientInvoice::where('client_agreement_id', $agreement->id)
+                ->whereNotIn('status', ['void'])
+                ->where('period_end', '<=', $periodEnd)
+                ->sum('hours_billed_at_rate');
+
+            // Work period end-of-month state (after M-1 work, before M retainer)
+            $rawWorkPeriodNegative = $workMonthBalance ? $workMonthBalance->closing->negativeBalance : 0;
+            $rawWorkPeriodUnused = $workMonthBalance ? $workMonthBalance->closing->unusedHours : 0;
+
+            // Apply catch-up/overage payoffs to M-1 state
+            $netWorkPeriodNegative = max(0, $rawWorkPeriodNegative - $totalBilledOverages);
+            $netWorkPeriodUnused = $rawWorkPeriodUnused;
+            if ($totalBilledOverages > $rawWorkPeriodNegative) {
+                $netWorkPeriodUnused += ($totalBilledOverages - $rawWorkPeriodNegative);
+            }
+
             // Prepare invoice data
             $invoiceData = [
                 'client_company_id' => $company->id,
@@ -343,8 +370,10 @@ class ClientInvoicingService
                 'retainer_hours_included' => (float) $agreement->monthly_retainer_hours,
                 'hours_worked' => $priorMonthEntries->sum('minutes_worked') / 60,
                 'rollover_hours_used' => $workMonthBalance ? $workMonthBalance->closing->hoursUsedFromRollover : 0,
-                'unused_hours_balance' => $cumulativeSnapshot['unused'],
-                'negative_hours_balance' => $cumulativeSnapshot['negative'],
+                'unused_hours_balance' => $netWorkPeriodUnused,
+                'negative_hours_balance' => $netWorkPeriodNegative,
+                'starting_unused_hours' => $cumulativeSnapshot['unused'],
+                'starting_negative_hours' => $cumulativeSnapshot['negative'],
                 'hours_billed_at_rate' => 0, // We'll set this if we decide to bill overage
                 'status' => 'draft',
             ];
@@ -502,9 +531,24 @@ class ClientInvoicingService
 
                 // Re-calculate the balance snapshot now that we have hours_billed_at_rate set
                 $cumulativeSnapshot = $this->calculateCumulativeBalanceSnapshot($agreement, $periodEnd, $allBalances);
+
+                // Re-calculate work period balances as well
+                $totalBilledOveragesUpdated = ClientInvoice::where('client_agreement_id', $agreement->id)
+                    ->whereNotIn('status', ['void'])
+                    ->where('period_end', '<=', $periodEnd)
+                    ->sum('hours_billed_at_rate');
+
+                $netWorkPeriodNegativeUpdated = max(0, $rawWorkPeriodNegative - $totalBilledOveragesUpdated);
+                $netWorkPeriodUnusedUpdated = $rawWorkPeriodUnused;
+                if ($totalBilledOveragesUpdated > $rawWorkPeriodNegative) {
+                    $netWorkPeriodUnusedUpdated += ($totalBilledOveragesUpdated - $rawWorkPeriodNegative);
+                }
+
                 $invoice->update([
-                    'negative_hours_balance' => $cumulativeSnapshot['negative'],
-                    'unused_hours_balance' => $cumulativeSnapshot['unused'],
+                    'negative_hours_balance' => $netWorkPeriodNegativeUpdated,
+                    'unused_hours_balance' => $netWorkPeriodUnusedUpdated,
+                    'starting_unused_hours' => $cumulativeSnapshot['unused'],
+                    'starting_negative_hours' => $cumulativeSnapshot['negative'],
                 ]);
             }
 
@@ -538,14 +582,14 @@ class ClientInvoicingService
      */
     protected function calculateCumulativeBalanceSnapshot(ClientAgreement $agreement, Carbon $periodEnd, array $allBalances): array
     {
-        // The unused hours balance should reflect the state AFTER processing the work period
-        // So we look at the work period month, not the retainer month
-        $workMonthKey = $periodEnd->format('Y-m');
+        // The retainer month is the month AFTER the work period
+        $retainerMonthStart = $periodEnd->copy()->addDay()->startOfMonth();
+        $targetMonthKey = $retainerMonthStart->format('Y-m');
 
-        // Find calculator summary for work month
+        // Find calculator summary for target month
         $summary = null;
         foreach ($allBalances as $b) {
-            if ($b->yearMonth === $workMonthKey) {
+            if ($b->yearMonth === $targetMonthKey) {
                 $summary = $b;
                 break;
             }

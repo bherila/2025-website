@@ -149,11 +149,6 @@ class ClientAgreement extends Model
                 $agreement->catch_up_threshold_hours = min(1.0, $retainerHours);
             }
             
-            // Automatically cap if threshold exceeds retainer hours
-            if ($agreement->catch_up_threshold_hours > $retainerHours) {
-                $agreement->catch_up_threshold_hours = $retainerHours;
-            }
-            
             // Validate on save
             $agreement->validateCatchUpThreshold();
         });
