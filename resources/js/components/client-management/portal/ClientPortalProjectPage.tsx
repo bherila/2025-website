@@ -168,7 +168,7 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
           projectName={projectName}
           projects={initialProjects}
         />
-        <div className="container mx-auto px-8 max-w-7xl">
+        <div className="container mx-auto px-8 max-w-6xl">
           <div className="mb-6">
             <Skeleton className="h-10 w-64" />
           </div>
@@ -199,7 +199,7 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
         projectName={projectName}
         projects={initialProjects}
       />
-      <div className="container mx-auto px-8 max-w-7xl">
+      <div className="container mx-auto px-8 max-w-6xl">
         <div className="mb-6">
           <div className="flex justify-between items-center">
             <div>

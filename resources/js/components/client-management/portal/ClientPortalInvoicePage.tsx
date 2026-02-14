@@ -180,7 +180,7 @@ const hasPayments = invoice?.payments && (invoice.payments as any[]).length > 0;
                     currentPage="invoice"
                     invoiceNumber={invoice?.invoice_number ?? undefined}
                 />
-                <div className="container mx-auto px-8 max-w-5xl">
+                <div className="container mx-auto px-8 max-w-6xl">
                     <div className="mb-6">
                         <Skeleton className="h-5 w-48" />
                     </div>
@@ -213,7 +213,7 @@ const hasPayments = invoice?.payments && (invoice.payments as any[]).length > 0;
                 invoiceNumber={invoice.invoice_number ?? undefined}
             />
 
-            <div className="container mx-auto px-8 max-w-5xl">
+            <div className="container mx-auto px-8 max-w-6xl">
                 <ClientPortalInvoiceActionButtonRow
                     invoice={invoice}
                     isAdmin={isAdmin}

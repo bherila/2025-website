@@ -126,7 +126,7 @@ export default function ClientPortalInvoicesPage({ slug, companyName, companyId,
     return (
       <>
         <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="invoices" />
-        <div className="container mx-auto px-8 max-w-4xl">
+        <div className="container mx-auto px-8 max-w-6xl">
           <div className="space-y-4">
             {[1, 2, 3].map(i => (
               <Card key={i}>
@@ -150,7 +150,7 @@ export default function ClientPortalInvoicesPage({ slug, companyName, companyId,
   return (
     <>
       <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="invoices" />
-      <div className="container mx-auto px-8 max-w-4xl">
+      <div className="container mx-auto px-8 max-w-6xl">
         <div className="flex items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-4">
             <Receipt className="h-8 w-8 text-muted-foreground" />

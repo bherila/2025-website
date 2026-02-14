@@ -136,7 +136,7 @@ export default function ClientPortalAgreementPage({ slug, companyName, companyId
     return (
       <>
         <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="agreement" />
-        <div className="container mx-auto px-8 max-w-4xl">
+        <div className="container mx-auto px-8 max-w-6xl">
           <Card>
             <CardHeader>
               <Skeleton className="h-8 w-64 mb-2" />
@@ -164,7 +164,7 @@ export default function ClientPortalAgreementPage({ slug, companyName, companyId
   return (
     <>
       <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="agreement" />
-      <div className="container mx-auto px-8 max-w-4xl">
+      <div className="container mx-auto px-8 max-w-6xl">
         <div className="flex items-center gap-4 mb-6">
           <FileText className="h-8 w-8 text-muted-foreground" />
           <div>
