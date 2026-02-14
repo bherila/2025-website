@@ -48,6 +48,12 @@ class ClientPortalController extends Controller
                 return $entry;
             });
 
+        // Hydrate company files for immediate listing (prevents initial loading spinner)
+        $companyFiles = \App\Models\Files\FileForClientCompany::where('client_company_id', $company->id)
+            ->with('uploader:id,name')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
         return view('client-management.portal.index', [
             'company' => $company,
             'slug' => $slug,
@@ -55,6 +61,7 @@ class ClientPortalController extends Controller
             'agreements' => $agreements,
             'companyUsers' => $users,
             'recentTimeEntries' => $recentTimeEntries,
+            'companyFiles' => $companyFiles,
         ]);
     }
 

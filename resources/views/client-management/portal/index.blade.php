@@ -10,6 +10,7 @@
      data-agreements="{{ json_encode($agreements) }}"
      data-company-users="{{ json_encode($companyUsers ?? []) }}"
      data-recent-time-entries="{{ json_encode($recentTimeEntries ?? []) }}"
+     data-company-files="{{ json_encode($companyFiles ?? []) }}"
 ></div>
 @endsection
 

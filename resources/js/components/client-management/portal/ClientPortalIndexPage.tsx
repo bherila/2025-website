@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { abbreviateName } from '@/lib/nameUtils'
 import type { Agreement, Project, User } from '@/types/client-management/common'
 import type { TimeEntry } from '@/types/client-management/time-entry'
+import type { FileRecord } from '@/types/files'
 
 import ClientPortalNav from './ClientPortalNav'
 import NewProjectModal from './NewProjectModal'
@@ -28,6 +29,7 @@ interface ClientPortalIndexPageProps {
   initialAgreements?: Agreement[]
   initialCompanyUsers?: User[]
   initialRecentTimeEntries?: TimeEntry[]
+  initialCompanyFiles?: FileRecord[]
   /** called after a mutation so the host can refresh the page/state */
   afterEdit?: () => void
 }
@@ -41,6 +43,7 @@ export default function ClientPortalIndexPage({
   initialAgreements = [],
   initialCompanyUsers = [],
   initialRecentTimeEntries = [],
+  initialCompanyFiles = [],
   afterEdit,
 }: ClientPortalIndexPageProps) {
   const [projects, setProjects] = useState<Project[]>(initialProjects)
@@ -64,9 +67,10 @@ export default function ClientPortalIndexPage({
   }, [companyName])
 
   useEffect(() => {
-    // We now receive projects, users and recent entries from server-side rendering so
-    // there's no need to call the API on mount. Only fetch files for the FileManager.
-    fileManager.fetchFiles()
+    // If server provided a hydrated file list, don't call the files API on mount
+    if (!initialCompanyFiles || initialCompanyFiles.length === 0) {
+      fileManager.fetchFiles()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -268,8 +272,8 @@ export default function ClientPortalIndexPage({
           {/* Right Column - Company Files (1/3 width) */}
           <div className="space-y-4">
             <FileList
-              files={fileManager.files}
-              loading={fileManager.loading}
+              files={fileManager.files.length > 0 ? fileManager.files : initialCompanyFiles}
+              loading={fileManager.loading && fileManager.files.length === 0}
               isAdmin={isAdmin}
               onDownload={fileManager.downloadFile}
               onDelete={fileManager.handleDeleteRequest}
