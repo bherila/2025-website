@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import type { ClientAgreement } from '@/types/client-management/client-agreement'
+import type { FileRecord } from '@/types/files'
 
 import ClientPortalNav from './ClientPortalNav'
 
@@ -21,8 +22,8 @@ interface ClientPortalAgreementPageProps {
   agreementId: number
   isAdmin: boolean
   initialAgreement?: any
-  initialInvoices?: any[]
-  initialAgreementFiles?: any[]
+  initialInvoices?: any[] | undefined
+  initialAgreementFiles?: FileRecord[] | undefined
 }
 
 export default function ClientPortalAgreementPage({ slug, companyName, companyId, agreementId, isAdmin, initialAgreement = null, initialInvoices, initialAgreementFiles }: ClientPortalAgreementPageProps) {
@@ -370,7 +371,7 @@ export default function ClientPortalAgreementPage({ slug, companyName, companyId
       {/* Agreement Files Section */}
       <FileList
         className="mt-6"
-        files={fileManager.files.length > 0 ? fileManager.files : initialAgreementFiles}
+        files={fileManager.files.length > 0 ? fileManager.files : (initialAgreementFiles ?? [])}
         loading={fileManager.loading && fileManager.files.length === 0}
         isAdmin={isAdmin}
         onDownload={fileManager.downloadFile}

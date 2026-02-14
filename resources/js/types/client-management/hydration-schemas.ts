@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { coerceMoney, coerceNumberLike } from './zod-helpers'
 
 // Basic hydrated schemas for client-portal server-provided payloads
 export const UserSchema = z.object({
@@ -27,11 +28,11 @@ export const AgreementSchema = z.object({
   termination_date: z.string().nullable().optional(),
   client_company_signed_date: z.string().nullable().optional(),
   is_visible_to_client: z.boolean().optional(),
-  monthly_retainer_hours: z.string(),
-  monthly_retainer_fee: z.string(),
-  catch_up_threshold_hours: z.string().optional(),
+  monthly_retainer_hours: coerceNumberLike('0'),
+  monthly_retainer_fee: coerceMoney('0.00'),
+  catch_up_threshold_hours: coerceNumberLike('0').optional(),
   rollover_months: z.number().optional(),
-  hourly_rate: z.string().optional(),
+  hourly_rate: coerceMoney('0.00').optional(),
 })
 export type Agreement = z.infer<typeof AgreementSchema>
 

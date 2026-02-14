@@ -40,9 +40,9 @@ interface ClientPortalNavProps {
   currentProjectSlug?: string | undefined
   projectName?: string | undefined
   invoiceNumber?: string | undefined
-  projects?: Project[]
-  isAdmin?: boolean
-  companyId?: number
+  projects?: Project[] | undefined
+  isAdmin?: boolean | undefined
+  companyId?: number | undefined
 }
 
 export default function ClientPortalNav({ 

@@ -24,14 +24,14 @@ interface ClientPortalIndexPageProps {
   slug: string
   companyName: string
   companyId: number
-  isAdmin?: boolean
-  initialProjects?: Project[]
-  initialAgreements?: Agreement[]
-  initialCompanyUsers?: User[]
-  initialRecentTimeEntries?: TimeEntry[]
-  initialCompanyFiles?: FileRecord[]
+  isAdmin?: boolean | undefined
+  initialProjects?: Project[] | undefined
+  initialAgreements?: Agreement[] | undefined
+  initialCompanyUsers?: User[] | undefined
+  initialRecentTimeEntries?: TimeEntry[] | undefined
+  initialCompanyFiles?: FileRecord[] | undefined
   /** called after a mutation so the host can refresh the page/state */
-  afterEdit?: () => void
+  afterEdit?: (() => void) | undefined
 }
 
 export default function ClientPortalIndexPage({ 
@@ -272,7 +272,7 @@ export default function ClientPortalIndexPage({
           {/* Right Column - Company Files (1/3 width) */}
           <div className="space-y-4">
             <FileList
-              files={fileManager.files.length > 0 ? fileManager.files : initialCompanyFiles}
+              files={fileManager.files.length > 0 ? fileManager.files : (initialCompanyFiles ?? [])}
               loading={fileManager.loading && fileManager.files.length === 0}
               isAdmin={isAdmin}
               onDownload={fileManager.downloadFile}

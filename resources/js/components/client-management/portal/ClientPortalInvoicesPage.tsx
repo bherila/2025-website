@@ -14,7 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import type { ClientCompany } from '@/types/client-management/common'
-import type { Invoice } from '@/types/client-management/invoice'
+import type { Invoice, InvoiceListItem } from '@/types/client-management/invoice'
 
 import ClientPortalNav from './ClientPortalNav'
 
@@ -24,11 +24,11 @@ interface ClientPortalInvoicesPageProps {
   companyId: number
   isAdmin?: boolean
   // can accept full invoices or lightweight list-item objects from server hydration
-  initialInvoices?: (Invoice | import('@/types/client-management/invoice').InvoiceListItem)[]
+  initialInvoices?: (Invoice | InvoiceListItem)[]
 }
 
 export default function ClientPortalInvoicesPage({ slug, companyName, companyId, isAdmin = false, initialInvoices }: ClientPortalInvoicesPageProps) {
-  const [invoices, setInvoices] = useState<Invoice[]>(initialInvoices ?? [])
+  const [invoices, setInvoices] = useState<(Invoice | InvoiceListItem)[]>(initialInvoices ?? [])
   const [company, setCompany] = useState<ClientCompany | null>(null)
   const [loading, setLoading] = useState(initialInvoices === undefined)
   const [generating, setGenerating] = useState(false)
@@ -100,7 +100,7 @@ export default function ClientPortalInvoicesPage({ slug, companyName, companyId,
     }
   }
 
-  const getStatusBadge = (status: string, invoice: Invoice) => {
+  const getStatusBadge = (status: string, invoice: Invoice | InvoiceListItem) => {
     // For draft invoices with period_end in the future, show "Upcoming"
     if (status === 'draft' && invoice.period_end) {
       const periodEnd = new Date(invoice.period_end);

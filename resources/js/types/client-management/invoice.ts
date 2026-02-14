@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { ClientInvoicePaymentSchema, ClientInvoicePaymentHydrationSchema } from './invoice-payment'
+import { coerceMoney, coerceNumberLike } from './zod-helpers'
 
 // Basic time entry schema
 export const InvoiceLineTimeEntrySchema = z.object({
@@ -12,11 +13,11 @@ export type InvoiceLineTimeEntry = z.infer<typeof InvoiceLineTimeEntrySchema>
 export const InvoiceLineSchema = z.object({
   client_invoice_line_id: z.number(),
   description: z.string(),
-  quantity: z.string(),
-  unit_price: z.string(),
-  line_total: z.string(),
+  quantity: coerceNumberLike('0'),
+  unit_price: coerceMoney('0.00'),
+  line_total: coerceMoney('0.00'),
   line_type: z.string(),
-  hours: z.string().nullable(),
+  hours: coerceNumberLike('0').nullable(),
   line_date: z.string().nullable(),
   time_entries: z.array(InvoiceLineTimeEntrySchema).optional(),
 })
@@ -59,28 +60,28 @@ export const InvoiceHydrationSchema = z.object({
   client_invoice_id: z.number(),
   client_company_id: z.number().optional(),
   invoice_number: z.string().nullable().optional(),
-  invoice_total: z.union([z.string(), z.number()]).optional(),
+  invoice_total: coerceMoney('0.00').optional(),
   issue_date: z.string().nullable().optional(),
   due_date: z.string().nullable().optional(),
   paid_date: z.string().nullable().optional(),
   status: z.string().optional(),
   period_start: z.string().nullable().optional(),
   period_end: z.string().nullable().optional(),
-  retainer_hours_included: z.union([z.string(), z.number()]).optional(),
-  hours_worked: z.union([z.string(), z.number()]).optional(),
+  retainer_hours_included: coerceNumberLike('0').optional(),
+  hours_worked: coerceNumberLike('0').optional(),
   carried_in_hours: z.number().optional(),
   current_month_hours: z.number().optional(),
-  rollover_hours_used: z.union([z.string(), z.number()]).optional(),
-  unused_hours_balance: z.union([z.string(), z.number()]).optional(),
-  negative_hours_balance: z.union([z.string(), z.number()]).optional(),
-  starting_unused_hours: z.union([z.string(), z.number()]).nullable().optional(),
-  starting_negative_hours: z.union([z.string(), z.number()]).nullable().optional(),
-  hours_billed_at_rate: z.union([z.string(), z.number()]).optional(),
+  rollover_hours_used: coerceNumberLike('0').optional(),
+  unused_hours_balance: coerceNumberLike('0').optional(),
+  negative_hours_balance: coerceNumberLike('0').optional(),
+  starting_unused_hours: coerceNumberLike('0').optional(),
+  starting_negative_hours: coerceNumberLike('0').optional(),
+  hours_billed_at_rate: coerceNumberLike('0').optional(),
   notes: z.string().nullable().optional(),
-  line_items: z.array(InvoiceLineSchema).optional(),
-  payments: z.array(ClientInvoicePaymentHydrationSchema).optional(),
-  remaining_balance: z.union([z.string(), z.number()]).optional(),
-  payments_total: z.union([z.string(), z.number()]).optional(),
+  line_items: z.array(InvoiceLineSchema).optional().default([]),
+  payments: z.array(ClientInvoicePaymentHydrationSchema).optional().default([]),
+  remaining_balance: coerceMoney('0.00').optional(),
+  payments_total: coerceMoney('0.00').optional(),
   previous_invoice_id: z.number().nullable().optional(),
   next_invoice_id: z.number().nullable().optional(),
 })
@@ -117,14 +118,14 @@ export const InvoiceListItemSchema = z.object({
   client_invoice_id: z.number(),
   client_company_id: z.number().optional(),
   invoice_number: z.string().nullable().optional(),
-  invoice_total: z.union([z.string(), z.number()]),
+  invoice_total: coerceMoney('0.00'),
   issue_date: z.string().nullable().optional(),
   due_date: z.string().nullable().optional(),
   status: z.string(),
   period_start: z.string().nullable().optional(),
   period_end: z.string().nullable().optional(),
-  remaining_balance: z.union([z.string(), z.number()]).optional(),
-  payments_total: z.union([z.string(), z.number()]).optional(),
+  remaining_balance: coerceMoney('0.00').optional(),
+  payments_total: coerceMoney('0.00').optional(),
 })
 export type InvoiceListItem = z.infer<typeof InvoiceListItemSchema>
 // Props used by small utility components (typed, callbacks not validated at runtime)

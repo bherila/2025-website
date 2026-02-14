@@ -313,57 +313,29 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         const relaxed = InvoiceHydrationSchema.safeParse(rawInvoice)
         if (relaxed.success) {
-          // normalize values to match strict InvoiceSchema expectations
-          const src = relaxed.data as any
-          const normalizeNumberLike = (v: any, fallback = '0') => {
-            if (v === null || v === undefined) return fallback
-            if (typeof v === 'number') return String(v)
-            return String(v)
-          }
-          const normalizeMoney = (v: any, fallback = '0.00') => {
-            if (v === null || v === undefined) return fallback
-            const n = Number(v)
-            if (Number.isNaN(n)) return fallback
-            return n.toFixed(2)
-          }
-
+          // values are already normalized by InvoiceHydrationSchema (using currencyjs)
+          const src = relaxed.success ? relaxed.data : ({} as any)
+          
           const coerced: any = {
-            client_invoice_id: src.client_invoice_id,
+            ...src,
             client_company_id: src.client_company_id ?? serverData.companyId,
             invoice_number: src.invoice_number ?? null,
-            invoice_total: normalizeMoney(src.invoice_total ?? 0),
             issue_date: src.issue_date ?? null,
             due_date: src.due_date ?? null,
             paid_date: src.paid_date ?? null,
             status: src.status ?? 'draft',
             period_start: src.period_start ?? null,
             period_end: src.period_end ?? null,
-            retainer_hours_included: normalizeNumberLike(src.retainer_hours_included ?? '0'),
-            hours_worked: normalizeNumberLike(src.hours_worked ?? '0'),
-            carried_in_hours: src.carried_in_hours ?? undefined,
-            current_month_hours: src.current_month_hours ?? undefined,
-            rollover_hours_used: normalizeNumberLike(src.rollover_hours_used ?? '0'),
-            unused_hours_balance: normalizeNumberLike(src.unused_hours_balance ?? '0'),
-            negative_hours_balance: normalizeNumberLike(src.negative_hours_balance ?? '0'),
-            starting_unused_hours: normalizeNumberLike(src.starting_unused_hours ?? '0'),
-            starting_negative_hours: normalizeNumberLike(src.starting_negative_hours ?? '0'),
-            hours_billed_at_rate: normalizeNumberLike(src.hours_billed_at_rate ?? '0'),
             notes: src.notes ?? null,
-            line_items: Array.isArray(src.line_items) ? src.line_items : [],
-            payments: Array.isArray(src.payments)
-              ? src.payments.map((p: any) => ({
-                  client_invoice_payment_id: p.client_invoice_payment_id,
-                  client_invoice_id: p.client_invoice_id ?? src.client_company_id ?? serverData.companyId,
-                  amount: normalizeMoney(p.amount ?? 0),
-                  payment_date: p.payment_date ?? null,
-                  payment_method: p.payment_method ?? 'Other',
-                  notes: p.hasOwnProperty('notes') ? p.notes : null,
-                  created_at: p.created_at ?? p.payment_date ?? new Date().toISOString(),
-                  updated_at: p.updated_at ?? p.payment_date ?? new Date().toISOString(),
-                }))
-              : [],
-            remaining_balance: normalizeMoney(src.remaining_balance ?? 0),
-            payments_total: normalizeMoney(src.payments_total ?? 0),
+            payments: src.payments.map((p: any) => ({
+              ...p,
+              client_invoice_id: p.client_invoice_id ?? src.client_company_id ?? serverData.companyId,
+              payment_date: p.payment_date ?? null,
+              payment_method: p.payment_method ?? 'Other',
+              notes: p.notes ?? null,
+              created_at: p.created_at ?? p.payment_date ?? new Date().toISOString(),
+              updated_at: p.updated_at ?? p.payment_date ?? new Date().toISOString(),
+            })),
             previous_invoice_id: src.previous_invoice_id ?? null,
             next_invoice_id: src.next_invoice_id ?? null,
           }

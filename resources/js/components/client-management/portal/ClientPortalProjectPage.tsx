@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
+import type { FileRecord } from '@/types/files'
 
 import ClientPortalNav from './ClientPortalNav'
 import EditTaskModal from './EditTaskModal'
@@ -45,11 +46,11 @@ interface ClientPortalProjectPageProps {
   companyId: number
   projectSlug: string
   projectName: string
-  isAdmin?: boolean
-  initialTasks?: Task[]
-  initialCompanyUsers?: User[]
-  initialProjects?: { id: number; name: string; slug: string }[]
-  initialProjectFiles?: any[]
+  isAdmin?: boolean | undefined
+  initialTasks?: Task[] | undefined
+  initialCompanyUsers?: User[] | undefined
+  initialProjects?: { id: number; name: string; slug: string }[] | undefined
+  initialProjectFiles?: FileRecord[] | undefined
 }
 
 export default function ClientPortalProjectPage({ slug, companyName, companyId, projectSlug, projectName, isAdmin = false, initialTasks, initialCompanyUsers, initialProjects, initialProjectFiles }: ClientPortalProjectPageProps) {
@@ -321,7 +322,7 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
           {/* Files Column - 1/3 width */}
           <div className="space-y-4">
             <FileList
-              files={fileManager.files.length > 0 ? fileManager.files : initialProjectFiles}
+              files={fileManager.files.length > 0 ? fileManager.files : (initialProjectFiles ?? [])}
               loading={fileManager.loading && fileManager.files.length === 0}
               isAdmin={isAdmin}
               onDownload={fileManager.downloadFile}

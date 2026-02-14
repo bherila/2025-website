@@ -1,4 +1,4 @@
-import { InvoiceSchema } from '@/types/client-management/invoice'
+import { InvoiceSchema, InvoiceHydrationSchema } from '@/types/client-management/invoice'
 
 describe('InvoiceSchema (zod)', () => {
   it('parses a valid invoice', () => {
@@ -50,7 +50,6 @@ describe('InvoiceSchema (zod)', () => {
       payments_total: 50
     }
 
-    const { InvoiceHydrationSchema } = require('@/types/client-management/invoice')
     const result = InvoiceHydrationSchema.safeParse(hydrated)
     expect(result.success).toBe(true)
   })
