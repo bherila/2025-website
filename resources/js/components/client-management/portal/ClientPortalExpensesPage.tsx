@@ -1,14 +1,14 @@
-import { 
+import {
   CheckCircle2,
   Clock,
-  DollarSign, 
-  ExternalLink, 
+  DollarSign,
+  ExternalLink,
   Link as LinkIcon,
-  Plus, 
-  Receipt, 
+  Plus,
+  Receipt,
   Trash2
 } from 'lucide-react'
-import { useCallback, useEffect,useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -130,7 +130,7 @@ export default function ClientPortalExpensesPage({ slug, companyName, companyId,
     return (
       <>
         <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="expenses" />
-        <div className="container mx-auto px-8 max-w-6xl">
+        <div className="mx-auto px-4 max-w-7xl">
           <Skeleton className="h-10 w-64 mb-6" />
           <Skeleton className="h-24 w-full mb-6" />
           <Skeleton className="h-64 w-full" />
@@ -142,7 +142,7 @@ export default function ClientPortalExpensesPage({ slug, companyName, companyId,
   return (
     <>
       <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="expenses" />
-      <div className="container mx-auto px-8 max-w-6xl">
+      <div className="mx-auto px-4 max-w-7xl">
         <div className="mb-6">
           <div className="flex justify-between items-center">
             <div>
@@ -164,7 +164,7 @@ export default function ClientPortalExpensesPage({ slug, companyName, companyId,
           >
             {formatCurrency(data?.total_amount || 0)}
           </SummaryTile>
-          
+
           <SummaryTile
             title="Reimbursable"
             icon={DollarSign}
@@ -172,7 +172,7 @@ export default function ClientPortalExpensesPage({ slug, companyName, companyId,
           >
             {formatCurrency(data?.reimbursable_total || 0)}
           </SummaryTile>
-          
+
           <SummaryTile
             title="Pending Reimbursement"
             icon={Clock}
@@ -180,7 +180,7 @@ export default function ClientPortalExpensesPage({ slug, companyName, companyId,
           >
             {formatCurrency(data?.pending_reimbursement_total || 0)}
           </SummaryTile>
-          
+
           <SummaryTile
             title="Non-Reimbursable"
             icon={Receipt}
@@ -223,7 +223,7 @@ export default function ClientPortalExpensesPage({ slug, companyName, companyId,
                 </TableHeader>
                 <TableBody>
                   {data.expenses.map(expense => (
-                    <TableRow 
+                    <TableRow
                       key={expense.id}
                       className="cursor-pointer hover:bg-muted/50"
                       onClick={() => openEditModal(expense)}

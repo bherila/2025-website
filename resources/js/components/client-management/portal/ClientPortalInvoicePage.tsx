@@ -166,7 +166,7 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
     }
 
     const isEditable = invoice?.status === 'draft';
-const hasPayments = invoice?.payments && (invoice.payments as any[]).length > 0;
+    const hasPayments = invoice?.payments && (invoice.payments as any[]).length > 0;
     const canVoid = !!(invoice && invoice.status !== 'void' && invoice.status !== 'paid' && !hasPayments);
 
     if (isLoading || !invoice) {
@@ -180,7 +180,7 @@ const hasPayments = invoice?.payments && (invoice.payments as any[]).length > 0;
                     currentPage="invoice"
                     invoiceNumber={invoice?.invoice_number ?? undefined}
                 />
-                <div className="container mx-auto px-8 max-w-6xl">
+                <div className="mx-auto px-4 max-w-7xl">
                     <div className="mb-6">
                         <Skeleton className="h-5 w-48" />
                     </div>
@@ -213,7 +213,7 @@ const hasPayments = invoice?.payments && (invoice.payments as any[]).length > 0;
                 invoiceNumber={invoice.invoice_number ?? undefined}
             />
 
-            <div className="container mx-auto px-8 max-w-6xl">
+            <div className="mx-auto px-4 max-w-7xl">
                 <ClientPortalInvoiceActionButtonRow
                     invoice={invoice}
                     isAdmin={isAdmin}
@@ -266,14 +266,14 @@ const hasPayments = invoice?.payments && (invoice.payments as any[]).length > 0;
                     </div>
                     <div className="text-right">
                         <div className="text-4xl font-bold mb-2">${parseFloat(invoice.invoice_total).toFixed(2)}</div>
-                        <Badge 
-                            variant={invoice.status === 'paid' ? 'default' : 'outline'} 
+                        <Badge
+                            variant={invoice.status === 'paid' ? 'default' : 'outline'}
                             className={
-                                invoice.status === 'paid' 
-                                    ? 'bg-green-600' 
+                                invoice.status === 'paid'
+                                    ? 'bg-green-600'
                                     : (invoice.status === 'issued' && parseFloat(invoice.payments_total || '0') > 0 && parseFloat(invoice.remaining_balance) > 0)
-                                    ? 'bg-blue-600 text-white'
-                                    : ''
+                                        ? 'bg-blue-600 text-white'
+                                        : ''
                             }
                         >
                             {invoice.status === 'issued' && parseFloat(invoice.payments_total || '0') > 0 && parseFloat(invoice.remaining_balance) > 0
@@ -391,7 +391,7 @@ const hasPayments = invoice?.payments && (invoice.payments as any[]).length > 0;
                                 </TableHeader>
                                 <TableBody>
                                     {invoice.payments.map(p => (
-                                        <TableRow 
+                                        <TableRow
                                             key={p.client_invoice_payment_id}
                                             className={`group ${isAdmin ? 'cursor-pointer' : ''}`}
                                             onClick={() => isAdmin && !isRefreshing && (setSelectedPayment(p), setPaymentModalOpen(true))}

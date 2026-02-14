@@ -1,11 +1,11 @@
 import { AlertCircle, Check, FileText, HelpCircle } from 'lucide-react'
-import { useCallback, useEffect,useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { DeleteFileModal, FileHistoryModal, FileList, FileUploadButton, useFileManagement } from '@/components/shared/FileManager'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardFooter,CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -137,7 +137,7 @@ export default function ClientPortalAgreementPage({ slug, companyName, companyId
     return (
       <>
         <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="agreement" />
-        <div className="container mx-auto px-8 max-w-6xl">
+        <div className="mx-auto px-4 max-w-7xl">
           <Card>
             <CardHeader>
               <Skeleton className="h-8 w-64 mb-2" />
@@ -165,7 +165,7 @@ export default function ClientPortalAgreementPage({ slug, companyName, companyId
   return (
     <>
       <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="agreement" />
-      <div className="container mx-auto px-8 max-w-6xl">
+      <div className="mx-auto px-4 max-w-7xl">
         <div className="flex items-center gap-4 mb-6">
           <FileText className="h-8 w-8 text-muted-foreground" />
           <div>
@@ -180,267 +180,267 @@ export default function ClientPortalAgreementPage({ slug, companyName, companyId
 
         {error && (
           <Alert variant="destructive" className="mb-4">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
-      {success && (
-        <Alert className="mb-4 border-green-500 bg-green-50 dark:bg-green-950">
-          <Check className="h-4 w-4 text-green-600" />
-          <AlertDescription className="text-green-600">{success}</AlertDescription>
-        </Alert>
-      )}
+        {success && (
+          <Alert className="mb-4 border-green-500 bg-green-50 dark:bg-green-950">
+            <Check className="h-4 w-4 text-green-600" />
+            <AlertDescription className="text-green-600">{success}</AlertDescription>
+          </Alert>
+        )}
 
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Agreement Summary</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <TooltipProvider>
-            <dl className="grid grid-cols-2 gap-4">
-              <div>
-                <dt className="text-sm text-muted-foreground flex items-center gap-1">
-                  Effective Date
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="h-3.5 w-3.5 cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="max-w-xs">The date when this service agreement becomes active and billing begins.</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </dt>
-                <dd className="font-medium">{new Date(agreement.active_date).toLocaleDateString()}</dd>
-              </div>
-              <div>
-                <dt className="text-sm text-muted-foreground flex items-center gap-1">
-                  Monthly Retainer
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="h-3.5 w-3.5 cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="max-w-xs">The fixed monthly fee that covers the contracted hours of service each month.</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </dt>
-                <dd className="font-medium">${parseFloat(agreement.monthly_retainer_fee).toLocaleString()}</dd>
-              </div>
-              <div>
-                <dt className="text-sm text-muted-foreground flex items-center gap-1">
-                  Hours Included
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="h-3.5 w-3.5 cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="max-w-xs">The number of service hours included with your monthly retainer fee.</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </dt>
-                <dd className="font-medium">{agreement.monthly_retainer_hours} hours/month</dd>
-              </div>
-              <div>
-                <dt className="text-sm text-muted-foreground flex items-center gap-1">
-                  Hourly Rate (Additional)
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="h-3.5 w-3.5 cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="max-w-xs">The rate charged for any hours worked beyond your monthly retainer hours and available rollover hours.</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </dt>
-                <dd className="font-medium">${parseFloat(agreement.hourly_rate).toLocaleString()}/hour</dd>
-              </div>
-              {agreement.rollover_months > 0 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Agreement Summary</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TooltipProvider>
+              <dl className="grid grid-cols-2 gap-4">
                 <div>
                   <dt className="text-sm text-muted-foreground flex items-center gap-1">
-                    Rollover Period
+                    Effective Date
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <HelpCircle className="h-3.5 w-3.5 cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p className="max-w-xs">The number of months that unused retainer hours can be carried forward. After this period, unused hours expire.</p>
+                        <p className="max-w-xs">The date when this service agreement becomes active and billing begins.</p>
                       </TooltipContent>
                     </Tooltip>
                   </dt>
-                  <dd className="font-medium">{agreement.rollover_months} month(s)</dd>
+                  <dd className="font-medium">{new Date(agreement.active_date).toLocaleDateString()}</dd>
                 </div>
-              )}
-              {agreement.agreement_link && (
                 <div>
-                  <dt className="text-sm text-muted-foreground">Full Agreement</dt>
-                  <dd>
-                    <a href={agreement.agreement_link} target="_blank" rel="noopener noreferrer" 
-                       className="text-blue-600 hover:underline">
-                      View Document →
-                    </a>
-                  </dd>
+                  <dt className="text-sm text-muted-foreground flex items-center gap-1">
+                    Monthly Retainer
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="h-3.5 w-3.5 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="max-w-xs">The fixed monthly fee that covers the contracted hours of service each month.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </dt>
+                  <dd className="font-medium">${parseFloat(agreement.monthly_retainer_fee).toLocaleString()}</dd>
                 </div>
-              )}
-            </dl>
-          </TooltipProvider>
-        </CardContent>
-      </Card>
-
-      {agreement.agreement_text && agreement.agreement_text.trim() !== '' && agreement.agreement_text.toUpperCase() !== 'TBA' && (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Agreement Terms</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
-              {agreement.agreement_text}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {isSigned && (
-        <Card className="mb-6 border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950">
-          <CardHeader>
-            <CardTitle className="text-green-700 dark:text-green-300">✓ Agreement Signed</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-green-700 dark:text-green-300">
-            <p><strong>Signed by:</strong> {agreement.client_company_signed_name}</p>
-            <p><strong>Title:</strong> {agreement.client_company_signed_title}</p>
-            <p><strong>Date:</strong> {new Date(agreement.client_company_signed_date!).toLocaleDateString()}</p>
-          </CardContent>
-        </Card>
-      )}
-
-      {!isSigned && !isTerminated && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Sign Agreement</CardTitle>
-            <CardDescription>
-              By signing, you agree to the terms outlined in this agreement.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {showSignForm ? (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="signName">Your Full Name</Label>
-                  <Input
-                    id="signName"
-                    value={signName}
-                    onChange={(e) => setSignName(e.target.value)}
-                    placeholder="John Doe"
-                  />
+                <div>
+                  <dt className="text-sm text-muted-foreground flex items-center gap-1">
+                    Hours Included
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="h-3.5 w-3.5 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="max-w-xs">The number of service hours included with your monthly retainer fee.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </dt>
+                  <dd className="font-medium">{agreement.monthly_retainer_hours} hours/month</dd>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="signTitle">Your Title</Label>
-                  <Input
-                    id="signTitle"
-                    value={signTitle}
-                    onChange={(e) => setSignTitle(e.target.value)}
-                    placeholder="CEO, Director, etc."
-                  />
+                <div>
+                  <dt className="text-sm text-muted-foreground flex items-center gap-1">
+                    Hourly Rate (Additional)
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="h-3.5 w-3.5 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="max-w-xs">The rate charged for any hours worked beyond your monthly retainer hours and available rollover hours.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </dt>
+                  <dd className="font-medium">${parseFloat(agreement.hourly_rate).toLocaleString()}/hour</dd>
                 </div>
-              </div>
-            ) : (
-              <p className="text-muted-foreground">
-                Click the button below to proceed with signing this agreement.
-              </p>
-            )}
-          </CardContent>
-          <CardFooter>
-            {showSignForm ? (
-              <div className="flex gap-2">
-                <Button onClick={handleSign} disabled={signing}>
-                  {signing ? 'Signing...' : 'Confirm & Sign'}
-                </Button>
-                <Button variant="outline" onClick={() => setShowSignForm(false)}>
-                  Cancel
-                </Button>
-              </div>
-            ) : (
-              <Button onClick={() => setShowSignForm(true)}>
-                Sign Agreement
-              </Button>
-            )}
-          </CardFooter>
-        </Card>
-      )}
-
-      {/* Agreement Files Section */}
-      <FileList
-        className="mt-6"
-        files={fileManager.files.length > 0 ? fileManager.files : (initialAgreementFiles ?? [])}
-        loading={fileManager.loading && fileManager.files.length === 0}
-        isAdmin={isAdmin}
-        onDownload={fileManager.downloadFile}
-        onDelete={fileManager.handleDeleteRequest}
-        title="Agreement Files"
-        actions={isAdmin && <FileUploadButton onUpload={fileManager.uploadFile} />}
-      />
-
-      {/* Invoices Section */}
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle>Invoices</CardTitle>
-          <CardDescription>Invoices generated under this service agreement</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loadingInvoices ? (
-            <div className="space-y-2">
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-            </div>
-          ) : invoices.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No invoices have been issued yet.</p>
-          ) : (
-            <div className="space-y-2">
-              {invoices.map((invoice) => (
-                <a
-                  key={invoice.client_invoice_id}
-                  href={`/client/portal/${slug}/invoice/${invoice.client_invoice_id}`}
-                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-                >
+                {agreement.rollover_months > 0 && (
                   <div>
-                    <div className="font-medium">
-                      {invoice.invoice_number || `Invoice #${invoice.client_invoice_id}`}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {invoice.period_start && invoice.period_end && (
-                        <>{new Date(invoice.period_start).toLocaleDateString()} - {new Date(invoice.period_end).toLocaleDateString()}</>
-                      )}
-                    </div>
+                    <dt className="text-sm text-muted-foreground flex items-center gap-1">
+                      Rollover Period
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="h-3.5 w-3.5 cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="max-w-xs">The number of months that unused retainer hours can be carried forward. After this period, unused hours expire.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </dt>
+                    <dd className="font-medium">{agreement.rollover_months} month(s)</dd>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <div className="font-medium">${parseFloat(invoice.invoice_total).toFixed(2)}</div>
-                      <Badge variant={invoice.status === 'paid' ? 'default' : 'outline'} className={invoice.status === 'paid' ? 'bg-green-600' : ''}>
-                        {invoice.status.toUpperCase()}
-                      </Badge>
-                    </div>
+                )}
+                {agreement.agreement_link && (
+                  <div>
+                    <dt className="text-sm text-muted-foreground">Full Agreement</dt>
+                    <dd>
+                      <a href={agreement.agreement_link} target="_blank" rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline">
+                        View Document →
+                      </a>
+                    </dd>
                   </div>
-                </a>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                )}
+              </dl>
+            </TooltipProvider>
+          </CardContent>
+        </Card>
 
-      <FileHistoryModal
-        file={fileManager.historyFile}
-        history={fileManager.historyData}
-        isOpen={fileManager.historyModalOpen}
-        onClose={fileManager.closeHistoryModal}
-      />
+        {agreement.agreement_text && agreement.agreement_text.trim() !== '' && agreement.agreement_text.toUpperCase() !== 'TBA' && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Agreement Terms</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
+                {agreement.agreement_text}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-      <DeleteFileModal
-        file={fileManager.deleteFile}
-        isOpen={fileManager.deleteModalOpen}
-        isDeleting={fileManager.isDeleting}
-        onClose={fileManager.closeDeleteModal}
-        onConfirm={fileManager.handleDeleteConfirm}
-      />
+        {isSigned && (
+          <Card className="mb-6 border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950">
+            <CardHeader>
+              <CardTitle className="text-green-700 dark:text-green-300">✓ Agreement Signed</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-green-700 dark:text-green-300">
+              <p><strong>Signed by:</strong> {agreement.client_company_signed_name}</p>
+              <p><strong>Title:</strong> {agreement.client_company_signed_title}</p>
+              <p><strong>Date:</strong> {new Date(agreement.client_company_signed_date!).toLocaleDateString()}</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {!isSigned && !isTerminated && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Sign Agreement</CardTitle>
+              <CardDescription>
+                By signing, you agree to the terms outlined in this agreement.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {showSignForm ? (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="signName">Your Full Name</Label>
+                    <Input
+                      id="signName"
+                      value={signName}
+                      onChange={(e) => setSignName(e.target.value)}
+                      placeholder="John Doe"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="signTitle">Your Title</Label>
+                    <Input
+                      id="signTitle"
+                      value={signTitle}
+                      onChange={(e) => setSignTitle(e.target.value)}
+                      placeholder="CEO, Director, etc."
+                    />
+                  </div>
+                </div>
+              ) : (
+                <p className="text-muted-foreground">
+                  Click the button below to proceed with signing this agreement.
+                </p>
+              )}
+            </CardContent>
+            <CardFooter>
+              {showSignForm ? (
+                <div className="flex gap-2">
+                  <Button onClick={handleSign} disabled={signing}>
+                    {signing ? 'Signing...' : 'Confirm & Sign'}
+                  </Button>
+                  <Button variant="outline" onClick={() => setShowSignForm(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <Button onClick={() => setShowSignForm(true)}>
+                  Sign Agreement
+                </Button>
+              )}
+            </CardFooter>
+          </Card>
+        )}
+
+        {/* Agreement Files Section */}
+        <FileList
+          className="mt-6"
+          files={fileManager.files.length > 0 ? fileManager.files : (initialAgreementFiles ?? [])}
+          loading={fileManager.loading && fileManager.files.length === 0}
+          isAdmin={isAdmin}
+          onDownload={fileManager.downloadFile}
+          onDelete={fileManager.handleDeleteRequest}
+          title="Agreement Files"
+          actions={isAdmin && <FileUploadButton onUpload={fileManager.uploadFile} />}
+        />
+
+        {/* Invoices Section */}
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>Invoices</CardTitle>
+            <CardDescription>Invoices generated under this service agreement</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loadingInvoices ? (
+              <div className="space-y-2">
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+              </div>
+            ) : invoices.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No invoices have been issued yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {invoices.map((invoice) => (
+                  <a
+                    key={invoice.client_invoice_id}
+                    href={`/client/portal/${slug}/invoice/${invoice.client_invoice_id}`}
+                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                  >
+                    <div>
+                      <div className="font-medium">
+                        {invoice.invoice_number || `Invoice #${invoice.client_invoice_id}`}
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {invoice.period_start && invoice.period_end && (
+                          <>{new Date(invoice.period_start).toLocaleDateString()} - {new Date(invoice.period_end).toLocaleDateString()}</>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <div className="font-medium">${parseFloat(invoice.invoice_total).toFixed(2)}</div>
+                        <Badge variant={invoice.status === 'paid' ? 'default' : 'outline'} className={invoice.status === 'paid' ? 'bg-green-600' : ''}>
+                          {invoice.status.toUpperCase()}
+                        </Badge>
+                      </div>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <FileHistoryModal
+          file={fileManager.historyFile}
+          history={fileManager.historyData}
+          isOpen={fileManager.historyModalOpen}
+          onClose={fileManager.closeHistoryModal}
+        />
+
+        <DeleteFileModal
+          file={fileManager.deleteFile}
+          isOpen={fileManager.deleteModalOpen}
+          isDeleting={fileManager.isDeleting}
+          onClose={fileManager.closeDeleteModal}
+          onConfirm={fileManager.handleDeleteConfirm}
+        />
       </div>
     </>
   )

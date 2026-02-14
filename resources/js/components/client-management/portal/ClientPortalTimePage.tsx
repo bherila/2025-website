@@ -1,5 +1,5 @@
-import { ChevronDown, ChevronRight, Clock, Download, Info,Pencil, Plus } from 'lucide-react'
-import { useCallback, useEffect,useState } from 'react'
+import { ChevronDown, ChevronRight, Clock, Download, Info, Pencil, Plus } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -14,10 +14,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import {TooltipProvider } from '@/components/ui/tooltip'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { formatHours } from '@/lib/formatHours'
-import type { Project,User } from '@/types/client-management/common'
-import type { TimeEntriesResponse,TimeEntry } from '@/types/client-management/time-entry'
+import type { Project, User } from '@/types/client-management/common'
+import type { TimeEntriesResponse, TimeEntry } from '@/types/client-management/time-entry'
 
 import ClientPortalNav from './ClientPortalNav'
 import NewTimeEntryModal from './NewTimeEntryModal'
@@ -180,7 +180,7 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, isA
       <TooltipProvider>
         <>
           <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="time" projects={projects} />
-          <div className="container mx-auto px-8 max-w-6xl">
+          <div className="mx-auto px-4 max-w-7xl">
             <Skeleton className="h-10 w-64 mb-6" />
             <Skeleton className="h-24 w-full mb-6" />
             <div className="space-y-4">
@@ -197,7 +197,7 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, isA
     <TooltipProvider>
       <>
         <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="time" projects={projects} />
-        <div className="container mx-auto px-8 max-w-6xl">
+        <div className="mx-auto px-4 max-w-7xl">
           <div className="mb-6">
             <div className="flex justify-between items-center">
               <div>

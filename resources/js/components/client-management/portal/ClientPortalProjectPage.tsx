@@ -97,7 +97,7 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
       // hydration provided tasks — clear loading
       setLoading(false)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchTasks, initialTasks])
 
   const fetchCompanyUsers = useCallback(async () => {
@@ -159,17 +159,17 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
   if (loading) {
     return (
       <>
-        <ClientPortalNav 
-          slug={slug} 
-          companyName={companyName} 
+        <ClientPortalNav
+          slug={slug}
+          companyName={companyName}
           companyId={companyId}
           isAdmin={isAdmin}
-          currentPage="project" 
-          currentProjectSlug={projectSlug} 
+          currentPage="project"
+          currentProjectSlug={projectSlug}
           projectName={projectName}
           projects={initialProjects}
         />
-        <div className="container mx-auto px-8 max-w-6xl">
+        <div className="mx-auto px-4 max-w-7xl">
           <div className="mb-6">
             <Skeleton className="h-10 w-64" />
           </div>
@@ -190,17 +190,17 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
 
   return (
     <>
-      <ClientPortalNav 
-        slug={slug} 
-        companyName={companyName} 
+      <ClientPortalNav
+        slug={slug}
+        companyName={companyName}
         companyId={companyId}
         isAdmin={isAdmin}
-        currentPage="project" 
-        currentProjectSlug={projectSlug} 
+        currentPage="project"
+        currentProjectSlug={projectSlug}
         projectName={projectName}
         projects={initialProjects}
       />
-      <div className="container mx-auto px-8 max-w-6xl">
+      <div className="mx-auto px-4 max-w-7xl">
         <div className="mb-6">
           <div className="flex justify-between items-center">
             <div>
@@ -267,10 +267,10 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
                               <Badge variant="secondary" className="font-normal">{task.assignee.name}</Badge>
                             )}
                             {task.due_date && (
-                               <div className={`flex items-center gap-1 ${new Date(task.due_date) < new Date() ? 'text-red-500 font-medium' : ''}`}>
-                                 <Calendar className="h-3 w-3" />
-                                 {format(new Date(task.due_date), 'MMM d, yyyy')}
-                               </div>
+                              <div className={`flex items-center gap-1 ${new Date(task.due_date) < new Date() ? 'text-red-500 font-medium' : ''}`}>
+                                <Calendar className="h-3 w-3" />
+                                {format(new Date(task.due_date), 'MMM d, yyyy')}
+                              </div>
                             )}
                           </div>
                         </div>
@@ -288,7 +288,7 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
                           <div className="flex items-start gap-3">
                             <div className="mt-1">
                               {togglingTasks.has(task.id) ? (
-                                 <div className="h-4 w-4 rounded-sm border border-primary animate-pulse bg-primary/20" />
+                                <div className="h-4 w-4 rounded-sm border border-primary animate-pulse bg-primary/20" />
                               ) : (
                                 <Checkbox
                                   checked={true}
@@ -303,9 +303,9 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
                                   <Badge variant="secondary" className="ml-0 text-xs">{task.assignee.name}</Badge>
                                 )}
                                 {task.completed_at && (
-                                   <span className="text-xs text-muted-foreground">
-                                     Completed {format(new Date(task.completed_at), 'MMM d')}
-                                   </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    Completed {format(new Date(task.completed_at), 'MMM d')}
+                                  </span>
                                 )}
                               </div>
                             </div>

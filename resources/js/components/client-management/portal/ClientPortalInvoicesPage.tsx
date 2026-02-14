@@ -1,5 +1,5 @@
-import { ChevronRight,FileText, Loader2, Receipt, RefreshCw } from 'lucide-react'
-import { useCallback, useEffect,useState } from 'react'
+import { ChevronRight, FileText, Loader2, Receipt, RefreshCw } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -109,7 +109,7 @@ export default function ClientPortalInvoicesPage({ slug, companyName, companyId,
         return <Badge variant="outline" className="border-blue-600 text-blue-600">Upcoming</Badge>
       }
     }
-    
+
     switch (status) {
       case 'paid':
         return <Badge variant="default" className="bg-green-600">Paid</Badge>
@@ -126,7 +126,7 @@ export default function ClientPortalInvoicesPage({ slug, companyName, companyId,
     return (
       <>
         <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="invoices" />
-        <div className="container mx-auto px-8 max-w-6xl">
+        <div className="mx-auto px-4 max-w-7xl">
           <div className="space-y-4">
             {[1, 2, 3].map(i => (
               <Card key={i}>
@@ -150,7 +150,7 @@ export default function ClientPortalInvoicesPage({ slug, companyName, companyId,
   return (
     <>
       <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="invoices" />
-      <div className="container mx-auto px-8 max-w-6xl">
+      <div className="mx-auto px-4 max-w-7xl">
         <div className="flex items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-4">
             <Receipt className="h-8 w-8 text-muted-foreground" />

@@ -1,15 +1,15 @@
 'use client'
 
 import { ChevronDown, Clock, FileText, FolderOpen, Home, Receipt, Settings } from 'lucide-react'
-import { useCallback, useEffect,useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import {
-    Breadcrumb,
-    BreadcrumbItem,
-    BreadcrumbLink,
-    BreadcrumbList,
-    BreadcrumbPage,
-    BreadcrumbSeparator,
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { Button } from '@/components/ui/button'
 import {
@@ -45,10 +45,10 @@ interface ClientPortalNavProps {
   companyId?: number | undefined
 }
 
-export default function ClientPortalNav({ 
-  slug, 
-  companyName, 
-  currentPage, 
+export default function ClientPortalNav({
+  slug,
+  companyName,
+  currentPage,
   currentProjectSlug,
   projectName,
   invoiceNumber,
@@ -100,7 +100,7 @@ export default function ClientPortalNav({
 
   return (
     <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 mb-6 print:hidden">
-      <div className="container mx-auto px-8 max-w-6xl">
+      <div className="mx-auto px-4 max-w-7xl">
         <div className="flex h-14 items-center justify-between">
           {/* Left side: Company name, Home, Projects dropdown */}
           <div className="flex items-center gap-6">
@@ -120,7 +120,7 @@ export default function ClientPortalNav({
                   <>
                     {companies.map(company => (
                       <DropdownMenuItem key={company.id} asChild>
-                        <a 
+                        <a
                           href={`/client/portal/${company.slug}`}
                           className={cn(
                             slug === company.slug && 'bg-accent font-medium'
@@ -147,8 +147,8 @@ export default function ClientPortalNav({
 
             <div className="flex items-center gap-1">
               {/* Home link */}
-              <Button 
-                variant={currentPage === 'home' ? 'secondary' : 'ghost'} 
+              <Button
+                variant={currentPage === 'home' ? 'secondary' : 'ghost'}
                 size="sm"
                 asChild
               >
@@ -159,8 +159,8 @@ export default function ClientPortalNav({
               </Button>
 
               {/* Time Records */}
-              <Button 
-                variant={currentPage === 'time' ? 'secondary' : 'ghost'} 
+              <Button
+                variant={currentPage === 'time' ? 'secondary' : 'ghost'}
                 size="sm"
                 asChild
               >
@@ -171,8 +171,8 @@ export default function ClientPortalNav({
               </Button>
 
               {/* Expenses */}
-              <Button 
-                variant={currentPage === 'expenses' ? 'secondary' : 'ghost'} 
+              <Button
+                variant={currentPage === 'expenses' ? 'secondary' : 'ghost'}
                 size="sm"
                 asChild
               >
@@ -183,8 +183,8 @@ export default function ClientPortalNav({
               </Button>
 
               {/* Invoices */}
-              <Button 
-                variant={currentPage === 'invoices' || currentPage === 'invoice' ? 'secondary' : 'ghost'} 
+              <Button
+                variant={currentPage === 'invoices' || currentPage === 'invoice' ? 'secondary' : 'ghost'}
                 size="sm"
                 asChild
               >
@@ -197,8 +197,8 @@ export default function ClientPortalNav({
               {/* Tasks dropdown */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button 
-                    variant={currentPage === 'project' ? 'secondary' : 'ghost'} 
+                  <Button
+                    variant={currentPage === 'project' ? 'secondary' : 'ghost'}
                     size="sm"
                     className="gap-1"
                   >
@@ -215,7 +215,7 @@ export default function ClientPortalNav({
                   ) : (
                     projects.map(project => (
                       <DropdownMenuItem key={project.id} asChild>
-                        <a 
+                        <a
                           href={`/client/portal/${slug}/project/${project.slug}`}
                           className={cn(
                             currentProjectSlug === project.slug && 'bg-accent'
@@ -244,16 +244,16 @@ export default function ClientPortalNav({
           )}
         </div>
       </div>
-      
+
       {/* Breadcrumbs Row */}
       {currentPage !== 'home' && (
-        <div className="container mx-auto px-8 max-w-6xl pb-4">
+        <div className="mx-auto px-4 max-w-7xl pb-4">
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
                 <BreadcrumbLink href={`/client/portal/${slug}`}>Home</BreadcrumbLink>
               </BreadcrumbItem>
-              
+
               {currentPage === 'time' && (
                 <>
                   <BreadcrumbSeparator />

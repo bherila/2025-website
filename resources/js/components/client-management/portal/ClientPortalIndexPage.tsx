@@ -34,9 +34,9 @@ interface ClientPortalIndexPageProps {
   afterEdit?: (() => void) | undefined
 }
 
-export default function ClientPortalIndexPage({ 
-  slug, 
-  companyName, 
+export default function ClientPortalIndexPage({
+  slug,
+  companyName,
   companyId,
   isAdmin = false,
   initialProjects,
@@ -94,21 +94,21 @@ export default function ClientPortalIndexPage({
   }
 
   // Get active agreement info for compact display
-  const activeAgreement = agreements.find(a => 
+  const activeAgreement = agreements.find(a =>
     !a.termination_date && a.client_company_signed_date
   )
 
   return (
     <>
-      <ClientPortalNav 
-        slug={slug} 
-        companyName={companyName} 
+      <ClientPortalNav
+        slug={slug}
+        companyName={companyName}
         companyId={companyId}
         isAdmin={isAdmin}
         currentPage="home"
         projects={projects}
       />
-      <div className="container mx-auto px-8 max-w-6xl">
+      <div className="mx-auto px-4 max-w-7xl">
         <div className="flex justify-between items-center mb-6">
           <div>
             <h1 className="text-3xl font-bold">{companyName}</h1>
@@ -150,7 +150,7 @@ export default function ClientPortalIndexPage({
               <div className="grid gap-4 md:grid-cols-2">
                 {projects.map(project => (
                   <Card key={project.id} className="cursor-pointer hover:shadow-md transition-shadow"
-                        onClick={() => window.location.href = `/client/portal/${slug}/project/${project.slug}`}>
+                    onClick={() => window.location.href = `/client/portal/${slug}/project/${project.slug}`}>
                     <CardHeader>
                       <CardTitle className="text-lg">{project.name}</CardTitle>
                     </CardHeader>
@@ -174,8 +174,8 @@ export default function ClientPortalIndexPage({
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-lg">Recent Time Entries</CardTitle>
-                    <Button 
-                      variant="ghost" 
+                    <Button
+                      variant="ghost"
                       size="sm"
                       onClick={() => window.location.href = `/client/portal/${slug}/time`}
                     >
@@ -199,7 +199,7 @@ export default function ClientPortalIndexPage({
                         {recentTimeEntries.map((entry) => {
                           const entryDate = new Date(entry.date_worked)
                           return (
-                            <tr 
+                            <tr
                               key={entry.id}
                               className={`group border-b border-muted/30 last:border-0 ${isAdmin && !entry.is_invoiced ? 'cursor-pointer hover:bg-muted/30' : ''}`}
                               onClick={() => isAdmin && !entry.is_invoiced && openEditTimeEntry(entry)}
@@ -292,8 +292,8 @@ export default function ClientPortalIndexPage({
                   Active Agreement: <span className="font-semibold text-foreground">{activeAgreement.monthly_retainer_hours} retainer hours / month</span>
                 </span>
               </div>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="sm"
                 onClick={() => window.location.href = `/client/portal/${slug}/agreement/${activeAgreement.id}`}
               >
@@ -304,37 +304,37 @@ export default function ClientPortalIndexPage({
           </div>
         )}
 
-      <NewTimeEntryModal
-        open={newTimeEntryModalOpen}
-        onOpenChange={handleTimeEntryModalClose}
-        slug={slug}
-        projects={projects}
-        users={companyUsers}
-        onSuccess={handleTimeEntrySuccess}
-        entry={editingEntry}
-        lastProjectId={recentTimeEntries.length > 0 ? recentTimeEntries[0]?.project?.id?.toString() : undefined}
-      />
+        <NewTimeEntryModal
+          open={newTimeEntryModalOpen}
+          onOpenChange={handleTimeEntryModalClose}
+          slug={slug}
+          projects={projects}
+          users={companyUsers}
+          onSuccess={handleTimeEntrySuccess}
+          entry={editingEntry}
+          lastProjectId={recentTimeEntries.length > 0 ? recentTimeEntries[0]?.project?.id?.toString() : undefined}
+        />
 
-      <NewProjectModal
-        open={newProjectModalOpen}
-        onOpenChange={setNewProjectModalOpen}
-        slug={slug}
-      />
+        <NewProjectModal
+          open={newProjectModalOpen}
+          onOpenChange={setNewProjectModalOpen}
+          slug={slug}
+        />
 
-      <FileHistoryModal
-        file={fileManager.historyFile}
-        history={fileManager.historyData}
-        isOpen={fileManager.historyModalOpen}
-        onClose={fileManager.closeHistoryModal}
-      />
+        <FileHistoryModal
+          file={fileManager.historyFile}
+          history={fileManager.historyData}
+          isOpen={fileManager.historyModalOpen}
+          onClose={fileManager.closeHistoryModal}
+        />
 
-      <DeleteFileModal
-        file={fileManager.deleteFile}
-        isOpen={fileManager.deleteModalOpen}
-        isDeleting={fileManager.isDeleting}
-        onClose={fileManager.closeDeleteModal}
-        onConfirm={fileManager.handleDeleteConfirm}
-      />
+        <DeleteFileModal
+          file={fileManager.deleteFile}
+          isOpen={fileManager.deleteModalOpen}
+          isDeleting={fileManager.isDeleting}
+          onClose={fileManager.closeDeleteModal}
+          onConfirm={fileManager.handleDeleteConfirm}
+        />
       </div>
     </>
   )
