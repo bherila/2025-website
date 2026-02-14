@@ -11,7 +11,9 @@ function abbreviateName(name: string | null | undefined): string {
   if (!name) return 'Unknown'
   const parts = name.trim().split(/\s+/)
   if (parts.length < 2) return name
-  return `${parts[0]} ${parts[1]![0]}.`
+  const secondPart = parts[1]
+  if (!secondPart || secondPart.length === 0) return parts[0] || name
+  return `${parts[0]} ${secondPart[0]}.`
 }
 
 interface TimeEntryListItemProps {
@@ -55,12 +57,12 @@ export default function TimeEntryListItem({
             {entry.is_billable && entry.is_invoiced ? (
               entry.client_invoice ? (
                 <a href={`/client/portal/${slug}/invoices/${entry.client_invoice.client_invoice_id}`} className="no-underline">
-                  <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-green-600 text-green-600 font-bold shrink-0 text-uppercase hover:bg-green-50">
+                  <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-green-600 text-green-600 font-bold shrink-0 uppercase hover:bg-green-50">
                     Invoiced
                   </Badge>
                 </a>
               ) : (
-                <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-green-600 text-green-600 font-bold shrink-0 text-uppercase">
+                <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-green-600 text-green-600 font-bold shrink-0 uppercase">
                   Invoiced
                 </Badge>
               )

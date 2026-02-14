@@ -1,4 +1,4 @@
-import { Clock, FolderOpen, Plus, ExternalLink } from 'lucide-react'
+import { Clock, FolderOpen, Plus, ExternalLink, Pencil } from 'lucide-react'
 import { useCallback,useEffect, useState } from 'react'
 
 import {
@@ -260,7 +260,15 @@ export default function ClientPortalIndexPage({
                               </td>
                               <td className="py-2 px-3 align-top">
                                 <span className="text-sm whitespace-nowrap text-muted-foreground">
-                                  {entry.user?.name?.split(' ').map((n, i) => i === 0 ? n : `${n[0]}.`).join(' ')}
+                                  {(() => {
+                                    const name = entry.user?.name
+                                    if (!name) return 'Unknown'
+                                    const parts = name.trim().split(/\s+/)
+                                    if (parts.length < 2) return name
+                                    const first = parts[0]
+                                    const rest = parts.slice(1).map(n => n.length > 0 ? `${n[0]}.` : '').join(' ')
+                                    return `${first} ${rest}`.trim()
+                                  })()}
                                 </span>
                               </td>
                               <td className="text-right py-2 px-3 align-top text-sm">
@@ -278,7 +286,7 @@ export default function ClientPortalIndexPage({
                                         openEditTimeEntry(entry)
                                       }}
                                     >
-                                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                                      <Pencil className="h-3 w-3 text-muted-foreground" />
                                     </Button>
                                   )}
                                 </td>
