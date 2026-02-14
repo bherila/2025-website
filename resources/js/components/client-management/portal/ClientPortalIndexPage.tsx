@@ -11,6 +11,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { abbreviateName } from '@/lib/nameUtils'
 import type { Agreement, Project, User } from '@/types/client-management/common'
 import type { TimeEntry } from '@/types/client-management/time-entry'
 
@@ -260,15 +261,7 @@ export default function ClientPortalIndexPage({
                               </td>
                               <td className="py-2 px-3 align-top">
                                 <span className="text-sm whitespace-nowrap text-muted-foreground">
-                                  {(() => {
-                                    const name = entry.user?.name
-                                    if (!name) return 'Unknown'
-                                    const parts = name.trim().split(/\s+/)
-                                    if (parts.length < 2) return name
-                                    const first = parts[0]
-                                    const rest = parts.slice(1).map(n => n.length > 0 ? `${n[0]}.` : '').join(' ')
-                                    return `${first} ${rest}`.trim()
-                                  })()}
+                                  {abbreviateName(entry.user?.name)}
                                 </span>
                               </td>
                               <td className="text-right py-2 px-3 align-top text-sm">
@@ -345,7 +338,7 @@ export default function ClientPortalIndexPage({
         users={companyUsers}
         onSuccess={handleTimeEntrySuccess}
         entry={editingEntry}
-        lastProjectId={recentTimeEntries.length > 0 ? recentTimeEntries[0]?.project?.id.toString() : undefined}
+        lastProjectId={recentTimeEntries.length > 0 ? recentTimeEntries[0]?.project?.id?.toString() : undefined}
       />
 
       <NewProjectModal

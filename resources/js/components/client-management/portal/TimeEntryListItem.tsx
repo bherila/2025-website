@@ -5,16 +5,8 @@ import {
   TableCell,
   TableRow,
 } from "@/components/ui/table"
+import { abbreviateName } from '@/lib/nameUtils'
 import type { TimeEntry } from '@/types/client-management/time-entry'
-
-function abbreviateName(name: string | null | undefined): string {
-  if (!name) return 'Unknown'
-  const parts = name.trim().split(/\s+/)
-  if (parts.length < 2) return name
-  const secondPart = parts[1]
-  if (!secondPart || secondPart.length === 0) return parts[0] || name
-  return `${parts[0]} ${secondPart[0]}.`
-}
 
 interface TimeEntryListItemProps {
   entry: TimeEntry
