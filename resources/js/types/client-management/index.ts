@@ -8,10 +8,10 @@ export type {
   User} from './common'
 export type {
   ClientAdminActionsProps,
-  ClientInvoicePayment,
   Invoice,
   InvoiceLine,
   InvoicePreview} from './invoice'
+export type { ClientInvoicePayment } from './invoice-payment'
 export type {
   MonthlyClosingBalance,
   MonthlyData,

@@ -1,13 +1,23 @@
 @extends('layouts.app')
 
 @section('content')
-<div id="ClientPortalProjectPage" 
-     data-slug="{{ $slug }}" 
-     data-company-name="{{ $company->company_name }}"
-     data-company-id="{{ $company->id }}"
-     data-project-slug="{{ $project->slug }}"
-     data-project-name="{{ $project->name }}"
-     data-is-admin="{{ auth()->user()?->hasRole('admin') ? 'true' : 'false' }}"></div>
+
+@push('data-head')
+<script id="client-portal-initial-data" type="application/json">
+{!! json_encode([
+  'slug' => $slug,
+  'companyName' => $company->company_name,
+  'companyId' => $company->id,
+  'project' => $project,
+  'tasks' => $tasks ?? [],
+  'companyUsers' => $companyUsers ?? [],
+  'projects' => $projects ?? [],
+  'projectFiles' => $projectFiles ?? [],
+], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!}
+</script>
+@endpush
+
+<div id="ClientPortalProjectPage"></div>
 @endsection
 
 @push('scripts')

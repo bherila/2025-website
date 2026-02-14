@@ -45,13 +45,13 @@ function abbreviateName(name: string | null | undefined): string {
   return `${parts[0]} ${parts[1]![0]}.`
 }
 
-export default function ClientPortalTimePage({ slug, companyName, companyId, isAdmin = false, initialCompanyUsers = [], initialProjects = [] }: ClientPortalTimePageProps) {
+export default function ClientPortalTimePage({ slug, companyName, companyId, isAdmin = false, initialCompanyUsers, initialProjects }: ClientPortalTimePageProps) {
   const [data, setData] = useState<TimeEntriesResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [newEntryModalOpen, setNewEntryModalOpen] = useState(false)
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null)
-  const [projects, setProjects] = useState<Project[]>(initialProjects)
-  const [companyUsers, setCompanyUsers] = useState<User[]>(initialCompanyUsers)
+  const [projects, setProjects] = useState<Project[]>(initialProjects ?? [])
+  const [companyUsers, setCompanyUsers] = useState<User[]>(initialCompanyUsers ?? [])
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
 
   useEffect(() => {
@@ -98,12 +98,12 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, isA
 
   useEffect(() => {
     fetchTimeEntries()
-    // Only fetch projects if none were provided via server hydration
-    if (!initialProjects || initialProjects.length === 0) {
+    // Only fetch projects if the host did not provide hydrated projects
+    if (initialProjects === undefined) {
       fetchProjects()
     }
-    // Only fetch company users if none were provided via server hydration
-    if (!initialCompanyUsers || initialCompanyUsers.length === 0) {
+    // Only fetch company users if the host did not provide hydrated company users
+    if (initialCompanyUsers === undefined) {
       fetchCompanyUsers()
     }
   }, [fetchTimeEntries, fetchProjects, fetchCompanyUsers, initialCompanyUsers, initialProjects])

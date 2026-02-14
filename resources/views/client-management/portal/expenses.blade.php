@@ -4,8 +4,7 @@
 <div id="ClientPortalExpensesPage" 
      data-slug="{{ $slug }}" 
      data-company-name="{{ $company->company_name }}" 
-     data-company-id="{{ $company->id }}"
-     data-is-admin="{{ auth()->user()?->hasRole('admin') ? 'true' : 'false' }}"></div>
+     data-company-id="{{ $company->id }}"></div>
 @endsection
 
 @push('scripts')

@@ -23,12 +23,14 @@ interface ClientPortalInvoicesPageProps {
   companyName: string
   companyId: number
   isAdmin?: boolean
+  // can accept full invoices or lightweight list-item objects from server hydration
+  initialInvoices?: (Invoice | import('@/types/client-management/invoice').InvoiceListItem)[]
 }
 
-export default function ClientPortalInvoicesPage({ slug, companyName, companyId, isAdmin = false }: ClientPortalInvoicesPageProps) {
-  const [invoices, setInvoices] = useState<Invoice[]>([])
+export default function ClientPortalInvoicesPage({ slug, companyName, companyId, isAdmin = false, initialInvoices }: ClientPortalInvoicesPageProps) {
+  const [invoices, setInvoices] = useState<Invoice[]>(initialInvoices ?? [])
   const [company, setCompany] = useState<ClientCompany | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(initialInvoices === undefined)
   const [generating, setGenerating] = useState(false)
 
   const fetchCompany = useCallback(async () => {
@@ -63,9 +65,9 @@ export default function ClientPortalInvoicesPage({ slug, companyName, companyId,
   }, [slug])
 
   useEffect(() => {
-    fetchInvoices()
-    fetchCompany()
-  }, [fetchInvoices, fetchCompany])
+    if (initialInvoices === undefined) fetchInvoices()
+    if (!company) fetchCompany()
+  }, [fetchInvoices, fetchCompany, initialInvoices, company])
 
   useEffect(() => {
     document.title = `Invoices | ${companyName}`

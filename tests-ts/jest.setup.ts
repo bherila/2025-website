@@ -24,3 +24,13 @@ Object.defineProperty(window, 'scrollTo', {
   writable: true,
   value: jest.fn(),
 });
+
+// Provide a minimal ResizeObserver mock for components that rely on it (Radix use-size)
+// Some tests render components which use ResizeObserver; Jest DOM doesn't provide it by default.
+class ResizeObserverMock {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+// @ts-ignore
+window.ResizeObserver = window.ResizeObserver || ResizeObserverMock;

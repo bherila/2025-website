@@ -86,4 +86,9 @@ describe('Navbar', () => {
     }
     expect(screen.getByText('Test Company')).toBeInTheDocument();
   });
+
+  it('accepts a hydrated currentUser prop and shows the user name', () => {
+    render(<Navbar {...defaultProps} authenticated={true} currentUser={{ id: 5, name: 'Joe', email: 'joe@example.com' }} />)
+    expect(screen.getByText('Joe')).toBeInTheDocument()
+  })
 });

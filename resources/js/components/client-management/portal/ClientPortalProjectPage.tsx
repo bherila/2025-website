@@ -46,15 +46,19 @@ interface ClientPortalProjectPageProps {
   projectSlug: string
   projectName: string
   isAdmin?: boolean
+  initialTasks?: Task[]
+  initialCompanyUsers?: User[]
+  initialProjects?: { id: number; name: string; slug: string }[]
+  initialProjectFiles?: any[]
 }
 
-export default function ClientPortalProjectPage({ slug, companyName, companyId, projectSlug, projectName, isAdmin = false }: ClientPortalProjectPageProps) {
-  const [tasks, setTasks] = useState<Task[]>([])
+export default function ClientPortalProjectPage({ slug, companyName, companyId, projectSlug, projectName, isAdmin = false, initialTasks, initialCompanyUsers, initialProjects, initialProjectFiles }: ClientPortalProjectPageProps) {
+  const [tasks, setTasks] = useState<Task[]>(initialTasks ?? [])
   const [loading, setLoading] = useState(true)
   const [newTaskModalOpen, setNewTaskModalOpen] = useState(false)
   const [editTaskModalOpen, setEditTaskModalOpen] = useState(false)
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
-  const [companyUsers, setCompanyUsers] = useState<User[]>([])
+  const [companyUsers, setCompanyUsers] = useState<User[]>(initialCompanyUsers ?? [])
   const [togglingTasks, setTogglingTasks] = useState<Set<number>>(new Set())
 
   const fileManager = useFileManagement({
@@ -84,6 +88,17 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
     }
   }, [slug, projectSlug])
 
+  // Only fetch tasks if the host did not provide hydrated tasks
+  useEffect(() => {
+    if (initialTasks === undefined) {
+      fetchTasks()
+    } else {
+      // hydration provided tasks — clear loading
+      setLoading(false)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchTasks, initialTasks])
+
   const fetchCompanyUsers = useCallback(async () => {
     try {
       const response = await fetch(`/api/client/portal/${slug}`)
@@ -97,10 +112,13 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
   }, [slug])
 
   useEffect(() => {
-    fetchTasks()
-    fetchCompanyUsers()
-    fileManager.fetchFiles()
-  }, [fetchTasks, fetchCompanyUsers, fileManager])
+    // Fetch resources only when not hydrated from server
+    if (initialTasks === undefined) fetchTasks()
+    if (initialCompanyUsers === undefined) fetchCompanyUsers()
+    // FileManager should fetch only if server did not hydrate files
+    if (initialProjectFiles === undefined && fileManager.files.length === 0) fileManager.fetchFiles()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchTasks, fetchCompanyUsers, fileManager, initialTasks, initialCompanyUsers, initialProjectFiles])
 
   const toggleTaskComplete = async (task: Task) => {
     setTogglingTasks(prev => new Set(prev).add(task.id))
@@ -148,6 +166,7 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
           currentPage="project" 
           currentProjectSlug={projectSlug} 
           projectName={projectName}
+          projects={initialProjects}
         />
         <div className="container mx-auto px-8 max-w-7xl">
           <div className="mb-6">
@@ -178,6 +197,7 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
         currentPage="project" 
         currentProjectSlug={projectSlug} 
         projectName={projectName}
+        projects={initialProjects}
       />
       <div className="container mx-auto px-8 max-w-7xl">
         <div className="mb-6">
@@ -301,8 +321,8 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
           {/* Files Column - 1/3 width */}
           <div className="space-y-4">
             <FileList
-              files={fileManager.files}
-              loading={fileManager.loading}
+              files={fileManager.files.length > 0 ? fileManager.files : initialProjectFiles}
+              loading={fileManager.loading && fileManager.files.length === 0}
               isAdmin={isAdmin}
               onDownload={fileManager.downloadFile}
               onDelete={fileManager.handleDeleteRequest}

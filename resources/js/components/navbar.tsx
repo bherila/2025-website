@@ -12,6 +12,7 @@ type NavbarProps = {
   authenticated: boolean;
   isAdmin: boolean;
   clientCompanies?: ClientCompany[];
+  currentUser?: { id: number; name: string; email: string; user_role?: string | null; last_login_date?: string | null } | null;
 };
 
 type ThemeMode = 'system' | 'dark' | 'light';
@@ -23,8 +24,10 @@ function applyTheme(mode: ThemeMode) {
   root.classList.toggle('dark', isDark);
 }
 
-export default function Navbar({ authenticated, isAdmin, clientCompanies }: NavbarProps) {
+export default function Navbar({ authenticated, isAdmin, clientCompanies, currentUser }: NavbarProps) {
   const [toolsOpen, setToolsOpen] = useState(false);
+  const initials = currentUser && currentUser.name ? currentUser.name.split(/\s+/).map(p => p[0]).slice(0,2).join('').toUpperCase() : '';
+
   const toolsRef = useRef<HTMLLIElement | null>(null);
   
   const [clientsOpen, setClientsOpen] = useState(false);
@@ -302,7 +305,12 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies }: Navb
         </a>
 
         {authenticated ? (
-          <a href='/dashboard' className='px-3 py-1.5 rounded bg-slate-900 text-white hover:bg-slate-900/90 text-sm'>My Account</a>
+          <a href='/dashboard' className='inline-flex items-center gap-2 px-3 py-1.5 rounded border border-gray-200 dark:border-[#3E3E3A] hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm'>
+            <div className='h-6 w-6 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-medium'>
+              {initials || 'U'}
+            </div>
+            <span className='hidden sm:inline'>{currentUser?.name ?? 'My Account'}</span>
+          </a>
         ) : (
           <a href='/login' className='px-3 py-1.5 rounded border border-gray-200 dark:border-[#3E3E3A] hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm'>Sign in</a>
         )}

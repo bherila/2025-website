@@ -7,30 +7,77 @@ import ClientPortalInvoicePage from '@/components/client-management/portal/Clien
 import ClientPortalInvoicesPage from '@/components/client-management/portal/ClientPortalInvoicesPage'
 import ClientPortalProjectPage from '@/components/client-management/portal/ClientPortalProjectPage'
 import ClientPortalTimePage from '@/components/client-management/portal/ClientPortalTimePage'
+import { InvoiceSchema, InvoiceListItemSchema, InvoiceHydrationSchema } from '@/types/client-management/invoice'
+import { ProjectSchema, UserSchema, AgreementSchema, FileRecordSchema, TimeEntrySchema, AppInitialDataSchema } from '@/types/client-management/hydration-schemas'
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Parse app-level head JSON once (id="app-initial-data") and validate it.
+  // Components should read auth/currentUser/isAdmin from this source.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const appScript = document.getElementById('app-initial-data') as HTMLScriptElement | null
+  const appRaw: any = appScript && appScript.textContent ? JSON.parse(appScript.textContent) : null
+  const appParsed = appRaw ? AppInitialDataSchema.safeParse(appRaw) : null
+  if (appParsed && !appParsed.success) {
+    console.error('Invalid app-initial-data payload — app-level hydration may be unsafe.', appParsed.error)
+  }
+  const appData = appParsed && appParsed.success ? appParsed.data : (appRaw || null)
+  // Validate app-level currentUser shape (log; components will fall back on API if invalid)
+  try {
+    const parsedCurrentUser = UserSchema.nullable().safeParse(appData?.currentUser ?? null)
+    if (!parsedCurrentUser.success) {
+      console.error('Invalid hydrated currentUser payload — will fall back to API fetch.', parsedCurrentUser.error)
+    }
+  } catch (e) {
+    /* no-op */
+  }
+
   const indexDiv = document.getElementById('ClientPortalIndexPage')
   if (indexDiv) {
-    // Server-hydrated payload in <head> is now required for the index page.
-    // Fall back to parsing data-* attributes only for non-critical arrays (back-compat).
+    // Server-hydrated payload must be embedded in a <script type="application/json"> tag
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const serverData: any = (window as any).__CLIENT_PORTAL_INITIAL_DATA__ || null
+    const script = document.getElementById('client-portal-initial-data') as HTMLScriptElement | null
+    const serverData: any = script && script.textContent ? JSON.parse(script.textContent) : null
 
     if (!serverData || !serverData.slug) {
       console.error('Missing server-hydrated payload for Client Portal index — aborting mount.')
       return
     }
 
-    const initialProjects = serverData.projects ?? (indexDiv.dataset.projects ? JSON.parse(indexDiv.dataset.projects) : [])
-    const initialAgreements = serverData.agreements ?? (indexDiv.dataset.agreements ? JSON.parse(indexDiv.dataset.agreements) : [])
-    const initialCompanyUsers = serverData.companyUsers ?? (indexDiv.dataset.companyUsers ? JSON.parse(indexDiv.dataset.companyUsers) : [])
-    const initialRecentTimeEntries = serverData.recentTimeEntries ?? (indexDiv.dataset.recentTimeEntries ? JSON.parse(indexDiv.dataset.recentTimeEntries) : [])
-    const initialCompanyFiles = serverData.companyFiles ?? (indexDiv.dataset.companyFiles ? JSON.parse(indexDiv.dataset.companyFiles) : [])
+    // Validate hydrated payloads (fall back to API fetch on validation failure)
+    const parsedProjects = ProjectSchema.array().safeParse(serverData.projects ?? [])
+    if (!parsedProjects.success) {
+      console.error('Invalid hydrated projects payload — will fall back to API fetch.', parsedProjects.error)
+    }
+    const initialProjects = parsedProjects.success ? parsedProjects.data : []
+
+    const parsedAgreements = AgreementSchema.array().safeParse(serverData.agreements ?? [])
+    if (!parsedAgreements.success) {
+      console.error('Invalid hydrated agreements payload — ignoring server data.', parsedAgreements.error)
+    }
+    const initialAgreements = parsedAgreements.success ? parsedAgreements.data : []
+
+    const parsedCompanyUsers = UserSchema.array().safeParse(serverData.companyUsers ?? [])
+    if (!parsedCompanyUsers.success) {
+      console.error('Invalid hydrated companyUsers payload — will fall back to API fetch.', parsedCompanyUsers.error)
+    }
+    const initialCompanyUsers = parsedCompanyUsers.success ? parsedCompanyUsers.data : []
+
+    const parsedRecentTimeEntries = TimeEntrySchema.array().safeParse(serverData.recentTimeEntries ?? [])
+    if (!parsedRecentTimeEntries.success) {
+      console.error('Invalid hydrated recentTimeEntries payload — ignoring server data.', parsedRecentTimeEntries.error)
+    }
+    const initialRecentTimeEntries = parsedRecentTimeEntries.success ? parsedRecentTimeEntries.data : []
+
+    const parsedCompanyFiles = FileRecordSchema.array().safeParse(serverData.companyFiles ?? [])
+    if (!parsedCompanyFiles.success) {
+      console.error('Invalid hydrated companyFiles payload — will fall back to file API.', parsedCompanyFiles.error)
+    }
+    const initialCompanyFiles = parsedCompanyFiles.success ? parsedCompanyFiles.data : []
 
     const slug = serverData.slug
     const companyName = serverData.companyName
     const companyId = serverData.companyId
-    const isAdmin = serverData.isAdmin
+    const isAdmin = appData?.isAdmin ?? false
 
     const root = createRoot(indexDiv)
     root.render(<ClientPortalIndexPage 
@@ -38,27 +85,42 @@ document.addEventListener('DOMContentLoaded', () => {
       companyName={companyName}
       companyId={companyId}
       isAdmin={isAdmin}
-      initialProjects={initialProjects}
-      initialAgreements={initialAgreements}
-      initialCompanyUsers={initialCompanyUsers}
-      initialRecentTimeEntries={initialRecentTimeEntries}
-      initialCompanyFiles={initialCompanyFiles}
+      initialProjects={initialProjects as any}
+      initialAgreements={initialAgreements as any}
+      initialCompanyUsers={initialCompanyUsers as any}
+      initialRecentTimeEntries={initialRecentTimeEntries as any}
+      initialCompanyFiles={initialCompanyFiles as any}
       afterEdit={() => window.location.reload()}
     />)
   }
 
   const timeDiv = document.getElementById('ClientPortalTimePage')
   if (timeDiv) {
-    // Prefer head-hydrated payload when available
+    // Read head-embedded JSON payload
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const serverData: any = (window as any).__CLIENT_PORTAL_INITIAL_DATA__ || null
+    const script = document.getElementById('client-portal-initial-data') as HTMLScriptElement | null
+    const serverData: any = script && script.textContent ? JSON.parse(script.textContent) : null
 
-    const slug = serverData?.slug ?? timeDiv.dataset.slug!
-    const companyName = serverData?.companyName ?? timeDiv.dataset.companyName!
-    const companyId = serverData?.companyId ?? parseInt(timeDiv.dataset.companyId!)
-    const isAdmin = serverData?.isAdmin ?? (timeDiv.dataset.isAdmin === 'true')
-    const initialCompanyUsers = serverData?.companyUsers ?? []
-    const initialProjects = serverData?.projects ?? []
+    if (!serverData || !serverData.slug) {
+      console.error('Missing server-hydrated payload for Client Portal time — aborting mount.')
+      return
+    }
+
+    const slug = serverData.slug
+    const companyName = serverData.companyName
+    const companyId = serverData.companyId
+    const isAdmin = appData?.isAdmin ?? false
+    const parsedCompanyUsers_time = UserSchema.array().safeParse(serverData.companyUsers ?? [])
+    if (!parsedCompanyUsers_time.success) {
+      console.error('Invalid hydrated companyUsers for time page — will fall back to API fetch.', parsedCompanyUsers_time.error)
+    }
+    const initialCompanyUsers = parsedCompanyUsers_time.success ? parsedCompanyUsers_time.data : []
+
+    const parsedProjects_time = ProjectSchema.array().safeParse(serverData.projects ?? [])
+    if (!parsedProjects_time.success) {
+      console.error('Invalid hydrated projects for time page — will fall back to API fetch.', parsedProjects_time.error)
+    }
+    const initialProjects = parsedProjects_time.success ? parsedProjects_time.data : []
 
     const root = createRoot(timeDiv)
     root.render(<ClientPortalTimePage 
@@ -66,56 +128,262 @@ document.addEventListener('DOMContentLoaded', () => {
       companyName={companyName}
       companyId={companyId}
       isAdmin={isAdmin}
-      initialCompanyUsers={initialCompanyUsers}
-      initialProjects={initialProjects}
+      initialCompanyUsers={initialCompanyUsers as any}
+      initialProjects={initialProjects as any}
     />)
   }
 
   const projectDiv = document.getElementById('ClientPortalProjectPage')
   if (projectDiv) {
+    // Read head-embedded JSON payload for project page
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const script = document.getElementById('client-portal-initial-data') as HTMLScriptElement | null
+    const serverData: any = script && script.textContent ? JSON.parse(script.textContent) : null
+
+    if (!serverData || !serverData.project) {
+      console.error('Missing server-hydrated payload for Client Portal project — aborting mount.')
+      return
+    }
+
+    const slug = serverData.slug
+    const companyName = serverData.companyName
+    const companyId = serverData.companyId
+    const projectSlug = serverData.project.slug
+    const projectName = serverData.project.name
+    const isAdmin = appData?.isAdmin ?? false
+
+    const initialTasks = serverData.tasks ?? []
+
+    const parsedCompanyUsers_proj = UserSchema.array().safeParse(serverData.companyUsers ?? [])
+    if (!parsedCompanyUsers_proj.success) {
+      console.error('Invalid hydrated companyUsers for project page — will fall back to API fetch.', parsedCompanyUsers_proj.error)
+    }
+    const initialCompanyUsers = parsedCompanyUsers_proj.success ? parsedCompanyUsers_proj.data : []
+
+    const parsedProjects_proj = ProjectSchema.array().safeParse(serverData.projects ?? [])
+    if (!parsedProjects_proj.success) {
+      console.error('Invalid hydrated projects for project page — will fall back to API fetch.', parsedProjects_proj.error)
+    }
+    const initialProjects = parsedProjects_proj.success ? parsedProjects_proj.data : []
+
+    const parsedProjectFiles = FileRecordSchema.array().safeParse(serverData.projectFiles ?? [])
+    if (!parsedProjectFiles.success) {
+      console.error('Invalid hydrated projectFiles payload — will fall back to file API.', parsedProjectFiles.error)
+    }
+    const initialProjectFiles = parsedProjectFiles.success ? parsedProjectFiles.data : []
+
     const root = createRoot(projectDiv)
     root.render(<ClientPortalProjectPage 
-      slug={projectDiv.dataset.slug!}
-      companyName={projectDiv.dataset.companyName!}
-      companyId={parseInt(projectDiv.dataset.companyId!)}
-      projectSlug={projectDiv.dataset.projectSlug!}
-      projectName={projectDiv.dataset.projectName!}
-      isAdmin={projectDiv.dataset.isAdmin === 'true'}
+      slug={slug}
+      companyName={companyName}
+      companyId={companyId}
+      projectSlug={projectSlug}
+      projectName={projectName}
+      isAdmin={isAdmin}
+      // hydration props
+      initialTasks={initialTasks as any}
+      initialCompanyUsers={initialCompanyUsers as any}
+      initialProjects={initialProjects as any}
+      initialProjectFiles={initialProjectFiles as any}
     />)
   }
 
   const agreementDiv = document.getElementById('ClientPortalAgreementPage')
   if (agreementDiv) {
+    // Read head-embedded JSON payload for agreement page
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const script = document.getElementById('client-portal-initial-data') as HTMLScriptElement | null
+    const serverData: any = script && script.textContent ? JSON.parse(script.textContent) : null
+
+    if (!serverData || !serverData.agreement) {
+      console.error('Missing server-hydrated payload for Client Portal agreement — aborting mount.')
+      return
+    }
+
+    const slug = serverData.slug
+    const companyName = serverData.companyName
+    const companyId = serverData.companyId
+    const isAdmin = appData?.isAdmin ?? false
+    const parsedAgreement = AgreementSchema.safeParse(serverData.agreement ?? {})
+    if (!parsedAgreement.success) {
+      console.error('Invalid hydrated agreement payload — aborting to allow API fallback.', parsedAgreement.error)
+    }
+    const initialAgreement = parsedAgreement.success ? parsedAgreement.data : null
+
+    const parsedInvoices = InvoiceSchema.array().safeParse(serverData.invoices ?? [])
+    if (!parsedInvoices.success) {
+      console.error('Invalid hydrated invoices for agreement page — ignoring server invoices.', parsedInvoices.error)
+    }
+    const initialInvoices = parsedInvoices.success ? parsedInvoices.data : []
+
+    const parsedAgreementFiles = FileRecordSchema.array().safeParse(serverData.agreementFiles ?? [])
+    if (!parsedAgreementFiles.success) {
+      console.error('Invalid hydrated agreementFiles payload — will fall back to file API.', parsedAgreementFiles.error)
+    }
+    const initialAgreementFiles = parsedAgreementFiles.success ? parsedAgreementFiles.data : []
+
+    if (!initialAgreement) {
+      console.error('Invalid or missing hydrated agreement — aborting mount.')
+      return
+    }
+
     const root = createRoot(agreementDiv)
     root.render(<ClientPortalAgreementPage 
-      slug={agreementDiv.dataset.slug!}
-      companyName={agreementDiv.dataset.companyName!}
-      companyId={parseInt(agreementDiv.dataset.companyId!)}
-      agreementId={parseInt(agreementDiv.dataset.agreementId!)}
-      isAdmin={agreementDiv.dataset.isAdmin === 'true'}
+      slug={slug}
+      companyName={companyName}
+      companyId={companyId}
+      agreementId={initialAgreement.id}
+      isAdmin={isAdmin}
+      initialAgreement={initialAgreement as any}
+      initialInvoices={initialInvoices as any}
+      initialAgreementFiles={initialAgreementFiles as any}
     />)
   }
 
   const invoicesDiv = document.getElementById('ClientPortalInvoicesPage')
   if (invoicesDiv) {
+    // Read head-embedded JSON payload for invoices page
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const script = document.getElementById('client-portal-initial-data') as HTMLScriptElement | null
+    const serverData: any = script && script.textContent ? JSON.parse(script.textContent) : null
+
+    if (!serverData || !serverData.slug) {
+      console.error('Missing server-hydrated payload for Client Portal invoices — aborting mount.')
+      return
+    }
+
+    const slug = serverData.slug
+    const companyName = serverData.companyName
+    const companyId = serverData.companyId
+    const isAdmin = appData?.isAdmin ?? false
+    // Prefer full Invoice objects, but accept lightweight list items from the server
+    const parsedInvoices_full = InvoiceSchema.array().safeParse(serverData.invoices ?? [])
+    let initialInvoices: any[] | undefined = undefined
+
+    if (parsedInvoices_full.success) {
+      initialInvoices = parsedInvoices_full.data
+    } else {
+      // try the relaxed list-item schema (server often omits line_items/payments for list endpoints)
+      const parsedList = InvoiceListItemSchema.array().safeParse(serverData.invoices ?? [])
+      if (parsedList.success) {
+        initialInvoices = parsedList.data
+      } else {
+        // validation failed — treat as missing so the component will fetch from the API
+        console.error('Invalid hydrated invoices payload for invoices page — will fall back to API fetch.', parsedInvoices_full.error || parsedList.error)
+        initialInvoices = undefined
+      }
+    }
+
     const root = createRoot(invoicesDiv)
     root.render(<ClientPortalInvoicesPage 
-      slug={invoicesDiv.dataset.slug!}
-      companyName={invoicesDiv.dataset.companyName!}
-      companyId={parseInt(invoicesDiv.dataset.companyId!)}
-      isAdmin={invoicesDiv.dataset.isAdmin === 'true'}
+      slug={slug}
+      companyName={companyName}
+      companyId={companyId}
+      isAdmin={isAdmin}
+      initialInvoices={initialInvoices as any}
     />)
   }
 
   const invoiceDiv = document.getElementById('ClientPortalInvoicePage')
   if (invoiceDiv) {
+    // Read head-embedded JSON payload for invoice page
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const script = document.getElementById('client-portal-initial-data') as HTMLScriptElement | null
+    const serverData: any = script && script.textContent ? JSON.parse(script.textContent) : null
+
+    if (!serverData || !serverData.invoice) {
+      console.error('Missing server-hydrated payload for Client Portal invoice — aborting mount.')
+      return
+    }
+
+    const slug = serverData.slug
+    const companyName = serverData.companyName
+    const companyId = serverData.companyId
+    const isAdmin = appData?.isAdmin ?? false
+
+    // Validate hydrated invoice payload with Zod
+    const rawInvoice = serverData.invoice ?? null
+
+    // Try strict parse first, then fall back to a relaxed hydration schema and normalize it
+    let initialInvoice: any = null
+    if (rawInvoice) {
+      const strict = InvoiceSchema.safeParse(rawInvoice)
+      if (strict.success) {
+        initialInvoice = strict.data
+      } else {
+        const relaxed = InvoiceHydrationSchema.safeParse(rawInvoice)
+        if (relaxed.success) {
+          // normalize values to match strict InvoiceSchema expectations
+          const src = relaxed.data as any
+          const normalizeNumberLike = (v: any, fallback = '0') => {
+            if (v === null || v === undefined) return fallback
+            if (typeof v === 'number') return String(v)
+            return String(v)
+          }
+          const normalizeMoney = (v: any, fallback = '0.00') => {
+            if (v === null || v === undefined) return fallback
+            const n = Number(v)
+            if (Number.isNaN(n)) return fallback
+            return n.toFixed(2)
+          }
+
+          const coerced: any = {
+            client_invoice_id: src.client_invoice_id,
+            client_company_id: src.client_company_id ?? serverData.companyId,
+            invoice_number: src.invoice_number ?? null,
+            invoice_total: normalizeMoney(src.invoice_total ?? 0),
+            issue_date: src.issue_date ?? null,
+            due_date: src.due_date ?? null,
+            paid_date: src.paid_date ?? null,
+            status: src.status ?? 'draft',
+            period_start: src.period_start ?? null,
+            period_end: src.period_end ?? null,
+            retainer_hours_included: normalizeNumberLike(src.retainer_hours_included ?? '0'),
+            hours_worked: normalizeNumberLike(src.hours_worked ?? '0'),
+            carried_in_hours: src.carried_in_hours ?? undefined,
+            current_month_hours: src.current_month_hours ?? undefined,
+            rollover_hours_used: normalizeNumberLike(src.rollover_hours_used ?? '0'),
+            unused_hours_balance: normalizeNumberLike(src.unused_hours_balance ?? '0'),
+            negative_hours_balance: normalizeNumberLike(src.negative_hours_balance ?? '0'),
+            starting_unused_hours: normalizeNumberLike(src.starting_unused_hours ?? '0'),
+            starting_negative_hours: normalizeNumberLike(src.starting_negative_hours ?? '0'),
+            hours_billed_at_rate: normalizeNumberLike(src.hours_billed_at_rate ?? '0'),
+            notes: src.notes ?? null,
+            line_items: Array.isArray(src.line_items) ? src.line_items : [],
+            payments: Array.isArray(src.payments) ? src.payments : [],
+            remaining_balance: normalizeMoney(src.remaining_balance ?? 0),
+            payments_total: normalizeMoney(src.payments_total ?? 0),
+            previous_invoice_id: src.previous_invoice_id ?? null,
+            next_invoice_id: src.next_invoice_id ?? null,
+          }
+
+          const recheck = InvoiceSchema.safeParse(coerced)
+          if (recheck.success) {
+            initialInvoice = recheck.data
+          } else {
+            console.error('Invalid or missing hydrated invoice payload — aborting mount.', recheck.error)
+          }
+        } else {
+          console.error('Invalid or missing hydrated invoice payload — aborting mount.', strict.error)
+        }
+      }
+    }
+
+    if (!initialInvoice) {
+      console.error('Invalid or missing hydrated invoice payload — aborting mount.')
+      return
+    }
+
+    const invoiceId = initialInvoice.client_invoice_id
+
     const root = createRoot(invoiceDiv)
     root.render(<ClientPortalInvoicePage 
-      slug={invoiceDiv.dataset.slug!}
-      companyName={invoiceDiv.dataset.companyName!}
-      companyId={parseInt(invoiceDiv.dataset.companyId!)}
-      invoiceId={parseInt(invoiceDiv.dataset.invoiceId!)}
-      isAdmin={invoiceDiv.dataset.isAdmin === 'true'}
+      slug={slug}
+      companyName={companyName}
+      companyId={companyId}
+      invoiceId={invoiceId}
+      isAdmin={isAdmin}
+      initialInvoice={initialInvoice}
     />)
   }
 
@@ -126,7 +394,7 @@ document.addEventListener('DOMContentLoaded', () => {
       slug={expensesDiv.dataset.slug!}
       companyName={expensesDiv.dataset.companyName!}
       companyId={parseInt(expensesDiv.dataset.companyId!)}
-      isAdmin={expensesDiv.dataset.isAdmin === 'true'}
+      isAdmin={appData?.isAdmin ?? false}
     />)
   }
 })

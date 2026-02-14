@@ -3,18 +3,17 @@
 @section('content')
 
 @push('data-head')
-<script>
-  window.__CLIENT_PORTAL_INITIAL_DATA__ = {!! json_encode([
-    'slug' => $slug,
-    'companyName' => $company->company_name,
-    'companyId' => $company->id,
-    'isAdmin' => auth()->user()?->hasRole('admin') ? true : false,
-    'projects' => $projects,
-    'agreements' => $agreements,
-    'companyUsers' => $companyUsers ?? [],
-    'recentTimeEntries' => $recentTimeEntries ?? [],
-    'companyFiles' => $companyFiles ?? [],
-  ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!};
+<script id="client-portal-initial-data" type="application/json">
+{!! json_encode([
+  'slug' => $slug,
+  'companyName' => $company->company_name,
+  'companyId' => $company->id,
+  'projects' => $projects,
+  'agreements' => $agreements,
+  'companyUsers' => $companyUsers ?? [],
+  'recentTimeEntries' => $recentTimeEntries ?? [],
+  'companyFiles' => $companyFiles ?? [],
+], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!}
 </script>
 @endpush
 

@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientInvoice;
 use App\Models\ClientManagement\ClientProject;
+use App\Models\ClientManagement\ClientTask;
+use App\Models\Files\FileForProject;
 use Illuminate\Support\Facades\Gate;
 
 class ClientPortalController extends Controller
@@ -103,10 +105,35 @@ class ClientPortalController extends Controller
             ->where('client_company_id', $company->id)
             ->firstOrFail();
 
+        // Hydrate tasks for the project (same shape as API)
+        $tasks = ClientTask::where('project_id', $project->id)
+            ->with(['assignee:id,name,email', 'creator:id,name'])
+            ->orderByRaw('completed_at IS NOT NULL')
+            ->orderBy('is_high_priority', 'desc')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // Company users and projects (for Nav)
+        $users = $company->users()->orderBy('name')->get();
+        $projects = ClientProject::where('client_company_id', $company->id)
+            ->withCount(['tasks', 'timeEntries'])
+            ->orderBy('name')
+            ->get();
+
+        // Project files for immediate listing
+        $projectFiles = FileForProject::where('project_id', $project->id)
+            ->with('uploader:id,name')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
         return view('client-management.portal.project', [
             'company' => $company,
             'project' => $project,
             'slug' => $slug,
+            'tasks' => $tasks,
+            'companyUsers' => $users,
+            'projects' => $projects,
+            'projectFiles' => $projectFiles,
         ]);
     }
 
@@ -119,9 +146,15 @@ class ClientPortalController extends Controller
 
         Gate::authorize('ClientCompanyMember', $company->id);
 
+        // Hydrate invoices list for faster rendering
+        $invoices = $company->invoices()
+            ->orderBy('period_end', 'asc')
+            ->get();
+
         return view('client-management.portal.invoices', [
             'company' => $company,
             'slug' => $slug,
+            'invoices' => $invoices,
         ]);
     }
 
@@ -134,7 +167,8 @@ class ClientPortalController extends Controller
 
         Gate::authorize('ClientCompanyMember', $company->id);
 
-        $query = ClientInvoice::where('client_invoice_id', $invoiceId)
+        $query = ClientInvoice::with(['agreement', 'lineItems.timeEntries', 'payments'])
+            ->where('client_invoice_id', $invoiceId)
             ->where('client_company_id', $company->id);
 
         // Admins can see all invoices, but clients can only see issued or paid ones.
@@ -144,12 +178,45 @@ class ClientPortalController extends Controller
 
         $invoice = $query->firstOrFail();
 
+        // Populate derived hourly summary values so the Blade hydration includes the same
+        // breakdown the API returns (carried_in_hours / current_month_hours).
+        $hoursBreakdown = $invoice->calculateHoursBreakdown();
+        $invoice->carried_in_hours = $hoursBreakdown['carried_in_hours'];
+        $invoice->current_month_hours = $hoursBreakdown['current_month_hours'];
+
+        // Prepare a lightweight, null-stripped payload for the head JSON so we avoid
+        // shipping explicit `null` values to the client (smaller payloads, undefined on client).
+        $invoicePayload = $this->removeNullsRecursive($invoice->toArray());
+
         return view('client-management.portal.invoice', [
             'company' => $company,
-            'invoice' => $invoice,
+            'invoice' => $invoicePayload,
             'slug' => $slug,
             'invoiceId' => $invoice->client_invoice_id,
         ]);
+    }
+
+    /**
+     * Utility: recursively remove null values from arrays so Blade JSON can omit nulls.
+     *
+     * @param  mixed  $data
+     * @return mixed
+     */
+    private function removeNullsRecursive($data)
+    {
+        if (is_array($data)) {
+            foreach ($data as $k => $v) {
+                $clean = $this->removeNullsRecursive($v);
+                if ($clean === null) {
+                    unset($data[$k]);
+                } else {
+                    $data[$k] = $clean;
+                }
+            }
+            return $data;
+        }
+
+        return $data === null ? null : $data;
     }
 
     /**

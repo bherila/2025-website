@@ -14,23 +14,39 @@ This is a hybrid Laravel 12 + React TypeScript application for personal finance 
 - **Authorization**: Gate-based authorization for admin-only features (e.g., Client Management uses 'admin' gate)
 - **User Roles**: Comma-separated roles in `user_role` column (e.g., `"admin,user"`). All roles lowercase. Available roles: `admin`, `user`
 
-### Example Pattern
+### Example Pattern (recommended — server hydration via JSON script tag)
 ```php
 // Controller passes data to view
-return view('finance.transactions', ['account_id' => $account_id, 'accountName' => $account->acct_name]);
+return view('finance.transactions', ['account_id' => $account_id, 'accountName' => $acct_name]);
 ```
 ```blade
-<!-- Blade view with data attributes -->
-<div id="FinanceAccountTransactionsPage" data-account-id="{{ $account_id }}"></div>
+<!-- Embed server-provided JSON in a non-executing script tag -->
+<script id="initial-data-finance-transactions" type="application/json">
+  {!! json_encode([ 'accountId' => $account_id, 'accountName' => $acct_name ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!}
+</script>
+<div id="FinanceAccountTransactionsPage"></div>
 ```
 ```tsx
-// React component reads data and mounts
+// Read the JSON from the head script and mount the React component
+const script = document.getElementById('initial-data-finance-transactions')
+const payload = script && script.textContent ? JSON.parse(script.textContent) : null
+if (!payload) throw new Error('Missing initial data')
 const div = document.getElementById('FinanceAccountTransactionsPage')
 if (div) {
   const root = createRoot(div)
-  root.render(<FinanceAccountTransactionsPage id={parseInt(div.dataset.accountId!)} />)
+  root.render(<FinanceAccountTransactionsPage id={parseInt(payload.accountId)} accountName={payload.accountName} />)
 }
 ```
+
+Why use this pattern?
+- No global variables (avoids pollution)
+- Safer — script content is inert (`type="application/json"` won't execute)
+- Cleaner separation of concerns and simpler escaping (no data-* attribute JSON blobs)
+
+Fallbacks & migration:
+- Components should prefer server-provided initial props; only fall back to client fetches when explicit props are missing.
+- Keep the JSON shape identical to the API response to avoid component changes.
+- Use `id` values on the `<script>` tags that are unique per page/payload for easy access.
 
 ## Development Workflow
 - **Setup**: Run `composer run setup` (installs deps, generates key, migrates DB, builds assets)

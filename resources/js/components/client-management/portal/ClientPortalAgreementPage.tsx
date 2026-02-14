@@ -20,19 +20,22 @@ interface ClientPortalAgreementPageProps {
   companyId: number
   agreementId: number
   isAdmin: boolean
+  initialAgreement?: any
+  initialInvoices?: any[]
+  initialAgreementFiles?: any[]
 }
 
-export default function ClientPortalAgreementPage({ slug, companyName, companyId, agreementId, isAdmin }: ClientPortalAgreementPageProps) {
-  const [agreement, setAgreement] = useState<ClientAgreement | null>(null)
-  const [loading, setLoading] = useState(true)
+export default function ClientPortalAgreementPage({ slug, companyName, companyId, agreementId, isAdmin, initialAgreement = null, initialInvoices, initialAgreementFiles }: ClientPortalAgreementPageProps) {
+  const [agreement, setAgreement] = useState<ClientAgreement | null>(initialAgreement ?? null)
+  const [loading, setLoading] = useState(initialAgreement === null)
   const [signing, setSigning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [showSignForm, setShowSignForm] = useState(false)
   const [signName, setSignName] = useState('')
   const [signTitle, setSignTitle] = useState('')
-  const [invoices, setInvoices] = useState<any[]>([])
-  const [loadingInvoices, setLoadingInvoices] = useState(true)
+  const [invoices, setInvoices] = useState<any[]>(initialInvoices ?? [])
+  const [loadingInvoices, setLoadingInvoices] = useState(initialInvoices === undefined)
 
   // File management
   const fileManager = useFileManagement({
@@ -76,10 +79,14 @@ export default function ClientPortalAgreementPage({ slug, companyName, companyId
   }, [slug, agreementId])
 
   useEffect(() => {
-    fetchAgreement()
-    fileManager.fetchFiles()
-    fetchInvoices()
-  }, [agreementId, fetchAgreement, fetchInvoices, fileManager])
+    if (initialAgreement === null) fetchAgreement()
+    // Only fetch files if server did not provide hydrated files
+    if (initialAgreementFiles === undefined && fileManager.files.length === 0) {
+      fileManager.fetchFiles()
+    }
+    // Only fetch invoices when the host did not provide an initialInvoices prop
+    if (initialInvoices === undefined) fetchInvoices()
+  }, [agreementId, fetchAgreement, fetchInvoices, fileManager, initialAgreement, initialInvoices, initialAgreementFiles])
 
   useEffect(() => {
     if (agreement) {
@@ -363,8 +370,8 @@ export default function ClientPortalAgreementPage({ slug, companyName, companyId
       {/* Agreement Files Section */}
       <FileList
         className="mt-6"
-        files={fileManager.files}
-        loading={fileManager.loading}
+        files={fileManager.files.length > 0 ? fileManager.files : initialAgreementFiles}
+        loading={fileManager.loading && fileManager.files.length === 0}
         isAdmin={isAdmin}
         onDownload={fileManager.downloadFile}
         onDelete={fileManager.handleDeleteRequest}

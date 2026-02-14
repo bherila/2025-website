@@ -209,7 +209,7 @@ export default function StackedBalanceChart({ data, labels, isNegative, isRetire
               borderRadius: '4px',
               color: '#ffffff',
             }}
-            formatter={(value: number | undefined) => value !== undefined ? currency(Math.abs(value)).format() : ''}
+            formatter={(value) => value !== undefined ? currency(Math.abs(value as number)).format() : ''}
             labelFormatter={(date: React.ReactNode) => {
               const dateStr = String(date ?? '');
               if (dateStr.includes('Q')) {

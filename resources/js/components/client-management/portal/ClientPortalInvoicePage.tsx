@@ -24,11 +24,12 @@ interface ClientPortalInvoicePageProps {
     companyId: number;
     invoiceId: number;
     isAdmin: boolean;
+    initialInvoice?: Invoice | null;
 }
 
-export default function ClientPortalInvoicePage({ slug, companyName, companyId, invoiceId, isAdmin }: ClientPortalInvoicePageProps) {
-    const [invoice, setInvoice] = useState<Invoice | null>(null)
-    const [isLoading, setIsLoading] = useState(true)
+export default function ClientPortalInvoicePage({ slug, companyName, companyId, invoiceId, isAdmin, initialInvoice = null }: ClientPortalInvoicePageProps) {
+    const [invoice, setInvoice] = useState<Invoice | null>(initialInvoice)
+    const [isLoading, setIsLoading] = useState(initialInvoice ? false : true)
     const [isRefreshing, setIsRefreshing] = useState(false)
     const [isLineItemModalOpen, setLineItemModalOpen] = useState(false)
     const [isPaymentModalOpen, setPaymentModalOpen] = useState(false)
@@ -57,8 +58,8 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
     }, [slug, invoiceId])
 
     useEffect(() => {
-        fetchInvoice()
-    }, [fetchInvoice])
+        if (!initialInvoice) fetchInvoice()
+    }, [fetchInvoice, initialInvoice])
 
     // Update page title with invoice number
     useEffect(() => {
@@ -165,7 +166,7 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
     }
 
     const isEditable = invoice?.status === 'draft';
-    const hasPayments = invoice?.payments && invoice.payments.length > 0;
+const hasPayments = invoice?.payments && (invoice.payments as any[]).length > 0;
     const canVoid = !!(invoice && invoice.status !== 'void' && invoice.status !== 'paid' && !hasPayments);
 
     if (isLoading || !invoice) {

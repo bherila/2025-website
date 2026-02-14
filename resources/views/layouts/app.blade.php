@@ -8,6 +8,23 @@
     <title>@yield('title', config('app.name', 'Ben Herila'))</title>
     <meta name="color-scheme" content="dark light">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css" integrity="sha512-c42qTSw/wPZ3/5LBzD+Bw5f7bSF2oxou6wEb+I/lqeaKV5FDIfMvvRp772y4jcJLKuGUOpbJMdg/BTl50fJYAw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <script id="app-initial-data" type="application/json">
+      {!! json_encode([
+        'appName' => config('app.name', 'Ben Herila'),
+        'appUrl' => config('app.url', ''),
+        'authenticated' => auth()->check() ? true : false,
+        'isAdmin' => auth()->check() && (auth()->id() === 1 || auth()->user()->user_role === 'Admin') ? true : false,
+        'clientCompanies' => auth()->check() ? auth()->user()->clientCompanies()->select('client_companies.id', 'company_name', 'slug')->get() : [],
+        'currentUser' => auth()->user() ? [
+          'id' => auth()->id(),
+          'name' => auth()->user()->name,
+          'email' => auth()->user()->email,
+          'user_role' => auth()->user()->user_role,
+          'last_login_date' => optional(auth()->user()->last_login_date)->toDateTimeString(),
+        ] : null,
+      ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!}
+    </script>
+    @stack('data-head')
     <script>
       (function() {
         try {
@@ -24,11 +41,7 @@
   </head>
   <body class="min-h-screen flex flex-col">
     <header class="site-header border-b border-gray-200 dark:border-[#3E3E3A] h-14">
-      <div id="navbar" 
-        data-authenticated="{{ auth()->check() ? 'true' : 'false' }}" 
-        data-is-admin="{{ auth()->check() && (auth()->id() === 1 || auth()->user()->user_role === 'Admin') ? 'true' : 'false' }}" 
-        data-client-companies="{{ auth()->check() ? json_encode(auth()->user()->clientCompanies()->select('client_companies.id', 'company_name', 'slug')->get()) : '[]' }}"
-      />
+      <div id="navbar"></div>
     </header>
 
     <main class="flex-1">

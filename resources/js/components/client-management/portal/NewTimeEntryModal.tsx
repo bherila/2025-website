@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import type { Project,User } from '@/types/client-management/common'
+import { UserSchema } from '@/types/client-management/hydration-schemas'
 import type { TimeEntry } from '@/types/client-management/time-entry'
 
 function getLocalISODate(): string {
@@ -72,14 +73,35 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
   const [error, setError] = useState<string | null>(null)
   const [currentUser, setCurrentUser] = useState<User | null>(null)
 
-  // Prefer server-hydrated company users when available (window.__CLIENT_PORTAL_INITIAL_DATA__.companyUsers)
+  // Prefer server-hydrated company users when available (from `#client-portal-initial-data` script)
   // Falls back to the `users` prop for backwards compatibility or in tests.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const serverCompanyUsers = (typeof window !== 'undefined' && (window as any).__CLIENT_PORTAL_INITIAL_DATA__?.companyUsers) ? ((window as any).__CLIENT_PORTAL_INITIAL_DATA__.companyUsers as User[]) : undefined
+  let serverCompanyUsers: User[] | undefined
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const portalScript = document.getElementById('client-portal-initial-data') as HTMLScriptElement | null
+    const portalRaw: any = portalScript && portalScript.textContent ? JSON.parse(portalScript.textContent) : null
+    serverCompanyUsers = portalRaw?.companyUsers ? (portalRaw.companyUsers as User[]) : undefined
+  } catch (e) {
+    // ignore parse errors
+  }
   const effectiveUsers: User[] = serverCompanyUsers ?? users
 
-  // Fetch current user
+  // Fetch current user (prefer app-level hydrated `currentUser` when available)
   useEffect(() => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const appScript = document.getElementById('app-initial-data') as HTMLScriptElement | null
+      const appRaw: any = appScript && appScript.textContent ? JSON.parse(appScript.textContent) : null
+      const serverCurrentUser = appRaw?.currentUser ? (appRaw.currentUser as User) : undefined
+
+      if (serverCurrentUser && UserSchema.safeParse(serverCurrentUser).success) {
+        setCurrentUser(serverCurrentUser)
+        return
+      }
+    } catch (e) {
+      // ignore
+    }
+
     fetch('/api/user')
       .then(response => response.json())
       .then(data => setCurrentUser(data))

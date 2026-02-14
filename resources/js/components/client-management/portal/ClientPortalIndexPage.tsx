@@ -39,19 +39,19 @@ export default function ClientPortalIndexPage({
   companyName, 
   companyId,
   isAdmin = false,
-  initialProjects = [],
-  initialAgreements = [],
-  initialCompanyUsers = [],
-  initialRecentTimeEntries = [],
-  initialCompanyFiles = [],
+  initialProjects,
+  initialAgreements,
+  initialCompanyUsers,
+  initialRecentTimeEntries,
+  initialCompanyFiles,
   afterEdit,
 }: ClientPortalIndexPageProps) {
-  const [projects, setProjects] = useState<Project[]>(initialProjects)
-  const [agreements] = useState<Agreement[]>(initialAgreements)
+  const [projects, setProjects] = useState<Project[]>(initialProjects ?? [])
+  const [agreements] = useState<Agreement[]>(initialAgreements ?? [])
   const [newProjectModalOpen, setNewProjectModalOpen] = useState(false)
   const [newTimeEntryModalOpen, setNewTimeEntryModalOpen] = useState(false)
-  const [recentTimeEntries, setRecentTimeEntries] = useState<TimeEntry[]>(initialRecentTimeEntries)
-  const [companyUsers, setCompanyUsers] = useState<User[]>(initialCompanyUsers)
+  const [recentTimeEntries, setRecentTimeEntries] = useState<TimeEntry[]>(initialRecentTimeEntries ?? [])
+  const [companyUsers, setCompanyUsers] = useState<User[]>(initialCompanyUsers ?? [])
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null)
 
   const fileManager = useFileManagement({
@@ -67,8 +67,8 @@ export default function ClientPortalIndexPage({
   }, [companyName])
 
   useEffect(() => {
-    // If server provided a hydrated file list, don't call the files API on mount
-    if (!initialCompanyFiles || initialCompanyFiles.length === 0) {
+    // If the server did not provide a hydrated file list, call the files API on mount
+    if (initialCompanyFiles === undefined) {
       fileManager.fetchFiles()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

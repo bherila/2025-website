@@ -134,9 +134,10 @@ export function PayslipTable(props: Props) {
       )
     }
 
+    // Narrow type so TypeScript understands `col.field` is a string key here
+    const field = col.field as fin_payslip_col
     return data.some((row) => {
-      // @ts-expect-error - Dynamic field access
-      const value = row[col.field]
+      const value = row[field]
       return value !== null && value !== 0 && value !== ''
     })
   })
