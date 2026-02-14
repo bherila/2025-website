@@ -21,9 +21,14 @@ document.addEventListener('DOMContentLoaded', () => {
   if (indexDiv) {
     let initialProjects = []
     let initialAgreements = []
+    let initialCompanyUsers = []
+    let initialRecentTimeEntries = []
+
     try {
       if (indexDiv.dataset.projects) initialProjects = JSON.parse(indexDiv.dataset.projects)
       if (indexDiv.dataset.agreements) initialAgreements = JSON.parse(indexDiv.dataset.agreements)
+      if (indexDiv.dataset.companyUsers) initialCompanyUsers = JSON.parse(indexDiv.dataset.companyUsers)
+      if (indexDiv.dataset.recentTimeEntries) initialRecentTimeEntries = JSON.parse(indexDiv.dataset.recentTimeEntries)
     } catch (e) {
       console.error('Failed to parse initial data', e)
     }
@@ -36,6 +41,9 @@ document.addEventListener('DOMContentLoaded', () => {
       isAdmin={indexDiv.dataset.isAdmin === 'true'}
       initialProjects={initialProjects}
       initialAgreements={initialAgreements}
+      initialCompanyUsers={initialCompanyUsers}
+      initialRecentTimeEntries={initialRecentTimeEntries}
+      afterEdit={() => window.location.reload()}
     />)
   }
 

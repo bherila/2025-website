@@ -1,5 +1,5 @@
 import { Clock, FolderOpen, Plus, ExternalLink, Pencil } from 'lucide-react'
-import { useCallback,useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import {
   DeleteFileModal,
@@ -26,6 +26,10 @@ interface ClientPortalIndexPageProps {
   isAdmin?: boolean
   initialProjects?: Project[]
   initialAgreements?: Agreement[]
+  initialCompanyUsers?: User[]
+  initialRecentTimeEntries?: TimeEntry[]
+  /** called after a mutation so the host can refresh the page/state */
+  afterEdit?: () => void
 }
 
 export default function ClientPortalIndexPage({ 
@@ -34,14 +38,17 @@ export default function ClientPortalIndexPage({
   companyId,
   isAdmin = false,
   initialProjects = [],
-  initialAgreements = []
+  initialAgreements = [],
+  initialCompanyUsers = [],
+  initialRecentTimeEntries = [],
+  afterEdit,
 }: ClientPortalIndexPageProps) {
   const [projects, setProjects] = useState<Project[]>(initialProjects)
   const [agreements] = useState<Agreement[]>(initialAgreements)
   const [newProjectModalOpen, setNewProjectModalOpen] = useState(false)
   const [newTimeEntryModalOpen, setNewTimeEntryModalOpen] = useState(false)
-  const [recentTimeEntries, setRecentTimeEntries] = useState<TimeEntry[]>([])
-  const [companyUsers, setCompanyUsers] = useState<User[]>([])
+  const [recentTimeEntries, setRecentTimeEntries] = useState<TimeEntry[]>(initialRecentTimeEntries)
+  const [companyUsers, setCompanyUsers] = useState<User[]>(initialCompanyUsers)
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null)
 
   const fileManager = useFileManagement({
@@ -52,55 +59,16 @@ export default function ClientPortalIndexPage({
     deleteUrlPattern: (fileId) => `/api/client/portal/${slug}/files/${fileId}`,
   })
 
-  const fetchTimeEntries = useCallback(async () => {
-    try {
-      const response = await fetch(`/api/client/portal/${slug}/time-entries`)
-      if (response.ok) {
-        const data = await response.json()
-        // Get the 5 most recent entries
-        const recent = data.entries?.slice(0, 5) || []
-        setRecentTimeEntries(recent)
-      }
-    } catch (error) {
-      console.error('Error loading time entries:', error)
-    }
-  }, [slug])
-
-  const fetchProjects = useCallback(async () => {
-    try {
-      const response = await fetch(`/api/client/portal/${slug}/projects`)
-      if (response.ok) {
-        const data = await response.json()
-        setProjects(data)
-      }
-    } catch (error) {
-      console.error('Error fetching projects:', error)
-    }
-  }, [slug])
-
-  const fetchCompanyUsers = useCallback(async () => {
-    try {
-      const response = await fetch(`/api/client/portal/${slug}`)
-      if (response.ok) {
-        const data = await response.json()
-        setCompanyUsers(data.users || [])
-      }
-    } catch (error) {
-      console.error('Error fetching company users:', error)
-    }
-  }, [slug])
-
   useEffect(() => {
     document.title = `Client Home: ${companyName}`
   }, [companyName])
 
   useEffect(() => {
-    fetchTimeEntries()
-    fetchProjects()
-    fetchCompanyUsers()
+    // We now receive projects, users and recent entries from server-side rendering so
+    // there's no need to call the API on mount. Only fetch files for the FileManager.
     fileManager.fetchFiles()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchTimeEntries, fetchProjects, fetchCompanyUsers])
+  }, [])
 
   const handleTimeEntryModalClose = (open: boolean) => {
     setNewTimeEntryModalOpen(open)
@@ -110,7 +78,9 @@ export default function ClientPortalIndexPage({
   }
 
   const handleTimeEntrySuccess = () => {
-    fetchTimeEntries()
+    // allow the host to refresh (preferred) or fall back to a full reload
+    if (afterEdit) return afterEdit()
+    window.location.reload()
   }
 
   const openEditTimeEntry = (entry: TimeEntry) => {

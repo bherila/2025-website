@@ -8,6 +8,8 @@
      data-is-admin="{{ auth()->user()?->hasRole('admin') ? 'true' : 'false' }}"
      data-projects="{{ json_encode($projects) }}"
      data-agreements="{{ json_encode($agreements) }}"
+     data-company-users="{{ json_encode($companyUsers ?? []) }}"
+     data-recent-time-entries="{{ json_encode($recentTimeEntries ?? []) }}"
 ></div>
 @endsection
 
