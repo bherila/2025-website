@@ -78,59 +78,8 @@ class ClientInvoiceApiController extends Controller
             ], 404);
         }
 
-        $invoice->load(['agreement', 'lineItems.timeEntries', 'payments']);
-
-        // Calculate hours breakdown using model method
-        $hoursBreakdown = $invoice->calculateHoursBreakdown();
-
-        return response()->json([
-            'id' => $invoice->client_invoice_id,
-            'invoice_number' => $invoice->invoice_number,
-            'period_start' => $invoice->period_start->toDateString(),
-            'period_end' => $invoice->period_end->toDateString(),
-            'invoice_total' => $invoice->invoice_total,
-            'status' => $invoice->status,
-            'issue_date' => $invoice->issue_date?->toDateString(),
-            'due_date' => $invoice->due_date?->toDateString(),
-            'paid_date' => $invoice->paid_date?->toDateString(),
-            'hours_worked' => $invoice->hours_worked,
-            'carried_in_hours' => $hoursBreakdown['carried_in_hours'],
-            'current_month_hours' => $hoursBreakdown['current_month_hours'],
-            'retainer_hours_included' => $invoice->retainer_hours_included,
-            'unused_hours_balance' => $invoice->unused_hours_balance,
-            'negative_hours_balance' => $invoice->negative_hours_balance,
-            'hours_billed_at_rate' => $invoice->hours_billed_at_rate,
-            'rollover_hours_used' => $invoice->rollover_hours_used,
-            'notes' => $invoice->notes,
-            'payments' => $invoice->payments,
-            'remaining_balance' => $invoice->remaining_balance,
-            'agreement' => $invoice->agreement ? [
-                'id' => $invoice->agreement->id,
-                'monthly_retainer_hours' => $invoice->agreement->monthly_retainer_hours,
-                'monthly_retainer_fee' => $invoice->agreement->monthly_retainer_fee,
-                'hourly_rate' => $invoice->agreement->hourly_rate,
-            ] : null,
-            'line_items' => $invoice->lineItems->map(function ($line) {
-                return [
-                    'id' => $line->client_invoice_line_id,
-                    'description' => $line->description,
-                    'quantity' => $line->quantity,
-                    'unit_price' => $line->unit_price,
-                    'line_total' => $line->line_total,
-                    'line_type' => $line->line_type,
-                    'hours' => $line->hours,
-                    'line_date' => $line->line_date?->toDateString(),
-                    'time_entries_count' => $line->timeEntries->count(),
-                    'time_entries' => $line->timeEntries->map(function ($entry) {
-                        return [
-                            'name' => $entry->name,
-                            'minutes_worked' => $entry->minutes_worked,
-                            'date_worked' => $entry->date_worked?->toDateString(),
-                        ];
-                    }),
-                ];
-            }),
-        ]);
+        // Use the model's canonical serializer so admin and portal controllers stay consistent
+        return response()->json($invoice->toDetailedArray());
     }
 
     /**

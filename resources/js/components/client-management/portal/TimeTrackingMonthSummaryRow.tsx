@@ -120,7 +120,8 @@ export default function TimeTrackingMonthSummaryRow({
       )}
 
       {/* Catch-up billed this month */}
-      {typeof catchUpHoursBilled === 'number' && catchUpHoursBilled > 0 && (
+      {/* Always show catch-up hours on invoice page (display 0:00 when zero) */}
+      {displayMode === 'invoice_page' && typeof catchUpHoursBilled === 'number' && (
         <SummaryTile title="Catch-up Hours Billed" kind="red" size="small">
           {formatHours(catchUpHoursBilled)}
         </SummaryTile>
@@ -139,7 +140,8 @@ export default function TimeTrackingMonthSummaryRow({
         }
 
         if (typeof fb === 'number') {
-          if (fb > 0) {
+          // Show Remaining Balance tile for invoice page even when zero (display 0:00)
+          if (fb >= 0) {
             return (
               <SummaryTile title="Remaining Balance" kind="green" size="small">
                 {formatHours(fb)}
@@ -147,6 +149,7 @@ export default function TimeTrackingMonthSummaryRow({
             )
           }
 
+          // Negative balance (carried forward)
           if (fb < 0) {
             return (
               <SummaryTile title="Negative Balance (Carried Forward)" kind="red" size="small">
@@ -155,7 +158,6 @@ export default function TimeTrackingMonthSummaryRow({
             )
           }
 
-          // Don't show balance tile if it's exactly 0
           return null
         }
 

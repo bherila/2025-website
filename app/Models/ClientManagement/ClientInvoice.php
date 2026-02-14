@@ -3,6 +3,7 @@
 namespace App\Models\ClientManagement;
 
 use App\Traits\SerializesDatesAsLocal;
+use App\Services\ClientManagement\DataTransferObjects\InvoiceHoursBreakdown;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -198,13 +199,13 @@ class ClientInvoice extends Model
 
     /**
      * Calculate hours breakdown: carried-in (previous months) vs current month.
-     * 
-     * @return array{carried_in_hours: float, current_month_hours: float}
+     *
+     * @return InvoiceHoursBreakdown
      */
-    public function calculateHoursBreakdown(): array
+    public function calculateHoursBreakdown(): InvoiceHoursBreakdown
     {
         $this->loadMissing('lineItems.timeEntries');
-        
+
         $periodStart = $this->period_start;
         $carriedInHours = 0;
         $currentMonthHours = 0;
@@ -212,7 +213,7 @@ class ClientInvoice extends Model
         foreach ($this->lineItems as $line) {
             if (in_array($line->line_type, ['prior_month_retainer', 'prior_month_billable', 'additional_hours'])) {
                 $lineHours = $line->hours ?? 0;
-                
+
                 // Check if line_date is before period_start (carried-in from previous months)
                 if ($line->line_date && $line->line_date < $periodStart) {
                     $carriedInHours += $lineHours;
@@ -230,9 +231,70 @@ class ClientInvoice extends Model
             }
         }
 
+        return new InvoiceHoursBreakdown((float) $carriedInHours, (float) $currentMonthHours);
+    }
+
+    /**
+     * Return a canonical detailed array representation for API responses.
+     * Controllers should call this to keep serialization consistent.
+     */
+    public function toDetailedArray(): array
+    {
+        $this->loadMissing(['agreement', 'lineItems.timeEntries', 'payments']);
+
+        $hoursBreakdown = $this->calculateHoursBreakdown();
+
         return [
-            'carried_in_hours' => $carriedInHours,
-            'current_month_hours' => $currentMonthHours,
+            'client_invoice_id' => $this->client_invoice_id,
+            'client_company_id' => $this->client_company_id,
+            'invoice_number' => $this->invoice_number,
+            'invoice_total' => $this->invoice_total,
+            'issue_date' => $this->issue_date?->toDateString(),
+            'due_date' => $this->due_date?->toDateString(),
+            'paid_date' => $this->paid_date?->toDateString(),
+            'status' => $this->status,
+            'period_start' => $this->period_start?->toDateString(),
+            'period_end' => $this->period_end?->toDateString(),
+            'retainer_hours_included' => $this->retainer_hours_included,
+            'hours_worked' => $this->hours_worked,
+            'carried_in_hours' => $hoursBreakdown->carriedInHours,
+            'current_month_hours' => $hoursBreakdown->currentMonthHours,
+            'rollover_hours_used' => $this->rollover_hours_used,
+            'unused_hours_balance' => $this->unused_hours_balance,
+            'negative_hours_balance' => $this->negative_hours_balance,
+            'starting_unused_hours' => $this->starting_unused_hours,
+            'starting_negative_hours' => $this->starting_negative_hours,
+            'hours_billed_at_rate' => $this->hours_billed_at_rate,
+            'notes' => $this->notes,
+            'payments' => $this->payments->toArray(),
+            'payments_total' => $this->payments_total,
+            'remaining_balance' => $this->remaining_balance,
+            'agreement' => $this->agreement ? [
+                'id' => $this->agreement->id,
+                'monthly_retainer_hours' => $this->agreement->monthly_retainer_hours,
+                'monthly_retainer_fee' => $this->agreement->monthly_retainer_fee,
+                'hourly_rate' => $this->agreement->hourly_rate,
+            ] : null,
+            'line_items' => $this->lineItems->map(function ($line) {
+                return [
+                    'client_invoice_line_id' => $line->client_invoice_line_id,
+                    'description' => $line->description,
+                    'quantity' => $line->quantity,
+                    'unit_price' => $line->unit_price,
+                    'line_total' => $line->line_total,
+                    'line_type' => $line->line_type,
+                    'hours' => $line->hours,
+                    'line_date' => $line->line_date?->toDateString(),
+                    'time_entries_count' => $line->timeEntries->count(),
+                    'time_entries' => $line->timeEntries->map(function ($entry) {
+                        return [
+                            'name' => $entry->name,
+                            'minutes_worked' => $entry->minutes_worked,
+                            'date_worked' => $entry->date_worked?->toDateString(),
+                        ];
+                    })->toArray(),
+                ];
+            })->toArray(),
         ];
     }
 

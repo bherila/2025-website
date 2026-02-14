@@ -178,15 +178,9 @@ class ClientPortalController extends Controller
 
         $invoice = $query->firstOrFail();
 
-        // Populate derived hourly summary values so the Blade hydration includes the same
-        // breakdown the API returns (carried_in_hours / current_month_hours).
-        $hoursBreakdown = $invoice->calculateHoursBreakdown();
-        $invoice->carried_in_hours = $hoursBreakdown['carried_in_hours'];
-        $invoice->current_month_hours = $hoursBreakdown['current_month_hours'];
-
-        // Prepare a lightweight, null-stripped payload for the head JSON so we avoid
-        // shipping explicit `null` values to the client (smaller payloads, undefined on client).
-        $invoicePayload = $this->removeNullsRecursive($invoice->toArray());
+        // Use the model's canonical detailed serialization for the head JSON
+        // and strip explicit nulls so the client receives a compact payload.
+        $invoicePayload = $this->removeNullsRecursive($invoice->toDetailedArray());
 
         return view('client-management.portal.invoice', [
             'company' => $company,
