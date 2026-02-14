@@ -11,6 +11,7 @@
     'companyId' => $company->id,
     'isAdmin' => auth()->user()?->hasRole('admin') ? true : false,
     'companyUsers' => $companyUsers ?? [],
+    'projects' => $projects ?? [],
   ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!};
 </script>
 @endpush

@@ -58,6 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const companyId = serverData?.companyId ?? parseInt(timeDiv.dataset.companyId!)
     const isAdmin = serverData?.isAdmin ?? (timeDiv.dataset.isAdmin === 'true')
     const initialCompanyUsers = serverData?.companyUsers ?? []
+    const initialProjects = serverData?.projects ?? []
 
     const root = createRoot(timeDiv)
     root.render(<ClientPortalTimePage 
@@ -66,6 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
       companyId={companyId}
       isAdmin={isAdmin}
       initialCompanyUsers={initialCompanyUsers}
+      initialProjects={initialProjects}
     />)
   }
 

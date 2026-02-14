@@ -74,13 +74,19 @@ class ClientPortalController extends Controller
 
         Gate::authorize('ClientCompanyMember', $company->id);
 
-        // Provide company users so the Time page can be server-hydrated and avoid an extra API call
+        // Provide company users and projects so the Time page can be server-hydrated
         $users = $company->users()->orderBy('name')->get();
+
+        $projects = ClientProject::where('client_company_id', $company->id)
+            ->withCount(['tasks', 'timeEntries'])
+            ->orderBy('name')
+            ->get();
 
         return view('client-management.portal.time', [
             'company' => $company,
             'slug' => $slug,
             'companyUsers' => $users,
+            'projects' => $projects,
         ]);
     }
 

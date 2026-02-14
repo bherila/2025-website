@@ -29,6 +29,7 @@ interface ClientPortalTimePageProps {
   companyId: number
   isAdmin?: boolean
   initialCompanyUsers?: User[]
+  initialProjects?: Project[]
 }
 
 function formatMonthYear(yearMonth: string): string {
@@ -44,12 +45,12 @@ function abbreviateName(name: string | null | undefined): string {
   return `${parts[0]} ${parts[1]![0]}.`
 }
 
-export default function ClientPortalTimePage({ slug, companyName, companyId, isAdmin = false, initialCompanyUsers = [] }: ClientPortalTimePageProps) {
+export default function ClientPortalTimePage({ slug, companyName, companyId, isAdmin = false, initialCompanyUsers = [], initialProjects = [] }: ClientPortalTimePageProps) {
   const [data, setData] = useState<TimeEntriesResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [newEntryModalOpen, setNewEntryModalOpen] = useState(false)
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null)
-  const [projects, setProjects] = useState<Project[]>([])
+  const [projects, setProjects] = useState<Project[]>(initialProjects)
   const [companyUsers, setCompanyUsers] = useState<User[]>(initialCompanyUsers)
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
 
@@ -97,12 +98,15 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, isA
 
   useEffect(() => {
     fetchTimeEntries()
-    fetchProjects()
+    // Only fetch projects if none were provided via server hydration
+    if (!initialProjects || initialProjects.length === 0) {
+      fetchProjects()
+    }
     // Only fetch company users if none were provided via server hydration
     if (!initialCompanyUsers || initialCompanyUsers.length === 0) {
       fetchCompanyUsers()
     }
-  }, [fetchTimeEntries, fetchProjects, fetchCompanyUsers, initialCompanyUsers])
+  }, [fetchTimeEntries, fetchProjects, fetchCompanyUsers, initialCompanyUsers, initialProjects])
 
   useEffect(() => {
     // Expand first month by default
@@ -175,7 +179,7 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, isA
     return (
       <TooltipProvider>
         <>
-          <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="time" />
+          <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="time" projects={projects} />
           <div className="container mx-auto px-8 max-w-6xl">
             <Skeleton className="h-10 w-64 mb-6" />
             <Skeleton className="h-24 w-full mb-6" />
@@ -192,7 +196,7 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, isA
   return (
     <TooltipProvider>
       <>
-        <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="time" />
+        <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="time" projects={projects} />
         <div className="container mx-auto px-8 max-w-6xl">
           <div className="mb-6">
             <div className="flex justify-between items-center">
