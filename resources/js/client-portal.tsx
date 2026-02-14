@@ -49,12 +49,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const timeDiv = document.getElementById('ClientPortalTimePage')
   if (timeDiv) {
+    // Prefer head-hydrated payload when available
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const serverData: any = (window as any).__CLIENT_PORTAL_INITIAL_DATA__ || null
+
+    const slug = serverData?.slug ?? timeDiv.dataset.slug!
+    const companyName = serverData?.companyName ?? timeDiv.dataset.companyName!
+    const companyId = serverData?.companyId ?? parseInt(timeDiv.dataset.companyId!)
+    const isAdmin = serverData?.isAdmin ?? (timeDiv.dataset.isAdmin === 'true')
+    const initialCompanyUsers = serverData?.companyUsers ?? []
+
     const root = createRoot(timeDiv)
     root.render(<ClientPortalTimePage 
-      slug={timeDiv.dataset.slug!}
-      companyName={timeDiv.dataset.companyName!}
-      companyId={parseInt(timeDiv.dataset.companyId!)}
-      isAdmin={timeDiv.dataset.isAdmin === 'true'}
+      slug={slug}
+      companyName={companyName}
+      companyId={companyId}
+      isAdmin={isAdmin}
+      initialCompanyUsers={initialCompanyUsers}
     />)
   }
 

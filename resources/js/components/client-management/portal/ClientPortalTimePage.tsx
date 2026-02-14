@@ -28,6 +28,7 @@ interface ClientPortalTimePageProps {
   companyName: string
   companyId: number
   isAdmin?: boolean
+  initialCompanyUsers?: User[]
 }
 
 function formatMonthYear(yearMonth: string): string {
@@ -43,13 +44,13 @@ function abbreviateName(name: string | null | undefined): string {
   return `${parts[0]} ${parts[1]![0]}.`
 }
 
-export default function ClientPortalTimePage({ slug, companyName, companyId, isAdmin = false }: ClientPortalTimePageProps) {
+export default function ClientPortalTimePage({ slug, companyName, companyId, isAdmin = false, initialCompanyUsers = [] }: ClientPortalTimePageProps) {
   const [data, setData] = useState<TimeEntriesResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [newEntryModalOpen, setNewEntryModalOpen] = useState(false)
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null)
   const [projects, setProjects] = useState<Project[]>([])
-  const [companyUsers, setCompanyUsers] = useState<User[]>([])
+  const [companyUsers, setCompanyUsers] = useState<User[]>(initialCompanyUsers)
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
 
   useEffect(() => {
@@ -97,8 +98,11 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, isA
   useEffect(() => {
     fetchTimeEntries()
     fetchProjects()
-    fetchCompanyUsers()
-  }, [fetchTimeEntries, fetchProjects, fetchCompanyUsers])
+    // Only fetch company users if none were provided via server hydration
+    if (!initialCompanyUsers || initialCompanyUsers.length === 0) {
+      fetchCompanyUsers()
+    }
+  }, [fetchTimeEntries, fetchProjects, fetchCompanyUsers, initialCompanyUsers])
 
   useEffect(() => {
     // Expand first month by default
