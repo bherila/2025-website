@@ -86,12 +86,13 @@ describe('Client-portal hydration', () => {
     // Component renders from hydrated props (use heading to avoid duplicate-text matches)
     expect(screen.getByRole('heading', { name: /Proj 1/ })).toBeInTheDocument()
 
-    // Ensure project-specific endpoints were NOT requested by this component
+    // Ensure project-specific endpoints (tasks/users) were NOT requested by this component.
+    // NOTE: files ARE allowed to be requested because SSR hydration for file lists was removed.
     await waitFor(() => {
       const calledAgreementOrTasks = (fetchMock.mock.calls as any[]).some(call => {
         const url = String(call[0] || '')
         // disallow project-specific endpoints; allow ClientPortalNav's projects list (/api/client/portal/acme/projects)
-        return url.includes('/projects/proj-1/tasks') || (url.includes('/api/client/portal/acme') && !url.includes('/projects')) || url.includes('/projects/proj-1/files')
+        return url.includes('/projects/proj-1/tasks') || (url.includes('/api/client/portal/acme') && !url.includes('/projects'))
       })
       expect(calledAgreementOrTasks).toBe(false)
     })
@@ -186,7 +187,12 @@ describe('Client-portal hydration', () => {
     await waitFor(() => {
       const calledAgreementEndpoints = (fetchMock.mock.calls as any[]).some(call => {
         const url = String(call[0] || '')
-        return url.includes(`/api/client/portal/acme/agreements/${1}`) || url.includes(`/api/client/portal/acme/agreements`) || url.includes(`/api/client/portal/acme/agreements/${1}/files`) || url.includes(`/api/client/portal/acme/invoices`)
+        // ignore file requests (always fetched now)
+        if (url.includes('/files')) return false
+        
+        return url.includes(`/api/client/portal/acme/agreements/${1}`) || 
+               url.includes(`/api/client/portal/acme/agreements`) || 
+               url.includes(`/api/client/portal/acme/invoices`)
       })
       expect(calledAgreementEndpoints).toBe(false)
     })

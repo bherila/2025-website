@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Dialog, DialogContent, DialogFooter,DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogFooter,DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -233,6 +233,9 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{entry ? 'Edit Time Record' : 'New Time Record'}</DialogTitle>
+          <DialogDescription>
+            {entry ? 'Update the details of your time entry below.' : 'Record the time you spent on a project task.'}
+          </DialogDescription>
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4">
