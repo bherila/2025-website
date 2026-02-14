@@ -72,6 +72,12 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
   const [error, setError] = useState<string | null>(null)
   const [currentUser, setCurrentUser] = useState<User | null>(null)
 
+  // Prefer server-hydrated company users when available (window.__CLIENT_PORTAL_INITIAL_DATA__.companyUsers)
+  // Falls back to the `users` prop for backwards compatibility or in tests.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const serverCompanyUsers = (typeof window !== 'undefined' && (window as any).__CLIENT_PORTAL_INITIAL_DATA__?.companyUsers) ? ((window as any).__CLIENT_PORTAL_INITIAL_DATA__.companyUsers as User[]) : undefined
+  const effectiveUsers: User[] = serverCompanyUsers ?? users
+
   // Fetch current user
   useEffect(() => {
     fetch('/api/user')
@@ -294,7 +300,7 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <option value="">Select user...</option>
-                {users.map(user => (
+                {effectiveUsers.map(user => (
                   <option key={user.id} value={user.id}>
                     {user.name}
                   </option>
