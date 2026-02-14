@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { ClientInvoicePaymentSchema } from './invoice-payment'
+import { ClientInvoicePaymentSchema, ClientInvoicePaymentHydrationSchema } from './invoice-payment'
 
 // Basic time entry schema
 export const InvoiceLineTimeEntrySchema = z.object({
@@ -78,7 +78,7 @@ export const InvoiceHydrationSchema = z.object({
   hours_billed_at_rate: z.union([z.string(), z.number()]).optional(),
   notes: z.string().nullable().optional(),
   line_items: z.array(InvoiceLineSchema).optional(),
-  payments: z.array(ClientInvoicePaymentSchema).optional(),
+  payments: z.array(ClientInvoicePaymentHydrationSchema).optional(),
   remaining_balance: z.union([z.string(), z.number()]).optional(),
   payments_total: z.union([z.string(), z.number()]).optional(),
   previous_invoice_id: z.number().nullable().optional(),

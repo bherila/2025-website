@@ -32,6 +32,29 @@ describe('InvoiceSchema (zod)', () => {
     expect(result.success).toBe(true)
   })
 
+  it('InvoiceHydrationSchema accepts numeric totals and payments with missing notes', () => {
+    const hydrated = {
+      client_invoice_id: 1,
+      invoice_total: 123.45,
+      status: 'issued',
+      period_start: '2024-01-01',
+      period_end: '2024-01-31',
+      retainer_hours_included: 10,
+      hours_worked: 2,
+      hours_billed_at_rate: 0,
+      line_items: [],
+      payments: [
+        { client_invoice_payment_id: 1, client_invoice_id: 1, amount: 50, payment_date: '2024-01-15', payment_method: 'ACH' }
+      ],
+      remaining_balance: 73.45,
+      payments_total: 50
+    }
+
+    const { InvoiceHydrationSchema } = require('@/types/client-management/invoice')
+    const result = InvoiceHydrationSchema.safeParse(hydrated)
+    expect(result.success).toBe(true)
+  })
+
   it('rejects an invalid invoice shape', () => {
     const bad = { foo: 'bar' }
     const result = InvoiceSchema.safeParse(bad)

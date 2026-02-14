@@ -350,7 +350,18 @@ document.addEventListener('DOMContentLoaded', () => {
             hours_billed_at_rate: normalizeNumberLike(src.hours_billed_at_rate ?? '0'),
             notes: src.notes ?? null,
             line_items: Array.isArray(src.line_items) ? src.line_items : [],
-            payments: Array.isArray(src.payments) ? src.payments : [],
+            payments: Array.isArray(src.payments)
+              ? src.payments.map((p: any) => ({
+                  client_invoice_payment_id: p.client_invoice_payment_id,
+                  client_invoice_id: p.client_invoice_id ?? src.client_company_id ?? serverData.companyId,
+                  amount: normalizeMoney(p.amount ?? 0),
+                  payment_date: p.payment_date ?? null,
+                  payment_method: p.payment_method ?? 'Other',
+                  notes: p.hasOwnProperty('notes') ? p.notes : null,
+                  created_at: p.created_at ?? p.payment_date ?? new Date().toISOString(),
+                  updated_at: p.updated_at ?? p.payment_date ?? new Date().toISOString(),
+                }))
+              : [],
             remaining_balance: normalizeMoney(src.remaining_balance ?? 0),
             payments_total: normalizeMoney(src.payments_total ?? 0),
             previous_invoice_id: src.previous_invoice_id ?? null,

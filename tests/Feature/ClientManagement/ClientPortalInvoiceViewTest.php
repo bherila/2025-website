@@ -126,5 +126,13 @@ class ClientPortalInvoiceViewTest extends TestCase
         // Monetary summary fields should still be present
         $this->assertArrayHasKey('remaining_balance', $inv);
         $this->assertArrayHasKey('payments_total', $inv);
+
+        // Hourly-summary fields must come from the canonical serializer (toDetailedArray)
+        $this->assertArrayHasKey('hours_billed_at_rate', $inv);
+        $this->assertEqualsWithDelta(0.0, (float) $inv['hours_billed_at_rate'], 0.0001);
+
+        // Remaining pool of hours (unused retainer) should be present for the Hourly Summary
+        $this->assertArrayHasKey('unused_hours_balance', $inv);
+        $this->assertEqualsWithDelta(0.0, (float) $inv['unused_hours_balance'], 0.0001);
     }
 }
