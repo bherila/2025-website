@@ -69,6 +69,13 @@ Unlike the previous implementation, the retainer fee line (dated the 1st of M) d
 ## Invoice Balance Fields
 The invoice tracks several balance fields that reflect the state at different points in time:
 
+### Server serialization & portal hydration
+- The server now exposes a **single canonical serializer** for detailed invoices (`ClientInvoice::toDetailedArray()`), used by the admin API and the portal Blade hydration.
+- Blade-embedded JSON omits explicit `null` values (keys may be absent on the client). The client treats missing keys as `undefined` and performs tolerant validation + normalization.
+- Monetary totals and payment amounts may be emitted as numbers by the server; the client accepts numeric/string unions and normalizes them to the expected string formats for runtime validation and display.
+- Hydration includes `hours_billed_at_rate` ("Catch-up Hours Billed") and `unused_hours_balance` (remaining retainer pool) so the portal's Hourly Summary can render these tiles immediately (0:00 is shown when values are zero).
+
+
 ### Work Period Balances (End of Month M-1)
 These fields reflect the state **after** processing all work performed in the work period (M-1) but **before** the retainer for Month M is applied. These are primarily used for historical reporting and test validation.
 

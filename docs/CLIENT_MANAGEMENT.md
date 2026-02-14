@@ -259,6 +259,11 @@ Vite entry points:
 ### TypeScript Typings
 Shared TypeScript interfaces are generated within the `@/types/client-management/` directory to ensure type consistency across components. When adding new interfaces, create or update files in this directory and import them using type-only imports (`import type { InterfaceName } from '@/types/client-management/file'`).
 
+Hydration vs runtime schemas
+- We use two schema flavors for some payloads (notably invoices/payments): a **strict runtime schema** (`InvoiceSchema`, `ClientInvoicePaymentSchema`) that represents the app's authoritative contract, and a **relaxed hydration schema** (`InvoiceHydrationSchema`, `ClientInvoicePaymentHydrationSchema`) that tolerates real-world server payload shapes (missing keys, numeric totals, omitted timestamps).
+- The client will attempt a strict parse first and fall back to the relaxed schema + normalization when necessary — keeping UI fast and safe while surfacing backend mismatches during development.
+
+
 #### React Components
 Location: `resources/js/components/client-management/`
 
@@ -400,7 +405,7 @@ Location: `resources/js/components/client-management/portal/`
 - Invoice actions (Issue, Void, Add Payment, etc.) for admins
 - Line item editing capabilities for draft invoices
 - Payment history with edit/delete actions
-- Hourly summary section showing hour balances
+- Hourly summary section showing hour balances (includes `hours_billed_at_rate` and `unused_hours_balance`; Catch‑up Hours Billed and Remaining Balance tiles are shown on the invoice even when zero)
 - Uses shadcn/ui Table, Badge, Button, Switch, Label components
 
 ### Styling
