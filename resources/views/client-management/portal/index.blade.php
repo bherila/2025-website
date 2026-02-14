@@ -12,7 +12,6 @@
   'agreements' => $agreements,
   'companyUsers' => $companyUsers ?? [],
   'recentTimeEntries' => $recentTimeEntries ?? [],
-  'companyFiles' => $companyFiles ?? [],
 ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!}
 </script>
 @endpush

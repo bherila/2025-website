@@ -2,7 +2,7 @@
 
 import { format } from 'date-fns'
 import { Download, FileIcon, History, Loader2, Trash2, Upload } from 'lucide-react'
-import { useRef,useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -370,7 +370,7 @@ export function useFileOperations(options: UseFileOperationsOptions) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchFiles = async () => {
+  const fetchFiles = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -382,9 +382,9 @@ export function useFileOperations(options: UseFileOperationsOptions) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [options.listUrl])
 
-  const uploadFile = async (file: File): Promise<FileRecord | null> => {
+  const uploadFile = useCallback(async (file: File): Promise<FileRecord | null> => {
     setError(null)
     try {
       // For large files, use signed URL upload
@@ -421,9 +421,9 @@ export function useFileOperations(options: UseFileOperationsOptions) {
       setError('Failed to upload file')
       return null
     }
-  }
+  }, [options.uploadUrl, options.uploadUrlEndpoint, fetchFiles])
 
-  const downloadFile = async (file: FileRecord) => {
+  const downloadFile = useCallback(async (file: FileRecord) => {
     try {
       const response: DownloadResponse = await fetchWrapper.get(options.downloadUrlPattern(file.id))
       // Open the download URL in a new tab
@@ -432,9 +432,9 @@ export function useFileOperations(options: UseFileOperationsOptions) {
       console.error('Failed to download file:', err)
       setError('Failed to download file')
     }
-  }
+  }, [options.downloadUrlPattern])
 
-  const deleteFile = async (file: FileRecord): Promise<boolean> => {
+  const deleteFile = useCallback(async (file: FileRecord): Promise<boolean> => {
     setError(null)
     try {
       await fetchWrapper.delete(options.deleteUrlPattern(file.id), {})
@@ -445,9 +445,9 @@ export function useFileOperations(options: UseFileOperationsOptions) {
       setError('Failed to delete file')
       return false
     }
-  }
+  }, [options.deleteUrlPattern, fetchFiles])
 
-  const getFileHistory = async (file: FileRecord): Promise<DownloadHistoryEntry[]> => {
+  const getFileHistory = useCallback(async (file: FileRecord): Promise<DownloadHistoryEntry[]> => {
     if (!options.historyUrlPattern) return []
     try {
       const response: FileHistoryResponse = await fetchWrapper.get(options.historyUrlPattern(file.id))
@@ -456,9 +456,9 @@ export function useFileOperations(options: UseFileOperationsOptions) {
       console.error('Failed to get file history:', err)
       return []
     }
-  }
+  }, [options.historyUrlPattern])
 
-  return {
+  return useMemo(() => ({
     files,
     loading,
     error,
@@ -467,7 +467,7 @@ export function useFileOperations(options: UseFileOperationsOptions) {
     downloadFile,
     deleteFile,
     getFileHistory,
-  }
+  }), [files, loading, error, fetchFiles, uploadFile, downloadFile, deleteFile, getFileHistory])
 }
 
 // Higher-level hook that includes modal state management for delete and history modals
@@ -487,36 +487,36 @@ export function useFileManagement(options: UseFileManagementOptions) {
   const [deleteFile, setDeleteFileState] = useState<FileRecord | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
-  const handleViewHistory = async (file: FileRecord) => {
+  const handleViewHistory = useCallback(async (file: FileRecord) => {
     const history = await fileOps.getFileHistory(file)
     setHistoryFile(file)
     setHistoryData(history)
     setHistoryModalOpen(true)
-  }
+  }, [fileOps])
 
-  const handleDeleteRequest = (file: FileRecord) => {
+  const handleDeleteRequest = useCallback((file: FileRecord) => {
     setDeleteFileState(file)
     setDeleteModalOpen(true)
-  }
+  }, [])
 
-  const handleDeleteConfirm = async () => {
+  const handleDeleteConfirm = useCallback(async () => {
     if (!deleteFile) return
     setIsDeleting(true)
     await fileOps.deleteFile(deleteFile)
     setIsDeleting(false)
     setDeleteModalOpen(false)
     setDeleteFileState(null)
-  }
+  }, [deleteFile, fileOps])
 
-  const closeHistoryModal = () => {
+  const closeHistoryModal = useCallback(() => {
     setHistoryModalOpen(false)
-  }
+  }, [])
 
-  const closeDeleteModal = () => {
+  const closeDeleteModal = useCallback(() => {
     setDeleteModalOpen(false)
-  }
+  }, [])
 
-  return {
+  return useMemo(() => ({
     // File operations
     ...fileOps,
 
@@ -534,5 +534,18 @@ export function useFileManagement(options: UseFileManagementOptions) {
     handleDeleteRequest,
     handleDeleteConfirm,
     closeDeleteModal,
-  }
+  }), [
+    fileOps,
+    historyModalOpen,
+    historyFile,
+    historyData,
+    handleViewHistory,
+    closeHistoryModal,
+    deleteModalOpen,
+    deleteFile,
+    isDeleting,
+    handleDeleteRequest,
+    handleDeleteConfirm,
+    closeDeleteModal,
+  ])
 }

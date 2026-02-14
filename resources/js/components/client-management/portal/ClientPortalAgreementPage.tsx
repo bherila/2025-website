@@ -87,7 +87,7 @@ export default function ClientPortalAgreementPage({ slug, companyName, companyId
     }
     // Only fetch invoices when the host did not provide an initialInvoices prop
     if (initialInvoices === undefined) fetchInvoices()
-  }, [agreementId, fetchAgreement, fetchInvoices, fileManager, initialAgreement, initialInvoices, initialAgreementFiles])
+  }, [agreementId, fetchAgreement, fetchInvoices, fileManager.fetchFiles, fileManager.files.length, initialAgreement, initialInvoices, initialAgreementFiles])
 
   useEffect(() => {
     if (agreement) {

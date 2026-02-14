@@ -68,12 +68,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const initialRecentTimeEntries = parsedRecentTimeEntries.success ? parsedRecentTimeEntries.data : []
 
-    const parsedCompanyFiles = FileRecordSchema.array().safeParse(serverData.companyFiles ?? [])
-    if (!parsedCompanyFiles.success) {
-      console.error('Invalid hydrated companyFiles payload — will fall back to file API.', parsedCompanyFiles.error)
-    }
-    const initialCompanyFiles = parsedCompanyFiles.success ? parsedCompanyFiles.data : []
-
     const slug = serverData.slug
     const companyName = serverData.companyName
     const companyId = serverData.companyId
@@ -89,7 +83,6 @@ document.addEventListener('DOMContentLoaded', () => {
       initialAgreements={initialAgreements as any}
       initialCompanyUsers={initialCompanyUsers as any}
       initialRecentTimeEntries={initialRecentTimeEntries as any}
-      initialCompanyFiles={initialCompanyFiles as any}
       afterEdit={() => window.location.reload()}
     />)
   }
@@ -166,12 +159,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const initialProjects = parsedProjects_proj.success ? parsedProjects_proj.data : []
 
-    const parsedProjectFiles = FileRecordSchema.array().safeParse(serverData.projectFiles ?? [])
-    if (!parsedProjectFiles.success) {
-      console.error('Invalid hydrated projectFiles payload — will fall back to file API.', parsedProjectFiles.error)
-    }
-    const initialProjectFiles = parsedProjectFiles.success ? parsedProjectFiles.data : []
-
     const root = createRoot(projectDiv)
     root.render(<ClientPortalProjectPage 
       slug={slug}
@@ -184,7 +171,6 @@ document.addEventListener('DOMContentLoaded', () => {
       initialTasks={initialTasks as any}
       initialCompanyUsers={initialCompanyUsers as any}
       initialProjects={initialProjects as any}
-      initialProjectFiles={initialProjectFiles as any}
     />)
   }
 
@@ -216,12 +202,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const initialInvoices = parsedInvoices.success ? parsedInvoices.data : []
 
-    const parsedAgreementFiles = FileRecordSchema.array().safeParse(serverData.agreementFiles ?? [])
-    if (!parsedAgreementFiles.success) {
-      console.error('Invalid hydrated agreementFiles payload — will fall back to file API.', parsedAgreementFiles.error)
-    }
-    const initialAgreementFiles = parsedAgreementFiles.success ? parsedAgreementFiles.data : []
-
     if (!initialAgreement) {
       console.error('Invalid or missing hydrated agreement — aborting mount.')
       return
@@ -236,7 +216,6 @@ document.addEventListener('DOMContentLoaded', () => {
       isAdmin={isAdmin}
       initialAgreement={initialAgreement as any}
       initialInvoices={initialInvoices as any}
-      initialAgreementFiles={initialAgreementFiles as any}
     />)
   }
 

@@ -12,7 +12,6 @@
   'tasks' => $tasks ?? [],
   'companyUsers' => $companyUsers ?? [],
   'projects' => $projects ?? [],
-  'projectFiles' => $projectFiles ?? [],
 ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!}
 </script>
 @endpush

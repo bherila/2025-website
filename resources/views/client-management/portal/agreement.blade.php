@@ -10,7 +10,6 @@
   'companyId' => $company->id,
 'agreement' => $agreement,
   'invoices' => $invoices ?? [],
-  'agreementFiles' => $agreementFiles ?? [],
 ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!}
 </script>
 @endpush

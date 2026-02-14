@@ -117,9 +117,10 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
     if (initialTasks === undefined) fetchTasks()
     if (initialCompanyUsers === undefined) fetchCompanyUsers()
     // FileManager should fetch only if server did not hydrate files
-    if (initialProjectFiles === undefined && fileManager.files.length === 0) fileManager.fetchFiles()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchTasks, fetchCompanyUsers, fileManager, initialTasks, initialCompanyUsers, initialProjectFiles])
+    if (initialProjectFiles === undefined && fileManager.files.length === 0) {
+      fileManager.fetchFiles()
+    }
+  }, [fetchTasks, fetchCompanyUsers, fileManager.fetchFiles, fileManager.files.length, initialTasks, initialCompanyUsers, initialProjectFiles])
 
   const toggleTaskComplete = async (task: Task) => {
     setTogglingTasks(prev => new Set(prev).add(task.id))

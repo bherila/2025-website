@@ -71,8 +71,7 @@ export default function ClientPortalIndexPage({
     if (initialCompanyFiles === undefined) {
       fileManager.fetchFiles()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [fileManager.fetchFiles, initialCompanyFiles])
 
   const handleTimeEntryModalClose = (open: boolean) => {
     setNewTimeEntryModalOpen(open)
