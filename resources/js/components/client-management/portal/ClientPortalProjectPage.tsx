@@ -89,17 +89,6 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
     }
   }, [slug, projectSlug])
 
-  // Only fetch tasks if the host did not provide hydrated tasks
-  useEffect(() => {
-    if (initialTasks === undefined) {
-      fetchTasks()
-    } else {
-      // hydration provided tasks — clear loading
-      setLoading(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchTasks, initialTasks])
-
   const fetchCompanyUsers = useCallback(async () => {
     try {
       const response = await fetch(`/api/client/portal/${slug}`)
@@ -113,14 +102,21 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
   }, [slug])
 
   useEffect(() => {
-    // Fetch resources only when not hydrated from server
-    if (initialTasks === undefined) fetchTasks()
-    if (initialCompanyUsers === undefined) fetchCompanyUsers()
-    // FileManager should fetch only if server did not hydrate files
-    if (initialProjectFiles === undefined && fileManager.files.length === 0) {
-      fileManager.fetchFiles()
+    // Only fetch tasks if the host did not provide hydrated tasks
+    if (initialTasks === undefined) {
+      fetchTasks()
+    } else {
+      // hydration provided tasks — clear loading
+      setLoading(false)
     }
-  }, [fetchTasks, fetchCompanyUsers, fileManager.fetchFiles, fileManager.files.length, initialTasks, initialCompanyUsers, initialProjectFiles])
+    
+    if (initialCompanyUsers === undefined) {
+      fetchCompanyUsers()
+    }
+    
+    // Always fetch project files via API since we removed SSR hydration for them
+    fileManager.fetchFiles()
+  }, [fetchTasks, fetchCompanyUsers, fileManager.fetchFiles, initialTasks, initialCompanyUsers])
 
   const toggleTaskComplete = async (task: Task) => {
     setTogglingTasks(prev => new Set(prev).add(task.id))

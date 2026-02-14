@@ -65,10 +65,6 @@ export default function EditTaskModal({ open, onOpenChange, task, slug, projectS
     deleteUrlPattern: (fileId) => `/api/client/portal/${slug}/projects/${projectSlug}/tasks/${task.id}/files/${fileId}`,
   })
 
-  const fetchFiles = useCallback(() => {
-    fileManager.fetchFiles()
-  }, [fileManager])
-
   useEffect(() => {
     setName(task.name)
     setDescription(task.description || '')
@@ -76,8 +72,8 @@ export default function EditTaskModal({ open, onOpenChange, task, slug, projectS
     setAssigneeId(task.assignee?.id.toString() || '')
     setIsHighPriority(task.is_high_priority)
     setIsHiddenFromClients(task.is_hidden_from_clients)
-    fetchFiles()
-  }, [task, fetchFiles])
+    fileManager.fetchFiles()
+  }, [task, fileManager.fetchFiles])
 
   const handleUpdateTask = async (e: React.FormEvent) => {
     e.preventDefault()

@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
+import { AppInitialDataSchema } from '@/types/client-management/hydration-schemas'
 
 interface Project {
   id: number
@@ -76,6 +77,21 @@ export default function ClientPortalNav({
   }, [slug])
 
   const fetchCompanies = useCallback(async () => {
+    // Check for global hydrated app data first
+    try {
+      const appScript = document.getElementById('app-initial-data') as HTMLScriptElement | null
+      const appRaw = appScript?.textContent ? JSON.parse(appScript.textContent) : null
+      const appParsed = appRaw ? AppInitialDataSchema.safeParse(appRaw) : null
+
+      if (appParsed?.success && appParsed.data.clientCompanies) {
+        setCompanies(appParsed.data.clientCompanies as Company[])
+        setLoadingCompanies(false)
+        return
+      }
+    } catch (e) {
+      // fallback to API
+    }
+
     try {
       const response = await fetch('/api/client/portal/companies')
       if (response.ok) {

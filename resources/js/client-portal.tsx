@@ -33,7 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const indexDiv = document.getElementById('ClientPortalIndexPage')
   if (indexDiv) {
-    // Server-hydrated payload must be embedded in a <script type="application/json"> tag
+    // Server-hydrated payload must be embedded in <script type="application/json"> tag
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const script = document.getElementById('client-portal-initial-data') as HTMLScriptElement | null
     const serverData: any = script && script.textContent ? JSON.parse(script.textContent) : null
@@ -48,25 +48,25 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!parsedProjects.success) {
       console.error('Invalid hydrated projects payload — will fall back to API fetch.', parsedProjects.error)
     }
-    const initialProjects = parsedProjects.success ? parsedProjects.data : []
+    const initialProjects = parsedProjects.success ? parsedProjects.data : undefined
 
     const parsedAgreements = AgreementSchema.array().safeParse(serverData.agreements ?? [])
     if (!parsedAgreements.success) {
       console.error('Invalid hydrated agreements payload — ignoring server data.', parsedAgreements.error)
     }
-    const initialAgreements = parsedAgreements.success ? parsedAgreements.data : []
+    const initialAgreements = parsedAgreements.success ? parsedAgreements.data : undefined
 
     const parsedCompanyUsers = UserSchema.array().safeParse(serverData.companyUsers ?? [])
     if (!parsedCompanyUsers.success) {
       console.error('Invalid hydrated companyUsers payload — will fall back to API fetch.', parsedCompanyUsers.error)
     }
-    const initialCompanyUsers = parsedCompanyUsers.success ? parsedCompanyUsers.data : []
+    const initialCompanyUsers = parsedCompanyUsers.success ? parsedCompanyUsers.data : undefined
 
     const parsedRecentTimeEntries = TimeEntrySchema.array().safeParse(serverData.recentTimeEntries ?? [])
     if (!parsedRecentTimeEntries.success) {
       console.error('Invalid hydrated recentTimeEntries payload — ignoring server data.', parsedRecentTimeEntries.error)
     }
-    const initialRecentTimeEntries = parsedRecentTimeEntries.success ? parsedRecentTimeEntries.data : []
+    const initialRecentTimeEntries = parsedRecentTimeEntries.success ? parsedRecentTimeEntries.data : undefined
 
     const slug = serverData.slug
     const companyName = serverData.companyName
@@ -107,13 +107,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!parsedCompanyUsers_time.success) {
       console.error('Invalid hydrated companyUsers for time page — will fall back to API fetch.', parsedCompanyUsers_time.error)
     }
-    const initialCompanyUsers = parsedCompanyUsers_time.success ? parsedCompanyUsers_time.data : []
+    const initialCompanyUsers = parsedCompanyUsers_time.success ? parsedCompanyUsers_time.data : undefined
 
     const parsedProjects_time = ProjectSchema.array().safeParse(serverData.projects ?? [])
     if (!parsedProjects_time.success) {
       console.error('Invalid hydrated projects for time page — will fall back to API fetch.', parsedProjects_time.error)
     }
-    const initialProjects = parsedProjects_time.success ? parsedProjects_time.data : []
+    const initialProjects = parsedProjects_time.success ? parsedProjects_time.data : undefined
 
     const root = createRoot(timeDiv)
     root.render(<ClientPortalTimePage 
@@ -145,19 +145,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const projectName = serverData.project.name
     const isAdmin = appData?.isAdmin ?? false
 
-    const initialTasks = serverData.tasks ?? []
+    const initialTasksRaw = serverData.tasks
+    const initialTasks = Array.isArray(initialTasksRaw) ? initialTasksRaw : undefined
 
     const parsedCompanyUsers_proj = UserSchema.array().safeParse(serverData.companyUsers ?? [])
     if (!parsedCompanyUsers_proj.success) {
       console.error('Invalid hydrated companyUsers for project page — will fall back to API fetch.', parsedCompanyUsers_proj.error)
     }
-    const initialCompanyUsers = parsedCompanyUsers_proj.success ? parsedCompanyUsers_proj.data : []
+    const initialCompanyUsers = parsedCompanyUsers_proj.success ? parsedCompanyUsers_proj.data : undefined
 
     const parsedProjects_proj = ProjectSchema.array().safeParse(serverData.projects ?? [])
     if (!parsedProjects_proj.success) {
       console.error('Invalid hydrated projects for project page — will fall back to API fetch.', parsedProjects_proj.error)
     }
-    const initialProjects = parsedProjects_proj.success ? parsedProjects_proj.data : []
+    const initialProjects = parsedProjects_proj.success ? parsedProjects_proj.data : undefined
 
     const root = createRoot(projectDiv)
     root.render(<ClientPortalProjectPage 
@@ -200,7 +201,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!parsedInvoices.success) {
       console.error('Invalid hydrated invoices for agreement page — ignoring server invoices.', parsedInvoices.error)
     }
-    const initialInvoices = parsedInvoices.success ? parsedInvoices.data : []
+    const initialInvoices = parsedInvoices.success ? parsedInvoices.data : undefined
 
     if (!initialAgreement) {
       console.error('Invalid or missing hydrated agreement — aborting mount.')

@@ -81,13 +81,11 @@ export default function ClientPortalAgreementPage({ slug, companyName, companyId
 
   useEffect(() => {
     if (initialAgreement === null) fetchAgreement()
-    // Only fetch files if server did not provide hydrated files
-    if (initialAgreementFiles === undefined && fileManager.files.length === 0) {
-      fileManager.fetchFiles()
-    }
+    // Always fetch files via API
+    fileManager.fetchFiles()
     // Only fetch invoices when the host did not provide an initialInvoices prop
     if (initialInvoices === undefined) fetchInvoices()
-  }, [agreementId, fetchAgreement, fetchInvoices, fileManager.fetchFiles, fileManager.files.length, initialAgreement, initialInvoices, initialAgreementFiles])
+  }, [agreementId, fetchAgreement, fetchInvoices, fileManager.fetchFiles, initialAgreement, initialInvoices])
 
   useEffect(() => {
     if (agreement) {

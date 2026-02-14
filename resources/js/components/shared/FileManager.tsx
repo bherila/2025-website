@@ -367,7 +367,7 @@ interface UseFileOperationsOptions {
 
 export function useFileOperations(options: UseFileOperationsOptions) {
   const [files, setFiles] = useState<FileRecord[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const fetchFiles = useCallback(async () => {
