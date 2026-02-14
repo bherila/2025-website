@@ -26,7 +26,9 @@ function applyTheme(mode: ThemeMode) {
 
 export default function Navbar({ authenticated, isAdmin, clientCompanies, currentUser }: NavbarProps) {
   const [toolsOpen, setToolsOpen] = useState(false);
-  const initials = currentUser && currentUser.name ? currentUser.name.split(/\s+/).map(p => p[0]).slice(0,2).join('').toUpperCase() : '';
+  const initials = currentUser && currentUser.name 
+    ? currentUser.name.trim().split(/\s+/).map(p => p[0]).filter(Boolean).slice(0,2).join('').toUpperCase() 
+    : '';
 
   const toolsRef = useRef<HTMLLIElement | null>(null);
   

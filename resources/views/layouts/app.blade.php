@@ -12,8 +12,8 @@
       {!! json_encode([
         'appName' => config('app.name', 'Ben Herila'),
         'appUrl' => config('app.url', ''),
-        'authenticated' => auth()->check() ? true : false,
-        'isAdmin' => auth()->check() && (auth()->id() === 1 || auth()->user()->user_role === 'Admin') ? true : false,
+        'authenticated' => auth()->check(),
+        'isAdmin' => auth()->check() && auth()->user()->hasRole('admin'),
         'clientCompanies' => auth()->check() ? auth()->user()->clientCompanies()->select('client_companies.id', 'company_name', 'slug')->get() : [],
         'currentUser' => auth()->user() ? [
           'id' => auth()->id(),
