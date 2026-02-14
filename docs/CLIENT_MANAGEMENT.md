@@ -296,10 +296,23 @@ Location: `resources/js/components/client-management/`
 Location: `resources/js/components/client-management/portal/`
 
 **ClientPortalIndexPage.tsx**
-- Main portal page showing projects and tasks
-- Task list with completion toggle
-- New Project and New Task buttons
-- Uses shadcn/ui Card, Button, Checkbox components
+- Main portal page showing projects, recent time entries, and active agreement
+- **Layout**: 
+  - Header with company name and action buttons (New Time Entry, New Project, Upload File)
+  - Two-column grid layout:
+    - **Left column (2/3 width)**: Projects cards with statistics, Recent Time Entries table
+    - **Right column (1/3 width)**: Company Files list
+  - **Bottom section**: Compact active agreement display (single line)
+- **Recent Time Entries**: Shows last 5 time entries in a clean table format
+  - Columns: Date, Description (with job type, badges, project), User (abbreviated), Time, Edit button (admins only)
+  - "View All →" button links to full time tracking page
+  - Inline editing for admins via click-to-edit functionality
+- **Active Agreement Display**: Compact single-line view at bottom showing retainer hours/month with "View Agreement" button
+- **Project Cards**: Grid of project cards showing tasks count and time entries count
+- **File Management**: Integrated file upload, download, and management for company files
+- **Performance Fix**: Resolved infinite loop issue by properly managing useEffect dependencies for file manager
+- New Project and New Time Entry buttons for quick access
+- Uses shadcn/ui Card, Button, Badge, Table, ExternalLink icon components
 
 **ClientPortalProjectPage.tsx**
 - Project detail page
@@ -344,6 +357,19 @@ Location: `resources/js/components/client-management/portal/`
 - **Quick Buttons**: Provides +/- 5 and 15 minute increment buttons for easy time adjustment
 - Time input accepts "h:mm", decimal hours, or hours with 'h' suffix (e.g., "1:30", "1.5", or "1.5h")
 - Uses shadcn/ui Dialog, Input, Textarea, Select, Checkbox components
+
+**TimeEntryListItem.tsx**
+- Reusable component for displaying individual time entry rows
+- Used in both ClientPortalIndexPage (recent entries) and ClientPortalTimePage (full list)
+- **Features**:
+  - Displays time entry with date, description, user, and time
+  - Shows job type, billable/invoiced status badges, and project badge
+  - Abbreviated user names (e.g., "Ben Herila" → "Ben H.")
+  - Click-to-edit functionality for admins (non-invoiced entries only)
+  - Edit button with pencil icon (visible on hover)
+  - Invoiced entries link to their invoice page
+- Props: `entry`, `slug`, `isAdmin`, `showDate`, `onEdit`
+- Uses shadcn/ui TableRow, TableCell, Badge, Button, Pencil icon components
 
 **ClientPortalAgreementPage.tsx**
 - Service agreement details and signing interface
@@ -1407,4 +1433,33 @@ Time entries now display an "Invoiced" status badge when:
 - The entry is linked to an invoice line (`client_invoice_line_id IS NOT NULL`)
 
 The `ClientTimeEntry` model has an `is_invoiced` appended attribute that is automatically included in API responses.
+
+## Recent Updates
+
+### Client Portal Home Page Improvements (2026-02-14)
+
+**Performance Fix:**
+- Fixed infinite loop bug in `ClientPortalIndexPage` caused by including `fileManager` object in useEffect dependencies
+- Solution: Removed `fileManager` from dependency array and added eslint-disable comment to acknowledge intentional behavior
+
+**New Features:**
+1. **New Time Entry Button**: Added "New Time Entry" button in top toolbar alongside "New Project" button for quick time logging
+2. **Recent Time Entries Section**: Displays the 5 most recent time entries in a clean table format on the home page
+   - Shows date, description with badges, user (abbreviated), and time
+   - Click-to-edit for admins on non-invoiced entries
+   - "View All →" button links to full time tracking page
+3. **Compact Agreement Display**: Simplified agreement section to a single line at bottom of page
+   - Format: "Active Agreement: XX retainer hours / month"
+   - "View Agreement" button with ExternalLink icon for full details
+
+**Layout Optimization:**
+- Maintained two-column grid layout (Projects/Time on left, Files on right)
+- Moved agreement display from prominent card to subtle footer
+- Added Recent Time Entries section between Projects and bottom of page
+- All elements properly responsive and follow existing shadcn/ui design patterns
+
+**Code Reusability:**
+- Created `TimeEntryListItem.tsx` component for consistent time entry display
+- Component is designed to be reusable across different pages (though currently inline table is used on home page)
+- Extracted time entry formatting and abbreviation logic for consistency
 

@@ -1,4 +1,4 @@
-import { Clock, FolderOpen, Plus } from 'lucide-react'
+import { Clock, FolderOpen, Plus, ExternalLink, Pencil } from 'lucide-react'
 import { useCallback,useEffect, useState } from 'react'
 
 import {
@@ -11,10 +11,13 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import type { Agreement, Project } from '@/types/client-management/common'
+import { abbreviateName } from '@/lib/nameUtils'
+import type { Agreement, Project, User } from '@/types/client-management/common'
+import type { TimeEntry } from '@/types/client-management/time-entry'
 
 import ClientPortalNav from './ClientPortalNav'
 import NewProjectModal from './NewProjectModal'
+import NewTimeEntryModal from './NewTimeEntryModal'
 
 interface ClientPortalIndexPageProps {
   slug: string
@@ -33,9 +36,13 @@ export default function ClientPortalIndexPage({
   initialProjects = [],
   initialAgreements = []
 }: ClientPortalIndexPageProps) {
-  const [projects] = useState<Project[]>(initialProjects)
+  const [projects, setProjects] = useState<Project[]>(initialProjects)
   const [agreements] = useState<Agreement[]>(initialAgreements)
   const [newProjectModalOpen, setNewProjectModalOpen] = useState(false)
+  const [newTimeEntryModalOpen, setNewTimeEntryModalOpen] = useState(false)
+  const [recentTimeEntries, setRecentTimeEntries] = useState<TimeEntry[]>([])
+  const [companyUsers, setCompanyUsers] = useState<User[]>([])
+  const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null)
 
   const fileManager = useFileManagement({
     listUrl: `/api/client/portal/${slug}/files`,
@@ -47,10 +54,39 @@ export default function ClientPortalIndexPage({
 
   const fetchTimeEntries = useCallback(async () => {
     try {
-      // Preload time entries into cache (data not directly used here)
-      await fetch(`/api/client/portal/${slug}/time-entries`)
+      const response = await fetch(`/api/client/portal/${slug}/time-entries`)
+      if (response.ok) {
+        const data = await response.json()
+        // Get the 5 most recent entries
+        const recent = data.entries?.slice(0, 5) || []
+        setRecentTimeEntries(recent)
+      }
     } catch (error) {
-      console.error('Error preloading time entries:', error)
+      console.error('Error loading time entries:', error)
+    }
+  }, [slug])
+
+  const fetchProjects = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/client/portal/${slug}/projects`)
+      if (response.ok) {
+        const data = await response.json()
+        setProjects(data)
+      }
+    } catch (error) {
+      console.error('Error fetching projects:', error)
+    }
+  }, [slug])
+
+  const fetchCompanyUsers = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/client/portal/${slug}`)
+      if (response.ok) {
+        const data = await response.json()
+        setCompanyUsers(data.users || [])
+      }
+    } catch (error) {
+      console.error('Error fetching company users:', error)
     }
   }, [slug])
 
@@ -60,8 +96,33 @@ export default function ClientPortalIndexPage({
 
   useEffect(() => {
     fetchTimeEntries()
+    fetchProjects()
+    fetchCompanyUsers()
     fileManager.fetchFiles()
-  }, [fetchTimeEntries, fileManager])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchTimeEntries, fetchProjects, fetchCompanyUsers])
+
+  const handleTimeEntryModalClose = (open: boolean) => {
+    setNewTimeEntryModalOpen(open)
+    if (!open) {
+      setEditingEntry(null)
+    }
+  }
+
+  const handleTimeEntrySuccess = () => {
+    fetchTimeEntries()
+  }
+
+  const openEditTimeEntry = (entry: TimeEntry) => {
+    if (!isAdmin) return
+    setEditingEntry(entry)
+    setNewTimeEntryModalOpen(true)
+  }
+
+  // Get active agreement info for compact display
+  const activeAgreement = agreements.find(a => 
+    !a.termination_date && a.client_company_signed_date
+  )
 
   return (
     <>
@@ -80,6 +141,12 @@ export default function ClientPortalIndexPage({
             <p className="text-muted-foreground">Client Portal</p>
           </div>
           <div className="flex gap-2">
+            {isAdmin && (
+              <Button onClick={() => setNewTimeEntryModalOpen(true)} variant="outline">
+                <Plus className="mr-2 h-4 w-4" />
+                New Time Entry
+              </Button>
+            )}
             <Button onClick={() => setNewProjectModalOpen(true)}>
               <Plus className="mr-2 h-4 w-4" />
               New Project
@@ -127,41 +194,104 @@ export default function ClientPortalIndexPage({
               </div>
             )}
 
-            {agreements.length > 0 && (
-              <div>
-                <div className="flex items-center gap-2 mb-4 text-muted-foreground">
-                  <Clock className="h-5 w-5" />
-                  <h2 className="text-xl font-semibold text-foreground">Service Agreements</h2>
-                </div>
-                <div className="space-y-3">
-                  {agreements.map(agreement => (
-                    <Card key={agreement.id} className="hover:shadow-md transition-shadow cursor-pointer"
-                          onClick={() => window.location.href = `/client/portal/${slug}/agreement/${agreement.id}`}>
-                      <CardContent className="p-4 flex items-center justify-between">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">
-                              Agreement (Effective {new Date(agreement.active_date).toLocaleDateString()})
-                            </span>
-                            {agreement.client_company_signed_date ? (
-                              <Badge variant="default" className="bg-green-600">✓ Signed</Badge>
-                            ) : (
-                              <Badge variant="secondary">Awaiting Signature</Badge>
-                            )}
-                            {agreement.termination_date && (
-                              <Badge variant="destructive">Terminated</Badge>
-                            )}
-                          </div>
-                          <p className="text-sm text-muted-foreground">
-                            {agreement.monthly_retainer_hours} hrs/mo @ ${parseFloat(agreement.monthly_retainer_fee).toLocaleString()}/mo
-                          </p>
-                        </div>
-                        <Button variant="ghost" size="sm">View Agreement →</Button>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
+            {/* Recent Time Entries Section */}
+            {recentTimeEntries.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg">Recent Time Entries</CardTitle>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => window.location.href = `/client/portal/${slug}/time`}
+                    >
+                      View All →
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="border border-muted/50 rounded-md overflow-hidden mx-4 mb-4">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-muted/50 border-b border-muted">
+                          <th className="text-left py-2 px-3 text-xs font-medium text-muted-foreground w-[110px]">Date</th>
+                          <th className="text-left py-2 px-3 text-xs font-medium text-muted-foreground">Description</th>
+                          <th className="text-left py-2 px-3 text-xs font-medium text-muted-foreground">User</th>
+                          <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">Time</th>
+                          {isAdmin && <th className="w-[40px] py-2 px-3"></th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {recentTimeEntries.map((entry) => {
+                          const entryDate = new Date(entry.date_worked)
+                          return (
+                            <tr 
+                              key={entry.id}
+                              className={`group border-b border-muted/30 last:border-0 ${isAdmin && !entry.is_invoiced ? 'cursor-pointer hover:bg-muted/30' : ''}`}
+                              onClick={() => isAdmin && !entry.is_invoiced && openEditTimeEntry(entry)}
+                            >
+                              <td className="py-2 px-3 align-top">
+                                <span className="text-sm font-medium">
+                                  {entryDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                                </span>
+                              </td>
+                              <td className="py-2 px-3 align-top">
+                                <div className="flex flex-col">
+                                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold leading-none mb-1">
+                                    {entry.job_type}
+                                  </span>
+                                  <span className="text-sm leading-tight mb-2">{entry.name || '--'}</span>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    {entry.is_billable && entry.is_invoiced ? (
+                                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-green-600 text-green-600 font-bold shrink-0">
+                                        INVOICED
+                                      </Badge>
+                                    ) : (
+                                      <Badge variant={entry.is_billable ? 'default' : 'secondary'} className="text-[9px] px-1 py-0 h-3.5 font-bold shrink-0">
+                                        {entry.is_billable ? 'BILLABLE' : 'NON-BILLABLE'}
+                                      </Badge>
+                                    )}
+                                    {entry.project && (
+                                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 font-medium border-muted-foreground/30 text-muted-foreground shrink-0">
+                                        {entry.project.name}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-2 px-3 align-top">
+                                <span className="text-sm whitespace-nowrap text-muted-foreground">
+                                  {abbreviateName(entry.user?.name)}
+                                </span>
+                              </td>
+                              <td className="text-right py-2 px-3 align-top text-sm">
+                                {entry.formatted_time}
+                              </td>
+                              {isAdmin && (
+                                <td className="py-1 px-3 align-top text-right">
+                                  {!entry.is_invoiced && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        openEditTimeEntry(entry)
+                                      }}
+                                    >
+                                      <Pencil className="h-3 w-3 text-muted-foreground" />
+                                    </Button>
+                                  )}
+                                </td>
+                              )}
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
             )}
           </div>
 
@@ -177,6 +307,39 @@ export default function ClientPortalIndexPage({
             />
           </div>
         </div>
+
+        {/* Compact Agreement Section at Bottom */}
+        {activeAgreement && (
+          <div className="mt-6 pt-6 border-t">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Clock className="h-5 w-5 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">
+                  Active Agreement: <span className="font-semibold text-foreground">{activeAgreement.monthly_retainer_hours} retainer hours / month</span>
+                </span>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => window.location.href = `/client/portal/${slug}/agreement/${activeAgreement.id}`}
+              >
+                <ExternalLink className="mr-2 h-4 w-4" />
+                View Agreement
+              </Button>
+            </div>
+          </div>
+        )}
+
+      <NewTimeEntryModal
+        open={newTimeEntryModalOpen}
+        onOpenChange={handleTimeEntryModalClose}
+        slug={slug}
+        projects={projects}
+        users={companyUsers}
+        onSuccess={handleTimeEntrySuccess}
+        entry={editingEntry}
+        lastProjectId={recentTimeEntries.length > 0 ? recentTimeEntries[0]?.project?.id?.toString() : undefined}
+      />
 
       <NewProjectModal
         open={newProjectModalOpen}
