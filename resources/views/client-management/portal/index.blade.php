@@ -18,9 +18,7 @@
 </script>
 @endpush
 
-<div id="ClientPortalIndexPage" 
-     data-slug="{{ $slug }}"
-></div>
+<div id="ClientPortalIndexPage"></div>
 @endsection
 
 @push('scripts')

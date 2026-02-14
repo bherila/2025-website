@@ -9,38 +9,35 @@ import ClientPortalProjectPage from '@/components/client-management/portal/Clien
 import ClientPortalTimePage from '@/components/client-management/portal/ClientPortalTimePage'
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Mount admin actions if available (legacy mounting - no longer used, kept for compatibility)
-  const adminActionsDiv = document.getElementById('ClientAdminActions')
-  if (adminActionsDiv) {
-    // This is no longer used - ClientAdminActions is now a modal dialog
-    // It should be rendered by the parent page component
-    console.warn('ClientAdminActions div found but component has been refactored to a modal')
-  }
-
   const indexDiv = document.getElementById('ClientPortalIndexPage')
   if (indexDiv) {
-    let initialProjects = []
-    let initialAgreements = []
-    let initialCompanyUsers = []
-    let initialRecentTimeEntries = []
-    let initialCompanyFiles = []
+    // Server-hydrated payload in <head> is now required for the index page.
+    // Fall back to parsing data-* attributes only for non-critical arrays (back-compat).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const serverData: any = (window as any).__CLIENT_PORTAL_INITIAL_DATA__ || null
 
-    try {
-      if (indexDiv.dataset.projects) initialProjects = JSON.parse(indexDiv.dataset.projects)
-      if (indexDiv.dataset.agreements) initialAgreements = JSON.parse(indexDiv.dataset.agreements)
-      if (indexDiv.dataset.companyUsers) initialCompanyUsers = JSON.parse(indexDiv.dataset.companyUsers)
-      if (indexDiv.dataset.recentTimeEntries) initialRecentTimeEntries = JSON.parse(indexDiv.dataset.recentTimeEntries)
-      if (indexDiv.dataset.companyFiles) initialCompanyFiles = JSON.parse(indexDiv.dataset.companyFiles)
-    } catch (e) {
-      console.error('Failed to parse initial data', e)
+    if (!serverData || !serverData.slug) {
+      console.error('Missing server-hydrated payload for Client Portal index — aborting mount.')
+      return
     }
+
+    const initialProjects = serverData.projects ?? (indexDiv.dataset.projects ? JSON.parse(indexDiv.dataset.projects) : [])
+    const initialAgreements = serverData.agreements ?? (indexDiv.dataset.agreements ? JSON.parse(indexDiv.dataset.agreements) : [])
+    const initialCompanyUsers = serverData.companyUsers ?? (indexDiv.dataset.companyUsers ? JSON.parse(indexDiv.dataset.companyUsers) : [])
+    const initialRecentTimeEntries = serverData.recentTimeEntries ?? (indexDiv.dataset.recentTimeEntries ? JSON.parse(indexDiv.dataset.recentTimeEntries) : [])
+    const initialCompanyFiles = serverData.companyFiles ?? (indexDiv.dataset.companyFiles ? JSON.parse(indexDiv.dataset.companyFiles) : [])
+
+    const slug = serverData.slug
+    const companyName = serverData.companyName
+    const companyId = serverData.companyId
+    const isAdmin = serverData.isAdmin
 
     const root = createRoot(indexDiv)
     root.render(<ClientPortalIndexPage 
-      slug={indexDiv.dataset.slug!}
-      companyName={indexDiv.dataset.companyName!}
-      companyId={parseInt(indexDiv.dataset.companyId!)}
-      isAdmin={indexDiv.dataset.isAdmin === 'true'}
+      slug={slug}
+      companyName={companyName}
+      companyId={companyId}
+      isAdmin={isAdmin}
       initialProjects={initialProjects}
       initialAgreements={initialAgreements}
       initialCompanyUsers={initialCompanyUsers}
