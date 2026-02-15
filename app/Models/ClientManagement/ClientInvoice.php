@@ -243,6 +243,7 @@ class ClientInvoice extends Model
         $this->loadMissing(['agreement', 'lineItems.timeEntries', 'payments']);
 
         $hoursBreakdown = $this->calculateHoursBreakdown();
+        $negativeOffset = min((float)$this->negative_hours_balance, (float)$this->retainer_hours_included);
 
         return [
             'client_invoice_id' => $this->client_invoice_id,
@@ -259,6 +260,7 @@ class ClientInvoice extends Model
             'hours_worked' => $this->hours_worked,
             'carried_in_hours' => $hoursBreakdown->carriedInHours,
             'current_month_hours' => $hoursBreakdown->currentMonthHours,
+            'negative_offset' => $negativeOffset,
             'rollover_hours_used' => $this->rollover_hours_used,
             'unused_hours_balance' => $this->unused_hours_balance,
             'negative_hours_balance' => $this->negative_hours_balance,

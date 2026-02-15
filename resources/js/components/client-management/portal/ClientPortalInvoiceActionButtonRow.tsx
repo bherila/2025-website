@@ -52,80 +52,81 @@ export default function ClientPortalInvoiceActionButtonRow({
 
                 <ButtonGroup>
                     {!isFullyPaid && (
-                    <Button
-                        variant="outline"
-                        onClick={onAddPayment}
-                        disabled={isRefreshing}
-                        className="rounded-r-none"
-                    >
-                        <PlusCircle className="mr-2 h-4 w-4" />
-                        Add Payment
-                    </Button>
-                )}
-                {isEditable && (
-                    <Button
-                        variant="outline"
-                        onClick={onAddLineItem}
-                        disabled={isRefreshing}
-                        className={cn(!isFullyPaid && "rounded-l-none border-l-0")}
-                    >
-                        <PlusCircle className="mr-2 h-4 w-4" />
-                        Add Line Item
-                    </Button>
-                )}
-                {invoice.status === 'void' && (
-                    <>
-                        <Button variant="outline" onClick={() => onUnVoid('issued')} disabled={isRefreshing} className="rounded-l-none border-l-0">
-                            <Undo2 className="mr-2 h-4 w-4" />
-                            Restore as Issued
+                        <Button
+                            variant="outline"
+                            onClick={onAddPayment}
+                            disabled={isRefreshing}
+                            className="rounded-r-none"
+                        >
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            Add Payment
                         </Button>
-                        <Button variant="outline" onClick={() => onUnVoid('draft')} disabled={isRefreshing} className="rounded-l-none border-l-0">
-                            <RotateCcw className="mr-2 h-4 w-4" />
-                            Restore as Draft
+                    )}
+                    {isEditable && (
+                        <Button
+                            variant="outline"
+                            onClick={onAddLineItem}
+                            disabled={isRefreshing}
+                            className={cn(!isFullyPaid && "rounded-l-none border-l-0")}
+                        >
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            Add Line Item
                         </Button>
-                    </>
-                )}
-            </ButtonGroup>
+                    )}
+                    {invoice.status === 'void' && (
+                        <>
+                            <Button variant="outline" onClick={() => onUnVoid('issued')} disabled={isRefreshing} className="rounded-l-none border-l-0">
+                                <Undo2 className="mr-2 h-4 w-4" />
+                                Restore as Issued
+                            </Button>
+                            <Button variant="outline" onClick={() => onUnVoid('draft')} disabled={isRefreshing} className="rounded-l-none border-l-0">
+                                <RotateCcw className="mr-2 h-4 w-4" />
+                                Restore as Draft
+                            </Button>
+                        </>
+                    )}
+                </ButtonGroup>
 
-            <div className="flex gap-2 items-center">
-                {invoice.status === 'draft' && (
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <span>
-                                <Button
-                                    onClick={onIssue}
-                                    disabled={isRefreshing || !canIssueInvoice}
-                                    className="bg-green-600 hover:bg-green-700 text-white border-green-700"
-                                >
-                                    <Send className="mr-2 h-4 w-4" />
-                                    Issue Invoice
-                                </Button>
-                            </span>
-                        </TooltipTrigger>
-                        {isPeriodEndInFuture && (
-                            <TooltipContent>
-                                Cannot issue invoice until after the period ends ({new Date(invoice.period_end!).toLocaleDateString()})
-                            </TooltipContent>
-                        )}
-                    </Tooltip>
-                )}
-                {canVoid && (
-                    <Button
-                        variant="outline"
-                        onClick={onVoid}
-                        disabled={isRefreshing}
-                        className="text-amber-600 border-amber-200 hover:bg-amber-50"
-                    >
-                        <Ban className="mr-2 h-4 w-4" />
-                        Void
-                    </Button>
-                )}
-                {isEditable && (
-                    <Button variant="ghost" onClick={onDelete} disabled={isRefreshing} className="text-destructive hover:bg-destructive/10">
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Delete
-                    </Button>
-                )}
+                <div className="flex gap-2 items-center">
+                    {invoice.status === 'draft' && (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <span>
+                                    <Button
+                                        onClick={onIssue}
+                                        disabled={isRefreshing || !canIssueInvoice}
+                                        className="bg-green-600 hover:bg-green-700 text-white border-green-700"
+                                    >
+                                        <Send className="mr-2 h-4 w-4" />
+                                        Issue Invoice
+                                    </Button>
+                                </span>
+                            </TooltipTrigger>
+                            {isPeriodEndInFuture && (
+                                <TooltipContent>
+                                    Cannot issue invoice until after the period ends ({new Date(invoice.period_end!).toLocaleDateString()})
+                                </TooltipContent>
+                            )}
+                        </Tooltip>
+                    )}
+                    {canVoid && (
+                        <Button
+                            variant="outline"
+                            onClick={onVoid}
+                            disabled={isRefreshing}
+                            className="text-amber-600 border-amber-200 hover:bg-amber-50"
+                        >
+                            <Ban className="mr-2 h-4 w-4" />
+                            Void
+                        </Button>
+                    )}
+                    {isEditable && (
+                        <Button variant="ghost" onClick={onDelete} disabled={isRefreshing} className="text-destructive hover:bg-destructive/10">
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                        </Button>
+                    )}
+                </div>
             </div>
         </div>
     );

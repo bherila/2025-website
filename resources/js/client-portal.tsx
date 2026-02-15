@@ -319,6 +319,7 @@ document.addEventListener('DOMContentLoaded', () => {
             retainer_hours_included: src.retainer_hours_included != null ? String(src.retainer_hours_included) : '0',
             hours_worked: src.hours_worked != null ? String(src.hours_worked) : '0',
             rollover_hours_used: src.rollover_hours_used != null ? String(src.rollover_hours_used) : '0',
+            negative_offset: src.negative_offset != null ? String(src.negative_offset) : '0',
             unused_hours_balance: src.unused_hours_balance != null ? String(src.unused_hours_balance) : '0',
             negative_hours_balance: src.negative_hours_balance != null ? String(src.negative_hours_balance) : '0',
             starting_unused_hours: src.starting_unused_hours != null ? String(src.starting_unused_hours) : '0',

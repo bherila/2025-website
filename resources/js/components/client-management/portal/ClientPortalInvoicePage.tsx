@@ -445,6 +445,7 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                         <TimeTrackingMonthSummaryRow
                             displayMode="invoice_page"
                             openingAvailable={parseFloat(invoice.retainer_hours_included)}
+                            negativeOffsetThisMonth={invoice.negative_offset ? parseFloat(invoice.negative_offset) : undefined}
                             carriedInHours={invoice.carried_in_hours}
                             currentMonthHours={invoice.current_month_hours}
                             hoursWorked={parseFloat(invoice.hours_worked)}
