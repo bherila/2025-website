@@ -1,5 +1,7 @@
 @extends('layouts.app')
 
+@section('title', 'RSU | ' . config('app.name', 'Ben Herila'))
+
 @section('content')
 <div id="rsu-root"></div>
 @viteReactRefresh

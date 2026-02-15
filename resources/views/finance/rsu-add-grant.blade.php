@@ -1,5 +1,7 @@
 @extends('layouts.app')
 
+@section('title', 'Add RSU Grant | ' . config('app.name', 'Ben Herila'))
+
 @section('content')
 <div id="add-grant-root"></div>
 @viteReactRefresh
