@@ -297,7 +297,10 @@ document.addEventListener('DOMContentLoaded', () => {
           const src = relaxed.success ? relaxed.data : ({} as any)
           
           const coerced: any = {
+            // start with relaxed/normalized source
             ...src,
+
+            // ensure required top-level fields match the strict InvoiceSchema types
             client_company_id: src.client_company_id ?? serverData.companyId,
             invoice_number: src.invoice_number ?? null,
             issue_date: src.issue_date ?? null,
@@ -307,6 +310,21 @@ document.addEventListener('DOMContentLoaded', () => {
             period_start: src.period_start ?? null,
             period_end: src.period_end ?? null,
             notes: src.notes ?? null,
+
+            // normalize money fields to string (2 decimals) and numeric-hours to string
+            invoice_total: src.invoice_total != null ? (typeof src.invoice_total === 'number' ? src.invoice_total.toFixed(2) : String(src.invoice_total)) : '0.00',
+            remaining_balance: src.remaining_balance != null ? (typeof src.remaining_balance === 'number' ? src.remaining_balance.toFixed(2) : String(src.remaining_balance)) : '0.00',
+            payments_total: src.payments_total != null ? (typeof src.payments_total === 'number' ? src.payments_total.toFixed(2) : String(src.payments_total)) : '0.00',
+
+            retainer_hours_included: src.retainer_hours_included != null ? String(src.retainer_hours_included) : '0',
+            hours_worked: src.hours_worked != null ? String(src.hours_worked) : '0',
+            rollover_hours_used: src.rollover_hours_used != null ? String(src.rollover_hours_used) : '0',
+            unused_hours_balance: src.unused_hours_balance != null ? String(src.unused_hours_balance) : '0',
+            negative_hours_balance: src.negative_hours_balance != null ? String(src.negative_hours_balance) : '0',
+            starting_unused_hours: src.starting_unused_hours != null ? String(src.starting_unused_hours) : '0',
+            starting_negative_hours: src.starting_negative_hours != null ? String(src.starting_negative_hours) : '0',
+            hours_billed_at_rate: src.hours_billed_at_rate != null ? String(src.hours_billed_at_rate) : '0',
+
             payments: src.payments.map((p: any) => ({
               ...p,
               client_invoice_id: p.client_invoice_id ?? src.client_company_id ?? serverData.companyId,

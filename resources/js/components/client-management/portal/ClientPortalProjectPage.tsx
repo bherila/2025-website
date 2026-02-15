@@ -166,7 +166,7 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
           projectName={projectName}
           projects={initialProjects}
         />
-        <div className="mx-auto px-4 max-w-7xl">
+        <div className="mx-auto px-4 max-w-7xlw">
           <div className="mb-6">
             <Skeleton className="h-10 w-64" />
           </div>
