@@ -168,6 +168,37 @@ class ClientPortalController extends Controller
         // and strip explicit nulls so the client receives a compact payload.
         $invoicePayload = $this->removeNullsRecursive($invoice->toDetailedArray());
 
+        // Get previous and next invoice IDs for navigation
+        $isAdmin = auth()->user()->hasRole('admin');
+        $navQuery = ClientInvoice::where('client_company_id', $company->id);
+        if (! $isAdmin) {
+            $navQuery->whereIn('status', ['issued', 'paid']);
+        }
+
+        $invoicePayload['previous_invoice_id'] = (clone $navQuery)
+            ->where(function ($q) use ($invoice) {
+                $q->where('period_start', '<', $invoice->period_start)
+                    ->orWhere(function ($q2) use ($invoice) {
+                        $q2->where('period_start', '=', $invoice->period_start)
+                            ->where('client_invoice_id', '<', $invoice->client_invoice_id);
+                    });
+            })
+            ->orderBy('period_start', 'desc')
+            ->orderBy('client_invoice_id', 'desc')
+            ->value('client_invoice_id');
+
+        $invoicePayload['next_invoice_id'] = (clone $navQuery)
+            ->where(function ($q) use ($invoice) {
+                $q->where('period_start', '>', $invoice->period_start)
+                    ->orWhere(function ($q2) use ($invoice) {
+                        $q2->where('period_start', '=', $invoice->period_start)
+                            ->where('client_invoice_id', '>', $invoice->client_invoice_id);
+                    });
+            })
+            ->orderBy('period_start', 'asc')
+            ->orderBy('client_invoice_id', 'asc')
+            ->value('client_invoice_id');
+
         return view('client-management.portal.invoice', [
             'company' => $company,
             'invoice' => $invoicePayload,

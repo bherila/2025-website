@@ -556,10 +556,12 @@ class ClientInvoicingService
             $this->linkAllFragmentsToLines($fragmentsToLines, $splitter);
 
             // Monthly retainer fee for month M (the month after the work period)
+            $retainerMonthEnd = $retainerMonthStart->copy()->endOfMonth();
             ClientInvoiceLine::create([
                 'client_invoice_id' => $invoice->client_invoice_id,
                 'client_agreement_id' => $agreement->id,
-                'description' => "Monthly Retainer ({$agreement->monthly_retainer_hours} hours) - " . $retainerMonthStart->format('M j, Y'),
+                'description' => "Monthly Retainer ({$agreement->monthly_retainer_hours} hours) - " . 
+                                $retainerMonthStart->format('M j, Y') . " through " . $retainerMonthEnd->format('M j, Y'),
                 'quantity' => '1',
                 'unit_price' => $agreement->monthly_retainer_fee,
                 'line_total' => $agreement->monthly_retainer_fee,

@@ -215,6 +215,7 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
 
             <div className="mx-auto px-4 max-w-7xl">
                 <ClientPortalInvoiceActionButtonRow
+                    slug={slug}
                     invoice={invoice}
                     isAdmin={isAdmin}
                     isEditable={isEditable}
@@ -240,23 +241,25 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                                         {invoice.previous_invoice_id && (
                                             <Button
                                                 variant="outline"
-                                                size="icon"
-                                                className="h-6 w-6 p-0"
+                                                size="sm"
+                                                className="h-7 px-2"
                                                 onClick={() => window.location.href = `/client/portal/${slug}/invoice/${invoice.previous_invoice_id}`}
                                                 title="Previous Invoice"
                                             >
-                                                <ChevronLeft className="h-3 w-3" />
+                                                <ChevronLeft className="h-3 w-3 mr-1" />
+                                                Prev
                                             </Button>
                                         )}
                                         {invoice.next_invoice_id && (
                                             <Button
                                                 variant="outline"
-                                                size="icon"
-                                                className="h-6 w-6 p-0"
+                                                size="sm"
+                                                className="h-7 px-2"
                                                 onClick={() => window.location.href = `/client/portal/${slug}/invoice/${invoice.next_invoice_id}`}
                                                 title="Next Invoice"
                                             >
-                                                <ChevronRight className="h-3 w-3" />
+                                                Next
+                                                <ChevronRight className="h-3 w-3 ml-1" />
                                             </Button>
                                         )}
                                     </span>

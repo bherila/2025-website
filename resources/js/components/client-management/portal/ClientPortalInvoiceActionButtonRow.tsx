@@ -1,4 +1,4 @@
-import { Ban, PlusCircle, RotateCcw, Send, Trash2, Undo2 } from "lucide-react";
+import { Ban, List, PlusCircle, RotateCcw, Send, Trash2, Undo2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import type { Invoice } from "@/types/client-management";
 
 interface ClientPortalInvoiceActionButtonRowProps {
+    slug: string;
     invoice: Invoice;
     isAdmin: boolean;
     isEditable: boolean;
@@ -21,6 +22,7 @@ interface ClientPortalInvoiceActionButtonRowProps {
 }
 
 export default function ClientPortalInvoiceActionButtonRow({
+    slug,
     invoice,
     isAdmin,
     isEditable,
@@ -42,8 +44,14 @@ export default function ClientPortalInvoiceActionButtonRow({
 
     return (
         <div className="mb-8 flex justify-between items-center gap-4 flex-wrap print:hidden">
-            <ButtonGroup>
-                {!isFullyPaid && (
+            <div className="flex gap-2 items-center">
+                <Button variant="outline" onClick={() => window.location.href = `/client/portal/${slug}/invoices`}>
+                    <List className="mr-2 h-4 w-4" />
+                    Back to Invoices
+                </Button>
+
+                <ButtonGroup>
+                    {!isFullyPaid && (
                     <Button
                         variant="outline"
                         onClick={onAddPayment}
