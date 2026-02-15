@@ -4,6 +4,7 @@ import currency from 'currency.js'
 import { useState } from 'react'
 
 import RsuSubNav from '@/components/rsu/RsuSubNav'
+import Container from '@/components/container'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -47,7 +48,7 @@ export default function AddGrantPage() {
     .filter((r) => r !== null) as IAward[]
 
   return (
-    <>
+    <Container>
       <RsuSubNav />
 
       <Card>
@@ -139,6 +140,6 @@ export default function AddGrantPage() {
           </form>
         </div>
       </Card>
-    </>
+    </Container>
   )
 }
