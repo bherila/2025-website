@@ -2,6 +2,17 @@
 
 ## Features
 
+### Finance Management
+- **RSU Tracking**: Manage Restricted Stock Units with full CRUD interface
+  - Track equity awards, vesting schedules, and stock valuations
+  - View awards with chart visualizations (shares or value over time)
+  - Bulk import from clipboard
+  - Manage individual awards: add, edit, delete
+  - See [docs/RSU.md](docs/RSU.md) for details
+- **Account Management**: Track financial accounts and transactions
+- **Statement Processing**: Import and process bank/brokerage statements
+- **Payslip Management**: Manage and track payslips
+
 ### Client Management
 - **Company & User Management**: Track clients and assign users to companies.
 - **Project & Task Tracking**: Manage deliverables per client.

@@ -1,6 +1,7 @@
 import type currency from 'currency.js'
 
 export interface IAward {
+  id?: number
   award_id?: string
   grant_date?: string
   vest_date?: string

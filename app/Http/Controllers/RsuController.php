@@ -34,28 +34,66 @@ class RsuController extends Controller
         return response()->json($data);
     }
 
-    public function addRsuGrants(Request $request)
+    public function upsertRsuGrants(Request $request)
     {
         $user = Auth::user();
         $grants = $request->json()->all();
 
         foreach ($grants as $grant) {
-            DB::table('fin_equity_awards')->updateOrInsert(
-                [
-                    'uid' => $user->id,
-                    'award_id' => $grant['award_id'],
-                    'grant_date' => $grant['grant_date'],
-                    'vest_date' => $grant['vest_date'],
-                    'symbol' => $grant['symbol'],
-                ],
-                [
-                    'share_count' => $grant['share_count']['value'],
-                    'grant_price' => $grant['grant_price'] ?? null,
-                    'vest_price' => $grant['vest_price'] ?? null,
-                ]
-            );
+            // Handle share_count which might be currency object or number
+            $shareCount = isset($grant['share_count']['value']) 
+                ? $grant['share_count']['value'] 
+                : $grant['share_count'];
+
+            // If id is provided, update the specific record
+            if (isset($grant['id'])) {
+                DB::table('fin_equity_awards')
+                    ->where('id', $grant['id'])
+                    ->where('uid', $user->id) // Ensure user can only update their own records
+                    ->update([
+                        'award_id' => $grant['award_id'],
+                        'grant_date' => $grant['grant_date'],
+                        'vest_date' => $grant['vest_date'],
+                        'symbol' => $grant['symbol'],
+                        'share_count' => $shareCount,
+                        'grant_price' => $grant['grant_price'] ?? null,
+                        'vest_price' => $grant['vest_price'] ?? null,
+                    ]);
+            } else {
+                // Otherwise use updateOrInsert based on unique key
+                DB::table('fin_equity_awards')->updateOrInsert(
+                    [
+                        'uid' => $user->id,
+                        'award_id' => $grant['award_id'],
+                        'grant_date' => $grant['grant_date'],
+                        'vest_date' => $grant['vest_date'],
+                        'symbol' => $grant['symbol'],
+                    ],
+                    [
+                        'share_count' => $shareCount,
+                        'grant_price' => $grant['grant_price'] ?? null,
+                        'vest_price' => $grant['vest_price'] ?? null,
+                    ]
+                );
+            }
         }
 
         return response()->json(['status' => 'success']);
+    }
+
+    public function deleteRsuGrant(Request $request, $id)
+    {
+        $user = Auth::user();
+        
+        $deleted = DB::table('fin_equity_awards')
+            ->where('id', $id)
+            ->where('uid', $user->id) // Ensure user can only delete their own records
+            ->delete();
+
+        if ($deleted) {
+            return response()->json(['status' => 'success']);
+        } else {
+            return response()->json(['status' => 'error', 'message' => 'Record not found'], 404);
+        }
     }
 }

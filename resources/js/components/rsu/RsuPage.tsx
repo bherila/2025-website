@@ -15,7 +15,7 @@ import { Tabs, TabsContent,TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { fetchWrapper } from '@/fetchWrapper'
 import type { IAward } from '@/types/finance'
 
-export default function RSUPage() {
+export default function RsuPage() {
   const [loading, setLoading] = useState(true)
   const [rsu, setRsu] = useState<IAward[]>([])
   const [chartMode, setChartMode] = useState<'shares' | 'value'>('shares')

@@ -1,10 +1,10 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 
-import RSUPage from '@/components/rsu/RSUPage'
+import RsuPage from '@/components/rsu/RsuPage'
 
 ReactDOM.createRoot(document.getElementById('rsu-root')!).render(
   <React.StrictMode>
-    <RSUPage />
+    <RsuPage />
   </React.StrictMode>
 )

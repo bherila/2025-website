@@ -33,6 +33,10 @@ Route::middleware('auth')->group(function () {
         return view('finance.rsu');
     });
 
+    Route::get('/finance/rsu/manage', function () {
+        return view('finance.rsu-manage');
+    });
+
     Route::get('/finance/rsu/add-grant', function () {
         return view('finance.rsu-add-grant');
     });

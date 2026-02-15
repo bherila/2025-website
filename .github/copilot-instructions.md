@@ -115,6 +115,7 @@ See [docs/TESTING.md](docs/TESTING.md) for comprehensive testing documentation.
 
 ## Common Patterns
 - **Transaction CRUD**: API endpoints like `/api/finance/{account_id}/line_items` for GET/POST/DELETE
+- **RSU Management**: Track Restricted Stock Units via `/api/rsu` (GET/POST/DELETE). Table `fin_equity_awards` stores awards. Unique constraint on (grant_date, award_id, vest_date, symbol). POST endpoint supports upsert - if `id` provided, updates existing record; otherwise uses updateOrInsert. See [docs/RSU.md](docs/RSU.md) for full documentation.
 - **Tagging System**: Many-to-many via `fin_account_line_item_tag_map` table
 - **Linking**: Transactions can link to related entries (e.g., buys/sells)
 - **Statements**: Balance snapshots with detailed line items in `fin_statement_details`
@@ -141,6 +142,7 @@ See [docs/TESTING.md](docs/TESTING.md) for comprehensive testing documentation.
 - `resources/views/finance/`: Blade templates with React mount points
 - `resources/views/client-management/`: Client management Blade templates
 - `resources/js/components/finance/`: React components for finance features
+- `resources/js/components/rsu/`: React components for RSU management
 - `resources/js/components/client-management/`: React components for client management
 - `resources/js/navbar.tsx`: Main navigation component with module links
 - `routes/api.php`: Finance API endpoints
