@@ -3,5 +3,5 @@
 @section('content')
 <div id="add-grant-root"></div>
 @viteReactRefresh
-@vite('resources/js/add-grant.tsx')
+@vite('resources/js/components/rsu/add-grant.tsx')
 @endsection
