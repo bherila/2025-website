@@ -13,7 +13,7 @@ class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable, SerializesDatesAsLocal;
-
+ 
     /**
      * The attributes that are mass assignable.
      *
@@ -27,7 +27,7 @@ class User extends Authenticatable
         'user_role',
         'last_login_date',
     ];
-
+ 
     /**
      * The attributes that should be hidden for serialization.
      *
@@ -38,6 +38,29 @@ class User extends Authenticatable
         'remember_token',
     ];
 
+    /**
+     * The accessors to append to the model's array form.
+     *
+     * @var array
+     */
+    protected $appends = ['user_role', 'virtual_user_role'];
+
+    /**
+     * Override the user_role attribute to return Admin for all admin-level users.
+     */
+    public function getUserRoleAttribute(): string
+    {
+        return $this->hasRole('admin') ? 'Admin' : ($this->attributes['user_role'] ?? 'User');
+    }
+
+    /**
+     * Alias for user_role for backward compatibility.
+     */
+    public function getVirtualUserRoleAttribute(): string
+    {
+        return $this->user_role;
+    }
+ 
     /**
      * Get the attributes that should be cast.
      *

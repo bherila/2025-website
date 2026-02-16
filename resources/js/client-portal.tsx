@@ -26,10 +26,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // Robust isAdmin resolution
   const isAdminGlobal = resolveIsAdmin(appRaw)
 
-  console.log('ClientPortal: appRaw', appRaw)
-  console.log('ClientPortal: appData', appData)
-  console.log('ClientPortal: isAdminGlobal', isAdminGlobal)
-
   // Validate app-level currentUser shape (log; components will fall back on API if invalid)
   try {
     const parsedCurrentUser = UserSchema.nullable().safeParse(appData?.currentUser ?? null)
