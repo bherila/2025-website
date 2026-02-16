@@ -95,6 +95,7 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
       const serverCurrentUser = appRaw?.currentUser ? (appRaw.currentUser as User) : undefined
 
       if (serverCurrentUser && UserSchema.safeParse(serverCurrentUser).success) {
+        console.log('NewTimeEntryModal: setting currentUser from hydrated data', serverCurrentUser)
         setCurrentUser(serverCurrentUser)
         return
       }
@@ -104,7 +105,10 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
 
     fetch('/api/user')
       .then(response => response.json())
-      .then(data => setCurrentUser(data))
+      .then(data => {
+        console.log('NewTimeEntryModal: setting currentUser from API', data)
+        setCurrentUser(data)
+      })
       .catch(error => console.error('Error fetching current user:', error))
   }, [])
 

@@ -23,7 +23,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const appData = appParsed && appParsed.success ? appParsed.data : (appRaw || null)
   
   // Robust isAdmin resolution
-  const isAdminGlobal = (appData?.isAdmin === true || appRaw?.isAdmin === true || appData?.isAdmin === 'true' || appRaw?.isAdmin === 'true')
+  const isAdminGlobal = (
+    appData?.isAdmin === true || 
+    appRaw?.isAdmin === true || 
+    appData?.isAdmin === 'true' || 
+    appRaw?.isAdmin === 'true' ||
+    (appData?.currentUser?.user_role?.toLowerCase() === 'admin') ||
+    (appRaw?.currentUser?.user_role?.toLowerCase() === 'admin')
+  )
+
+  console.log('ClientPortal: appRaw', appRaw)
+  console.log('ClientPortal: appData', appData)
+  console.log('ClientPortal: isAdminGlobal', isAdminGlobal)
 
   // Validate app-level currentUser shape (log; components will fall back on API if invalid)
   try {
