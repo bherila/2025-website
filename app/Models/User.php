@@ -91,11 +91,13 @@ class User extends Authenticatable
             return true;
         }
 
-        if (empty($this->user_role)) {
+        $rawRole = $this->attributes['user_role'] ?? '';
+
+        if (empty($rawRole)) {
             return false;
         }
 
-        $roles = array_map('trim', explode(',', strtolower($this->user_role)));
+        $roles = array_map('trim', explode(',', strtolower($rawRole)));
 
         return in_array(strtolower($role), $roles, true);
     }
@@ -105,11 +107,13 @@ class User extends Authenticatable
      */
     public function getRoles(): array
     {
-        if (empty($this->user_role)) {
+        $rawRole = $this->attributes['user_role'] ?? '';
+
+        if (empty($rawRole)) {
             return $this->id === 1 ? ['admin'] : [];
         }
 
-        $roles = array_map('trim', explode(',', strtolower($this->user_role)));
+        $roles = array_map('trim', explode(',', strtolower($rawRole)));
 
         // Ensure user ID 1 always has admin
         if ($this->id === 1 && ! in_array('admin', $roles, true)) {
