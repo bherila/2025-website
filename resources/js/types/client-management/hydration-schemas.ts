@@ -3,7 +3,7 @@ import { coerceMoney, coerceNumberLike } from './zod-helpers'
 
 // Basic hydrated schemas for client-portal server-provided payloads
 export const UserSchema = z.object({
-  id: z.number(),
+  id: z.coerce.number(),
   name: z.string(),
   email: z.string(),
   user_role: z.string().nullable().optional(),
@@ -12,7 +12,7 @@ export const UserSchema = z.object({
 export type User = z.infer<typeof UserSchema>
 
 export const ProjectSchema = z.object({
-  id: z.number(),
+  id: z.coerce.number(),
   name: z.string(),
   slug: z.string(),
   description: z.string().nullable().optional(),
@@ -23,28 +23,28 @@ export const ProjectSchema = z.object({
 export type Project = z.infer<typeof ProjectSchema>
 
 export const AgreementSchema = z.object({
-  id: z.number(),
+  id: z.coerce.number(),
   active_date: z.string(),
   termination_date: z.string().nullable().optional(),
   client_company_signed_date: z.string().nullable().optional(),
-  is_visible_to_client: z.boolean().optional(),
+  is_visible_to_client: z.coerce.boolean().optional(),
   monthly_retainer_hours: coerceNumberLike('0'),
   monthly_retainer_fee: coerceMoney('0.00'),
   catch_up_threshold_hours: coerceNumberLike('0').optional(),
-  rollover_months: z.number().optional(),
+  rollover_months: z.coerce.number().optional(),
   hourly_rate: coerceMoney('0.00').optional(),
 })
 export type Agreement = z.infer<typeof AgreementSchema>
 
 // Minimal FileRecord schema (validate the fields used by portal UI)
 export const FileRecordSchema = z.object({
-  id: z.number(),
+  id: z.coerce.number(),
   original_filename: z.string(),
   human_file_size: z.string().optional(),
   created_at: z.string(),
   download_count: z.number().optional(),
   uploader: z
-    .object({ id: z.number(), name: z.string() })
+    .object({ id: z.coerce.number(), name: z.string() })
     .nullable()
     .optional(),
 })
@@ -52,13 +52,13 @@ export type FileRecord = z.infer<typeof FileRecordSchema>
 
 // Minimal TimeEntry schema for recentTimeEntries used on index page
 export const TimeEntrySchema = z.object({
-  id: z.number(),
+  id: z.coerce.number(),
   name: z.string().nullable().optional(),
-  minutes_worked: z.number().optional(),
+  minutes_worked: z.coerce.number().optional(),
   formatted_time: z.string().optional(),
   date_worked: z.string(),
-  is_billable: z.boolean().optional(),
-  is_invoiced: z.boolean().optional(),
+  is_billable: z.coerce.boolean().optional(),
+  is_invoiced: z.coerce.boolean().optional(),
   job_type: z.string().optional(),
   user: UserSchema.nullable().optional(),
   project: ProjectSchema.nullable().optional(),
@@ -68,7 +68,7 @@ export type TimeEntry = z.infer<typeof TimeEntrySchema>
 
 // App-level hydration payload (head JSON `#app-initial-data`)
 export const AppCompanySchema = z.object({
-  id: z.number(),
+  id: z.coerce.number(),
   company_name: z.string(),
   slug: z.string(),
 })
@@ -76,8 +76,8 @@ export const AppCompanySchema = z.object({
 export const AppInitialDataSchema = z.object({
   appName: z.string().optional(),
   appUrl: z.string().optional(),
-  authenticated: z.boolean().optional(),
-  isAdmin: z.boolean().optional(),
+  authenticated: z.coerce.boolean().optional(),
+  isAdmin: z.coerce.boolean().optional(),
   clientCompanies: z.array(AppCompanySchema).optional(),
   currentUser: UserSchema.nullable().optional(),
 })

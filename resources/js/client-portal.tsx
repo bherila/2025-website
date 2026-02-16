@@ -21,6 +21,10 @@ document.addEventListener('DOMContentLoaded', () => {
     console.error('Invalid app-initial-data payload — app-level hydration may be unsafe.', appParsed.error)
   }
   const appData = appParsed && appParsed.success ? appParsed.data : (appRaw || null)
+  
+  // Robust isAdmin resolution
+  const isAdminGlobal = (appData?.isAdmin === true || appRaw?.isAdmin === true || appData?.isAdmin === 'true' || appRaw?.isAdmin === 'true')
+
   // Validate app-level currentUser shape (log; components will fall back on API if invalid)
   try {
     const parsedCurrentUser = UserSchema.nullable().safeParse(appData?.currentUser ?? null)
@@ -71,7 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const slug = serverData.slug
     const companyName = serverData.companyName
     const companyId = serverData.companyId
-    const isAdmin = appData?.isAdmin ?? false
+    const isAdmin = isAdminGlobal
 
     const root = createRoot(indexDiv)
     root.render(<ClientPortalIndexPage 
@@ -102,7 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const slug = serverData.slug
     const companyName = serverData.companyName
     const companyId = serverData.companyId
-    const isAdmin = appData?.isAdmin ?? false
+    const isAdmin = isAdminGlobal
     const parsedCompanyUsers_time = UserSchema.array().safeParse(serverData.companyUsers ?? [])
     if (!parsedCompanyUsers_time.success) {
       console.error('Invalid hydrated companyUsers for time page — will fall back to API fetch.', parsedCompanyUsers_time.error)
@@ -143,7 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const companyId = serverData.companyId
     const projectSlug = serverData.project.slug
     const projectName = serverData.project.name
-    const isAdmin = appData?.isAdmin ?? false
+    const isAdmin = isAdminGlobal
 
     const initialTasksRaw = serverData.tasks
     const initialTasks = Array.isArray(initialTasksRaw) ? initialTasksRaw : undefined
@@ -190,7 +194,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const slug = serverData.slug
     const companyName = serverData.companyName
     const companyId = serverData.companyId
-    const isAdmin = appData?.isAdmin ?? false
+    const isAdmin = isAdminGlobal
     const parsedAgreement = AgreementSchema.safeParse(serverData.agreement ?? {})
     if (!parsedAgreement.success) {
       console.error('Invalid hydrated agreement payload — aborting to allow API fallback.', parsedAgreement.error)
@@ -235,7 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const slug = serverData.slug
     const companyName = serverData.companyName
     const companyId = serverData.companyId
-    const isAdmin = appData?.isAdmin ?? false
+    const isAdmin = isAdminGlobal
     // Prefer full Invoice objects, but accept lightweight list items from the server
     const parsedInvoices_full = InvoiceSchema.array().safeParse(serverData.invoices ?? [])
     let initialInvoices: any[] | undefined = undefined
@@ -279,7 +283,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const slug = serverData.slug
     const companyName = serverData.companyName
     const companyId = serverData.companyId
-    const isAdmin = appData?.isAdmin ?? false
+    const isAdmin = isAdminGlobal
 
     // Validate hydrated invoice payload with Zod
     const rawInvoice = serverData.invoice ?? null
@@ -376,7 +380,7 @@ document.addEventListener('DOMContentLoaded', () => {
       slug={expensesDiv.dataset.slug!}
       companyName={expensesDiv.dataset.companyName!}
       companyId={parseInt(expensesDiv.dataset.companyId!)}
-      isAdmin={appData?.isAdmin ?? false}
+      isAdmin={isAdminGlobal}
     />)
   }
 })
