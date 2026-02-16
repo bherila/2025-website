@@ -7,6 +7,7 @@ import ClientPortalInvoicePage from '@/components/client-management/portal/Clien
 import ClientPortalInvoicesPage from '@/components/client-management/portal/ClientPortalInvoicesPage'
 import ClientPortalProjectPage from '@/components/client-management/portal/ClientPortalProjectPage'
 import ClientPortalTimePage from '@/components/client-management/portal/ClientPortalTimePage'
+import { resolveIsAdmin } from '@/lib/authUtils'
 import { InvoiceSchema, InvoiceListItemSchema, InvoiceHydrationSchema } from '@/types/client-management/invoice'
 import { ProjectSchema, UserSchema, AgreementSchema, FileRecordSchema, TimeEntrySchema, AppInitialDataSchema } from '@/types/client-management/hydration-schemas'
 
@@ -23,14 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const appData = appParsed && appParsed.success ? appParsed.data : (appRaw || null)
   
   // Robust isAdmin resolution
-  const isAdminGlobal = (
-    appData?.isAdmin === true || 
-    appRaw?.isAdmin === true || 
-    appData?.isAdmin === 'true' || 
-    appRaw?.isAdmin === 'true' ||
-    (appData?.currentUser?.user_role?.toLowerCase() === 'admin') ||
-    (appRaw?.currentUser?.user_role?.toLowerCase() === 'admin')
-  )
+  const isAdminGlobal = resolveIsAdmin(appRaw)
 
   console.log('ClientPortal: appRaw', appRaw)
   console.log('ClientPortal: appData', appData)

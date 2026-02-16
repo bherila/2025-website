@@ -32,4 +32,23 @@ describe('TimeTrackingMonthSummaryRow', () => {
     const remainingTileRoot = remainingTitleDiv.closest('div')!.parentElement!
     expect(remainingTileRoot).toHaveTextContent('0:00')
   })
+
+  it('shows Monthly Retainer and Prev Month Overage correctly', () => {
+    render(
+      <TimeTrackingMonthSummaryRow
+        monthlyRetainer={10}
+        negativeOffsetThisMonth={2.5}
+        hoursWorked={5}
+      />
+    )
+
+    expect(screen.getByText('Monthly Retainer')).toBeInTheDocument()
+    expect(screen.getByText('Prev Month Overage (Subtracted)')).toBeInTheDocument()
+
+    const retainerTile = screen.getByText('Monthly Retainer').closest('div')!.parentElement!
+    expect(retainerTile).toHaveTextContent('10:00')
+
+    const overageTile = screen.getByText('Prev Month Overage (Subtracted)').closest('div')!.parentElement!
+    expect(overageTile).toHaveTextContent('2:30')
+  })
 })
