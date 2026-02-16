@@ -16,7 +16,6 @@ export function resolveIsAdmin(appRaw: any): boolean {
   return (
     appData?.isAdmin === true || 
     appRaw?.isAdmin === true || 
-    appData?.isAdmin === 'true' || 
     appRaw?.isAdmin === 'true' ||
     (appData?.currentUser?.user_role?.toLowerCase() === 'admin') ||
     (appRaw?.currentUser?.user_role?.toLowerCase() === 'admin') ||
