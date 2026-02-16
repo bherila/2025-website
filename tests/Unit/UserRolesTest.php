@@ -129,4 +129,50 @@ class UserRolesTest extends TestCase
 
         $this->assertFalse($user->canLogin());
     }
+
+    /**
+     * Test user_role accessor returns 'Admin' for admin users
+     */
+    public function test_user_role_accessor_returns_admin_for_admins(): void
+    {
+        $user = new User;
+        $user->user_role = 'admin'; // Underlying value
+
+        // The accessor getUserRoleAttribute should return 'Admin'
+        $this->assertEquals('Admin', $user->user_role);
+    }
+
+    /**
+     * Test user_role accessor returns 'Admin' for user ID 1
+     */
+    public function test_user_role_accessor_returns_admin_for_user_id_1(): void
+    {
+        $user = new User;
+        $user->id = 1;
+        $user->user_role = 'user'; // Underlying value
+
+        $this->assertEquals('Admin', $user->user_role);
+    }
+
+    /**
+     * Test virtual_user_role alias
+     */
+    public function test_virtual_user_role_alias(): void
+    {
+        $user = new User;
+        $user->user_role = 'admin';
+
+        $this->assertEquals('Admin', $user->virtual_user_role);
+    }
+
+    /**
+     * Test user_role accessor returns original role for non-admins
+     */
+    public function test_user_role_accessor_returns_original_role_for_non_admins(): void
+    {
+        $user = new User;
+        $user->user_role = 'User';
+
+        $this->assertEquals('User', $user->user_role);
+    }
 }
