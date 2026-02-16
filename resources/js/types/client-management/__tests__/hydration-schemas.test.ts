@@ -6,9 +6,14 @@ describe('hydration zod schemas', () => {
     expect(UserSchema.parse(valid)).toMatchObject(valid)
   })
 
-  it('UserSchema rejects invalid user', () => {
-    // id should be number
-    const bad = { id: '1', name: 'Alice', email: 'a@ex.com' }
+  it('UserSchema coerces string IDs', () => {
+    const validStr = { id: '123', name: 'Alice', email: 'a@ex.com' }
+    const parsed = UserSchema.parse(validStr as any)
+    expect(parsed.id).toBe(123)
+  })
+
+  it('UserSchema rejects truly invalid IDs', () => {
+    const bad = { id: 'abc', name: 'Alice', email: 'a@ex.com' }
     expect(() => UserSchema.parse(bad as any)).toThrow()
   })
 
