@@ -7,11 +7,20 @@ import ClientPortalAgreementPage from '@/components/client-management/portal/Cli
 import ClientPortalInvoicesPage from '@/components/client-management/portal/ClientPortalInvoicesPage'
 import * as fetchWrapper from '@/fetchWrapper'
 import { makePortalFetchMock } from '@/test-utils/portalFetchMock'
+import { _resetCache } from '@/hooks/useAppInitialData'
 
 describe('Client-portal hydration', () => {
 
 
   beforeEach(() => {
+    document.body.innerHTML = ''
+    const script = document.createElement('script')
+    script.id = 'app-initial-data'
+    script.type = 'application/json'
+    script.textContent = JSON.stringify({ isAdmin: false, clientCompanies: [] })
+    document.body.appendChild(script)
+    _resetCache()
+
     jest.clearAllMocks()
     ;(window as any).fetch = makePortalFetchMock()
   })
@@ -52,7 +61,6 @@ describe('Client-portal hydration', () => {
           companyName="Acme"
           companyId={1}
           invoiceId={1}
-          isAdmin={false}
           initialInvoice={mockInvoice as any}
         />
       )
@@ -75,7 +83,6 @@ describe('Client-portal hydration', () => {
           companyId={1}
           projectSlug="proj-1"
           projectName="Proj 1"
-          isAdmin={false}
           initialTasks={[{ id: 1, project_id: 1, name: 'Task 1', description: null, completed_at: null, due_date: null, assignee: null, creator: null, is_high_priority: false, is_hidden_from_clients: false, created_at: new Date().toISOString() }]}
           initialCompanyUsers={[{ id: 1, name: 'User', email: 'u@example.com' }]}
           initialProjectFiles={[{ id: 1, original_filename: 'f.txt', human_file_size: '1 KB', created_at: new Date().toISOString(), download_count: 0 } as any]}
@@ -107,7 +114,6 @@ describe('Client-portal hydration', () => {
           slug="acme"
           companyName="Acme"
           companyId={1}
-          isAdmin={false}
           initialProjects={[{ id: 1, name: 'P', slug: 'p' } as any]}
           initialAgreements={[]}
           initialCompanyUsers={[{ id: 1, name: 'U', email: 'u@example.com' } as any]}
@@ -140,7 +146,6 @@ describe('Client-portal hydration', () => {
           slug="acme"
           companyName="Acme"
           companyId={1}
-          isAdmin={false}
           initialCompanyUsers={[{ id: 1, name: 'U', email: 'u@example.com' } as any]}
           initialProjects={[{ id: 1, name: 'P', slug: 'p' } as any]}
         />
@@ -172,7 +177,6 @@ describe('Client-portal hydration', () => {
           companyName="Acme"
           companyId={1}
           agreementId={1}
-          isAdmin={false}
           initialAgreement={{ id: 1, monthly_retainer_hours: '10', agreement_text: null, active_date: '2024-01-01', client_company_signed_date: null, catch_up_threshold_hours: '1', rollover_months: 0, hourly_rate: '100', monthly_retainer_fee: '0' } as any}
           initialInvoices={[]}
           initialAgreementFiles={[{ id: 1, original_filename: 'a.pdf', human_file_size: '1 KB', created_at: new Date().toISOString(), download_count: 0 } as any]}
@@ -207,7 +211,6 @@ describe('Client-portal hydration', () => {
           slug="acme"
           companyName="Acme"
           companyId={1}
-          isAdmin={false}
           initialInvoices={[{ client_invoice_id: 1, invoice_number: 'INV-1', invoice_total: '10.00', period_start: '2024-01-01', period_end: '2024-01-31', status: 'issued', client_company_id: 1, line_items: [], payments: [], remaining_balance: '10.00', payments_total: '0.00', retainer_hours_included: '0', hours_worked: '0' } as any]}
         />
       )

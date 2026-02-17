@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { useIsUserAdmin } from '@/hooks/useAppInitialData'
 import type { ClientAgreement } from '@/types/client-management/client-agreement'
 import type { FileRecord } from '@/types/files'
 
@@ -20,13 +21,13 @@ interface ClientPortalAgreementPageProps {
   companyName: string
   companyId: number
   agreementId: number
-  isAdmin: boolean
   initialAgreement?: any
   initialInvoices?: any[] | undefined
   initialAgreementFiles?: FileRecord[] | undefined
 }
 
-export default function ClientPortalAgreementPage({ slug, companyName, companyId, agreementId, isAdmin, initialAgreement = null, initialInvoices, initialAgreementFiles }: ClientPortalAgreementPageProps) {
+export default function ClientPortalAgreementPage({ slug, companyName, companyId, agreementId, initialAgreement = null, initialInvoices, initialAgreementFiles }: ClientPortalAgreementPageProps) {
+  const isAdmin = useIsUserAdmin()
   const [agreement, setAgreement] = useState<ClientAgreement | null>(initialAgreement ?? null)
   const [loading, setLoading] = useState(initialAgreement === null)
   const [signing, setSigning] = useState(false)
@@ -134,7 +135,7 @@ export default function ClientPortalAgreementPage({ slug, companyName, companyId
   if (loading) {
     return (
       <>
-        <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="agreement" />
+        <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} currentPage="agreement" />
         <div className="mx-auto px-4 max-w-7xl">
           <Card>
             <CardHeader>
@@ -162,7 +163,7 @@ export default function ClientPortalAgreementPage({ slug, companyName, companyId
 
   return (
     <>
-      <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="agreement" />
+      <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} currentPage="agreement" />
       <div className="mx-auto px-4 max-w-7xl">
         <div className="flex items-center gap-4 mb-6">
           <FileText className="h-8 w-8 text-muted-foreground" />
@@ -371,7 +372,6 @@ export default function ClientPortalAgreementPage({ slug, companyName, companyId
           className="mt-6"
           files={fileManager.files.length > 0 ? fileManager.files : (initialAgreementFiles ?? [])}
           loading={fileManager.loading && fileManager.files.length === 0}
-          isAdmin={isAdmin}
           onDownload={fileManager.downloadFile}
           onDelete={fileManager.handleDeleteRequest}
           title="Agreement Files"

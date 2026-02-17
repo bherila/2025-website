@@ -390,7 +390,6 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
           className="mt-8"
           files={fileManager.files}
           loading={fileManager.loading}
-          isAdmin={true}
           onDownload={fileManager.downloadFile}
           onDelete={fileManager.handleDeleteRequest}
           title="Statement Files"

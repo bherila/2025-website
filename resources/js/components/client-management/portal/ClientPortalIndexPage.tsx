@@ -11,6 +11,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useIsUserAdmin } from '@/hooks/useAppInitialData'
 import { abbreviateName } from '@/lib/nameUtils'
 import type { Agreement, Project, User } from '@/types/client-management/common'
 import type { TimeEntry } from '@/types/client-management/time-entry'
@@ -24,7 +25,6 @@ interface ClientPortalIndexPageProps {
   slug: string
   companyName: string
   companyId: number
-  isAdmin?: boolean | undefined
   initialProjects?: Project[] | undefined
   initialAgreements?: Agreement[] | undefined
   initialCompanyUsers?: User[] | undefined
@@ -38,7 +38,6 @@ export default function ClientPortalIndexPage({
   slug,
   companyName,
   companyId,
-  isAdmin = false,
   initialProjects,
   initialAgreements,
   initialCompanyUsers,
@@ -46,6 +45,7 @@ export default function ClientPortalIndexPage({
   initialCompanyFiles,
   afterEdit,
 }: ClientPortalIndexPageProps) {
+  const isAdmin = useIsUserAdmin()
   const [projects, setProjects] = useState<Project[]>(initialProjects ?? [])
   const [agreements] = useState<Agreement[]>(initialAgreements ?? [])
   const [newProjectModalOpen, setNewProjectModalOpen] = useState(false)
@@ -103,7 +103,6 @@ export default function ClientPortalIndexPage({
         slug={slug}
         companyName={companyName}
         companyId={companyId}
-        isAdmin={isAdmin}
         currentPage="home"
         projects={projects}
       />
@@ -273,7 +272,6 @@ export default function ClientPortalIndexPage({
             <FileList
               files={fileManager.files.length > 0 ? fileManager.files : (initialCompanyFiles ?? [])}
               loading={fileManager.loading && fileManager.files.length === 0}
-              isAdmin={isAdmin}
               onDownload={fileManager.downloadFile}
               onDelete={fileManager.handleDeleteRequest}
               title="Company Files"

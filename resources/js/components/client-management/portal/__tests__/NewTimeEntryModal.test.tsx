@@ -2,11 +2,13 @@ import React from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import NewTimeEntryModal from '../NewTimeEntryModal'
+import { _resetCache } from '@/hooks/useAppInitialData'
 
 describe('NewTimeEntryModal - currentUser hydration', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
     jest.resetModules()
+    _resetCache()
     // ensure no lingering app-level script
     const existing = document.getElementById('app-initial-data')
     if (existing) existing.remove()

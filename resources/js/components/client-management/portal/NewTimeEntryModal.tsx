@@ -7,11 +7,13 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter,DialogHeader, Di
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { useCurrentUser } from '@/hooks/useAppInitialData'
+import { usePortalInitialData } from '@/hooks/usePortalInitialData'
 import type { Project,User } from '@/types/client-management/common'
-import { UserSchema } from '@/types/client-management/hydration-schemas'
 import type { TimeEntry } from '@/types/client-management/time-entry'
 
 function getLocalISODate(): string {
+// ... existing getLocalISODate function ...
   const date = new Date()
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -20,6 +22,7 @@ function getLocalISODate(): string {
 }
 
 export function parseTimeToMinutes(timeString: string): number | null {
+// ... existing parseTimeToMinutes function ...
   const str = (timeString || '').trim().toLowerCase()
   if (!str) return null
 
@@ -44,6 +47,7 @@ export function parseTimeToMinutes(timeString: string): number | null {
 }
 
 export function formatMinutesToTime(minutes: number): string {
+// ... existing formatMinutesToTime function ...
   if (!minutes || minutes <= 0) return '0:00'
   const h = Math.floor(minutes / 60)
   const m = minutes % 60
@@ -71,44 +75,19 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
   const [isBillable, setIsBillable] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [currentUser, setCurrentUser] = useState<User | null>(null)
+  
+  const currentUser = useCurrentUser()
+  const portalData = usePortalInitialData()
+  const effectiveUsers: User[] = portalData.companyUsers ?? users
 
-  // Prefer server-hydrated company users when available (from `#client-portal-initial-data` script)
-  // Falls back to the `users` prop for backwards compatibility or in tests.
-  let serverCompanyUsers: User[] | undefined
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const portalScript = document.getElementById('client-portal-initial-data') as HTMLScriptElement | null
-    const portalRaw: any = portalScript && portalScript.textContent ? JSON.parse(portalScript.textContent) : null
-    serverCompanyUsers = portalRaw?.companyUsers ? (portalRaw.companyUsers as User[]) : undefined
-  } catch (e) {
-    // ignore parse errors
-  }
-  const effectiveUsers: User[] = serverCompanyUsers ?? users
-
-  // Fetch current user (prefer app-level hydrated `currentUser` when available)
   useEffect(() => {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const appScript = document.getElementById('app-initial-data') as HTMLScriptElement | null
-      const appRaw: any = appScript && appScript.textContent ? JSON.parse(appScript.textContent) : null
-      const serverCurrentUser = appRaw?.currentUser ? (appRaw.currentUser as User) : undefined
-
-      if (serverCurrentUser && UserSchema.safeParse(serverCurrentUser).success) {
-        setCurrentUser(serverCurrentUser)
-        return
-      }
-    } catch (e) {
-      // ignore
+    if (!currentUser) {
+      // Fallback only if not hydrated
+      fetch('/api/user')
+        .then(response => response.json())
+        .catch(error => console.error('Error fetching current user:', error))
     }
-
-    fetch('/api/user')
-      .then(response => response.json())
-      .then(data => {
-        setCurrentUser(data)
-      })
-      .catch(error => console.error('Error fetching current user:', error))
-  }, [])
+  }, [currentUser])
 
   // Initialize state from entry if in edit mode
   useEffect(() => {

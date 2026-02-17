@@ -3,13 +3,13 @@ import { Ban, List, PlusCircle, RotateCcw, Send, Trash2, Undo2 } from "lucide-re
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useIsUserAdmin } from "@/hooks/useAppInitialData";
 import { cn } from "@/lib/utils";
 import type { Invoice } from "@/types/client-management";
 
 interface ClientPortalInvoiceActionButtonRowProps {
     slug: string;
     invoice: Invoice;
-    isAdmin: boolean;
     isEditable: boolean;
     isRefreshing: boolean;
     canVoid: boolean;
@@ -24,7 +24,6 @@ interface ClientPortalInvoiceActionButtonRowProps {
 export default function ClientPortalInvoiceActionButtonRow({
     slug,
     invoice,
-    isAdmin,
     isEditable,
     isRefreshing,
     canVoid,
@@ -35,6 +34,7 @@ export default function ClientPortalInvoiceActionButtonRow({
     onUnVoid,
     onDelete
 }: ClientPortalInvoiceActionButtonRowProps) {
+    const isAdmin = useIsUserAdmin();
     if (!isAdmin) return null;
 
     // Check if period_end is in the future

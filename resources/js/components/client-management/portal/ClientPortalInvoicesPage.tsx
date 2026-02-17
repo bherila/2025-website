@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { useIsUserAdmin } from '@/hooks/useAppInitialData'
 import type { ClientCompany } from '@/types/client-management/common'
 import type { Invoice, InvoiceListItem } from '@/types/client-management/invoice'
 
@@ -22,12 +23,12 @@ interface ClientPortalInvoicesPageProps {
   slug: string
   companyName: string
   companyId: number
-  isAdmin?: boolean
   // can accept full invoices or lightweight list-item objects from server hydration
   initialInvoices?: (Invoice | InvoiceListItem)[]
 }
 
-export default function ClientPortalInvoicesPage({ slug, companyName, companyId, isAdmin = false, initialInvoices }: ClientPortalInvoicesPageProps) {
+export default function ClientPortalInvoicesPage({ slug, companyName, companyId, initialInvoices }: ClientPortalInvoicesPageProps) {
+  const isAdmin = useIsUserAdmin()
   const [invoices, setInvoices] = useState<(Invoice | InvoiceListItem)[]>(initialInvoices ?? [])
   const [company, setCompany] = useState<ClientCompany | null>(null)
   const [loading, setLoading] = useState(initialInvoices === undefined)
@@ -125,7 +126,7 @@ export default function ClientPortalInvoicesPage({ slug, companyName, companyId,
   if (loading) {
     return (
       <>
-        <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="invoices" />
+        <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} currentPage="invoices" />
         <div className="mx-auto px-4 max-w-7xl">
           <div className="space-y-4">
             {[1, 2, 3].map(i => (
@@ -149,7 +150,7 @@ export default function ClientPortalInvoicesPage({ slug, companyName, companyId,
 
   return (
     <>
-      <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="invoices" />
+      <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} currentPage="invoices" />
       <div className="mx-auto px-4 max-w-7xl">
         <div className="flex items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-4">

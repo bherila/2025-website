@@ -23,9 +23,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   const appData = appParsed && appParsed.success ? appParsed.data : (appRaw || null)
   
-  // Robust isAdmin resolution
-  const isAdminGlobal = resolveIsAdmin(appRaw)
-
   // Validate app-level currentUser shape (log; components will fall back on API if invalid)
   try {
     const parsedCurrentUser = UserSchema.nullable().safeParse(appData?.currentUser ?? null)
@@ -76,14 +73,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const slug = serverData.slug
     const companyName = serverData.companyName
     const companyId = serverData.companyId
-    const isAdmin = isAdminGlobal
 
     const root = createRoot(indexDiv)
     root.render(<ClientPortalIndexPage 
       slug={slug}
       companyName={companyName}
       companyId={companyId}
-      isAdmin={isAdmin}
       initialProjects={initialProjects as any}
       initialAgreements={initialAgreements as any}
       initialCompanyUsers={initialCompanyUsers as any}
@@ -107,7 +102,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const slug = serverData.slug
     const companyName = serverData.companyName
     const companyId = serverData.companyId
-    const isAdmin = isAdminGlobal
     const parsedCompanyUsers_time = UserSchema.array().safeParse(serverData.companyUsers ?? [])
     if (!parsedCompanyUsers_time.success) {
       console.error('Invalid hydrated companyUsers for time page — will fall back to API fetch.', parsedCompanyUsers_time.error)
@@ -125,7 +119,6 @@ document.addEventListener('DOMContentLoaded', () => {
       slug={slug}
       companyName={companyName}
       companyId={companyId}
-      isAdmin={isAdmin}
       initialCompanyUsers={initialCompanyUsers as any}
       initialProjects={initialProjects as any}
     />)
@@ -148,7 +141,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const companyId = serverData.companyId
     const projectSlug = serverData.project.slug
     const projectName = serverData.project.name
-    const isAdmin = isAdminGlobal
 
     const initialTasksRaw = serverData.tasks
     const initialTasks = Array.isArray(initialTasksRaw) ? initialTasksRaw : undefined
@@ -172,7 +164,6 @@ document.addEventListener('DOMContentLoaded', () => {
       companyId={companyId}
       projectSlug={projectSlug}
       projectName={projectName}
-      isAdmin={isAdmin}
       // hydration props
       initialTasks={initialTasks as any}
       initialCompanyUsers={initialCompanyUsers as any}
@@ -195,7 +186,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const slug = serverData.slug
     const companyName = serverData.companyName
     const companyId = serverData.companyId
-    const isAdmin = isAdminGlobal
     const parsedAgreement = AgreementSchema.safeParse(serverData.agreement ?? {})
     if (!parsedAgreement.success) {
       console.error('Invalid hydrated agreement payload — aborting to allow API fallback.', parsedAgreement.error)
@@ -219,7 +209,6 @@ document.addEventListener('DOMContentLoaded', () => {
       companyName={companyName}
       companyId={companyId}
       agreementId={initialAgreement.id}
-      isAdmin={isAdmin}
       initialAgreement={initialAgreement as any}
       initialInvoices={initialInvoices as any}
     />)
@@ -240,7 +229,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const slug = serverData.slug
     const companyName = serverData.companyName
     const companyId = serverData.companyId
-    const isAdmin = isAdminGlobal
     // Prefer full Invoice objects, but accept lightweight list items from the server
     const parsedInvoices_full = InvoiceSchema.array().safeParse(serverData.invoices ?? [])
     let initialInvoices: any[] | undefined = undefined
@@ -264,7 +252,6 @@ document.addEventListener('DOMContentLoaded', () => {
       slug={slug}
       companyName={companyName}
       companyId={companyId}
-      isAdmin={isAdmin}
       initialInvoices={initialInvoices as any}
     />)
   }
@@ -284,7 +271,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const slug = serverData.slug
     const companyName = serverData.companyName
     const companyId = serverData.companyId
-    const isAdmin = isAdminGlobal
 
     // Validate hydrated invoice payload with Zod
     const rawInvoice = serverData.invoice ?? null
@@ -369,7 +355,6 @@ document.addEventListener('DOMContentLoaded', () => {
       companyName={companyName}
       companyId={companyId}
       invoiceId={invoiceId}
-      isAdmin={isAdmin}
       initialInvoice={initialInvoice}
     />)
   }
@@ -381,7 +366,6 @@ document.addEventListener('DOMContentLoaded', () => {
       slug={expensesDiv.dataset.slug!}
       companyName={expensesDiv.dataset.companyName!}
       companyId={parseInt(expensesDiv.dataset.companyId!)}
-      isAdmin={isAdminGlobal}
     />)
   }
 })

@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { useIsUserAdmin } from '@/hooks/useAppInitialData'
 import { formatHours } from '@/lib/formatHours'
 import type { Project, User } from '@/types/client-management/common'
 import type { TimeEntriesResponse, TimeEntry } from '@/types/client-management/time-entry'
@@ -27,25 +28,26 @@ interface ClientPortalTimePageProps {
   slug: string
   companyName: string
   companyId: number
-  isAdmin?: boolean
   initialCompanyUsers?: User[]
   initialProjects?: Project[]
 }
 
 function formatMonthYear(yearMonth: string): string {
+// ... existing formatMonthYear function ...
   const [year, month] = yearMonth.split('-')
   const date = new Date(parseInt(year!), parseInt(month!) - 1)
   return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 }
 
 function abbreviateName(name: string | null | undefined): string {
+// ... existing abbreviateName function ...
   if (!name) return 'Unknown'
   const parts = name.trim().split(/\s+/)
   if (parts.length < 2) return name
   return `${parts[0]} ${parts[1]![0]}.`
 }
 
-export default function ClientPortalTimePage({ slug, companyName, companyId, isAdmin = false, initialCompanyUsers, initialProjects }: ClientPortalTimePageProps) {
+export default function ClientPortalTimePage({ slug, companyName, companyId, initialCompanyUsers, initialProjects }: ClientPortalTimePageProps) {
   const [data, setData] = useState<TimeEntriesResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [newEntryModalOpen, setNewEntryModalOpen] = useState(false)
@@ -53,6 +55,7 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, isA
   const [projects, setProjects] = useState<Project[]>(initialProjects ?? [])
   const [companyUsers, setCompanyUsers] = useState<User[]>(initialCompanyUsers ?? [])
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
+  const isAdmin = useIsUserAdmin()
 
   useEffect(() => {
     document.title = `Time: ${companyName}`
@@ -179,7 +182,7 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, isA
     return (
       <TooltipProvider>
         <>
-          <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="time" projects={projects} />
+          <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} currentPage="time" projects={projects} />
           <div className="mx-auto px-4 max-w-7xl">
             <Skeleton className="h-10 w-64 mb-6" />
             <Skeleton className="h-24 w-full mb-6" />
@@ -196,7 +199,7 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, isA
   return (
     <TooltipProvider>
       <>
-        <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="time" projects={projects} />
+        <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} currentPage="time" projects={projects} />
         <div className="mx-auto px-4 max-w-7xl">
           <div className="mb-6">
             <div className="flex justify-between items-center">

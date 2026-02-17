@@ -23,6 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { useIsUserAdmin } from '@/hooks/useAppInitialData'
 import type { Project } from '@/types/client-management/common'
 import type { ClientExpense, ExpensesResponse } from '@/types/client-management/expense'
 
@@ -34,10 +35,10 @@ interface ClientPortalExpensesPageProps {
   slug: string
   companyName: string
   companyId: number
-  isAdmin?: boolean
 }
 
 function formatCurrency(amount: number): string {
+// ... existing formatCurrency function ...
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -45,6 +46,7 @@ function formatCurrency(amount: number): string {
 }
 
 function formatDate(dateString: string): string {
+// ... existing formatDate function ...
   return new Date(dateString).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -52,7 +54,8 @@ function formatDate(dateString: string): string {
   })
 }
 
-export default function ClientPortalExpensesPage({ slug, companyName, companyId, isAdmin = false }: ClientPortalExpensesPageProps) {
+export default function ClientPortalExpensesPage({ slug, companyName, companyId }: ClientPortalExpensesPageProps) {
+  const isAdmin = useIsUserAdmin()
   const [data, setData] = useState<ExpensesResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
@@ -129,7 +132,7 @@ export default function ClientPortalExpensesPage({ slug, companyName, companyId,
   if (loading) {
     return (
       <>
-        <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="expenses" />
+        <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} currentPage="expenses" />
         <div className="mx-auto px-4 max-w-7xl">
           <Skeleton className="h-10 w-64 mb-6" />
           <Skeleton className="h-24 w-full mb-6" />
@@ -141,7 +144,7 @@ export default function ClientPortalExpensesPage({ slug, companyName, companyId,
 
   return (
     <>
-      <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} isAdmin={isAdmin} currentPage="expenses" />
+      <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} currentPage="expenses" />
       <div className="mx-auto px-4 max-w-7xl">
         <div className="mb-6">
           <div className="flex justify-between items-center">

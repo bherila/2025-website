@@ -24,6 +24,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
+import { useIsUserAdmin } from '@/hooks/useAppInitialData'
 import type { DownloadHistoryEntry, DownloadResponse, FileHistoryResponse, FileRecord, UploadUrlResponse } from '@/types/files'
 
 // Maximum file size for direct upload (50MB)
@@ -32,7 +33,6 @@ const DIRECT_UPLOAD_MAX_SIZE = 50 * 1024 * 1024
 interface FileListProps {
   files: FileRecord[]
   loading: boolean
-  isAdmin: boolean
   onDownload: (file: FileRecord) => void
   onDelete?: (file: FileRecord) => void
   onViewHistory?: (file: FileRecord) => void
@@ -41,7 +41,8 @@ interface FileListProps {
   className?: string
 }
 
-export function FileList({ files, loading, isAdmin, onDownload, onDelete, onViewHistory, title = 'Files', actions, className }: FileListProps) {
+export function FileList({ files, loading, onDownload, onDelete, onViewHistory, title = 'Files', actions, className }: FileListProps) {
+  const isAdmin = useIsUserAdmin()
   if (loading) {
     return (
       <Card className={className}>

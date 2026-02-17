@@ -1,12 +1,14 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import { makePortalFetchMock } from '@/test-utils/portalFetchMock'
+import { _resetCache } from '@/hooks/useAppInitialData'
 
 // Tests the DOM-mounted client-portal entrypoint behavior (server payload validation)
 
 describe('client-portal entrypoint hydration validation', () => {
   beforeEach(() => {
     jest.resetModules()
+    _resetCache()
     document.body.innerHTML = ''
     jest.spyOn(console, 'error').mockImplementation(() => {})
   })

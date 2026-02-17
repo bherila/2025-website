@@ -5,13 +5,13 @@ import {
   TableCell,
   TableRow,
 } from "@/components/ui/table"
+import { useIsUserAdmin } from '@/hooks/useAppInitialData'
 import { abbreviateName } from '@/lib/nameUtils'
 import type { TimeEntry } from '@/types/client-management/time-entry'
 
 interface TimeEntryListItemProps {
   entry: TimeEntry
   slug: string
-  isAdmin: boolean
   showDate?: boolean
   onEdit?: (entry: TimeEntry) => void
 }
@@ -19,10 +19,10 @@ interface TimeEntryListItemProps {
 export default function TimeEntryListItem({ 
   entry, 
   slug, 
-  isAdmin, 
   showDate = true,
   onEdit 
 }: TimeEntryListItemProps) {
+  const isAdmin = useIsUserAdmin()
   const handleClick = () => {
     if (isAdmin && !entry.is_invoiced && onEdit) {
       onEdit(entry)

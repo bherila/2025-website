@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { useIsUserAdmin } from '@/hooks/useAppInitialData'
 
 interface User {
   id: number
@@ -36,10 +37,10 @@ interface EditTaskModalProps {
   projectSlug: string
   users: User[]
   onSuccess: () => void
-  isAdmin: boolean
 }
 
-export default function EditTaskModal({ open, onOpenChange, task, slug, projectSlug, users, onSuccess, isAdmin }: EditTaskModalProps) {
+export default function EditTaskModal({ open, onOpenChange, task, slug, projectSlug, users, onSuccess }: EditTaskModalProps) {
+  const isAdmin = useIsUserAdmin()
   const [name, setName] = useState(task.name)
   const [description, setDescription] = useState(task.description || '')
   const [dueDate, setDueDate] = useState(task.due_date ? task.due_date.split(/[ T]/)[0] : '')
@@ -349,7 +350,6 @@ export default function EditTaskModal({ open, onOpenChange, task, slug, projectS
               <FileList
                 files={fileManager.files}
                 loading={fileManager.loading}
-                isAdmin={isAdmin}
                 onDownload={fileManager.downloadFile}
                 onDelete={fileManager.handleDeleteRequest}
                 title=""

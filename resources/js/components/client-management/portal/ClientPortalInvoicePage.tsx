@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fetchWrapper } from "@/fetchWrapper";
+import { useIsUserAdmin } from "@/hooks/useAppInitialData";
 import { formatHours } from "@/lib/formatHours";
 import type { ClientInvoicePayment, Invoice, InvoiceLine } from "@/types/client-management";
 
@@ -23,11 +24,11 @@ interface ClientPortalInvoicePageProps {
     companyName: string;
     companyId: number;
     invoiceId: number;
-    isAdmin: boolean;
     initialInvoice?: Invoice | null;
 }
 
-export default function ClientPortalInvoicePage({ slug, companyName, companyId, invoiceId, isAdmin, initialInvoice = null }: ClientPortalInvoicePageProps) {
+export default function ClientPortalInvoicePage({ slug, companyName, companyId, invoiceId, initialInvoice = null }: ClientPortalInvoicePageProps) {
+    const isAdmin = useIsUserAdmin()
     const [invoice, setInvoice] = useState<Invoice | null>(initialInvoice)
     const [isLoading, setIsLoading] = useState(initialInvoice ? false : true)
     const [isRefreshing, setIsRefreshing] = useState(false)
@@ -176,7 +177,6 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                     slug={slug}
                     companyName={companyName}
                     companyId={companyId}
-                    isAdmin={isAdmin}
                     currentPage="invoice"
                     invoiceNumber={invoice?.invoice_number ?? undefined}
                 />
@@ -208,7 +208,6 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                 slug={slug}
                 companyName={companyName}
                 companyId={companyId}
-                isAdmin={isAdmin}
                 currentPage="invoice"
                 invoiceNumber={invoice.invoice_number ?? undefined}
             />
@@ -217,7 +216,6 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                 <ClientPortalInvoiceActionButtonRow
                     slug={slug}
                     invoice={invoice}
-                    isAdmin={isAdmin}
                     isEditable={isEditable}
                     isRefreshing={isRefreshing}
                     canVoid={canVoid}

@@ -19,8 +19,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { useClientCompanies, useIsUserAdmin } from '@/hooks/useAppInitialData'
 import { cn } from '@/lib/utils'
-import { AppInitialDataSchema } from '@/types/client-management/hydration-schemas'
 
 interface Project {
   id: number
@@ -42,7 +42,6 @@ interface ClientPortalNavProps {
   projectName?: string | undefined
   invoiceNumber?: string | undefined
   projects?: Project[] | undefined
-  isAdmin?: boolean | undefined
   companyId?: number | undefined
 }
 
@@ -54,13 +53,14 @@ export default function ClientPortalNav({
   projectName,
   invoiceNumber,
   projects: initialProjects,
-  isAdmin = false,
   companyId
 }: ClientPortalNavProps) {
   const [projects, setProjects] = useState<Project[]>(initialProjects || [])
-  const [companies, setCompanies] = useState<Company[]>([])
+  const hydratedCompanies = useClientCompanies()
+  const isAdmin = useIsUserAdmin()
+  const [companies, setCompanies] = useState<Company[]>(hydratedCompanies as Company[])
   const [loadingProjects, setLoadingProjects] = useState(!initialProjects)
-  const [loadingCompanies, setLoadingCompanies] = useState(true)
+  const [loadingCompanies, setLoadingCompanies] = useState(hydratedCompanies.length === 0)
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -77,19 +77,10 @@ export default function ClientPortalNav({
   }, [slug])
 
   const fetchCompanies = useCallback(async () => {
-    // Check for global hydrated app data first
-    try {
-      const appScript = document.getElementById('app-initial-data') as HTMLScriptElement | null
-      const appRaw = appScript?.textContent ? JSON.parse(appScript.textContent) : null
-      const appParsed = appRaw ? AppInitialDataSchema.safeParse(appRaw) : null
-
-      if (appParsed?.success && appParsed.data.clientCompanies) {
-        setCompanies(appParsed.data.clientCompanies as Company[])
-        setLoadingCompanies(false)
-        return
-      }
-    } catch (e) {
-      // fallback to API
+    if (hydratedCompanies.length > 0) {
+      setCompanies(hydratedCompanies as Company[])
+      setLoadingCompanies(false)
+      return
     }
 
     try {
@@ -103,7 +94,7 @@ export default function ClientPortalNav({
     } finally {
       setLoadingCompanies(false)
     }
-  }, [])
+  }, [hydratedCompanies])
 
   useEffect(() => {
     if (!initialProjects) {

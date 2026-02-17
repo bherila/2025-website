@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useIsUserAdmin } from '@/hooks/useAppInitialData'
 import type { FileRecord } from '@/types/files'
 
 import ClientPortalNav from './ClientPortalNav'
@@ -46,14 +47,14 @@ interface ClientPortalProjectPageProps {
   companyId: number
   projectSlug: string
   projectName: string
-  isAdmin?: boolean | undefined
   initialTasks?: Task[] | undefined
   initialCompanyUsers?: User[] | undefined
   initialProjects?: { id: number; name: string; slug: string }[] | undefined
   initialProjectFiles?: FileRecord[] | undefined
 }
 
-export default function ClientPortalProjectPage({ slug, companyName, companyId, projectSlug, projectName, isAdmin = false, initialTasks, initialCompanyUsers, initialProjects, initialProjectFiles }: ClientPortalProjectPageProps) {
+export default function ClientPortalProjectPage({ slug, companyName, companyId, projectSlug, projectName, initialTasks, initialCompanyUsers, initialProjects, initialProjectFiles }: ClientPortalProjectPageProps) {
+  const isAdmin = useIsUserAdmin()
   const [tasks, setTasks] = useState<Task[]>(initialTasks ?? [])
   const [loading, setLoading] = useState(true)
   const [newTaskModalOpen, setNewTaskModalOpen] = useState(false)
@@ -160,7 +161,6 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
           slug={slug}
           companyName={companyName}
           companyId={companyId}
-          isAdmin={isAdmin}
           currentPage="project"
           currentProjectSlug={projectSlug}
           projectName={projectName}
@@ -191,7 +191,6 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
         slug={slug}
         companyName={companyName}
         companyId={companyId}
-        isAdmin={isAdmin}
         currentPage="project"
         currentProjectSlug={projectSlug}
         projectName={projectName}
@@ -321,7 +320,6 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
             <FileList
               files={fileManager.files.length > 0 ? fileManager.files : (initialProjectFiles ?? [])}
               loading={fileManager.loading && fileManager.files.length === 0}
-              isAdmin={isAdmin}
               onDownload={fileManager.downloadFile}
               onDelete={fileManager.handleDeleteRequest}
               onViewHistory={fileManager.handleViewHistory}
@@ -348,7 +346,6 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
             projectSlug={projectSlug}
             users={companyUsers}
             onSuccess={fetchTasks}
-            isAdmin={isAdmin}
           />
         )}
 
