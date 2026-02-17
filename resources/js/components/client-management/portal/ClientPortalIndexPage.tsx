@@ -16,11 +16,11 @@ import { abbreviateName } from '@/lib/nameUtils'
 import type { Agreement, Project, User } from '@/types/client-management/common'
 import type { TimeEntry } from '@/types/client-management/time-entry'
 import type { FileRecord } from '@/types/files'
-
-import ClientPortalNav from './ClientPortalNav'
-import NewProjectModal from './NewProjectModal'
-import NewTimeEntryModal from './NewTimeEntryModal'
-
+ 
+ import ClientPortalNav from './ClientPortalNav'
+import DisabledEditButton from './DisabledEditButton'
+ import NewProjectModal from './NewProjectModal'
+ import NewTimeEntryModal from './NewTimeEntryModal'
 interface ClientPortalIndexPageProps {
   slug: string
   companyName: string
@@ -241,7 +241,9 @@ export default function ClientPortalIndexPage({
                               </td>
                               {isAdmin && (
                                 <td className="py-1 px-3 align-top text-right">
-                                  {!entry.is_invoiced && (
+                                  {entry.is_invoiced ? (
+                                    <DisabledEditButton />
+                                  ) : (
                                     <Button
                                       variant="ghost"
                                       size="icon"

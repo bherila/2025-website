@@ -19,11 +19,11 @@ import { useIsUserAdmin } from '@/hooks/useAppInitialData'
 import { formatHours } from '@/lib/formatHours'
 import type { Project, User } from '@/types/client-management/common'
 import type { TimeEntriesResponse, TimeEntry } from '@/types/client-management/time-entry'
-
-import ClientPortalNav from './ClientPortalNav'
-import NewTimeEntryModal from './NewTimeEntryModal'
-import TimeTrackingMonthSummaryRow from './TimeTrackingMonthSummaryRow'
-
+ 
+ import ClientPortalNav from './ClientPortalNav'
+import DisabledEditButton from './DisabledEditButton'
+ import NewTimeEntryModal from './NewTimeEntryModal'
+ import TimeTrackingMonthSummaryRow from './TimeTrackingMonthSummaryRow'
 interface ClientPortalTimePageProps {
   slug: string
   companyName: string
@@ -400,7 +400,9 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, ini
                                     </TableCell>
                                     {isAdmin && (
                                       <TableCell className="py-1 align-top text-right">
-                                        {!entry.is_invoiced && (
+                                        {entry.is_invoiced ? (
+                                          <DisabledEditButton />
+                                        ) : (
                                           <Button
                                             variant="ghost"
                                             size="icon"

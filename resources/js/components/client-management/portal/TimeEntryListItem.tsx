@@ -9,6 +9,8 @@ import { useIsUserAdmin } from '@/hooks/useAppInitialData'
 import { abbreviateName } from '@/lib/nameUtils'
 import type { TimeEntry } from '@/types/client-management/time-entry'
 
+import DisabledEditButton from './DisabledEditButton'
+
 interface TimeEntryListItemProps {
   entry: TimeEntry
   slug: string
@@ -82,18 +84,22 @@ export default function TimeEntryListItem({
       </TableCell>
       {isAdmin && (
         <TableCell className="py-1 align-top text-right">
-          {!entry.is_invoiced && onEdit && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={(e) => {
-                e.stopPropagation()
-                onEdit(entry)
-              }}
-            >
-              <Pencil className="h-3 w-3 text-muted-foreground" />
-            </Button>
+          {entry.is_invoiced ? (
+            <DisabledEditButton />
+          ) : (
+            onEdit && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onEdit(entry)
+                }}
+              >
+                <Pencil className="h-3 w-3 text-muted-foreground" />
+              </Button>
+            )
           )}
         </TableCell>
       )}
