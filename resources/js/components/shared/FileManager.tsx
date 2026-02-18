@@ -174,9 +174,10 @@ interface FileUploadButtonProps {
   onUpload: (file: File) => Promise<void | FileRecord | null>
   disabled?: boolean
   className?: string
+  variant?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link'
 }
 
-export function FileUploadButton({ onUpload, disabled, className }: FileUploadButtonProps) {
+export function FileUploadButton({ onUpload, disabled, className, variant = 'default' }: FileUploadButtonProps) {
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -228,6 +229,7 @@ export function FileUploadButton({ onUpload, disabled, className }: FileUploadBu
       <Button
         onClick={handleClick}
         disabled={disabled || uploading}
+        variant={variant}
         className={`relative overflow-hidden ${className || ''}`}
       >
         {uploading && (

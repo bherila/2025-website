@@ -114,17 +114,17 @@ export default function ClientPortalIndexPage({
           </div>
           <div className="flex gap-2">
             {isAdmin && (
-              <Button onClick={() => setNewTimeEntryModalOpen(true)} variant="outline">
+              <Button onClick={() => setNewTimeEntryModalOpen(true)} variant="secondary">
                 <Plus className="mr-2 h-4 w-4" />
                 New Time Entry
               </Button>
             )}
-            <Button onClick={() => setNewProjectModalOpen(true)}>
+            <Button variant="secondary" onClick={() => setNewProjectModalOpen(true)}>
               <Plus className="mr-2 h-4 w-4" />
               New Project
             </Button>
             {isAdmin && (
-              <FileUploadButton onUpload={fileManager.uploadFile} />
+              <FileUploadButton variant="secondary" onUpload={fileManager.uploadFile} />
             )}
           </div>
         </div>
@@ -138,7 +138,7 @@ export default function ClientPortalIndexPage({
                   <FolderOpen className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
                   <h3 className="text-lg font-medium mb-2">No projects yet</h3>
                   <p className="text-muted-foreground mb-4">Create your first project to get started</p>
-                  <Button onClick={() => setNewProjectModalOpen(true)}>
+                  <Button variant="secondary" onClick={() => setNewProjectModalOpen(true)}>
                     <Plus className="mr-2 h-4 w-4" />
                     New Project
                   </Button>
