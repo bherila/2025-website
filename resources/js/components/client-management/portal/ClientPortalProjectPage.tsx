@@ -20,6 +20,7 @@ import type { FileRecord } from '@/types/files'
 import ClientPortalNav from './ClientPortalNav'
 import EditTaskModal from './EditTaskModal'
 import NewTaskModal from './NewTaskModal'
+import ProjectPageHeader from './ProjectPageHeader'
 
 interface User {
   id: number
@@ -62,6 +63,7 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [companyUsers, setCompanyUsers] = useState<User[]>(initialCompanyUsers ?? [])
   const [togglingTasks, setTogglingTasks] = useState<Set<number>>(new Set())
+  const [currentProjectName, setCurrentProjectName] = useState(projectName)
 
   const fileManager = useFileManagement({
     listUrl: `/api/client/portal/${slug}/projects/${projectSlug}/files`,
@@ -73,8 +75,8 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
   })
 
   useEffect(() => {
-    document.title = `Project: ${projectName} | ${companyName}`
-  }, [projectName, companyName])
+    document.title = `Project: ${currentProjectName} | ${companyName}`
+  }, [currentProjectName, companyName])
 
   const fetchTasks = useCallback(async () => {
     try {
@@ -110,11 +112,11 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
       // hydration provided tasks — clear loading
       setLoading(false)
     }
-    
+
     if (initialCompanyUsers === undefined) {
       fetchCompanyUsers()
     }
-    
+
     // Always fetch project files via API since we removed SSR hydration for them
     fileManager.fetchFiles()
   }, [fetchTasks, fetchCompanyUsers, fileManager.fetchFiles, initialTasks, initialCompanyUsers])
@@ -193,22 +195,26 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
         companyId={companyId}
         currentPage="project"
         currentProjectSlug={projectSlug}
-        projectName={projectName}
+        projectName={currentProjectName}
         projects={initialProjects}
       />
       <div className="mx-auto px-4 max-w-7xl">
         <div className="mb-6">
           <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold">{projectName}</h1>
-            </div>
+            <ProjectPageHeader
+              projectName={currentProjectName}
+              isAdmin={isAdmin}
+              slug={slug}
+              projectSlug={projectSlug}
+              onRenameSuccess={setCurrentProjectName}
+            />
             <div className="flex gap-2">
-              <Button onClick={() => setNewTaskModalOpen(true)}>
+              <Button onClick={() => setNewTaskModalOpen(true)} variant="secondary">
                 <Plus className="mr-2 h-4 w-4" />
                 Add Task
               </Button>
               {isAdmin && (
-                <FileUploadButton onUpload={fileManager.uploadFile} />
+                <FileUploadButton variant="secondary" onUpload={fileManager.uploadFile} />
               )}
             </div>
           </div>

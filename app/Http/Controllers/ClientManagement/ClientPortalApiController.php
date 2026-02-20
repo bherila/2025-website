@@ -98,6 +98,30 @@ class ClientPortalApiController extends Controller
     }
 
     /**
+     * Update a project.
+     */
+    public function updateProject(Request $request, $slug, $projectSlug)
+    {
+        Gate::authorize('Admin');
+
+        $company = ClientCompany::where('slug', $slug)->firstOrFail();
+        Gate::authorize('ClientCompanyMember', $company->id);
+
+        $project = ClientProject::where('slug', $projectSlug)
+            ->where('client_company_id', $company->id)
+            ->firstOrFail();
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+        ]);
+
+        $project->update($validated);
+
+        return response()->json($project);
+    }
+
+    /**
      * Get all tasks for a project.
      */
     public function getTasks($slug, $projectSlug)
