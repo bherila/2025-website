@@ -78,6 +78,13 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
     document.title = `Project: ${currentProjectName} | ${companyName}`
   }, [currentProjectName, companyName])
 
+  const handleRenameSuccess = (newName: string, newSlug: string) => {
+    setCurrentProjectName(newName)
+    if (newSlug !== projectSlug) {
+      window.location.href = `/client/portal/${slug}/project/${newSlug}`
+    }
+  }
+
   const fetchTasks = useCallback(async () => {
     try {
       const response = await fetch(`/api/client/portal/${slug}/projects/${projectSlug}/tasks`)
@@ -206,7 +213,7 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
               isAdmin={isAdmin}
               slug={slug}
               projectSlug={projectSlug}
-              onRenameSuccess={setCurrentProjectName}
+              onRenameSuccess={handleRenameSuccess}
             />
             <div className="flex gap-2">
               <Button onClick={() => setNewTaskModalOpen(true)} variant="secondary">

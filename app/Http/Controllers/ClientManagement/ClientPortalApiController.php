@@ -116,6 +116,24 @@ class ClientPortalApiController extends Controller
             'description' => 'nullable|string',
         ]);
 
+        if (isset($validated['name']) && $validated['name'] !== $project->name) {
+            $newSlug = ClientProject::generateSlug($validated['name']);
+
+            // Ensure unique slug within the company
+            $baseSlug = $newSlug;
+            $counter = 1;
+            while (
+                ClientProject::where('client_company_id', $company->id)
+                    ->where('slug', $newSlug)
+                    ->where('id', '!=', $project->id)
+                    ->exists()
+            ) {
+                $newSlug = $baseSlug . '-' . $counter;
+                $counter++;
+            }
+            $project->slug = $newSlug;
+        }
+
         $project->update($validated);
 
         return response()->json($project);

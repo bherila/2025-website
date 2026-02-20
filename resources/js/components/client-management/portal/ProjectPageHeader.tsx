@@ -8,7 +8,7 @@ interface ProjectPageHeaderProps {
     isAdmin: boolean
     slug: string
     projectSlug: string
-    onRenameSuccess: (newName: string) => void
+    onRenameSuccess: (newName: string, newSlug: string) => void
 }
 
 export default function ProjectPageHeader({
@@ -51,8 +51,9 @@ export default function ProjectPageHeader({
             })
 
             if (response.ok) {
-                setCurrentProjectName(editedName)
-                onRenameSuccess(editedName)
+                const data = await response.json()
+                setCurrentProjectName(data.name)
+                onRenameSuccess(data.name, data.slug)
                 setIsEditingName(false)
             } else {
                 const errorData = await response.json()
