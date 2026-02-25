@@ -231,6 +231,23 @@ class GeminiImportController extends Controller
             return null;
         }
 
+        // Normalize any date strings to YYYY-MM-DD (drop time/timezone)
+        if (isset($data['statementInfo']) && is_array($data['statementInfo'])) {
+            foreach (['periodStart', 'periodEnd'] as $key) {
+                if (!empty($data['statementInfo'][$key]) && is_string($data['statementInfo'][$key])) {
+                    $data['statementInfo'][$key] = substr($data['statementInfo'][$key], 0, 10);
+                }
+            }
+        }
+
+        if (isset($data['transactions']) && is_array($data['transactions'])) {
+            foreach ($data['transactions'] as &$tx) {
+                if (!empty($tx['date']) && is_string($tx['date'])) {
+                    $tx['date'] = substr($tx['date'], 0, 10);
+                }
+            }
+        }
+
         return $data;
     }
 

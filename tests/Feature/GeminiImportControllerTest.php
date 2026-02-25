@@ -228,6 +228,36 @@ class GeminiImportControllerTest extends TestCase
         $response->assertJson(['error' => 'API rate limit exceeded. Please wait and try again.']);
     }
 
+    public function test_parse_document_truncates_dates_to_iso(): void
+    {
+        $user = $this->createAdminUser(['gemini_api_key' => 'test-key']);
+
+        $geminiResponse = $this->geminiJsonResponse([
+            'statementInfo' => [
+                'periodStart' => '2025-01-01T00:00:00Z',
+                'periodEnd' => '2025-01-31T23:59:59-05:00',
+            ],
+            'transactions' => [
+                ['date' => '2025-01-15T12:34:56Z', 'description' => 'X', 'amount' => 1],
+            ],
+        ]);
+
+        Http::fake([
+            'generativelanguage.googleapis.com/*' => Http::response($geminiResponse, 200),
+        ]);
+
+        $file = UploadedFile::fake()->create('statement.pdf', 100, 'application/pdf');
+
+        $response = $this->actingAs($user)
+            ->postJson('/api/finance/transactions/import-gemini', ['file' => $file]);
+
+        $response->assertOk();
+        $json = $response->json();
+        $this->assertEquals('2025-01-01', $json['statementInfo']['periodStart']);
+        $this->assertEquals('2025-01-31', $json['statementInfo']['periodEnd']);
+        $this->assertEquals('2025-01-15', $json['transactions'][0]['date']);
+    }
+
     // ================================================================
     // importStatementDetails tests
     // ================================================================

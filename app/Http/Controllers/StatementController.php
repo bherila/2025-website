@@ -304,8 +304,9 @@ class StatementController extends Controller
         $statementInfo = $request->statementInfo ?? [];
         $statementDetails = $request->statementDetails ?? [];
 
-        $periodStart = $statementInfo['periodStart'] ?? null;
-        $periodEnd = $statementInfo['periodEnd'] ?? now()->format('Y-m-d');
+        // truncate to date-only strings (YYYY-MM-DD) to avoid timezone artifacts
+        $periodStart = isset($statementInfo['periodStart']) ? substr($statementInfo['periodStart'], 0, 10) : null;
+        $periodEnd = isset($statementInfo['periodEnd']) ? substr($statementInfo['periodEnd'], 0, 10) : now()->format('Y-m-d');
         $closingBalance = $statementInfo['closingBalance'] ?? null;
 
         // Create the statement record

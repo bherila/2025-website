@@ -218,6 +218,7 @@ PDF statements can be imported using Gemini AI for parsing. The frontend now pro
    Both are checked by default, giving the user control to skip one type if desired.
 3. When the user clicks **Process with AI**, the PDF is POSTed to `/api/finance/transactions/import-gemini`.
    The backend endpoint is now `GeminiImportController@parseDocument`; responses (successful JSON payloads) are cached by SHA‑256 hash of the file contents for one hour to avoid repeat API calls. Errors are **not** cached so retries always re‑contact Gemini.
+   **Date handling:** any dates extracted from the PDF (e.g. transaction dates or statement period dates) are truncated to the `YYYY-MM-DD` string form on the server before being returned. This avoids timezone conversions and ensures the database stores plain date strings without time or zone components.
 4. Gemini returns a structured JSON object containing any combination of statement information, statement detail rows, and transaction entries. The front end renders preview cards showing the parsed output and highlights duplicates.
 5. After reviewing the data, the user confirms by clicking the import button. The existing import logic remains unchanged: transactions are POSTed in chunks and, if statement details exist, the page calls `/api/finance/{id}/import-pdf-statement` to save them (the server‑side controller is `StatementController`).
 

@@ -8,7 +8,7 @@ This is a hybrid Laravel 12 + React TypeScript application for personal finance 
 - **Frontend**: React components mount into DOM elements using `createRoot`
 - **Data Flow**: Blade passes initial data via `data-*` attributes; React handles UI updates via API calls
 - **API**: RESTful endpoints under `/api` for CRUD operations
-  - recently a `GeminiImportController` was added to centralize PDF imports and cache AI responses by file hash
+  - recently a `GeminiImportController` was added to centralize PDF imports and cache AI responses by file hash; it also normalizes any parsed dates to plain `YYYY-MM-DD` strings to avoid timezone issues
 - **Domain**: Financial accounts, transactions, statements, payslips, RSUs, CSV imports, and client management
 - **Modules**: Finance (accounts, transactions, statements, payslips, RSUs), Tools (license manager, bingo, IRS F461, maxmin, user management), Recipes, Projects, Client Management
 - **Authentication**: Session-based; protected routes use `auth` middleware (web routes) or `['web', 'auth']` (API routes)

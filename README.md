@@ -10,7 +10,7 @@
   - Manage individual awards: add, edit, delete
   - See [docs/RSU.md](docs/RSU.md) for details
 - **Account Management**: Track financial accounts and transactions
-- **Statement Processing**: Import and process bank/brokerage statements (PDFs are parsed via Google Gemini AI with a two‑step preview UI; server results are cached by file hash to reduce API calls)
+- **Statement Processing**: Import and process bank/brokerage statements (PDFs are parsed via Google Gemini AI with a two‑step preview UI; server results are cached by file hash to reduce API calls). Dates from PDFs are normalized to plain `YYYY-MM-DD` strings with no timezone.
 - **Payslip Management**: Manage and track payslips
 
 ### Client Management

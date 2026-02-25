@@ -349,12 +349,16 @@ export default function ImportTransactions({
     if (!pdfData?.transactions || pdfData.transactions.length === 0) {
       return null
     }
-    return pdfData.transactions.map(tx => AccountLineItemSchema.parse({
-      t_date: tx.date,
-      t_description: tx.description,
-      t_amt: tx.amount,
-      t_type: tx.type,
-    }))
+    return pdfData.transactions.map(tx => {
+      // ensure date string has only YYYY-MM-DD
+      const dateStr = tx.date ? tx.date.split(/[ T]/)[0] : ''
+      return AccountLineItemSchema.parse({
+        t_date: dateStr,
+        t_description: tx.description,
+        t_amt: tx.amount,
+        t_type: tx.type,
+      })
+    })
   }, [pdfData])
 
   // Helper to format file size

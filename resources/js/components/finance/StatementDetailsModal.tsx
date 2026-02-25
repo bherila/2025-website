@@ -54,7 +54,10 @@ export function StatementDetailsModal({
     return acc
   }, {} as Record<string, StatementDetail[]>)
 
-  const formatValue = (value: number, isPercentage: boolean) => {
+  const formatValue = (value: number | null | undefined, isPercentage: boolean) => {
+    if (value == null) {
+      return '-'
+    }
     if (isPercentage) {
       return `${value.toFixed(2)}%`
     }
