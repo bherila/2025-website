@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef,useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { z } from 'zod'
 
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
-import { filterOutDuplicates,findDuplicateTransactions } from '@/data/finance/isDuplicateTransaction'
+import { filterOutDuplicates, findDuplicateTransactions } from '@/data/finance/isDuplicateTransaction'
 import type { IbStatementData } from '@/data/finance/parseIbCsv'
 import { parseImportData } from '@/data/finance/parseImportData'
 import { fetchWrapper } from '@/fetchWrapper'
@@ -71,7 +73,15 @@ export default function ImportTransactions({
   const [existingTransactions, setExistingTransactions] = useState<AccountLineItem[]>([])
   const [loadingExisting, setLoadingExisting] = useState(true)
   const [pdfData, setPdfData] = useState<GeminiImportResponse | null>(null)
+  // Pending PDF file waiting for user to click "Process with AI"
+  const [pendingPdfFile, setPendingPdfFile] = useState<File | null>(null)
+  // Gemini-specific error for retry
+  const [geminiError, setGeminiError] = useState<string | null>(null)
+  // Checkboxes for PDF import options
+  const [importTransactions, setImportTransactions] = useState(true)
+  const [attachAsStatement, setAttachAsStatement] = useState(true)
   const dropZoneRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Load all existing transactions upfront
   useEffect(() => {
@@ -176,9 +186,14 @@ export default function ImportTransactions({
     setText('')
     setFileInfo(null)
     setPdfData(null)
+    setPendingPdfFile(null)
+    setGeminiError(null)
     setError(null)
+    setImportTransactions(true)
+    setAttachAsStatement(true)
   }, [])
 
+  /** Accept a file but do NOT auto-submit PDFs to Gemini */
   const handleFileRead = useCallback(async (file: File) => {
     setFileInfo({
       name: file.name,
@@ -186,26 +201,15 @@ export default function ImportTransactions({
       size: file.size,
     })
     setError(null)
+    setGeminiError(null)
     setPdfData(null)
+    setPendingPdfFile(null)
     setText('')
     
     try {
       if (file.type === 'application/pdf') {
-        setLoading(true)
-        const formData = new FormData()
-        formData.append('file', file)
-        try {
-          const response = await fetchWrapper.post('/api/finance/transactions/import-gemini', formData) as GeminiImportResponse
-          if (response.error) {
-            setError(response.error)
-          } else {
-            setPdfData(response)
-          }
-        } catch (e) {
-          setError(`Error processing PDF: ${e instanceof Error ? e.message : String(e)}`)
-        } finally {
-          setLoading(false)
-        }
+        // Store file for later — user must click "Process with AI"
+        setPendingPdfFile(file)
       } else {
         const content = await file.text()
         setText(content.trimStart())
@@ -214,6 +218,39 @@ export default function ImportTransactions({
       setError(`Error reading file: ${err instanceof Error ? err.message : String(err)}`)
     }
   }, [])
+
+  /** Send the pending PDF to Gemini for AI processing */
+  const processPdfWithGemini = useCallback(async () => {
+    if (!pendingPdfFile) return
+    setLoading(true)
+    setGeminiError(null)
+    setError(null)
+    const formData = new FormData()
+    formData.append('file', pendingPdfFile)
+    try {
+      const response = await fetchWrapper.post('/api/finance/transactions/import-gemini', formData) as GeminiImportResponse
+      if (response.error) {
+        setGeminiError(response.error)
+      } else {
+        setPdfData(response)
+        setPendingPdfFile(null)
+      }
+    } catch (e) {
+      setGeminiError(`Error processing PDF: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setLoading(false)
+    }
+  }, [pendingPdfFile])
+
+  /** Handle click-to-select file via hidden input */
+  const handleFileInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files
+    if (files && files.length > 0) {
+      handleFileRead(files[0]!)
+    }
+    // Reset so the same file can be re-selected
+    event.target.value = ''
+  }, [handleFileRead])
 
   const handleDrop = useCallback(
     (event: React.DragEvent<HTMLDivElement>) => {
@@ -357,6 +394,16 @@ export default function ImportTransactions({
       onDragLeave={handleDragLeave}
       className={`border-2 p-5 text-center transition-colors ${isDragOver ? 'border-blue-500 bg-blue-50 dark:bg-blue-950' : 'border-gray-300 dark:border-gray-600'}`}
     >
+      {/* Hidden file input for click-to-select */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv,.qfx,.ofx,.har,.pdf,.txt"
+        className="hidden"
+        onChange={handleFileInputChange}
+        data-testid="file-input"
+      />
+
       <ImportProgressDialog
         open={isImporting}
         progress={importProgress}
@@ -371,7 +418,7 @@ export default function ImportTransactions({
       {loading ? (
         <div className="flex justify-center items-center h-40">
           <Spinner />
-          <p className="ml-2">Processing...</p>
+          <p className="ml-2">Processing with AI...</p>
         </div>
       ) : fileInfo ? (
         <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
@@ -395,8 +442,48 @@ export default function ImportTransactions({
         </div>
       ) : (
         <div className="h-32 flex flex-col justify-center items-center text-gray-500 dark:text-gray-400">
-          <p className="mb-2">Drop a file here or paste with Ctrl+V</p>
-          <p className="text-sm text-gray-400 dark:text-gray-500">Supports CSV, QFX, HAR, and PDF files</p>
+          <p className="mb-2">Drop a file here, paste with Ctrl+V, or</p>
+          <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+            Choose File
+          </Button>
+          <p className="text-sm text-gray-400 dark:text-gray-500 mt-2">Supports CSV, QFX, HAR, and PDF files</p>
+        </div>
+      )}
+
+      {/* Gemini error with retry */}
+      {geminiError && (
+        <div className="my-3 p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-left">
+          <p className="text-red-600 dark:text-red-400 mb-2">{geminiError}</p>
+          <Button variant="outline" size="sm" onClick={processPdfWithGemini}>
+            Retry
+          </Button>
+        </div>
+      )}
+
+      {/* PDF pending: show "Process with AI" button */}
+      {pendingPdfFile && !loading && !pdfData && !geminiError && (
+        <div className="my-3">
+          <div className="flex items-center gap-4 mb-3 justify-center">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="import-transactions"
+                checked={importTransactions}
+                onCheckedChange={(checked) => setImportTransactions(checked === true)}
+              />
+              <Label htmlFor="import-transactions">Import Transactions</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="attach-statement"
+                checked={attachAsStatement}
+                onCheckedChange={(checked) => setAttachAsStatement(checked === true)}
+              />
+              <Label htmlFor="attach-statement">Attach as Statement</Label>
+            </div>
+          </div>
+          <Button onClick={processPdfWithGemini} disabled={!importTransactions && !attachAsStatement}>
+            Process with AI
+          </Button>
         </div>
       )}
 
@@ -441,8 +528,8 @@ export default function ImportTransactions({
         </div>
       ) : null}
 
-      {/* Show clear button if we have file info but no valid data */}
-      {fileInfo && !effectiveData && !loading && (
+      {/* Show clear button if we have file info but no valid data and not a pending PDF */}
+      {fileInfo && !effectiveData && !loading && !pendingPdfFile && (
         <div className="mt-4">
           <Button variant="outline" onClick={clearData}>
             Clear and try another file

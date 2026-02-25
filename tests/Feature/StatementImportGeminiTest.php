@@ -255,7 +255,7 @@ class StatementImportGeminiTest extends TestCase
             ]);
 
         $response->assertStatus(500);
-        $response->assertJson(['error' => 'Failed to import statement data.']);
+        $response->assertJson(['error' => 'Failed to process the PDF file.']);
     }
 
     public function test_import_handles_malformed_json_response(): void
@@ -327,8 +327,8 @@ class StatementImportGeminiTest extends TestCase
 
     public function test_prompt_is_well_formed(): void
     {
-        $controller = new \App\Http\Controllers\StatementImportGeminiController;
-        $prompt = $controller->getPrompt();
+        $controller = new \App\Http\Controllers\GeminiImportController;
+        $prompt = $controller->getStatementPrompt();
 
         $this->assertStringContainsString('JSON', $prompt);
         $this->assertStringContainsString('section', $prompt);

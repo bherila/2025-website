@@ -207,26 +207,26 @@ The parser tries each format in order until one succeeds:
 
 ## PDF Statement Import
 
-PDF statements can be imported using Gemini AI for parsing. The flow is:
+PDF statements can be imported using Gemini AI for parsing. The frontend now provides a two‑step experience with explicit options and server‑side caching.
 
 ### Import Flow
 
-1. User drops or pastes a PDF file on the import page
-2. Frontend sends PDF to `TransactionGeminiImportController` for parsing
-3. Gemini extracts:
-   - **Statement Info**: date, closing balance
-   - **Statement Details**: MTD/YTD line items (interest, fees, dividends, etc.)
-   - **Transactions**: Individual transaction entries
-4. User previews parsed data and clicks Import
-5. Frontend calls `StatementController::importPdfStatement()` to persist:
-   - Creates `fin_statements` record with statement_opening_date and statement_closing_date
-   - Creates `fin_statement_details` records for MTD/YTD items
+1. User drops or pastes a file on the import page, or chooses one via the file picker.
+2. If the file is text (CSV/QFX/HAR/etc.) it is parsed immediately in the browser. If it is a PDF the file is held in state and a summary card appears, along with two checkboxes:
+   - **Import Transactions**
+   - **Attach as Statement**
+   Both are checked by default, giving the user control to skip one type if desired.
+3. When the user clicks **Process with AI**, the PDF is POSTed to `/api/finance/transactions/import-gemini`.
+   The backend endpoint is now `GeminiImportController@parseDocument`; responses (successful JSON payloads) are cached by SHA‑256 hash of the file contents for one hour to avoid repeat API calls. Errors are **not** cached so retries always re‑contact Gemini.
+4. Gemini returns a structured JSON object containing any combination of statement information, statement detail rows, and transaction entries. The front end renders preview cards showing the parsed output and highlights duplicates.
+5. After reviewing the data, the user confirms by clicking the import button. The existing import logic remains unchanged: transactions are POSTed in chunks and, if statement details exist, the page calls `/api/finance/{id}/import-pdf-statement` to save them (the server‑side controller is `StatementController`).
 
 ### API Endpoints
 
 | Endpoint | Controller | Purpose |
 |----------|------------|---------|
-| `POST /api/finance/gemini-import` | `TransactionGeminiImportController` | Parse PDF with Gemini |
+| `POST /api/finance/transactions/import-gemini` | `GeminiImportController@parseDocument` | Parse PDF or other file with Gemini (cached by file hash) |
+| `POST /api/finance/statement/{statement_id}/import-gemini` | `GeminiImportController@importStatementDetails` | Parse PDF and insert statement line items (cached by file hash) |
 | `POST /api/finance/{id}/import-pdf-statement` | `StatementController` | Save parsed statement data |
 
 ### Statement Details Schema

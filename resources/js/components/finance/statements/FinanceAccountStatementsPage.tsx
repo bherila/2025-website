@@ -19,7 +19,9 @@ import {
   DialogDescription,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
+import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { fetchWrapper } from '@/fetchWrapper'
@@ -45,6 +47,13 @@ interface StatementDetailModalState {
 }
 
 export default function FinanceAccountStatementsPage({ id }: { id: number }) {
+  const [showChart, setShowChart] = useState(() => {
+    try {
+      return localStorage.getItem('finance_statements_chart_visible') === 'true'
+    } catch {
+      return false
+    }
+  })
   const [statements, setStatements] = useState<StatementSnapshot[] | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false);
@@ -231,7 +240,20 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
 
   return (
     <TooltipProvider>
-      <div className="flex justify-end gap-2 mb-2 px-8">
+      <div className="flex justify-end gap-2 mb-2 px-8 items-center">
+        <div className="flex items-center gap-2 mr-auto">
+          <Switch
+            id="chart-toggle"
+            checked={showChart}
+            onCheckedChange={(checked) => {
+              setShowChart(checked)
+              try {
+                localStorage.setItem('finance_statements_chart_visible', String(checked))
+              } catch { /* ignore */ }
+            }}
+          />
+          <Label htmlFor="chart-toggle" className="text-sm cursor-pointer">Show Chart</Label>
+        </div>
         <Button onClick={() => setIsAllStatementsModalOpen(true)} variant="outline" size="sm">
           <TableProperties className="h-4 w-4 mr-1" />
           View All Statements
@@ -241,7 +263,7 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
           Download CSV
         </Button>
       </div>
-      <AccountStatementsChart balanceHistory={balanceHistory} />
+      {showChart && <AccountStatementsChart balanceHistory={balanceHistory} />}
       <div>
         <Table className="container mx-auto">
           <TableHeader>

@@ -68,8 +68,8 @@ Route::middleware(['web', 'auth'])->post('/license-keys', [App\Http\Controllers\
 Route::middleware(['web', 'auth'])->post('/license-keys/import', [App\Http\Controllers\LicenseKeyController::class, 'import']);
 Route::middleware(['web', 'auth'])->post('/user/update-email', [App\Http\Controllers\UserApiController::class, 'updateEmail']);
 Route::middleware(['web', 'auth'])->post('/user/update-password', [App\Http\Controllers\UserApiController::class, 'updatePassword']);
-Route::middleware(['web', 'auth'])->post('/finance/transactions/import-gemini', [App\Http\Controllers\TransactionGeminiImportController::class, 'import']);
-Route::middleware(['web', 'auth'])->post('/finance/statement/{statement_id}/import-gemini', [App\Http\Controllers\StatementImportGeminiController::class, 'import']);
+Route::middleware(['web', 'auth'])->post('/finance/transactions/import-gemini', [App\Http\Controllers\GeminiImportController::class, 'parseDocument']);
+Route::middleware(['web', 'auth'])->post('/finance/statement/{statement_id}/import-gemini', [App\Http\Controllers\GeminiImportController::class, 'importStatementDetails']);
 Route::middleware(['web', 'auth'])->get('/finance/statement/{statement_id}/details', [StatementController::class, 'getDetails']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/all-statement-details', [StatementController::class, 'getFinStatementDetails']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/import-ib-statement', [StatementController::class, 'importIbStatement']);

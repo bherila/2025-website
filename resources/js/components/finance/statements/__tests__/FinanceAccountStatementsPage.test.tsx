@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom';
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 
 import { fetchWrapper } from '@/fetchWrapper';
@@ -170,17 +170,39 @@ describe('FinanceAccountStatementsPage', () => {
     expect(balanceCalls).toHaveLength(1);
   });
 
-  it('renders chart, toolbar buttons, and file list', async () => {
+  it('renders toolbar buttons and file list, chart hidden by default', async () => {
     (fetchWrapper.get as jest.Mock).mockResolvedValueOnce(SAMPLE_STATEMENTS);
 
     render(<FinanceAccountStatementsPage id={32} />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('chart')).toBeInTheDocument();
+      expect(screen.getByText('View All Statements')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('View All Statements')).toBeInTheDocument();
+    // Chart is hidden by default
+    expect(screen.queryByTestId('chart')).not.toBeInTheDocument();
+
+    // Show Chart toggle is present
+    expect(screen.getByText('Show Chart')).toBeInTheDocument();
+
     expect(screen.getByText('Download CSV')).toBeInTheDocument();
     expect(screen.getByTestId('file-list')).toBeInTheDocument();
+  });
+
+  it('shows chart when Show Chart toggle is enabled', async () => {
+    (fetchWrapper.get as jest.Mock).mockResolvedValueOnce(SAMPLE_STATEMENTS);
+
+    render(<FinanceAccountStatementsPage id={32} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Show Chart')).toBeInTheDocument();
+    });
+
+    // Click the switch to show chart
+    fireEvent.click(screen.getByRole('switch'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('chart')).toBeInTheDocument();
+    });
   });
 });
