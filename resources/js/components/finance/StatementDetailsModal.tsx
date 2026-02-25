@@ -73,7 +73,7 @@ export function StatementDetailsModal({
             {statementInfo?.periodStart && statementInfo?.periodEnd && (
               <span>Period: {statementInfo.periodStart} to {statementInfo.periodEnd}</span>
             )}
-            {statementInfo?.closingBalance !== undefined && (
+            {statementInfo?.closingBalance != null && (
               <span className="ml-4">
                 Closing Balance: {statementInfo.closingBalance.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}
               </span>

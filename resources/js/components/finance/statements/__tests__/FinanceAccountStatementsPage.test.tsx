@@ -106,6 +106,8 @@ jest.mock('../AllStatementsModal', () => {
 const SAMPLE_STATEMENTS = [
   { statement_id: 1, statement_opening_date: null, statement_closing_date: '2025-01-31', balance: '100000.00', lineItemCount: 0 },
   { statement_id: 2, statement_opening_date: null, statement_closing_date: '2025-02-28', balance: '110000.00', lineItemCount: 3 },
+  // entry with missing closing date - should display '-' instead of date
+  { statement_id: 3, statement_opening_date: null, statement_closing_date: null, balance: '120000.00', lineItemCount: 1 },
 ];
 
 // --- Tests -----------------------------------------------------------------
@@ -138,6 +140,12 @@ describe('FinanceAccountStatementsPage', () => {
       expect(screen.getAllByText('100000.00').length).toBeGreaterThanOrEqual(1);
     });
     expect(screen.getByText('110000.00')).toBeInTheDocument();
+    // the null-date row should render a hyphen or empty placeholder in the date column
+    const row = screen.getByText('120000.00').closest('tr');
+    expect(row).toBeTruthy();
+    if (row) {
+      expect(row.textContent).toMatch(/\-/);
+    }
   });
 
   it('shows empty state when no statements', async () => {

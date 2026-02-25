@@ -194,6 +194,26 @@ describe('ImportTransactions', () => {
     });
   });
 
+  it('handles null closingBalance without crashing', async () => {
+    (fetchWrapper.post as jest.Mock).mockResolvedValue({
+      statementInfo: { brokerName: 'Bank', closingBalance: null },
+      statementDetails: [],
+      transactions: [],
+    });
+
+    render(<ImportTransactions accountId={1} onImportFinished={jest.fn()} />);
+
+    const input = screen.getByTestId('file-input') as HTMLInputElement;
+    const file = new File(['dummy'], 'test.pdf', { type: 'application/pdf' });
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() => expect(screen.getByText('Process with AI')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Process with AI'));
+    // no error message should appear and the file name remains visible
+    await waitFor(() => {
+      expect(screen.getByText('test.pdf')).toBeInTheDocument();
+    });
+  });
+
   it('reads text files directly without Gemini', async () => {
     render(<ImportTransactions accountId={1} onImportFinished={jest.fn()} />);
 

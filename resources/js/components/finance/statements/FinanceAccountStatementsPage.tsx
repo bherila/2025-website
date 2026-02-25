@@ -119,11 +119,12 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
       const prevBal = prev ? parseFloat(prev.balance) : 0;
       const change = bal - prevBal;
       const percentChange = prevBal !== 0 ? (change / prevBal) * 100 : 0;
+      const date = statement.statement_closing_date ? new Date(statement.statement_closing_date) : null;
 
       return {
         statement_id: statement.statement_id,
         statement_closing_date: statement.statement_closing_date,
-        date: new Date(statement.statement_closing_date),
+        date,
         balance: bal,
         originalBalance: statement.balance,
         change,
@@ -279,11 +280,11 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
             {statementHistory.map((row, index) => (
               <TableRow key={row.statement_closing_date + '-' + row.balance + '-' + index}>
                 <TableCell className="text-right">
-                  {row.date.toLocaleString('en-US', {
+                  {row.date ? row.date.toLocaleString('en-US', {
                     year: 'numeric',
                     month: 'short',
                     day: 'numeric',
-                  })}
+                  }) : '-'}
                 </TableCell>
                 <TableCell className="text-right">{row.balance.toFixed(2)}</TableCell>
                 <TableCell className="text-right" style={{ color: row.change < 0 ? 'red' : undefined }}>
