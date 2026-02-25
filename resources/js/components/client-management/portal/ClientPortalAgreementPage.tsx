@@ -86,7 +86,8 @@ export default function ClientPortalAgreementPage({ slug, companyName, companyId
     fileManager.fetchFiles()
     // Only fetch invoices when the host did not provide an initialInvoices prop
     if (initialInvoices === undefined) fetchInvoices()
-  }, [agreementId, fetchAgreement, fetchInvoices, fileManager.fetchFiles, initialAgreement, initialInvoices])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fileManager.fetchFiles excluded to avoid infinite loop
+  }, [agreementId, fetchAgreement, fetchInvoices, initialAgreement, initialInvoices])
 
   useEffect(() => {
     if (agreement) {

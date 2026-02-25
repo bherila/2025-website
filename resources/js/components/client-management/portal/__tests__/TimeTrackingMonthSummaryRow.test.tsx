@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react'
+
 import TimeTrackingMonthSummaryRow from '@/components/client-management/portal/TimeTrackingMonthSummaryRow'
 
 describe('TimeTrackingMonthSummaryRow', () => {

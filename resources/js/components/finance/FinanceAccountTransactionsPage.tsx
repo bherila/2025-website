@@ -1,6 +1,6 @@
 'use client'
-import { Download,Plus } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Download, Plus } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
 import { z } from 'zod'
 
 import { Button } from '@/components/ui/button'
@@ -30,7 +30,7 @@ export default function FinanceAccountTransactionsPage({ id }: { id: number }) {
   const [showNewTransactionModal, setShowNewTransactionModal] = useState(false)
 
   // Export functions
-  const exportToCSV = () => {
+  const exportToCSV = useCallback(() => {
     if (!data || data.length === 0) return
     
     const headers = ['Date', 'Type', 'Description', 'Symbol', 'Amount', 'Qty', 'Price', 'Commission', 'Fee', 'Memo']
@@ -56,9 +56,9 @@ export default function FinanceAccountTransactionsPage({ id }: { id: number }) {
     link.download = `transactions_${id}_${selectedYear || 'all'}.csv`
     link.click()
     URL.revokeObjectURL(link.href)
-  }
+  }, [data, id, selectedYear])
 
-  const exportToJSON = () => {
+  const exportToJSON = useCallback(() => {
     if (!data || data.length === 0) return
     
     const jsonContent = JSON.stringify(data, null, 2)
@@ -68,7 +68,7 @@ export default function FinanceAccountTransactionsPage({ id }: { id: number }) {
     link.download = `transactions_${id}_${selectedYear || 'all'}.json`
     link.click()
     URL.revokeObjectURL(link.href)
-  }
+  }, [data, id, selectedYear])
 
   // Get year from URL/sessionStorage on mount and listen for changes
   useEffect(() => {
@@ -154,6 +154,34 @@ export default function FinanceAccountTransactionsPage({ id }: { id: number }) {
     }
   }
 
+  const handleRefresh = useCallback(() => setFetchKey(k => k + 1), [])
+
+  // Shared toolbar rendered in both empty and non-empty states
+  const toolbar = (
+    <div className="flex justify-end gap-2 mb-2 px-8">
+      <Button onClick={() => setShowNewTransactionModal(true)} variant="outline" size="sm">
+        <Plus className="h-4 w-4 mr-2" />
+        New Transaction
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" disabled={!data || data.length === 0}>
+            <Download className="h-4 w-4 mr-2" />
+            Export
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem onClick={exportToCSV}>
+            Export as CSV
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={exportToJSON}>
+            Export as JSON
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  )
+
   if (isLoading && !data) {
     return (
       <div className="d-flex justify-content-center">
@@ -165,12 +193,7 @@ export default function FinanceAccountTransactionsPage({ id }: { id: number }) {
   if (!data || data.length === 0) {
     return (
       <>
-        <div className="flex justify-end gap-2 mb-4">
-          <Button onClick={() => setShowNewTransactionModal(true)} variant="outline" size="sm">
-            <Plus className="h-4 w-4 mr-2" />
-            New Transaction
-          </Button>
-        </div>
+        {toolbar}
         <div className="text-center p-8 bg-muted rounded-lg">
           <h2 className="text-xl font-semibold mb-4">No Transactions Found</h2>
           <p className="mb-6">
@@ -186,7 +209,7 @@ export default function FinanceAccountTransactionsPage({ id }: { id: number }) {
           accountId={id}
           isOpen={showNewTransactionModal}
           onClose={() => setShowNewTransactionModal(false)}
-          onSuccess={() => setFetchKey(fetchKey + 1)}
+          onSuccess={handleRefresh}
         />
       </>
     )
@@ -194,40 +217,19 @@ export default function FinanceAccountTransactionsPage({ id }: { id: number }) {
 
   return (
     <div>
-      <div className="flex justify-end gap-2 mb-4">
-        <Button onClick={() => setShowNewTransactionModal(true)} variant="outline" size="sm">
-          <Plus className="h-4 w-4 mr-2" />
-          New Transaction
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
-              <Download className="h-4 w-4 mr-2" />
-              Export
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem onClick={exportToCSV}>
-              Export as CSV
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={exportToJSON}>
-              Export as JSON
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+      {toolbar}
       <TransactionsTable
         enableTagging
         enableLinking
         data={data}
         onDeleteTransaction={handleDeleteTransaction}
-        refreshFn={() => setFetchKey(fetchKey + 1)}
+        refreshFn={handleRefresh}
       />
       <NewTransactionModal
         accountId={id}
         isOpen={showNewTransactionModal}
         onClose={() => setShowNewTransactionModal(false)}
-        onSuccess={() => setFetchKey(fetchKey + 1)}
+        onSuccess={handleRefresh}
       />
     </div>
   )

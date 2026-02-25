@@ -1,4 +1,4 @@
-import { useCallback, useEffect,useState } from 'react'
+import { useEffect,useState } from 'react'
 
 import { DeleteFileModal, FileList, FileUploadButton, useFileManagement } from '@/components/shared/FileManager'
 import { Button } from '@/components/ui/button'
@@ -74,7 +74,8 @@ export default function EditTaskModal({ open, onOpenChange, task, slug, projectS
     setIsHighPriority(task.is_high_priority)
     setIsHiddenFromClients(task.is_hidden_from_clients)
     fileManager.fetchFiles()
-  }, [task, fileManager.fetchFiles])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fileManager.fetchFiles excluded to avoid infinite loop
+  }, [task])
 
   const handleUpdateTask = async (e: React.FormEvent) => {
     e.preventDefault()

@@ -1,5 +1,5 @@
-import { z } from 'zod'
 import currency from 'currency.js'
+import { z } from 'zod'
 
 /**
  * Coerces a value to a string with 2 decimal places using currency.js.

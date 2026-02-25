@@ -1,13 +1,13 @@
-import { render, screen, act, waitFor } from '@testing-library/react'
-import ClientPortalInvoicePage from '@/components/client-management/portal/ClientPortalInvoicePage'
-import ClientPortalProjectPage from '@/components/client-management/portal/ClientPortalProjectPage'
-import ClientPortalIndexPage from '@/components/client-management/portal/ClientPortalIndexPage'
-import ClientPortalTimePage from '@/components/client-management/portal/ClientPortalTimePage'
+import { act, render, screen, waitFor } from '@testing-library/react'
+
 import ClientPortalAgreementPage from '@/components/client-management/portal/ClientPortalAgreementPage'
+import ClientPortalIndexPage from '@/components/client-management/portal/ClientPortalIndexPage'
+import ClientPortalInvoicePage from '@/components/client-management/portal/ClientPortalInvoicePage'
 import ClientPortalInvoicesPage from '@/components/client-management/portal/ClientPortalInvoicesPage'
-import * as fetchWrapper from '@/fetchWrapper'
-import { makePortalFetchMock } from '@/test-utils/portalFetchMock'
+import ClientPortalProjectPage from '@/components/client-management/portal/ClientPortalProjectPage'
+import ClientPortalTimePage from '@/components/client-management/portal/ClientPortalTimePage'
 import { _resetCache } from '@/hooks/useAppInitialData'
+import { makePortalFetchMock } from '@/test-utils/portalFetchMock'
 
 describe('Client-portal hydration', () => {
 

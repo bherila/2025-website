@@ -1,6 +1,7 @@
 'use client'
 
 import currency from 'currency.js'
+import { Plus } from 'lucide-react'
 import { useCallback, useEffect, useMemo,useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -10,6 +11,8 @@ import { Table } from '@/components/ui/table'
 import type { AccountLineItem } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
 import { goToTransaction } from '@/lib/financeRouteBuilder'
+
+import CreateAndLinkTransactionModal from './CreateAndLinkTransactionModal'
 
 interface LinkedTransaction {
   t_id: number
@@ -40,6 +43,7 @@ export default function TransactionLinkModal({
   const [childTransactions, setChildTransactions] = useState<LinkedTransaction[]>([])
   const [linkableTransactions, setLinkableTransactions] = useState<LinkedTransaction[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [showCreateModal, setShowCreateModal] = useState(false)
 
   // Calculate if linked transactions sum to zero (balanced)
   const isBalanced = useMemo(() => {
@@ -161,6 +165,14 @@ export default function TransactionLinkModal({
       setIsLinking(false)
     }
   }
+
+  const handleCreateAndLinkSuccess = useCallback(async () => {
+    // Reload link data after creating and linking
+    await loadLinkData()
+    if (onLinkChanged) {
+      onLinkChanged()
+    }
+  }, [loadLinkData, onLinkChanged])
 
   const navigateToTransaction = (accountId: number, transactionId: number, transactionDate?: string) => {
     // Extract year from transaction date for year selector compatibility
@@ -327,6 +339,18 @@ export default function TransactionLinkModal({
                   No matching transactions found in other accounts.
                 </p>
               )}
+
+              <div className="mt-4 pt-4 border-t">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowCreateModal(true)}
+                  disabled={isLinking}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Matching Transaction in Another Account
+                </Button>
+              </div>
             </div>
           )}
         </div>
@@ -337,6 +361,19 @@ export default function TransactionLinkModal({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {transaction.t_id && (
+        <CreateAndLinkTransactionModal
+          isOpen={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+          sourceTransactionId={transaction.t_id}
+          sourceDate={transaction.t_date || ''}
+          sourceAmount={transaction.t_amt || 0}
+          sourceDescription={transaction.t_description || ''}
+          sourceAccountId={transaction.t_account ?? 0}
+          onSuccess={handleCreateAndLinkSuccess}
+        />
+      )}
     </Dialog>
   )
 }

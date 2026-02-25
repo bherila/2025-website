@@ -2,7 +2,7 @@
 
 import { format } from 'date-fns'
 import { Download, FileIcon, History, Loader2, Trash2, Upload } from 'lucide-react'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -373,6 +373,18 @@ export function useFileOperations(options: UseFileOperationsOptions) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Keep latest function-type options in refs so callbacks stay stable
+  const downloadUrlPatternRef = useRef(options.downloadUrlPattern)
+  const deleteUrlPatternRef = useRef(options.deleteUrlPattern)
+  const historyUrlPatternRef = useRef(options.historyUrlPattern)
+  const uploadUrlEndpointRef = useRef(options.uploadUrlEndpoint)
+  useEffect(() => {
+    downloadUrlPatternRef.current = options.downloadUrlPattern
+    deleteUrlPatternRef.current = options.deleteUrlPattern
+    historyUrlPatternRef.current = options.historyUrlPattern
+    uploadUrlEndpointRef.current = options.uploadUrlEndpoint
+  })
+
   const fetchFiles = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -391,9 +403,9 @@ export function useFileOperations(options: UseFileOperationsOptions) {
     setError(null)
     try {
       // For large files, use signed URL upload
-      if (file.size > DIRECT_UPLOAD_MAX_SIZE && options.uploadUrlEndpoint) {
+      if (file.size > DIRECT_UPLOAD_MAX_SIZE && uploadUrlEndpointRef.current) {
         // Get signed upload URL
-        const urlResponse: UploadUrlResponse = await fetchWrapper.post(options.uploadUrlEndpoint, {
+        const urlResponse: UploadUrlResponse = await fetchWrapper.post(uploadUrlEndpointRef.current, {
           filename: file.name,
           content_type: file.type || 'application/octet-stream',
           file_size: file.size,
@@ -424,23 +436,23 @@ export function useFileOperations(options: UseFileOperationsOptions) {
       setError('Failed to upload file')
       return null
     }
-  }, [options.uploadUrl, options.uploadUrlEndpoint, fetchFiles])
+  }, [options.uploadUrl, fetchFiles])
 
   const downloadFile = useCallback(async (file: FileRecord) => {
     try {
-      const response: DownloadResponse = await fetchWrapper.get(options.downloadUrlPattern(file.id))
+      const response: DownloadResponse = await fetchWrapper.get(downloadUrlPatternRef.current(file.id))
       // Open the download URL in a new tab
       window.open(response.download_url, '_blank')
     } catch (err) {
       console.error('Failed to download file:', err)
       setError('Failed to download file')
     }
-  }, [options.downloadUrlPattern])
+  }, [])
 
   const deleteFile = useCallback(async (file: FileRecord): Promise<boolean> => {
     setError(null)
     try {
-      await fetchWrapper.delete(options.deleteUrlPattern(file.id), {})
+      await fetchWrapper.delete(deleteUrlPatternRef.current(file.id), {})
       await fetchFiles()
       return true
     } catch (err) {
@@ -448,18 +460,18 @@ export function useFileOperations(options: UseFileOperationsOptions) {
       setError('Failed to delete file')
       return false
     }
-  }, [options.deleteUrlPattern, fetchFiles])
+  }, [fetchFiles])
 
   const getFileHistory = useCallback(async (file: FileRecord): Promise<DownloadHistoryEntry[]> => {
-    if (!options.historyUrlPattern) return []
+    if (!historyUrlPatternRef.current) return []
     try {
-      const response: FileHistoryResponse = await fetchWrapper.get(options.historyUrlPattern(file.id))
+      const response: FileHistoryResponse = await fetchWrapper.get(historyUrlPatternRef.current(file.id))
       return response.download_history
     } catch (err) {
       console.error('Failed to get file history:', err)
       return []
     }
-  }, [options.historyUrlPattern])
+  }, [])
 
   return useMemo(() => ({
     files,

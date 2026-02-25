@@ -7,14 +7,13 @@ import ClientPortalInvoicePage from '@/components/client-management/portal/Clien
 import ClientPortalInvoicesPage from '@/components/client-management/portal/ClientPortalInvoicesPage'
 import ClientPortalProjectPage from '@/components/client-management/portal/ClientPortalProjectPage'
 import ClientPortalTimePage from '@/components/client-management/portal/ClientPortalTimePage'
-import { resolveIsAdmin } from '@/lib/authUtils'
-import { InvoiceSchema, InvoiceListItemSchema, InvoiceHydrationSchema } from '@/types/client-management/invoice'
-import { ProjectSchema, UserSchema, AgreementSchema, FileRecordSchema, TimeEntrySchema, AppInitialDataSchema } from '@/types/client-management/hydration-schemas'
+import { AgreementSchema, AppInitialDataSchema, ProjectSchema, TimeEntrySchema, UserSchema } from '@/types/client-management/hydration-schemas'
+import { InvoiceHydrationSchema,InvoiceListItemSchema, InvoiceSchema } from '@/types/client-management/invoice'
 
 document.addEventListener('DOMContentLoaded', () => {
   // Parse app-level head JSON once (id="app-initial-data") and validate it.
   // Components should read auth/currentUser/isAdmin from this source.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const appScript = document.getElementById('app-initial-data') as HTMLScriptElement | null
   const appRaw: any = appScript && appScript.textContent ? JSON.parse(appScript.textContent) : null
   const appParsed = appRaw ? AppInitialDataSchema.safeParse(appRaw) : null
@@ -36,7 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const indexDiv = document.getElementById('ClientPortalIndexPage')
   if (indexDiv) {
     // Server-hydrated payload must be embedded in <script type="application/json"> tag
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const script = document.getElementById('client-portal-initial-data') as HTMLScriptElement | null
     const serverData: any = script && script.textContent ? JSON.parse(script.textContent) : null
 
@@ -90,7 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const timeDiv = document.getElementById('ClientPortalTimePage')
   if (timeDiv) {
     // Read head-embedded JSON payload
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const script = document.getElementById('client-portal-initial-data') as HTMLScriptElement | null
     const serverData: any = script && script.textContent ? JSON.parse(script.textContent) : null
 
@@ -127,7 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const projectDiv = document.getElementById('ClientPortalProjectPage')
   if (projectDiv) {
     // Read head-embedded JSON payload for project page
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const script = document.getElementById('client-portal-initial-data') as HTMLScriptElement | null
     const serverData: any = script && script.textContent ? JSON.parse(script.textContent) : null
 
@@ -174,7 +173,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const agreementDiv = document.getElementById('ClientPortalAgreementPage')
   if (agreementDiv) {
     // Read head-embedded JSON payload for agreement page
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const script = document.getElementById('client-portal-initial-data') as HTMLScriptElement | null
     const serverData: any = script && script.textContent ? JSON.parse(script.textContent) : null
 
@@ -217,7 +216,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const invoicesDiv = document.getElementById('ClientPortalInvoicesPage')
   if (invoicesDiv) {
     // Read head-embedded JSON payload for invoices page
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const script = document.getElementById('client-portal-initial-data') as HTMLScriptElement | null
     const serverData: any = script && script.textContent ? JSON.parse(script.textContent) : null
 
@@ -259,7 +258,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const invoiceDiv = document.getElementById('ClientPortalInvoicePage')
   if (invoiceDiv) {
     // Read head-embedded JSON payload for invoice page
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const script = document.getElementById('client-portal-initial-data') as HTMLScriptElement | null
     const serverData: any = script && script.textContent ? JSON.parse(script.textContent) : null
 

@@ -1,6 +1,6 @@
 'use client'
-import { Paperclip, Pencil,Trash2 as Delete } from 'lucide-react'
-import { useCallback,useEffect, useState } from 'react'
+import { Download, Paperclip, Pencil, TableProperties, Trash2 as Delete } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { DeleteFileModal, FileList, FileUploadButton, useFileManagement } from '@/components/shared/FileManager'
 import {
@@ -24,7 +24,7 @@ import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { fetchWrapper } from '@/fetchWrapper'
 
-import { type StatementDetail,StatementDetailsModal, type StatementInfo } from '../StatementDetailsModal';
+import { type StatementDetail, StatementDetailsModal, type StatementInfo } from '../StatementDetailsModal';
 import AccountStatementsChart from './AccountStatementsChart'
 import AllStatementsModal from './AllStatementsModal';
 
@@ -47,7 +47,6 @@ interface StatementDetailModalState {
 export default function FinanceAccountStatementsPage({ id }: { id: number }) {
   const [statements, setStatements] = useState<StatementSnapshot[] | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [fetchKey, setFetchKey] = useState(0); // Used to trigger re-fetch
   const [modalOpen, setModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedStatement, setSelectedStatement] = useState<StatementSnapshot | null>(null);
@@ -61,13 +60,15 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
   });
   const [isAllStatementsModalOpen, setIsAllStatementsModalOpen] = useState(false);
 
-  // File management
-  const fileManager = useFileManagement({
+  // Memoize file management options to prevent object identity changes each render
+  const fileManagerOptions = useMemo(() => ({
     listUrl: `/api/finance/${id}/files`,
     uploadUrl: `/api/finance/${id}/files`,
-    downloadUrlPattern: (fileId) => `/api/finance/${id}/files/${fileId}/download`,
-    deleteUrlPattern: (fileId) => `/api/finance/${id}/files/${fileId}`,
-  })
+    downloadUrlPattern: (fileId: number) => `/api/finance/${id}/files/${fileId}/download`,
+    deleteUrlPattern: (fileId: number) => `/api/finance/${id}/files/${fileId}`,
+  }), [id])
+
+  const fileManager = useFileManagement(fileManagerOptions)
 
   const fetchData = useCallback(async () => {
     try {
@@ -81,31 +82,49 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
     }
   }, [id])
 
+  // Fetch statements on mount
   useEffect(() => {
     fetchData()
+  }, [fetchData])
+
+  // Fetch files once on mount (separate from statements to avoid coupling)
+  useEffect(() => {
     fileManager.fetchFiles()
-  }, [fetchData, fetchKey, fileManager])
+    // Only run on mount — fetchFiles identity is stable when listUrl doesn't change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  const statementHistory = statements?.map((statement, index) => {
-    const prev = statements[index - 1]
-    const currentBalance = parseFloat(statement.balance);
-    const prevBalance = prev ? parseFloat(prev.balance) : 0;
+  // Memoize chart data to prevent re-rendering the chart on every parent render
+  const balanceHistory = useMemo(() =>
+    statements?.map((s) => [
+      new Date(s.statement_closing_date).valueOf(),
+      parseFloat(s.balance),
+    ] as [number, number]) ?? [],
+    [statements]
+  )
 
-    const change = currentBalance - prevBalance;
-    const percentChange = prevBalance !== 0 ? (change / prevBalance) * 100 : 0;
+  const statementHistory = useMemo(() =>
+    statements?.map((statement, index) => {
+      const prev = statements[index - 1]
+      const bal = parseFloat(statement.balance);
+      const prevBal = prev ? parseFloat(prev.balance) : 0;
+      const change = bal - prevBal;
+      const percentChange = prevBal !== 0 ? (change / prevBal) * 100 : 0;
 
-    return {
-      statement_id: statement.statement_id,
-      statement_closing_date: statement.statement_closing_date,
-      date: new Date(statement.statement_closing_date),
-      balance: currentBalance,
-      originalBalance: statement.balance,
-      change: change,
-      percentChange: percentChange,
-      lineItemCount: statement.lineItemCount,
-      original: statement,
-    }
-  }) || [];
+      return {
+        statement_id: statement.statement_id,
+        statement_closing_date: statement.statement_closing_date,
+        date: new Date(statement.statement_closing_date),
+        balance: bal,
+        originalBalance: statement.balance,
+        change,
+        percentChange,
+        lineItemCount: statement.lineItemCount,
+        original: statement,
+      }
+    }) ?? [],
+    [statements]
+  );
 
   const handleOpenModal = (statement: StatementSnapshot | null = null) => {
     setSelectedStatement(statement);
@@ -157,7 +176,7 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
   const handleDeleteSnapshot = async (statement_closing_date: string, balance: string) => {
     try {
       await fetchWrapper.delete(`/api/finance/${id}/balance-timeseries`, { statement_closing_date, balance });
-      setFetchKey(prev => prev + 1); // Trigger re-fetch
+      fetchData();
     } catch (error) {
       console.error('Error deleting balance snapshot:', error);
     }
@@ -173,7 +192,7 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
 
     try {
       await fetchWrapper[method](url, { balance: currentBalance, statement_closing_date: currentDate });
-      setFetchKey(prev => prev + 1);
+      fetchData();
       setModalOpen(false);
     } catch (error) {
       console.error(`Error ${selectedStatement ? 'updating' : 'adding'} balance snapshot:`, error);
@@ -182,7 +201,7 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
     }
   };
 
-  const handleDownloadCSV = () => {
+  const handleDownloadCSV = useCallback(() => {
     const csvContent = 'Date,Balance\n' + statementHistory.map(row => `${row.date.toISOString().split('T')[0]},${row.balance}`).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -191,7 +210,7 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
     a.download = `${id}_statements.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  };
+  }, [id, statementHistory]);
 
   if (isLoading) {
     return (
@@ -205,23 +224,25 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
     return (
       <div className="text-center p-8 bg-muted rounded-lg">
         <h2 className="text-xl font-semibold mb-4">No Statements Found</h2>
-        <p className="mb-6">This account doesn't have any statements yet.</p>
+        <p className="mb-6">This account doesn&apos;t have any statements yet.</p>
       </div>
     )
   }
 
   return (
     <TooltipProvider>
-      <AccountStatementsChart balanceHistory={statements.map((balance) => [new Date(balance.statement_closing_date).valueOf(), parseFloat(balance.balance)])} />
-      <div className="relative">
-        <div className="absolute top-0 right-0 z-10 flex gap-2">
-          <Button onClick={() => setIsAllStatementsModalOpen(true)} variant="outline">
-            View All Statements
-          </Button>
-          <Button onClick={handleDownloadCSV} variant="outline">
-            Download CSV
-          </Button>
-        </div>
+      <div className="flex justify-end gap-2 mb-2 px-8">
+        <Button onClick={() => setIsAllStatementsModalOpen(true)} variant="outline" size="sm">
+          <TableProperties className="h-4 w-4 mr-1" />
+          View All Statements
+        </Button>
+        <Button onClick={handleDownloadCSV} variant="outline" size="sm">
+          <Download className="h-4 w-4 mr-1" />
+          Download CSV
+        </Button>
+      </div>
+      <AccountStatementsChart balanceHistory={balanceHistory} />
+      <div>
         <Table className="container mx-auto">
           <TableHeader>
             <TableRow>

@@ -1,30 +1,33 @@
 import { useMemo } from 'react'
-import { AppInitialDataSchema, type AppInitialData } from '@/types/client-management/hydration-schemas'
+
 import { resolveIsAdmin } from '@/lib/authUtils'
+import { type AppInitialData,AppInitialDataSchema } from '@/types/client-management/hydration-schemas'
 
 let cachedData: (AppInitialData & { isAdmin: boolean }) | null = null
+
+function getAppInitialData(): AppInitialData & { isAdmin: boolean } {
+  if (cachedData) return cachedData
+
+  const appScript = document.getElementById('app-initial-data') as HTMLScriptElement | null
+  const appRaw = appScript && appScript.textContent ? JSON.parse(appScript.textContent) : null
+  const appParsed = appRaw ? AppInitialDataSchema.safeParse(appRaw) : null
+
+  const data = appParsed && appParsed.success ? appParsed.data : (appRaw || {})
+  const isAdmin = resolveIsAdmin(appRaw)
+
+  cachedData = {
+    ...data,
+    isAdmin,
+  } as AppInitialData & { isAdmin: boolean }
+
+  return cachedData
+}
 
 /**
  * Hook to access the global app-level hydrated data from the #app-initial-data script tag.
  */
 export function useAppInitialData() {
-  return useMemo(() => {
-    if (cachedData) return cachedData
-
-    const appScript = document.getElementById('app-initial-data') as HTMLScriptElement | null
-    const appRaw = appScript && appScript.textContent ? JSON.parse(appScript.textContent) : null
-    const appParsed = appRaw ? AppInitialDataSchema.safeParse(appRaw) : null
-    
-    const data = appParsed && appParsed.success ? appParsed.data : (appRaw || {})
-    const isAdmin = resolveIsAdmin(appRaw)
-    
-    cachedData = {
-      ...data,
-      isAdmin,
-    } as AppInitialData & { isAdmin: boolean }
-    
-    return cachedData
-  }, [])
+  return useMemo(() => getAppInitialData(), [])
 }
 
 /**

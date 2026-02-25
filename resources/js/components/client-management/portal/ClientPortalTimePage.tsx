@@ -19,7 +19,7 @@ import { useIsUserAdmin } from '@/hooks/useAppInitialData'
 import { formatHours } from '@/lib/formatHours'
 import type { Project, User } from '@/types/client-management/common'
 import type { TimeEntriesResponse, TimeEntry } from '@/types/client-management/time-entry'
- 
+
  import ClientPortalNav from './ClientPortalNav'
 import DisabledEditButton from './DisabledEditButton'
  import NewTimeEntryModal from './NewTimeEntryModal'

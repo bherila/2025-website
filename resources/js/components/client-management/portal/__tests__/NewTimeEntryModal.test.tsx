@@ -1,8 +1,11 @@
-import React from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
 import '@testing-library/jest-dom'
-import NewTimeEntryModal from '../NewTimeEntryModal'
+
+import { render, screen, waitFor } from '@testing-library/react'
+import React from 'react'
+
 import { _resetCache } from '@/hooks/useAppInitialData'
+
+import NewTimeEntryModal from '../NewTimeEntryModal'
 
 describe('NewTimeEntryModal - currentUser hydration', () => {
   beforeEach(() => {

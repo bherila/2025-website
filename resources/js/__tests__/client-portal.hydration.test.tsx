@@ -1,7 +1,9 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
 import '@testing-library/jest-dom'
-import { makePortalFetchMock } from '@/test-utils/portalFetchMock'
+
+import { fireEvent, waitFor } from '@testing-library/react'
+
 import { _resetCache } from '@/hooks/useAppInitialData'
+import { makePortalFetchMock } from '@/test-utils/portalFetchMock'
 
 // Tests the DOM-mounted client-portal entrypoint behavior (server payload validation)
 

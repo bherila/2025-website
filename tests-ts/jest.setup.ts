@@ -32,5 +32,6 @@ class ResizeObserverMock {
   unobserve() {}
   disconnect() {}
 }
-// @ts-ignore
-window.ResizeObserver = window.ResizeObserver || ResizeObserverMock;
+if (!window.ResizeObserver) {
+  window.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver
+}

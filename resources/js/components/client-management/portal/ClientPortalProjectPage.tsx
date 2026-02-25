@@ -126,7 +126,8 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
 
     // Always fetch project files via API since we removed SSR hydration for them
     fileManager.fetchFiles()
-  }, [fetchTasks, fetchCompanyUsers, fileManager.fetchFiles, initialTasks, initialCompanyUsers])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fileManager.fetchFiles excluded to avoid infinite loop
+  }, [fetchTasks, fetchCompanyUsers, initialTasks, initialCompanyUsers])
 
   const toggleTaskComplete = async (task: Task) => {
     setTogglingTasks(prev => new Set(prev).add(task.id))

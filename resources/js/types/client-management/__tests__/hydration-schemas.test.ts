@@ -1,4 +1,4 @@
-import { UserSchema, ProjectSchema, FileRecordSchema, TimeEntrySchema, AgreementSchema, AppInitialDataSchema } from '../hydration-schemas'
+import { AgreementSchema, AppInitialDataSchema,FileRecordSchema, ProjectSchema, TimeEntrySchema, UserSchema } from '../hydration-schemas'
 
 describe('hydration zod schemas', () => {
   it('UserSchema parses valid user', () => {

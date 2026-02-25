@@ -1,4 +1,4 @@
-import { Clock, FolderOpen, Plus, ExternalLink, Pencil } from 'lucide-react'
+import { Clock, ExternalLink, FolderOpen, Pencil,Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import {
@@ -16,7 +16,7 @@ import { abbreviateName } from '@/lib/nameUtils'
 import type { Agreement, Project, User } from '@/types/client-management/common'
 import type { TimeEntry } from '@/types/client-management/time-entry'
 import type { FileRecord } from '@/types/files'
- 
+
  import ClientPortalNav from './ClientPortalNav'
 import DisabledEditButton from './DisabledEditButton'
  import NewProjectModal from './NewProjectModal'
@@ -71,7 +71,8 @@ export default function ClientPortalIndexPage({
     if (initialCompanyFiles === undefined) {
       fileManager.fetchFiles()
     }
-  }, [fileManager.fetchFiles, initialCompanyFiles])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fileManager.fetchFiles excluded to avoid infinite loop
+  }, [initialCompanyFiles])
 
   const handleTimeEntryModalClose = (open: boolean) => {
     setNewTimeEntryModalOpen(open)
