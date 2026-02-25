@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react';
 import currency from 'currency.js';
 import { useEffect, useState } from 'react';
 
@@ -70,8 +71,8 @@ export default function AllStatementsModal({ isOpen, onClose, accountId }: AllSt
             </TableHeader>
             <TableBody>
               {Object.entries(groupedData).map(([section, lineItems]) => (
-                <>
-                  <TableRow key={section} className="bg-muted/50">
+                <React.Fragment key={section}>
+                  <TableRow className="bg-muted/50">
                     <TableCell colSpan={dates.length + 2} className="font-bold">{section}</TableCell>
                   </TableRow>
                   {Object.entries(lineItems).map(([lineItem, { is_percentage, values, last_ytd_value }]) => (
@@ -87,7 +88,7 @@ export default function AllStatementsModal({ isOpen, onClose, accountId }: AllSt
                       </TableCell>
                     </TableRow>
                   ))}
-                </>
+                </React.Fragment>
               ))}
             </TableBody>
           </Table>
