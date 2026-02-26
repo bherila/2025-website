@@ -262,7 +262,7 @@ class ClientPortalApiController extends Controller
         Gate::authorize('ClientCompanyMember', $company->id);
 
         $entries = ClientTimeEntry::where('client_company_id', $company->id)
-            ->with(['user:id,name,email', 'project:id,name,slug', 'task:id,name', 'invoiceLine.invoice:client_invoice_id,invoice_number'])
+            ->with(['user:id,name,email', 'project:id,name,slug', 'task:id,name', 'invoiceLine.invoice:client_invoice_id,invoice_number,status,issue_date'])
             ->orderBy('date_worked', 'desc')
             ->orderBy('created_at', 'desc')
             ->get()
@@ -272,6 +272,8 @@ class ClientPortalApiController extends Controller
                 if ($ci) {
                     $entry->client_invoice = $ci;
                     $entry->client_invoice->invoice_date = $ci->issue_date ? $ci->issue_date->toDateString() : null;
+                    // Include status so the frontend can distinguish draft vs issued
+                    $entry->client_invoice->status = $ci->status;
                 } else {
                     $entry->client_invoice = null;
                 }
@@ -489,8 +491,13 @@ class ClientPortalApiController extends Controller
 
         if ($isUpdate) {
             $entry = ClientTimeEntry::where('client_company_id', $company->id)->findOrFail($entryId);
-            if ($entry->isInvoiced()) {
-                return response()->json(['error' => 'Cannot update invoiced time entries.'], 403);
+            // Block edits to entries on issued/paid invoices
+            if ($entry->isOnIssuedInvoice()) {
+                return response()->json(['error' => 'Cannot update time entries on issued invoices.'], 403);
+            }
+            // If on a draft invoice, unlink so regeneration can re-assign it
+            if ($entry->isLinkedToInvoice()) {
+                $entry->update(['client_invoice_line_id' => null]);
             }
             $entry->update($validated);
         } else {
@@ -507,6 +514,9 @@ class ClientPortalApiController extends Controller
                 'job_type' => $validated['job_type'] ?? 'Software Development',
             ]);
         }
+
+        // Regenerate draft invoices that cover the affected period
+        $this->regenerateDraftInvoicesForDate($company, $entry->date_worked);
 
         return response()->json(
             $entry->load(['user:id,name,email', 'project:id,name,slug', 'task:id,name']),
@@ -526,11 +536,58 @@ class ClientPortalApiController extends Controller
         Gate::authorize('ClientCompanyMember', $company->id);
 
         $entry = ClientTimeEntry::where('client_company_id', $company->id)->findOrFail($entryId);
-        if ($entry->isInvoiced()) {
-            return response()->json(['error' => 'Cannot delete invoiced time entries.'], 403);
+        // Block deletion of entries on issued/paid invoices
+        if ($entry->isOnIssuedInvoice()) {
+            return response()->json(['error' => 'Cannot delete time entries on issued invoices.'], 403);
         }
+        // If on a draft invoice, unlink first
+        if ($entry->isLinkedToInvoice()) {
+            $entry->update(['client_invoice_line_id' => null]);
+        }
+        $dateWorked = $entry->date_worked;
         $entry->delete();
 
+        // Regenerate draft invoices that cover the affected period
+        $this->regenerateDraftInvoicesForDate($company, $dateWorked);
+
         return response()->json(['success' => true]);
+    }
+
+    /**
+     * Regenerate any draft invoices whose period covers the given date.
+     *
+     * This ensures that when time entries are created, updated, or deleted,
+     * any existing draft (upcoming) invoices are refreshed to reflect the changes.
+     */
+    protected function regenerateDraftInvoicesForDate(ClientCompany $company, $date): void
+    {
+        $dateStr = $date instanceof \DateTimeInterface ? $date->format('Y-m-d') : (string) $date;
+
+        $draftInvoices = ClientInvoice::where('client_company_id', $company->id)
+            ->where('status', 'draft')
+            ->where('period_start', '<=', $dateStr)
+            ->where('period_end', '>=', $dateStr)
+            ->get();
+
+        if ($draftInvoices->isEmpty()) {
+            return;
+        }
+
+        $invoicingService = app(ClientInvoicingService::class);
+
+        foreach ($draftInvoices as $invoice) {
+            try {
+                $invoicingService->generateInvoice(
+                    $company,
+                    $invoice->period_start,
+                    $invoice->period_end
+                );
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::warning('Failed to regenerate draft invoice on time entry change', [
+                    'invoice_id' => $invoice->client_invoice_id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
     }
 }

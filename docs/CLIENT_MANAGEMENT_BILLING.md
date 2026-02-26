@@ -48,7 +48,7 @@ While most hours are covered by the pool at $0 additional cost, any manual line 
 ## Invoice Line Items
 Generated invoices contain the following line item types (in order):
 
-1. **Prior-Month Work** (`prior_month_retainer`): Time entries from M-1. In the "give and take" model, these are generally included at $0, dated last day of M-1. Shows total hours and links to time entries with their original dates. Quantity is ALWAYS formatted as "h:mm".
+1. **Prior-Month Work** (`prior_month_retainer`): Time entries from M-1. In the "give and take" model, these are generally included at $0, dated last day of M-1. Shows total hours in the description and links to time entries with their original dates. Quantity is blank/empty (hours are documented in the description).
    - Split Logic: If prior month work exceeds what was covered by M-1 retainer and M retainer, it is split into multiple line items (Covered by M-1, Covered by M, Carried Forward).
 
 2. **Retainer Fee** (`retainer`): Monthly retainer fee for month M. Description includes the date (e.g., "Monthly Retainer (10 hours) - Feb 1, 2024"). Dated first day of M. Quantity is "1".
@@ -96,13 +96,17 @@ These balances are calculated to ensure the client has a predictable starting po
 
 ### Time Entry Validation
 To maintain the integrity of financial records, the system enforces the following rules in the Client Portal:
-- **Block Edits/Deletes**: Users cannot edit or delete time entries if they are linked to an invoice with **Issued**, **Paid**, or **Void** status.
-- **Block New Entries**: Users cannot create new time entries for a date that falls within the period of an already **Issued** invoice.
+- **Block Edits/Deletes on Issued Invoices**: Users cannot edit or delete time entries linked to invoices with **Issued** or **Paid** status.
+- **Allow Edits/Deletes on Draft Invoices**: Time entries linked to **Draft** (upcoming) invoices CAN be edited or deleted. The entry is automatically unlinked and the draft invoice is regenerated.
+- **Block New Entries in Issued Periods**: Users cannot create new time entries for a date within an **Issued** or **Paid** invoice period.
 
-### Automatic Draft Generation
-To ensure a continuous billing cycle:
-- When a user logs a time entry for a date past the current `period_end` of existing invoices, the system automatically triggers the generation of a **Draft** invoice for that next work period.
-- This ensures that a "bucket" (retainer pool) is always ready to receive work entries.
+### Automatic Draft Invoice Regeneration
+Draft invoices are automatically regenerated when time entries change:
+- **On Create**: When a new time entry is added for a date covered by a draft invoice, that invoice is regenerated.
+- **On Update**: When a time entry on a draft invoice is modified, the entry is unlinked and the invoice is regenerated.
+- **On Delete**: When a time entry on a draft invoice is deleted, the entry is unlinked and the invoice is regenerated.
+
+This ensures draft/upcoming invoices always reflect the current state of time entries.
 
 ## Draft Invoice Regeneration
 When regenerating a draft invoice (e.g., when new time entries are added):
@@ -113,6 +117,14 @@ When regenerating a draft invoice (e.g., when new time entries are added):
 
 ## Time Entry Detail Display
 The invoice page includes a "Show Detail" toggle switch in the top-right corner (default: ON). When enabled, it displays the underlying time entry descriptions for each line item as an indented bullet list, showing the description, hours, and original date_worked for each entry.
+
+## Time Entry Badge Display
+On the time entries page, each billable entry linked to an invoice shows a badge:
+- **Upcoming** (blue): Entry is on a **draft** invoice — clickable link to the draft invoice
+- **Invoiced** (green): Entry is on an **issued** or **paid** invoice — clickable link to the issued invoice
+- **BILLABLE** / **NON-BILLABLE**: Entry is not yet linked to any invoice
+
+Entries on draft invoices remain fully editable (edit button visible, row clickable). Only entries on issued/paid invoices are locked.
 
 ## Page Title
 The invoice page title includes the invoice number for easy identification (e.g., "Invoice ABC-202402-001 - Company Name").

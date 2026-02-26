@@ -338,7 +338,8 @@ Location: `resources/js/components/client-management/portal/`
     - Action column with Edit button (Pencil icon) for admins
     - Clean, borderless card layout with lightened table borders
 - **Color-coded balance indicators**: Green for positive availability, red for negative deficit
-- **Validation**: Blocks time entry edits/deletes in periods covered by Issued invoices.
+- **Validation**: Blocks time entry edits/deletes for entries on Issued/Paid invoices. Entries on Draft (upcoming) invoices can be freely edited — they are unlinked and the draft invoice is regenerated automatically.
+- **Badge display**: "Upcoming" (blue) for entries on draft invoices, "Invoiced" (green) for entries on issued/paid invoices. Both link to the invoice.
 - Collapsible month sections for better navigation
 - Uses shadcn/ui Card, Button, Table, Badge, Tooltip, Skeleton components
 

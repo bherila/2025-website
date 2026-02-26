@@ -121,19 +121,42 @@ class ClientTimeEntry extends Model
     }
 
     /**
-     * Check if this time entry has been invoiced.
+     * Check if this time entry is linked to any invoice (draft or issued).
      */
-    public function isInvoiced(): bool
+    public function isLinkedToInvoice(): bool
     {
         return $this->client_invoice_line_id !== null;
     }
 
     /**
+     * Check if this time entry is on an issued or paid invoice (not editable).
+     */
+    public function isOnIssuedInvoice(): bool
+    {
+        if (!$this->client_invoice_line_id) {
+            return false;
+        }
+        $this->loadMissing('invoiceLine.invoice');
+        $invoice = $this->invoiceLine?->invoice;
+        return $invoice && in_array($invoice->status, ['issued', 'paid']);
+    }
+
+    /**
+     * Check if this time entry has been invoiced (on an issued/paid invoice).
+     * For backwards compatibility, this returns true only for non-draft invoices.
+     */
+    public function isInvoiced(): bool
+    {
+        return $this->isOnIssuedInvoice();
+    }
+
+    /**
      * Accessor for is_invoiced attribute.
+     * Returns true only for entries on issued/paid invoices.
      */
     public function getIsInvoicedAttribute(): bool
     {
-        return $this->isInvoiced();
+        return $this->isOnIssuedInvoice();
     }
 
     /**
@@ -145,10 +168,15 @@ class ClientTimeEntry extends Model
     }
 
     /**
-     * Get the associated invoice via the line item.
+     * Get the associated invoice via the line item, including status.
      */
     public function getClientInvoiceAttribute()
     {
-        return $this->invoiceLine?->invoice;
+        $invoice = $this->invoiceLine?->invoice;
+        if ($invoice) {
+            // Ensure status is always available for client-side display logic
+            $invoice->makeVisible('status');
+        }
+        return $invoice;
     }
 }

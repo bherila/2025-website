@@ -1,5 +1,3 @@
-import React from 'react'
-
 import SummaryTile from '@/components/ui/summary-tile'
 import { formatHours } from '@/lib/formatHours'
 

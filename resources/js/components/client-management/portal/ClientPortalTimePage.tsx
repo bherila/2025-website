@@ -364,17 +364,21 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, ini
                                         <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold leading-none mb-1">{entry.job_type}</span>
                                         <span className="text-sm leading-tight mb-2">{entry.name || '--'}</span>
                                         <div className="flex items-center gap-2 flex-wrap">
-                                          {entry.is_billable && entry.is_invoiced ? (
-                                            entry.client_invoice ? (
+                                          {entry.is_billable && entry.client_invoice ? (
+                                            entry.client_invoice.status === 'draft' ? (
+                                              // Draft/upcoming invoice - show Upcoming badge in blue
+                                              <a href={`/client/portal/${slug}/invoices/${entry.client_invoice.client_invoice_id}`} className="no-underline">
+                                                <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-blue-600 text-blue-600 font-bold shrink-0 text-uppercase hover:bg-blue-50">
+                                                  Upcoming
+                                                </Badge>
+                                              </a>
+                                            ) : (
+                                              // Issued/paid invoice - show Invoiced badge in green
                                               <a href={`/client/portal/${slug}/invoices/${entry.client_invoice.client_invoice_id}`} className="no-underline">
                                                 <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-green-600 text-green-600 font-bold shrink-0 text-uppercase hover:bg-green-50">
                                                   Invoiced
                                                 </Badge>
                                               </a>
-                                            ) : (
-                                              <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-green-600 text-green-600 font-bold shrink-0 text-uppercase">
-                                                Invoiced
-                                              </Badge>
                                             )
                                           ) : (
                                             <Badge variant={entry.is_billable ? 'default' : 'secondary'} className="text-[9px] px-1 py-0 h-3.5 font-bold shrink-0">

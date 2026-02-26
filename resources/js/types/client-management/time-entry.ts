@@ -16,6 +16,7 @@ export interface TimeEntry {
     client_invoice_id: number
     invoice_number: string
     invoice_date?: string
+    status?: string
   }
   created_at: string
 }

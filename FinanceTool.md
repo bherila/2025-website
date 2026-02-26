@@ -12,7 +12,7 @@ The finance module uses a tabbed navigation system with a shared year selector a
 |-----|-------|-------------|
 | Transactions | `/finance/{id}` | Main transaction list with filtering, sorting, tagging, linking |
 | Duplicates | `/finance/{id}/duplicates` | Find and remove duplicate transactions |
-| Statements | `/finance/{id}/statements` | Upload and view account statements |
+| Statements | `/finance/{id}/statements` | Upload and view account statements (detail view on the same page via query params) |
 | Linker | `/finance/{id}/linker` | Bulk transaction linking tool |
 
 ### Utility Buttons
@@ -53,6 +53,9 @@ import {
 
 ## Transaction Import
 
+(see PDF Import Enhancements below for additional options when processing PDF files)
+
+
 The transaction import feature allows users to import transactions from a file. The import process is as follows:
 
 1.  The user drops a file onto the import page.
@@ -62,6 +65,28 @@ The transaction import feature allows users to import transactions from a file. 
 5.  The frontend displays the imported transactions in a table, highlighting any duplicates.
 6.  The user can then choose to import the new transactions.
 
+### PDF Import Enhancements
+
+PDF statements now offer three explicit checkboxes when a file is pending processing:
+
+- **Import Transactions** – import parsed line items
+- **Attach as Statement** – create a statement/statement-details record
+- **Save File to Storage** – upload the original PDF to S3 for later reference
+
+Checkbox states are persisted globally in `localStorage` (`pdf_import_transactions`,
+`pdf_attach_statement`, `pdf_save_file_s3`) so users don’t need to reconfigure each
+session or per account. The "Process with AI" button is disabled when **all three**
+options are unchecked, preventing accidental no-op uploads.
+
+When the storage option is selected the file is immediately uploaded to
+`/api/finance/{accountId}/files` after Gemini processing completes; the resulting
+record will surface in the **Statement Files** card on the Statements page even
+if no transactions or details were imported.
+
+The backend endpoint for AI parsing (`GeminiImportController@parseDocument`) now
+accepts parameters for the selected options and caches responses by SHA‑256 file
+hash for one hour. A companion endpoint (`/api/finance/statement/{statement_id}/pdf`)
+returns signed URLs for viewing/downloading any PDF tied to a statement.
 ## Duplicate Detection
 
 Duplicate detection is performed on the client-side. A transaction is considered a duplicate if it has the same `t_date`, `t_type`, `t_description`, `t_qty`, and `t_amt` as an existing transaction. The comparison for `t_type` and `t_description` is a substring match.
