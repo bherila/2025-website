@@ -190,6 +190,7 @@ Route::middleware(['web', 'auth'])->get('/finance/{accountId}/files', [FileContr
 Route::middleware(['web', 'auth'])->post('/finance/{accountId}/files', [FileController::class, 'uploadFinAccountFile']);
 Route::middleware(['web', 'auth'])->get('/finance/{accountId}/files/{fileId}/download', [FileController::class, 'downloadFinAccountFile']);
 Route::middleware(['web', 'auth'])->delete('/finance/{accountId}/files/{fileId}', [FileController::class, 'deleteFinAccountFile']);
+Route::middleware(['web', 'auth'])->get('/finance/{accountId}/statements/{statementId}/pdf', [FileController::class, 'viewStatementPdf']);
 
 // Utility Bill Tracker API routes
 use App\Http\Controllers\UtilityBillTracker\UtilityAccountApiController;

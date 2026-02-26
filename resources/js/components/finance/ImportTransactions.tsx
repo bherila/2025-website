@@ -77,9 +77,16 @@ export default function ImportTransactions({
   const [pendingPdfFile, setPendingPdfFile] = useState<File | null>(null)
   // Gemini-specific error for retry
   const [geminiError, setGeminiError] = useState<string | null>(null)
-  // Checkboxes for PDF import options
-  const [importTransactions, setImportTransactions] = useState(true)
-  const [attachAsStatement, setAttachAsStatement] = useState(true)
+  // Checkboxes for PDF import options — persisted in localStorage
+  const [importTransactions, setImportTransactions] = useState(() => {
+    try { const v = localStorage.getItem('pdf_import_transactions'); return v === null ? true : v === 'true' } catch { return true }
+  })
+  const [attachAsStatement, setAttachAsStatement] = useState(() => {
+    try { const v = localStorage.getItem('pdf_attach_statement'); return v === null ? true : v === 'true' } catch { return true }
+  })
+  const [saveFileToS3, setSaveFileToS3] = useState(() => {
+    try { const v = localStorage.getItem('pdf_save_file_s3'); return v === null ? true : v === 'true' } catch { return true }
+  })
   const dropZoneRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -189,8 +196,6 @@ export default function ImportTransactions({
     setPendingPdfFile(null)
     setGeminiError(null)
     setError(null)
-    setImportTransactions(true)
-    setAttachAsStatement(true)
   }, [])
 
   /** Accept a file but do NOT auto-submit PDFs to Gemini */
@@ -227,12 +232,24 @@ export default function ImportTransactions({
     setError(null)
     const formData = new FormData()
     formData.append('file', pendingPdfFile)
+    formData.append('import_transactions', importTransactions ? '1' : '0')
+    formData.append('attach_as_statement', attachAsStatement ? '1' : '0')
     try {
       const response = await fetchWrapper.post('/api/finance/transactions/import-gemini', formData) as GeminiImportResponse
       if (response.error) {
         setGeminiError(response.error)
       } else {
         setPdfData(response)
+        // Upload file to S3 if the checkbox is checked
+        if (saveFileToS3) {
+          try {
+            const uploadForm = new FormData()
+            uploadForm.append('file', pendingPdfFile)
+            await fetchWrapper.post(`/api/finance/${accountId}/files`, uploadForm)
+          } catch (uploadErr) {
+            console.error('Failed to save file to S3:', uploadErr)
+          }
+        }
         setPendingPdfFile(null)
       }
     } catch (e) {
@@ -240,7 +257,7 @@ export default function ImportTransactions({
     } finally {
       setLoading(false)
     }
-  }, [pendingPdfFile])
+  }, [pendingPdfFile, importTransactions, attachAsStatement, saveFileToS3, accountId])
 
   /** Handle click-to-select file via hidden input */
   const handleFileInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -472,7 +489,11 @@ export default function ImportTransactions({
               <Checkbox
                 id="import-transactions"
                 checked={importTransactions}
-                onCheckedChange={(checked) => setImportTransactions(checked === true)}
+                onCheckedChange={(checked) => {
+                  const val = checked === true
+                  setImportTransactions(val)
+                  try { localStorage.setItem('pdf_import_transactions', String(val)) } catch { /* ignore */ }
+                }}
               />
               <Label htmlFor="import-transactions">Import Transactions</Label>
             </div>
@@ -480,12 +501,28 @@ export default function ImportTransactions({
               <Checkbox
                 id="attach-statement"
                 checked={attachAsStatement}
-                onCheckedChange={(checked) => setAttachAsStatement(checked === true)}
+                onCheckedChange={(checked) => {
+                  const val = checked === true
+                  setAttachAsStatement(val)
+                  try { localStorage.setItem('pdf_attach_statement', String(val)) } catch { /* ignore */ }
+                }}
               />
               <Label htmlFor="attach-statement">Attach as Statement</Label>
             </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="save-file-s3"
+                checked={saveFileToS3}
+                onCheckedChange={(checked) => {
+                  const val = checked === true
+                  setSaveFileToS3(val)
+                  try { localStorage.setItem('pdf_save_file_s3', String(val)) } catch { /* ignore */ }
+                }}
+              />
+              <Label htmlFor="save-file-s3">Save File to Storage</Label>
+            </div>
           </div>
-          <Button onClick={processPdfWithGemini} disabled={!importTransactions && !attachAsStatement}>
+          <Button onClick={processPdfWithGemini} disabled={!importTransactions && !attachAsStatement && !saveFileToS3}>
             Process with AI
           </Button>
         </div>

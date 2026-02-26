@@ -144,7 +144,7 @@ describe('FinanceAccountStatementsPage', () => {
     const row = screen.getByText('120000.00').closest('tr');
     expect(row).toBeTruthy();
     if (row) {
-      expect(row.textContent).toMatch(/\-/);
+      expect(row.textContent).toMatch(/-/);
     }
   });
 

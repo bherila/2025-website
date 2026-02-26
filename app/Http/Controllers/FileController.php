@@ -570,6 +570,37 @@ class FileController extends Controller
     }
 
     /**
+     * Get a signed view URL for a statement's PDF file.
+     */
+    public function viewStatementPdf(int $accountId, int $statementId): JsonResponse
+    {
+        $userId = Auth::id();
+        $account = FinAccounts::where('acct_id', $accountId)
+            ->where('acct_owner', $userId)
+            ->firstOrFail();
+
+        $file = FileForFinAccount::where('acct_id', $account->acct_id)
+            ->where('statement_id', $statementId)
+            ->firstOrFail();
+
+        $viewUrl = $this->fileService->getSignedViewUrl(
+            $file->s3_path,
+            $file->mime_type ?? 'application/pdf'
+        );
+
+        $downloadUrl = $this->fileService->getSignedDownloadUrl(
+            $file->s3_path,
+            $file->original_filename
+        );
+
+        return response()->json([
+            'view_url' => $viewUrl,
+            'download_url' => $downloadUrl,
+            'filename' => $file->original_filename,
+        ]);
+    }
+
+    /**
      * Validate that the current user has access to a company.
      */
     protected function validateCompanyAccess(string $companySlug, bool $requireAdmin = false): ClientCompany

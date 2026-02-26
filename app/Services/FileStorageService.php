@@ -110,6 +110,32 @@ class FileStorageService
     }
 
     /**
+     * Generate a signed URL for viewing (inline) a file from S3.
+     *
+     * @param  string  $s3Path  The file path in S3
+     * @param  string  $mimeType  The MIME type of the file
+     * @param  int  $expiration  URL expiration time in minutes
+     * @return string The signed view URL
+     */
+    public function getSignedViewUrl(string $s3Path, string $mimeType = 'application/pdf', int $expiration = 60): string
+    {
+        $bucket = config('filesystems.disks.s3.bucket');
+        if (empty($bucket)) {
+            throw new \RuntimeException('S3 Bucket is not configured in filesystems.disks.s3.bucket');
+        }
+
+        return $this->storage()->temporaryUrl(
+            $s3Path,
+            now()->addMinutes($expiration),
+            [
+                'Bucket' => $bucket,
+                'ResponseContentDisposition' => 'inline',
+                'ResponseContentType' => $mimeType,
+            ]
+        );
+    }
+
+    /**
      * Delete a file from S3.
      *
      * @param  string  $s3Path  The file path in S3

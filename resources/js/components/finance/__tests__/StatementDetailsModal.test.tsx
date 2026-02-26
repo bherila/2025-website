@@ -23,7 +23,7 @@ jest.mock('@/components/ui/table', () => ({
 describe('StatementDetailsModal', () => {
   it('renders dash for null numeric values', () => {
     const details = [
-      { section: 'Test', line_item: 'Foo', statement_period_value: null, ytd_value: undefined, is_percentage: false },
+      { section: 'Test', line_item: 'Foo', statement_period_value: null as unknown as number, ytd_value: undefined as unknown as number, is_percentage: false },
     ];
     render(
       <StatementDetailsModal

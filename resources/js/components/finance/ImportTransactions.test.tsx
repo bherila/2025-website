@@ -60,6 +60,7 @@ jest.mock('@/fetchWrapper', () => ({
 describe('ImportTransactions', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    localStorage.clear();
     (fetchWrapper.get as jest.Mock).mockResolvedValue([]);
   });
 
@@ -139,9 +140,32 @@ describe('ImportTransactions', () => {
     await waitFor(() => {
       expect(screen.getByTestId('import-transactions')).toBeInTheDocument();
       expect(screen.getByTestId('attach-statement')).toBeInTheDocument();
+      expect(screen.getByTestId('save-file-s3')).toBeInTheDocument();
       expect(screen.getByText('Import Transactions')).toBeInTheDocument();
       expect(screen.getByText('Attach as Statement')).toBeInTheDocument();
+      expect(screen.getByText('Save File to Storage')).toBeInTheDocument();
     });
+  });
+
+  it('disables Process with AI when all checkboxes are unchecked', async () => {
+    render(<ImportTransactions accountId={1} onImportFinished={jest.fn()} />);
+
+    const input = screen.getByTestId('file-input') as HTMLInputElement;
+    const file = new File(['pdf content'], 'test.pdf', { type: 'application/pdf' });
+
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Process with AI')).toBeInTheDocument();
+    });
+
+    // Uncheck all three checkboxes
+    fireEvent.click(screen.getByTestId('import-transactions'));
+    fireEvent.click(screen.getByTestId('attach-statement'));
+    fireEvent.click(screen.getByTestId('save-file-s3'));
+
+    // Process with AI button should be disabled
+    expect(screen.getByText('Process with AI')).toBeDisabled();
   });
 
   it('calls Gemini API when Process with AI is clicked', async () => {
