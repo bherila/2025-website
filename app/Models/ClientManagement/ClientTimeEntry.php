@@ -14,7 +14,7 @@ class ClientTimeEntry extends Model
 
     protected $table = 'client_time_entries';
 
-    protected $appends = ['is_invoiced', 'client_invoice'];
+    protected $appends = ['is_invoiced', 'client_invoice', 'formatted_time'];
 
     protected $fillable = [
         'project_id',

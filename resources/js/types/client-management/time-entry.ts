@@ -52,6 +52,9 @@ export interface MonthlyData {
   unbilled_hours?: number // Billable hours with no active agreement (delayed billing)
   pre_agreement_hours_applied?: number
   will_be_billed_in_next_agreement?: boolean
+  catch_up_hours_billed?: number // Hours billed at rate for catch-up on this work month's invoice
+  next_month_starting_unused?: number | null // Next month starting unused hours balance
+  next_month_starting_negative?: number | null // Next month starting negative hours balance
 }
 
 export interface TimeEntriesResponse {

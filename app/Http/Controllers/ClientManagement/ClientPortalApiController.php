@@ -376,11 +376,30 @@ class ClientPortalApiController extends Controller
         );
 
         // Merge balance data with month info
+        // Also fetch invoice data to get catch-up hours and next-month starting balance
+        // without duplicating billing logic — the invoicing service already computes these.
+        $invoicesByWorkMonth = collect();
+        if ($agreement->id) {
+            $invoicesByWorkMonth = ClientInvoice::where('client_company_id', $company->id)
+                ->where('client_agreement_id', $agreement->id)
+                ->whereNotIn('status', ['void'])
+                ->get()
+                ->keyBy(function ($inv) {
+                    // The invoice covers work done in the period_start month
+                    return $inv->period_start->format('Y-m');
+                });
+        }
+
         $result = [];
         foreach ($balances as $index => $balance) {
             $monthData = $months[$index];
+            $yearMonth = $monthData['year_month'];
+
+            // Lookup the invoice that covers this work month
+            $invoice = $invoicesByWorkMonth[$yearMonth] ?? null;
+
             $result[] = [
-                'year_month' => $monthData['year_month'],
+                'year_month' => $yearMonth,
                 'has_agreement' => !$monthData['is_pre_agreement'],
                 'entries_count' => $monthData['entries_count'],
                 'hours_worked' => round($monthData['hours_worked'], 2),
@@ -405,6 +424,10 @@ class ClientPortalApiController extends Controller
                 ],
                 'unbilled_hours' => $monthData['is_pre_agreement'] ? $balance->closing->negativeBalance : 0,
                 'will_be_billed_in_next_agreement' => $monthData['is_pre_agreement'],
+                // Catch-up hours billed and next-month starting balance from invoice data
+                'catch_up_hours_billed' => $invoice ? (float) $invoice->hours_billed_at_rate : 0,
+                'next_month_starting_unused' => $invoice ? (float) $invoice->starting_unused_hours : null,
+                'next_month_starting_negative' => $invoice ? (float) $invoice->starting_negative_hours : null,
             ];
         }
 
@@ -554,19 +577,19 @@ class ClientPortalApiController extends Controller
     }
 
     /**
-     * Regenerate any draft invoices whose period covers the given date.
+     * Regenerate all draft invoices for the company.
      *
-     * This ensures that when time entries are created, updated, or deleted,
-     * any existing draft (upcoming) invoices are refreshed to reflect the changes.
+     * Because prior-month billing cascades balances across periods, editing a
+     * time entry in month M can affect the invoice covering M (period M) as well
+     * as any subsequent drafts whose starting balances depend on M's outcome.
+     * We therefore regenerate every draft invoice, ordered chronologically so
+     * that each one sees updated balances from earlier periods.
      */
     protected function regenerateDraftInvoicesForDate(ClientCompany $company, $date): void
     {
-        $dateStr = $date instanceof \DateTimeInterface ? $date->format('Y-m-d') : (string) $date;
-
         $draftInvoices = ClientInvoice::where('client_company_id', $company->id)
             ->where('status', 'draft')
-            ->where('period_start', '<=', $dateStr)
-            ->where('period_end', '>=', $dateStr)
+            ->orderBy('period_start')
             ->get();
 
         if ($draftInvoices->isEmpty()) {

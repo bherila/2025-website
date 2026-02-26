@@ -145,13 +145,14 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, ini
     if (!data?.entries || data.entries.length === 0) return
 
     // Create CSV content
-    const headers = ['Date', 'Project', 'Task', 'Description', 'Hours', 'Billable', 'User']
+    const headers = ['Date', 'Project', 'Task', 'Description', 'Hours', 'Minutes', 'Billable', 'User']
     const rows = data.entries.map(entry => [
       entry.date_worked,
       entry.project?.name || '',
       entry.task?.name || '',
       entry.name || '',
-      (entry.minutes_worked / 60).toFixed(2),
+      Math.floor(entry.minutes_worked / 60),
+      entry.minutes_worked % 60,
       entry.is_billable ? 'Yes' : 'No',
       entry.user?.name || ''
     ])
@@ -318,6 +319,9 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, ini
                           excessHours={month.closing?.excess_hours}
                           negativeBalance={month.closing?.negative_balance}
                           remainingPool={remainingPool}
+                          catchUpHoursBilled={month.catch_up_hours_billed}
+                          startingUnusedHours={month.next_month_starting_unused ?? undefined}
+                          startingNegativeHours={month.next_month_starting_negative ?? undefined}
                         />
                       )}
                     </CardHeader>

@@ -43,7 +43,7 @@ export default function TimeTrackingMonthSummaryRow({
   const isInvoicePage = displayMode === 'invoice_page' || (carriedInHours !== undefined || currentMonthHours !== undefined);
   
   return (
-    <div className="mt-3 grid grid-cols-2 md:grid-cols-5 gap-3 text-xs text-muted-foreground">
+    <div className="mt-3 grid grid-cols-2 md:grid-cols-6 gap-3 text-xs text-muted-foreground">
       {/* Show monthly retainer if available (prioritize monthlyRetainer prop, then openingAvailable) */}
       {(typeof monthlyRetainer === 'number' || typeof openingAvailable === 'number') && (
         <SummaryTile
@@ -108,10 +108,16 @@ export default function TimeTrackingMonthSummaryRow({
       )}
 
       {/* Catch-up billed this month */}
-      {/* Always show catch-up hours on invoice page (display 0:00 when zero) */}
-      {displayMode === 'invoice_page' && typeof catchUpHoursBilled === 'number' && (
+      {/* Show catch-up hours on both invoice and time pages when present */}
+      {typeof catchUpHoursBilled === 'number' && catchUpHoursBilled > 0 && (
         <SummaryTile title="Catch-up Hours Billed" kind="red" size="small">
           {formatHours(catchUpHoursBilled)}
+        </SummaryTile>
+      )}
+      {/* On invoice page, always show (even 0:00) */}
+      {displayMode === 'invoice_page' && typeof catchUpHoursBilled === 'number' && catchUpHoursBilled === 0 && (
+        <SummaryTile title="Catch-up Hours Billed" kind="red" size="small">
+          {formatHours(0)}
         </SummaryTile>
       )}
 
@@ -147,9 +153,24 @@ export default function TimeTrackingMonthSummaryRow({
           }
 
           // On invoice page, if we have starting balances for the NEXT month that differ from the work period end state, show them as well
-          if (displayMode === 'invoice_page' && (startingUnusedHours !== undefined || startingNegativeHours !== undefined)) {
+          // On time page, show next month balance when available from invoice data
+          if (startingUnusedHours !== undefined || startingNegativeHours !== undefined) {
             const nextFb = (startingUnusedHours || 0) - (startingNegativeHours || 0);
-            if (nextFb !== fb) {
+            if (displayMode === 'invoice_page' && nextFb !== fb) {
+              if (nextFb >= 0) {
+                results.push(
+                  <SummaryTile key="next-remaining" title="Next Month Start Balance" kind="green" size="small">
+                    {formatHours(nextFb)}
+                  </SummaryTile>
+                );
+              } else {
+                results.push(
+                  <SummaryTile key="next-negative" title="Next Month Start Overage" kind="red" size="small">
+                    {formatHours(Math.abs(nextFb))}
+                  </SummaryTile>
+                );
+              }
+            } else if (displayMode === 'time_page') {
               if (nextFb >= 0) {
                 results.push(
                   <SummaryTile key="next-remaining" title="Next Month Start Balance" kind="green" size="small">
