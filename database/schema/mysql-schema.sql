@@ -227,6 +227,8 @@ CREATE TABLE `client_invoices` (
   `rollover_hours_used` decimal(10,4) NOT NULL DEFAULT 0.0000,
   `unused_hours_balance` decimal(10,4) NOT NULL DEFAULT 0.0000,
   `negative_hours_balance` decimal(10,4) NOT NULL DEFAULT 0.0000,
+  `starting_unused_hours` decimal(12,4) DEFAULT NULL,
+  `starting_negative_hours` decimal(12,4) DEFAULT NULL,
   `hours_billed_at_rate` decimal(10,4) NOT NULL DEFAULT 0.0000,
   `status` enum('draft','issued','paid','void') NOT NULL DEFAULT 'draft',
   `notes` text DEFAULT NULL,
@@ -1138,7 +1140,7 @@ CREATE TABLE `vxcv_links` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 --
--- WARNING: can't read the INFORMATION_SCHEMA.libraries table. It's most probably an old server 5.5.5-10.6.24-MariaDB.
+-- WARNING: can't read the INFORMATION_SCHEMA.libraries table. It's most probably an old server 5.5.5-10.6.25-MariaDB.
 --
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
@@ -1184,3 +1186,7 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (40,'2026_01_12_094
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (41,'2026_01_12_094820_create_utility_bill_table',20);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (42,'2026_01_12_102909_add_columns_to_utility_bill_table',21);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (43,'2026_01_16_055957_add_details_to_utility_bill_table',22);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (44,'2026_01_28_220930_update_client_invoice_lines_table',23);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (45,'2026_01_29_031451_change_quantity_column_to_varchar_in_client_invoice_lines',24);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (46,'2026_02_05_062520_add_catch_up_threshold_hours_to_client_agreements_table',25);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (47,'2026_02_07_000000_add_starting_balances_to_client_invoices',26);

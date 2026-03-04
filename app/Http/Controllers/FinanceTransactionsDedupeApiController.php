@@ -26,94 +26,176 @@ class FinanceTransactionsDedupeApiController extends Controller
         $uid = Auth::id();
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
 
-        // Build query for transactions - exclude those already marked as not duplicate
-        $query = FinAccountLineItems::where('t_account', $account->acct_id)
-            ->where('t_is_not_duplicate', false) // Only check transactions not already verified
-            ->with(['tags'])
-            ->orderBy('t_date', 'asc')
-            ->orderBy('t_id', 'asc');
+        // Handle reanalyze parameter
+        $reanalyze = filter_var($request->input('reanalyze'), FILTER_VALIDATE_BOOLEAN);
 
         // Filter by year if provided
         $year = null;
         if ($request->has('year') && $request->year !== 'all') {
             $year = intval($request->year);
+        }
+
+        // Count how many transactions were already marked as non-duplicate (for UI info)
+        $previouslyMarkedQuery = FinAccountLineItems::where('t_account', $account->acct_id)
+            ->where('t_is_not_duplicate', true);
+        if ($year) {
+            $previouslyMarkedQuery->whereYear('t_date', $year);
+        }
+        $previouslyMarkedCount = $previouslyMarkedQuery->count();
+
+        // Step 1: Identify candidate duplicate groups using SQL GROUP BY
+        // We omit t_account_balance to catch duplicates imported with different running balances
+        $candidateQuery = FinAccountLineItems::where('t_account', $account->acct_id)
+            ->whereNull('when_deleted')
+            ->select('t_date', 't_qty', 't_amt', 't_symbol')
+            ->groupBy('t_date', 't_qty', 't_amt', 't_symbol')
+            ->havingRaw('COUNT(*) > 1');
+
+        if (!$reanalyze) {
+            $candidateQuery->where('t_is_not_duplicate', false);
+        }
+
+        if ($year) {
+            $candidateQuery->whereYear('t_date', $year);
+        }
+
+        $candidates = $candidateQuery->get();
+
+        if ($candidates->isEmpty()) {
+            // No duplicates found, mark ALL remaining as non-duplicate if not filtered too much
+            $markedAsNonDuplicate = FinAccountLineItems::where('t_account', $account->acct_id)
+                ->where('t_is_not_duplicate', false);
+            if ($year) {
+                $markedAsNonDuplicate->whereYear('t_date', $year);
+            }
+            $count = $markedAsNonDuplicate->update(['t_is_not_duplicate' => true]);
+
+            return response()->json([
+                'groups' => [],
+                'total' => 0,
+                'markedAsNonDuplicate' => $count,
+                'previouslyMarkedCount' => $previouslyMarkedCount,
+            ]);
+        }
+
+        // Step 2: Fetch all transactions that match the candidate criteria
+        $query = FinAccountLineItems::where('t_account', $account->acct_id)
+            ->whereNull('when_deleted')
+            ->with(['tags', 'parentTransactions:t_id']);
+
+        if (!$reanalyze) {
+            $query->where('t_is_not_duplicate', false);
+        }
+
+        if ($year) {
             $query->whereYear('t_date', $year);
         }
 
-        // Get all transactions for the account, sorted by date
-        $transactions = $query->get();
+        // Filter to only records that could be part of a duplicate group
+        $query->where(function ($q) use ($candidates) {
+            foreach ($candidates as $candidate) {
+                $q->orWhere(function ($sub) use ($candidate) {
+                    $sub->where('t_date', $candidate->t_date)
+                        ->where('t_qty', $candidate->t_qty)
+                        ->where('t_amt', $candidate->t_amt)
+                        ->where('t_symbol', $candidate->t_symbol);
+                });
+            }
+        });
 
-        // Track which transaction IDs are involved in duplicate groups
-        $idsInDuplicateGroups = [];
+        $transactions = $query->orderBy('t_date', 'asc')
+            ->orderBy('t_id', 'asc')
+            ->get();
 
+        // Step 3: Group transactions by their identifying fields in PHP
+        $initialGroups = [];
+        foreach ($transactions as $t) {
+            $qty = $this->normalizeValue($t->t_qty);
+            $amt = $this->normalizeValue($t->t_amt);
+            $symbol = strtoupper(trim($t->t_symbol ?? ''));
+            // Keys no longer include balance
+            $key = "{$t->t_date}|{$qty}|{$amt}|{$symbol}";
+
+            $initialGroups[$key][] = $t;
+        }
+
+        // Step 4: Refine groups by checking description/memo (swapped or identical)
         $groups = [];
-        $seenIds = [];
+        $idsInDuplicateGroups = [];
+        $limitReached = false;
 
-        foreach ($transactions as $transaction) {
-            if (in_array($transaction->t_id, $seenIds)) {
+        foreach ($initialGroups as $key => $groupTransactions) {
+            if (count($groups) >= 150) {
+                $limitReached = true;
+                break;
+            }
+
+            if (count($groupTransactions) < 2) {
                 continue;
             }
 
-            // Build a key for grouping: date + normalized qty + normalized amount + symbol
-            $date = $transaction->t_date;
-            $qty = $this->normalizeValue($transaction->t_qty);
-            $amt = $this->normalizeValue($transaction->t_amt);
-            $symbol = strtoupper(trim($transaction->t_symbol ?? ''));
-            $balance = $this->normalizeValue($transaction->t_account_balance);
+            // Sub-group by description/memo patterns
+            $refinedGroups = [];
+            $usedIds = [];
 
-            $groupKey = "{$date}|{$qty}|{$amt}|{$symbol}";
-
-            // Find other transactions with the same key
-            $duplicates = $transactions->filter(function ($t) use ($transaction, $date, $qty, $amt, $symbol, $balance, $seenIds) {
-                if ($t->t_id === $transaction->t_id || in_array($t->t_id, $seenIds)) {
-                    return false;
+            for ($i = 0; $i < count($groupTransactions); $i++) {
+                $t1 = $groupTransactions[$i];
+                if (isset($usedIds[$t1->t_id])) {
+                    continue;
                 }
 
-                $tDate = $t->t_date;
-                $tQty = $this->normalizeValue($t->t_qty);
-                $tAmt = $this->normalizeValue($t->t_amt);
-                $tSymbol = strtoupper(trim($t->t_symbol ?? ''));
-                $tBalance = $this->normalizeValue($t->t_account_balance);
+                $currentRefinedGroup = [$t1];
+                $desc1 = $this->normalizeString($t1->t_description);
+                $memo1 = $this->normalizeString($t1->t_comment);
 
-                if ($tDate !== $date || $tQty !== $qty || $tAmt !== $amt || $tSymbol !== $symbol || $tBalance !== $balance) {
-                    return false;
+                for ($j = $i + 1; $j < count($groupTransactions); $j++) {
+                    $t2 = $groupTransactions[$j];
+                    if (isset($usedIds[$t2->t_id])) {
+                        continue;
+                    }
+
+                    $desc2 = $this->normalizeString($t2->t_description);
+                    $memo2 = $this->normalizeString($t2->t_comment);
+
+                    // Identical or Swapped
+                    if (($desc1 === $desc2 && $memo1 === $memo2) || ($desc1 === $memo2 && $memo1 === $desc2)) {
+                        $currentRefinedGroup[] = $t2;
+                        $usedIds[$t2->t_id] = true;
+                    }
                 }
 
-                // Check if description/memo are identical or swapped
-                $desc1 = $this->normalizeString($transaction->t_description);
-                $memo1 = $this->normalizeString($transaction->t_comment);
-                $desc2 = $this->normalizeString($t->t_description);
-                $memo2 = $this->normalizeString($t->t_comment);
+                if (count($currentRefinedGroup) > 1) {
+                    $usedIds[$t1->t_id] = true;
+                    $refinedGroups[] = $currentRefinedGroup;
+                }
+            }
 
-                // Identical
-                if ($desc1 === $desc2 && $memo1 === $memo2) {
-                    return true;
+            foreach ($refinedGroups as $allInGroup) {
+                if (count($groups) >= 150) {
+                    $limitReached = true;
+                    break;
                 }
 
-                // Swapped
-                if ($desc1 === $memo2 && $memo1 === $desc2) {
-                    return true;
-                }
-
-                return false;
-            });
-
-            if ($duplicates->count() > 0) {
-                // Create a group with all matching transactions
-                $allInGroup = collect([$transaction])->merge($duplicates);
-
+                $allInGroup = collect($allInGroup);
                 foreach ($allInGroup as $t) {
-                    $seenIds[] = $t->t_id;
                     $idsInDuplicateGroups[] = $t->t_id;
                 }
 
-                // The last transaction (highest t_id) is the one to keep
-                // We keep the NEWER t_id because re-imported CSV may have updated data
-                $keepTransaction = $allInGroup->sortBy('t_id')->last();
-                $deleteIds = $allInGroup->filter(fn ($t) => $t->t_id !== $keepTransaction->t_id)->pluck('t_id')->toArray();
+                $keepTransaction = $allInGroup->sort(function ($a, $b) {
+                    // Prioritize those already marked as not duplicate
+                    if ($a->t_is_not_duplicate && !$b->t_is_not_duplicate)
+                        return 1;
+                    if (!$a->t_is_not_duplicate && $b->t_is_not_duplicate)
+                        return -1;
+
+                    // Fallback to ID (prefer newer)
+                    return $a->t_id <=> $b->t_id;
+                })->last();
+
+                $deleteIds = $allInGroup->filter(fn($t) => $t->t_id !== $keepTransaction->t_id)->pluck('t_id')->toArray();
 
                 $groups[] = [
-                    'key' => $groupKey,
+                    'key' => $key,
                     'transactions' => $allInGroup->map(function ($t) {
                         return [
                             't_id' => $t->t_id,
@@ -125,8 +207,9 @@ class FinanceTransactionsDedupeApiController extends Controller
                             't_price' => $t->t_price,
                             't_amt' => $t->t_amt,
                             't_comment' => $t->t_comment,
-                            'parent_t_id' => $t->parent_t_id,
-                            'tags' => $t->tags->map(fn ($tag) => [
+                            't_is_not_duplicate' => (bool) $t->t_is_not_duplicate,
+                            'parent_t_id' => $t->parentTransactions->first()?->t_id,
+                            'tags' => $t->tags->map(fn($tag) => [
                                 'tag_id' => $tag->tag_id,
                                 'tag_label' => $tag->tag_label,
                             ])->toArray(),
@@ -135,35 +218,26 @@ class FinanceTransactionsDedupeApiController extends Controller
                     'keepId' => $keepTransaction->t_id,
                     'deleteIds' => $deleteIds,
                 ];
-
-                // Limit to 150 groups
-                if (count($groups) >= 150) {
-                    break;
-                }
             }
         }
 
         // Mark transactions that had no duplicates as verified non-duplicates
-        // Only do this if we scanned all transactions (not limited by group count)
+        // Only do this if we scanned all potential candidates (not limited by group count)
         $markedAsNonDuplicate = 0;
-        if (count($groups) < 150) {
-            $allTransactionIds = $transactions->pluck('t_id')->toArray();
-            $idsWithoutDuplicates = array_diff($allTransactionIds, $idsInDuplicateGroups);
+        if (!$limitReached) {
+            $nonDuplicateQuery = FinAccountLineItems::where('t_account', $account->acct_id)
+                ->where('t_is_not_duplicate', false);
 
-            if (! empty($idsWithoutDuplicates)) {
-                $markedAsNonDuplicate = FinAccountLineItems::whereIn('t_id', $idsWithoutDuplicates)
-                    ->where('t_account', $account->acct_id)
-                    ->update(['t_is_not_duplicate' => true]);
+            if ($year) {
+                $nonDuplicateQuery->whereYear('t_date', $year);
             }
-        }
 
-        // Count how many transactions were already marked as non-duplicate (for UI info)
-        $previouslyMarkedQuery = FinAccountLineItems::where('t_account', $account->acct_id)
-            ->where('t_is_not_duplicate', true);
-        if ($year) {
-            $previouslyMarkedQuery->whereYear('t_date', $year);
+            if (!empty($idsInDuplicateGroups)) {
+                $nonDuplicateQuery->whereNotIn('t_id', $idsInDuplicateGroups);
+            }
+
+            $markedAsNonDuplicate = $nonDuplicateQuery->update(['t_is_not_duplicate' => true]);
         }
-        $previouslyMarkedCount = $previouslyMarkedQuery->count();
 
         return response()->json([
             'groups' => $groups,
@@ -203,76 +277,118 @@ class FinanceTransactionsDedupeApiController extends Controller
         DB::beginTransaction();
         try {
             // Mark unchecked groups as non-duplicates
-            if (! empty($markAsNotDuplicateIds)) {
+            if (!empty($markAsNotDuplicateIds)) {
                 $totalMarkedAsNotDuplicate = FinAccountLineItems::whereIn('t_id', $markAsNotDuplicateIds)
                     ->where('t_account', $account->acct_id)
                     ->update(['t_is_not_duplicate' => true]);
             }
 
+            if (empty($merges)) {
+                DB::commit();
+
+                return response()->json([
+                    'success' => true,
+                    'mergedCount' => 0,
+                    'tagsAdded' => 0,
+                    'markedAsNotDuplicate' => $totalMarkedAsNotDuplicate,
+                ]);
+            }
+
+            // 1. Collect all IDs involved
+            $allKeepIds = collect($merges)->pluck('keepId')->toArray();
+            $allDeleteIds = [];
+            foreach ($merges as $merge) {
+                $allDeleteIds = array_merge($allDeleteIds, $merge['deleteIds']);
+            }
+            $allDeleteIds = array_unique($allDeleteIds);
+
+            // 2. Fetch all transactions in bulk to minimize queries
+            $allRelevantTransactions = FinAccountLineItems::whereIn('t_id', array_merge($allKeepIds, $allDeleteIds))
+                ->where('t_account', $account->acct_id)
+                ->with(['tags'])
+                ->get()
+                ->keyBy('t_id');
+
+            // 3. Prepare bulk operations
+            $allTagInserts = [];
+            $parentReassignments = []; // Mapping for CASE statement: delete_id => keep_id
+            $actualDeleteIds = [];
+
             foreach ($merges as $merge) {
                 $keepId = $merge['keepId'];
                 $deleteIds = $merge['deleteIds'];
 
-                // Verify the kept transaction exists and belongs to this account
-                $keepTransaction = FinAccountLineItems::where('t_id', $keepId)
-                    ->where('t_account', $account->acct_id)
-                    ->first();
-
-                if (! $keepTransaction) {
-                    continue; // Skip if keep transaction not found
+                if (!$allRelevantTransactions->has($keepId)) {
+                    continue;
                 }
 
-                // Verify delete transactions exist and belong to this account
-                $deleteTransactions = FinAccountLineItems::whereIn('t_id', $deleteIds)
-                    ->where('t_account', $account->acct_id)
-                    ->with(['tags'])
-                    ->get();
+                $keepTransaction = $allRelevantTransactions->get($keepId);
+                $existingTagIds = $keepTransaction->tags->pluck('tag_id')->toArray();
 
-                if ($deleteTransactions->count() === 0) {
-                    continue; // Skip if no delete transactions found
-                }
+                foreach ($deleteIds as $delId) {
+                    if (!$allRelevantTransactions->has($delId)) {
+                        continue;
+                    }
 
-                // Collect all tag IDs from transactions to delete
-                $tagIdsToAdd = [];
-                foreach ($deleteTransactions as $t) {
-                    foreach ($t->tags as $tag) {
-                        $tagIdsToAdd[] = $tag->tag_id;
+                    $delTransaction = $allRelevantTransactions->get($delId);
+                    $actualDeleteIds[] = $delId;
+                    $parentReassignments[$delId] = $keepId;
+
+                    foreach ($delTransaction->tags as $tag) {
+                        if (!in_array($tag->tag_id, $existingTagIds)) {
+                            $allTagInserts[] = [
+                                't_id' => $keepId,
+                                'tag_id' => $tag->tag_id,
+                            ];
+                            $existingTagIds[] = $tag->tag_id; // Avoid duplicate inserts for same keepId
+                        }
                     }
                 }
-                $tagIdsToAdd = array_unique($tagIdsToAdd);
+            }
 
-                // Get existing tag IDs on kept transaction
-                $existingTagIds = DB::table('fin_account_line_item_tag_map')
-                    ->where('t_id', $keepId)
-                    ->pluck('tag_id')
-                    ->toArray();
+            // 4. Execute bulk operations
+            if (!empty($allTagInserts)) {
+                // Remove duplicates in allTagInserts (e.g. if multiple delete transactions had the same tag)
+                $allTagInserts = collect($allTagInserts)->unique(fn($i) => $i['t_id'] . '-' . $i['tag_id'])->toArray();
+                DB::table('fin_account_line_item_tag_map')->insertOrIgnore($allTagInserts);
+                $totalTagsAdded = count($allTagInserts);
+            }
 
-                // Add missing tags to kept transaction
-                $newTagIds = array_diff($tagIdsToAdd, $existingTagIds);
-                foreach ($newTagIds as $tagId) {
-                    DB::table('fin_account_line_item_tag_map')->insert([
-                        't_id' => $keepId,
-                        'tag_id' => $tagId,
-                    ]);
+            if (!empty($parentReassignments)) {
+                // We update the links table, NOT the line items table
+                // Any link where a deleted transaction was the parent should now point to the kept transaction
+                $parentCaseSql = 'CASE ';
+                foreach ($parentReassignments as $delId => $keepId) {
+                    $parentCaseSql .= "WHEN parent_t_id = {$delId} THEN {$keepId} ";
                 }
-                $totalTagsAdded += count($newTagIds);
+                $parentCaseSql .= 'ELSE parent_t_id END';
 
-                // Reassign parent_t_id from deleted transactions to kept transaction
-                // This handles child transactions that were linked to the deleted ones
-                FinAccountLineItems::whereIn('parent_t_id', $deleteIds)
-                    ->update(['parent_t_id' => $keepId]);
+                DB::table('fin_account_line_item_links')
+                    ->whereIn('parent_t_id', array_keys($parentReassignments))
+                    ->update(['parent_t_id' => DB::raw($parentCaseSql)]);
 
-                // Delete tag mappings for deleted transactions
+                // Also handle cases where a deleted transaction was the child in a link
+                $childCaseSql = 'CASE ';
+                foreach ($parentReassignments as $delId => $keepId) {
+                    $childCaseSql .= "WHEN child_t_id = {$delId} THEN {$keepId} ";
+                }
+                $childCaseSql .= 'ELSE child_t_id END';
+
+                DB::table('fin_account_line_item_links')
+                    ->whereIn('child_t_id', array_keys($parentReassignments))
+                    ->update(['child_t_id' => DB::raw($childCaseSql)]);
+            }
+
+            if (!empty($actualDeleteIds)) {
+                // Delete tag mappings first
                 DB::table('fin_account_line_item_tag_map')
-                    ->whereIn('t_id', $deleteIds)
+                    ->whereIn('t_id', $actualDeleteIds)
                     ->delete();
 
                 // Delete the transactions
-                $deletedCount = FinAccountLineItems::whereIn('t_id', $deleteIds)
+                $totalDeleted = FinAccountLineItems::whereIn('t_id', $actualDeleteIds)
                     ->where('t_account', $account->acct_id)
                     ->delete();
-
-                $totalDeleted += $deletedCount;
             }
 
             DB::commit();
@@ -286,7 +402,7 @@ class FinanceTransactionsDedupeApiController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
 
-            return response()->json(['error' => 'Failed to merge transactions: '.$e->getMessage()], 500);
+            return response()->json(['error' => 'Failed to merge transactions: ' . $e->getMessage()], 500);
         }
     }
 

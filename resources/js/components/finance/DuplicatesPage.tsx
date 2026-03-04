@@ -1,16 +1,16 @@
 'use client'
 
-import { useCallback, useEffect, useMemo,useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Spinner } from '@/components/ui/spinner'
 import { fetchWrapper } from '@/fetchWrapper'
-import { 
-  getEffectiveYear, 
+import {
+  getEffectiveYear,
   YEAR_CHANGED_EVENT,
-  type YearSelection 
+  type YearSelection
 } from '@/lib/financeRouteBuilder'
 
 interface Transaction {
@@ -23,6 +23,7 @@ interface Transaction {
   t_price: number | string | null
   t_amt: number | string | null
   t_comment: string | null
+  t_is_not_duplicate: boolean
   parent_t_id: number | null
   tags?: { tag_id: number; tag_label: string }[]
 }
@@ -42,6 +43,7 @@ export default function DuplicatesPage({ id }: { id: number }) {
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [selectedYear, setSelectedYear] = useState<YearSelection | null>(null)
+  const [isReanalyzing, setIsReanalyzing] = useState(false)
   const [markedAsNonDuplicate, setMarkedAsNonDuplicate] = useState(0)
   const [previouslyMarkedCount, setPreviouslyMarkedCount] = useState(0)
 
@@ -51,10 +53,10 @@ export default function DuplicatesPage({ id }: { id: number }) {
       const effective = getEffectiveYear(id)
       setSelectedYear(effective)
     }
-    
+
     // Initial load
     updateYear()
-    
+
     // Listen for year changes from year selector
     const handleYearChange = (e: Event) => {
       const customEvent = e as CustomEvent<{ accountId: number; year: YearSelection }>
@@ -63,7 +65,7 @@ export default function DuplicatesPage({ id }: { id: number }) {
       }
     }
     window.addEventListener(YEAR_CHANGED_EVENT, handleYearChange)
-    
+
     return () => {
       window.removeEventListener(YEAR_CHANGED_EVENT, handleYearChange)
     }
@@ -71,16 +73,20 @@ export default function DuplicatesPage({ id }: { id: number }) {
 
   const fetchDuplicates = useCallback(async () => {
     if (selectedYear === null) return
-    
+
     setIsLoading(true)
     setError(null)
     try {
-      const yearParam = selectedYear !== 'all' ? `?year=${selectedYear}` : ''
-      const data = await fetchWrapper.get(`/api/finance/${id}/duplicates${yearParam}`)
+      const params = new URLSearchParams()
+      if (selectedYear !== 'all') params.append('year', selectedYear.toString())
+      if (isReanalyzing) params.append('reanalyze', 'true')
+
+      const query = params.toString() ? `?${params.toString()}` : ''
+      const data = await fetchWrapper.get(`/api/finance/${id}/duplicates${query}`)
       setDuplicateGroups(data.groups || [])
       setMarkedAsNonDuplicate(data.markedAsNonDuplicate || 0)
       setPreviouslyMarkedCount(data.previouslyMarkedCount || 0)
-      
+
       // Pre-select all suggested deletions
       const preSelected = new Set<number>()
       for (const group of data.groups || []) {
@@ -94,13 +100,13 @@ export default function DuplicatesPage({ id }: { id: number }) {
     } finally {
       setIsLoading(false)
     }
-  }, [id, selectedYear])
+  }, [id, selectedYear, isReanalyzing])
 
   useEffect(() => {
     if (selectedYear !== null) {
       fetchDuplicates()
     }
-  }, [fetchDuplicates, selectedYear])
+  }, [fetchDuplicates, selectedYear, isReanalyzing])
 
   const toggleSelection = (tId: number) => {
     setSelectedForDeletion(prev => {
@@ -119,18 +125,22 @@ export default function DuplicatesPage({ id }: { id: number }) {
     const mergeRequests: { keepId: number; deleteIds: number[] }[] = []
     // Track groups that are entirely unchecked (to mark as non-duplicates)
     const markAsNotDuplicateIds: number[] = []
-    
+
     for (const group of duplicateGroups) {
       const deleteIds = group.transactions
         .filter(t => selectedForDeletion.has(t.t_id))
         .map(t => t.t_id)
-      
+
       if (deleteIds.length > 0) {
         // Find the transaction to keep (highest t_id not being deleted)
         const keepId = group.transactions
           .filter(t => !selectedForDeletion.has(t.t_id))
-          .sort((a, b) => b.t_id - a.t_id)[0]?.t_id
-        
+          .sort((a, b) => {
+            if (a.t_is_not_duplicate && !b.t_is_not_duplicate) return -1
+            if (!a.t_is_not_duplicate && b.t_is_not_duplicate) return 1
+            return b.t_id - a.t_id
+          })[0]?.t_id
+
         if (keepId) {
           mergeRequests.push({ keepId, deleteIds })
         }
@@ -177,7 +187,7 @@ export default function DuplicatesPage({ id }: { id: number }) {
   const { deleteCount, markAsNonDuplicateCount } = useMemo(() => {
     let deleteCount = 0
     let markAsNonDuplicateCount = 0
-    
+
     for (const group of duplicateGroups) {
       const selectedInGroup = group.transactions.filter(t => selectedForDeletion.has(t.t_id)).length
       if (selectedInGroup > 0) {
@@ -187,7 +197,7 @@ export default function DuplicatesPage({ id }: { id: number }) {
         markAsNonDuplicateCount += group.transactions.length
       }
     }
-    
+
     return { deleteCount, markAsNonDuplicateCount }
   }, [duplicateGroups, selectedForDeletion])
 
@@ -216,18 +226,28 @@ export default function DuplicatesPage({ id }: { id: number }) {
   return (
     <div className="p-4 max-w-6xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Duplicate Transaction Detection</h1>
-      
+
       {error && (
         <Alert variant="destructive" className="mb-4">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      
+
       {successMessage && (
         <Alert className="mb-4 bg-green-50 dark:bg-green-900 border-green-200 dark:border-green-800">
           <AlertDescription className="text-green-800 dark:text-green-200">{successMessage}</AlertDescription>
         </Alert>
       )}
+
+      <div className="flex items-center gap-6 mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg">
+        <label className="flex items-center gap-2 cursor-pointer font-medium text-blue-900 dark:text-blue-100">
+          <Checkbox checked={isReanalyzing} onCheckedChange={(checked) => setIsReanalyzing(!!checked)} />
+          <span>Reanalyze All Transactions</span>
+        </label>
+        <p className="text-xs text-blue-700 dark:text-blue-300">
+          Enabling this will include items previously marked as "not duplicate".
+        </p>
+      </div>
 
       {duplicateGroups.length === 0 ? (
         <div className="text-center py-8 text-gray-500 dark:text-gray-400 space-y-2">
@@ -255,8 +275,8 @@ export default function DuplicatesPage({ id }: { id: number }) {
             <Button variant="outline" size="sm" onClick={selectNone}>
               Deselect All
             </Button>
-            <Button 
-              onClick={handleMerge} 
+            <Button
+              onClick={handleMerge}
               disabled={isMerging || (deleteCount === 0 && markAsNonDuplicateCount === 0)}
               className="ml-auto"
             >
@@ -278,29 +298,28 @@ export default function DuplicatesPage({ id }: { id: number }) {
 
           <div className="space-y-4">
             {duplicateGroups.map((group, groupIndex) => (
-              <div 
-                key={group.key} 
+              <div
+                key={group.key}
                 className="border rounded-lg p-4 bg-white dark:bg-gray-800 shadow-sm"
               >
                 <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
                   Group {groupIndex + 1}: {group.transactions[0]?.t_date} - {group.transactions[0]?.t_symbol || 'No Symbol'} - ${group.transactions[0]?.t_amt}
                 </div>
-                
+
                 <div className="space-y-2">
                   {group.transactions.map((tx) => {
                     const isSelected = selectedForDeletion.has(tx.t_id)
                     const isKeep = tx.t_id === group.keepId
-                    
+
                     return (
-                      <div 
+                      <div
                         key={tx.t_id}
-                        className={`flex items-start gap-3 p-3 rounded border ${
-                          isSelected 
-                            ? 'bg-red-50 dark:bg-red-900 border-red-200 dark:border-red-800' 
-                            : isKeep 
-                              ? 'bg-green-50 dark:bg-green-900 border-green-200 dark:border-green-800' 
-                              : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'
-                        }`}
+                        className={`flex items-start gap-3 p-3 rounded border ${isSelected
+                          ? 'bg-red-50 dark:bg-red-900 border-red-200 dark:border-red-800'
+                          : isKeep
+                            ? 'bg-green-50 dark:bg-green-900 border-green-200 dark:border-green-800'
+                            : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'
+                          }`}
                       >
                         <Checkbox
                           id={`tx-${tx.t_id}`}
@@ -313,6 +332,11 @@ export default function DuplicatesPage({ id }: { id: number }) {
                             <span className="font-mono text-xs bg-gray-200 dark:bg-gray-700 px-1 rounded">
                               #{tx.t_id}
                             </span>
+                            {tx.t_is_not_duplicate && (
+                              <span className="text-[10px] font-bold bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1.5 py-0.5 rounded uppercase tracking-tight">
+                                Previously Verified
+                              </span>
+                            )}
                             {isKeep && !isSelected && (
                               <span className="text-xs bg-green-200 dark:bg-green-800 text-green-800 dark:text-green-200 px-2 py-0.5 rounded">
                                 KEEP
@@ -365,8 +389,8 @@ export default function DuplicatesPage({ id }: { id: number }) {
                               <div className="md:col-span-2">
                                 <span className="text-gray-500 dark:text-gray-400">Tags:</span>{' '}
                                 {tx.tags.map(tag => (
-                                  <span 
-                                    key={tag.tag_id} 
+                                  <span
+                                    key={tag.tag_id}
                                     className="inline-block text-xs bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded mr-1"
                                   >
                                     {tag.tag_label}
