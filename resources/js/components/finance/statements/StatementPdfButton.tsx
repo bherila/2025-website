@@ -1,5 +1,5 @@
-import { FileText } from 'lucide-react'
-import { useState } from 'react'
+import { Download, FileText } from 'lucide-react'
+import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -13,6 +13,9 @@ interface StatementPdfButtonProps {
   iconOnly?: boolean
   className?: string
   title?: string
+  hasPdf?: boolean
+  showDownload?: boolean
+  downloadVariant?: 'outline' | 'default' | 'ghost' | 'secondary'
 }
 
 export default function StatementPdfButton({
@@ -21,11 +24,35 @@ export default function StatementPdfButton({
   iconOnly = false,
   className = '',
   title,
+  hasPdf: initialHasPdf,
+  showDownload = false,
+  downloadVariant = 'outline',
 }: StatementPdfButtonProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [pdfData, setPdfData] = useState<{ view_url: string; filename: string } | null>(null)
+  const [checking, setChecking] = useState(initialHasPdf === undefined)
+  const [hasPdf, setHasPdf] = useState(initialHasPdf ?? true)
+  const [pdfData, setPdfData] = useState<{ view_url: string; download_url: string; filename: string } | null>(null)
   const [hasError, setHasError] = useState(false)
+
+  // If initialHasPdf is not provided, check if PDF exists
+  useEffect(() => {
+    if (initialHasPdf !== undefined) return
+
+    const checkPdf = async () => {
+      setChecking(true)
+      try {
+        const data = await fetchWrapper.get(`/api/finance/${accountId}/statements/${statementId}/pdf`)
+        setPdfData(data)
+        setHasPdf(true)
+      } catch (err) {
+        setHasPdf(false)
+      } finally {
+        setChecking(false)
+      }
+    }
+    checkPdf()
+  }, [accountId, statementId, initialHasPdf])
 
   const handleOpen = async () => {
     if (pdfData) {
@@ -47,11 +74,25 @@ export default function StatementPdfButton({
     }
   }
 
+  const handleDownload = () => {
+    if (pdfData?.download_url) {
+      window.open(pdfData.download_url, '_blank')
+    }
+  }
+
+  if (checking) {
+    return null
+  }
+
+  if (!hasPdf) {
+    return null
+  }
+
   if (hasError && iconOnly) {
     return null // Don't show anything if it failed and we're in a list
   }
 
-  const button = (
+  const viewButton = (
     <Button
       variant="outline"
       size={iconOnly ? 'sm' : 'default'}
@@ -66,18 +107,27 @@ export default function StatementPdfButton({
 
   return (
     <>
-      <TooltipProvider>
-        {iconOnly ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              {button}
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>View Original PDF</p>
-            </TooltipContent>
-          </Tooltip>
-        ) : button}
-      </TooltipProvider>
+      <div className="flex gap-2">
+        <TooltipProvider>
+          {iconOnly ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                {viewButton}
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>View Original PDF</p>
+              </TooltipContent>
+            </Tooltip>
+          ) : viewButton}
+        </TooltipProvider>
+
+        {showDownload && hasPdf && (
+          <Button variant={downloadVariant} size="sm" onClick={handleDownload} disabled={loading}>
+            <Download className="h-4 w-4 mr-1" />
+            Download PDF
+          </Button>
+        )}
+      </div>
 
       {pdfData && (
         <StatementPdfModal

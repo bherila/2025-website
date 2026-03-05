@@ -1,4 +1,3 @@
-import { Download } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -37,9 +36,6 @@ export default function StatementDetailView({
   const [statementInfo, setStatementInfo] = useState<StatementInfo | undefined>(preloadedInfo)
   const [statementDetails, setStatementDetails] = useState<StatementDetail[]>(preloadedDetails ?? [])
   const [isLoading, setIsLoading] = useState(!preloadedDetails)
-  const [pdfLoading, setPdfLoading] = useState(false)
-  const [pdfUrl, setPdfUrl] = useState<{ view_url: string; download_url: string; filename: string } | null>(null)
-  const [pdfError, setPdfError] = useState(false)
 
   // Fetch data if not preloaded
   useEffect(() => {
@@ -58,30 +54,6 @@ export default function StatementDetailView({
     }
     fetchDetails()
   }, [statementId, preloadedDetails])
-
-  // Check if there's a PDF file for this statement for download button
-  useEffect(() => {
-    const checkPdf = async () => {
-      setPdfLoading(true)
-      setPdfError(false)
-      try {
-        const data = await fetchWrapper.get(`/api/finance/${accountId}/statements/${statementId}/pdf`)
-        setPdfUrl(data)
-      } catch {
-        // No PDF attached — that's fine
-        setPdfError(true)
-      } finally {
-        setPdfLoading(false)
-      }
-    }
-    checkPdf()
-  }, [accountId, statementId])
-
-  const handleDownloadPdf = () => {
-    if (pdfUrl?.download_url) {
-      window.open(pdfUrl.download_url, '_blank')
-    }
-  }
 
   // Group details by section
   const detailsBySection = statementDetails.reduce((acc, detail) => {
@@ -148,19 +120,12 @@ export default function StatementDetailView({
         </div>
 
         {/* PDF buttons */}
-        {!pdfLoading && pdfUrl && !pdfError && (
-          <div className="flex gap-2">
-            <StatementPdfButton 
-              accountId={accountId} 
-              statementId={statementId} 
-              title="View Original PDF"
-            />
-            <Button variant="outline" size="sm" onClick={handleDownloadPdf}>
-              <Download className="h-4 w-4 mr-1" />
-              Download PDF
-            </Button>
-          </div>
-        )}
+        <StatementPdfButton 
+          accountId={accountId} 
+          statementId={statementId} 
+          title="View Original PDF"
+          showDownload
+        />
       </div>
 
       {/* Statement details sections */}

@@ -33,6 +33,7 @@ export interface StatementSnapshot {
   statement_closing_date: string
   balance: string
   lineItemCount: number
+  hasPdf?: boolean
 }
 
 interface StatementsListViewProps {
@@ -106,6 +107,7 @@ export default function StatementsListView({
         change,
         percentChange,
         lineItemCount: statement.lineItemCount,
+        hasPdf: !!statement.hasPdf,
         original: statement,
       }
     }),
@@ -249,6 +251,7 @@ export default function StatementsListView({
                       <StatementPdfButton 
                         accountId={accountId} 
                         statementId={row.statement_id} 
+                        hasPdf={row.hasPdf}
                         iconOnly 
                       />
 

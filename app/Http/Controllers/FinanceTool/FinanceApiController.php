@@ -155,8 +155,16 @@ class FinanceApiController extends Controller
 
         $balances = DB::table('fin_statements as fs')
             ->leftJoin('fin_statement_details as fsd', 'fs.statement_id', '=', 'fsd.statement_id')
+            ->leftJoin('files_for_fin_accounts as ffa', 'fs.statement_id', '=', 'ffa.statement_id')
             ->where('fs.acct_id', $account->acct_id)
-            ->select('fs.statement_id', 'fs.statement_opening_date', 'fs.statement_closing_date', 'fs.balance', DB::raw('count(fsd.id) as lineItemCount'))
+            ->select(
+                'fs.statement_id', 
+                'fs.statement_opening_date', 
+                'fs.statement_closing_date', 
+                'fs.balance', 
+                DB::raw('count(DISTINCT fsd.id) as lineItemCount'),
+                DB::raw('count(DISTINCT ffa.id) > 0 as hasPdf')
+            )
             ->groupBy('fs.statement_id', 'fs.statement_opening_date', 'fs.statement_closing_date', 'fs.balance')
             ->orderBy('fs.statement_closing_date', 'asc')
             ->get();
