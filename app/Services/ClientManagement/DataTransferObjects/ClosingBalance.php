@@ -11,6 +11,5 @@ class ClosingBalance
         public float $excessHours,
         public float $negativeBalance,
         public float $remainingRollover,
-    ) {
-    }
+    ) {}
 }

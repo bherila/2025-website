@@ -2,7 +2,7 @@
 
 namespace App\Models\Files;
 
-use App\Models\FinAccounts;
+use App\Models\FinanceTool\FinAccounts;
 use App\Traits\HasFileStorage;
 use App\Traits\SerializesDatesAsLocal;
 use Illuminate\Database\Eloquent\Model;

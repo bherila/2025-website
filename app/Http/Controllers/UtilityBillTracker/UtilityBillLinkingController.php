@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\UtilityBillTracker;
 
 use App\Http\Controllers\Controller;
-use App\Models\FinAccountLineItems;
+use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\UtilityBillTracker\UtilityAccount;
 use App\Models\UtilityBillTracker\UtilityBill;
 use Illuminate\Http\Request;

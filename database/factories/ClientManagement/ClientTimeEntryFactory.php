@@ -2,7 +2,6 @@
 
 namespace Database\Factories\ClientManagement;
 
-use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientProject;
 use App\Models\ClientManagement\ClientTimeEntry;
 use App\Models\User;
@@ -37,11 +36,11 @@ class ClientTimeEntryFactory extends Factory
             },
             'is_billable' => true,
             'job_type' => fake()->randomElement([
-                'Software Development', 
-                'Project Management', 
-                'Support', 
-                'Meeting', 
-                'Other'
+                'Software Development',
+                'Project Management',
+                'Support',
+                'Meeting',
+                'Other',
             ]),
             'client_invoice_line_id' => null,
         ];

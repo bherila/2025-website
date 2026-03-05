@@ -4,9 +4,9 @@ use App\Http\Controllers\ClientManagement\ClientAgreementController;
 use App\Http\Controllers\ClientManagement\ClientCompanyController;
 use App\Http\Controllers\ClientManagement\ClientPortalAgreementController;
 use App\Http\Controllers\ClientManagement\ClientPortalController;
-use App\Http\Controllers\FinanceAccountsController;
+use App\Http\Controllers\FinanceTool\FinanceAccountsController;
+use App\Http\Controllers\FinanceTool\FinancePayslipController;
 use App\Http\Controllers\LoginController;
-use App\Http\Controllers\PayslipController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\UtilityBillTracker\UtilityAccountController;
 use Illuminate\Support\Facades\Route;
@@ -41,8 +41,8 @@ Route::middleware('auth')->group(function () {
         return view('finance.rsu-add-grant');
     });
 
-    Route::get('/finance/payslips', [PayslipController::class, 'index']);
-    Route::get('/finance/payslips/entry', [PayslipController::class, 'entry']);
+    Route::get('/finance/payslips', [FinancePayslipController::class, 'index']);
+    Route::get('/finance/payslips/entry', [FinancePayslipController::class, 'entry']);
 
     Route::get('/finance/accounts', [FinanceAccountsController::class, 'index']);
     Route::get('/finance/tags', function () {

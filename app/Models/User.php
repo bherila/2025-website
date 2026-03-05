@@ -13,7 +13,7 @@ class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable, SerializesDatesAsLocal;
- 
+
     /**
      * The attributes that are mass assignable.
      *
@@ -27,7 +27,7 @@ class User extends Authenticatable
         'user_role',
         'last_login_date',
     ];
- 
+
     /**
      * The attributes that should be hidden for serialization.
      *
@@ -60,7 +60,7 @@ class User extends Authenticatable
     {
         return $this->user_role;
     }
- 
+
     /**
      * Get the attributes that should be cast.
      *

@@ -7,7 +7,6 @@ use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientInvoice;
 use App\Models\ClientManagement\ClientProject;
 use App\Models\ClientManagement\ClientTask;
-use App\Models\Files\FileForProject;
 use Illuminate\Support\Facades\Gate;
 
 class ClientPortalController extends Controller
@@ -47,6 +46,7 @@ class ClientPortalController extends Controller
                 } else {
                     $entry->client_invoice = null;
                 }
+
                 return $entry;
             });
 
@@ -224,6 +224,7 @@ class ClientPortalController extends Controller
                     $data[$k] = $clean;
                 }
             }
+
             return $data;
         }
 

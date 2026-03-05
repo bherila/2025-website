@@ -4,8 +4,6 @@ namespace Tests\Feature\ClientManagement;
 
 use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientCompany;
-use App\Models\ClientManagement\ClientInvoice;
-use App\Models\ClientManagement\ClientInvoiceLine;
 use App\Models\ClientManagement\ClientProject;
 use App\Models\ClientManagement\ClientTimeEntry;
 use App\Models\User;
@@ -29,8 +27,11 @@ class TimeEntryDraftInvoiceTest extends TestCase
     use RefreshDatabase;
 
     private User $admin;
+
     private ClientCompany $company;
+
     private ClientAgreement $agreement;
+
     private ClientProject $project;
 
     protected function setUp(): void
@@ -267,7 +268,7 @@ class TimeEntryDraftInvoiceTest extends TestCase
     }
 
     // ==========================================
-    // Draft Invoice Regeneration Tests  
+    // Draft Invoice Regeneration Tests
     // ==========================================
 
     public function test_draft_invoice_regenerated_on_time_entry_create(): void
@@ -456,7 +457,7 @@ class TimeEntryDraftInvoiceTest extends TestCase
         $response->assertStatus(200);
 
         $entries = $response->json('entries');
-        $invoicedEntry = collect($entries)->first(fn($e) => $e['client_invoice'] !== null);
+        $invoicedEntry = collect($entries)->first(fn ($e) => $e['client_invoice'] !== null);
 
         $this->assertNotNull($invoicedEntry, 'Should have an entry linked to invoice');
         $this->assertArrayHasKey('status', $invoicedEntry['client_invoice']);

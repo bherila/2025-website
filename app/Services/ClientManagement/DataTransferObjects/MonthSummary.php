@@ -10,6 +10,5 @@ class MonthSummary
         public float $hoursWorked,
         public string $yearMonth,
         public float $retainerHours,
-    ) {
-    }
+    ) {}
 }

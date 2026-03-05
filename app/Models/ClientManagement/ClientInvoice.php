@@ -2,8 +2,8 @@
 
 namespace App\Models\ClientManagement;
 
-use App\Traits\SerializesDatesAsLocal;
 use App\Services\ClientManagement\DataTransferObjects\InvoiceHoursBreakdown;
+use App\Traits\SerializesDatesAsLocal;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -199,8 +199,6 @@ class ClientInvoice extends Model
 
     /**
      * Calculate hours breakdown: carried-in (previous months) vs current month.
-     *
-     * @return InvoiceHoursBreakdown
      */
     public function calculateHoursBreakdown(): InvoiceHoursBreakdown
     {
@@ -243,7 +241,7 @@ class ClientInvoice extends Model
         $this->loadMissing(['agreement', 'lineItems.timeEntries', 'payments']);
 
         $hoursBreakdown = $this->calculateHoursBreakdown();
-        $negativeOffset = min((float)$this->negative_hours_balance, (float)$this->retainer_hours_included);
+        $negativeOffset = min((float) $this->negative_hours_balance, (float) $this->retainer_hours_included);
 
         return [
             'client_invoice_id' => $this->client_invoice_id,

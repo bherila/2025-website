@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::table('client_agreements', function (Blueprint $table) {
             // Check if column doesn't exist before adding
-            if (!Schema::hasColumn('client_agreements', 'catch_up_threshold_hours')) {
+            if (! Schema::hasColumn('client_agreements', 'catch_up_threshold_hours')) {
                 // Add catch_up_threshold_hours column with default of 1.0
                 // This represents the minimum hours that must be available after applying retainer
                 // Range: 0 to monthly_retainer_hours (validated in model/API)

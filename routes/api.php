@@ -5,24 +5,26 @@ use App\Http\Controllers\ClientManagement\ClientCompanyApiController;
 use App\Http\Controllers\ClientManagement\ClientCompanyUserController;
 use App\Http\Controllers\ClientManagement\ClientPortalAgreementApiController;
 use App\Http\Controllers\ClientManagement\ClientPortalApiController;
-use App\Http\Controllers\FinanceApiController;
-use App\Http\Controllers\FinanceTransactionLinkingApiController;
-use App\Http\Controllers\FinanceTransactionsApiController;
-use App\Http\Controllers\FinanceTransactionsDedupeApiController;
-use App\Http\Controllers\FinanceTransactionTaggingApiController;
-use App\Http\Controllers\PayslipController;
-use App\Http\Controllers\PayslipImportController;
-use App\Http\Controllers\RsuController;
-use App\Http\Controllers\StatementController;
+use App\Http\Controllers\FinanceTool\FinanceApiController;
+use App\Http\Controllers\FinanceTool\FinanceGeminiImportController;
+use App\Http\Controllers\FinanceTool\FinanceLotsController;
+use App\Http\Controllers\FinanceTool\FinancePayslipController;
+use App\Http\Controllers\FinanceTool\FinancePayslipImportController;
+use App\Http\Controllers\FinanceTool\FinanceRsuController;
+use App\Http\Controllers\FinanceTool\FinanceTransactionLinkingApiController;
+use App\Http\Controllers\FinanceTool\FinanceTransactionsApiController;
+use App\Http\Controllers\FinanceTool\FinanceTransactionsDedupeApiController;
+use App\Http\Controllers\FinanceTool\FinanceTransactionTaggingApiController;
+use App\Http\Controllers\FinanceTool\StatementController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['web', 'auth'])->get('/finance/accounts', [FinanceApiController::class, 'accounts']);
 Route::middleware(['web', 'auth'])->post('/finance/accounts', [FinanceApiController::class, 'createAccount']);
 Route::middleware(['web', 'auth'])->post('/finance/accounts/balance', [FinanceApiController::class, 'updateBalance']);
 Route::middleware(['web', 'auth'])->get('/finance/chart', [FinanceApiController::class, 'chartData']);
-Route::middleware(['web', 'auth'])->get('/rsu', [RsuController::class, 'getRsuData']);
-Route::middleware(['web', 'auth'])->post('/rsu', [RsuController::class, 'upsertRsuGrants']);
-Route::middleware(['web', 'auth'])->delete('/rsu/{id}', [RsuController::class, 'deleteRsuGrant']);
+Route::middleware(['web', 'auth'])->get('/rsu', [FinanceRsuController::class, 'getRsuData']);
+Route::middleware(['web', 'auth'])->post('/rsu', [FinanceRsuController::class, 'upsertRsuGrants']);
+Route::middleware(['web', 'auth'])->delete('/rsu/{id}', [FinanceRsuController::class, 'deleteRsuGrant']);
 
 // Transaction routes (FinanceTransactionsApiController)
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/line_items', [FinanceTransactionsApiController::class, 'getLineItems']);
@@ -51,13 +53,13 @@ Route::middleware(['web', 'auth'])->post('/finance/{account_id}/update-closed', 
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/update-flags', [FinanceApiController::class, 'updateAccountFlags']);
 Route::middleware(['web', 'auth'])->delete('/finance/{account_id}', [FinanceApiController::class, 'deleteAccount']);
 
-Route::middleware(['web', 'auth'])->get('/payslips/years', [PayslipController::class, 'fetchPayslipYears']);
-Route::middleware(['web', 'auth'])->get('/payslips', [PayslipController::class, 'fetchPayslips']);
-Route::middleware(['web', 'auth'])->post('/payslips', [PayslipController::class, 'savePayslip']);
-Route::middleware(['web', 'auth'])->post('/payslips/import', [PayslipImportController::class, 'import']);
-Route::middleware(['web', 'auth'])->delete('/payslips/{payslip_id}', [PayslipController::class, 'deletePayslip']);
-Route::middleware(['web', 'auth'])->get('/payslips/{payslip_id}', [PayslipController::class, 'fetchPayslipById']);
-Route::middleware(['web', 'auth'])->post('/payslips/{payslip_id}/estimated-status', [PayslipController::class, 'updatePayslipEstimatedStatus']);
+Route::middleware(['web', 'auth'])->get('/payslips/years', [FinancePayslipController::class, 'fetchPayslipYears']);
+Route::middleware(['web', 'auth'])->get('/payslips', [FinancePayslipController::class, 'fetchPayslips']);
+Route::middleware(['web', 'auth'])->post('/payslips', [FinancePayslipController::class, 'savePayslip']);
+Route::middleware(['web', 'auth'])->post('/payslips/import', [FinancePayslipImportController::class, 'import']);
+Route::middleware(['web', 'auth'])->delete('/payslips/{payslip_id}', [FinancePayslipController::class, 'deletePayslip']);
+Route::middleware(['web', 'auth'])->get('/payslips/{payslip_id}', [FinancePayslipController::class, 'fetchPayslipById']);
+Route::middleware(['web', 'auth'])->post('/payslips/{payslip_id}/estimated-status', [FinancePayslipController::class, 'updatePayslipEstimatedStatus']);
 
 Route::middleware(['web', 'auth'])->get('/user', [App\Http\Controllers\UserApiController::class, 'getUser']);
 
@@ -68,18 +70,18 @@ Route::middleware(['web', 'auth'])->post('/license-keys', [App\Http\Controllers\
 Route::middleware(['web', 'auth'])->post('/license-keys/import', [App\Http\Controllers\LicenseKeyController::class, 'import']);
 Route::middleware(['web', 'auth'])->post('/user/update-email', [App\Http\Controllers\UserApiController::class, 'updateEmail']);
 Route::middleware(['web', 'auth'])->post('/user/update-password', [App\Http\Controllers\UserApiController::class, 'updatePassword']);
-Route::middleware(['web', 'auth'])->post('/finance/transactions/import-gemini', [App\Http\Controllers\GeminiImportController::class, 'parseDocument']);
+Route::middleware(['web', 'auth'])->post('/finance/transactions/import-gemini', [FinanceGeminiImportController::class, 'parseDocument']);
 Route::middleware(['web', 'auth'])->get('/finance/statement/{statement_id}/details', [StatementController::class, 'getDetails']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/all-statement-details', [StatementController::class, 'getFinStatementDetails']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/import-ib-statement', [StatementController::class, 'importIbStatement']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/import-pdf-statement', [StatementController::class, 'importPdfStatement']);
 
 // Lots API routes
-Route::middleware(['web', 'auth'])->get('/finance/{account_id}/lots', [App\Http\Controllers\LotsController::class, 'index']);
-Route::middleware(['web', 'auth'])->post('/finance/{account_id}/lots', [App\Http\Controllers\LotsController::class, 'store']);
-Route::middleware(['web', 'auth'])->post('/finance/{account_id}/lots/import', [App\Http\Controllers\LotsController::class, 'importLots']);
-Route::middleware(['web', 'auth'])->post('/finance/{account_id}/lots/search-transactions', [App\Http\Controllers\LotsController::class, 'searchTransactions']);
-Route::middleware(['web', 'auth'])->get('/finance/{account_id}/lots/by-transaction/{t_id}', [App\Http\Controllers\LotsController::class, 'lotsByTransaction']);
+Route::middleware(['web', 'auth'])->get('/finance/{account_id}/lots', [FinanceLotsController::class, 'index']);
+Route::middleware(['web', 'auth'])->post('/finance/{account_id}/lots', [FinanceLotsController::class, 'store']);
+Route::middleware(['web', 'auth'])->post('/finance/{account_id}/lots/import', [FinanceLotsController::class, 'importLots']);
+Route::middleware(['web', 'auth'])->post('/finance/{account_id}/lots/search-transactions', [FinanceLotsController::class, 'searchTransactions']);
+Route::middleware(['web', 'auth'])->get('/finance/{account_id}/lots/by-transaction/{t_id}', [FinanceLotsController::class, 'lotsByTransaction']);
 
 Route::middleware(['web', 'auth'])->post('/user/update-api-key', [App\Http\Controllers\UserApiController::class, 'updateApiKey']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/duplicates', [FinanceTransactionsDedupeApiController::class, 'findDuplicates']);

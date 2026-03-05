@@ -33,7 +33,6 @@ class RolloverCalculator
      *                                       indexed by months ago (1 = last month, 2 = two months ago, etc.)
      * @param  int  $rolloverMonths  Number of months hours can roll over (1 = no rollover)
      * @param  float  $previousNegativeBalance  Negative balance carried from previous month
-     * @return OpeningBalance
      */
     public function calculateOpeningBalance(
         float $retainerHours,
@@ -94,7 +93,6 @@ class RolloverCalculator
      * @param  float  $retainerHours  This month's retainer hours (for categorizing usage)
      * @param  float  $rolloverHours  Available rollover hours from previous months
      * @param  float  $remainingNegativeBalance  Negative balance that was too large to be offset by retainer
-     * @return ClosingBalance
      */
     public function calculateClosingBalance(
         float $totalAvailable,
@@ -150,7 +148,6 @@ class RolloverCalculator
      * @param  array  $previousMonthsUnused  Unused hours from previous months by month index
      * @param  int  $rolloverMonths  Number of months hours can roll over
      * @param  float  $previousNegativeBalance  Negative balance from previous month
-     * @return MonthSummary
      */
     public function calculateMonthSummary(
         float $retainerHours,

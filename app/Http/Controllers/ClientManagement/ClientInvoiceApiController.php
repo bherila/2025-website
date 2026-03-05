@@ -463,7 +463,7 @@ class ClientInvoiceApiController extends Controller
         $invoiceFresh = $invoice->fresh(['payments']);
         $remainingBalance = (float) $invoiceFresh->remaining_balance;
         $paymentAmount = (float) $request->input('amount');
-        
+
         if ($paymentAmount > $remainingBalance) {
             return response()->json([
                 'message' => 'Payment amount exceeds remaining balance.',
@@ -509,7 +509,7 @@ class ClientInvoiceApiController extends Controller
         $currentPaymentAmount = (float) $payment->amount;
         $newPaymentAmount = (float) $request->input('amount');
         $balanceAfterUpdate = $remainingBalance + $currentPaymentAmount - $newPaymentAmount;
-        
+
         if ($balanceAfterUpdate < 0) {
             return response()->json([
                 'message' => 'Updated payment amount would exceed invoice total.',

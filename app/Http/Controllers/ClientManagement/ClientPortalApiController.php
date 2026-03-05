@@ -82,7 +82,7 @@ class ClientPortalApiController extends Controller
         $baseSlug = $projectSlug;
         $counter = 1;
         while (ClientProject::where('slug', $projectSlug)->exists()) {
-            $projectSlug = $baseSlug . '-' . $counter;
+            $projectSlug = $baseSlug.'-'.$counter;
             $counter++;
         }
 
@@ -128,7 +128,7 @@ class ClientPortalApiController extends Controller
                     ->where('id', '!=', $project->id)
                     ->exists()
             ) {
-                $newSlug = $baseSlug . '-' . $counter;
+                $newSlug = $baseSlug.'-'.$counter;
                 $counter++;
             }
             $project->slug = $newSlug;
@@ -277,6 +277,7 @@ class ClientPortalApiController extends Controller
                 } else {
                     $entry->client_invoice = null;
                 }
+
                 return $entry;
             });
 
@@ -290,10 +291,10 @@ class ClientPortalApiController extends Controller
         // Calculate total unbilled hours (billable hours in months without agreements)
         $totalUnbilledHours = 0;
         foreach ($monthlyData as $month) {
-            if (!$month['has_agreement'] && isset($month['unbilled_hours'])) {
+            if (! $month['has_agreement'] && isset($month['unbilled_hours'])) {
                 // If the hours have already been applied to the next active agreement,
                 // do not double-count them as still unbilled in the summary bar.
-                if (!($month['will_be_billed_in_next_agreement'] ?? false)) {
+                if (! ($month['will_be_billed_in_next_agreement'] ?? false)) {
                     $totalUnbilledHours += $month['unbilled_hours'];
                 }
             }
@@ -323,7 +324,7 @@ class ClientPortalApiController extends Controller
         // Get the active agreement (or agreements over time)
         $agreement = $company->activeAgreement();
 
-        if (!$agreement) {
+        if (! $agreement) {
             // No agreement - return month groupings with unbilled hours tracking
             return $entriesByMonth->map(function ($monthEntries, $yearMonth) {
                 $billableMinutes = $monthEntries->where('is_billable', true)->sum('minutes_worked');
@@ -400,7 +401,7 @@ class ClientPortalApiController extends Controller
 
             $result[] = [
                 'year_month' => $yearMonth,
-                'has_agreement' => !$monthData['is_pre_agreement'],
+                'has_agreement' => ! $monthData['is_pre_agreement'],
                 'entries_count' => $monthData['entries_count'],
                 'hours_worked' => round($monthData['hours_worked'], 2),
                 'formatted_hours' => ClientTimeEntry::formatMinutesAsTime($monthData['billable_minutes']),
@@ -465,11 +466,11 @@ class ClientPortalApiController extends Controller
         $isUpdate = $entryId !== null;
 
         $validated = $request->validate([
-            'project_id' => ($isUpdate ? 'sometimes|' : '') . 'required|exists:client_projects,id',
+            'project_id' => ($isUpdate ? 'sometimes|' : '').'required|exists:client_projects,id',
             'task_id' => 'nullable|exists:client_tasks,id',
             'name' => 'nullable|string|max:255',
-            'time' => ($isUpdate ? 'sometimes|' : '') . 'required|string',
-            'date_worked' => ($isUpdate ? 'sometimes|' : '') . 'required|date',
+            'time' => ($isUpdate ? 'sometimes|' : '').'required|string',
+            'date_worked' => ($isUpdate ? 'sometimes|' : '').'required|date',
             'user_id' => 'nullable|exists:users,id',
             'is_billable' => 'boolean',
             'job_type' => 'nullable|string|max:255',
@@ -504,10 +505,10 @@ class ClientPortalApiController extends Controller
 
             if ($issuedInvoice) {
                 return response()->json([
-                    'error' => 'Cannot add time entries to periods covered by issued invoices. The period ' .
-                        $issuedInvoice->period_start->format('M j, Y') . ' - ' .
-                        $issuedInvoice->period_end->format('M j, Y') .
-                        ' is already invoiced.'
+                    'error' => 'Cannot add time entries to periods covered by issued invoices. The period '.
+                        $issuedInvoice->period_start->format('M j, Y').' - '.
+                        $issuedInvoice->period_end->format('M j, Y').
+                        ' is already invoiced.',
                 ], 403);
             }
         }

@@ -14,7 +14,7 @@ use Tests\TestCase;
 
 /**
  * Feature tests for invoicing examples from the requirements.
- * 
+ *
  * These tests verify the exact behavior described in the problem statement.
  */
 class InvoicingExamplesTest extends TestCase
@@ -22,8 +22,11 @@ class InvoicingExamplesTest extends TestCase
     use RefreshDatabase;
 
     private ClientInvoicingService $invoicingService;
+
     private User $user;
+
     private ClientCompany $company;
+
     private ClientProject $project;
 
     protected function setUp(): void
@@ -45,13 +48,13 @@ class InvoicingExamplesTest extends TestCase
 
     /**
      * Example 1 — single large January entry
-     * 
+     *
      * - Client Agreement: retainer_included_hours = 2, catch_up_threshold_hours = 1
      * - January: 10 hours worked after Jan retainer date
      * - February invoice should include:
      *   - 2.0h allocated as January retainer (pre-agreement work retroactively covered)
      *   - 8.0h billed as additional hours (catch-up for remaining overage)
-     * 
+     *
      * Note: Since agreement starts in February, January has 0 retainer capacity.
      * The 10h is retroactively applied to the February invoice's balance calculation.
      */
@@ -101,7 +104,7 @@ class InvoicingExamplesTest extends TestCase
         // Find additional_hours line (catch-up for remaining 8h + 1h buffer)
         $additionalLine = $lineItems->firstWhere('line_type', 'additional_hours');
         $this->assertNotNull($additionalLine, 'Should have additional_hours line');
-        
+
         // Remaining 8h + 1h buffer (catch_up_threshold) = 9h total billed
         $this->assertEquals(9.0, (float) $additionalLine->hours, 'Should bill 9h (8h overage + 1h buffer) as additional');
         $this->assertEquals(1350.00, (float) $additionalLine->line_total, '9h * $150 = $1350');
@@ -117,10 +120,10 @@ class InvoicingExamplesTest extends TestCase
 
     /**
      * Example 2 — exact boundary
-     * 
+     *
      * - Remaining retainer = 2.0h, time entry = 2.0h
      * - Should be single fragment assigned to retainer; no extra fragment
-     * 
+     *
      * Note: With catch_up_threshold = 1.0, we need buffer after allocation.
      * So 2h work with 2h retainer leaves 0h available, triggering catch-up.
      */
@@ -175,7 +178,7 @@ class InvoicingExamplesTest extends TestCase
 
     /**
      * Example 3 — catch_up_threshold = 0
-     * 
+     *
      * - All overage after retainer allocations becomes billable catch-up
      * - No minimum catch-up allocation enforced
      */
@@ -229,7 +232,7 @@ class InvoicingExamplesTest extends TestCase
 
     /**
      * Example 4 — rollover behavior
-     * 
+     *
      * - retainer_included_hours = 10, rollover_months = 2
      * - Month N: worked 6h → 4h unused
      * - Month N+1: worked 14h → uses 4h rollover first (FIFO)

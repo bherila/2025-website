@@ -21,6 +21,7 @@ class ClientCompanyFactory extends Factory
     public function definition(): array
     {
         $name = fake()->company();
+
         return [
             'company_name' => $name,
             'slug' => Str::slug($name),

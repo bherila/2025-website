@@ -276,7 +276,7 @@ Main page component that:
 
 ### FinanceTransactionsApiController
 
-**Location**: `app/Http/Controllers/FinanceTransactionsApiController.php`
+**Location**: `app/Http/Controllers/FinanceTool/FinanceTransactionsApiController.php`
 
 | Method | Description |
 |--------|-------------|
@@ -288,7 +288,7 @@ Main page component that:
 
 ### FinanceTransactionLinkingApiController
 
-**Location**: `app/Http/Controllers/FinanceTransactionLinkingApiController.php`
+**Location**: `app/Http/Controllers/FinanceTool/FinanceTransactionLinkingApiController.php`
 
 | Method | Description |
 |--------|-------------|
@@ -300,7 +300,7 @@ Main page component that:
 
 ### FinanceTransactionTaggingApiController
 
-**Location**: `app/Http/Controllers/FinanceTransactionTaggingApiController.php`
+**Location**: `app/Http/Controllers/FinanceTool/FinanceTransactionTaggingApiController.php`
 
 | Method | Description |
 |--------|-------------|
@@ -312,7 +312,7 @@ Main page component that:
 
 ### FinanceTransactionsDedupeApiController
 
-**Location**: `app/Http/Controllers/FinanceTransactionsDedupeApiController.php`
+**Location**: `app/Http/Controllers/FinanceTool/FinanceTransactionsDedupeApiController.php`
 
 | Method | Description |
 |--------|-------------|
@@ -320,7 +320,7 @@ Main page component that:
 
 ### FinanceApiController
 
-**Location**: `app/Http/Controllers/FinanceApiController.php`
+**Location**: `app/Http/Controllers/FinanceTool/FinanceApiController.php`
 
 | Method | Description |
 |--------|-------------|
@@ -340,7 +340,7 @@ Main page component that:
 
 ### FinAccountLineItems
 
-**Location**: `app/Models/FinAccountLineItems.php`
+**Location**: `app/Models/FinanceTool/FinAccountLineItems.php`
 
 ```php
 // Relationships - transactions can link to each other in either direction
@@ -367,7 +367,7 @@ public function linkedTransactionsAsB()
 
 ### FinAccountLineItemLink
 
-**Location**: `app/Models/FinAccountLineItemLink.php`
+**Location**: `app/Models/FinanceTool/FinAccountLineItemLink.php`
 
 Link table model for transaction relationships:
 - `a_t_id`: The transaction with lower t_id (or older date)

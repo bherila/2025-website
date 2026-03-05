@@ -2,7 +2,7 @@
 
 namespace App\Models\UtilityBillTracker;
 
-use App\Models\FinAccountLineItems;
+use App\Models\FinanceTool\FinAccountLineItems;
 use App\Services\FileStorageService;
 use App\Traits\SerializesDatesAsLocal;
 use Illuminate\Database\Eloquent\Model;

@@ -16,8 +16,11 @@ class ClientPortalInvoicesTest extends TestCase
     use RefreshDatabase;
 
     private User $admin;
+
     private User $client;
+
     private ClientCompany $company;
+
     private ClientAgreement $agreement;
 
     protected function setUp(): void
@@ -26,12 +29,12 @@ class ClientPortalInvoicesTest extends TestCase
 
         $this->admin = User::factory()->create(['user_role' => 'admin']);
         $this->client = User::factory()->create(['user_role' => 'user']);
-        
+
         $this->company = ClientCompany::factory()->create([
             'company_name' => 'Test Company',
-            'slug' => 'test-company'
+            'slug' => 'test-company',
         ]);
-        
+
         $this->company->users()->attach($this->client);
 
         $this->agreement = ClientAgreement::create([
@@ -39,7 +42,7 @@ class ClientPortalInvoicesTest extends TestCase
             'active_date' => Carbon::now()->subMonth(),
             'agreement_text' => 'Test Agreement',
             'monthly_retainer_hours' => 10,
-            'hourly_rate' => 150
+            'hourly_rate' => 150,
         ]);
     }
 
@@ -53,7 +56,7 @@ class ClientPortalInvoicesTest extends TestCase
             'period_end' => Carbon::now()->endOfMonth(),
             'status' => 'draft',
             'invoice_number' => 'INV-001',
-            'invoice_total' => 100.00
+            'invoice_total' => 100.00,
         ]);
 
         $response = $this->actingAs($this->admin)
@@ -74,7 +77,7 @@ class ClientPortalInvoicesTest extends TestCase
             'period_end' => Carbon::now()->endOfMonth(),
             'status' => 'draft',
             'invoice_number' => 'INV-001',
-            'invoice_total' => 100.00
+            'invoice_total' => 100.00,
         ]);
 
         $response = $this->actingAs($this->client)
@@ -94,7 +97,7 @@ class ClientPortalInvoicesTest extends TestCase
             'period_end' => Carbon::now()->endOfMonth(),
             'status' => 'draft',
             'invoice_number' => 'INV-001',
-            'invoice_total' => 100.00
+            'invoice_total' => 100.00,
         ]);
 
         // 1. Client visits first (populates cache with empty list)
@@ -105,7 +108,7 @@ class ClientPortalInvoicesTest extends TestCase
         // 2. Admin visits (should see the draft invoice, but might get cached empty list if bug exists)
         $response = $this->actingAs($this->admin)
             ->getJson("/api/client/portal/{$this->company->slug}/invoices");
-        
+
         $response->assertJsonCount(1);
     }
 }

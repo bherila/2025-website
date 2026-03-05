@@ -13,6 +13,5 @@ class OpeningBalance
         public float $invoicedNegativeBalance,
         public float $effectiveRetainerHours,
         public float $remainingNegativeBalance,
-    ) {
-    }
+    ) {}
 }

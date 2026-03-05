@@ -16,7 +16,9 @@ class TimeEntryInvoiceSuppressionTest extends TestCase
     use RefreshDatabase;
 
     private User $admin;
+
     private ClientCompany $company;
+
     private ClientProject $project;
 
     protected function setUp(): void
@@ -24,7 +26,7 @@ class TimeEntryInvoiceSuppressionTest extends TestCase
         parent::setUp();
 
         $this->admin = User::factory()->create(['user_role' => 'admin']);
-        
+
         $this->company = ClientCompany::create([
             'company_name' => 'Test Company',
             'slug' => 'test-company',
@@ -46,7 +48,7 @@ class TimeEntryInvoiceSuppressionTest extends TestCase
             'active_date' => Carbon::create(2024, 1, 1),
             'is_active' => true,
         ]);
-        
+
         // Add admin to company users
         $this->company->users()->attach($this->admin->id);
     }
@@ -62,7 +64,7 @@ class TimeEntryInvoiceSuppressionTest extends TestCase
         $this->assertEquals(0, ClientInvoice::count());
 
         $dateWorked = '2024-01-15';
-        
+
         $response = $this->postJson("/api/client/portal/{$this->company->slug}/time-entries", [
             'project_id' => $this->project->id,
             'time' => '1:30',
@@ -77,7 +79,7 @@ class TimeEntryInvoiceSuppressionTest extends TestCase
         // Verify time entry was created
         $this->assertDatabaseHas('client_time_entries', [
             'client_company_id' => $this->company->id,
-            'date_worked' => $dateWorked . ' 00:00:00',
+            'date_worked' => $dateWorked.' 00:00:00',
         ]);
 
         // CRITICAL: Verify NO invoice was created

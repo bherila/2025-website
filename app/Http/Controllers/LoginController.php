@@ -18,6 +18,7 @@ class LoginController extends Controller
             if ($user && $user->canLogin()) {
                 Auth::login($user);
                 $request->session()->regenerate();
+
                 return redirect()->intended('/');
             }
         }

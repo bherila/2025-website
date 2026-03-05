@@ -16,7 +16,7 @@ class AllocationServiceTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->service = new AllocationService();
+        $this->service = new AllocationService;
     }
 
     public function test_recombine_unlinked_fragments_merges_matching_entries(): void
@@ -66,7 +66,7 @@ class AllocationServiceTest extends TestCase
 
         $this->assertEquals(2, $recombined); // 3 entries -> 1 entry (2 merged)
         $this->assertEquals(1, ClientTimeEntry::where('client_company_id', $company->id)->count());
-        
+
         $merged = ClientTimeEntry::where('client_company_id', $company->id)->first();
         $this->assertEquals(135, $merged->minutes_worked); // 60 + 30 + 45
     }
@@ -296,12 +296,12 @@ class AllocationServiceTest extends TestCase
 
         $this->assertEquals(2, $recombined); // 4 entries -> 2 entries (2 merges)
         $this->assertEquals(2, ClientTimeEntry::where('client_company_id', $company->id)->count());
-        
+
         $taskA = ClientTimeEntry::where('client_company_id', $company->id)
             ->where('name', 'Task A')
             ->first();
         $this->assertEquals(90, $taskA->minutes_worked);
-        
+
         $taskB = ClientTimeEntry::where('client_company_id', $company->id)
             ->where('name', 'Task B')
             ->first();

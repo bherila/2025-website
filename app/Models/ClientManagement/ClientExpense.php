@@ -2,7 +2,7 @@
 
 namespace App\Models\ClientManagement;
 
-use App\Models\FinAccountLineItems;
+use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\User;
 use App\Traits\SerializesDatesAsLocal;
 use Illuminate\Database\Eloquent\Model;

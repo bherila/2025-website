@@ -25,11 +25,10 @@ class TimeEntrySplitter
      * 3. Catch-up billing (up to threshold to maintain minimum availability)
      * 4. Billable catch-up (beyond threshold)
      *
-     * @param Collection $timeEntries Collection of ClientTimeEntry models
-     * @param float $priorMonthRetainerCapacity Hours available from prior month retainer
-     * @param float $currentMonthRetainerCapacity Hours available from current month retainer
-     * @param float $catchUpThresholdHours Minimum availability buffer hours
-     * @return AllocationPlan
+     * @param  Collection  $timeEntries  Collection of ClientTimeEntry models
+     * @param  float  $priorMonthRetainerCapacity  Hours available from prior month retainer
+     * @param  float  $currentMonthRetainerCapacity  Hours available from current month retainer
+     * @param  float  $catchUpThresholdHours  Minimum availability buffer hours
      */
     public function allocateTimeEntries(
         Collection $timeEntries,
@@ -121,9 +120,10 @@ class TimeEntrySplitter
      * Split a single time entry into two fragments at the specified minutes.
      * Creates a new ClientTimeEntry record for the overflow.
      *
-     * @param ClientTimeEntry $entry The entry to split
-     * @param int $splitAtMinutes The number of minutes for the primary fragment
+     * @param  ClientTimeEntry  $entry  The entry to split
+     * @param  int  $splitAtMinutes  The number of minutes for the primary fragment
      * @return array{primary: ClientTimeEntry, overflow: ClientTimeEntry}
+     *
      * @throws \InvalidArgumentException If split point is invalid
      */
     public function splitEntry(ClientTimeEntry $entry, int $splitAtMinutes): array
@@ -167,10 +167,9 @@ class TimeEntrySplitter
     /**
      * Create a TimeEntryFragment from a ClientTimeEntry model.
      *
-     * @param ClientTimeEntry $entry The source time entry
-     * @param int $minutes The number of minutes for this fragment
-     * @param string $allocationType The allocation type for this fragment
-     * @return TimeEntryFragment
+     * @param  ClientTimeEntry  $entry  The source time entry
+     * @param  int  $minutes  The number of minutes for this fragment
+     * @param  string  $allocationType  The allocation type for this fragment
      */
     protected function createFragment(
         ClientTimeEntry $entry,
@@ -191,8 +190,7 @@ class TimeEntrySplitter
     /**
      * Sum the total hours from an array of fragments.
      *
-     * @param TimeEntryFragment[] $fragments
-     * @return float
+     * @param  TimeEntryFragment[]  $fragments
      */
     protected function sumFragmentHours(array $fragments): float
     {

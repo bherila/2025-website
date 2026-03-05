@@ -13,13 +13,13 @@ readonly class TimeEntryFragment
     /**
      * Create a new time entry fragment.
      *
-     * @param int $originalTimeEntryId The ID of the original ClientTimeEntry
-     * @param int $minutes The number of minutes for this fragment
-     * @param string $dateWorked The date the work was performed (Y-m-d format)
-     * @param string $description The description of the work
-     * @param int $userId The ID of the user who performed the work
-     * @param int|null $clientInvoiceLineId The invoice line this fragment is linked to (null if unlinked)
-     * @param string $allocationType The type of allocation: 'prior_month_retainer', 'current_month_retainer', 'catch_up', 'billable_catchup', or 'unallocated'
+     * @param  int  $originalTimeEntryId  The ID of the original ClientTimeEntry
+     * @param  int  $minutes  The number of minutes for this fragment
+     * @param  string  $dateWorked  The date the work was performed (Y-m-d format)
+     * @param  string  $description  The description of the work
+     * @param  int  $userId  The ID of the user who performed the work
+     * @param  int|null  $clientInvoiceLineId  The invoice line this fragment is linked to (null if unlinked)
+     * @param  string  $allocationType  The type of allocation: 'prior_month_retainer', 'current_month_retainer', 'catch_up', 'billable_catchup', or 'unallocated'
      */
     public function __construct(
         public int $originalTimeEntryId,
@@ -29,13 +29,10 @@ readonly class TimeEntryFragment
         public int $userId,
         public ?int $clientInvoiceLineId = null,
         public string $allocationType = 'unallocated'
-    ) {
-    }
+    ) {}
 
     /**
      * Get the hours for this fragment.
-     *
-     * @return float
      */
     public function getHours(): float
     {
@@ -44,8 +41,6 @@ readonly class TimeEntryFragment
 
     /**
      * Check if this fragment is linked to an invoice line.
-     *
-     * @return bool
      */
     public function isLinked(): bool
     {

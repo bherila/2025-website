@@ -31,7 +31,7 @@ class CleanupOrphanedInvoices extends Command
         $this->info('Starting orphaned invoice cleanup...');
 
         // 1. Find all ClientInvoiceLine which are pointing to a soft-deleted ClientInvoice
-        $orphanedLinesQuery = ClientInvoiceLine::whereIn('client_invoice_id', function($query) {
+        $orphanedLinesQuery = ClientInvoiceLine::whereIn('client_invoice_id', function ($query) {
             $query->select('client_invoice_id')
                 ->from('client_invoices')
                 ->whereNotNull('deleted_at');
@@ -51,7 +51,7 @@ class CleanupOrphanedInvoices extends Command
 
         // 2. Find all ClientTimeEntry which are pointing to a soft-deleted ClientInvoiceLine
         // (In case some lines were already soft-deleted but didn't unlink their time entries)
-        $orphanedTimeEntriesQuery = ClientTimeEntry::whereIn('client_invoice_line_id', function($query) {
+        $orphanedTimeEntriesQuery = ClientTimeEntry::whereIn('client_invoice_line_id', function ($query) {
             $query->select('client_invoice_line_id')
                 ->from('client_invoice_lines')
                 ->whereNotNull('deleted_at');

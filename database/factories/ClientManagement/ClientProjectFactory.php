@@ -22,6 +22,7 @@ class ClientProjectFactory extends Factory
     public function definition(): array
     {
         $name = fake()->words(3, true);
+
         return [
             'client_company_id' => ClientCompany::factory(),
             'name' => ucfirst($name),

@@ -12,7 +12,7 @@ class ClientInvoiceLineTest extends TestCase
      */
     public function test_calculate_total_with_various_quantities(): void
     {
-        $line = new ClientInvoiceLine();
+        $line = new ClientInvoiceLine;
         $line->unit_price = 100.00;
 
         // Decimal quantity

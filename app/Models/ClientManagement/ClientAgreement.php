@@ -120,14 +120,14 @@ class ClientAgreement extends Model
 
     /**
      * Validate catch_up_threshold_hours is within valid range.
-     * 
+     *
      * @throws \InvalidArgumentException If catch_up_threshold_hours is invalid
      */
     public function validateCatchUpThreshold(): void
     {
         $threshold = (float) $this->catch_up_threshold_hours;
         $retainerHours = (float) $this->monthly_retainer_hours;
-        
+
         if ($threshold < 0 || $threshold > $retainerHours) {
             throw new \InvalidArgumentException(
                 "catch_up_threshold_hours must be between 0 and monthly_retainer_hours ({$retainerHours}). Got: {$threshold}"
@@ -148,7 +148,7 @@ class ClientAgreement extends Model
                 // Default to 1.0, but cap at monthly_retainer_hours
                 $agreement->catch_up_threshold_hours = min(1.0, $retainerHours);
             }
-            
+
             // Validate on save
             $agreement->validateCatchUpThreshold();
         });

@@ -20,7 +20,7 @@ class AllocationService
      *
      * Merge keys consist of: date_worked, user_id, name, project_id, task_id
      *
-     * @param int $clientCompanyId The client company to process
+     * @param  int  $clientCompanyId  The client company to process
      * @return int Number of entries recombined
      */
     public function recombineUnlinkedFragments(int $clientCompanyId): int
@@ -64,8 +64,7 @@ class AllocationService
      * Entries can merge if they share the same date, user, description, project, task,
      * and ALL entries are unlinked from invoices.
      *
-     * @param Collection $entries Collection of ClientTimeEntry models
-     * @return bool
+     * @param  Collection  $entries  Collection of ClientTimeEntry models
      */
     protected function canMergeEntries(Collection $entries): bool
     {
@@ -89,8 +88,9 @@ class AllocationService
      * Merge multiple time entries into one by summing minutes.
      * Keeps the first entry (by ID), deletes the rest.
      *
-     * @param Collection $entries Collection of ClientTimeEntry models to merge
+     * @param  Collection  $entries  Collection of ClientTimeEntry models to merge
      * @return ClientTimeEntry The merged entry
+     *
      * @throws \InvalidArgumentException If entries cannot be merged
      */
     protected function mergeEntries(Collection $entries): ClientTimeEntry
@@ -126,9 +126,6 @@ class AllocationService
      * Generate a merge key for a time entry.
      *
      * Entries with the same merge key are candidates for recombination.
-     *
-     * @param ClientTimeEntry $entry
-     * @return string
      */
     protected function getMergeKey(ClientTimeEntry $entry): string
     {
@@ -144,9 +141,7 @@ class AllocationService
     /**
      * Check if all entries with the same merge keys as the given entry are unlinked.
      *
-     * @param int $clientCompanyId
-     * @param ClientTimeEntry $sampleEntry Sample entry to derive merge keys from
-     * @return bool
+     * @param  ClientTimeEntry  $sampleEntry  Sample entry to derive merge keys from
      */
     protected function allEntriesUnlinked(int $clientCompanyId, ClientTimeEntry $sampleEntry): bool
     {

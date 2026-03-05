@@ -11,7 +11,7 @@ use App\Models\Files\FileForClientCompany;
 use App\Models\Files\FileForFinAccount;
 use App\Models\Files\FileForProject;
 use App\Models\Files\FileForTask;
-use App\Models\FinAccounts;
+use App\Models\FinanceTool\FinAccounts;
 use App\Services\FileStorageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -516,10 +516,11 @@ class FileController extends Controller
 
         if ($existingFile) {
             // If statement_id is provided and was null, update it
-            if ($request->statement_id && !$existingFile->statement_id) {
+            if ($request->statement_id && ! $existingFile->statement_id) {
                 $existingFile->statement_id = $request->statement_id;
                 $existingFile->save();
             }
+
             return response()->json($existingFile->load('uploader:id,name'), 200);
         }
 

@@ -133,11 +133,12 @@ class ClientTimeEntry extends Model
      */
     public function isOnIssuedInvoice(): bool
     {
-        if (!$this->client_invoice_line_id) {
+        if (! $this->client_invoice_line_id) {
             return false;
         }
         $this->loadMissing('invoiceLine.invoice');
         $invoice = $this->invoiceLine?->invoice;
+
         return $invoice && in_array($invoice->status, ['issued', 'paid']);
     }
 
@@ -177,6 +178,7 @@ class ClientTimeEntry extends Model
             // Ensure status is always available for client-side display logic
             $invoice->makeVisible('status');
         }
+
         return $invoice;
     }
 }

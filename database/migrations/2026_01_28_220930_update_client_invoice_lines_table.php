@@ -13,11 +13,11 @@ return new class extends Migration
     {
         Schema::table('client_invoice_lines', function (Blueprint $table) {
             // Only add line_date if it doesn't exist (sqlite schema already has it)
-            if (!Schema::hasColumn('client_invoice_lines', 'line_date')) {
+            if (! Schema::hasColumn('client_invoice_lines', 'line_date')) {
                 $table->date('line_date')->nullable()->after('hours');
             }
         });
-        
+
         // Note: enum change is not supported in SQLite, only run on MySQL
         if (Schema::getConnection()->getDriverName() !== 'sqlite') {
             Schema::table('client_invoice_lines', function (Blueprint $table) {
@@ -38,7 +38,7 @@ return new class extends Migration
                 $table->dropColumn('line_date');
             }
         });
-        
+
         if (Schema::getConnection()->getDriverName() !== 'sqlite') {
             Schema::table('client_invoice_lines', function (Blueprint $table) {
                 $table->enum('line_type', ['retainer', 'additional_hours', 'expense', 'adjustment', 'credit'])

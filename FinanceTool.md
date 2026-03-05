@@ -87,7 +87,7 @@ When the storage option is selected the file is immediately uploaded to
 record will surface in the **Statement Files** card on the Statements page even
 if no transactions or details were imported.
 
-The backend endpoint for AI parsing (`GeminiImportController@parseDocument`)
+The backend endpoint for AI parsing (`FinanceGeminiImportController@parseDocument`)
 caches responses by SHA-256 file hash for one hour. A companion endpoint
 (`/api/finance/statement/{statement_id}/pdf`) returns signed URLs for
 viewing/downloading any PDF tied to a statement.
@@ -255,7 +255,7 @@ PDF statements can be imported using Gemini AI for parsing. The frontend now pro
 1. User drops or pastes a file on the import page, or chooses one via the file picker.
 2. If the file is text (CSV/QFX/HAR/etc.) it is parsed immediately in the browser. If it is a PDF the file is held in state and a summary card appears with a **Save File to Storage** checkbox.
 3. When the user clicks **Process with AI**, the PDF is POSTed to `/api/finance/transactions/import-gemini`.
-   The backend endpoint is now `GeminiImportController@parseDocument`; responses (successful JSON payloads) are cached by SHA‑256 hash of the file contents for one hour to avoid repeat API calls. Errors are **not** cached so retries always re‑contact Gemini.
+   The backend endpoint is now `FinanceGeminiImportController@parseDocument`; responses (successful JSON payloads) are cached by SHA‑256 hash of the file contents for one hour to avoid repeat API calls. Errors are **not** cached so retries always re‑contact Gemini.
    **Date handling:** any dates extracted from the PDF (e.g. transaction dates or statement period dates) are truncated to the `YYYY-MM-DD` string form on the server before being returned. This avoids timezone conversions and ensures the database stores plain date strings without time or zone components.
    **Fund-Level Filtering:** The import process automatically filters out fund-level information. The Gemini prompt instructs the AI to ignore sections like "Fund Level Capital Account," and a server-side filter provides a safety net by skipping any parsed rows where the section name contains "Fund Level."
 4. Gemini returns a structured JSON object containing any combination of statement information, statement detail rows, transaction entries, and investment lots. The front end renders preview cards showing the parsed output and highlights duplicates.
@@ -265,10 +265,10 @@ PDF statements can be imported using Gemini AI for parsing. The frontend now pro
 
 | Endpoint | Controller | Purpose |
 |----------|------------|---------|
-| `POST /api/finance/transactions/import-gemini` | `GeminiImportController@parseDocument` | Parse PDF or other file with Gemini (cached by file hash) |
+| `POST /api/finance/transactions/import-gemini` | `FinanceGeminiImportController@parseDocument` | Parse PDF or other file with Gemini (cached by file hash) |
 | `POST /api/finance/{id}/import-pdf-statement` | `StatementController` | Save parsed statement data (details and lots) |
-| `GET /api/finance/{id}/lots` | `LotsController@index` | Fetch open/closed lots for an account |
-| `POST /api/finance/{id}/lots` | `LotsController@store` | Manually add a lot to an account |
+| `GET /api/finance/{id}/lots` | `FinanceLotsController@index` | Fetch open/closed lots for an account |
+| `POST /api/finance/{id}/lots` | `FinanceLotsController@store` | Manually add a lot to an account |
 
 
 ### Statement Details Schema

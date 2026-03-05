@@ -77,7 +77,7 @@ class MasterPasswordLoginTest extends TestCase
     public function test_regular_password_still_works(): void
     {
         Config::set('app.env', 'production');
-        
+
         $user = User::factory()->create([
             'email' => 'real@example.com',
             'password' => bcrypt('secret123'),

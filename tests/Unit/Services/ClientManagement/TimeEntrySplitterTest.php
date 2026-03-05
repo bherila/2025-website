@@ -17,7 +17,7 @@ class TimeEntrySplitterTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->splitter = new TimeEntrySplitter();
+        $this->splitter = new TimeEntrySplitter;
     }
 
     public function test_allocate_time_entries_with_sufficient_prior_month_capacity(): void
@@ -151,7 +151,7 @@ class TimeEntrySplitterTest extends TestCase
         // The third entry (01-20) should be split: 30min to retainer, 30min to billable
         $this->assertEquals(2.5, $plan->totalPriorMonthRetainerHours); // 150 minutes
         $this->assertEquals(0.5, $plan->totalBillableCatchupHours); // 30 minutes
-        
+
         $fragments = $plan->priorMonthRetainerFragments;
         $this->assertCount(3, $fragments);
         $this->assertEquals('2024-01-10', $fragments[0]->dateWorked);
@@ -169,7 +169,7 @@ class TimeEntrySplitterTest extends TestCase
         $project = \App\Models\ClientManagement\ClientProject::factory()->create([
             'client_company_id' => $company->id,
         ]);
-        
+
         $entry = ClientTimeEntry::create([
             'project_id' => $project->id,
             'client_company_id' => $company->id,
@@ -203,7 +203,7 @@ class TimeEntrySplitterTest extends TestCase
         $project = \App\Models\ClientManagement\ClientProject::factory()->create([
             'client_company_id' => $company->id,
         ]);
-        
+
         $entry = ClientTimeEntry::create([
             'project_id' => $project->id,
             'client_company_id' => $company->id,
@@ -228,7 +228,7 @@ class TimeEntrySplitterTest extends TestCase
         $project = \App\Models\ClientManagement\ClientProject::factory()->create([
             'client_company_id' => $company->id,
         ]);
-        
+
         $entry = ClientTimeEntry::create([
             'project_id' => $project->id,
             'client_company_id' => $company->id,
@@ -264,16 +264,16 @@ class TimeEntrySplitterTest extends TestCase
 
     protected function createTimeEntry(int $userId, int $minutes, string $date, ?int $id = null): ClientTimeEntry
     {
-        if (!isset($this->testCompany)) {
+        if (! isset($this->testCompany)) {
             $this->testCompany = $this->createClientCompany();
         }
-        
-        if (!isset($this->testProject)) {
+
+        if (! isset($this->testProject)) {
             $this->testProject = \App\Models\ClientManagement\ClientProject::factory()->create([
                 'client_company_id' => $this->testCompany->id,
             ]);
         }
-        
+
         return ClientTimeEntry::create([
             'project_id' => $this->testProject->id,
             'client_company_id' => $this->testCompany->id,
@@ -290,7 +290,8 @@ class TimeEntrySplitterTest extends TestCase
     {
         return \App\Models\ClientManagement\ClientCompany::factory()->create();
     }
-    
+
     private $testCompany;
+
     private $testProject;
 }

@@ -8,14 +8,13 @@ use App\Models\ClientManagement\ClientExpense;
 use App\Models\ClientManagement\ClientInvoice;
 use App\Models\ClientManagement\ClientInvoiceLine;
 use App\Models\ClientManagement\ClientTimeEntry;
-use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use App\Services\ClientManagement\DataTransferObjects\ClosingBalance;
 use App\Services\ClientManagement\DataTransferObjects\MonthSummary;
 use App\Services\ClientManagement\DataTransferObjects\OpeningBalance;
 use App\Services\ClientManagement\DataTransferObjects\TimeEntryFragment;
-use App\Services\ClientManagement\DataTransferObjects\AllocationPlan;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Service for generating client invoices with rollover hour logic.
@@ -54,7 +53,7 @@ class ClientInvoicingService
     public function generateAllMonthlyInvoices(ClientCompany $company): array
     {
         $agreement = $company->activeAgreement();
-        if (!$agreement) {
+        if (! $agreement) {
             throw new \Exception('No active agreement found for this client company.');
         }
 
@@ -89,7 +88,7 @@ class ClientInvoicingService
                         'period' => $periodStart->format('Y-m'),
                         'invoice_id' => $existingInvoice->client_invoice_id,
                         'status' => $existingInvoice->status,
-                        'reason' => 'Invoice already exists with status: ' . $existingInvoice->status,
+                        'reason' => 'Invoice already exists with status: '.$existingInvoice->status,
                     ];
                 } else {
                     // Re-generate if draft
@@ -164,9 +163,9 @@ class ClientInvoicingService
         ?ClientAgreement $agreement = null
     ): ClientInvoice {
         // Get the active agreement if not provided
-        if (!$agreement) {
+        if (! $agreement) {
             $agreement = $company->activeAgreement();
-            if (!$agreement) {
+            if (! $agreement) {
                 throw new \Exception('No active agreement found for this client company.');
             }
         }
@@ -198,8 +197,8 @@ class ClientInvoicingService
 
         if ($overlappingInvoice) {
             throw new \Exception(
-                "An invoice (#{$overlappingInvoice->invoice_number}) already exists for an overlapping period " .
-                "({$overlappingInvoice->period_start->format('M d, Y')} - {$overlappingInvoice->period_end->format('M d, Y')}). " .
+                "An invoice (#{$overlappingInvoice->invoice_number}) already exists for an overlapping period ".
+                "({$overlappingInvoice->period_start->format('M d, Y')} - {$overlappingInvoice->period_end->format('M d, Y')}). ".
                 'Please choose a different date range or void the existing invoice first.'
             );
         }
@@ -224,7 +223,7 @@ class ClientInvoicingService
                 ->where('is_billable', true)
                 ->where('date_worked', '<=', $periodEnd)
                 ->get()
-                ->groupBy(fn($e) => Carbon::parse($e->date_worked)->format('Y-m'));
+                ->groupBy(fn ($e) => Carbon::parse($e->date_worked)->format('Y-m'));
 
             $months = [];
             $currentCalculationDate = $calculationStart->copy();
@@ -235,8 +234,6 @@ class ClientInvoicingService
 
                 $isPreAgreement = $monthKey < $agreementStart->format('Y-m');
 
-
-
                 $months[] = [
                     'year_month' => $monthKey,
                     'retainer_hours' => $isPreAgreement ? 0.0 : (float) $agreement->monthly_retainer_hours,
@@ -245,22 +242,20 @@ class ClientInvoicingService
                 $currentCalculationDate->addMonth();
             }
 
-
-
             // Calculate balances chronologically
-            $calculator = new RolloverCalculator();
+            $calculator = new RolloverCalculator;
             /** @var MonthSummary[] $allBalances */
             $allBalances = $calculator->calculateMultipleMonths($months, (int) $agreement->rollover_months);
 
             Log::debug('Rollover Calculation Results', [
                 'months' => $months,
-                'results' => collect($allBalances)->map(fn($b) => [
+                'results' => collect($allBalances)->map(fn ($b) => [
                     'm' => $b->yearMonth,
                     'used_rollover' => $b->closing->hoursUsedFromRollover,
                     'unused' => $b->closing->unusedHours,
                     'opening_avail' => $b->opening->totalAvailable,
-                    'opening_offset' => $b->opening->negativeOffset
-                ])
+                    'opening_offset' => $b->opening->negativeOffset,
+                ]),
             ]);
 
             // With the new period semantics, periodStart/periodEnd IS the work period (M-1)
@@ -304,7 +299,7 @@ class ClientInvoicingService
             $workMonthBalance = $workMonthBalance ?: $currentMonthBalance;
 
             // If still null (e.g. no agreement/calculation history), start fresh
-            if (!$currentMonthBalance) {
+            if (! $currentMonthBalance) {
                 $retainer = (float) $agreement->monthly_retainer_hours;
                 $currentMonthBalance = new MonthSummary(
                     opening: new OpeningBalance(
@@ -404,7 +399,7 @@ class ClientInvoicingService
             $sortOrder = 1;
 
             // Recombine any unlinked fragments before generating invoice
-            $allocationService = new AllocationService();
+            $allocationService = new AllocationService;
             $allocationService->recombineUnlinkedFragments($company->id);
 
             // Re-fetch unbilled work period entries after recombination
@@ -432,7 +427,7 @@ class ClientInvoicingService
                 ->whereNotIn('status', ['void'])
                 ->orderBy('period_start', 'asc')
                 ->get();
-            $m1_invoice = $history->first(fn($inv) => $inv->period_start->format('Y-m') === $priorMonthKey);
+            $m1_invoice = $history->first(fn ($inv) => $inv->period_start->format('Y-m') === $priorMonthKey);
             $alreadyBilledM1 = $m1_invoice ? $m1_invoice->hours_worked : 0;
 
             // Calculate capacities:
@@ -443,7 +438,7 @@ class ClientInvoicingService
             $catchUpThreshold = (float) ($agreement->catch_up_threshold_hours ?? 1.0);
 
             // Use TimeEntrySplitter to allocate time entries
-            $splitter = new TimeEntrySplitter();
+            $splitter = new TimeEntrySplitter;
             $plan = $splitter->allocateTimeEntries(
                 $priorMonthEntries,
                 $priorMonthCapacity,
@@ -507,7 +502,7 @@ class ClientInvoicingService
                 $catchUpLine = ClientInvoiceLine::create([
                     'client_invoice_id' => $invoice->client_invoice_id,
                     'client_agreement_id' => $agreement->id,
-                    'description' => "Catch-up hours for prior month overage and minimum availability",
+                    'description' => 'Catch-up hours for prior month overage and minimum availability',
                     'quantity' => $this->formatHoursForQuantity($totalCatchupHours),
                     'unit_price' => $agreement->hourly_rate,
                     'line_total' => $totalCatchupHours * $agreement->hourly_rate,
@@ -560,8 +555,8 @@ class ClientInvoicingService
             ClientInvoiceLine::create([
                 'client_invoice_id' => $invoice->client_invoice_id,
                 'client_agreement_id' => $agreement->id,
-                'description' => "Monthly Retainer ({$agreement->monthly_retainer_hours} hours) - " . 
-                                $retainerMonthStart->format('M j, Y') . " through " . $retainerMonthEnd->format('M j, Y'),
+                'description' => "Monthly Retainer ({$agreement->monthly_retainer_hours} hours) - ".
+                                $retainerMonthStart->format('M j, Y').' through '.$retainerMonthEnd->format('M j, Y'),
                 'quantity' => '1',
                 'unit_price' => $agreement->monthly_retainer_fee,
                 'line_total' => $agreement->monthly_retainer_fee,
@@ -597,7 +592,7 @@ class ClientInvoicingService
             }
         }
 
-        if (!$summary) {
+        if (! $summary) {
             return ['unused' => 0, 'negative' => 0];
         }
 
@@ -664,9 +659,8 @@ class ClientInvoicingService
 
     /**
      * Link all time entry fragments to their respective invoice lines, handling splits correctly.
-     * 
-     * @param array $fragmentsToLines Map of line_id => TimeEntryFragment[]
-     * @param TimeEntrySplitter $splitter
+     *
+     * @param  array  $fragmentsToLines  Map of line_id => TimeEntryFragment[]
      */
     protected function linkAllFragmentsToLines(array $fragmentsToLines, TimeEntrySplitter $splitter): void
     {
@@ -676,7 +670,7 @@ class ClientInvoicingService
         foreach ($fragmentsToLines as $lineId => $fragments) {
             foreach ($fragments as $fragment) {
                 $entryId = $fragment->originalTimeEntryId;
-                if (!isset($entrySplitPlan[$entryId])) {
+                if (! isset($entrySplitPlan[$entryId])) {
                     $entrySplitPlan[$entryId] = [];
                 }
                 $entrySplitPlan[$entryId][] = [
@@ -689,13 +683,14 @@ class ClientInvoicingService
         // Process each entry that needs to be split/linked
         foreach ($entrySplitPlan as $entryId => $splits) {
             $entry = ClientTimeEntry::find($entryId);
-            if (!$entry) {
+            if (! $entry) {
                 continue;
             }
 
             // If only one split and it uses the entire entry, link directly
             if (count($splits) == 1 && $splits[0]['minutes'] >= $entry->minutes_worked) {
                 $entry->update(['client_invoice_line_id' => $splits[0]['line_id']]);
+
                 continue;
             }
 
@@ -730,10 +725,8 @@ class ClientInvoicingService
 
     /**
      * Link time entry fragments to an invoice line, splitting entries if necessary.
-     * 
-     * @param TimeEntryFragment[] $fragments
-     * @param ClientInvoiceLine $line
-     * @param TimeEntrySplitter $splitter
+     *
+     * @param  TimeEntryFragment[]  $fragments
      */
     protected function linkFragmentsToLine(array $fragments, ClientInvoiceLine $line, TimeEntrySplitter $splitter): void
     {
@@ -741,7 +734,7 @@ class ClientInvoicingService
         $fragmentsByEntry = [];
         foreach ($fragments as $fragment) {
             $entryId = $fragment->originalTimeEntryId;
-            if (!isset($fragmentsByEntry[$entryId])) {
+            if (! isset($fragmentsByEntry[$entryId])) {
                 $fragmentsByEntry[$entryId] = [];
             }
             $fragmentsByEntry[$entryId][] = $fragment;
@@ -750,14 +743,14 @@ class ClientInvoicingService
         // Process each time entry
         foreach ($fragmentsByEntry as $entryId => $entryFragments) {
             $entry = ClientTimeEntry::find($entryId);
-            if (!$entry) {
+            if (! $entry) {
                 continue; // Entry was deleted or not found
             }
 
             // Calculate total minutes needed from this entry for this line
             $totalMinutesNeeded = array_reduce(
                 $entryFragments,
-                fn($sum, $frag) => $sum + $frag->minutes,
+                fn ($sum, $frag) => $sum + $frag->minutes,
                 0
             );
 
@@ -818,8 +811,8 @@ class ClientInvoicingService
 
     /**
      * Format hours as h:mm string for invoice line quantity display.
-     * 
-     * @param float $hours Decimal hours (e.g., 1.5)
+     *
+     * @param  float  $hours  Decimal hours (e.g., 1.5)
      * @return string Formatted as "h:mm" (e.g., "1:30")
      */
     protected function formatHoursForQuantity(float $hours): string

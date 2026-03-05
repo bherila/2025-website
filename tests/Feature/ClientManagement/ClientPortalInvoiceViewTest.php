@@ -2,11 +2,11 @@
 
 namespace Tests\Feature\ClientManagement;
 
+use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientInvoice;
 use App\Models\ClientManagement\ClientInvoiceLine;
 use App\Models\ClientManagement\ClientTimeEntry;
-use App\Models\ClientManagement\ClientAgreement;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;

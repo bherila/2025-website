@@ -5,7 +5,7 @@ namespace App\Http\Controllers\ClientManagement;
 use App\Http\Controllers\Controller;
 use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientExpense;
-use App\Models\FinAccountLineItems;
+use App\Models\FinanceTool\FinAccountLineItems;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;

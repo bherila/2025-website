@@ -145,8 +145,6 @@ class ClientInvoiceTest extends TestCase
     // Prior-Month Time Entry Tests
     // ==========================================
 
-
-
     public function test_prior_month_entries_time_entries_have_dates(): void
     {
         ClientTimeEntry::factory()->for($this->company)->for($this->project, 'project')->create([
@@ -208,7 +206,6 @@ class ClientInvoiceTest extends TestCase
         $this->assertEquals(0, (float) $invoice->fresh()->unused_hours_balance);
         $this->assertEquals(5, (float) $invoice->fresh()->negative_hours_balance);
     }
-
 
     // ==========================================
     // No Retainer in Prior Month Tests
@@ -692,9 +689,9 @@ class ClientInvoiceTest extends TestCase
             Carbon::create(2024, 1, 31)
         );
 
-        // February invoice covers work from January. 
+        // February invoice covers work from January.
         // If we work 13 hours in January, it uses 10h retainer from Jan + 3h rollover from... Jan?
-        // Wait, January work is covered by January retainer. 
+        // Wait, January work is covered by January retainer.
         // 13h in January exceeds 10h retainer by 3h.
         ClientTimeEntry::factory()->for($this->company)->for($this->project, 'project')->create([
             'user_id' => $this->admin->id,
@@ -749,14 +746,15 @@ class ClientInvoiceTest extends TestCase
         // Final state at start of Feb: Starts with 1h available (the restored threshold).
         $this->assertEquals(9, (float) $janInvoice->fresh()->negative_hours_balance);
         $this->assertEquals(0, (float) $janInvoice->fresh()->unused_hours_balance);
-        
+
         // At start of FEB (starting balances)
         $this->assertEquals(0, (float) $janInvoice->fresh()->starting_negative_hours);
         $this->assertEquals(1, (float) $janInvoice->fresh()->starting_unused_hours);
     }
+
     public function test_time_entry_is_split_with_catchup_billing(): void
     {
-        // This test verifies that a time entry is split when it partially fits in the current month's 
+        // This test verifies that a time entry is split when it partially fits in the current month's
         // retainer offset (limited by the 1h availability rule) and the remainder triggers catch-up billing.
 
         // 1. Agreement: 10 hours retainer from Jan 2024
@@ -772,7 +770,7 @@ class ClientInvoiceTest extends TestCase
         // Dec 2023 is Pre-Agreement. Capacity = 0.
         // Jan 2024 Capacity = 10.
         // Rule: Offset capped at 10-1 = 9h.
-        // Work = 12. 
+        // Work = 12.
         // Billed: 9h (Applied to Jan) + 3h (Catch-up).
 
         $entry = ClientTimeEntry::factory()->create([
@@ -821,7 +819,7 @@ class ClientInvoiceTest extends TestCase
 
     public function test_time_entry_is_split_without_catchup_billing(): void
     {
-        // This test verifies that a time entry is split when it crosses from M-1's remaining 
+        // This test verifies that a time entry is split when it crosses from M-1's remaining
         // retainer capacity into M's retainer offset, while keeping availability >= 1h.
 
         // 1. Agreement: 10 hours retainer from Dec 2023
@@ -996,7 +994,6 @@ class ClientInvoiceTest extends TestCase
             ->assertStatus(404);
     }
 
-
     public function test_excessive_overage_triggers_catch_up_billing(): void
     {
         // Scenario:
@@ -1144,8 +1141,8 @@ class ClientInvoiceTest extends TestCase
         $this->assertEquals(10 * 60, $entries->sum('minutes_worked'));
 
         // Check linking
-        $appliedToJanLine = $priorMonthLines->first(fn($l) => str_contains($l->description, 'January 2026 pool'));
-        $appliedToFebLine = $priorMonthLines->first(fn($l) => str_contains($l->description, 'February 2026 pool'));
+        $appliedToJanLine = $priorMonthLines->first(fn ($l) => str_contains($l->description, 'January 2026 pool'));
+        $appliedToFebLine = $priorMonthLines->first(fn ($l) => str_contains($l->description, 'February 2026 pool'));
 
         $this->assertNotNull($appliedToJanLine);
         $this->assertNotNull($appliedToFebLine);
@@ -1216,12 +1213,12 @@ class ClientInvoiceTest extends TestCase
         // Invoice number should use 202501 from period_end, not current date
         $periodStart = Carbon::parse('2025-01-01');
         $periodEnd = Carbon::parse('2025-01-31');
-        
+
         $invoice = $this->invoicingService->generateInvoice($this->company, $periodStart, $periodEnd);
-        
+
         // Check that invoice number contains 202501 (YYYYMM of period_end)
         $this->assertStringContainsString('202501', $invoice->invoice_number);
-        
+
         // Check format: PREFIX-YYYYMM-NNN
         $parts = explode('-', $invoice->invoice_number);
         $this->assertCount(3, $parts, 'Invoice number should have format PREFIX-YYYYMM-NNN');
