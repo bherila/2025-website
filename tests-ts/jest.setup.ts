@@ -35,3 +35,20 @@ class ResizeObserverMock {
 if (!window.ResizeObserver) {
   window.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver
 }
+
+// Mock pdfjsLib for PDF viewer tests
+(window as any).pdfjsLib = {
+  GlobalWorkerOptions: {
+    workerSrc: ''
+  },
+  getDocument: jest.fn(() => ({
+    promise: Promise.resolve({
+      numPages: 0,
+      getPage: jest.fn(() => Promise.resolve({
+        getViewport: jest.fn(() => ({ width: 0, height: 0 })),
+        render: jest.fn(() => ({ promise: Promise.resolve() }))
+      }))
+    })
+  })),
+  version: 'mock-version'
+};

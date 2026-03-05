@@ -1,5 +1,5 @@
-import { Download, ExternalLink } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { Download } from 'lucide-react'
+import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
@@ -14,6 +14,7 @@ import {
 import { fetchWrapper } from '@/fetchWrapper'
 
 import type { StatementDetail, StatementInfo } from '../StatementDetailsModal'
+import StatementPdfButton from './StatementPdfButton'
 
 interface StatementDetailViewProps {
   accountId: number
@@ -58,7 +59,7 @@ export default function StatementDetailView({
     fetchDetails()
   }, [statementId, preloadedDetails])
 
-  // Check if there's a PDF file for this statement
+  // Check if there's a PDF file for this statement for download button
   useEffect(() => {
     const checkPdf = async () => {
       setPdfLoading(true)
@@ -76,17 +77,11 @@ export default function StatementDetailView({
     checkPdf()
   }, [accountId, statementId])
 
-  const handleViewPdf = useCallback(() => {
-    if (pdfUrl?.view_url) {
-      window.open(pdfUrl.view_url, '_blank')
-    }
-  }, [pdfUrl])
-
-  const handleDownloadPdf = useCallback(() => {
+  const handleDownloadPdf = () => {
     if (pdfUrl?.download_url) {
       window.open(pdfUrl.download_url, '_blank')
     }
-  }, [pdfUrl])
+  }
 
   // Group details by section
   const detailsBySection = statementDetails.reduce((acc, detail) => {
@@ -117,7 +112,7 @@ export default function StatementDetailView({
   }
 
   return (
-    <div className="px-8 py-4">
+    <div className="container mx-auto px-4 md:px-8 py-4">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
         <button
@@ -134,13 +129,13 @@ export default function StatementDetailView({
       </nav>
 
       {/* Header row */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex flex-col md:flex-row md:items-start justify-between mb-6 gap-4">
         <div>
           <h2 className="text-xl font-semibold">
             {statementInfo?.brokerName || 'Statement Details'}
             {statementInfo?.accountNumber && ` — ${statementInfo.accountNumber}`}
           </h2>
-          <div className="text-sm text-muted-foreground mt-1 flex gap-4">
+          <div className="text-sm text-muted-foreground mt-1 flex flex-wrap gap-4">
             {statementInfo?.periodStart && statementInfo?.periodEnd && (
               <span>Period: {statementInfo.periodStart} to {statementInfo.periodEnd}</span>
             )}
@@ -155,10 +150,11 @@ export default function StatementDetailView({
         {/* PDF buttons */}
         {!pdfLoading && pdfUrl && !pdfError && (
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={handleViewPdf}>
-              <ExternalLink className="h-4 w-4 mr-1" />
-              View Original PDF
-            </Button>
+            <StatementPdfButton 
+              accountId={accountId} 
+              statementId={statementId} 
+              title="View Original PDF"
+            />
             <Button variant="outline" size="sm" onClick={handleDownloadPdf}>
               <Download className="h-4 w-4 mr-1" />
               Download PDF

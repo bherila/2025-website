@@ -95,9 +95,9 @@ jest.mock('../AccountStatementsChart', () => {
   return { __esModule: true, default: Chart };
 });
 
-jest.mock('../AllStatementsModal', () => {
+jest.mock('../AllStatementsView', () => {
   const Modal = () => <div data-testid="all-statements-modal" />;
-  Modal.displayName = 'AllStatementsModal';
+  Modal.displayName = 'AllStatementsView';
   return { __esModule: true, default: Modal };
 });
 

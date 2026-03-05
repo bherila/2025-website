@@ -25,7 +25,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { fetchWrapper } from '@/fetchWrapper'
 
 import AccountStatementsChart from './AccountStatementsChart'
-import AllStatementsModal from './AllStatementsModal'
+import StatementPdfButton from './StatementPdfButton'
 
 export interface StatementSnapshot {
   statement_id: number
@@ -40,6 +40,7 @@ interface StatementsListViewProps {
   statements: StatementSnapshot[]
   onRefresh: () => void
   onViewDetail: (statementId: number) => void
+  onViewAll: () => void
 }
 
 export default function StatementsListView({
@@ -47,6 +48,7 @@ export default function StatementsListView({
   statements,
   onRefresh,
   onViewDetail,
+  onViewAll,
 }: StatementsListViewProps) {
   const [showChart, setShowChart] = useState(() => {
     try {
@@ -60,7 +62,6 @@ export default function StatementsListView({
   const [selectedStatement, setSelectedStatement] = useState<StatementSnapshot | null>(null)
   const [currentBalance, setCurrentBalance] = useState('')
   const [currentDate, setCurrentDate] = useState('')
-  const [isAllStatementsModalOpen, setIsAllStatementsModalOpen] = useState(false)
 
   // Memoize file management options to prevent object identity changes each render
   const fileManagerOptions = useMemo(() => ({
@@ -164,196 +165,200 @@ export default function StatementsListView({
 
   return (
     <TooltipProvider>
-      <div className="flex justify-end gap-2 mb-2 px-8 items-center">
-        <div className="flex items-center gap-2 mr-auto">
-          <Switch
-            id="chart-toggle"
-            checked={showChart}
-            onCheckedChange={(checked) => {
-              setShowChart(checked)
-              try {
-                localStorage.setItem('finance_statements_chart_visible', String(checked))
-              } catch { /* ignore */ }
-            }}
-          />
-          <Label htmlFor="chart-toggle" className="text-sm cursor-pointer">Show Chart</Label>
+      <div className="container mx-auto px-4 md:px-8 py-4">
+        <div className="flex justify-end gap-2 mb-2 items-center">
+          <div className="flex items-center gap-2 mr-auto">
+            <Switch
+              id="chart-toggle"
+              checked={showChart}
+              onCheckedChange={(checked) => {
+                setShowChart(checked)
+                try {
+                  localStorage.setItem('finance_statements_chart_visible', String(checked))
+                } catch { /* ignore */ }
+              }}
+            />
+            <Label htmlFor="chart-toggle" className="text-sm cursor-pointer">Show Chart</Label>
+          </div>
+          <Button onClick={onViewAll} variant="outline" size="sm">
+            <TableProperties className="h-4 w-4 mr-1" />
+            View All Statements
+          </Button>
+          <Button onClick={handleDownloadCSV} variant="outline" size="sm">
+            <Download className="h-4 w-4 mr-1" />
+            Download CSV
+          </Button>
         </div>
-        <Button onClick={() => setIsAllStatementsModalOpen(true)} variant="outline" size="sm">
-          <TableProperties className="h-4 w-4 mr-1" />
-          View All Statements
-        </Button>
-        <Button onClick={handleDownloadCSV} variant="outline" size="sm">
-          <Download className="h-4 w-4 mr-1" />
-          Download CSV
-        </Button>
-      </div>
-      {showChart && <AccountStatementsChart balanceHistory={balanceHistory} />}
-      <div>
-        <Table className="container mx-auto">
-          <TableHeader>
-            <TableRow>
-              <TableCell className="text-right">Date</TableCell>
-              <TableCell className="text-right">Balance</TableCell>
-              <TableCell className="text-right">Change</TableCell>
-              <TableCell className="text-right">% Change</TableCell>
-              <TableCell className="text-center">Actions</TableCell>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {statementHistory.map((row, index) => (
-              <TableRow key={row.statement_closing_date + '-' + row.balance + '-' + index}>
-                <TableCell className="text-right">
-                  {row.date ? row.date.toLocaleString('en-US', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                  }) : '-'}
-                </TableCell>
-                <TableCell className="text-right">{row.balance.toFixed(2)}</TableCell>
-                <TableCell className="text-right" style={{ color: row.change < 0 ? 'red' : undefined }}>
-                  {row.change.toFixed(2)}
-                </TableCell>
-                <TableCell className="text-right" style={{ color: row.percentChange < 0 ? 'red' : undefined }}>
-                  {row.percentChange.toFixed(2)}%
+        {showChart && <AccountStatementsChart balanceHistory={balanceHistory} />}
+        <div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableCell className="text-right">Date</TableCell>
+                <TableCell className="text-right">Balance</TableCell>
+                <TableCell className="text-right">Change</TableCell>
+                <TableCell className="text-right">% Change</TableCell>
+                <TableCell className="text-center">Actions</TableCell>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {statementHistory.map((row, index) => (
+                <TableRow key={row.statement_closing_date + '-' + row.balance + '-' + index}>
+                  <TableCell className="text-right">
+                    {row.date ? row.date.toLocaleString('en-US', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                    }) : '-'}
+                  </TableCell>
+                  <TableCell className="text-right">{row.balance.toFixed(2)}</TableCell>
+                  <TableCell className="text-right" style={{ color: row.change < 0 ? 'red' : undefined }}>
+                    {row.change.toFixed(2)}
+                  </TableCell>
+                  <TableCell className="text-right" style={{ color: row.percentChange < 0 ? 'red' : undefined }}>
+                    {row.percentChange.toFixed(2)}%
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="outline" size="sm" onClick={() => handleOpenModal(row.original)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Edit Balance</p>
+                        </TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant={row.lineItemCount > 0 ? 'default' : 'outline'}
+                            className={row.lineItemCount > 0 ? 'bg-green-500 text-white hover:bg-green-600' : ''}
+                            size="sm"
+                            onClick={() => onViewDetail(row.statement_id)}
+                          >
+                            <Paperclip className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Statement Details</p>
+                        </TooltipContent>
+                      </Tooltip>
+                      
+                      <StatementPdfButton 
+                        accountId={accountId} 
+                        statementId={row.statement_id} 
+                        iconOnly 
+                      />
+
+                      <AlertDialog>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="destructive" size="sm">
+                                <Delete className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Delete</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <AlertDialogContent>
+                          <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to delete this balance snapshot? This action cannot be undone.
+                          </AlertDialogDescription>
+                          <div className="flex justify-end gap-4 mt-6">
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction asChild>
+                              <Button variant="destructive" onClick={() => handleDeleteSnapshot(row.statement_id)}>
+                                Delete
+                              </Button>
+                            </AlertDialogAction>
+                          </div>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+              <TableRow>
+                <TableCell colSpan={4} className="text-center font-semibold">
+                  Add New Snapshot
                 </TableCell>
                 <TableCell className="text-center">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button variant="outline" size="sm" onClick={() => handleOpenModal(row.original)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Edit Balance</p>
-                    </TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant={row.lineItemCount > 0 ? 'default' : 'outline'}
-                        className={row.lineItemCount > 0 ? 'bg-green-500 text-white hover:bg-green-600' : ''}
-                        size="sm"
-                        onClick={() => onViewDetail(row.statement_id)}
-                      >
-                        <Paperclip className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Statement Details</p>
-                    </TooltipContent>
-                  </Tooltip>
-                  <AlertDialog>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="destructive" size="sm">
-                            <Delete className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Delete</p>
-                      </TooltipContent>
-                    </Tooltip>
-                    <AlertDialogContent>
-                      <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Are you sure you want to delete this balance snapshot? This action cannot be undone.
-                      </AlertDialogDescription>
-                      <div className="flex justify-end gap-4 mt-6">
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction asChild>
-                          <Button variant="destructive" onClick={() => handleDeleteSnapshot(row.statement_id)}>
-                            Delete
-                          </Button>
-                        </AlertDialogAction>
-                      </div>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                  <Button variant="outline" size="sm" onClick={() => handleOpenModal()}>
+                    Add
+                  </Button>
                 </TableCell>
               </TableRow>
-            ))}
-            <TableRow>
-              <TableCell colSpan={4} className="text-center font-semibold">
-                Add New Snapshot
-              </TableCell>
-              <TableCell className="text-center">
-                <Button variant="outline" size="sm" onClick={() => handleOpenModal()}>
-                  Add
-                </Button>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-        <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-          <DialogContent>
-            <DialogTitle>{selectedStatement ? 'Edit' : 'Add New'} Balance Snapshot</DialogTitle>
-            <DialogDescription>
-              {selectedStatement ? 'Update the balance for the snapshot.' : 'Enter the date and balance for the new snapshot. Both fields are required.'}
-            </DialogDescription>
-            <div className="space-y-4 mt-4">
-              <div className="flex items-center gap-4">
-                <label htmlFor="balance-date" className="w-16">Date:</label>
-                <input
-                  id="balance-date"
-                  type="date"
-                  value={currentDate}
-                  onChange={(e) => setCurrentDate(e.target.value)}
-                  className="border p-2 rounded flex-1"
-                  required
-                  disabled={!!selectedStatement}
-                />
+            </TableBody>
+          </Table>
+          <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+            <DialogContent>
+              <DialogTitle>{selectedStatement ? 'Edit' : 'Add New'} Balance Snapshot</DialogTitle>
+              <DialogDescription>
+                {selectedStatement ? 'Update the balance for the snapshot.' : 'Enter the date and balance for the new snapshot. Both fields are required.'}
+              </DialogDescription>
+              <div className="space-y-4 mt-4">
+                <div className="flex items-center gap-4">
+                  <label htmlFor="balance-date" className="w-16">Date:</label>
+                  <input
+                    id="balance-date"
+                    type="date"
+                    value={currentDate}
+                    onChange={(e) => setCurrentDate(e.target.value)}
+                    className="border p-2 rounded flex-1"
+                    required
+                    disabled={!!selectedStatement}
+                  />
+                </div>
+                <div className="flex items-center gap-4">
+                  <label htmlFor="balance-amount" className="w-16">Balance:</label>
+                  <input
+                    id="balance-amount"
+                    type="number"
+                    step="0.01"
+                    value={currentBalance}
+                    onChange={(e) => setCurrentBalance(e.target.value)}
+                    placeholder="Balance"
+                    className="border p-2 rounded flex-1"
+                    required
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    onClick={handleFormSubmit}
+                    disabled={!currentDate || !currentBalance || isSubmitting}
+                  >
+                    {isSubmitting ? 'Submitting...' : (selectedStatement ? 'Update Snapshot' : 'Add Snapshot')}
+                  </Button>
+                </div>
               </div>
-              <div className="flex items-center gap-4">
-                <label htmlFor="balance-amount" className="w-16">Balance:</label>
-                <input
-                  id="balance-amount"
-                  type="number"
-                  step="0.01"
-                  value={currentBalance}
-                  onChange={(e) => setCurrentBalance(e.target.value)}
-                  placeholder="Balance"
-                  className="border p-2 rounded flex-1"
-                  required
-                />
-              </div>
-              <div className="flex justify-end">
-                <Button
-                  onClick={handleFormSubmit}
-                  disabled={!currentDate || !currentBalance || isSubmitting}
-                >
-                  {isSubmitting ? 'Submitting...' : (selectedStatement ? 'Update Snapshot' : 'Add Snapshot')}
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-        {isAllStatementsModalOpen && (
-          <AllStatementsModal
-            accountId={accountId}
-            isOpen={isAllStatementsModalOpen}
-            onClose={() => setIsAllStatementsModalOpen(false)}
+            </DialogContent>
+          </Dialog>
+
+          {/* Account Files Section */}
+          <FileList
+            className="mt-8"
+            files={fileManager.files}
+            loading={fileManager.loading}
+            onDownload={fileManager.downloadFile}
+            onDelete={fileManager.handleDeleteRequest}
+            title="Statement Files"
+            actions={<FileUploadButton onUpload={fileManager.uploadFile} />}
           />
-        )}
 
-        {/* Account Files Section */}
-        <FileList
-          className="mt-8"
-          files={fileManager.files}
-          loading={fileManager.loading}
-          onDownload={fileManager.downloadFile}
-          onDelete={fileManager.handleDeleteRequest}
-          title="Statement Files"
-          actions={<FileUploadButton onUpload={fileManager.uploadFile} />}
-        />
-
-        <DeleteFileModal
-          file={fileManager.deleteFile}
-          isOpen={fileManager.deleteModalOpen}
-          isDeleting={fileManager.isDeleting}
-          onClose={fileManager.closeDeleteModal}
-          onConfirm={fileManager.handleDeleteConfirm}
-        />
+          <DeleteFileModal
+            file={fileManager.deleteFile}
+            isOpen={fileManager.deleteModalOpen}
+            isDeleting={fileManager.isDeleting}
+            onClose={fileManager.closeDeleteModal}
+            onConfirm={fileManager.handleDeleteConfirm}
+          />
+        </div>
       </div>
     </TooltipProvider>
   )

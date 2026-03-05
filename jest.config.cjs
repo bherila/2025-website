@@ -6,6 +6,7 @@ const config = {
   setupFilesAfterEnv: ['<rootDir>/tests-ts/jest.setup.ts'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/resources/js/$1',
+    '^pdfjs-dist$': '<rootDir>/resources/js/__mocks__/pdfjs-dist.ts',
   },
   transformIgnorePatterns: [
     '/node_modules/(?!dayjs).+\\.js$',

@@ -36,24 +36,37 @@ interface DetailViewState {
   details?: StatementDetail[]
 }
 
+import AllStatementsView from './AllStatementsView' // I will rename this later or use it as a component
+
 export default function FinanceAccountStatementsPage({ id }: { id: number }) {
   const [statements, setStatements] = useState<StatementSnapshot[] | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  // URL-driven detail view state
-  const [detailView, setDetailView] = useState<DetailViewState | null>(() => {
+  // URL-driven view state
+  const [viewState, setViewState] = useState<{
+    view: 'list' | 'detail' | 'all'
+    statementId?: number
+    info?: StatementInfo
+    details?: StatementDetail[]
+  }>(() => {
     const sid = getSearchParam('statement_id')
-    return sid ? { statementId: parseInt(sid, 10) } : null
+    const view = getSearchParam('view')
+    if (sid) return { view: 'detail', statementId: parseInt(sid, 10) }
+    if (view === 'all') return { view: 'all' }
+    return { view: 'list' }
   })
 
   // Listen for browser back/forward
   useEffect(() => {
     const handlePopState = () => {
       const sid = getSearchParam('statement_id')
+      const view = getSearchParam('view')
       if (sid) {
-        setDetailView({ statementId: parseInt(sid, 10) })
+        setViewState({ view: 'detail', statementId: parseInt(sid, 10) })
+      } else if (view === 'all') {
+        setViewState({ view: 'all' })
       } else {
-        setDetailView(null)
+        setViewState({ view: 'list' })
       }
     }
     window.addEventListener('popstate', handlePopState)
@@ -80,31 +93,38 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
   const handleViewDetail = useCallback(async (statementId: number) => {
     // Preserve current year in URL
     const currentYear = getSearchParam('year')
-    setSearchParams({ statement_id: String(statementId), year: currentYear })
+    setSearchParams({ statement_id: String(statementId), year: currentYear, view: null })
 
     // Pre-fetch details
     try {
       const data = await fetchWrapper.get(`/api/finance/statement/${statementId}/details`)
-      setDetailView({
+      setViewState({
+        view: 'detail',
         statementId,
         info: data.statementInfo as StatementInfo,
         details: (data.statementDetails || []) as StatementDetail[],
       })
     } catch {
       // Still show the detail view — it will fetch its own data
-      setDetailView({ statementId })
+      setViewState({ view: 'detail', statementId })
     }
+  }, [])
+
+  const handleViewAll = useCallback(() => {
+    const currentYear = getSearchParam('year')
+    setSearchParams({ statement_id: null, year: currentYear, view: 'all' })
+    setViewState({ view: 'all' })
   }, [])
 
   const handleBackToList = useCallback(() => {
     const currentYear = getSearchParam('year')
-    setSearchParams({ statement_id: null, year: currentYear })
-    setDetailView(null)
+    setSearchParams({ statement_id: null, year: currentYear, view: null })
+    setViewState({ view: 'list' })
   }, [])
 
   if (isLoading) {
     return (
-      <div className="d-flex justify-content-center">
+      <div className="flex justify-center items-center py-16">
         <Spinner />
       </div>
     )
@@ -112,21 +132,37 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
 
   if (!statements || statements.length === 0) {
     return (
-      <div className="text-center p-8 bg-muted rounded-lg">
-        <h2 className="text-xl font-semibold mb-4">No Statements Found</h2>
-        <p className="mb-6">This account doesn&apos;t have any statements yet.</p>
+      <div className="container mx-auto px-4 md:px-8 py-8">
+        <div className="text-center p-8 bg-muted rounded-lg border">
+          <h2 className="text-xl font-semibold mb-4">No Statements Found</h2>
+          <p className="mb-6 text-muted-foreground">This account doesn&apos;t have any statements yet.</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show all statements full-screen
+  if (viewState.view === 'all') {
+    return (
+      <div className="container mx-auto">
+        <AllStatementsView
+          accountId={id}
+          isOpen={true}
+          onClose={handleBackToList}
+          fullScreen
+        />
       </div>
     )
   }
 
   // Show detail view if a statement is selected
-  if (detailView) {
+  if (viewState.view === 'detail' && viewState.statementId) {
     return (
       <StatementDetailView
         accountId={id}
-        statementId={detailView.statementId}
-        preloadedInfo={detailView.info}
-        preloadedDetails={detailView.details}
+        statementId={viewState.statementId}
+        preloadedInfo={viewState.info}
+        preloadedDetails={viewState.details}
         onBack={handleBackToList}
       />
     )
@@ -139,6 +175,7 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
       statements={statements}
       onRefresh={fetchData}
       onViewDetail={handleViewDetail}
+      onViewAll={handleViewAll}
     />
   )
 }

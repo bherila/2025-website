@@ -46,7 +46,7 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      external: (id) => /\.test\.[tj]sx?$/.test(id) || id.includes('/__tests__/'),
+      external: (id) => /\.test\.[tj]sx?$/.test(id) || id.includes('/__tests__/') || id === 'pdfjs-dist',
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom'],
