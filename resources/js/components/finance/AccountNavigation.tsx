@@ -1,6 +1,6 @@
 'use client'
-import { Settings,Upload } from 'lucide-react'
-import { useEffect,useState } from 'react'
+import { ChevronDown, Settings,Upload } from 'lucide-react'
+import { useCallback,useEffect,useState } from 'react'
 
 import {
   Breadcrumb,
@@ -11,6 +11,12 @@ import {
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { 
   accountsUrl,
@@ -20,8 +26,47 @@ import {
   maintenanceUrl, 
   type YearSelection 
 } from '@/lib/financeRouteBuilder'
+import { cn } from '@/lib/utils'
 
 import AccountYearSelector from './AccountYearSelector'
+
+interface FinAccount {
+  acct_id: number
+  acct_name: string
+}
+
+/**
+ * Fetches all finance accounts (asset, liability, retirement) and returns them as a flat list.
+ */
+export function useFinanceAccounts(): { accounts: FinAccount[]; isLoading: boolean } {
+  const [accounts, setAccounts] = useState<FinAccount[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  const fetchAccounts = useCallback(async () => {
+    try {
+      const response = await fetch('/api/finance/accounts')
+      if (response.ok) {
+        const data = await response.json()
+        const all: FinAccount[] = [
+          ...(data.assetAccounts || []),
+          ...(data.liabilityAccounts || []),
+          ...(data.retirementAccounts || []),
+        ]
+        setAccounts(all)
+      }
+    } catch (error) {
+      console.error('Failed to fetch finance accounts:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchAccounts()
+  }, [fetchAccounts])
+
+  return { accounts, isLoading }
+}
 
 // Tabs that show year selector
 const TAB_ITEMS = [
@@ -52,6 +97,7 @@ export default function AccountNavigation({
   onYearChange?: (year: YearSelection) => void
 }) {
   const [selectedYear, setSelectedYear] = useState<YearSelection>(() => getEffectiveYear(accountId))
+  const { accounts, isLoading: loadingAccounts } = useFinanceAccounts()
   
   // Update selected year when it changes via URL or selector
   useEffect(() => {
@@ -79,7 +125,34 @@ export default function AccountNavigation({
             </BreadcrumbItem>
             <BreadcrumbSeparator />
             <BreadcrumbItem>
-              Account {accountId} - {accountName ?? 'no name'}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-auto px-1 py-0 font-normal gap-1">
+                    Account {accountId} - {accountName ?? 'no name'}
+                    <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-64">
+                  {loadingAccounts ? (
+                    <DropdownMenuItem disabled>Loading accounts...</DropdownMenuItem>
+                  ) : accounts.length === 0 ? (
+                    <DropdownMenuItem disabled>No accounts available</DropdownMenuItem>
+                  ) : (
+                    accounts.map((account) => (
+                      <DropdownMenuItem key={account.acct_id} asChild>
+                        <a
+                          href={getTabUrl(activeTab, account.acct_id, selectedYear)}
+                          className={cn(
+                            account.acct_id === accountId && 'bg-accent font-medium'
+                          )}
+                        >
+                          Account {account.acct_id} - {account.acct_name}
+                        </a>
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </BreadcrumbItem>
             {activeTabTitle && (
               <>

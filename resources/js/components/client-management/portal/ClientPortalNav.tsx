@@ -45,6 +45,26 @@ interface ClientPortalNavProps {
   companyId?: number | undefined
 }
 
+/**
+ * Returns the URL path suffix for a given page type when switching companies.
+ * For pages with IDs (e.g. invoice detail), strips the ID and returns the list page path.
+ * For company-specific pages (project, agreement), returns '' (home).
+ */
+export function getPagePathSuffix(currentPage: ClientPortalNavProps['currentPage']): string {
+  switch (currentPage) {
+    case 'time': return '/time'
+    case 'expenses': return '/expenses'
+    case 'invoices': return '/invoices'
+    case 'invoice': return '/invoices'  // strip invoice ID, go to list
+    case 'home':
+    case 'project':    // project slugs are company-specific
+    case 'agreement':  // agreement IDs are company-specific
+    default:
+      // Unknown or home-equivalent pages return to the company home
+      return ''
+  }
+}
+
 export default function ClientPortalNav({
   slug,
   companyName,
@@ -128,7 +148,7 @@ export default function ClientPortalNav({
                     {companies.map(company => (
                       <DropdownMenuItem key={company.id} asChild>
                         <a
-                          href={`/client/portal/${company.slug}`}
+                          href={`/client/portal/${company.slug}${getPagePathSuffix(currentPage)}`}
                           className={cn(
                             slug === company.slug && 'bg-accent font-medium'
                           )}
