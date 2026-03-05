@@ -55,6 +55,14 @@ class FileController extends Controller
 
         $file = $request->file('file');
         $originalFilename = $file->getClientOriginalName();
+
+        // Ensure unique filename for this project
+        $originalFilename = $this->generateUniqueFilename($originalFilename, function ($name) use ($project) {
+            return FileForProject::where('project_id', $project->id)
+                ->where('original_filename', $name)
+                ->exists();
+        });
+
         $storedFilename = FileForProject::generateStoredFilename($originalFilename);
         $s3Path = FileForProject::generateS3Path($companySlug, $projectSlug, $storedFilename);
 
@@ -87,6 +95,14 @@ class FileController extends Controller
         ]);
 
         $originalFilename = $request->filename;
+
+        // Ensure unique filename for this project
+        $originalFilename = $this->generateUniqueFilename($originalFilename, function ($name) use ($project) {
+            return FileForProject::where('project_id', $project->id)
+                ->where('original_filename', $name)
+                ->exists();
+        });
+
         $storedFilename = FileForProject::generateStoredFilename($originalFilename);
         $s3Path = FileForProject::generateS3Path($companySlug, $projectSlug, $storedFilename);
 
@@ -192,6 +208,14 @@ class FileController extends Controller
 
         $file = $request->file('file');
         $originalFilename = $file->getClientOriginalName();
+
+        // Ensure unique filename for this company
+        $originalFilename = $this->generateUniqueFilename($originalFilename, function ($name) use ($company) {
+            return FileForClientCompany::where('client_company_id', $company->id)
+                ->where('original_filename', $name)
+                ->exists();
+        });
+
         $storedFilename = FileForClientCompany::generateStoredFilename($originalFilename);
         $s3Path = FileForClientCompany::generateS3Path($companySlug, $storedFilename);
 
@@ -224,6 +248,14 @@ class FileController extends Controller
         ]);
 
         $originalFilename = $request->filename;
+
+        // Ensure unique filename for this company
+        $originalFilename = $this->generateUniqueFilename($originalFilename, function ($name) use ($company) {
+            return FileForClientCompany::where('client_company_id', $company->id)
+                ->where('original_filename', $name)
+                ->exists();
+        });
+
         $storedFilename = FileForClientCompany::generateStoredFilename($originalFilename);
         $s3Path = FileForClientCompany::generateS3Path($companySlug, $storedFilename);
 
@@ -316,6 +348,14 @@ class FileController extends Controller
 
         $file = $request->file('file');
         $originalFilename = $file->getClientOriginalName();
+
+        // Ensure unique filename for this agreement
+        $originalFilename = $this->generateUniqueFilename($originalFilename, function ($name) use ($agreement) {
+            return FileForAgreement::where('agreement_id', $agreement->id)
+                ->where('original_filename', $name)
+                ->exists();
+        });
+
         $storedFilename = FileForAgreement::generateStoredFilename($originalFilename);
         $s3Path = FileForAgreement::generateS3Path($companySlug, $agreement->id, $storedFilename);
 
@@ -411,6 +451,14 @@ class FileController extends Controller
 
         $file = $request->file('file');
         $originalFilename = $file->getClientOriginalName();
+
+        // Ensure unique filename for this task
+        $originalFilename = $this->generateUniqueFilename($originalFilename, function ($name) use ($task) {
+            return FileForTask::where('task_id', $task->id)
+                ->where('original_filename', $name)
+                ->exists();
+        });
+
         $storedFilename = FileForTask::generateStoredFilename($originalFilename);
         $s3Path = FileForTask::generateS3Path($companySlug, $projectSlug, $task->id, $storedFilename);
 
@@ -525,6 +573,14 @@ class FileController extends Controller
         }
 
         $originalFilename = $file->getClientOriginalName();
+
+        // Ensure unique filename for this account
+        $originalFilename = $this->generateUniqueFilename($originalFilename, function ($name) use ($account) {
+            return FileForFinAccount::where('acct_id', $account->acct_id)
+                ->where('original_filename', $name)
+                ->exists();
+        });
+
         $storedFilename = FileForFinAccount::generateStoredFilename($originalFilename);
         $s3Path = FileForFinAccount::generateS3Path($account->acct_id, $storedFilename);
 
@@ -617,6 +673,30 @@ class FileController extends Controller
             'download_url' => $downloadUrl,
             'filename' => $file->original_filename,
         ]);
+    }
+
+    /**
+     * Helper to generate a unique filename within a given scope.
+     * Appends _1, _2, etc. before the extension if name exists.
+     */
+    protected function generateUniqueFilename(string $filename, callable $existsCheck): string
+    {
+        if (! $existsCheck($filename)) {
+            return $filename;
+        }
+
+        $info = pathinfo($filename);
+        $name = $info['filename'];
+        $ext = isset($info['extension']) ? '.'.$info['extension'] : '';
+
+        $counter = 1;
+        while (true) {
+            $newName = $name.'_'.$counter.$ext;
+            if (! $existsCheck($newName)) {
+                return $newName;
+            }
+            $counter++;
+        }
     }
 
     /**
