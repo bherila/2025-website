@@ -513,9 +513,14 @@ export default function ImportTransactions({
       {geminiError && (
         <div className="my-3 p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-left">
           <p className="text-red-600 dark:text-red-400 mb-2">{geminiError}</p>
-          <Button variant="outline" size="sm" onClick={processPdfWithGemini}>
-            Retry
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={processPdfWithGemini}>
+              Retry
+            </Button>
+            <Button variant="outline" size="sm" onClick={clearData}>
+              Clear
+            </Button>
+          </div>
         </div>
       )}
 
@@ -538,6 +543,9 @@ export default function ImportTransactions({
           </div>
           <Button onClick={processPdfWithGemini}>
             Process with AI
+          </Button>
+          <Button variant="outline" className="ml-2" onClick={clearData}>
+            Clear
           </Button>
         </div>
       )}
@@ -597,7 +605,7 @@ export default function ImportTransactions({
           )}
           <div className="my-2">
             <Button
-              className="mx-1"
+              className="mr-2"
               onClick={(e) => {
                 e.preventDefault()
                 handleImport(effectiveData ?? [], statement)
@@ -606,7 +614,7 @@ export default function ImportTransactions({
             >
               {getImportButtonText()}
             </Button>
-            <Button className="mx-1" onClick={clearData} disabled={loading || isImporting}>
+            <Button variant="outline" onClick={clearData} disabled={loading || isImporting}>
               Clear
             </Button>
           </div>
@@ -615,12 +623,11 @@ export default function ImportTransactions({
           )}
         </div>
       ) : null}
-
-      {/* Show clear button if we have file info but no valid data and not a pending PDF */}
-      {fileInfo && !effectiveData && !loading && !pendingPdfFile && (
+      {/* Show clear button if we have file info but no valid data and not a pending PDF and not already shown in other blocks */}
+      {fileInfo && !effectiveData && !loading && !pendingPdfFile && !hasStatementDetails && !hasLots && !geminiError && (
         <div className="mt-4">
           <Button variant="outline" onClick={clearData}>
-            Clear and try another file
+            Clear
           </Button>
         </div>
       )}
