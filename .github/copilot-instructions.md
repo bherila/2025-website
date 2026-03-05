@@ -8,9 +8,9 @@ This is a hybrid Laravel 12 + React TypeScript application for personal finance 
 - **Frontend**: React components mount into DOM elements using `createRoot`
 - **Data Flow**: Blade passes initial data via `data-*` attributes; React handles UI updates via API calls
 - **API**: RESTful endpoints under `/api` for CRUD operations
-  - recently a `GeminiImportController` was added to centralize PDF imports and cache AI responses by file hash; it also normalizes any parsed dates to plain `YYYY-MM-DD` strings to avoid timezone issues
-- **Domain**: Financial accounts, transactions, statements, payslips, RSUs, CSV imports, and client management
-- **Modules**: Finance (accounts, transactions, statements, payslips, RSUs), Tools (license manager, bingo, IRS F461, maxmin, user management), Recipes, Projects, Client Management
+  - recently a `GeminiImportController` was added to centralize PDF imports and cache AI responses by file hash; it automatically filters out fund-level data and normalizes any parsed dates to plain `YYYY-MM-DD` strings to avoid timezone issues
+- **Domain**: Financial accounts, transactions, statements, investment lots, payslips, RSUs, CSV imports, and client management
+- **Modules**: Finance (accounts, transactions, statements, lots, payslips, RSUs), Tools (license manager, bingo, IRS F461, maxmin, user management), Recipes, Projects, Client Management
 - **Authentication**: Session-based; protected routes use `auth` middleware (web routes) or `['web', 'auth']` (API routes)
 - **Authorization**: Gate-based authorization for admin-only features (e.g., Client Management uses 'admin' gate)
 - **User Roles**: Comma-separated roles in `user_role` column (e.g., `"admin,user"`). All roles lowercase. Available roles: `admin`, `user`
@@ -120,6 +120,7 @@ See [docs/TESTING.md](docs/TESTING.md) for comprehensive testing documentation.
 - **Tagging System**: Many-to-many via `fin_account_line_item_tag_map` table
 - **Linking**: Transactions can link to related entries (e.g., buys/sells)
 - **Statements**: Balance snapshots with detailed line items in `fin_statement_details`
+- **Lot Tracking**: Investment lots stored in `fin_account_lots`; handles ST/LT holding periods (365 day threshold) and realized gain/loss calculation.
 - **File Uploads**: Handle CSV imports with validation and parsing logic
 - **Prior-Month Billing**: Invoices for month M cover work from M-1 (dated last day of M-1) plus retainer for M (dated first day of M). The system uses a "give and take" model where overages in M-1 are carried forward as a negative balance rather than billed immediately. Retainer hours in future months first offset any carried-forward negative balance. Pre-agreement months are treated as having 0 retainer hours, with their hours naturally carrying forward into the first active agreement month's pool.
 - **Minimum Availability Rule**: If the carried-forward negative balance reduces the new month's availability (Retainer - Debt) below 1 hour, the system automatically bills "catch-up hours" (appearing as `additional_hours`) to pay down the debt enough to restore 1 hour of availability.

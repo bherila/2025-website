@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\FinAccounts;
+use App\Models\FinAccountLot;
 use App\Models\FinStatementDetail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -71,7 +72,7 @@ class StatementController extends Controller
             ->where('statement_id', $statement_id)
             ->first();
 
-        if (! $statement) {
+        if (!$statement) {
             return response()->json(['error' => 'Statement not found'], 404);
         }
 
@@ -80,7 +81,7 @@ class StatementController extends Controller
             ->where('acct_owner', $uid)
             ->first();
 
-        if (! $account) {
+        if (!$account) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -126,10 +127,10 @@ class StatementController extends Controller
             $section = $detail->section;
             $lineItem = $detail->line_item;
 
-            if (! isset($groupedData[$section])) {
+            if (!isset($groupedData[$section])) {
                 $groupedData[$section] = [];
             }
-            if (! isset($groupedData[$section][$lineItem])) {
+            if (!isset($groupedData[$section][$lineItem])) {
                 $groupedData[$section][$lineItem] = [
                     'is_percentage' => (bool) $detail->is_percentage,
                     'values' => [],
@@ -179,7 +180,7 @@ class StatementController extends Controller
         ]);
 
         // Insert NAV rows
-        if (! empty($statement['nav'])) {
+        if (!empty($statement['nav'])) {
             $navRows = array_map(function ($row) use ($statementId) {
                 return [
                     'statement_id' => $statementId,
@@ -195,7 +196,7 @@ class StatementController extends Controller
         }
 
         // Insert cash report rows
-        if (! empty($statement['cashReport'])) {
+        if (!empty($statement['cashReport'])) {
             $cashRows = array_map(function ($row) use ($statementId) {
                 return [
                     'statement_id' => $statementId,
@@ -210,7 +211,7 @@ class StatementController extends Controller
         }
 
         // Insert position rows
-        if (! empty($statement['positions'])) {
+        if (!empty($statement['positions'])) {
             $positionRows = array_map(function ($row) use ($statementId) {
                 return [
                     'statement_id' => $statementId,
@@ -233,7 +234,7 @@ class StatementController extends Controller
         }
 
         // Insert performance rows
-        if (! empty($statement['performance'])) {
+        if (!empty($statement['performance'])) {
             $perfRows = array_map(function ($row) use ($statementId) {
                 return [
                     'statement_id' => $statementId,
@@ -299,10 +300,21 @@ class StatementController extends Controller
             'statementDetails.*.statement_period_value' => 'nullable|numeric',
             'statementDetails.*.ytd_value' => 'nullable|numeric',
             'statementDetails.*.is_percentage' => 'nullable|boolean',
+            'lots' => 'nullable|array',
+            'lots.*.symbol' => 'required|string|max:50',
+            'lots.*.description' => 'nullable|string|max:255',
+            'lots.*.quantity' => 'required|numeric',
+            'lots.*.purchaseDate' => 'required|date',
+            'lots.*.costBasis' => 'required|numeric',
+            'lots.*.costPerUnit' => 'nullable|numeric',
+            'lots.*.saleDate' => 'nullable|date',
+            'lots.*.proceeds' => 'nullable|numeric',
+            'lots.*.realizedGainLoss' => 'nullable|numeric',
         ]);
 
         $statementInfo = $request->statementInfo ?? [];
         $statementDetails = $request->statementDetails ?? [];
+        $lots = $request->lots ?? [];
 
         // truncate to date-only strings (YYYY-MM-DD) to avoid timezone artifacts
         $periodStart = isset($statementInfo['periodStart']) ? substr($statementInfo['periodStart'], 0, 10) : null;
@@ -318,7 +330,7 @@ class StatementController extends Controller
         ]);
 
         // Insert statement detail rows
-        if (! empty($statementDetails)) {
+        if (!empty($statementDetails)) {
             $detailRows = array_map(function ($row) use ($statementId) {
                 return [
                     'statement_id' => $statementId,
@@ -332,6 +344,51 @@ class StatementController extends Controller
             FinStatementDetail::insert($detailRows);
         }
 
+        // Insert lot rows
+        $lotsCount = 0;
+        if (!empty($lots)) {
+            $lotRows = [];
+            foreach ($lots as $lot) {
+                $purchaseDate = $lot['purchaseDate'] ?? null;
+                $saleDate = $lot['saleDate'] ?? null;
+
+                // Compute is_short_term and realized_gain_loss
+                $isShortTerm = null;
+                $realizedGainLoss = $lot['realizedGainLoss'] ?? null;
+
+                if ($saleDate && $purchaseDate) {
+                    $pDate = new \DateTime($purchaseDate);
+                    $sDate = new \DateTime($saleDate);
+                    $diff = $pDate->diff($sDate);
+                    $isShortTerm = $diff->days <= 365;
+
+                    if ($realizedGainLoss === null && isset($lot['proceeds']) && isset($lot['costBasis'])) {
+                        $realizedGainLoss = $lot['proceeds'] - $lot['costBasis'];
+                    }
+                }
+
+                $lotRows[] = [
+                    'acct_id' => $account->acct_id,
+                    'symbol' => $lot['symbol'] ?? '',
+                    'description' => $lot['description'] ?? null,
+                    'quantity' => $lot['quantity'] ?? 0,
+                    'purchase_date' => $purchaseDate,
+                    'cost_basis' => $lot['costBasis'] ?? 0,
+                    'cost_per_unit' => $lot['costPerUnit'] ?? null,
+                    'sale_date' => $saleDate,
+                    'proceeds' => $lot['proceeds'] ?? null,
+                    'realized_gain_loss' => $realizedGainLoss,
+                    'is_short_term' => $isShortTerm,
+                    'lot_source' => 'import',
+                    'statement_id' => $statementId,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+            }
+            FinAccountLot::insert($lotRows);
+            $lotsCount = count($lotRows);
+        }
+
         return response()->json([
             'success' => true,
             'statement_id' => $statementId,
@@ -339,6 +396,8 @@ class StatementController extends Controller
             'period_end' => $periodEnd,
             'closing_balance' => $closingBalance,
             'details_count' => count($statementDetails),
+            'lots_count' => $lotsCount,
         ]);
     }
 }
+

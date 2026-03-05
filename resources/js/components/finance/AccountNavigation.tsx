@@ -1,6 +1,6 @@
 'use client'
-import { ChevronDown, Settings,Upload } from 'lucide-react'
-import { useCallback,useEffect,useState } from 'react'
+import { ChevronDown, Settings, Upload } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
 
 import {
   Breadcrumb,
@@ -18,13 +18,13 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { 
+import {
   accountsUrl,
   getEffectiveYear,
-  getTabUrl, 
-  importUrl, 
-  maintenanceUrl, 
-  type YearSelection 
+  getTabUrl,
+  importUrl,
+  maintenanceUrl,
+  type YearSelection
 } from '@/lib/financeRouteBuilder'
 import { cn } from '@/lib/utils'
 
@@ -74,6 +74,7 @@ const TAB_ITEMS = [
   { value: 'duplicates', title: 'Duplicates', showYearSelector: true },
   { value: 'linker', title: 'Linker', showYearSelector: true },
   { value: 'statements', title: 'Statements', showYearSelector: true },
+  { value: 'lots', title: 'Lots', showYearSelector: false },
   { value: 'summary', title: 'Summary', showYearSelector: true },
 ]
 
@@ -98,7 +99,6 @@ export default function AccountNavigation({
 }) {
   const [selectedYear, setSelectedYear] = useState<YearSelection>(() => getEffectiveYear(accountId))
   const { accounts, isLoading: loadingAccounts } = useFinanceAccounts()
-  
   // Update selected year when it changes via URL or selector
   useEffect(() => {
     const handleYearChange = (e: Event) => {
@@ -110,7 +110,7 @@ export default function AccountNavigation({
     window.addEventListener('financeYearChange', handleYearChange)
     return () => window.removeEventListener('financeYearChange', handleYearChange)
   }, [accountId])
-  
+
   const activeTabTitle = ALL_NAV_ITEMS.find((item) => item.value === activeTab)?.title || ''
   const activeTabItem = TAB_ITEMS.find((item) => item.value === activeTab)
   const showYearSelector = activeTabItem?.showYearSelector ?? false
@@ -177,10 +177,10 @@ export default function AccountNavigation({
               ))}
             </TabsList>
           </Tabs>
-          
+
           {showYearSelector && (
-            <AccountYearSelector 
-              accountId={accountId} 
+            <AccountYearSelector
+              accountId={accountId}
               onYearChange={onYearChange}
             />
           )}

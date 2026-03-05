@@ -13,6 +13,7 @@ The finance module uses a tabbed navigation system with a shared year selector a
 | Transactions | `/finance/{id}` | Main transaction list with filtering, sorting, tagging, linking |
 | Duplicates | `/finance/{id}/duplicates` | Find and remove duplicate transactions |
 | Statements | `/finance/{id}/statements` | Upload and view account statements (detail view on the same page via query params) |
+| Lots | `/finance/{id}/lots` | Track investment positions and lots (open/closed, ST/LT gains) |
 | Linker | `/finance/{id}/linker` | Bulk transaction linking tool |
 
 ### Utility Buttons
@@ -42,6 +43,7 @@ import {
   duplicatesUrl,       // /finance/{id}/duplicates?year=X
   linkerUrl,           // /finance/{id}/linker?year=X
   statementsUrl,       // /finance/{id}/statements?year=X
+  lotsUrl,             // /finance/{id}/lots
   summaryUrl,          // /finance/{id}/summary?year=X
   importUrl,           // /finance/{id}/import-transactions
   maintenanceUrl,      // /finance/{id}/maintenance
@@ -244,8 +246,9 @@ PDF statements can be imported using Gemini AI for parsing. The frontend now pro
 3. When the user clicks **Process with AI**, the PDF is POSTed to `/api/finance/transactions/import-gemini`.
    The backend endpoint is now `GeminiImportController@parseDocument`; responses (successful JSON payloads) are cached by SHA‑256 hash of the file contents for one hour to avoid repeat API calls. Errors are **not** cached so retries always re‑contact Gemini.
    **Date handling:** any dates extracted from the PDF (e.g. transaction dates or statement period dates) are truncated to the `YYYY-MM-DD` string form on the server before being returned. This avoids timezone conversions and ensures the database stores plain date strings without time or zone components.
-4. Gemini returns a structured JSON object containing any combination of statement information, statement detail rows, and transaction entries. The front end renders preview cards showing the parsed output and highlights duplicates.
-5. After reviewing the data, the user confirms by clicking the import button. The existing import logic remains unchanged: transactions are POSTed in chunks and, if statement details exist, the page calls `/api/finance/{id}/import-pdf-statement` to save them (the server‑side controller is `StatementController`).
+   **Fund-Level Filtering:** The import process automatically filters out fund-level information. The Gemini prompt instructs the AI to ignore sections like "Fund Level Capital Account," and a server-side filter provides a safety net by skipping any parsed rows where the section name contains "Fund Level."
+4. Gemini returns a structured JSON object containing any combination of statement information, statement detail rows, transaction entries, and investment lots. The front end renders preview cards showing the parsed output and highlights duplicates.
+5. After reviewing the data, the user confirms by clicking the import button. The existing import logic remains unchanged: transactions are POSTed in chunks and, if statement details or lots exist, the page calls `/api/finance/{id}/import-pdf-statement` to save them (the server‑side controller is `StatementController`).
 
 ### API Endpoints
 
@@ -253,7 +256,10 @@ PDF statements can be imported using Gemini AI for parsing. The frontend now pro
 |----------|------------|---------|
 | `POST /api/finance/transactions/import-gemini` | `GeminiImportController@parseDocument` | Parse PDF or other file with Gemini (cached by file hash) |
 | `POST /api/finance/statement/{statement_id}/import-gemini` | `GeminiImportController@importStatementDetails` | Parse PDF and insert statement line items (cached by file hash) |
-| `POST /api/finance/{id}/import-pdf-statement` | `StatementController` | Save parsed statement data |
+| `POST /api/finance/{id}/import-pdf-statement` | `StatementController` | Save parsed statement data (details and lots) |
+| `GET /api/finance/{id}/lots` | `LotsController@index` | Fetch open/closed lots for an account |
+| `POST /api/finance/{id}/lots` | `LotsController@store` | Manually add a lot to an account |
+
 
 ### Statement Details Schema
 
@@ -301,3 +307,38 @@ The import button shows contextual text based on what will be imported:
 - "Import 11 Transactions" - transactions only
 - "Import Statement" - statement only
 - "Import 11 Transactions and Statement" - both
+
+## Position and Lot Tracking
+
+The finance module supports tracking investment positions at the lot level. This data can be entered manually or extracted automatically from PDF statements via the Gemini AI parser.
+
+### Core Logic
+
+- **Open vs. Closed**: Lots with a `sale_date` of `NULL` are considered "Open." Once a `sale_date` is provided, the lot is "Closed."
+- **ST/LT Classification**: The transition from Short-Term (ST) to Long-Term (LT) occurs after holding a lot for more than 365 days. The system automatically computes this based on `purchase_date` and `sale_date`.
+- **Gains and Losses**: Realized gains and losses are calculated as `proceeds - cost_basis` upon closing a lot.
+
+### Database Schema (`fin_account_lots`)
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `lot_id` | BIGINT | Primary Key |
+| `acct_id` | BIGINT | Account ID |
+| `symbol` | VARCHAR(50) | Ticker symbol |
+| `quantity` | DECIMAL(18,8) | Share quantity |
+| `purchase_date` | DATE | Date acquired |
+| `cost_basis` | DECIMAL(18,4) | Total cost basis |
+| `sale_date` | DATE | Date sold (NULL for open) |
+| `proceeds` | DECIMAL(18,4) | Total sale proceeds |
+| `realized_gain_loss` | DECIMAL(18,4) | Calculated realized P/L |
+| `is_short_term` | BOOLEAN | Auto-computed holding period |
+| `lot_source` | VARCHAR(50) | `import` or `manual` |
+
+### Lots UI Page
+
+The Lots tab (`/finance/{id}/lots`) provides:
+- **Toggles**: Switch between "Open Lots" and "Closed Lots".
+- **Year Filter**: For closed lots, filter by tax year.
+- **Summary Cards**: Visual breakdown of ST/LT gains and losses for the selected year.
+- **Detailed Table**: Complete list of lots with symbol, quantity, dates, performance, and source.
+

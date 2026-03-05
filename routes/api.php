@@ -74,6 +74,11 @@ Route::middleware(['web', 'auth'])->get('/finance/statement/{statement_id}/detai
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/all-statement-details', [StatementController::class, 'getFinStatementDetails']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/import-ib-statement', [StatementController::class, 'importIbStatement']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/import-pdf-statement', [StatementController::class, 'importPdfStatement']);
+
+// Lots API routes
+Route::middleware(['web', 'auth'])->get('/finance/{account_id}/lots', [App\Http\Controllers\LotsController::class, 'index']);
+Route::middleware(['web', 'auth'])->post('/finance/{account_id}/lots', [App\Http\Controllers\LotsController::class, 'store']);
+
 Route::middleware(['web', 'auth'])->post('/user/update-api-key', [App\Http\Controllers\UserApiController::class, 'updateApiKey']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/duplicates', [FinanceTransactionsDedupeApiController::class, 'findDuplicates']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/merge-duplicates', [FinanceTransactionsDedupeApiController::class, 'mergeDuplicates']);

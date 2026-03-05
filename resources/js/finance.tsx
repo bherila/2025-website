@@ -4,6 +4,7 @@ import AccountNavigation from '@/components/finance/AccountNavigation'
 import DuplicatesPage from '@/components/finance/DuplicatesPage'
 import FinanceAccountsPage from '@/components/finance/FinanceAccountsPage'
 import FinanceAccountTransactionsPage from '@/components/finance/FinanceAccountTransactionsPage'
+import FinanceAccountLotsPage from '@/components/finance/FinanceAccountLotsPage'
 import ImportTransactionsClient from '@/components/finance/ImportTransactionsClient'
 import LinkerPage from '@/components/finance/LinkerPage'
 import ManageTagsPage from '@/components/finance/ManageTagsPage'
@@ -64,6 +65,12 @@ document.addEventListener('DOMContentLoaded', () => {
   if (linkerDiv) {
     const root = createRoot(linkerDiv)
     root.render(<LinkerPage id={parseInt(linkerDiv.dataset.accountId!)} />)
+  }
+
+  const lotsDiv = document.getElementById('FinanceAccountLotsPage')
+  if (lotsDiv) {
+    const root = createRoot(lotsDiv)
+    root.render(<FinanceAccountLotsPage id={parseInt(lotsDiv.dataset.accountId!)} />)
   }
 
   const manageTagsDiv = document.getElementById('ManageTagsPage')

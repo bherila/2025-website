@@ -70,13 +70,13 @@ export function getEffectiveYear(accountId: number): YearSelection {
     setStoredYear(accountId, urlYear)
     return urlYear
   }
-  
+
   // Fall back to storage
   const storedYear = getStoredYear(accountId)
   if (storedYear !== null) {
     return storedYear
   }
-  
+
   // Default to 'all'
   return 'all'
 }
@@ -129,6 +129,13 @@ export function statementsUrl(accountId: number, options: RouteOptions = {}): st
 }
 
 /**
+ * Build URL for lots page
+ */
+export function lotsUrl(accountId: number): string {
+  return `/finance/${accountId}/lots`
+}
+
+/**
  * Build URL for summary page
  */
 export function summaryUrl(accountId: number, options: RouteOptions = {}): string {
@@ -177,10 +184,10 @@ export function goToTransaction(accountId: number, transactionId: number, year?:
  */
 export function navigateToTab(
   accountId: number,
-  tab: 'transactions' | 'duplicates' | 'linker' | 'statements' | 'summary' | 'import' | 'maintenance'
+  tab: 'transactions' | 'duplicates' | 'linker' | 'statements' | 'lots' | 'summary' | 'import' | 'maintenance'
 ): void {
   const year = getEffectiveYear(accountId)
-  
+
   switch (tab) {
     case 'transactions':
       window.location.href = transactionsUrl(accountId, { year })
@@ -193,6 +200,9 @@ export function navigateToTab(
       break
     case 'statements':
       window.location.href = statementsUrl(accountId, { year })
+      break
+    case 'lots':
+      window.location.href = lotsUrl(accountId)
       break
     case 'summary':
       window.location.href = summaryUrl(accountId, { year })
@@ -224,6 +234,8 @@ export function getTabUrl(
       return linkerUrl(accountId, options)
     case 'statements':
       return statementsUrl(accountId, options)
+    case 'lots':
+      return lotsUrl(accountId)
     case 'summary':
       return summaryUrl(accountId, options)
     case 'import':
@@ -242,7 +254,7 @@ export function getTabUrl(
 export function updateYearInUrl(accountId: number, year: YearSelection): void {
   // Sync to storage
   setStoredYear(accountId, year)
-  
+
   // Update URL without navigation
   const url = new URL(window.location.href)
   if (year === 'all') {
@@ -250,10 +262,10 @@ export function updateYearInUrl(accountId: number, year: YearSelection): void {
   } else {
     url.searchParams.set('year', String(year))
   }
-  
+
   // Use replaceState to update URL without adding to history
   window.history.replaceState({}, '', url.toString())
-  
+
   // Dispatch event for components that need to know about year changes
   window.dispatchEvent(new CustomEvent('financeYearChange', { detail: { accountId, year } }))
 }

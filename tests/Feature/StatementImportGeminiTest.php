@@ -66,9 +66,11 @@ class StatementImportGeminiTest extends TestCase
         $user = $this->createAdminUser(['gemini_api_key' => 'test-key']);
         [, $stmtId] = $this->createAccountAndStatement($user->id);
 
-        Http::fake(['*' => Http::response($this->geminiJsonResponse([
-            ['section' => 'Summary', 'line_item' => 'Total', 'statement_period_value' => 100, 'ytd_value' => 200, 'is_percentage' => false],
-        ]), 200)]);
+        Http::fake([
+            '*' => Http::response($this->geminiJsonResponse([
+                ['section' => 'Summary', 'line_item' => 'Total', 'statement_period_value' => 100, 'ytd_value' => 200, 'is_percentage' => false],
+            ]), 200)
+        ]);
 
         $file = UploadedFile::fake()->create('test.txt', 100, 'text/plain');
 
@@ -323,6 +325,50 @@ class StatementImportGeminiTest extends TestCase
         $response->assertOk();
         $response->assertJson(['items_count' => 1]);
         $this->assertDatabaseCount('fin_statement_details', 1);
+    }
+
+    public function test_import_filters_out_fund_level_sections(): void
+    {
+        $user = $this->createAdminUser(['gemini_api_key' => 'test-key']);
+        [$acctId, $stmtId] = $this->createAccountAndStatement($user->id);
+
+        $geminiResponse = $this->geminiJsonResponse([
+            [
+                'section' => 'Fund Level Capital Account',
+                'line_item' => 'Total Beginning Capital',
+                'statement_period_value' => 1000000,
+                'ytd_value' => 2000000,
+                'is_percentage' => false,
+            ],
+            [
+                'section' => 'Investor Capital Account',
+                'line_item' => 'Total Beginning Capital',
+                'statement_period_value' => 100,
+                'ytd_value' => 200,
+                'is_percentage' => false,
+            ],
+        ]);
+
+        Http::fake([
+            'generativelanguage.googleapis.com/*' => Http::response($geminiResponse, 200),
+        ]);
+
+        $file = UploadedFile::fake()->create('statement.pdf', 100, 'application/pdf');
+
+        $response = $this->actingAs($user)
+            ->postJson("/api/finance/statement/{$stmtId}/import-gemini", [
+                'file' => $file,
+            ]);
+
+        $response->assertOk();
+        $response->assertJson(['items_count' => 1]); // Should only have one item (Investor Capital Account)
+        $this->assertDatabaseCount('fin_statement_details', 1);
+        $this->assertDatabaseHas('fin_statement_details', [
+            'section' => 'Investor Capital Account',
+        ]);
+        $this->assertDatabaseMissing('fin_statement_details', [
+            'section' => 'Fund Level Capital Account',
+        ]);
     }
 
     public function test_prompt_is_well_formed(): void
