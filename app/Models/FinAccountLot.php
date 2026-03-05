@@ -45,6 +45,6 @@ class FinAccountLot extends Model
 
     public function statement(): BelongsTo
     {
-        return $this->belongsTo(FinAccountBalanceSnapshot::class, 'statement_id', 'statement_id');
+        return $this->belongsTo(FinStatement::class, 'statement_id', 'statement_id');
     }
 }

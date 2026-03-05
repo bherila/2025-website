@@ -15,6 +15,7 @@ class FinAccountLineItems extends Model
 
     protected $fillable = [
         't_account',
+        'statement_id',
         't_date',
         't_date_posted',
         't_type',
@@ -44,6 +45,11 @@ class FinAccountLineItems extends Model
     public function account()
     {
         return $this->belongsTo(FinAccounts::class, 't_account', 'acct_id');
+    }
+
+    public function statement()
+    {
+        return $this->belongsTo(FinStatement::class, 'statement_id', 'statement_id');
     }
 
     public function tags()

@@ -132,12 +132,17 @@ class FinanceTransactionsApiController extends Controller
         $uid = Auth::id();
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
 
-        $lineItems = $request->json()->all();
+        $data = $request->json()->all();
+        // Check if we have a top-level statement_id or if it's per item
+        $statementId = $request->input('statement_id');
+        $lineItems = isset($data['transactions']) ? $data['transactions'] : (isset($data[0]) ? $data : []);
+
         $dataToInsert = [];
 
         foreach ($lineItems as $item) {
             $dataToInsert[] = [
                 't_account' => $account->acct_id,
+                'statement_id' => $item['statement_id'] ?? $statementId,
                 't_date' => $item['t_date'],
                 't_date_posted' => $item['t_date_posted'] ?? null,
                 't_type' => $item['t_type'] ?? null,
@@ -162,6 +167,7 @@ class FinanceTransactionsApiController extends Controller
                 't_interest_rate' => $item['t_interest_rate'] ?? null,
                 't_harvested_amount' => $item['t_harvested_amount'] ?? null,
                 't_account_balance' => $item['t_account_balance'] ?? null,
+                'when_added' => now(),
             ];
         }
 

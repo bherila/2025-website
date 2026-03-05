@@ -418,6 +418,7 @@ DROP TABLE IF EXISTS `files_for_fin_accounts`;
 CREATE TABLE `files_for_fin_accounts` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `acct_id` bigint(20) unsigned NOT NULL,
+  `file_hash` varchar(64) DEFAULT NULL,
   `statement_id` bigint(20) unsigned DEFAULT NULL COMMENT 'Optional link to parsed statement',
   `original_filename` varchar(255) NOT NULL,
   `stored_filename` varchar(255) NOT NULL,
@@ -433,6 +434,7 @@ CREATE TABLE `files_for_fin_accounts` (
   KEY `files_for_fin_accounts_uploaded_by_user_id_foreign` (`uploaded_by_user_id`),
   KEY `files_for_fin_accounts_acct_id_index` (`acct_id`),
   KEY `files_for_fin_accounts_statement_id_index` (`statement_id`),
+  KEY `files_for_fin_accounts_file_hash_index` (`file_hash`),
   CONSTRAINT `files_for_fin_accounts_acct_id_foreign` FOREIGN KEY (`acct_id`) REFERENCES `fin_accounts` (`acct_id`) ON DELETE CASCADE,
   CONSTRAINT `files_for_fin_accounts_uploaded_by_user_id_foreign` FOREIGN KEY (`uploaded_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -524,6 +526,7 @@ DROP TABLE IF EXISTS `fin_account_line_items`;
 CREATE TABLE `fin_account_line_items` (
   `t_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `t_account` bigint(20) unsigned DEFAULT NULL,
+  `statement_id` bigint(20) unsigned DEFAULT NULL,
   `t_date` varchar(10) NOT NULL,
   `t_type` varchar(255) DEFAULT NULL,
   `t_schc_category` varchar(255) DEFAULT NULL,
@@ -559,7 +562,38 @@ CREATE TABLE `fin_account_line_items` (
   `t_date_posted` varchar(10) DEFAULT NULL,
   `t_account_balance` decimal(13,4) DEFAULT NULL,
   PRIMARY KEY (`t_id`),
-  KEY `fin_account_line_items_t_account_index` (`t_account`)
+  KEY `fin_account_line_items_t_account_index` (`t_account`),
+  KEY `fin_account_line_items_statement_id_index` (`statement_id`),
+  CONSTRAINT `fin_account_line_items_statement_id_foreign` FOREIGN KEY (`statement_id`) REFERENCES `fin_statements` (`statement_id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_account_lots`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_account_lots` (
+  `lot_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `acct_id` bigint(20) unsigned NOT NULL,
+  `symbol` varchar(50) NOT NULL,
+  `description` varchar(255) DEFAULT NULL,
+  `quantity` decimal(18,8) NOT NULL,
+  `purchase_date` date NOT NULL,
+  `cost_basis` decimal(18,4) NOT NULL,
+  `cost_per_unit` decimal(18,8) DEFAULT NULL,
+  `sale_date` date DEFAULT NULL COMMENT 'NULL = open lot',
+  `proceeds` decimal(18,4) DEFAULT NULL,
+  `realized_gain_loss` decimal(18,4) DEFAULT NULL,
+  `is_short_term` tinyint(1) DEFAULT NULL COMMENT 'sale_date - purchase_date <= 1 year',
+  `lot_source` varchar(50) DEFAULT NULL COMMENT 'import, manual, etc.',
+  `statement_id` bigint(20) unsigned DEFAULT NULL COMMENT 'Statement this lot was imported from',
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`lot_id`),
+  KEY `fin_account_lots_statement_id_foreign` (`statement_id`),
+  KEY `fin_account_lots_acct_id_index` (`acct_id`),
+  KEY `fin_account_lots_symbol_index` (`symbol`),
+  KEY `fin_account_lots_sale_date_index` (`sale_date`),
+  CONSTRAINT `fin_account_lots_acct_id_foreign` FOREIGN KEY (`acct_id`) REFERENCES `fin_accounts` (`acct_id`) ON DELETE CASCADE,
+  CONSTRAINT `fin_account_lots_statement_id_foreign` FOREIGN KEY (`statement_id`) REFERENCES `fin_statements` (`statement_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_account_tag`;
@@ -1190,3 +1224,5 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (44,'2026_01_28_220
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (45,'2026_01_29_031451_change_quantity_column_to_varchar_in_client_invoice_lines',24);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (46,'2026_02_05_062520_add_catch_up_threshold_hours_to_client_agreements_table',25);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (47,'2026_02_07_000000_add_starting_balances_to_client_invoices',26);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (48,'2026_03_05_000000_create_fin_account_lots_table',27);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (49,'2026_03_05_001906_add_hash_and_statement_id_to_finance_tables',28);

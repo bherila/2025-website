@@ -73,6 +73,7 @@ export default function ImportTransactions({
   const [existingTransactions, setExistingTransactions] = useState<AccountLineItem[]>([])
   const [loadingExisting, setLoadingExisting] = useState(true)
   const [pdfData, setPdfData] = useState<GeminiImportResponse | null>(null)
+  const [importedStatementId, setImportedStatementId] = useState<number | undefined>(undefined)
   // Pending PDF file waiting for user to click "Process with AI"
   const [pendingPdfFile, setPendingPdfFile] = useState<File | null>(null)
   // Gemini-specific error for retry
@@ -106,7 +107,7 @@ export default function ImportTransactions({
     loadExistingTransactions()
   }, [accountId])
 
-  const processChunks = useCallback(async (chunks: AccountLineItem[][], chunkIndex: number) => {
+  const processChunks = useCallback(async (chunks: AccountLineItem[][], chunkIndex: number, statementId?: number) => {
     if (chunkIndex >= chunks.length) {
       setIsImporting(false)
       window.location.href = `/finance/${accountId}`
@@ -122,9 +123,12 @@ export default function ImportTransactions({
     }
 
     try {
-      await fetchWrapper.post(`/api/finance/${accountId}/line_items`, chunk)
+      await fetchWrapper.post(`/api/finance/${accountId}/line_items`, {
+        transactions: chunk,
+        statement_id: statementId
+      })
       setImportProgress((prev) => ({ ...prev, processed: prev.processed + chunk.length }))
-      await processChunks(chunks, chunkIndex + 1)
+      await processChunks(chunks, chunkIndex + 1, statementId)
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : String(e)
       setImportError(`Failed to import chunk ${chunkIndex + 1}: ${errorMessage}`)
@@ -139,12 +143,16 @@ export default function ImportTransactions({
     setIsImporting(true)
     setImportError(null)
     
+    let statementId: number | undefined
+
     // Import IB statement first (if available)
     if (statementToImport) {
       try {
-        await fetchWrapper.post(`/api/finance/${accountId}/import-ib-statement`, {
+        const response = await fetchWrapper.post(`/api/finance/${accountId}/import-ib-statement`, {
           statement: statementToImport,
-        })
+        }) as { statement_id: number }
+        statementId = response.statement_id
+        setImportedStatementId(statementId)
       } catch (e) {
         const errorMessage = e instanceof Error ? e.message : String(e)
         setImportError(`Failed to import statement: ${errorMessage}`)
@@ -157,10 +165,13 @@ export default function ImportTransactions({
     // Import PDF statement details (if available)
     if (pdfData?.statementDetails && pdfData.statementDetails.length > 0) {
       try {
-        await fetchWrapper.post(`/api/finance/${accountId}/import-pdf-statement`, {
+        const response = await fetchWrapper.post(`/api/finance/${accountId}/import-pdf-statement`, {
           statementInfo: pdfData.statementInfo,
           statementDetails: pdfData.statementDetails,
-        })
+          lots: pdfData.lots,
+        }) as { statement_id: number }
+        statementId = response.statement_id
+        setImportedStatementId(statementId)
       } catch (e) {
         const errorMessage = e instanceof Error ? e.message : String(e)
         setImportError(`Failed to import statement details: ${errorMessage}`)
@@ -182,7 +193,7 @@ export default function ImportTransactions({
       for (let i = 0; i < newTransactions.length; i += CHUNK_SIZE) {
         chunks.push(newTransactions.slice(i, i + CHUNK_SIZE))
       }
-      await processChunks(chunks, 0)
+      await processChunks(chunks, 0, statementId)
     } else {
       setIsImporting(false)
       onImportFinished()
@@ -324,7 +335,7 @@ export default function ImportTransactions({
       chunks.push(dataToImport.slice(i, i + CHUNK_SIZE))
     }
     const failedChunkIndex = Math.floor(importProgress.processed / CHUNK_SIZE)
-    processChunks(chunks, failedChunkIndex)
+    processChunks(chunks, failedChunkIndex, importedStatementId)
   }
 
   // Handle Ctrl+V paste on the page

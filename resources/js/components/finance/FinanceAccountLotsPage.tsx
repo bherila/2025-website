@@ -37,6 +37,10 @@ interface Lot {
     realized_gain_loss: string | null
     is_short_term: boolean | null
     lot_source: string | null
+    statement?: {
+        statement_id: number
+        statement_closing_date: string
+    } | null
 }
 
 interface GainLossSummary {
@@ -254,6 +258,7 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
                                         <TableHead>Type</TableHead>
                                     </>
                                 )}
+                                <TableHead>Statement</TableHead>
                                 <TableHead>Source</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -286,6 +291,20 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
                                                 </TableCell>
                                             </>
                                         )}
+                                        <TableCell>
+                                            {lot.statement ? (
+                                                <a
+                                                    href={`/finance/${id}/statements?statement_id=${lot.statement.statement_id}`}
+                                                    className="text-blue-600 hover:underline"
+                                                >
+                                                    {formatDate(lot.statement.statement_closing_date)}
+                                                </a>
+                                            ) : lot.lot_source === 'import' ? (
+                                                <span className="text-muted-foreground italic text-xs">Statement Deleted</span>
+                                            ) : (
+                                                '—'
+                                            )}
+                                        </TableCell>
                                         <TableCell>
                                             {lot.lot_source && (
                                                 <Badge variant="outline" className="text-xs">

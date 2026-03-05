@@ -89,6 +89,17 @@ The backend endpoint for AI parsing (`GeminiImportController@parseDocument`) now
 accepts parameters for the selected options and caches responses by SHA‑256 file
 hash for one hour. A companion endpoint (`/api/finance/statement/{statement_id}/pdf`)
 returns signed URLs for viewing/downloading any PDF tied to a statement.
+
+### Duplicate File Prevention
+To save storage and processing time, the file management system uses SHA-256 hashing:
+- When a file is uploaded, its hash is stored in `files_for_fin_accounts.file_hash`.
+- If a file with the same hash already exists for the account, the existing record is reused.
+- If the file was already uploaded but not yet linked to a statement, it is updated with the new `statement_id`.
+
+### Gemini Cache Management
+Gemini API responses are cached by file hash. To allow re-processing a file:
+- Deleting a statement from the **Statements** tab will automatically clear the Gemini cache for all associated files.
+- This allows the user to re-upload the same file and have Gemini parse it again (useful if the prompt or parsing logic changed).
 ## Duplicate Detection
 
 Duplicate detection is performed on the client-side. A transaction is considered a duplicate if it has the same `t_date`, `t_type`, `t_description`, `t_qty`, and `t_amt` as an existing transaction. The comparison for `t_type` and `t_description` is a substring match.
@@ -333,6 +344,7 @@ The finance module supports tracking investment positions at the lot level. This
 | `realized_gain_loss` | DECIMAL(18,4) | Calculated realized P/L |
 | `is_short_term` | BOOLEAN | Auto-computed holding period |
 | `lot_source` | VARCHAR(50) | `import` or `manual` |
+| `statement_id` | BIGINT | Link to the statement this lot was imported from |
 
 ### Lots UI Page
 
@@ -341,4 +353,11 @@ The Lots tab (`/finance/{id}/lots`) provides:
 - **Year Filter**: For closed lots, filter by tax year.
 - **Summary Cards**: Visual breakdown of ST/LT gains and losses for the selected year.
 - **Detailed Table**: Complete list of lots with symbol, quantity, dates, performance, and source.
+- **Statement Link**: For imported lots, a clickable link to the original statement detail view. Shows "Statement Deleted" if the statement was removed but the lot was preserved.
+
+## Data Persistence & Cleanup
+When a statement is deleted:
+- Associated **Lots** are un-linked (their `statement_id` is set to NULL) but the data remains.
+- Associated **Transactions** are un-linked (their `statement_id` is set to NULL) but the data remains.
+- This ensures that deleting a statement doesn't accidentally wipe out your transaction history or position tracking.
 

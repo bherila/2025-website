@@ -61,6 +61,10 @@ experience:
 - Added the `viewStatementPdf` method on `FileController` with a matching route.
   This method requires the file to be associated with the requested statement.
 
+- **Duplicate File Prevention**: The `FileController` now uses SHA-256 hashes to prevent re-saving the same file multiple times for an account.
+
+- **Automated Cache Cleanup**: Deleting a statement now triggers a cleanup of any cached Gemini AI responses associated with the statement's files.
+
 ## Testing & Quality Assurance
 
 - New unit tests cover the checkbox persistence and disabling behavior in the
@@ -70,9 +74,10 @@ experience:
 
 ## Notes
 
-- The `files_for_fin_accounts` table already had a `statement_id` column; files
-  uploaded via the import workflow are automatically tagged with it when the
-  corresponding statement exists.
+- The `files_for_fin_accounts` table now includes a `file_hash` column for duplicate detection.
+- The `fin_account_line_items` table now includes a `statement_id` column to link transactions back to their source.
+- When a statement is deleted, associated lots and transactions are **un-linked** rather than deleted, ensuring data integrity.
+- The `FinAccountBalanceSnapshot` model was renamed to `FinStatement` to align with the table name.
 - All TypeScript and PHP tests currently pass after these changes. Linting
   and type-checking were also updated to accommodate new imports and
   dependencies.

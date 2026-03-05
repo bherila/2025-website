@@ -34,7 +34,8 @@ class LotsController extends Controller
             }
         }
 
-        $lots = $query->orderBy('symbol')
+        $lots = $query->with('statement')
+            ->orderBy('symbol')
             ->orderBy('purchase_date')
             ->get();
 

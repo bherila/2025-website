@@ -226,16 +226,59 @@ class FinanceApiController extends Controller
         $uid = Auth::id();
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
 
-        $request->validate([
-            'statement_closing_date' => 'required|string',
-            'balance' => 'required|string',
-        ]);
+        $statementId = $request->input('statement_id');
 
-        DB::table('fin_statements')
-            ->where('acct_id', $account->acct_id)
-            ->where('statement_closing_date', $request->statement_closing_date)
-            ->where('balance', $request->balance)
-            ->delete();
+        // Fallback to searching if statement_id is not provided (backwards compatibility)
+        if (!$statementId) {
+            $request->validate([
+                'statement_closing_date' => 'required|string',
+                'balance' => 'required|string',
+            ]);
+
+            $statement = DB::table('fin_statements')
+                ->where('acct_id', $account->acct_id)
+                ->where('statement_closing_date', $request->statement_closing_date)
+                ->where('balance', $request->balance)
+                ->first();
+
+            if (!$statement) {
+                return response()->json(['error' => 'Statement not found'], 404);
+            }
+            $statementId = $statement->statement_id;
+        }
+
+        DB::transaction(function () use ($statementId, $account) {
+            // Find associated files to clear cache
+            $files = DB::table('files_for_fin_accounts')
+                ->where('statement_id', $statementId)
+                ->where('acct_id', $account->acct_id)
+                ->get();
+
+            foreach ($files as $file) {
+                if ($file->file_hash) {
+                    \Illuminate\Support\Facades\Cache::forget("gemini_import:transactions:{$file->file_hash}");
+                    \Illuminate\Support\Facades\Cache::forget("gemini_import:statement:{$file->file_hash}");
+                }
+            }
+
+            // Un-link lots (not delete)
+            DB::table('fin_account_lots')
+                ->where('statement_id', $statementId)
+                ->where('acct_id', $account->acct_id)
+                ->update(['statement_id' => null]);
+
+            // Un-link transactions (not delete)
+            DB::table('fin_account_line_items')
+                ->where('statement_id', $statementId)
+                ->where('t_account', $account->acct_id)
+                ->update(['statement_id' => null]);
+
+            // Delete the statement (cascades to details)
+            DB::table('fin_statements')
+                ->where('statement_id', $statementId)
+                ->where('acct_id', $account->acct_id)
+                ->delete();
+        });
 
         return response()->json(['success' => true]);
     }

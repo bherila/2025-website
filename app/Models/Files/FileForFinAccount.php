@@ -17,6 +17,7 @@ class FileForFinAccount extends Model
     protected $fillable = [
         'acct_id',
         'statement_id',
+        'file_hash',
         'original_filename',
         'stored_filename',
         's3_path',
@@ -30,6 +31,7 @@ class FileForFinAccount extends Model
         'download_history' => 'array',
         'file_size_bytes' => 'integer',
         'statement_id' => 'integer',
+        'file_hash' => 'string',
     ];
 
     protected $appends = ['human_file_size', 'download_count'];

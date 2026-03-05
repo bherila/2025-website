@@ -506,6 +506,23 @@ class FileController extends Controller
         ]);
 
         $file = $request->file('file');
+        $fileContent = file_get_contents($file->getRealPath());
+        $fileHash = hash('sha256', $fileContent);
+
+        // Check if file already exists for this account by hash
+        $existingFile = FileForFinAccount::where('acct_id', $account->acct_id)
+            ->where('file_hash', $fileHash)
+            ->first();
+
+        if ($existingFile) {
+            // If statement_id is provided and was null, update it
+            if ($request->statement_id && !$existingFile->statement_id) {
+                $existingFile->statement_id = $request->statement_id;
+                $existingFile->save();
+            }
+            return response()->json($existingFile->load('uploader:id,name'), 200);
+        }
+
         $originalFilename = $file->getClientOriginalName();
         $storedFilename = FileForFinAccount::generateStoredFilename($originalFilename);
         $s3Path = FileForFinAccount::generateS3Path($account->acct_id, $storedFilename);
@@ -513,6 +530,7 @@ class FileController extends Controller
         $fileModel = new FileForFinAccount([
             'acct_id' => $account->acct_id,
             'statement_id' => $request->statement_id,
+            'file_hash' => $fileHash,
             'original_filename' => $originalFilename,
             'stored_filename' => $storedFilename,
             's3_path' => $s3Path,

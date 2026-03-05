@@ -123,9 +123,9 @@ export default function StatementsListView({
     setModalOpen(true)
   }
 
-  const handleDeleteSnapshot = async (statement_closing_date: string, balance: string) => {
+  const handleDeleteSnapshot = async (statement_id: number) => {
     try {
-      await fetchWrapper.delete(`/api/finance/${accountId}/balance-timeseries`, { statement_closing_date, balance })
+      await fetchWrapper.delete(`/api/finance/${accountId}/balance-timeseries`, { statement_id })
       onRefresh()
     } catch (error) {
       console.error('Error deleting balance snapshot:', error)
@@ -263,7 +263,7 @@ export default function StatementsListView({
                       <div className="flex justify-end gap-4 mt-6">
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction asChild>
-                          <Button variant="destructive" onClick={() => handleDeleteSnapshot(row.statement_closing_date, row.originalBalance)}>
+                          <Button variant="destructive" onClick={() => handleDeleteSnapshot(row.statement_id)}>
                             Delete
                           </Button>
                         </AlertDialogAction>

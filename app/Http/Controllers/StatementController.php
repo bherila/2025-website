@@ -300,6 +300,10 @@ class StatementController extends Controller
             'statementDetails.*.statement_period_value' => 'nullable|numeric',
             'statementDetails.*.ytd_value' => 'nullable|numeric',
             'statementDetails.*.is_percentage' => 'nullable|boolean',
+            'transactions' => 'nullable|array',
+            'transactions.*.t_date' => 'required|date',
+            'transactions.*.t_amt' => 'required|numeric',
+            'transactions.*.t_description' => 'nullable|string|max:255',
             'lots' => 'nullable|array',
             'lots.*.symbol' => 'required|string|max:50',
             'lots.*.description' => 'nullable|string|max:255',
@@ -314,6 +318,7 @@ class StatementController extends Controller
 
         $statementInfo = $request->statementInfo ?? [];
         $statementDetails = $request->statementDetails ?? [];
+        $transactions = $request->transactions ?? [];
         $lots = $request->lots ?? [];
 
         // truncate to date-only strings (YYYY-MM-DD) to avoid timezone artifacts
@@ -342,6 +347,30 @@ class StatementController extends Controller
                 ];
             }, $statementDetails);
             FinStatementDetail::insert($detailRows);
+        }
+
+        // Insert transactions
+        $transactionsCount = 0;
+        if (!empty($transactions)) {
+            $transactionRows = array_map(function ($tx) use ($account, $statementId) {
+                return [
+                    't_account' => $account->acct_id,
+                    'statement_id' => $statementId,
+                    't_date' => substr($tx['t_date'], 0, 10),
+                    't_amt' => $tx['t_amt'],
+                    't_description' => $tx['t_description'] ?? null,
+                    't_type' => $tx['t_type'] ?? null,
+                    't_symbol' => $tx['t_symbol'] ?? null,
+                    't_qty' => $tx['t_qty'] ?? 0,
+                    't_price' => $tx['t_price'] ?? 0,
+                    't_commission' => $tx['t_commission'] ?? 0,
+                    't_fee' => $tx['t_fee'] ?? 0,
+                    't_source' => 'import',
+                    'when_added' => now(),
+                ];
+            }, $transactions);
+            FinAccountLineItems::insert($transactionRows);
+            $transactionsCount = count($transactionRows);
         }
 
         // Insert lot rows
@@ -396,6 +425,7 @@ class StatementController extends Controller
             'period_end' => $periodEnd,
             'closing_balance' => $closingBalance,
             'details_count' => count($statementDetails),
+            'transactions_count' => $transactionsCount,
             'lots_count' => $lotsCount,
         ]);
     }
