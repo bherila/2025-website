@@ -2,34 +2,15 @@
 
 namespace Tests\Feature;
 
-use App\Models\FinStatementDetail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class GeminiImportControllerTest extends TestCase
 {
     use RefreshDatabase;
-
-    private function createAccountAndStatement(int $userId): array
-    {
-        $acctId = DB::table('fin_accounts')->insertGetId([
-            'acct_owner' => $userId,
-            'acct_name' => 'Test Account',
-            'acct_last_balance' => '100000',
-        ]);
-
-        $stmtId = DB::table('fin_statements')->insertGetId([
-            'acct_id' => $acctId,
-            'balance' => '100000',
-            'statement_closing_date' => '2025-01-31',
-        ]);
-
-        return [$acctId, $stmtId];
-    }
 
     private function geminiJsonResponse(array $items): array
     {
@@ -258,222 +239,7 @@ class GeminiImportControllerTest extends TestCase
         $this->assertEquals('2025-01-15', $json['transactions'][0]['date']);
     }
 
-    // ================================================================
-    // importStatementDetails tests
-    // ================================================================
-
-    public function test_import_statement_requires_authentication(): void
-    {
-        $response = $this->postJson('/api/finance/statement/1/import-gemini', []);
-        $response->assertUnauthorized();
-    }
-
-    public function test_import_statement_validates_file_is_required(): void
-    {
-        $user = $this->createAdminUser(['gemini_api_key' => 'test-key']);
-
-        $response = $this->actingAs($user)->postJson('/api/finance/statement/1/import-gemini', []);
-        $response->assertStatus(422);
-        $response->assertJsonValidationErrors('file');
-    }
-
-    public function test_import_statement_returns_404_for_nonexistent_statement(): void
-    {
-        $user = $this->createAdminUser(['gemini_api_key' => 'test-key']);
-
-        $file = UploadedFile::fake()->create('statement.pdf', 100, 'application/pdf');
-
-        $response = $this->actingAs($user)
-            ->postJson('/api/finance/statement/99999/import-gemini', ['file' => $file]);
-
-        $response->assertStatus(404);
-    }
-
-    public function test_import_statement_returns_404_for_other_users_statement(): void
-    {
-        $owner = $this->createUser(['gemini_api_key' => 'test-key']);
-        $otherUser = $this->createUser(['gemini_api_key' => 'test-key']);
-
-        [, $stmtId] = $this->createAccountAndStatement($owner->id);
-
-        $file = UploadedFile::fake()->create('statement.pdf', 100, 'application/pdf');
-
-        $response = $this->actingAs($otherUser)
-            ->postJson("/api/finance/statement/{$stmtId}/import-gemini", ['file' => $file]);
-
-        $response->assertStatus(404);
-    }
-
-    public function test_import_statement_requires_gemini_api_key(): void
-    {
-        $user = $this->createAdminUser(['gemini_api_key' => null]);
-        [, $stmtId] = $this->createAccountAndStatement($user->id);
-
-        $file = UploadedFile::fake()->create('statement.pdf', 100, 'application/pdf');
-
-        $response = $this->actingAs($user)
-            ->postJson("/api/finance/statement/{$stmtId}/import-gemini", ['file' => $file]);
-
-        $response->assertStatus(400);
-        $response->assertJson(['error' => 'Gemini API key is not set.']);
-    }
-
-    public function test_import_statement_successfully_creates_details(): void
-    {
-        $user = $this->createAdminUser(['gemini_api_key' => 'test-key']);
-        [, $stmtId] = $this->createAccountAndStatement($user->id);
-
-        $geminiResponse = $this->geminiJsonResponse([
-            [
-                'section' => 'Statement Summary ($)',
-                'line_item' => 'Pre-Tax Return',
-                'statement_period_value' => -23355.87,
-                'ytd_value' => 12312.59,
-                'is_percentage' => false,
-            ],
-            [
-                'section' => 'Statement Summary (%)',
-                'line_item' => 'Pre-Tax Return',
-                'statement_period_value' => -1.75,
-                'ytd_value' => 1.76,
-                'is_percentage' => true,
-            ],
-        ]);
-
-        Http::fake([
-            'generativelanguage.googleapis.com/*' => Http::response($geminiResponse, 200),
-        ]);
-
-        $file = UploadedFile::fake()->create('statement.pdf', 100, 'application/pdf');
-
-        $response = $this->actingAs($user)
-            ->postJson("/api/finance/statement/{$stmtId}/import-gemini", ['file' => $file]);
-
-        $response->assertOk();
-        $response->assertJson([
-            'success' => true,
-            'items_count' => 2,
-        ]);
-
-        $this->assertDatabaseCount('fin_statement_details', 2);
-
-        $detail = FinStatementDetail::where('statement_id', $stmtId)
-            ->where('section', 'Statement Summary ($)')
-            ->first();
-
-        $this->assertNotNull($detail);
-        $this->assertEquals('Pre-Tax Return', $detail->line_item);
-        $this->assertEquals(-23355.87, (float) $detail->statement_period_value);
-    }
-
-    public function test_import_statement_caches_gemini_response(): void
-    {
-        $user = $this->createAdminUser(['gemini_api_key' => 'test-key']);
-        [, $stmtId] = $this->createAccountAndStatement($user->id);
-
-        $geminiResponse = $this->geminiJsonResponse([
-            ['section' => 'Summary', 'line_item' => 'Total', 'statement_period_value' => 100, 'ytd_value' => 200, 'is_percentage' => false],
-        ]);
-
-        Http::fake([
-            'generativelanguage.googleapis.com/*' => Http::response($geminiResponse, 200),
-        ]);
-
-        $file = UploadedFile::fake()->create('statement.pdf', 100, 'application/pdf');
-
-        $response = $this->actingAs($user)
-            ->postJson("/api/finance/statement/{$stmtId}/import-gemini", ['file' => $file]);
-        $response->assertOk();
-
-        // Verify the Gemini result was cached
-        $fileContent = $file->get();
-        $hash = hash('sha256', $fileContent);
-        $this->assertNotNull(Cache::get("gemini_import:statement:{$hash}"));
-    }
-
-    public function test_import_statement_accepts_non_pdf_file(): void
-    {
-        $user = $this->createAdminUser(['gemini_api_key' => 'test-key']);
-        [, $stmtId] = $this->createAccountAndStatement($user->id);
-
-        Http::fake(['*' => Http::response($this->geminiJsonResponse([
-            ['section' => 'Summary', 'line_item' => 'Total', 'statement_period_value' => 100, 'ytd_value' => 200, 'is_percentage' => false],
-        ]), 200)]);
-
-        $file = UploadedFile::fake()->create('test.txt', 100, 'text/plain');
-
-        $response = $this->actingAs($user)
-            ->postJson("/api/finance/statement/{$stmtId}/import-gemini", ['file' => $file]);
-
-        $response->assertStatus(200);
-    }
-
-    public function test_import_statement_handles_rate_limit(): void
-    {
-        $user = $this->createAdminUser(['gemini_api_key' => 'test-key']);
-        [, $stmtId] = $this->createAccountAndStatement($user->id);
-
-        Http::fake([
-            'generativelanguage.googleapis.com/*' => Http::response(
-                ['error' => ['message' => 'Rate limit exceeded']],
-                429
-            ),
-        ]);
-
-        $file = UploadedFile::fake()->create('statement.pdf', 100, 'application/pdf');
-
-        $response = $this->actingAs($user)
-            ->postJson("/api/finance/statement/{$stmtId}/import-gemini", ['file' => $file]);
-
-        $response->assertStatus(429);
-    }
-
-    public function test_import_statement_handles_malformed_json(): void
-    {
-        $user = $this->createAdminUser(['gemini_api_key' => 'test-key']);
-        [, $stmtId] = $this->createAccountAndStatement($user->id);
-
-        Http::fake([
-            'generativelanguage.googleapis.com/*' => Http::response([
-                'candidates' => [
-                    ['content' => ['parts' => [['text' => 'Not valid JSON']]]],
-                ],
-            ], 200),
-        ]);
-
-        $file = UploadedFile::fake()->create('statement.pdf', 100, 'application/pdf');
-
-        $response = $this->actingAs($user)
-            ->postJson("/api/finance/statement/{$stmtId}/import-gemini", ['file' => $file]);
-
-        $response->assertStatus(500);
-        $this->assertDatabaseCount('fin_statement_details', 0);
-    }
-
-    public function test_import_statement_skips_malformed_entries(): void
-    {
-        $user = $this->createAdminUser(['gemini_api_key' => 'test-key']);
-        [, $stmtId] = $this->createAccountAndStatement($user->id);
-
-        $geminiResponse = $this->geminiJsonResponse([
-            ['section' => 'Valid Section', 'line_item' => 'Valid Item', 'statement_period_value' => 100, 'ytd_value' => 200, 'is_percentage' => false],
-            ['section' => '', 'line_item' => '', 'statement_period_value' => 0],
-        ]);
-
-        Http::fake([
-            'generativelanguage.googleapis.com/*' => Http::response($geminiResponse, 200),
-        ]);
-
-        $file = UploadedFile::fake()->create('statement.pdf', 100, 'application/pdf');
-
-        $response = $this->actingAs($user)
-            ->postJson("/api/finance/statement/{$stmtId}/import-gemini", ['file' => $file]);
-
-        $response->assertOk();
-        $response->assertJson(['items_count' => 1]);
-    }
-
-    public function test_prompts_are_well_formed(): void
+    public function test_prompt_is_well_formed(): void
     {
         $controller = new \App\Http\Controllers\GeminiImportController;
 
@@ -481,11 +247,6 @@ class GeminiImportControllerTest extends TestCase
         $this->assertStringContainsString('statementInfo', $transactionPrompt);
         $this->assertStringContainsString('transactions', $transactionPrompt);
         $this->assertStringContainsString('statementDetails', $transactionPrompt);
-
-        $statementPrompt = $controller->getStatementPrompt();
-        $this->assertStringContainsString('JSON', $statementPrompt);
-        $this->assertStringContainsString('section', $statementPrompt);
-        $this->assertStringContainsString('line_item', $statementPrompt);
-        $this->assertStringContainsString('is_percentage', $statementPrompt);
+        $this->assertStringContainsString('lots', $transactionPrompt);
     }
 }

@@ -41,6 +41,19 @@ interface GeminiImportResponse {
     amount: number
     type?: string
   }>
+  lots?: Array<{
+    symbol: string
+    description?: string
+    quantity: number
+    purchaseDate: string
+    costBasis: number
+    costPerUnit?: number
+    marketValue?: number
+    unrealizedGainLoss?: number
+    saleDate?: string
+    proceeds?: number
+    realizedGainLoss?: number
+  }>
   error?: string
 }
 
@@ -79,12 +92,14 @@ export default function ImportTransactions({
   // Gemini-specific error for retry
   const [geminiError, setGeminiError] = useState<string | null>(null)
   // Checkboxes for PDF import options — persisted in localStorage
+  // "Import Transactions" and "Attach as Statement" are shown AFTER Gemini parsing
   const [importTransactions, setImportTransactions] = useState(() => {
     try { const v = localStorage.getItem('pdf_import_transactions'); return v === null ? true : v === 'true' } catch { return true }
   })
   const [attachAsStatement, setAttachAsStatement] = useState(() => {
     try { const v = localStorage.getItem('pdf_attach_statement'); return v === null ? true : v === 'true' } catch { return true }
   })
+  // "Save File to Storage" is shown at the upload stage (before Gemini)
   const [saveFileToS3, setSaveFileToS3] = useState(() => {
     try { const v = localStorage.getItem('pdf_save_file_s3'); return v === null ? true : v === 'true' } catch { return true }
   })
@@ -162,12 +177,14 @@ export default function ImportTransactions({
       }
     }
     
-    // Import PDF statement details (if available)
-    if (pdfData?.statementDetails && pdfData.statementDetails.length > 0) {
+    // Import PDF statement + lots (if user opted to attach as statement, or if there are lots)
+    const hasDetails = (pdfData?.statementDetails?.length ?? 0) > 0
+    const hasLots = (pdfData?.lots?.length ?? 0) > 0
+    if (pdfData && (attachAsStatement || hasLots) && (hasDetails || hasLots)) {
       try {
         const response = await fetchWrapper.post(`/api/finance/${accountId}/import-pdf-statement`, {
           statementInfo: pdfData.statementInfo,
-          statementDetails: pdfData.statementDetails,
+          statementDetails: attachAsStatement ? pdfData.statementDetails : [],
           lots: pdfData.lots,
         }) as { statement_id: number }
         statementId = response.statement_id
@@ -182,7 +199,8 @@ export default function ImportTransactions({
     }
     
     // Use the preloaded existing transactions to filter out duplicates
-    const newTransactions = filterOutDuplicates(data, existingTransactions)
+    const transactionsToProcess = importTransactions ? data : []
+    const newTransactions = filterOutDuplicates(transactionsToProcess, existingTransactions)
     
     setLoading(false)
 
@@ -198,7 +216,7 @@ export default function ImportTransactions({
       setIsImporting(false)
       onImportFinished()
     }
-  }, [accountId, existingTransactions, processChunks, onImportFinished, pdfData])
+  }, [accountId, existingTransactions, processChunks, onImportFinished, pdfData, attachAsStatement, importTransactions])
 
   const clearData = useCallback(() => {
     setText('')
@@ -243,8 +261,6 @@ export default function ImportTransactions({
     setError(null)
     const formData = new FormData()
     formData.append('file', pendingPdfFile)
-    formData.append('import_transactions', importTransactions ? '1' : '0')
-    formData.append('attach_as_statement', attachAsStatement ? '1' : '0')
     try {
       const response = await fetchWrapper.post('/api/finance/transactions/import-gemini', formData) as GeminiImportResponse
       if (response.error) {
@@ -268,7 +284,7 @@ export default function ImportTransactions({
     } finally {
       setLoading(false)
     }
-  }, [pendingPdfFile, importTransactions, attachAsStatement, saveFileToS3, accountId])
+  }, [pendingPdfFile, saveFileToS3, accountId])
 
   /** Handle click-to-select file via hidden input */
   const handleFileInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -399,24 +415,35 @@ export default function ImportTransactions({
   // Combine data from text parsing or PDF parsing
   const effectiveData = data ?? pdfParsedData
   
-  // Check if we have statement details from PDF
+  // Check if we have statement details or lots from PDF
   const hasStatementDetails = (pdfData?.statementDetails?.length ?? 0) > 0
+  const hasLots = (pdfData?.lots?.length ?? 0) > 0
   const transactionCount = effectiveData?.length ?? 0
   
   // Build import button text
   const getImportButtonText = () => {
     const parts: string[] = []
-    if (transactionCount > 0) {
+    if (importTransactions && transactionCount > 0) {
       parts.push(`${transactionCount} Transaction${transactionCount !== 1 ? 's' : ''}`)
     }
     if (statement) {
       parts.push('1 Statement')
-    } else if (hasStatementDetails) {
+    } else if (attachAsStatement && hasStatementDetails) {
       parts.push('1 Statement')
+    }
+    if (hasLots) {
+      parts.push(`${pdfData!.lots!.length} Lot${pdfData!.lots!.length !== 1 ? 's' : ''}`)
     }
     if (parts.length === 0) return 'Import'
     return `Import ${parts.join(' and ')}`
   }
+
+  // Determine if there is anything to import
+  const hasImportableContent = 
+    (importTransactions && transactionCount > 0) || 
+    (attachAsStatement && hasStatementDetails) ||
+    hasLots ||
+    !!statement
 
   return (
     <div
@@ -492,34 +519,10 @@ export default function ImportTransactions({
         </div>
       )}
 
-      {/* PDF pending: show "Process with AI" button */}
+      {/* PDF pending: show "Save to Storage" option and "Process with AI" button */}
       {pendingPdfFile && !loading && !pdfData && !geminiError && (
         <div className="my-3">
           <div className="flex items-center gap-4 mb-3 justify-center">
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="import-transactions"
-                checked={importTransactions}
-                onCheckedChange={(checked) => {
-                  const val = checked === true
-                  setImportTransactions(val)
-                  try { localStorage.setItem('pdf_import_transactions', String(val)) } catch { /* ignore */ }
-                }}
-              />
-              <Label htmlFor="import-transactions">Import Transactions</Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="attach-statement"
-                checked={attachAsStatement}
-                onCheckedChange={(checked) => {
-                  const val = checked === true
-                  setAttachAsStatement(val)
-                  try { localStorage.setItem('pdf_attach_statement', String(val)) } catch { /* ignore */ }
-                }}
-              />
-              <Label htmlFor="attach-statement">Attach as Statement</Label>
-            </div>
             <div className="flex items-center gap-2">
               <Checkbox
                 id="save-file-s3"
@@ -533,7 +536,7 @@ export default function ImportTransactions({
               <Label htmlFor="save-file-s3">Save File to Storage</Label>
             </div>
           </div>
-          <Button onClick={processPdfWithGemini} disabled={!importTransactions && !attachAsStatement && !saveFileToS3}>
+          <Button onClick={processPdfWithGemini}>
             Process with AI
           </Button>
         </div>
@@ -556,9 +559,42 @@ export default function ImportTransactions({
       {/* Statement preview card */}
       {statement && <StatementPreviewCard statement={statement} />}
 
-      {/* Show import button if we have data or statement details */}
-      {(effectiveData && effectiveData.length > 0) || hasStatementDetails ? (
+      {/* Show import button if we have data, statement details, or lots */}
+      {(effectiveData && effectiveData.length > 0) || hasStatementDetails || hasLots ? (
         <div style={{textAlign: 'left'}}>
+          {/* Post-Gemini import options for PDF data */}
+          {pdfData && (transactionCount > 0 || hasStatementDetails) && (
+            <div className="flex items-center gap-4 my-3">
+              {transactionCount > 0 && (
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="import-transactions"
+                    checked={importTransactions}
+                    onCheckedChange={(checked) => {
+                      const val = checked === true
+                      setImportTransactions(val)
+                      try { localStorage.setItem('pdf_import_transactions', String(val)) } catch { /* ignore */ }
+                    }}
+                  />
+                  <Label htmlFor="import-transactions">Import Transactions</Label>
+                </div>
+              )}
+              {hasStatementDetails && (
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="attach-statement"
+                    checked={attachAsStatement}
+                    onCheckedChange={(checked) => {
+                      const val = checked === true
+                      setAttachAsStatement(val)
+                      try { localStorage.setItem('pdf_attach_statement', String(val)) } catch { /* ignore */ }
+                    }}
+                  />
+                  <Label htmlFor="attach-statement">Attach as Statement</Label>
+                </div>
+              )}
+            </div>
+          )}
           <div className="my-2">
             <Button
               className="mx-1"
@@ -566,7 +602,7 @@ export default function ImportTransactions({
                 e.preventDefault()
                 handleImport(effectiveData ?? [], statement)
               }}
-              disabled={loading || isImporting}
+              disabled={loading || isImporting || !hasImportableContent}
             >
               {getImportButtonText()}
             </Button>

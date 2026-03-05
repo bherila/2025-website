@@ -69,26 +69,29 @@ The transaction import feature allows users to import transactions from a file. 
 
 ### PDF Import Enhancements
 
-PDF statements now offer three explicit checkboxes when a file is pending processing:
+PDF statements now offer a two-stage experience with explicit options:
 
-- **Import Transactions** – import parsed line items
-- **Attach as Statement** – create a statement/statement-details record
+**Stage 1 (Pre-Gemini):** After selecting/dropping a PDF, one checkbox is shown:
 - **Save File to Storage** – upload the original PDF to S3 for later reference
+
+**Stage 2 (Post-Gemini):** After AI parsing completes, additional checkboxes appear before the Import button:
+- **Import Transactions** – import parsed transaction line items (shown only when transactions are detected)
+- **Attach as Statement** – create a statement/statement-details record (shown only when statement details are detected)
 
 Checkbox states are persisted globally in `localStorage` (`pdf_import_transactions`,
 `pdf_attach_statement`, `pdf_save_file_s3`) so users don’t need to reconfigure each
-session or per account. The "Process with AI" button is disabled when **all three**
-options are unchecked, preventing accidental no-op uploads.
+session or per account.
 
 When the storage option is selected the file is immediately uploaded to
 `/api/finance/{accountId}/files` after Gemini processing completes; the resulting
 record will surface in the **Statement Files** card on the Statements page even
 if no transactions or details were imported.
 
-The backend endpoint for AI parsing (`GeminiImportController@parseDocument`) now
-accepts parameters for the selected options and caches responses by SHA‑256 file
-hash for one hour. A companion endpoint (`/api/finance/statement/{statement_id}/pdf`)
-returns signed URLs for viewing/downloading any PDF tied to a statement.
+The backend endpoint for AI parsing (`GeminiImportController@parseDocument`)
+caches responses by SHA-256 file hash for one hour. A companion endpoint
+(`/api/finance/statement/{statement_id}/pdf`) returns signed URLs for
+viewing/downloading any PDF tied to a statement.
+
 
 ### Duplicate File Prevention
 To save storage and processing time, the file management system uses SHA-256 hashing:
@@ -250,10 +253,7 @@ PDF statements can be imported using Gemini AI for parsing. The frontend now pro
 ### Import Flow
 
 1. User drops or pastes a file on the import page, or chooses one via the file picker.
-2. If the file is text (CSV/QFX/HAR/etc.) it is parsed immediately in the browser. If it is a PDF the file is held in state and a summary card appears, along with two checkboxes:
-   - **Import Transactions**
-   - **Attach as Statement**
-   Both are checked by default, giving the user control to skip one type if desired.
+2. If the file is text (CSV/QFX/HAR/etc.) it is parsed immediately in the browser. If it is a PDF the file is held in state and a summary card appears with a **Save File to Storage** checkbox.
 3. When the user clicks **Process with AI**, the PDF is POSTed to `/api/finance/transactions/import-gemini`.
    The backend endpoint is now `GeminiImportController@parseDocument`; responses (successful JSON payloads) are cached by SHA‑256 hash of the file contents for one hour to avoid repeat API calls. Errors are **not** cached so retries always re‑contact Gemini.
    **Date handling:** any dates extracted from the PDF (e.g. transaction dates or statement period dates) are truncated to the `YYYY-MM-DD` string form on the server before being returned. This avoids timezone conversions and ensures the database stores plain date strings without time or zone components.
@@ -266,7 +266,6 @@ PDF statements can be imported using Gemini AI for parsing. The frontend now pro
 | Endpoint | Controller | Purpose |
 |----------|------------|---------|
 | `POST /api/finance/transactions/import-gemini` | `GeminiImportController@parseDocument` | Parse PDF or other file with Gemini (cached by file hash) |
-| `POST /api/finance/statement/{statement_id}/import-gemini` | `GeminiImportController@importStatementDetails` | Parse PDF and insert statement line items (cached by file hash) |
 | `POST /api/finance/{id}/import-pdf-statement` | `StatementController` | Save parsed statement data (details and lots) |
 | `GET /api/finance/{id}/lots` | `LotsController@index` | Fetch open/closed lots for an account |
 | `POST /api/finance/{id}/lots` | `LotsController@store` | Manually add a lot to an account |
@@ -317,7 +316,8 @@ The import page uses extracted components for better maintainability:
 The import button shows contextual text based on what will be imported:
 - "Import 11 Transactions" - transactions only
 - "Import Statement" - statement only
-- "Import 11 Transactions and Statement" - both
+- "Import 11 Transactions and 1 Statement" - transactions + statement
+- "Import 11 Transactions and 1 Statement and 5 Lots" - all three types
 
 ## Position and Lot Tracking
 

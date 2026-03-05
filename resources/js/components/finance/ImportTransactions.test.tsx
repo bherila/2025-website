@@ -129,7 +129,7 @@ describe('ImportTransactions', () => {
     );
   });
 
-  it('shows import checkboxes for PDF files', async () => {
+  it('shows save-file-s3 checkbox for PDF files (other checkboxes appear after Gemini)', async () => {
     render(<ImportTransactions accountId={1} onImportFinished={jest.fn()} />);
 
     const input = screen.getByTestId('file-input') as HTMLInputElement;
@@ -138,16 +138,22 @@ describe('ImportTransactions', () => {
     fireEvent.change(input, { target: { files: [file] } });
 
     await waitFor(() => {
-      expect(screen.getByTestId('import-transactions')).toBeInTheDocument();
-      expect(screen.getByTestId('attach-statement')).toBeInTheDocument();
       expect(screen.getByTestId('save-file-s3')).toBeInTheDocument();
-      expect(screen.getByText('Import Transactions')).toBeInTheDocument();
-      expect(screen.getByText('Attach as Statement')).toBeInTheDocument();
       expect(screen.getByText('Save File to Storage')).toBeInTheDocument();
     });
+
+    // Import Transactions and Attach as Statement should NOT be visible yet
+    expect(screen.queryByTestId('import-transactions')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('attach-statement')).not.toBeInTheDocument();
   });
 
-  it('disables Process with AI when all checkboxes are unchecked', async () => {
+  it('shows import-transactions and attach-statement checkboxes after Gemini parsing', async () => {
+    (fetchWrapper.post as jest.Mock).mockResolvedValue({
+      statementInfo: { brokerName: 'Test' },
+      statementDetails: [{ section: 'S', line_item: 'L', statement_period_value: 1, ytd_value: 2, is_percentage: false }],
+      transactions: [{ date: '2025-01-01', description: 'Test', amount: 100, type: 'deposit' }],
+    });
+
     render(<ImportTransactions accountId={1} onImportFinished={jest.fn()} />);
 
     const input = screen.getByTestId('file-input') as HTMLInputElement;
@@ -159,13 +165,31 @@ describe('ImportTransactions', () => {
       expect(screen.getByText('Process with AI')).toBeInTheDocument();
     });
 
-    // Uncheck all three checkboxes
-    fireEvent.click(screen.getByTestId('import-transactions'));
-    fireEvent.click(screen.getByTestId('attach-statement'));
+    fireEvent.click(screen.getByText('Process with AI'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('import-transactions')).toBeInTheDocument();
+      expect(screen.getByTestId('attach-statement')).toBeInTheDocument();
+    });
+  });
+
+  it('Process with AI button is always enabled regardless of save-file-s3 state', async () => {
+    render(<ImportTransactions accountId={1} onImportFinished={jest.fn()} />);
+
+    const input = screen.getByTestId('file-input') as HTMLInputElement;
+    const file = new File(['pdf content'], 'test.pdf', { type: 'application/pdf' });
+
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Process with AI')).toBeInTheDocument();
+    });
+
+    // Uncheck save-file-s3
     fireEvent.click(screen.getByTestId('save-file-s3'));
 
-    // Process with AI button should be disabled
-    expect(screen.getByText('Process with AI')).toBeDisabled();
+    // Process with AI button should still be enabled
+    expect(screen.getByText('Process with AI')).not.toBeDisabled();
   });
 
   it('calls Gemini API when Process with AI is clicked', async () => {

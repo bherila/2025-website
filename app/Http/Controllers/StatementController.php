@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\FinAccounts;
+use App\Models\FinAccountLineItems;
 use App\Models\FinAccountLot;
 use App\Models\FinStatementDetail;
 use Illuminate\Http\Request;
@@ -314,6 +315,8 @@ class StatementController extends Controller
             'lots.*.saleDate' => 'nullable|date',
             'lots.*.proceeds' => 'nullable|numeric',
             'lots.*.realizedGainLoss' => 'nullable|numeric',
+            'lots.*.marketValue' => 'nullable|numeric',
+            'lots.*.unrealizedGainLoss' => 'nullable|numeric',
         ]);
 
         $statementInfo = $request->statementInfo ?? [];
