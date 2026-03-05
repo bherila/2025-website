@@ -31,7 +31,7 @@ export default function StatementPdfButton({
   const [isOpen, setIsOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [checking, setChecking] = useState(initialHasPdf === undefined)
-  const [hasPdf, setHasPdf] = useState(initialHasPdf ?? true)
+  const [hasPdf, setHasPdf] = useState(initialHasPdf ?? false)
   const [pdfData, setPdfData] = useState<{ view_url: string; download_url: string; filename: string } | null>(null)
   const [hasError, setHasError] = useState(false)
 
@@ -54,6 +54,14 @@ export default function StatementPdfButton({
     checkPdf()
   }, [accountId, statementId, initialHasPdf])
 
+  if (checking) {
+    return null
+  }
+
+  if (!hasPdf) {
+    return null
+  }
+
   const handleOpen = async () => {
     if (pdfData) {
       setIsOpen(true)
@@ -69,6 +77,7 @@ export default function StatementPdfButton({
     } catch (err) {
       console.error('Failed to fetch statement PDF:', err)
       setHasError(true)
+      setHasPdf(false) // Hide button if fetch fails (e.g. 404)
     } finally {
       setLoading(false)
     }
@@ -78,14 +87,6 @@ export default function StatementPdfButton({
     if (pdfData?.download_url) {
       window.open(pdfData.download_url, '_blank')
     }
-  }
-
-  if (checking) {
-    return null
-  }
-
-  if (!hasPdf) {
-    return null
   }
 
   if (hasError && iconOnly) {
