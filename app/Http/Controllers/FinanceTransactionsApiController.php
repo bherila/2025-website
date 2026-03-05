@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\FinAccountLineItems;
+use App\Models\FinAccountLot;
 use App\Models\FinAccounts;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -116,6 +117,10 @@ class FinanceTransactionsApiController extends Controller
         $request->validate([
             't_id' => 'required|integer',
         ]);
+
+        // Unlink any lots referencing this transaction before deleting
+        FinAccountLot::where('open_t_id', $request->t_id)->update(['open_t_id' => null]);
+        FinAccountLot::where('close_t_id', $request->t_id)->update(['close_t_id' => null]);
 
         FinAccountLineItems::where('t_id', $request->t_id)
             ->where('t_account', $account->acct_id)

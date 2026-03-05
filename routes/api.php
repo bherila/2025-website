@@ -78,6 +78,9 @@ Route::middleware(['web', 'auth'])->post('/finance/{account_id}/import-pdf-state
 // Lots API routes
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/lots', [App\Http\Controllers\LotsController::class, 'index']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/lots', [App\Http\Controllers\LotsController::class, 'store']);
+Route::middleware(['web', 'auth'])->post('/finance/{account_id}/lots/import', [App\Http\Controllers\LotsController::class, 'importLots']);
+Route::middleware(['web', 'auth'])->post('/finance/{account_id}/lots/search-transactions', [App\Http\Controllers\LotsController::class, 'searchTransactions']);
+Route::middleware(['web', 'auth'])->get('/finance/{account_id}/lots/by-transaction/{t_id}', [App\Http\Controllers\LotsController::class, 'lotsByTransaction']);
 
 Route::middleware(['web', 'auth'])->post('/user/update-api-key', [App\Http\Controllers\UserApiController::class, 'updateApiKey']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/duplicates', [FinanceTransactionsDedupeApiController::class, 'findDuplicates']);

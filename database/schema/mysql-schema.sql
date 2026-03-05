@@ -585,6 +585,8 @@ CREATE TABLE `fin_account_lots` (
   `is_short_term` tinyint(1) DEFAULT NULL COMMENT 'sale_date - purchase_date <= 1 year',
   `lot_source` varchar(50) DEFAULT NULL COMMENT 'import, manual, etc.',
   `statement_id` bigint(20) unsigned DEFAULT NULL COMMENT 'Statement this lot was imported from',
+  `open_t_id` bigint(20) unsigned DEFAULT NULL COMMENT 'Transaction that opened this lot (buy)',
+  `close_t_id` bigint(20) unsigned DEFAULT NULL COMMENT 'Transaction that closed this lot (sell)',
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`lot_id`),
@@ -592,7 +594,11 @@ CREATE TABLE `fin_account_lots` (
   KEY `fin_account_lots_acct_id_index` (`acct_id`),
   KEY `fin_account_lots_symbol_index` (`symbol`),
   KEY `fin_account_lots_sale_date_index` (`sale_date`),
+  KEY `fin_account_lots_open_t_id_index` (`open_t_id`),
+  KEY `fin_account_lots_close_t_id_index` (`close_t_id`),
   CONSTRAINT `fin_account_lots_acct_id_foreign` FOREIGN KEY (`acct_id`) REFERENCES `fin_accounts` (`acct_id`) ON DELETE CASCADE,
+  CONSTRAINT `fin_account_lots_close_t_id_foreign` FOREIGN KEY (`close_t_id`) REFERENCES `fin_account_line_items` (`t_id`) ON DELETE SET NULL,
+  CONSTRAINT `fin_account_lots_open_t_id_foreign` FOREIGN KEY (`open_t_id`) REFERENCES `fin_account_line_items` (`t_id`) ON DELETE SET NULL,
   CONSTRAINT `fin_account_lots_statement_id_foreign` FOREIGN KEY (`statement_id`) REFERENCES `fin_statements` (`statement_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -1226,3 +1232,4 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (46,'2026_02_05_062
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (47,'2026_02_07_000000_add_starting_balances_to_client_invoices',26);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (48,'2026_03_05_000000_create_fin_account_lots_table',27);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (49,'2026_03_05_001906_add_hash_and_statement_id_to_finance_tables',28);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (50,'2026_03_05_100000_add_transaction_ids_to_fin_account_lots',29);

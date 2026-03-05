@@ -24,6 +24,7 @@ import { fetchWrapper } from '@/fetchWrapper'
 import { cn } from '@/lib/utils'
 
 import { ClearFilterButton } from './ClearFilterButton'
+import TransactionLotsModal from './lots/TransactionLotsModal'
 import { TagApplyButton } from './TagApplyButton'
 import TransactionDetailsModal from './TransactionDetailsModal'
 import TransactionLinkModal from './TransactionLinkModal'
@@ -35,9 +36,10 @@ interface Props {
   refreshFn?: () => void
   duplicates?: AccountLineItem[]
   enableLinking?: boolean
+  accountId?: number
 }
 
-export default function TransactionsTable({ data, onDeleteTransaction, enableTagging = false, refreshFn, duplicates, enableLinking = false }: Props) {
+export default function TransactionsTable({ data, onDeleteTransaction, enableTagging = false, refreshFn, duplicates, enableLinking = false, accountId }: Props) {
   const [sortField, setSortField] = useState<keyof AccountLineItem>('t_date')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
   const [descriptionFilter, setDescriptionFilter] = useState('')
@@ -66,6 +68,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
   const [postDateFilter, setPostDateFilter] = useState('')
   const [cashBalanceFilter, setCashBalanceFilter] = useState('')
   const [deleteConfirmTransaction, setDeleteConfirmTransaction] = useState<AccountLineItem | null>(null)
+  const [lotsTransaction, setLotsTransaction] = useState<AccountLineItem | null>(null)
 
   const isDuplicate = (item: AccountLineItem) => {
     if (!duplicates || duplicates.length === 0) {
@@ -305,6 +308,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
               <th className="text-center">Client</th>
             )}
             {enableLinking && <th className="text-center">Link</th>}
+            {accountId && <th className="text-center">Lots</th>}
             <th className="text-center">Details</th>
             {onDeleteTransaction && <th className="text-center">🗑️</th>}
           </tr>
@@ -487,6 +491,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
             )}
             {!isClientExpenseColumnEmpty && <th></th>}
             {enableLinking && <th></th>}
+            {accountId && <th></th>}
             <th></th>
             {onDeleteTransaction && <th></th>}
           </tr>
@@ -708,6 +713,20 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                   </Button>
                 </td>
               )}
+              {accountId && (
+                <td>
+                  {row.t_symbol && (row.t_type === 'Sell' || row.t_type === 'Buy' || row.t_type === 'SELL' || row.t_type === 'BUY' || (row.t_qty && Number(row.t_qty) !== 0)) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setLotsTransaction(row)}
+                      title="View/Edit Lots"
+                    >
+                      📦
+                    </Button>
+                  )}
+                </td>
+              )}
               <td>
                 <Button 
                   variant="outline" 
@@ -758,6 +777,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
             {!isCashBalanceColumnEmpty && <TotalCell />}
             {!isClientExpenseColumnEmpty && <TotalCell />}
             {enableLinking && <TotalCell />}
+            {accountId && <TotalCell />}
             <TotalCell />
             {onDeleteTransaction && <TotalCell />}
           </tr>
@@ -812,6 +832,15 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
               refreshFn()
             }
           }}
+        />
+      )}
+
+      {lotsTransaction && accountId && (
+        <TransactionLotsModal
+          accountId={accountId}
+          transactionId={lotsTransaction.t_id!}
+          isOpen={!!lotsTransaction}
+          onClose={() => setLotsTransaction(null)}
         />
       )}
 

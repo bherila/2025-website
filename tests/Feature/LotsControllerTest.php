@@ -221,4 +221,279 @@ class LotsControllerTest extends TestCase
         $response = $this->getJson('/api/finance/1/lots?status=open');
         $response->assertUnauthorized();
     }
+
+    public function test_import_lots_creates_new_lots(): void
+    {
+        $user = $this->createAdminUser();
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Test Import',
+            'acct_last_balance' => '0',
+        ]);
+
+        // Create buy and sell transactions
+        $buyTId = DB::table('fin_account_line_items')->insertGetId([
+            't_account' => $acctId,
+            't_date' => '2024-12-19',
+            't_type' => 'Buy',
+            't_symbol' => 'ARKG',
+            't_qty' => 0.101,
+            't_amt' => -2.25,
+            'when_added' => now(),
+        ]);
+        $sellTId = DB::table('fin_account_line_items')->insertGetId([
+            't_account' => $acctId,
+            't_date' => '2025-05-06',
+            't_type' => 'Sell',
+            't_symbol' => 'ARKG',
+            't_qty' => -0.101,
+            't_amt' => 2.06,
+            'when_added' => now(),
+        ]);
+
+        $response = $this->actingAs($user)->postJson("/api/finance/{$acctId}/lots/import", [
+            'lots' => [
+                [
+                    'symbol' => 'ARKG',
+                    'description' => 'ISHARES TR GENOMICS IMMUN',
+                    'quantity' => 0.101,
+                    'purchase_date' => '2024-12-19',
+                    'cost_basis' => 2.25,
+                    'cost_per_unit' => 22.28,
+                    'sale_date' => '2025-05-06',
+                    'proceeds' => 2.06,
+                    'realized_gain_loss' => -0.19,
+                    'is_short_term' => true,
+                    'open_t_id' => $buyTId,
+                    'close_t_id' => $sellTId,
+                ],
+            ],
+        ]);
+
+        $response->assertOk();
+        $response->assertJson(['success' => true, 'created' => 1, 'updated' => 0]);
+
+        $this->assertDatabaseHas('fin_account_lots', [
+            'acct_id' => $acctId,
+            'symbol' => 'ARKG',
+            'open_t_id' => $buyTId,
+            'close_t_id' => $sellTId,
+            'lot_source' => 'fidelity_import',
+        ]);
+    }
+
+    public function test_import_lots_updates_existing_open_lot(): void
+    {
+        $user = $this->createAdminUser();
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Test Import Update',
+            'acct_last_balance' => '0',
+        ]);
+
+        // Create an existing open lot
+        FinAccountLot::create([
+            'acct_id' => $acctId,
+            'symbol' => 'ARKG',
+            'quantity' => 0.101,
+            'purchase_date' => '2024-12-19',
+            'cost_basis' => 2.25,
+            'lot_source' => 'fidelity_import',
+        ]);
+
+        $sellTId = DB::table('fin_account_line_items')->insertGetId([
+            't_account' => $acctId,
+            't_date' => '2025-05-06',
+            't_type' => 'Sell',
+            't_symbol' => 'ARKG',
+            't_qty' => -0.101,
+            't_amt' => 2.06,
+            'when_added' => now(),
+        ]);
+
+        $response = $this->actingAs($user)->postJson("/api/finance/{$acctId}/lots/import", [
+            'lots' => [
+                [
+                    'symbol' => 'ARKG',
+                    'quantity' => 0.101,
+                    'purchase_date' => '2024-12-19',
+                    'cost_basis' => 2.25,
+                    'sale_date' => '2025-05-06',
+                    'proceeds' => 2.06,
+                    'realized_gain_loss' => -0.19,
+                    'is_short_term' => true,
+                    'close_t_id' => $sellTId,
+                ],
+            ],
+        ]);
+
+        $response->assertOk();
+        $response->assertJson(['success' => true, 'created' => 0, 'updated' => 1]);
+
+        $lot = FinAccountLot::where('acct_id', $acctId)->first();
+        $this->assertEquals('2025-05-06', $lot->sale_date->format('Y-m-d'));
+        $this->assertEquals($sellTId, $lot->close_t_id);
+    }
+
+    public function test_search_transactions_returns_matching(): void
+    {
+        $user = $this->createAdminUser();
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Test Search',
+            'acct_last_balance' => '0',
+        ]);
+
+        DB::table('fin_account_line_items')->insert([
+            ['t_account' => $acctId, 't_date' => '2024-12-19', 't_type' => 'Buy', 't_symbol' => 'ARKG', 't_qty' => 0.101, 't_amt' => -2.25, 'when_added' => now()],
+            ['t_account' => $acctId, 't_date' => '2025-05-06', 't_type' => 'Sell', 't_symbol' => 'ARKG', 't_qty' => -0.101, 't_amt' => 2.06, 'when_added' => now()],
+            ['t_account' => $acctId, 't_date' => '2025-01-15', 't_type' => 'Dividend', 't_symbol' => 'ARKG', 't_qty' => 0, 't_amt' => 0.50, 'when_added' => now()],
+        ]);
+
+        $response = $this->actingAs($user)->postJson("/api/finance/{$acctId}/lots/search-transactions", [
+            'dates' => ['2024-12-19', '2025-05-06'],
+        ]);
+
+        $response->assertOk();
+        $transactions = $response->json('transactions');
+        $this->assertCount(2, $transactions);
+    }
+
+    public function test_lots_by_transaction(): void
+    {
+        $user = $this->createAdminUser();
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Test Lots By Txn',
+            'acct_last_balance' => '0',
+        ]);
+
+        $buyTId = DB::table('fin_account_line_items')->insertGetId([
+            't_account' => $acctId, 't_date' => '2024-01-15', 't_type' => 'Buy', 't_symbol' => 'AAPL', 't_qty' => 10, 't_amt' => -1500, 'when_added' => now(),
+        ]);
+
+        FinAccountLot::create([
+            'acct_id' => $acctId,
+            'symbol' => 'AAPL',
+            'quantity' => 10,
+            'purchase_date' => '2024-01-15',
+            'cost_basis' => 1500.00,
+            'open_t_id' => $buyTId,
+            'lot_source' => 'manual',
+        ]);
+
+        $response = $this->actingAs($user)->getJson("/api/finance/{$acctId}/lots/by-transaction/{$buyTId}");
+
+        $response->assertOk();
+        $lots = $response->json('lots');
+        $this->assertCount(1, $lots);
+        $this->assertEquals('AAPL', $lots[0]['symbol']);
+    }
+
+    public function test_delete_transaction_unlinks_lots(): void
+    {
+        $user = $this->createAdminUser();
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Test Unlink',
+            'acct_last_balance' => '0',
+        ]);
+
+        $buyTId = DB::table('fin_account_line_items')->insertGetId([
+            't_account' => $acctId, 't_date' => '2024-01-15', 't_type' => 'Buy', 't_symbol' => 'AAPL', 't_qty' => 10, 't_amt' => -1500, 'when_added' => now(),
+        ]);
+
+        $lot = FinAccountLot::create([
+            'acct_id' => $acctId,
+            'symbol' => 'AAPL',
+            'quantity' => 10,
+            'purchase_date' => '2024-01-15',
+            'cost_basis' => 1500.00,
+            'open_t_id' => $buyTId,
+            'lot_source' => 'manual',
+        ]);
+
+        // Delete the transaction
+        $response = $this->actingAs($user)->deleteJson("/api/finance/{$acctId}/line_items", [
+            't_id' => $buyTId,
+        ]);
+
+        $response->assertOk();
+
+        // Lot should still exist but open_t_id should be null
+        $lot->refresh();
+        $this->assertNull($lot->open_t_id);
+        $this->assertDatabaseHas('fin_account_lots', ['lot_id' => $lot->lot_id]);
+    }
+
+    public function test_merge_transactions_reassigns_lots(): void
+    {
+        $user = $this->createAdminUser();
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Test Merge Lots',
+            'acct_last_balance' => '0',
+        ]);
+
+        // Create two "duplicate" transactions
+        $t1Id = DB::table('fin_account_line_items')->insertGetId([
+            't_account' => $acctId, 't_date' => '2024-01-15', 't_type' => 'Buy', 't_symbol' => 'AAPL', 't_qty' => 10, 't_amt' => -1500, 't_description' => 'Buy AAPL', 'when_added' => now(),
+        ]);
+        $t2Id = DB::table('fin_account_line_items')->insertGetId([
+            't_account' => $acctId, 't_date' => '2024-01-15', 't_type' => 'Buy', 't_symbol' => 'AAPL', 't_qty' => 10, 't_amt' => -1500, 't_description' => 'Buy AAPL', 'when_added' => now(),
+        ]);
+
+        // Link lot to older transaction (which will be deleted)
+        $lot = FinAccountLot::create([
+            'acct_id' => $acctId,
+            'symbol' => 'AAPL',
+            'quantity' => 10,
+            'purchase_date' => '2024-01-15',
+            'cost_basis' => 1500.00,
+            'open_t_id' => $t1Id,
+            'lot_source' => 'manual',
+        ]);
+
+        // Merge: keep t2, delete t1
+        $response = $this->actingAs($user)->postJson("/api/finance/{$acctId}/merge-duplicates", [
+            'merges' => [
+                ['keepId' => $t2Id, 'deleteIds' => [$t1Id]],
+            ],
+        ]);
+
+        $response->assertOk();
+
+        // Lot's open_t_id should now point to t2Id (kept transaction)
+        $lot->refresh();
+        $this->assertEquals($t2Id, $lot->open_t_id);
+    }
+
+    public function test_create_lot_with_transaction_ids(): void
+    {
+        $user = $this->createAdminUser();
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Test Lot Links',
+            'acct_last_balance' => '0',
+        ]);
+
+        $buyTId = DB::table('fin_account_line_items')->insertGetId([
+            't_account' => $acctId, 't_date' => '2025-01-01', 't_type' => 'Buy', 't_symbol' => 'TSLA', 't_qty' => 10, 't_amt' => -2500, 'when_added' => now(),
+        ]);
+
+        $response = $this->actingAs($user)->postJson("/api/finance/{$acctId}/lots", [
+            'symbol' => 'TSLA',
+            'quantity' => 10,
+            'purchase_date' => '2025-01-01',
+            'cost_basis' => 2500.00,
+            'open_t_id' => $buyTId,
+        ]);
+
+        $response->assertStatus(201);
+        $this->assertDatabaseHas('fin_account_lots', [
+            'acct_id' => $acctId,
+            'symbol' => 'TSLA',
+            'open_t_id' => $buyTId,
+        ]);
+    }
 }

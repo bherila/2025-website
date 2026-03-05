@@ -22,40 +22,9 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { fetchWrapper } from '@/fetchWrapper'
+import type { Lot, LotsResponse } from '@/types/finance/lot'
 
-interface Lot {
-    lot_id: number
-    acct_id: number
-    symbol: string
-    description: string | null
-    quantity: string
-    purchase_date: string
-    cost_basis: string
-    cost_per_unit: string | null
-    sale_date: string | null
-    proceeds: string | null
-    realized_gain_loss: string | null
-    is_short_term: boolean | null
-    lot_source: string | null
-    statement?: {
-        statement_id: number
-        statement_closing_date: string
-    } | null
-}
-
-interface GainLossSummary {
-    short_term_gains: number
-    short_term_losses: number
-    long_term_gains: number
-    long_term_losses: number
-    total_realized: number
-}
-
-interface LotsResponse {
-    lots: Lot[]
-    summary: GainLossSummary | null
-    closedYears: number[]
-}
+import ImportLotsPanel from './lots/ImportLotsPanel'
 
 function formatCurrency(value: string | number | null | undefined): string {
     if (value === null || value === undefined) return '—'
@@ -91,6 +60,7 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
     const [selectedYear, setSelectedYear] = useState<string>('')
     const [data, setData] = useState<LotsResponse | null>(null)
     const [isLoading, setIsLoading] = useState(true)
+    const [showImport, setShowImport] = useState(false)
 
     const fetchLots = useCallback(async () => {
         setIsLoading(true)
@@ -137,6 +107,30 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
     const summary = data?.summary
     const closedYears = data?.closedYears ?? []
 
+    if (showImport) {
+        return (
+            <div className="px-8 pb-8">
+                <ImportLotsPanel
+                    accountId={id}
+                    onImportComplete={() => {
+                        setShowImport(false)
+                        fetchLots()
+                    }}
+                    onCancel={() => setShowImport(false)}
+                />
+            </div>
+        )
+    }
+
+    /** Check if a lot has a missing (null) transaction link when one is expected */
+    const hasMissingLink = (lot: Lot) => {
+        // open_t_id should always be set for imported lots
+        if (lot.lot_source && lot.lot_source !== 'manual' && lot.open_t_id === null) return true
+        // close_t_id should exist for closed lots from imports
+        if (lot.sale_date && lot.lot_source && lot.lot_source !== 'manual' && lot.close_t_id === null) return true
+        return false
+    }
+
     return (
         <div className="px-8 pb-8">
             {/* Controls */}
@@ -162,6 +156,10 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
                         </SelectContent>
                     </Select>
                 )}
+
+                <Button variant="outline" onClick={() => setShowImport(true)}>
+                    Import Lots
+                </Button>
 
                 {isLoading && <Spinner className="h-4 w-4" />}
             </div>
@@ -260,6 +258,7 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
                                 )}
                                 <TableHead>Statement</TableHead>
                                 <TableHead>Source</TableHead>
+                                <TableHead>Links</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -311,6 +310,23 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
                                                     {lot.lot_source}
                                                 </Badge>
                                             )}
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-1">
+                                                {lot.open_t_id && (
+                                                    <a href={`/finance/${id}#t_id=${lot.open_t_id}`} className="text-blue-600 hover:underline text-xs">
+                                                        Buy #{lot.open_t_id}
+                                                    </a>
+                                                )}
+                                                {lot.close_t_id && (
+                                                    <a href={`/finance/${id}#t_id=${lot.close_t_id}`} className="text-blue-600 hover:underline text-xs">
+                                                        Sell #{lot.close_t_id}
+                                                    </a>
+                                                )}
+                                                {hasMissingLink(lot) && (
+                                                    <span title="Linked transaction is missing" className="text-yellow-600">⚠️</span>
+                                                )}
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 )

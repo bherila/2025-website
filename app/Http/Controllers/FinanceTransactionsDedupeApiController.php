@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\FinAccountLineItems;
+use App\Models\FinAccountLot;
 use App\Models\FinAccounts;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -380,6 +381,12 @@ class FinanceTransactionsDedupeApiController extends Controller
             }
 
             if (!empty($actualDeleteIds)) {
+                // Reassign lots from deleted transactions to kept transactions
+                foreach ($parentReassignments as $delId => $keepId) {
+                    FinAccountLot::where('open_t_id', $delId)->update(['open_t_id' => $keepId]);
+                    FinAccountLot::where('close_t_id', $delId)->update(['close_t_id' => $keepId]);
+                }
+
                 // Delete tag mappings first
                 DB::table('fin_account_line_item_tag_map')
                     ->whereIn('t_id', $actualDeleteIds)

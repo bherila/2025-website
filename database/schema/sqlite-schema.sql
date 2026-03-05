@@ -528,7 +528,9 @@ CREATE TABLE `fin_account_line_items` (
   `t_harvested_amount` REAL,
   `t_is_not_duplicate` INTEGER NOT NULL DEFAULT 0,
   `t_date_posted` TEXT,
-  `t_account_balance` REAL
+  `t_account_balance` REAL,
+  `statement_id` INTEGER,
+  FOREIGN KEY (`statement_id`) REFERENCES `fin_statements` (`statement_id`) ON DELETE SET NULL
 );
 
 CREATE INDEX `fin_account_line_items_t_account_index` ON `fin_account_line_items` (`t_account`);
@@ -955,6 +957,37 @@ CREATE TABLE `utility_bill` (
 CREATE INDEX `utility_bill_utility_account_id_index` ON `utility_bill` (`utility_account_id`);
 CREATE INDEX `utility_bill_t_id_index` ON `utility_bill` (`t_id`);
 
+CREATE TABLE `fin_account_lots` (
+  `lot_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+  `acct_id` INTEGER NOT NULL,
+  `symbol` TEXT NOT NULL,
+  `description` TEXT,
+  `quantity` REAL NOT NULL,
+  `purchase_date` TEXT NOT NULL,
+  `cost_basis` REAL NOT NULL,
+  `cost_per_unit` REAL,
+  `sale_date` TEXT,
+  `proceeds` REAL,
+  `realized_gain_loss` REAL,
+  `is_short_term` INTEGER,
+  `lot_source` TEXT,
+  `statement_id` INTEGER,
+  `open_t_id` INTEGER,
+  `close_t_id` INTEGER,
+  `created_at` TEXT,
+  `updated_at` TEXT,
+  FOREIGN KEY (`acct_id`) REFERENCES `fin_accounts` (`acct_id`) ON DELETE CASCADE,
+  FOREIGN KEY (`statement_id`) REFERENCES `fin_statements` (`statement_id`) ON DELETE SET NULL,
+  FOREIGN KEY (`open_t_id`) REFERENCES `fin_account_line_items` (`t_id`) ON DELETE SET NULL,
+  FOREIGN KEY (`close_t_id`) REFERENCES `fin_account_line_items` (`t_id`) ON DELETE SET NULL
+);
+
+CREATE INDEX `fin_account_lots_acct_id_index` ON `fin_account_lots` (`acct_id`);
+CREATE INDEX `fin_account_lots_symbol_index` ON `fin_account_lots` (`symbol`);
+CREATE INDEX `fin_account_lots_sale_date_index` ON `fin_account_lots` (`sale_date`);
+CREATE INDEX `fin_account_lots_open_t_id_index` ON `fin_account_lots` (`open_t_id`);
+CREATE INDEX `fin_account_lots_close_t_id_index` ON `fin_account_lots` (`close_t_id`);
+
 CREATE TABLE `verification` (
   `id` TEXT PRIMARY KEY NOT NULL,
   `identifier` TEXT NOT NULL,
@@ -983,5 +1016,8 @@ CREATE TABLE `vxcv_links` (
 
 -- Insert migration records to mark schema as applied
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (1, '0001_01_01_000000_create_schema_baseline', 1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (2, '2026_03_05_000000_create_fin_account_lots_table', 2);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (3, '2026_03_05_001906_add_hash_and_statement_id_to_finance_tables', 2);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (4, '2026_03_05_100000_add_transaction_ids_to_fin_account_lots', 2);
 
 PRAGMA foreign_keys = ON;

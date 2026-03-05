@@ -25,6 +25,8 @@ class FinAccountLot extends Model
         'is_short_term',
         'lot_source',
         'statement_id',
+        'open_t_id',
+        'close_t_id',
     ];
 
     protected $casts = [
@@ -46,5 +48,15 @@ class FinAccountLot extends Model
     public function statement(): BelongsTo
     {
         return $this->belongsTo(FinStatement::class, 'statement_id', 'statement_id');
+    }
+
+    public function openTransaction(): BelongsTo
+    {
+        return $this->belongsTo(FinAccountLineItems::class, 'open_t_id', 't_id');
+    }
+
+    public function closeTransaction(): BelongsTo
+    {
+        return $this->belongsTo(FinAccountLineItems::class, 'close_t_id', 't_id');
     }
 }

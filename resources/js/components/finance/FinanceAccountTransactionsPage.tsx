@@ -221,6 +221,7 @@ export default function FinanceAccountTransactionsPage({ id }: { id: number }) {
       <TransactionsTable
         enableTagging
         enableLinking
+        accountId={id}
         data={data}
         onDeleteTransaction={handleDeleteTransaction}
         refreshFn={handleRefresh}
