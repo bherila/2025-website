@@ -36,7 +36,7 @@ describe('AccountNavigation account dropdown', () => {
     jest.clearAllMocks()
   })
 
-  it('renders account dropdown button with account name', async () => {
+  it('renders account combobox with account name', async () => {
     const AccountNavigation = (await import('@/components/finance/AccountNavigation')).default
     await act(async () => {
       render(
@@ -48,11 +48,11 @@ describe('AccountNavigation account dropdown', () => {
       )
     })
 
-    // The breadcrumb should show the account with a dropdown trigger button
-    expect(screen.getByText(/Account 1 - Checking/)).toBeInTheDocument()
-    const dropdownTrigger = screen.getByRole('button', { name: /Account 1 - Checking/i })
-    expect(dropdownTrigger).toBeInTheDocument()
-    expect(dropdownTrigger).toHaveAttribute('aria-haspopup', 'menu')
+    // The breadcrumb should show the account combobox
+    const combobox = screen.getByRole('combobox')
+    expect(combobox).toBeInTheDocument()
+    expect(combobox).toHaveAttribute('placeholder', 'Checking')
+    expect(combobox).toHaveAttribute('aria-haspopup', 'listbox')
   })
 
   it('fetches accounts list on mount', async () => {

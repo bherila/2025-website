@@ -1,6 +1,6 @@
 'use client'
-import { ChevronDown, Settings, Upload } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import {Settings, Upload } from 'lucide-react'
+import { useCallback, useEffect, useMemo,useState } from 'react'
 
 import {
   Breadcrumb,
@@ -12,11 +12,13 @@ import {
 } from '@/components/ui/breadcrumb'
 import { Button } from '@/components/ui/button'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from '@/components/ui/combobox'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   accountsUrl,
@@ -99,6 +101,8 @@ export default function AccountNavigation({
 }) {
   const [selectedYear, setSelectedYear] = useState<YearSelection>(() => getEffectiveYear(accountId))
   const { accounts, isLoading: loadingAccounts } = useFinanceAccounts()
+  const [searchValue, setSearchValue] = useState('')
+
   // Update selected year when it changes via URL or selector
   useEffect(() => {
     const handleYearChange = (e: Event) => {
@@ -115,6 +119,22 @@ export default function AccountNavigation({
   const activeTabItem = TAB_ITEMS.find((item) => item.value === activeTab)
   const showYearSelector = activeTabItem?.showYearSelector ?? false
 
+  const currentAccount = useMemo(() => {
+    return accounts.find(a => a.acct_id === accountId) || { acct_id: accountId, acct_name: accountName }
+  }, [accounts, accountId, accountName])
+
+  const filteredAccounts = useMemo(() => {
+    if (!searchValue) return accounts
+    return accounts.filter(account =>
+      account.acct_name.toLowerCase().includes(searchValue.toLowerCase())
+    )
+  }, [accounts, searchValue])
+
+  const onAccountSelect = (account: FinAccount) => {
+    if (account.acct_id === accountId) return
+    window.location.href = getTabUrl(activeTab, account.acct_id, selectedYear)
+  }
+
   return (
     <div className="mt-4 px-8">
       <div className="py-4 px-4">
@@ -125,34 +145,38 @@ export default function AccountNavigation({
             </BreadcrumbItem>
             <BreadcrumbSeparator />
             <BreadcrumbItem>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-auto px-1 py-0 font-normal gap-1">
-                    Account {accountId} - {accountName ?? 'no name'}
-                    <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-64">
-                  {loadingAccounts ? (
-                    <DropdownMenuItem disabled>Loading accounts...</DropdownMenuItem>
-                  ) : accounts.length === 0 ? (
-                    <DropdownMenuItem disabled>No accounts available</DropdownMenuItem>
-                  ) : (
-                    accounts.map((account) => (
-                      <DropdownMenuItem key={account.acct_id} asChild>
-                        <a
-                          href={getTabUrl(activeTab, account.acct_id, selectedYear)}
+              <Combobox
+                onValueChange={(val) => {
+                   if (val) onAccountSelect(val as FinAccount)
+                }}
+              >
+                <ComboboxInput
+                  placeholder={currentAccount.acct_name}
+                  className="h-8 min-w-[200px]"
+                  value={searchValue}
+                  onChange={(e) => setSearchValue(e.target.value)}
+                />
+                <ComboboxContent align="start" className="w-64">
+                  <ComboboxEmpty>No accounts found</ComboboxEmpty>
+                  <ComboboxList>
+                    {loadingAccounts ? (
+                      <div className="p-2 text-sm text-muted-foreground">Loading accounts...</div>
+                    ) : (
+                      filteredAccounts.map((account) => (
+                        <ComboboxItem
+                          key={account.acct_id}
+                          value={account}
                           className={cn(
                             account.acct_id === accountId && 'bg-accent font-medium'
                           )}
                         >
-                          Account {account.acct_id} - {account.acct_name}
-                        </a>
-                      </DropdownMenuItem>
-                    ))
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
+                          {account.acct_name}
+                        </ComboboxItem>
+                      ))
+                    )}
+                  </ComboboxList>
+                </ComboboxContent>
+              </Combobox>
             </BreadcrumbItem>
             {activeTabTitle && (
               <>
