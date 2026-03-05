@@ -19,12 +19,12 @@ function Home() {
       <Line>{Im} currently:</Line>
       <ul className="list-disc list-inside pl-4">
         <li>
-          a Software Engineer at Meta. I work on the Getting Together teams building product 
-          and infrastructure (like Online Status) that help people find and connect across 
-          Instagram, Facebook, and{' '}
+          a Tech Lead at Meta, where I support the Getting Together teams. We build product 
+          and infrastructure (like Online Status) that help billions of people find and
+          connect across platforms like Instagram, Facebook, and{' '}
           <CustomLink href="https://horizon.meta.com" rel="noopener">
             Meta Horizon
-          </CustomLink>. I also integrate generative AI into our team workflows and experiments.
+          </CustomLink>.
         </li>
         <li>
           a venture partner at{' '}
