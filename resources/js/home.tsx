@@ -19,14 +19,15 @@ function Home() {
       <Line>{Im} currently:</Line>
       <ul className="list-disc list-inside pl-4">
         <li>
-          a Software Engineer at Meta. {Im} currently working on{' '}
+          a Software Engineer at Meta. I work on the Getting Together teams building product 
+          and infrastructure (like Online Status) that help people find and connect across 
+          Instagram, Facebook, and{' '}
           <CustomLink href="https://horizon.meta.com" rel="noopener">
-            Horizon Worlds
-          </CustomLink>
-          .
+            Meta Horizon
+          </CustomLink>. I also integrate generative AI into our team workflows and experiments.
         </li>
         <li>
-          a venture partner in{' '}
+          a venture partner at{' '}
           <CustomLink href="https://www.pioneerfund.vc/team" rel="noopener">
             Pioneer Fund
           </CustomLink>
@@ -39,8 +40,9 @@ function Home() {
       </ul>
 
       <Line>
-        Before Meta, I worked at Airbnb on the i18n team. We expanded Airbnb.com to 32 new countries, added support for
-        right-to-left, 4-byte unicode, and more. You can read about it on the{' '}
+        Before Meta, I worked at Airbnb on the internationalization team. We 
+        expanded Airbnb.com to 32+ new countries, added right-to-left support 
+        and 4‑byte Unicode handling, and more. You can read about it on the{' '}
         <CustomLink
           href="https://medium.com/airbnb-engineering/building-airbnbs-internationalization-platform-45cf0104b63c"
           rel="noopener"
@@ -51,25 +53,24 @@ function Home() {
       </Line>
 
       <Line>
-        Before Airbnb, I was the co-founder and CTO of an e-commerce wine company called{' '}
-        <CustomLink href="https://www.undergroundcellar.com">Underground Cellar</CustomLink>, backed by Bling Capital and
-        Y Combinator (Winter 2015 batch).
+        Before Airbnb, I co-founded and served as CTO of{' '}
+        <CustomLink href="https://www.undergroundcellar.com">Underground Cellar</CustomLink>, 
+        an e-commerce company backed by Bling Capital and Y Combinator (Winter 2015).
       </Line>
 
       <Line>
-        I began my professional career at Microsoft, briefly on the Office Graphics platform in 2009, and {' '}
+        I began my professional career at Microsoft, working briefly on the Office Graphics platform in 2009. Through my work on MinWin I helped make Windows Server smaller; read more via the archived{' '}
         <CustomLink
           href="https://web.archive.org/web/20240806233349/https://servercore.net/2013/07/meet-the-new-server-core-program-manager/"
           rel="noopener"
         >
-          made Windows Server smaller
-        </CustomLink>{' '}
-        through my work on MinWin.
+          Server Core post
+        </CustomLink>
+        .
       </Line>
 
       <Line>
-        Before Microsoft, I worked on numerous personal projects and business ventures, and built the online presence for
-        companies including{' '}
+        Earlier on, I built online presences and digital products for a variety of companies, including{' '}
         <CustomLink href="/projects/roessner/" rel="noopener">
           Roessner &amp; Co.
         </CustomLink>
@@ -77,12 +78,12 @@ function Home() {
         <CustomLink href="/projects/walsh/" rel="noopener">
           The Walsh Company
         </CustomLink>
-        ,{' '}
+        , and{' '}
         <CustomLink href="/projects/marisol/" rel="noopener">
           Marisol
-        </CustomLink>,
-        {' '}and{' '}
-        <CustomLink href="/projects/">more</CustomLink>.
+        </CustomLink>
+        . See more on the{' '}
+        <CustomLink href="/projects/">projects page</CustomLink>.
       </Line>
       <CTAs />
     </div>
