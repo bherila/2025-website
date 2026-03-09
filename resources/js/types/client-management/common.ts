@@ -6,6 +6,16 @@ export interface User {
   last_login_date?: string | null
 }
 
+export interface ClientInvoice {
+  client_invoice_id: number
+  invoice_number: string
+  invoice_total: string | number
+  issue_date: string | null
+  due_date: string | null
+  status: 'draft' | 'issued' | 'paid' | 'void'
+  remaining_balance: number
+}
+
 export interface ClientCompany {
   id: number
   company_name: string
@@ -22,6 +32,7 @@ export interface ClientCompany {
   agreements: Agreement[]
   total_balance_due?: number
   uninvoiced_hours?: number
+  unpaid_invoices?: ClientInvoice[]
 }
 
 export interface Project {

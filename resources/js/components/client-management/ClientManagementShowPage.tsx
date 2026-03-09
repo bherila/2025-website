@@ -11,8 +11,6 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import type {ClientCompany } from '@/types/client-management/common'
 
-import ClientAdminActions from './ClientAdminActions'
-
 interface ClientManagementShowPageProps {
   companyId: number
 }
@@ -21,7 +19,6 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
   const [company, setCompany] = useState<ClientCompany | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [runInvoicingOpen, setRunInvoicingOpen] = useState(false)
   const [alertInfo, setAlertInfo] = useState<{
     show: boolean
     message: string
@@ -211,13 +208,15 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Client Company Details</h1>
         <div className="flex gap-2">
-          <Button 
-            variant="secondary"
-            onClick={() => setRunInvoicingOpen(true)}
-          >
-            <FileText className="mr-2 h-4 w-4" />
-            Run Invoicing
-          </Button>
+          {company.slug && (
+            <Button 
+              variant="secondary"
+              onClick={() => window.location.href = `/client/portal/${company.slug}/invoices`}
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              Invoices
+            </Button>
+          )}
           <Button 
             variant="outline" 
             onClick={() => window.location.href = '/client/mgmt'}
@@ -456,17 +455,6 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
           </CardContent>
         </Card>
       </div>
-
-      {runInvoicingOpen && (
-        <ClientAdminActions 
-          companyId={companyId}
-          onClose={() => setRunInvoicingOpen(false)}
-          onSuccess={() => {
-            setRunInvoicingOpen(false)
-            fetchCompany()
-          }}
-        />
-      )}
     </div>
   )
 }

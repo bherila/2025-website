@@ -21,9 +21,15 @@ class ClientCompanyApiController extends Controller
         Gate::authorize('Admin');
 
         $companies = ClientCompany::with(['users', 'invoices.payments'])->get()->map(function ($company) {
-            $company->total_balance_due = $company->invoices
+            $unpaidInvoices = $company->invoices
                 ->whereNotIn('status', ['paid', 'void'])
-                ->sum('remaining_balance');
+                ->filter(function ($invoice) {
+                    return $invoice->remaining_balance > 0;
+                })
+                ->values();
+
+            $company->unpaid_invoices = $unpaidInvoices;
+            $company->total_balance_due = $unpaidInvoices->sum('remaining_balance');
 
             $company->uninvoiced_hours = $company->timeEntries()
                 ->where('is_billable', true)

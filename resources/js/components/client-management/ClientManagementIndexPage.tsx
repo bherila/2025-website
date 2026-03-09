@@ -1,7 +1,6 @@
-import { ChevronDown, ChevronUp, Clock,DollarSign, Plus } from 'lucide-react'
+import { ChevronDown, ChevronUp, Clock,DollarSign, FileText, Plus } from 'lucide-react'
 import { useEffect,useState } from 'react'
 
-import ClientAdminActions from '@/components/client-management/ClientAdminActions'
 import InvitePeopleModal from '@/components/client-management/InvitePeopleModal'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -20,7 +19,6 @@ export default function ClientManagementIndexPage() {
   const [loading, setLoading] = useState(true)
   const [showInactive, setShowInactive] = useState(false)
   const [inviteModalOpen, setInviteModalOpen] = useState(false)
-  const [runInvoicingCompanyId, setRunInvoicingCompanyId] = useState<number | null>(null)
 
   useEffect(() => {
     fetchCompanies()
@@ -106,21 +104,23 @@ export default function ClientManagementIndexPage() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button 
-                    variant="secondary" 
-                    size="sm"
-                    onClick={() => setRunInvoicingCompanyId(company.id)}
-                  >
-                    Run Invoicing
-                  </Button>
                   {company.slug && (
-                    <Button 
-                      variant="default" 
-                      size="sm"
-                      onClick={() => window.location.href = `/client/portal/${company.slug}`}
-                    >
-                      Portal
-                    </Button>
+                    <>
+                      <Button 
+                        variant="secondary" 
+                        size="sm"
+                        onClick={() => window.location.href = `/client/portal/${company.slug}/invoices`}
+                      >
+                        Invoices
+                      </Button>
+                      <Button 
+                        variant="default" 
+                        size="sm"
+                        onClick={() => window.location.href = `/client/portal/${company.slug}`}
+                      >
+                        Portal
+                      </Button>
+                    </>
                   )}
                   <Button 
                     variant="outline" 
@@ -132,8 +132,41 @@ export default function ClientManagementIndexPage() {
                 </div>
               </div>
             </CardHeader>
-            {company.users.length > 0 && (
-              <CardContent className="pt-0">
+            <CardContent className="pt-0 space-y-4">
+              {company.unpaid_invoices && company.unpaid_invoices.length > 0 && (
+                <div className="border-t pt-3">
+                  <h4 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
+                    <FileText className="h-4 w-4" />
+                    Unpaid Invoices
+                  </h4>
+                  <div className="space-y-2">
+                    {company.unpaid_invoices.map(invoice => (
+                      <div key={invoice.client_invoice_id} className="flex justify-between items-center text-sm p-2 bg-muted/30 rounded-md border border-muted">
+                        <div className="flex items-center gap-3">
+                          <span className="font-medium">{invoice.invoice_number}</span>
+                          <span className="text-muted-foreground">Due: {invoice.due_date ? new Date(invoice.due_date).toLocaleDateString() : 'N/A'}</span>
+                          <Badge variant={invoice.status === 'issued' ? 'destructive' : 'secondary'} className="text-[10px] py-0 px-1.5">
+                            {invoice.status.toUpperCase()}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="font-bold text-orange-600">${Number(invoice.remaining_balance).toFixed(2)}</span>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-7 px-2 text-xs"
+                            onClick={() => window.location.href = `/client/portal/${company.slug}/invoice/${invoice.client_invoice_id}`}
+                          >
+                            View →
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {company.users.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {company.users.map(user => (
                     <Badge key={user.id} variant="secondary" className="py-1">
@@ -142,8 +175,8 @@ export default function ClientManagementIndexPage() {
                     </Badge>
                   ))}
                 </div>
-              </CardContent>
-            )}
+              )}
+            </CardContent>
           </Card>
         ))}
       </div>
@@ -191,17 +224,6 @@ export default function ClientManagementIndexPage() {
         companies={companies}
         onSuccess={fetchCompanies}
       />
-
-      {runInvoicingCompanyId && (
-        <ClientAdminActions
-          companyId={runInvoicingCompanyId}
-          onClose={() => setRunInvoicingCompanyId(null)}
-          onSuccess={() => {
-            setRunInvoicingCompanyId(null)
-            fetchCompanies()
-          }}
-        />
-      )}
     </div>
   )
 }
