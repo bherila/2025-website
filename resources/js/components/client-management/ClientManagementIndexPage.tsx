@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Clock,DollarSign, FileText, Plus } from 'lucide-react'
+import { ChevronDown, ChevronUp, Clock, DollarSign, ExternalLink, FileText, Plus } from 'lucide-react'
 import { useEffect,useState } from 'react'
 
 import InvitePeopleModal from '@/components/client-management/InvitePeopleModal'
@@ -105,30 +105,31 @@ export default function ClientManagementIndexPage() {
                 </div>
                 <div className="flex gap-2">
                   {company.slug && (
-                    <>
-                      <Button 
-                        variant="secondary" 
-                        size="sm"
-                        onClick={() => window.location.href = `/client/portal/${company.slug}/invoices`}
-                      >
-                        Invoices
-                      </Button>
-                      <Button 
-                        variant="default" 
-                        size="sm"
-                        onClick={() => window.location.href = `/client/portal/${company.slug}`}
-                      >
-                        Portal
-                      </Button>
-                    </>
+                    <Button 
+                      variant="secondary" 
+                      size="sm"
+                      onClick={() => window.location.href = `/client/portal/${company.slug}/invoices`}
+                    >
+                      Invoices
+                    </Button>
                   )}
                   <Button 
-                    variant="outline" 
+                    variant="secondary" 
                     size="sm"
                     onClick={() => window.location.href = `/client/mgmt/${company.id}`}
                   >
                     Details
                   </Button>
+                  {company.slug && (
+                    <Button 
+                      variant="default" 
+                      size="sm"
+                      onClick={() => window.location.href = `/client/portal/${company.slug}`}
+                    >
+                      <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                      Portal
+                    </Button>
+                  )}
                 </div>
               </div>
             </CardHeader>

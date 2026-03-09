@@ -218,7 +218,7 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
             </Button>
           )}
           <Button 
-            variant="outline" 
+            variant="secondary" 
             onClick={() => window.location.href = '/client/mgmt'}
           >
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -226,11 +226,11 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
           </Button>
           {company.slug && (
             <Button
-              variant="outline"
+              variant="default"
               onClick={() => window.location.href = `/client/portal/${company.slug}`}
             >
               <ExternalLink className="mr-2 h-4 w-4" />
-              View Client Portal
+              View Portal
             </Button>
           )}
         </div>
