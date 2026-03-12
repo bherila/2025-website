@@ -254,9 +254,9 @@ function Form8949Table({ title, lots, showAccountNames }: { title: string; lots:
                         </TableHeader>
                         <TableBody>
                             {lots.map((lot, i) => {
-                                const accountNameSuffix = showAccountNames && lot.accountName 
-                                    ? ` [${lot.accountName.split(' ')[0]}]` 
-                                    : ''
+                                const accountBadgeLabel = showAccountNames && lot.accountName 
+                                    ? lot.accountName.split(' ')[0] 
+                                    : null
                                     
                                 return (
                                     <TableRow
@@ -264,7 +264,12 @@ function Form8949Table({ title, lots, showAccountNames }: { title: string; lots:
                                         className={lot.isWashSale ? 'bg-orange-50 dark:bg-orange-950/30' : ''}
                                     >
                                         <TableCell className="font-mono text-sm whitespace-nowrap">
-                                            {lot.description}{accountNameSuffix}
+                                            {lot.description}
+                                            {accountBadgeLabel && (
+                                                <Badge variant="outline" className="ml-1 text-xs font-sans uppercase tracking-tight opacity-70">
+                                                    {accountBadgeLabel}
+                                                </Badge>
+                                            )}
                                             {lot.isShortSale && (
                                                 <Badge variant="outline" className="ml-1 text-xs">Short</Badge>
                                             )}
