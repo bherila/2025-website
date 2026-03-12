@@ -2,7 +2,7 @@
 import './TransactionsTable.css'
 
 import currency from 'currency.js'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { collectTagsFromRows, type TransactionTag } from '@/components/finance/transactionsTableTags'
 import { useFinanceTags } from '@/components/finance/useFinanceTags'
@@ -257,7 +257,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
   const totalPages = viewAll ? 1 : Math.max(1, Math.ceil(totalRows / pageSize))
 
   // Auto-select page when highlightTransactionId is set
-  useMemo(() => {
+  useEffect(() => {
     if (highlightTransactionId && !viewAll) {
       const idx = sortedData.findIndex(r => r.t_id === highlightTransactionId)
       if (idx >= 0) {
@@ -270,9 +270,9 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
   }, [highlightTransactionId, sortedData, pageSize, viewAll]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset to page 1 when filters change
-  useMemo(() => {
+  useEffect(() => {
     setCurrentPage(1)
-  }, [descriptionFilter, typeFilter, categoryFilter, symbolFilter, cusipFilter, optExpirationFilter, optTypeFilter, dateFilter, memoFilter, tagFilter, amountFilter, qtyFilter, postDateFilter, cashBalanceFilter]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [descriptionFilter, typeFilter, categoryFilter, symbolFilter, cusipFilter, optExpirationFilter, optTypeFilter, dateFilter, memoFilter, tagFilter, amountFilter, qtyFilter, postDateFilter, cashBalanceFilter])
 
   // Clamp page
   const safePage = Math.min(currentPage, totalPages)
