@@ -3,6 +3,13 @@ import { useMemo, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import {
@@ -37,6 +44,63 @@ function formatDate(dateStr: string | null): string {
     } catch {
         return dateStr
     }
+}
+
+function VariousTransactionsModal({ lot }: { lot: LotSale }) {
+    if (!lot.acquiredTransactions || lot.acquiredTransactions.length === 0) {
+        return <span className="text-sm">Various</span>
+    }
+
+    return (
+        <Dialog>
+            <DialogTrigger asChild>
+                <button className="text-sm text-blue-600 hover:underline">
+                    Various
+                </button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                    <DialogTitle>Acquired Transactions Details</DialogTitle>
+                </DialogHeader>
+                <div className="mt-4 border rounded-md overflow-hidden">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Date</TableHead>
+                                <TableHead>Description</TableHead>
+                                <TableHead className="text-right">Quantity</TableHead>
+                                <TableHead className="text-right">Price</TableHead>
+                                <TableHead className="text-right">Basis Contribution</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {lot.acquiredTransactions.map((tx, idx) => (
+                                <TableRow key={tx.id ?? idx}>
+                                    <TableCell>{formatDate(tx.date)}</TableCell>
+                                    <TableCell className="max-w-[200px] truncate" title={tx.description}>
+                                        {tx.description}
+                                    </TableCell>
+                                    <TableCell className="text-right font-mono">{tx.qty}</TableCell>
+                                    <TableCell className="text-right font-mono">{formatCurrency(tx.price)}</TableCell>
+                                    <TableCell className="text-right font-mono">{formatCurrency(tx.price * tx.qty)}</TableCell>
+                                </TableRow>
+                            ))}
+                            <TableRow className="font-semibold bg-muted/50">
+                                <TableCell colSpan={2}>Total</TableCell>
+                                <TableCell className="text-right font-mono">
+                                    {lot.acquiredTransactions.reduce((sum, tx) => sum + tx.qty, 0)}
+                                </TableCell>
+                                <TableCell></TableCell>
+                                <TableCell className="text-right font-mono">
+                                    {formatCurrency(lot.costBasis)}
+                                </TableCell>
+                            </TableRow>
+                        </TableBody>
+                    </Table>
+                </div>
+            </DialogContent>
+        </Dialog>
+    )
 }
 
 interface LotAnalyzerProps {
@@ -251,7 +315,9 @@ function Form8949Table({ title, lots }: { title: string; lots: LotSale[] }) {
                                             <Badge variant="destructive" className="ml-1 text-xs">Wash</Badge>
                                         )}
                                     </TableCell>
-                                    <TableCell className="text-sm">{formatDate(lot.dateAcquired)}</TableCell>
+                                    <TableCell className="text-sm">
+                                        {lot.dateAcquired ? formatDate(lot.dateAcquired) : <VariousTransactionsModal lot={lot} />}
+                                    </TableCell>
                                     <TableCell className="text-sm">{formatDate(lot.dateSold)}</TableCell>
                                     <TableCell className="text-right font-mono text-sm">{formatCurrency(lot.proceeds)}</TableCell>
                                     <TableCell className="text-right font-mono text-sm">{formatCurrency(lot.costBasis)}</TableCell>

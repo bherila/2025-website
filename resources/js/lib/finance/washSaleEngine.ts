@@ -22,6 +22,14 @@ export interface LotSale {
   symbol: string
   /** Date acquired (purchase date) */
   dateAcquired: string | null
+  /** Transactions that make up the cost basis of this sale */
+  acquiredTransactions?: Array<{
+    id: number | undefined
+    date: string
+    qty: number
+    price: number
+    description: string
+  }>
   /** Date sold */
   dateSold: string
   /** Proceeds (sales price) — col (d) */
@@ -236,40 +244,63 @@ export function analyzeLots(
   const sortedSales = [...sales].sort((a, b) => a.date.getTime() - b.date.getTime())
 
   for (const sale of sortedSales) {
-    const saleQty = sale.qty
+    let remainingSaleQty = sale.qty
     const saleProceeds = Math.abs(sale.amount)
     const isShort = isShortSaleType(sale.type)
 
     // For a sale, we need to determine the cost basis.
-    // If we have price * qty, use that. Otherwise, try to match with a purchase.
-    // In the absence of explicit lot matching, we'll use the transaction amount.
     let costBasis = 0
     let dateAcquired: string | null = null
-    let matchedPurchase: ParsedTransaction | null = null
+    const acquiredTransactions: Array<{
+      id: number | undefined
+      date: string
+      qty: number
+      price: number
+      description: string
+    }> = []
 
-    // Try to find the best matching purchase for cost basis (FIFO)
+    // Try to find matching purchases for cost basis (FIFO)
     const matchingPurchases = purchases
       .filter(p => areSubstantiallyIdentical(sale, p, options.includeOptions))
       .filter(p => p.date.getTime() <= sale.date.getTime()) // purchased before or on the sale date
       .sort((a, b) => a.date.getTime() - b.date.getTime()) // FIFO
 
     for (const purchase of matchingPurchases) {
+      if (remainingSaleQty <= 0) break
+
       const used = purchaseUsed.get(purchase.id ?? -1) ?? 0
       const available = purchase.qty - used
       if (available > 0) {
-        // Use this purchase as the cost basis source
-        costBasis = (purchase.price > 0 ? purchase.price : (Math.abs(purchase.amount) / purchase.qty)) * Math.min(saleQty, available)
-        dateAcquired = purchase.dateStr
-        matchedPurchase = purchase
-        break
+        const qtyToUse = Math.min(remainingSaleQty, available)
+        const unitPrice = purchase.price > 0 ? purchase.price : (Math.abs(purchase.amount) / purchase.qty)
+        
+        costBasis += unitPrice * qtyToUse
+        
+        acquiredTransactions.push({
+          id: purchase.id,
+          date: purchase.dateStr,
+          qty: qtyToUse,
+          price: unitPrice,
+          description: purchase.description,
+        })
+
+        // Track used shares for subsequent sales
+        purchaseUsed.set(purchase.id ?? -1, used + qtyToUse)
+        remainingSaleQty -= qtyToUse
       }
     }
 
-    // If no matching purchase found, compute from the sale data itself
-    if (!matchedPurchase) {
+    // Set dateAcquired. If multiple purchases, it's null (Various)
+    if (acquiredTransactions.length === 1) {
+      dateAcquired = acquiredTransactions[0]!.date
+    } else if (acquiredTransactions.length > 1) {
+      dateAcquired = null // "Various"
+    }
+
+    // If no matching purchase found or only partial, compute estimate for remainder
+    if (remainingSaleQty > 0) {
       // If the sale has a price, use price * qty as cost basis estimate
-      // Otherwise we can't determine cost basis
-      costBasis = sale.price > 0 ? sale.price * saleQty : 0
+      costBasis += (sale.price > 0 ? sale.price : 0) * remainingSaleQty
     }
 
     const rawGainLoss = saleProceeds - costBasis
@@ -287,6 +318,8 @@ export function analyzeLots(
       const washWindowEnd = new Date(sale.date)
       washWindowEnd.setDate(washWindowEnd.getDate() + 30)
 
+      const acquiredIds = new Set(acquiredTransactions.map(at => at.id).filter(id => id !== undefined))
+
       // Sort potential wash purchases by date (prefer closest after the sale)
       const washCandidates = purchases
         .filter(p => areSubstantiallyIdentical(sale, p, options.includeOptions))
@@ -296,7 +329,7 @@ export function analyzeLots(
         })
         .filter(p => {
           // The replacement purchase cannot be the same transaction that established the position
-          if (matchedPurchase && p.id === matchedPurchase.id) return false
+          if (p.id !== undefined && acquiredIds.has(p.id)) return false
           return true
         })
         .sort((a, b) => {
@@ -315,8 +348,8 @@ export function analyzeLots(
 
         // This is a wash sale
         isWashSale = true
-        const washQty = Math.min(saleQty, available)
-        const lossPerShare = Math.abs(rawGainLoss) / saleQty
+        const washQty = Math.min(sale.qty, available)
+        const lossPerShare = Math.abs(rawGainLoss) / sale.qty
         disallowedLoss = lossPerShare * washQty
         washPurchaseId = candidate.id
 
@@ -339,9 +372,10 @@ export function analyzeLots(
     }
 
     results.push({
-      description: `${saleQty} sh. ${sale.symbol}`,
+      description: `${sale.qty} sh. ${sale.symbol}`,
       symbol: sale.symbol,
       dateAcquired,
+      acquiredTransactions,
       dateSold: sale.dateStr,
       proceeds: saleProceeds,
       costBasis,
@@ -349,7 +383,7 @@ export function analyzeLots(
       adjustmentAmount,
       gainOrLoss,
       isShortTerm,
-      quantity: saleQty,
+      quantity: sale.qty,
       saleTransactionId: sale.id,
       washPurchaseTransactionId: washPurchaseId,
       isWashSale,
