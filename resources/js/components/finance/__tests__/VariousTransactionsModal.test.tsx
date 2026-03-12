@@ -34,6 +34,7 @@ jest.mock('@/components/ui/dialog', () => {
     },
     DialogHeader: ({ children }: any) => <div>{children}</div>,
     DialogTitle: ({ children }: any) => <div>{children}</div>,
+    DialogFooter: ({ children }: any) => <div>{children}</div>,
   };
 });
 
@@ -46,6 +47,34 @@ jest.mock('@/components/ui/table', () => ({
   TableHeader: ({ children }: any) => <thead>{children}</thead>,
   TableRow: ({ children }: any) => <tr>{children}</tr>,
 }))
+
+jest.mock('@/components/ui/button', () => ({
+  Button: ({ children, onClick, ...props }: any) => (
+    <button onClick={onClick} {...props}>{children}</button>
+  ),
+}))
+
+jest.mock('@/components/ui/spinner', () => ({
+  Spinner: () => <div>Loading...</div>,
+}))
+
+jest.mock('@/fetchWrapper', () => ({
+  fetchWrapper: {
+    get: jest.fn(),
+    post: jest.fn(),
+    put: jest.fn(),
+    delete: jest.fn(),
+  }
+}))
+
+jest.mock('currency.js', () => {
+  const fn = (v: any) => ({
+    format: () => `$${Number(v).toFixed(2)}`,
+    value: Number(v),
+  })
+  fn.default = fn
+  return fn
+})
 
 describe('VariousTransactionsModal', () => {
   const baseLot: LotSale = {
@@ -116,5 +145,27 @@ describe('VariousTransactionsModal', () => {
     expect(screen.getByText('Jun 2, 2024')).toBeInTheDocument()
     expect(screen.getByText('$5,000.00')).toBeInTheDocument()
     expect(screen.getByText('$5,500.00')).toBeInTheDocument()
+  })
+
+  it('shows "Load All Years" button when no matching purchases found', () => {
+    const onLoadAllYears = jest.fn()
+    render(<VariousTransactionsModal lot={baseLot} onLoadAllYears={onLoadAllYears} />)
+    
+    // Open the dialog
+    fireEvent.click(screen.getByText('Unknown'))
+    
+    const loadAllBtn = screen.getByText('Load All Years')
+    expect(loadAllBtn).toBeInTheDocument()
+    fireEvent.click(loadAllBtn)
+    expect(onLoadAllYears).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows "Search for Opening Transaction" button when no matches found', () => {
+    render(<VariousTransactionsModal lot={baseLot} />)
+    
+    // Open the dialog
+    fireEvent.click(screen.getByText('Unknown'))
+    
+    expect(screen.getByText('Search for Opening Transaction')).toBeInTheDocument()
   })
 })

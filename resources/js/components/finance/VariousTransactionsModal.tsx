@@ -1,6 +1,9 @@
 'use client'
 
+import { useState } from 'react'
+
 import CustomLink from '@/components/link'
+import { Button } from '@/components/ui/button'
 import {
     Dialog,
     DialogContent,
@@ -17,6 +20,8 @@ import {
     TableRow,
 } from '@/components/ui/table'
 import type { LotSale } from '@/lib/finance/washSaleEngine'
+
+import { LotMatchSearchModal } from './LotMatchSearchModal'
 
 // Re-declaring these here to keep the component self-contained, 
 // or they could be imported from a common utils file.
@@ -40,78 +45,117 @@ function formatDate(dateStr: string | null): string {
 
 interface VariousTransactionsModalProps {
     lot: LotSale
+    /** Called when the user wants to load all years of transactions */
+    onLoadAllYears?: () => void
+    /** Called when a lot assignment is saved in the search modal */
+    onAssignmentSaved?: () => void
 }
 
-export function VariousTransactionsModal({ lot }: VariousTransactionsModalProps) {
+export function VariousTransactionsModal({ lot, onLoadAllYears, onAssignmentSaved }: VariousTransactionsModalProps) {
     const count = lot.acquiredTransactions?.length ?? 0
+    const [showSearchModal, setShowSearchModal] = useState(false)
+    const hasUnmatched = !lot.acquiredTransactions || lot.acquiredTransactions.length === 0
     const label = count > 1 ? `Various (${count})` : count === 1 ? formatDate(lot.acquiredTransactions![0].date) : 'Unknown'
 
     return (
-        <Dialog>
-            <DialogTrigger asChild>
-                <CustomLink 
-                    role="button"
-                    tabIndex={0}
-                    className="text-sm cursor-pointer no-underline hover:underline"
+        <>
+            <Dialog>
+                <DialogTrigger asChild>
+                    <CustomLink 
+                        role="button"
+                        tabIndex={0}
+                        className="text-sm cursor-pointer no-underline hover:underline"
+                    >
+                        {label}
+                    </CustomLink>
+                </DialogTrigger>
+                <DialogContent 
+                    className="max-w-4xl max-h-[80vh] flex flex-col" 
+                    onOpenAutoFocus={(e) => e.preventDefault()}
                 >
-                    {label}
-                </CustomLink>
-            </DialogTrigger>
-            <DialogContent 
-                className="max-w-4xl max-h-[80vh] flex flex-col" 
-                onOpenAutoFocus={(e) => e.preventDefault()}
-            >
-                <DialogHeader>
-                    <DialogTitle>Acquired Transactions Details</DialogTitle>
-                </DialogHeader>
-                <div className="mt-4 border rounded-md overflow-auto">
-                    {!lot.acquiredTransactions || lot.acquiredTransactions.length === 0 ? (
-                        <div className="p-8 text-center text-muted-foreground">
-                            <p className="mb-2 font-medium text-foreground text-sm uppercase tracking-wider">No Matching Purchases Found</p>
-                            <p className="text-sm">
-                                No specific matching purchase transactions were found for this lot in the current data set.
-                                This could happen if the purchase occurred before the earliest transaction imported,
-                                or if the cost basis was manually entered.
-                            </p>
-                        </div>
-                    ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Date</TableHead>
-                                    <TableHead>Description</TableHead>
-                                    <TableHead className="text-right">Quantity</TableHead>
-                                    <TableHead className="text-right">Price</TableHead>
-                                    <TableHead className="text-right">Basis Contribution</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {lot.acquiredTransactions.map((tx, idx) => (
-                                    <TableRow key={`${tx.id}-${tx.internalIndex}-${idx}`}>
-                                        <TableCell>{formatDate(tx.date)}</TableCell>
-                                        <TableCell className="max-w-[300px] truncate" title={tx.description}>
-                                            {tx.description}
-                                        </TableCell>
-                                        <TableCell className="text-right font-mono">{tx.qty}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatCurrency(tx.price)}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatCurrency(tx.price * tx.qty)}</TableCell>
+                    <DialogHeader>
+                        <DialogTitle>Acquired Transactions Details</DialogTitle>
+                    </DialogHeader>
+                    <div className="mt-4 border rounded-md overflow-auto">
+                        {hasUnmatched ? (
+                            <div className="p-8 text-center text-muted-foreground">
+                                <p className="mb-2 font-medium text-foreground text-sm uppercase tracking-wider">No Matching Purchases Found</p>
+                                <p className="text-sm mb-4">
+                                    No specific matching purchase transactions were found for this lot in the current data set.
+                                    This could happen if the purchase occurred before the earliest transaction imported,
+                                    or if the cost basis was manually entered.
+                                </p>
+                                <div className="flex justify-center gap-3">
+                                    {onLoadAllYears && (
+                                        <Button variant="outline" size="sm" onClick={onLoadAllYears}>
+                                            Load All Years
+                                        </Button>
+                                    )}
+                                    <Button
+                                        variant="default"
+                                        size="sm"
+                                        onClick={() => setShowSearchModal(true)}
+                                    >
+                                        Search for Opening Transaction
+                                    </Button>
+                                </div>
+                            </div>
+                        ) : (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Date</TableHead>
+                                        <TableHead>Description</TableHead>
+                                        <TableHead className="text-right">Quantity</TableHead>
+                                        <TableHead className="text-right">Price</TableHead>
+                                        <TableHead className="text-right">Basis Contribution</TableHead>
                                     </TableRow>
-                                ))}
-                                <TableRow className="font-semibold bg-muted/50">
-                                    <TableCell colSpan={2}>Total</TableCell>
-                                    <TableCell className="text-right font-mono">
-                                        {lot.acquiredTransactions.reduce((sum, tx) => sum + tx.qty, 0)}
-                                    </TableCell>
-                                    <TableCell></TableCell>
-                                    <TableCell className="text-right font-mono">
-                                        {formatCurrency(lot.costBasis)}
-                                    </TableCell>
-                                </TableRow>
-                            </TableBody>
-                        </Table>
+                                </TableHeader>
+                                <TableBody>
+                                    {lot.acquiredTransactions!.map((tx, idx) => (
+                                        <TableRow key={`${tx.id}-${idx}`}>
+                                            <TableCell>{formatDate(tx.date)}</TableCell>
+                                            <TableCell className="max-w-[300px] truncate" title={tx.description}>
+                                                {tx.description}
+                                            </TableCell>
+                                            <TableCell className="text-right font-mono">{tx.qty}</TableCell>
+                                            <TableCell className="text-right font-mono">{formatCurrency(tx.price)}</TableCell>
+                                            <TableCell className="text-right font-mono">{formatCurrency(tx.price * tx.qty)}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                    <TableRow className="font-semibold bg-muted/50">
+                                        <TableCell colSpan={2}>Total</TableCell>
+                                        <TableCell className="text-right font-mono">
+                                            {lot.acquiredTransactions!.reduce((sum, tx) => sum + tx.qty, 0)}
+                                        </TableCell>
+                                        <TableCell></TableCell>
+                                        <TableCell className="text-right font-mono">
+                                            {formatCurrency(lot.costBasis)}
+                                        </TableCell>
+                                    </TableRow>
+                                </TableBody>
+                            </Table>
+                        )}
+                    </div>
+                    {!hasUnmatched && (
+                        <div className="mt-3 flex justify-end">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setShowSearchModal(true)}
+                            >
+                                Search for Different Opening Transaction
+                            </Button>
+                        </div>
                     )}
-                </div>
-            </DialogContent>
-        </Dialog>
+                </DialogContent>
+            </Dialog>
+            <LotMatchSearchModal
+                lot={lot}
+                isOpen={showSearchModal}
+                onClose={() => setShowSearchModal(false)}
+                onAssignmentSaved={onAssignmentSaved}
+            />
+        </>
     )
 }

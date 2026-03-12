@@ -442,4 +442,127 @@ class FinanceLotsController extends Controller
 
         return response()->json(['success' => true]);
     }
+
+    /**
+     * Search for potential opening transactions by symbol across all user accounts.
+     * Used by the Lot Analyzer to manually match closing transactions (sales)
+     * with opening transactions (buys) that may be from earlier years.
+     *
+     * This is distinct from TransactionLinkModal — that links related
+     * transfers across accounts; this links buy/sell lot pairs for tax reporting.
+     */
+    public function searchOpeningTransactions(Request $request)
+    {
+        $uid = Auth::id();
+
+        $validated = $request->validate([
+            'symbol' => 'required|string|max:20',
+            'type' => 'nullable|string|in:buy,sell',
+        ]);
+
+        $accountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
+
+        $query = FinAccountLineItems::whereIn('t_account', $accountIds)
+            ->whereNull('when_deleted')
+            ->where('t_symbol', 'LIKE', $validated['symbol'])
+            ->select('t_id', 't_account', 't_date', 't_type', 't_description', 't_symbol', 't_qty', 't_amt', 't_price')
+            ->orderBy('t_date')
+            ->orderBy('t_id');
+
+        // Filter to buy-type transactions by default (opening a long position)
+        $typeFilter = $validated['type'] ?? 'buy';
+        if ($typeFilter === 'buy') {
+            $query->where(function ($q) {
+                $q->where('t_type', 'LIKE', '%Buy%')
+                    ->orWhere('t_type', 'LIKE', '%Reinvest%');
+            })->where(function ($q) {
+                // Exclude closing short transactions
+                $q->where('t_type', 'NOT LIKE', '%cover%')
+                    ->where('t_type', 'NOT LIKE', '%close%');
+            });
+        } elseif ($typeFilter === 'sell') {
+            $query->where(function ($q) {
+                $q->where('t_type', 'LIKE', '%Sell%')
+                    ->orWhere('t_type', 'LIKE', '%short%');
+            });
+        }
+
+        $transactions = $query->limit(200)->get();
+
+        // Enrich with account name
+        $accounts = FinAccounts::where('acct_owner', $uid)->pluck('acct_name', 'acct_id');
+        $transactions->transform(function ($t) use ($accounts) {
+            $t->acct_name = $accounts[$t->t_account] ?? null;
+            return $t;
+        });
+
+        return response()->json(['transactions' => $transactions]);
+    }
+
+    /**
+     * Save a manual lot assignment (linking an opening transaction to a closing transaction).
+     * This persists the lot so the user does not have to repeat manual matching.
+     */
+    public function saveLotAssignment(Request $request)
+    {
+        $uid = Auth::id();
+
+        $validated = $request->validate([
+            'assignments' => 'required|array|min:1',
+            'assignments.*.close_t_id' => 'required|integer',
+            'assignments.*.open_t_id' => 'required|integer',
+            'assignments.*.symbol' => 'required|string|max:50',
+            'assignments.*.quantity' => 'required|numeric',
+            'assignments.*.purchase_date' => 'required|date',
+            'assignments.*.cost_basis' => 'required|numeric',
+            'assignments.*.sale_date' => 'required|date',
+            'assignments.*.proceeds' => 'required|numeric',
+        ]);
+
+        // Verify all transactions belong to this user
+        $accountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
+
+        $created = 0;
+        DB::beginTransaction();
+        try {
+            foreach ($validated['assignments'] as $assignment) {
+                // Verify the close and open transactions belong to user
+                $closeTx = FinAccountLineItems::whereIn('t_account', $accountIds)
+                    ->where('t_id', $assignment['close_t_id'])
+                    ->firstOrFail();
+                $openTx = FinAccountLineItems::whereIn('t_account', $accountIds)
+                    ->where('t_id', $assignment['open_t_id'])
+                    ->firstOrFail();
+
+                $purchaseDate = new \DateTime($assignment['purchase_date']);
+                $saleDate = new \DateTime($assignment['sale_date']);
+                $isShortTerm = $purchaseDate->diff($saleDate)->days <= 365;
+
+                FinAccountLot::create([
+                    'acct_id' => $closeTx->t_account,
+                    'symbol' => $assignment['symbol'],
+                    'quantity' => $assignment['quantity'],
+                    'purchase_date' => $assignment['purchase_date'],
+                    'cost_basis' => $assignment['cost_basis'],
+                    'cost_per_unit' => $assignment['quantity'] > 0
+                        ? $assignment['cost_basis'] / $assignment['quantity']
+                        : null,
+                    'sale_date' => $assignment['sale_date'],
+                    'proceeds' => $assignment['proceeds'],
+                    'realized_gain_loss' => $assignment['proceeds'] - $assignment['cost_basis'],
+                    'is_short_term' => $isShortTerm,
+                    'lot_source' => 'manual',
+                    'open_t_id' => $assignment['open_t_id'],
+                    'close_t_id' => $assignment['close_t_id'],
+                ]);
+                $created++;
+            }
+
+            DB::commit();
+            return response()->json(['success' => true, 'created' => $created]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['error' => 'Failed to save lot assignments: '.$e->getMessage()], 500);
+        }
+    }
 }

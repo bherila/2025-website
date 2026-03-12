@@ -726,4 +726,91 @@ class FinanceLotsControllerTest extends TestCase
         $openIds = $lots->pluck('open_t_id')->sort()->values()->toArray();
         $this->assertEquals([$buy1, $buy2], $openIds);
     }
+
+    public function test_search_opening_transactions_by_symbol(): void
+    {
+        $user = $this->createAdminUser();
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Test Search Opening',
+            'acct_last_balance' => '0',
+        ]);
+
+        DB::table('fin_account_line_items')->insert([
+            ['t_account' => $acctId, 't_date' => '2024-01-15', 't_type' => 'Buy', 't_symbol' => 'AAPL', 't_qty' => 100, 't_amt' => -15000, 'when_added' => now()],
+            ['t_account' => $acctId, 't_date' => '2024-06-15', 't_type' => 'Sell', 't_symbol' => 'AAPL', 't_qty' => -100, 't_amt' => 17000, 'when_added' => now()],
+            ['t_account' => $acctId, 't_date' => '2024-02-01', 't_type' => 'Buy', 't_symbol' => 'GOOG', 't_qty' => 50, 't_amt' => -7500, 'when_added' => now()],
+        ]);
+
+        $response = $this->actingAs($user)->postJson('/api/finance/lots/search-opening', [
+            'symbol' => 'AAPL',
+            'type' => 'buy',
+        ]);
+
+        $response->assertOk();
+        $transactions = $response->json('transactions');
+        // Should only return AAPL buys, not sells or GOOG buys
+        $this->assertCount(1, $transactions);
+        $this->assertEquals('AAPL', $transactions[0]['t_symbol']);
+        $this->assertEquals('Buy', $transactions[0]['t_type']);
+    }
+
+    public function test_save_lot_assignment_manually(): void
+    {
+        $user = $this->createAdminUser();
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Test Manual Assignment',
+            'acct_last_balance' => '0',
+        ]);
+
+        $buyTId = DB::table('fin_account_line_items')->insertGetId([
+            't_account' => $acctId, 't_date' => '2024-01-15', 't_type' => 'Buy', 't_symbol' => 'AAPL', 't_qty' => 100, 't_amt' => -15000, 'when_added' => now(),
+        ]);
+        $sellTId = DB::table('fin_account_line_items')->insertGetId([
+            't_account' => $acctId, 't_date' => '2024-06-15', 't_type' => 'Sell', 't_symbol' => 'AAPL', 't_qty' => -100, 't_amt' => 17000, 'when_added' => now(),
+        ]);
+
+        $response = $this->actingAs($user)->postJson('/api/finance/lots/save-assignment', [
+            'assignments' => [
+                [
+                    'close_t_id' => $sellTId,
+                    'open_t_id' => $buyTId,
+                    'symbol' => 'AAPL',
+                    'quantity' => 100,
+                    'purchase_date' => '2024-01-15',
+                    'cost_basis' => 15000.00,
+                    'sale_date' => '2024-06-15',
+                    'proceeds' => 17000.00,
+                ],
+            ],
+        ]);
+
+        $response->assertOk();
+        $response->assertJson(['success' => true, 'created' => 1]);
+
+        $this->assertDatabaseHas('fin_account_lots', [
+            'acct_id' => $acctId,
+            'symbol' => 'AAPL',
+            'lot_source' => 'manual',
+            'open_t_id' => $buyTId,
+            'close_t_id' => $sellTId,
+        ]);
+    }
+
+    public function test_search_opening_requires_auth(): void
+    {
+        $response = $this->postJson('/api/finance/lots/search-opening', [
+            'symbol' => 'AAPL',
+        ]);
+        $response->assertUnauthorized();
+    }
+
+    public function test_save_assignment_requires_auth(): void
+    {
+        $response = $this->postJson('/api/finance/lots/save-assignment', [
+            'assignments' => [],
+        ]);
+        $response->assertUnauthorized();
+    }
 }

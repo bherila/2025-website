@@ -159,7 +159,14 @@ export default function AllTransactionsPage({ initialAvailableYears = [] }: AllT
 
                 {showLotAnalyzer && filteredData && filteredData.length > 0 && (
                     <div className="mb-6">
-                        <LotAnalyzer transactions={filteredData} accountMap={accountMap} />
+                        <LotAnalyzer
+                            transactions={filteredData}
+                            accountMap={accountMap}
+                            onLoadAllYears={() => {
+                                setSelectedYear('all')
+                                // fetchData will be called via useEffect or user clicks Get Transactions
+                            }}
+                        />
                     </div>
                 )}
 
