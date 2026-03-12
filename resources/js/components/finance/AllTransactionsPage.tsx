@@ -41,12 +41,19 @@ export default function AllTransactionsPage({ initialAvailableYears = [] }: AllT
 
     const fetchAccounts = useCallback(async () => {
         try {
-            const accounts = await fetchWrapper.get('/api/finance/accounts')
-            if (Array.isArray(accounts)) {
+            const response = await fetchWrapper.get('/api/finance/accounts')
+            if (response && typeof response === 'object') {
                 const map = new Map<number, string>()
-                accounts.forEach((acc: any) => {
-                    if (acc.acct_id && acc.acct_name) {
-                        map.set(acc.acct_id, acc.acct_name)
+                // Combine all account categories into one flat map
+                const categories = ['assetAccounts', 'liabilityAccounts', 'retirementAccounts']
+                categories.forEach(cat => {
+                    const accounts = response[cat]
+                    if (Array.isArray(accounts)) {
+                        accounts.forEach((acc: any) => {
+                            if (acc.acct_id && acc.acct_name) {
+                                map.set(Number(acc.acct_id), acc.acct_name)
+                            }
+                        })
                     }
                 })
                 setAccountMap(map)
