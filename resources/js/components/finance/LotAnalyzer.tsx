@@ -271,10 +271,14 @@ function Form8949Table({ title, lots, showAccountNames }: { title: string; lots:
                                                 </Badge>
                                             )}
                                             {lot.isShortSale && (
-                                                <Badge variant="outline" className="ml-1 text-xs">Short</Badge>
+                                                <Badge variant="outline" className="ml-1 text-xs font-sans uppercase tracking-tight border-blue-500 text-blue-600 dark:text-blue-400">
+                                                    Short
+                                                </Badge>
                                             )}
                                             {lot.isWashSale && (
-                                                <Badge variant="destructive" className="ml-1 text-xs">Wash</Badge>
+                                                <Badge variant="destructive" className="ml-1 text-xs font-sans uppercase tracking-tight">
+                                                    Wash
+                                                </Badge>
                                             )}
                                         </TableCell>
                                         <TableCell className="text-sm whitespace-nowrap">
