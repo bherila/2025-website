@@ -66,9 +66,9 @@ describe('ESPP lot matching and wash sale analysis', () => {
     expect(lots[0]).toMatchObject({
       quantity: 75,
       proceeds: 12000,
-      costBasis: 9500, // 50*120 + 25*140
+      costBasis: 9500, // 50×120 + 25×140
       gainOrLoss: 2500,
-      dateAcquired: null, // multiple acquisition lots
+      dateAcquired: null, // null when FIFO draws from multiple acquisition dates
     })
     expect(lots[0]?.acquiredTransactions).toHaveLength(2)
   })
