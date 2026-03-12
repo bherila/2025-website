@@ -8,15 +8,28 @@ The **TransactionsTable** component is a comprehensive, feature-rich table for d
 
 ## Account-Level Navigation
 
-The finance module uses a tabbed navigation system at the account level with a shared year selector.
+The finance module uses a multi-level navigation system:
+
+### Finance Sub-Navigation
+
+**Location**: `resources/js/components/finance/FinanceSubNav.tsx`
+
+A shared sub-navigation bar across all finance pages providing quick access to:
+- **Accounts** — Account list and management
+- **All Transactions** — Cross-account transaction view with Lot Analyzer
+- **RSU** — Restricted Stock Unit tracking
+- **Payslips** — Payslip management
+
+This component renders a breadcrumb and a horizontal section-switcher bar. It accepts `breadcrumbItems` (additional breadcrumb entries) and `children` (content below the breadcrumb, like account-specific tabs).
 
 ### Account Navigation Component
 
 **Location**: `resources/js/components/finance/AccountNavigation.tsx`
 
-The navigation bar displays:
-- **Tabs** (left side): Transactions, Duplicates, Statements, Linker
-- **Year Selector** (inline): Shared across all tabs
+Wraps `FinanceSubNav` and adds account-specific navigation:
+- **Breadcrumb**: Finance > Accounts > [Account Combobox] > [Active Tab]
+- **Tabs** (left side): Transactions, Duplicates, Statements, Linker, Lots, Summary
+- **Year Selector** (inline): Shared across tabs that support year filtering
 - **Utility Buttons** (right side): Import, Maintenance
 
 ### Year Selection
@@ -82,6 +95,31 @@ goToTransaction(accountId, transactionId, 2024)
 | `refreshFn` | `() => void` | optional | Callback to refresh data after changes |
 | `duplicates` | `AccountLineItem[]` | optional | Array of existing transactions for duplicate detection |
 | `enableLinking` | `boolean` | `false` | Enable transaction linking functionality |
+| `accountId` | `number` | optional | Account ID for lot management features |
+| `pageSize` | `number` | `5000` | Number of rows per page (pagination) |
+| `highlightTransactionId` | `number` | optional | Transaction ID to auto-scroll to (triggers page auto-selection) |
+
+---
+
+## Pagination
+
+TransactionsTable supports client-side pagination to optimize DOM performance with large datasets.
+
+### Behavior
+- **Default page size**: 5,000 rows
+- **Filtering**: Operates across the entire in-memory dataset (not just the current page)
+- **Totals**: Computed from all filtered data, not just the current page
+- **Controls**: Displayed at both the top and bottom of the table
+- **Page changes**: Do not trigger browser scrolling
+- **View All**: A button allows bypassing pagination for the current session
+- **Go to transaction**: When `highlightTransactionId` is set, the correct page is automatically selected
+
+### Pagination Controls
+- First page (`««`), Previous (`«`), Next (`»`), Last (`»»`)
+- Current page indicator (e.g., "Page 3 of 12")
+- Row range display (e.g., "Showing 10,001–15,000 of 52,413 rows")
+- "View All" button to disable pagination
+- "Paginate" button to re-enable pagination from View All mode
 
 ---
 
