@@ -51,8 +51,12 @@ export default function AllTransactionsPage() {
     const fetchData = useCallback(async () => {
         try {
             setIsLoading(true)
-            const yearParam = selectedYear !== 'all' ? `?year=${selectedYear}` : ''
-            const fetchedData = await fetchWrapper.get(`/api/finance/all-line-items${yearParam}`)
+            const params = new URLSearchParams()
+            if (selectedYear !== 'all') params.append('year', selectedYear)
+            if (filter !== 'all') params.append('filter', filter)
+            
+            const queryString = params.toString() ? `?${params.toString()}` : ''
+            const fetchedData = await fetchWrapper.get(`/api/finance/all-line-items${queryString}`)
             const parsedData = z.array(AccountLineItemSchema).parse(fetchedData)
             setData(parsedData.filter(Boolean))
         } catch (error) {
@@ -61,18 +65,14 @@ export default function AllTransactionsPage() {
         } finally {
             setIsLoading(false)
         }
-    }, [selectedYear])
+    }, [selectedYear, filter])
 
     useEffect(() => {
         fetchYears()
     }, [fetchYears])
 
-    const filteredData = data?.filter(item => {
-        if (filter === 'all') return true
-        if (filter === 'stock') return !!item.t_symbol
-        if (filter === 'cash') return !item.t_symbol
-        return true
-    })
+    // No client-side filtering needed anymore
+    const filteredData = data
 
     return (
         <>

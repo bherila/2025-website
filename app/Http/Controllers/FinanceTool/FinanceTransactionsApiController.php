@@ -40,6 +40,18 @@ class FinanceTransactionsApiController extends Controller
             $query->whereYear('t_date', $year);
         }
 
+        // Filter by type if provided
+        if ($request->has('filter')) {
+            $filter = $request->filter;
+            if ($filter === 'stock') {
+                $query->whereNotNull('t_symbol')->where('t_symbol', '!=', '');
+            } elseif ($filter === 'cash') {
+                $query->where(function ($q) {
+                    $q->whereNull('t_symbol')->orWhere('t_symbol', '');
+                });
+            }
+        }
+
         // Return a streamed response to save memory on large datasets
         return response()->stream(function () use ($query) {
             echo '[';
