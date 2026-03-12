@@ -20,6 +20,10 @@ export interface LotSale {
   description: string
   /** Symbol of the security */
   symbol: string
+  /** The account ID of the sale */
+  accountId?: number
+  /** The account name of the sale */
+  accountName?: string
   /** Date acquired (purchase date) */
   dateAcquired: string | null
   /** Transactions that make up the cost basis of this sale */
@@ -72,6 +76,8 @@ export interface WashSaleOptions {
 interface ParsedTransaction {
   id: number | undefined
   internalIndex: number
+  accountId: number | undefined
+  accountName: string | undefined
   date: Date
   dateStr: string
   symbol: string
@@ -241,6 +247,8 @@ export function parseTransactions(items: AccountLineItem[]): ParsedTransaction[]
       return {
         id: item.t_id,
         internalIndex: index,
+        accountId: item.t_account,
+        accountName: item.acct_name,
         date: parseDate(item.t_date),
         dateStr: item.t_date,
         symbol: item.t_symbol!,
@@ -419,6 +427,8 @@ export function analyzeLots(
       rawResults.push({
         description: `${portionQty} sh. ${sale.symbol}`,
         symbol: sale.symbol,
+        accountId: sale.accountId,
+        accountName: sale.accountName,
         dateAcquired,
         acquiredTransactions: actualMatches,
         dateSold: sale.dateStr,
@@ -450,8 +460,8 @@ function mergeLotSales(lots: LotSale[]): LotSale[] {
   const merged: Map<string, LotSale> = new Map()
 
   for (const lot of lots) {
-    // Key for grouping: symbol, dateSold, term, shortSale status, and adjustment code
-    const key = `${lot.symbol}|${lot.dateSold}|${lot.isShortTerm}|${lot.isShortSale}|${lot.adjustmentCode}`
+    // Key for grouping: symbol, dateSold, term, shortSale status, adjustment code, AND accountId
+    const key = `${lot.symbol}|${lot.dateSold}|${lot.isShortTerm}|${lot.isShortSale}|${lot.adjustmentCode}|${lot.accountId}`
     
     const existing = merged.get(key)
     if (existing) {

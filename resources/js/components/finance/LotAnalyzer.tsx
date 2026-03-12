@@ -48,6 +48,7 @@ interface LotAnalyzerProps {
 export default function LotAnalyzer({ transactions }: LotAnalyzerProps) {
     const [includeOptions, setIncludeOptions] = useState(false)
     const [showShortTermOnly, setShowShortTermOnly] = useState(false)
+    const [showAccountNames, setShowAccountNames] = useState(false)
 
     const options: WashSaleOptions = useMemo(() => ({
         includeOptions,
@@ -98,7 +99,7 @@ export default function LotAnalyzer({ transactions }: LotAnalyzerProps) {
                                 checked={includeOptions}
                                 onCheckedChange={setIncludeOptions}
                             />
-                            <Label htmlFor="include-options" className="text-sm">
+                            <Label htmlFor="include-options" className="text-sm cursor-pointer">
                                 Treat stock options as substantially similar to underlying stock
                             </Label>
                         </div>
@@ -108,8 +109,18 @@ export default function LotAnalyzer({ transactions }: LotAnalyzerProps) {
                                 checked={showShortTermOnly}
                                 onCheckedChange={setShowShortTermOnly}
                             />
-                            <Label htmlFor="short-term-only" className="text-sm">
+                            <Label htmlFor="short-term-only" className="text-sm cursor-pointer">
                                 Show short-term only
+                            </Label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Switch
+                                id="show-accounts"
+                                checked={showAccountNames}
+                                onCheckedChange={setShowAccountNames}
+                            />
+                            <Label htmlFor="show-accounts" className="text-sm cursor-pointer">
+                                Show account names
                             </Label>
                         </div>
                     </div>
@@ -180,19 +191,21 @@ export default function LotAnalyzer({ transactions }: LotAnalyzerProps) {
             <Form8949Table
                 title="Part I — Short-Term (held one year or less)"
                 lots={showShortTermOnly ? filteredLots : shortTermLots}
+                showAccountNames={showAccountNames}
             />
 
             {!showShortTermOnly && (
                 <Form8949Table
                     title="Part II — Long-Term (held more than one year)"
                     lots={longTermLots}
+                    showAccountNames={showAccountNames}
                 />
             )}
         </div>
     )
 }
 
-function Form8949Table({ title, lots }: { title: string; lots: LotSale[] }) {
+function Form8949Table({ title, lots, showAccountNames }: { title: string; lots: LotSale[]; showAccountNames: boolean }) {
     if (lots.length === 0) {
         return (
             <Card>
@@ -239,35 +252,41 @@ function Form8949Table({ title, lots }: { title: string; lots: LotSale[] }) {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {lots.map((lot, i) => (
-                                <TableRow
-                                    key={`${lot.saleTransactionId ?? i}-${lot.dateSold}`}
-                                    className={lot.isWashSale ? 'bg-orange-50 dark:bg-orange-950/30' : ''}
-                                >
-                                    <TableCell className="font-mono text-sm">
-                                        {lot.description}
-                                        {lot.isShortSale && (
-                                            <Badge variant="outline" className="ml-1 text-xs">Short</Badge>
-                                        )}
-                                        {lot.isWashSale && (
-                                            <Badge variant="destructive" className="ml-1 text-xs">Wash</Badge>
-                                        )}
-                                    </TableCell>
-                                    <TableCell className="text-sm">
-                                        <VariousTransactionsModal lot={lot} />
-                                    </TableCell>
-                                    <TableCell className="text-sm">{formatDate(lot.dateSold)}</TableCell>
-                                    <TableCell className="text-right font-mono text-sm">{formatCurrency(lot.proceeds)}</TableCell>
-                                    <TableCell className="text-right font-mono text-sm">{formatCurrency(lot.costBasis)}</TableCell>
-                                    <TableCell className="text-center font-mono text-sm">{lot.adjustmentCode}</TableCell>
-                                    <TableCell className="text-right font-mono text-sm">
-                                        {lot.adjustmentAmount !== 0 ? formatCurrency(lot.adjustmentAmount) : ''}
-                                    </TableCell>
-                                    <TableCell className={`text-right font-mono text-sm ${lot.gainOrLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                        {formatCurrency(lot.gainOrLoss)}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
+                            {lots.map((lot, i) => {
+                                const accountNameSuffix = showAccountNames && lot.accountName 
+                                    ? ` [${lot.accountName.split(' ')[0]}]` 
+                                    : ''
+                                    
+                                return (
+                                    <TableRow
+                                        key={`${lot.saleTransactionId ?? i}-${lot.dateSold}-${lot.accountId}`}
+                                        className={lot.isWashSale ? 'bg-orange-50 dark:bg-orange-950/30' : ''}
+                                    >
+                                        <TableCell className="font-mono text-sm">
+                                            {lot.description}{accountNameSuffix}
+                                            {lot.isShortSale && (
+                                                <Badge variant="outline" className="ml-1 text-xs">Short</Badge>
+                                            )}
+                                            {lot.isWashSale && (
+                                                <Badge variant="destructive" className="ml-1 text-xs">Wash</Badge>
+                                            )}
+                                        </TableCell>
+                                        <TableCell className="text-sm">
+                                            <VariousTransactionsModal lot={lot} />
+                                        </TableCell>
+                                        <TableCell className="text-sm">{formatDate(lot.dateSold)}</TableCell>
+                                        <TableCell className="text-right font-mono text-sm">{formatCurrency(lot.proceeds)}</TableCell>
+                                        <TableCell className="text-right font-mono text-sm">{formatCurrency(lot.costBasis)}</TableCell>
+                                        <TableCell className="text-center font-mono text-sm">{lot.adjustmentCode}</TableCell>
+                                        <TableCell className="text-right font-mono text-sm">
+                                            {lot.adjustmentAmount !== 0 ? formatCurrency(lot.adjustmentAmount) : ''}
+                                        </TableCell>
+                                        <TableCell className={`text-right font-mono text-sm ${lot.gainOrLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                            {formatCurrency(lot.gainOrLoss)}
+                                        </TableCell>
+                                    </TableRow>
+                                )
+                            })}
                             {/* Totals row */}
                             <TableRow className="font-semibold bg-muted/50">
                                 <TableCell colSpan={3}>Totals</TableCell>
