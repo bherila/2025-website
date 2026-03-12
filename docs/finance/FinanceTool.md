@@ -2,6 +2,13 @@
 
 This document contains information about the finance tools in the `bwh-php` project.
 
+## Development Environment
+
+The development environment is configured to handle large datasets efficiently.
+
+### Memory Limit
+The `composer run dev` command is configured to run PHP with a **1GB memory limit** (`-d memory_limit=1G`) for both `artisan serve` and `artisan queue:listen`. This prevents out-of-memory errors when processing or viewing thousands of transactions.
+
 ## Account Navigation
 
 The finance module uses a tabbed navigation system with a shared year selector at the account level.
@@ -31,27 +38,19 @@ The year selector uses URL query strings for shareable, bookmarkable links:
 - All tab navigation preserves the year selection
 - Uses `financeRouteBuilder.ts` for centralized URL construction
 
-### Route Builder
+## All Transactions Page
 
-**Location**: `resources/js/lib/financeRouteBuilder.ts`
+The **All Transactions** page (`/finance/all-transactions`) provides a unified view of all transactions across all accounts for the current user.
 
-Centralized URL construction and navigation for the finance module:
+### Performance Optimizations
 
-```typescript
-import { 
-  transactionsUrl,     // /finance/{id}?year=X
-  duplicatesUrl,       // /finance/{id}/duplicates?year=X
-  linkerUrl,           // /finance/{id}/linker?year=X
-  statementsUrl,       // /finance/{id}/statements?year=X
-  lotsUrl,             // /finance/{id}/lots
-  summaryUrl,          // /finance/{id}/summary?year=X
-  importUrl,           // /finance/{id}/import-transactions
-  maintenanceUrl,      // /finance/{id}/maintenance
-  goToTransaction,     // Navigate to specific transaction
-  getEffectiveYear,    // Get year from URL or sessionStorage
-  updateYearInUrl,     // Update URL without navigation
-} from '@/lib/financeRouteBuilder'
-```
+To handle thousands of transactions across multiple accounts, the following optimizations are implemented:
+
+1.  **JSON Streaming**: The backend (`FinanceTransactionsApiController@getLineItems`) uses `response()->stream()` to send data to the client as it's being read from the database.
+2.  **Lazy Loading**: The backend uses Eloquent's `lazy()` method to chunk database results, keeping memory usage constant regardless of the total number of records.
+3.  **Client-side Account Mapping**: To avoid repeating account name strings in every transaction record (saving significant bandwidth), the API returns only the account ID. The frontend fetches the account list once and builds an `accountMap` for display lookups.
+4.  **On-demand Loading**: Transactions are not loaded automatically on page mount. Users select a year and optional filters (Cash Only / Stock Only) and click **Get Transactions** to trigger the API request.
+5.  **Initial Data Bootstrapping**: Available transaction years are passed directly from the Blade template to the React component via a data attribute, eliminating an initial API request.
 
 ## Transaction Import
 
@@ -192,11 +191,11 @@ Option transactions may have special types:
 
 | Controller | Responsibility |
 |------------|---------------|
-| `FinanceTransactionsApiController` | CRUD operations for transactions |
+| `FinanceTransactionsApiController` | CRUD operations for transactions (unified fetching) |
 | `FinanceTransactionLinkingApiController` | Link/unlink transactions, find linkable pairs |
 | `FinanceTransactionTaggingApiController` | Tag CRUD and application |
 | `FinanceTransactionsDedupeApiController` | Find duplicate transactions |
-| `FinanceApiController` | Account summary and other utilities |
+| `FinanceApiController` | Account summary, account list, and other utilities |
 
 ## CSV Parsers
 
@@ -368,4 +367,3 @@ When a statement is deleted:
 - Associated **Lots** are un-linked (their `statement_id` is set to NULL) but the data remains.
 - Associated **Transactions** are un-linked (their `statement_id` is set to NULL) but the data remains.
 - This ensures that deleting a statement doesn't accidentally wipe out your transaction history or position tracking.
-
