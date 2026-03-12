@@ -43,9 +43,10 @@ function formatDate(dateStr: string | null): string {
 
 interface LotAnalyzerProps {
     transactions: AccountLineItem[]
+    accountMap?: Map<number, string>
 }
 
-export default function LotAnalyzer({ transactions }: LotAnalyzerProps) {
+export default function LotAnalyzer({ transactions, accountMap }: LotAnalyzerProps) {
     const [includeOptions, setIncludeOptions] = useState(false)
     const [showShortTermOnly, setShowShortTermOnly] = useState(false)
     const [showAccountNames, setShowAccountNames] = useState(false)
@@ -54,7 +55,7 @@ export default function LotAnalyzer({ transactions }: LotAnalyzerProps) {
         includeOptions,
     }), [includeOptions])
 
-    const lots = useMemo(() => analyzeLots(transactions, options), [transactions, options])
+    const lots = useMemo(() => analyzeLots(transactions, options, accountMap), [transactions, options, accountMap])
     const summary = useMemo(() => computeSummary(lots), [lots])
 
     const filteredLots = useMemo(() => {

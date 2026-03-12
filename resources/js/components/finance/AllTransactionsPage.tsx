@@ -27,6 +27,7 @@ interface AllTransactionsPageProps {
 export default function AllTransactionsPage({ initialAvailableYears = [] }: AllTransactionsPageProps) {
     const [data, setData] = useState<AccountLineItem[] | null>(null)
     const [isLoading, setIsLoading] = useState(false)
+    const [accountMap, setAccountMap] = useState<Map<number, string>>(new Map())
     const [selectedYear, setSelectedYear] = useState<string>(() => {
         const currentYear = new Date().getFullYear()
         if (initialAvailableYears.includes(currentYear)) {
@@ -38,9 +39,32 @@ export default function AllTransactionsPage({ initialAvailableYears = [] }: AllT
     const [showLotAnalyzer, setShowLotAnalyzer] = useState(false)
     const [filter, setFilter] = useState<FilterType>('all')
 
+    const fetchAccounts = useCallback(async () => {
+        try {
+            const accounts = await fetchWrapper.get('/api/finance/accounts')
+            if (Array.isArray(accounts)) {
+                const map = new Map<number, string>()
+                accounts.forEach((acc: any) => {
+                    if (acc.acct_id && acc.acct_name) {
+                        map.set(acc.acct_id, acc.acct_name)
+                    }
+                })
+                setAccountMap(map)
+            }
+        } catch (error) {
+            console.error('Error fetching accounts:', error)
+        }
+    }, [])
+
     const fetchData = useCallback(async () => {
         try {
             setIsLoading(true)
+            
+            // Ensure accounts are loaded first for mapping
+            if (accountMap.size === 0) {
+                await fetchAccounts()
+            }
+
             const params = new URLSearchParams()
             if (selectedYear !== 'all') params.append('year', selectedYear)
             if (filter !== 'all') params.append('filter', filter)
@@ -128,7 +152,7 @@ export default function AllTransactionsPage({ initialAvailableYears = [] }: AllT
 
                 {showLotAnalyzer && filteredData && filteredData.length > 0 && (
                     <div className="mb-6">
-                        <LotAnalyzer transactions={filteredData} />
+                        <LotAnalyzer transactions={filteredData} accountMap={accountMap} />
                     </div>
                 )}
 

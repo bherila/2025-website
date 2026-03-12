@@ -281,9 +281,19 @@ export function parseTransactions(items: AccountLineItem[]): ParsedTransaction[]
  */
 export function analyzeLots(
   transactions: AccountLineItem[],
-  options: WashSaleOptions = { includeOptions: false }
+  options: WashSaleOptions = { includeOptions: false },
+  accountMap?: Map<number, string>
 ): LotSale[] {
   const parsed = parseTransactions(transactions)
+
+  // Enrich parsed transactions with account names from the map if provided
+  if (accountMap) {
+    parsed.forEach(t => {
+      if (t.accountId && accountMap.has(t.accountId)) {
+        t.accountName = accountMap.get(t.accountId)
+      }
+    })
+  }
 
   // Track available lots for cost basis matching
   // We separate long positions (buys) and short positions (sell shorts)
