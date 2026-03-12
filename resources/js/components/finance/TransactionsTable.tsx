@@ -31,17 +31,74 @@ import { TagApplyButton } from './TagApplyButton'
 import TransactionDetailsModal from './TransactionDetailsModal'
 import TransactionLinkModal from './TransactionLinkModal'
 
+const DEFAULT_PAGE_SIZE = 5000
+
 interface Props {
   data: AccountLineItem[]
-  onDeleteTransaction?: (transactionId: string) => Promise<void>
-  enableTagging?: boolean
-  refreshFn?: () => void
-  duplicates?: AccountLineItem[]
-  enableLinking?: boolean
-  accountId?: number
+  onDeleteTransaction?: ((transactionId: string) => Promise<void>) | undefined
+  enableTagging?: boolean | undefined
+  refreshFn?: (() => void) | undefined
+  duplicates?: AccountLineItem[] | undefined
+  enableLinking?: boolean | undefined
+  accountId?: number | undefined
+  /** Override the default page size (default: 5000) */
+  pageSize?: number | undefined
+  /** Transaction ID to scroll to (triggers page auto-selection) */
+  highlightTransactionId?: number | undefined
 }
 
-export default function TransactionsTable({ data, onDeleteTransaction, enableTagging = false, refreshFn, duplicates, enableLinking = false, accountId }: Props) {
+function PaginationControls({ 
+  currentPage, totalPages, totalRows, pageSize, viewAll, 
+  onPageChange, onViewAll 
+}: { 
+  currentPage: number; totalPages: number; totalRows: number; pageSize: number; viewAll: boolean;
+  onPageChange: (page: number) => void; onViewAll: () => void
+}) {
+  if (totalRows <= pageSize && !viewAll) return null
+  
+  const startRow = viewAll ? 1 : (currentPage - 1) * pageSize + 1
+  const endRow = viewAll ? totalRows : Math.min(currentPage * pageSize, totalRows)
+
+  return (
+    <div className="flex items-center justify-between px-2 py-2 text-sm text-muted-foreground">
+      <span>
+        Showing {startRow.toLocaleString()}–{endRow.toLocaleString()} of {totalRows.toLocaleString()} rows
+      </span>
+      <div className="flex items-center gap-2">
+        {!viewAll && totalPages > 1 && (
+          <>
+            <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => onPageChange(1)}>
+              ««
+            </Button>
+            <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => onPageChange(currentPage - 1)}>
+              «
+            </Button>
+            <span className="px-2">
+              Page {currentPage} of {totalPages}
+            </span>
+            <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => onPageChange(currentPage + 1)}>
+              »
+            </Button>
+            <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => onPageChange(totalPages)}>
+              »»
+            </Button>
+          </>
+        )}
+        {viewAll ? (
+          <Button variant="ghost" size="sm" onClick={() => onPageChange(1)}>
+            Paginate
+          </Button>
+        ) : (
+          <Button variant="ghost" size="sm" onClick={onViewAll}>
+            View All
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default function TransactionsTable({ data, onDeleteTransaction, enableTagging = false, refreshFn, duplicates, enableLinking = false, accountId, pageSize = DEFAULT_PAGE_SIZE, highlightTransactionId }: Props) {
   const [sortField, setSortField] = useState<keyof AccountLineItem>('t_date')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
   const [descriptionFilter, setDescriptionFilter] = useState('')
@@ -63,6 +120,8 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
   const [cashBalanceFilter, setCashBalanceFilter] = useState('')
   const [deleteConfirmTransaction, setDeleteConfirmTransaction] = useState<AccountLineItem | null>(null)
   const [lotsTransaction, setLotsTransaction] = useState<AccountLineItem | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [viewAll, setViewAll] = useState(false)
 
   const isDuplicate = (item: AccountLineItem) => {
     if (!duplicates || duplicates.length === 0) {
@@ -193,6 +252,33 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
     return aVal < bVal ? -direction : direction
   })
 
+  // Pagination: compute total pages and the visible slice
+  const totalRows = sortedData.length
+  const totalPages = viewAll ? 1 : Math.max(1, Math.ceil(totalRows / pageSize))
+
+  // Auto-select page when highlightTransactionId is set
+  useMemo(() => {
+    if (highlightTransactionId && !viewAll) {
+      const idx = sortedData.findIndex(r => r.t_id === highlightTransactionId)
+      if (idx >= 0) {
+        const targetPage = Math.floor(idx / pageSize) + 1
+        if (targetPage !== currentPage) {
+          setCurrentPage(targetPage)
+        }
+      }
+    }
+  }, [highlightTransactionId, sortedData, pageSize, viewAll]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reset to page 1 when filters change
+  useMemo(() => {
+    setCurrentPage(1)
+  }, [descriptionFilter, typeFilter, categoryFilter, symbolFilter, cusipFilter, optExpirationFilter, optTypeFilter, dateFilter, memoFilter, tagFilter, amountFilter, qtyFilter, postDateFilter, cashBalanceFilter]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Clamp page
+  const safePage = Math.min(currentPage, totalPages)
+  const paginatedData = viewAll ? sortedData : sortedData.slice((safePage - 1) * pageSize, safePage * pageSize)
+
+  // Totals are computed from all filtered+sorted data (not just the current page)
   const [totalAmount, totalPositives, totalNegatives] = sortedData.reduce(
     ([total, positives, negatives], row) => {
         const amount = currency(row.t_amt || '0');
@@ -211,8 +297,30 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
     }
   }
 
+  const handlePageChange = (page: number) => {
+    setViewAll(false)
+    setCurrentPage(page)
+  }
+
+  const handleViewAll = () => {
+    setViewAll(true)
+  }
+
+  const paginationControls = (
+    <PaginationControls
+      currentPage={safePage}
+      totalPages={totalPages}
+      totalRows={totalRows}
+      pageSize={pageSize}
+      viewAll={viewAll}
+      onPageChange={handlePageChange}
+      onViewAll={handleViewAll}
+    />
+  )
+
   return (
     <>
+      {paginationControls}
       <Table style={{ fontSize: '90%' }}>
         <thead>
           <tr>
@@ -489,7 +597,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
           </tr>
         </thead>
         <tbody>
-          {sortedData.map((row, i) => (
+          {paginatedData.map((row, i) => (
             <tr 
               key={row.t_id + ':' + i} 
               className={cn({ 'duplicate-row': isDuplicate(row) })}
@@ -775,6 +883,8 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
           </tr>
         </tfoot>
       </Table>
+
+      {paginationControls}
 
       {enableTagging && (
         <div className="mt-4 p-4 border rounded">
