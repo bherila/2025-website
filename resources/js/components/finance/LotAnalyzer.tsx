@@ -235,20 +235,20 @@ function Form8949Table({ title, lots, showAccountNames }: { title: string; lots:
                 <CardTitle className="text-sm">{title}</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-                <div className="rounded-md border">
+                <div className="rounded-md border overflow-x-auto">
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead className="w-[200px]">
+                                <TableHead className="min-w-[300px] whitespace-nowrap">
                                     (a) Description of property
                                 </TableHead>
-                                <TableHead>(b) Date acquired</TableHead>
-                                <TableHead>(c) Date sold</TableHead>
-                                <TableHead className="text-right">(d) Proceeds</TableHead>
-                                <TableHead className="text-right">(e) Cost basis</TableHead>
-                                <TableHead className="text-center">(f) Code</TableHead>
-                                <TableHead className="text-right">(g) Adjustment</TableHead>
-                                <TableHead className="text-right">(h) Gain or (loss)</TableHead>
+                                <TableHead className="whitespace-nowrap">(b) Date acquired</TableHead>
+                                <TableHead className="whitespace-nowrap">(c) Date sold</TableHead>
+                                <TableHead className="text-right whitespace-nowrap">(d) Proceeds</TableHead>
+                                <TableHead className="text-right whitespace-nowrap">(e) Cost basis</TableHead>
+                                <TableHead className="text-center whitespace-nowrap">(f) Code</TableHead>
+                                <TableHead className="text-right whitespace-nowrap">(g) Adjustment</TableHead>
+                                <TableHead className="text-right whitespace-nowrap">(h) Gain or (loss)</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -262,7 +262,7 @@ function Form8949Table({ title, lots, showAccountNames }: { title: string; lots:
                                         key={`${lot.saleTransactionId ?? i}-${lot.dateSold}-${lot.accountId}`}
                                         className={lot.isWashSale ? 'bg-orange-50 dark:bg-orange-950/30' : ''}
                                     >
-                                        <TableCell className="font-mono text-sm">
+                                        <TableCell className="font-mono text-sm whitespace-nowrap">
                                             {lot.description}{accountNameSuffix}
                                             {lot.isShortSale && (
                                                 <Badge variant="outline" className="ml-1 text-xs">Short</Badge>
@@ -271,17 +271,17 @@ function Form8949Table({ title, lots, showAccountNames }: { title: string; lots:
                                                 <Badge variant="destructive" className="ml-1 text-xs">Wash</Badge>
                                             )}
                                         </TableCell>
-                                        <TableCell className="text-sm">
+                                        <TableCell className="text-sm whitespace-nowrap">
                                             <VariousTransactionsModal lot={lot} />
                                         </TableCell>
-                                        <TableCell className="text-sm">{formatDate(lot.dateSold)}</TableCell>
-                                        <TableCell className="text-right font-mono text-sm">{formatCurrency(lot.proceeds)}</TableCell>
-                                        <TableCell className="text-right font-mono text-sm">{formatCurrency(lot.costBasis)}</TableCell>
-                                        <TableCell className="text-center font-mono text-sm">{lot.adjustmentCode}</TableCell>
-                                        <TableCell className="text-right font-mono text-sm">
+                                        <TableCell className="text-sm whitespace-nowrap">{formatDate(lot.dateSold)}</TableCell>
+                                        <TableCell className="text-right font-mono text-sm whitespace-nowrap">{formatCurrency(lot.proceeds)}</TableCell>
+                                        <TableCell className="text-right font-mono text-sm whitespace-nowrap">{formatCurrency(lot.costBasis)}</TableCell>
+                                        <TableCell className="text-center font-mono text-sm whitespace-nowrap">{lot.adjustmentCode}</TableCell>
+                                        <TableCell className="text-right font-mono text-sm whitespace-nowrap">
                                             {lot.adjustmentAmount !== 0 ? formatCurrency(lot.adjustmentAmount) : ''}
                                         </TableCell>
-                                        <TableCell className={`text-right font-mono text-sm ${lot.gainOrLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                        <TableCell className={`text-right font-mono text-sm whitespace-nowrap ${lot.gainOrLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                             {formatCurrency(lot.gainOrLoss)}
                                         </TableCell>
                                     </TableRow>
@@ -289,14 +289,14 @@ function Form8949Table({ title, lots, showAccountNames }: { title: string; lots:
                             })}
                             {/* Totals row */}
                             <TableRow className="font-semibold bg-muted/50">
-                                <TableCell colSpan={3}>Totals</TableCell>
-                                <TableCell className="text-right font-mono">{formatCurrency(totals.proceeds)}</TableCell>
-                                <TableCell className="text-right font-mono">{formatCurrency(totals.costBasis)}</TableCell>
-                                <TableCell></TableCell>
-                                <TableCell className="text-right font-mono">
+                                <TableCell colSpan={3} className="whitespace-nowrap">Totals</TableCell>
+                                <TableCell className="text-right font-mono whitespace-nowrap">{formatCurrency(totals.proceeds)}</TableCell>
+                                <TableCell className="text-right font-mono whitespace-nowrap">{formatCurrency(totals.costBasis)}</TableCell>
+                                <TableCell className="whitespace-nowrap"></TableCell>
+                                <TableCell className="text-right font-mono whitespace-nowrap">
                                     {totals.adjustmentAmount !== 0 ? formatCurrency(totals.adjustmentAmount) : ''}
                                 </TableCell>
-                                <TableCell className={`text-right font-mono ${totals.gainOrLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                <TableCell className={`text-right font-mono whitespace-nowrap ${totals.gainOrLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                     {formatCurrency(totals.gainOrLoss)}
                                 </TableCell>
                             </TableRow>
