@@ -98,7 +98,9 @@ export function LotMatchSearchModal({ lot, isOpen, onClose, onAssignmentSaved }:
                 symbol: lot.symbol,
                 quantity: Math.abs(openTx.t_qty),
                 purchase_date: openTx.t_date,
-                cost_basis: Math.abs(Number(openTx.t_amt) || (Number(openTx.t_price) * Math.abs(openTx.t_qty))),
+                cost_basis: openTx.t_amt != null
+                    ? Math.abs(Number(openTx.t_amt))
+                    : Math.abs(Number(openTx.t_price) * Math.abs(openTx.t_qty)),
                 sale_date: lot.dateSold,
                 proceeds: (lot.proceeds / lot.quantity) * Math.abs(openTx.t_qty),
             }))

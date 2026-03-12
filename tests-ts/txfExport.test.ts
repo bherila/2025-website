@@ -101,17 +101,17 @@ describe('TXF Export', () => {
 
     it('should handle multiple lots', () => {
       const lots = [
-        makeLot({ symbol: 'AAPL', isShortTerm: true }),
-        makeLot({ symbol: 'GOOG', isShortTerm: false }),
+        makeLot({ symbol: 'AAPL', description: '100 sh. AAPL', isShortTerm: true }),
+        makeLot({ symbol: 'GOOG', description: '50 sh. GOOG', isShortTerm: false }),
       ]
       const txf = generateTxf(lots)
       expect(txf).toContain('N321')
       expect(txf).toContain('N323')
       expect(txf).toContain('P100 sh. AAPL')
-      expect(txf).toContain('P100 sh. AAPL') // description is same for both in makeLot
-      // Both records should have their own ^
+      expect(txf).toContain('P50 sh. GOOG')
+      // Header + 2 records = 3 carets
       const caretCount = txf.split('\r\n').filter(l => l === '^').length
-      expect(caretCount).toBe(3) // header + 2 records
+      expect(caretCount).toBe(3)
     })
   })
 })

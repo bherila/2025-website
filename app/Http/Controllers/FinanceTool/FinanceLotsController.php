@@ -487,6 +487,7 @@ class FinanceLotsController extends Controller
             });
         }
 
+        // Cap at 200 results to keep the search modal responsive
         $transactions = $query->limit(200)->get();
 
         // Enrich with account name
