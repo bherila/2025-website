@@ -139,12 +139,45 @@ Lots are stored in `fin_account_lots`. Each row represents one lot, mapping an o
 | `POST` | `/api/finance/{account_id}/lots/save-analyzed` | Save lots from analyzer (replaces previous `analyzer`-sourced lots) |
 | `PUT` | `/api/finance/{account_id}/lots/{lot_id}` | Update a single lot (reassign open/close transaction IDs) |
 | `DELETE` | `/api/finance/{account_id}/lots/{lot_id}` | Delete a single lot |
+| `POST` | `/api/finance/lots/search-opening` | Search for potential opening transactions by symbol across all user accounts |
+| `POST` | `/api/finance/lots/save-assignment` | Save manually matched lot assignments to the database |
 
 ### Save Workflow
 1. User runs the Lot Analyzer on a single-account view
 2. Reviews the IRS Form 8949 output
 3. Clicks "Save Lots to Database" to persist
 4. Previous `analyzer`-sourced lots for that account are replaced; `manual` and `import` lots are preserved
+
+### Manual Lot Matching
+When the analyzer cannot find an opening transaction (shows "Unknown" in the Date Acquired column), the user can:
+1. Click "Unknown" to open the Acquired Transactions Details modal
+2. Click **"Load All Years"** to switch the year selector to "All" and reload all historical transactions
+3. Click **"Search for Opening Transaction"** to open the Lot Match Search Modal, which queries the backend by symbol across all accounts
+4. Select one or more buy transactions from the search results (with checkbox multi-select and quantity tracking)
+5. Save the assignment — this creates `manual`-sourced lot records in the database
+
+This is distinct from the **TransactionLinkModal**, which links related transfers across accounts (e.g., an ACH withdrawal and a matching deposit). The Lot Match Search Modal is specifically for linking buy/sell pairs for tax reporting purposes.
+
+---
+
+## Year-of-Sale Grouping
+
+The Lot Analyzer supports grouping results by the year of sale. When sales span multiple tax years:
+- **Tab bar** appears above the summary cards with a tab for each sale year and an "All Years" tab
+- Selecting a year tab filters the Form 8949 output and summary cards to that year only
+- Wash sale analysis always runs across all years (to catch cross-year wash sales), but the display is filtered
+- The **TXF export** respects the selected year tab
+
+---
+
+## TXF Export
+
+The "Save as TXF File" button generates a TXF (Tax eXchange Format) file for import into tax preparation software (TurboTax, H&R Block, etc.).
+
+- **File location**: `resources/js/lib/finance/txfExport.ts`
+- **Format**: TXF v042 with reference codes 321 (short-term) and 323 (long-term)
+- **Filename**: `yyyy.txf` when a specific year is selected, `all.txf` for all years
+- **Wash sale support**: Includes disallowed loss amounts when applicable
 
 ---
 
@@ -167,26 +200,28 @@ Run wash sale engine tests:
 pnpm test -- tests-ts/washSaleEngine.test.ts
 ```
 
+Run TXF export tests:
+```bash
+pnpm test -- tests-ts/txfExport.test.ts
+```
+
 Run PHP lots controller tests:
 ```bash
 php artisan test --filter=FinanceLotsControllerTest
 ```
 
-### JS Test Coverage (40 tests)
-- `normalizeOptions`: legacy conversion, constraint enforcement
-- Basic gain/loss calculation and short-term/long-term classification
-- Wash sale detection (30-day window, boundary conditions, repurchase before/after)
-- Cross-type settings (stock→option, option→stock, same underlying flag)
-- Short/long cross-wash scenarios
-- Method 1 vs Method 2 comparison
-- Currency precision (currency.js arithmetic)
-- Edge cases: empty input, only buys, only sells, case-insensitive symbols
+### JS Test Coverage
+- **Wash sale engine** (40 tests): normalizeOptions, gain/loss calculation, ST/LT classification, wash sale detection (30-day window, boundary conditions), cross-type settings, Method 1 vs 2, currency precision, edge cases
+- **TXF export** (11 tests): header format, reference numbers, date formatting, amounts, wash sale inclusion, multi-lot handling
+- **VariousTransactionsModal** (6 tests): render states, Load All Years button, Search for Opening Transaction button
 
-### PHP Test Coverage (19 tests)
+### PHP Test Coverage (23 tests)
 - CRUD operations for lots (create, update, delete)
 - Save analyzed lots from wash sale engine
 - Replace previous analyzer lots on re-save
 - One closing transaction → multiple opening lots
 - Transaction linking and unlinking
 - Merge/deduplication with lot reassignment
+- Search opening transactions by symbol
+- Save manual lot assignments
 - Authorization and authentication
