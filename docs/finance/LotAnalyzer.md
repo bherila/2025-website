@@ -2,13 +2,15 @@
 
 ## Overview
 
-The Lot Analyzer is a client-side React component that analyzes stock transactions to match sales with purchases, calculate gains/losses, and detect IRS wash sales. Its output mirrors IRS Form 8949 (Sales and Other Dispositions of Capital Assets).
+The Lot Analyzer is a client-side React component that analyzes stock transactions to match sales with purchases, calculate gains/losses, and detect IRS wash sales. Its output mirrors IRS Form 8949 (Sales and Other Dispositions of Capital Assets). Analysis results can optionally be saved to the database via the lots API.
 
 ## Component Location
 
 - **React Component**: `resources/js/components/finance/LotAnalyzer.tsx`
 - **Wash Sale Engine**: `resources/js/lib/finance/washSaleEngine.ts`
 - **Unit Tests**: `tests-ts/washSaleEngine.test.ts`
+- **PHP Controller**: `app/Http/Controllers/FinanceTool/FinanceLotsController.php`
+- **PHP Tests**: `tests/Feature/FinanceLotsControllerTest.php`
 - **Type Definitions**: `resources/js/types/finance/account-line-item.ts`
 
 ---
@@ -36,7 +38,14 @@ When a single sale is matched against multiple purchase lots (FIFO), the "Date a
 ### Account Separation
 Sales of the same security on the same day are separated into different line items if they occur in different financial accounts. A **Show accounts** toggle allows appending the account name (as a badge) to the description for better clarity.
 
-### Wash Sale Detection
+### Precise Financial Arithmetic
+All currency calculations use **currency.js** to avoid floating-point drift. This ensures that computed proceeds, cost bases, gains, and wash sale adjustments are exact to the cent.
+
+---
+
+## Wash Sale Detection
+
+### Overview
 A wash sale occurs when:
 1. A security is sold at a **loss**
 2. A "substantially identical" security is purchased within a **61-day window** (30 days before to 30 days after the sale date)
@@ -47,14 +56,43 @@ When a wash sale is detected:
 - Column (g) shows the disallowed loss amount
 - Column (h) shows the adjusted gain/loss
 
-### Substantially Similar Securities
-By default, the engine requires an **exact symbol match** for stocks and mutual funds. A toggle allows treating stock options as "substantially similar" to the underlying stock, since the IRC isn't clear on this topic.
+### Four-Flag Configuration (`WashSaleOptions`)
+
+The wash sale engine supports four independent boolean settings:
+
+| Setting | Description |
+|---------|-------------|
+| `adjustSameUnderlying` | Master flag: when true, option contracts for the same underlying are considered substantially identical regardless of strike, expiration, or type. When false, `adjustStockToOption` and `adjustOptionToStock` are forced to false. |
+| `adjustShortLong` | When true, wash sales can trigger across short and long positions. |
+| `adjustStockToOption` | When true, selling stock at a loss then buying a CALL option on the same underlying triggers a wash sale. |
+| `adjustOptionToStock` | When true, selling a CALL option at a loss then buying shares of the underlying stock triggers a wash sale. |
+
+### Method 1 — Same Underlying Ticker (Recommended)
+All four flags enabled. Option contracts for the same underlying security are considered substantially identical, regardless of strike, expiration, or type. Options are also considered substantially identical to shares of the underlying.
+
+```typescript
+import { WASH_SALE_METHOD_1 } from '@/lib/finance/washSaleEngine'
+// { adjustShortLong: true, adjustStockToOption: true, adjustOptionToStock: true, adjustSameUnderlying: true }
+```
+
+### Method 2 — Identical Ticker (Broker / 1099-B Style)
+All four flags disabled. Only exact ticker matches trigger wash sales. Options must have the same strike, expiration, and type (identical option symbol). Shares of the underlying are not considered substantially identical to options.
+
+```typescript
+import { WASH_SALE_METHOD_2 } from '@/lib/finance/washSaleEngine'
+// { adjustShortLong: false, adjustStockToOption: false, adjustOptionToStock: false, adjustSameUnderlying: false }
+```
+
+### Legacy Compatibility
+The old `{ includeOptions: boolean }` format is still accepted and automatically mapped:
+- `{ includeOptions: true }` → Method 1
+- `{ includeOptions: false }` → Method 2
 
 ### Short Sale Support
 The engine recognizes "Sell short" (opening) and "Buy to close" (closing) transactions. Short sales are matched against their opening "Sell short" transactions and are flagged in the output with a blue **SHORT** badge.
 
 ### Transaction Type Recognition
-The engine uses flexible substring matching to recognize transaction types, including those with "Option" prefixes:
+The engine uses flexible substring matching:
 
 **Opening Long:** `Buy`, `Buy to open`, `Reinvest`, etc.
 **Closing Long:** `Sell`, `Sell to close`, `Assigned`, `Exercised`, etc.
@@ -74,7 +112,7 @@ The engine uses **FIFO (First In, First Out)** matching:
 5. If a sale results in both ST and LT portions, it is split into two separate line items.
 
 ### Same-Day Merging
-To keep the report concise, multiple sales of the same security on the same day within the same account are merged into a single line item, provided they have the same term (ST/LT) and adjustment codes.
+Multiple sales of the same security on the same day within the same account are merged into a single line item, provided they have the same term (ST/LT) and adjustment codes.
 
 ### Wash Sale Window
 The 61-day wash sale window is centered on the sale date:
@@ -86,6 +124,27 @@ The 61-day wash sale window is centered on the sale date:
 When multiple purchases fall within the wash sale window, the engine prioritizes:
 1. Purchases **after** the sale (most likely to be the "replacement")
 2. Among those, the **closest** to the sale date
+
+---
+
+## Database Persistence
+
+### Schema
+Lots are stored in `fin_account_lots`. Each row represents one lot, mapping an opening transaction (`open_t_id`) to a closing transaction (`close_t_id`). One closing transaction can map to **multiple** opening lots (e.g., when a sale liquidates shares from several FIFO purchases).
+
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/finance/{account_id}/lots/save-analyzed` | Save lots from analyzer (replaces previous `analyzer`-sourced lots) |
+| `PUT` | `/api/finance/{account_id}/lots/{lot_id}` | Update a single lot (reassign open/close transaction IDs) |
+| `DELETE` | `/api/finance/{account_id}/lots/{lot_id}` | Delete a single lot |
+
+### Save Workflow
+1. User runs the Lot Analyzer on a single-account view
+2. Reviews the IRS Form 8949 output
+3. Clicks "Save Lots to Database" to persist
+4. Previous `analyzer`-sourced lots for that account are replaced; `manual` and `import` lots are preserved
 
 ---
 
@@ -108,12 +167,26 @@ Run wash sale engine tests:
 pnpm test -- tests-ts/washSaleEngine.test.ts
 ```
 
-The test suite covers:
-- Transaction parsing and flexible type recognition
-- Basic gain/loss calculation
-- Short-term vs long-term classification and splitting
-- Wash sale detection and replacement tracking
-- Short sale handling (Sell short / Buy to close)
-- Same-day merging logic
-- "Various" transaction aggregation
-- Edge cases and summary computation
+Run PHP lots controller tests:
+```bash
+php artisan test --filter=FinanceLotsControllerTest
+```
+
+### JS Test Coverage (40 tests)
+- `normalizeOptions`: legacy conversion, constraint enforcement
+- Basic gain/loss calculation and short-term/long-term classification
+- Wash sale detection (30-day window, boundary conditions, repurchase before/after)
+- Cross-type settings (stock→option, option→stock, same underlying flag)
+- Short/long cross-wash scenarios
+- Method 1 vs Method 2 comparison
+- Currency precision (currency.js arithmetic)
+- Edge cases: empty input, only buys, only sells, case-insensitive symbols
+
+### PHP Test Coverage (19 tests)
+- CRUD operations for lots (create, update, delete)
+- Save analyzed lots from wash sale engine
+- Replace previous analyzer lots on re-save
+- One closing transaction → multiple opening lots
+- Transaction linking and unlinking
+- Merge/deduplication with lot reassignment
+- Authorization and authentication
