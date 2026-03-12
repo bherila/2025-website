@@ -260,7 +260,7 @@ export function parseTransactions(items: AccountLineItem[]): ParsedTransaction[]
         id: item.t_id,
         internalIndex: index,
         accountId: item.t_account,
-        accountName: (item as any).acct_name,
+        accountName: item.acct_name,
         date: parseDate(item.t_date),
         dateStr: item.t_date,
         symbol: item.t_symbol!,
@@ -328,7 +328,7 @@ export function analyzeLots(
       const qtyToUse = Math.min(remainingQty, available)
       const unitPrice = candidate.price.value > 0
         ? candidate.price
-        : currency(candidate.amount.intValue).divide(candidate.qty * 100)
+        : currency(candidate.amount.intValue, { fromCents: true }).divide(candidate.qty)
       const holdingDays = daysBetween(candidate.date, sale.date)
       const match = {
         id: candidate.id,
