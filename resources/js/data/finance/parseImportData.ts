@@ -13,6 +13,12 @@ import { parseWealthfrontHAR } from '@/data/finance/parseWealthfrontHAR'
 import { parseDate } from '@/lib/DateHelper'
 import { splitDelimitedText } from '@/lib/splitDelimitedText'
 
+function findColumnIndex(headerRow: string[], ...candidates: string[]) {
+  const normalizedCandidates = candidates.map((header) => header.trim().toLowerCase())
+  const index = headerRow.findIndex((cell) => normalizedCandidates.includes(cell.trim().toLowerCase()))
+  return index !== -1 ? index : null
+}
+
 export interface ParseImportDataResult {
   /** Parsed transaction data, or null if no valid transactions found */
   data: AccountLineItem[] | null
@@ -96,20 +102,32 @@ function parseGenericCsv(text: string): ParseImportDataResult {
   try {
     const lines = splitDelimitedText(text)
     if (lines.length > 1 && lines[0]) {
-      const getColumnIndex = (...headers: string[]) => {
-        const firstLine = lines[0]!.map((cell) => cell.trim())
-        const index = firstLine.findIndex(h => headers.includes(h))
-        return index !== -1 ? index : null
-      }
-
-      const dateColIndex = getColumnIndex('Date', 'Transaction Date', 'date')
-      const postDateColIndex = getColumnIndex('Post Date', 'As of', 'As of Date', 'Settlement Date', 'Date Settled', 'Settled')
-      const descriptionColIndex = getColumnIndex('Description', 'Desc', 'description')
-      const amountColIndex = getColumnIndex('Amount', 'Amt', 'amount')
-      const commentColIndex = getColumnIndex('Comment', 'Memo', 'memo')
-      const typeColIndex = getColumnIndex('Type', 'type')
-      const categoryColIndex = getColumnIndex('Category')
-      const accountBalanceColIndex = getColumnIndex('Cash Balance ($)')
+      const headerRow = lines[0]
+      const dateColIndex = findColumnIndex(headerRow, 'Date', 'Transaction Date')
+      const postDateColIndex = findColumnIndex(
+        headerRow,
+        'Post Date',
+        'As of',
+        'As of Date',
+        'Settlement Date',
+        'Date Settled',
+        'Settled',
+        'Posted Date',
+      )
+      const descriptionColIndex = findColumnIndex(
+        headerRow,
+        'Description',
+        'Desc',
+        'Name',
+        'Details',
+        'Merchant',
+        'Payee',
+      )
+      const amountColIndex = findColumnIndex(headerRow, 'Amount', 'Amt')
+      const commentColIndex = findColumnIndex(headerRow, 'Comment', 'Memo', 'Notes')
+      const typeColIndex = findColumnIndex(headerRow, 'Type', 'Transaction', 'Transaction Type')
+      const categoryColIndex = findColumnIndex(headerRow, 'Category')
+      const accountBalanceColIndex = findColumnIndex(headerRow, 'Cash Balance ($)', 'Cash Balance', 'Balance')
 
       if (dateColIndex !== null && descriptionColIndex !== null && amountColIndex !== null) {
         for (let i = 1; i < lines.length; i++) {

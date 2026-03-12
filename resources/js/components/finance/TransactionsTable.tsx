@@ -2,7 +2,7 @@
 import './TransactionsTable.css'
 
 import currency from 'currency.js'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import {
   AlertDialog,
@@ -22,6 +22,8 @@ import type { AccountLineItem } from '@/data/finance/AccountLineItem'
 import { isDuplicateTransaction } from '@/data/finance/isDuplicateTransaction'
 import { fetchWrapper } from '@/fetchWrapper'
 import { cn } from '@/lib/utils'
+import { collectTagsFromRows, type TransactionTag } from '@/components/finance/transactionsTableTags'
+import { useFinanceTags } from '@/components/finance/useFinanceTags'
 
 import { ClearFilterButton } from './ClearFilterButton'
 import TransactionLotsModal from './lots/TransactionLotsModal'
@@ -54,14 +56,6 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
   const [tagFilter, setTagFilter] = useState('')
   const [amountFilter, setAmountFilter] = useState('')
   const [qtyFilter, setQtyFilter] = useState('')
-  const [availableTags, setAvailableTags] = useState<
-    {
-      tag_id: number
-      tag_label: string
-      tag_color: string
-    }[]
-  >([])
-  const [isLoadingTags, setIsLoadingTags] = useState(false)
   const [selectedTransactions, setSelectedTransactions] = useState<string[]>([])
   const [selectedTransaction, setSelectedTransaction] = useState<AccountLineItem | null>(null)
   const [linkTransaction, setLinkTransaction] = useState<AccountLineItem | null>(null)
@@ -83,16 +77,14 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
            (item.parent_transaction !== null && item.parent_transaction !== undefined)
   }
 
-  useEffect(() => {
-    if (!enableTagging) return
-    setIsLoadingTags(true)
-    fetchWrapper.get('/api/finance/tags')
-      .then(setAvailableTags)
-      .catch((error) => console.error('Failed to load tags:', error))
-      .finally(() => {
-        setIsLoadingTags(false)
-      })
-  }, [enableTagging])
+  const tagsFromRows: TransactionTag[] = useMemo(() => collectTagsFromRows(data), [data])
+  const {
+    tags: availableTags,
+    isLoading: isLoadingTags,
+  } = useFinanceTags({
+    enabled: enableTagging,
+    fallbackTags: tagsFromRows,
+  })
 
   const handleApplyTag = async (tagId: number, tagLabel: string) => {
     const transactionIds = sortedData.map((r) => r.t_id).join(',')

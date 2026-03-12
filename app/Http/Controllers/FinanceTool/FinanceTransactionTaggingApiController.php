@@ -30,12 +30,16 @@ class FinanceTransactionTaggingApiController extends Controller
                 return $tag;
             });
 
-            return response()->json($tags);
+            return response()->json([
+                'data' => $tags->values(),
+            ]);
         }
 
         $tags = $query->get(['tag_id', 'tag_label', 'tag_color']);
 
-        return response()->json($tags);
+        return response()->json([
+            'data' => $tags->values(),
+        ]);
     }
 
     public function createTag(Request $request)

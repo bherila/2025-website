@@ -161,7 +161,8 @@ When clicking the 🗑️ delete button:
 When `enableTagging` is true:
 - Tags are displayed as colored badges
 - "Apply Tag" button to apply tags to filtered transactions
-- Fetches available tags from `/api/finance/tags`
+- Fetches available tags via the shared `useFinanceTags` hook (`resources/js/components/finance/useFinanceTags.ts`)
+- Tag API response contract is a stable JSON envelope: `{ "data": Tag[] }`
 - "Manage Tags" button links to `/finance/tags` for tag CRUD
 
 ---
@@ -195,8 +196,8 @@ When `enableTagging` is true:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/finance/tags` | Get user's tags |
-| GET | `/api/finance/tags?include_counts=true` | Get tags with transaction counts |
+| GET | `/api/finance/tags` | Get user's tags in `{ data: [...] }` envelope |
+| GET | `/api/finance/tags?include_counts=true` | Get tags with transaction counts in `{ data: [...] }` envelope |
 | POST | `/api/finance/tags` | Create a new tag |
 | PUT | `/api/finance/tags/{tag_id}` | Update a tag |
 | DELETE | `/api/finance/tags/{tag_id}` | Delete a tag (soft delete) |
@@ -234,6 +235,7 @@ Page for managing user's tags:
 - Edit existing tags
 - Delete tags (with confirmation)
 - Shows transaction count per tag
+- Uses `useFinanceTags({ includeCounts: true })` for consistent tag loading
 - Route: `/finance/tags`
 
 ### LinkerPage

@@ -1,5 +1,5 @@
 'use client'
-import { useCallback,useEffect, useState } from 'react'
+import { useState } from 'react'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
@@ -16,15 +16,9 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
+import { type FinanceTag, useFinanceTags } from '@/components/finance/useFinanceTags'
 import { fetchWrapper } from '@/fetchWrapper'
 import { accountsUrl } from '@/lib/financeRouteBuilder'
-
-interface Tag {
-  tag_id: number
-  tag_label: string
-  tag_color: string
-  transaction_count?: number
-}
 
 const TAG_COLORS = [
   'gray',
@@ -40,8 +34,7 @@ const TAG_COLORS = [
 ]
 
 export default function ManageTagsPage() {
-  const [tags, setTags] = useState<Tag[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const { tags, isLoading, error: tagsError, refreshTags } = useFinanceTags({ includeCounts: true })
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   
@@ -51,31 +44,14 @@ export default function ManageTagsPage() {
   const [isCreating, setIsCreating] = useState(false)
   
   // Edit state
-  const [editingTag, setEditingTag] = useState<Tag | null>(null)
+  const [editingTag, setEditingTag] = useState<FinanceTag | null>(null)
   const [editLabel, setEditLabel] = useState('')
   const [editColor, setEditColor] = useState('')
   const [isUpdating, setIsUpdating] = useState(false)
   
   // Delete confirmation state
-  const [deleteConfirmTag, setDeleteConfirmTag] = useState<Tag | null>(null)
+  const [deleteConfirmTag, setDeleteConfirmTag] = useState<FinanceTag | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
-
-  const fetchTags = useCallback(async () => {
-    try {
-      setIsLoading(true)
-      setError(null)
-      const data = await fetchWrapper.get('/api/finance/tags?include_counts=true')
-      setTags(data)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load tags')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchTags()
-  }, [fetchTags])
 
   const handleCreateTag = async () => {
     if (!newTagLabel.trim()) {
@@ -93,7 +69,7 @@ export default function ManageTagsPage() {
       setSuccessMessage('Tag created successfully')
       setNewTagLabel('')
       setNewTagColor('blue')
-      await fetchTags()
+      await refreshTags()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create tag')
     } finally {
@@ -101,7 +77,7 @@ export default function ManageTagsPage() {
     }
   }
 
-  const handleStartEdit = (tag: Tag) => {
+  const handleStartEdit = (tag: FinanceTag) => {
     setEditingTag(tag)
     setEditLabel(tag.tag_label)
     setEditColor(tag.tag_color)
@@ -128,7 +104,7 @@ export default function ManageTagsPage() {
       })
       setSuccessMessage('Tag updated successfully')
       setEditingTag(null)
-      await fetchTags()
+      await refreshTags()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update tag')
     } finally {
@@ -145,7 +121,7 @@ export default function ManageTagsPage() {
       await fetchWrapper.delete(`/api/finance/tags/${deleteConfirmTag.tag_id}`, {})
       setSuccessMessage('Tag deleted successfully')
       setDeleteConfirmTag(null)
-      await fetchTags()
+      await refreshTags()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete tag')
     } finally {
@@ -194,9 +170,9 @@ export default function ManageTagsPage() {
         Tags help you organize and categorize your transactions. Create tags here and then apply them to transactions from the transactions table.
       </p>
       
-      {error && (
+      {(error || tagsError) && (
         <Alert variant="destructive" className="mb-4">
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{error || tagsError}</AlertDescription>
         </Alert>
       )}
       

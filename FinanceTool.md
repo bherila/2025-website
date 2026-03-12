@@ -156,6 +156,14 @@ Tags can be applied to transactions for categorization:
 - Bulk apply tags to filtered transactions
 - Manage tags at `/finance/tags`
 
+### Tag API Response Contract
+
+Tag fetch endpoints return a consistent JSON envelope:
+- `GET /api/finance/tags` -> `{ data: Tag[] }`
+- `GET /api/finance/tags?include_counts=true` -> `{ data: TagWithCount[] }`
+
+Both `TransactionsTable` and `ManageTagsPage` use the shared hook `resources/js/components/finance/useFinanceTags.ts` to consume this contract.
+
 ## Stock Options
 
 ### Option Parsing
