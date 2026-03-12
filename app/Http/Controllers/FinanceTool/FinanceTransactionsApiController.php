@@ -278,24 +278,6 @@ class FinanceTransactionsApiController extends Controller
     }
 
     /**
-     * Get available years for transactions across all accounts
-     */
-    public function getAllTransactionYears(Request $request)
-    {
-        $uid = Auth::id();
-        $accountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
-
-        $years = FinAccountLineItems::whereIn('t_account', $accountIds)
-            ->selectRaw('DISTINCT YEAR(t_date) as year')
-            ->whereNotNull('t_date')
-            ->orderBy('year', 'desc')
-            ->pluck('year')
-            ->toArray();
-
-        return response()->json($years);
-    }
-
-    /**
      * Get available years for transactions in an account
      */
     public function getTransactionYears(Request $request, $account_id)

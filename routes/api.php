@@ -33,7 +33,6 @@ Route::middleware(['web', 'auth'])->post('/finance/{account_id}/line_items', [Fi
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/transaction', [FinanceTransactionsApiController::class, 'createTransaction']);
 Route::middleware(['web', 'auth'])->delete('/finance/{account_id}/line_items', [FinanceTransactionsApiController::class, 'deleteLineItem']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/transaction-years', [FinanceTransactionsApiController::class, 'getTransactionYears']);
-Route::middleware(['web', 'auth'])->get('/finance/all-transaction-years', [FinanceTransactionsApiController::class, 'getAllTransactionYears']);
 Route::middleware(['web', 'auth'])->get('/finance/tags', [FinanceTransactionTaggingApiController::class, 'getUserTags']);
 Route::middleware(['web', 'auth'])->post('/finance/tags-apply', [FinanceTransactionTaggingApiController::class, 'applyTagToTransactions']);
 Route::middleware(['web', 'auth'])->post('/finance/tags', [FinanceTransactionTaggingApiController::class, 'createTag']);

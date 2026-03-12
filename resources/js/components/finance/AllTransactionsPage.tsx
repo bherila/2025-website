@@ -20,33 +20,23 @@ import TransactionsTable from './TransactionsTable'
 
 type FilterType = 'all' | 'cash' | 'stock'
 
-export default function AllTransactionsPage() {
+interface AllTransactionsPageProps {
+    initialAvailableYears?: number[]
+}
+
+export default function AllTransactionsPage({ initialAvailableYears = [] }: AllTransactionsPageProps) {
     const [data, setData] = useState<AccountLineItem[] | null>(null)
     const [isLoading, setIsLoading] = useState(false)
-    const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString())
-    const [availableYears, setAvailableYears] = useState<number[]>([])
+    const [selectedYear, setSelectedYear] = useState<string>(() => {
+        const currentYear = new Date().getFullYear()
+        if (initialAvailableYears.includes(currentYear)) {
+            return currentYear.toString()
+        }
+        return initialAvailableYears.length > 0 ? initialAvailableYears[0].toString() : 'all'
+    })
+    const [availableYears, setAvailableYears] = useState<number[]>(initialAvailableYears)
     const [showLotAnalyzer, setShowLotAnalyzer] = useState(false)
     const [filter, setFilter] = useState<FilterType>('all')
-
-    const fetchYears = useCallback(async () => {
-        try {
-            const years = await fetchWrapper.get('/api/finance/all-transaction-years')
-            if (Array.isArray(years)) {
-                setAvailableYears(years)
-                // If current year is not in available years, default to "all" or first available
-                const currentYearStr = new Date().getFullYear().toString()
-                if (!years.includes(parseInt(currentYearStr))) {
-                    if (years.length > 0) {
-                        setSelectedYear(String(years[0]))
-                    } else {
-                        setSelectedYear('all')
-                    }
-                }
-            }
-        } catch (error) {
-            console.error('Error fetching available years:', error)
-        }
-    }, [])
 
     const fetchData = useCallback(async () => {
         try {
@@ -66,10 +56,6 @@ export default function AllTransactionsPage() {
             setIsLoading(false)
         }
     }, [selectedYear, filter])
-
-    useEffect(() => {
-        fetchYears()
-    }, [fetchYears])
 
     // No client-side filtering needed anymore
     const filteredData = data

@@ -93,6 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const allTransactionsDiv = document.getElementById('AllTransactionsPage')
   if (allTransactionsDiv) {
     const root = createRoot(allTransactionsDiv)
-    root.render(<AllTransactionsPage />)
+    const initialAvailableYears = JSON.parse(allTransactionsDiv.dataset.availableYears || '[]')
+    root.render(<AllTransactionsPage initialAvailableYears={initialAvailableYears} />)
   }
 })
