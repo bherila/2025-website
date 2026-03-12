@@ -53,10 +53,6 @@ export function VariousTransactionsModal({ lot }: VariousTransactionsModalProps)
                     role="button"
                     tabIndex={0}
                     className="text-sm cursor-pointer no-underline hover:underline"
-                    onClick={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                    }}
                 >
                     {label}
                 </CustomLink>
