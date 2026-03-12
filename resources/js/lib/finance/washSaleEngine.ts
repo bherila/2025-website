@@ -115,8 +115,8 @@ function daysBetween(a: Date, b: Date): number {
  */
 function isRegularSale(type: string): boolean {
   const t = type.toLowerCase().trim()
-  // "Sell to Close" or just "Sell"
-  return (t === 'sell' || t === 'sell to close' || t === 'assigned' || t === 'exercised' || (t.startsWith('sell') && !t.includes('short') && !t.includes('open')))
+  if (t.includes('sell short') || t.includes('sellshort') || t.includes('sell to open')) return false
+  return (t.includes('sell') || t === 'assigned' || t === 'exercised')
 }
 
 /**
@@ -124,7 +124,7 @@ function isRegularSale(type: string): boolean {
  */
 function isShortOpening(type: string): boolean {
   const t = type.toLowerCase().trim()
-  return t === 'sell short' || t === 'sellshort' || t === 'sell to open'
+  return t.includes('sell short') || t.includes('sellshort') || t.includes('sell to open')
 }
 
 /**
@@ -132,7 +132,8 @@ function isShortOpening(type: string): boolean {
  */
 function isRegularBuy(type: string): boolean {
   const t = type.toLowerCase().trim()
-  return (t === 'buy' || t === 'buy to open' || t === 'reinvest' || (t.startsWith('buy') && !t.includes('close') && !t.includes('cover')))
+  if (t.includes('buy to cover') || t.includes('buytocover') || t.includes('buy to close')) return false
+  return (t.includes('buy') || t.includes('reinvest'))
 }
 
 /**
@@ -140,7 +141,7 @@ function isRegularBuy(type: string): boolean {
  */
 function isShortClosing(type: string): boolean {
   const t = type.toLowerCase().trim()
-  return t === 'buy to cover' || t === 'buytocover' || t === 'buy to close'
+  return t.includes('buy to cover') || t.includes('buytocover') || t.includes('buy to close')
 }
 
 /**

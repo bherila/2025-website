@@ -50,17 +50,21 @@ export function VariousTransactionsModal({ lot }: VariousTransactionsModalProps)
         <Dialog>
             <DialogTrigger asChild>
                 <CustomLink 
-                    href="#" 
+                    role="button"
+                    tabIndex={0}
+                    className="text-sm cursor-pointer no-underline hover:underline"
                     onClick={(e) => {
                         e.preventDefault()
                         e.stopPropagation()
                     }}
-                    className="text-sm cursor-pointer"
                 >
                     {label}
                 </CustomLink>
             </DialogTrigger>
-            <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col" onPointerDownOutside={(e) => e.preventDefault()}>
+            <DialogContent 
+                className="max-w-4xl max-h-[80vh] flex flex-col" 
+                onOpenAutoFocus={(e) => e.preventDefault()}
+            >
                 <DialogHeader>
                     <DialogTitle>Acquired Transactions Details</DialogTitle>
                 </DialogHeader>
