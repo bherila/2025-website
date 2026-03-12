@@ -32,6 +32,8 @@ interface FinanceSubNavProps {
  * then a horizontal section-switcher bar.
  */
 export default function FinanceSubNav({ activeSection, breadcrumbItems, children }: FinanceSubNavProps) {
+  const activeSectionInfo = FINANCE_SECTIONS.find(s => s.value === activeSection)
+
   return (
     <div className="mt-4 px-8">
       <div className="py-4 px-4">
@@ -44,8 +46,8 @@ export default function FinanceSubNav({ activeSection, breadcrumbItems, children
             {breadcrumbItems ? (
               <>
                 <BreadcrumbItem>
-                  <BreadcrumbLink href={FINANCE_SECTIONS.find(s => s.value === activeSection)!.href}>
-                    {FINANCE_SECTIONS.find(s => s.value === activeSection)!.label}
+                  <BreadcrumbLink href={activeSectionInfo!.href}>
+                    {activeSectionInfo!.label}
                   </BreadcrumbLink>
                 </BreadcrumbItem>
                 {breadcrumbItems}
@@ -53,7 +55,7 @@ export default function FinanceSubNav({ activeSection, breadcrumbItems, children
             ) : (
               <BreadcrumbItem>
                 <BreadcrumbPage>
-                  {FINANCE_SECTIONS.find(s => s.value === activeSection)?.label ?? activeSection}
+                  {activeSectionInfo?.label ?? activeSection}
                 </BreadcrumbPage>
               </BreadcrumbItem>
             )}

@@ -262,12 +262,10 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
       const idx = sortedData.findIndex(r => r.t_id === highlightTransactionId)
       if (idx >= 0) {
         const targetPage = Math.floor(idx / pageSize) + 1
-        if (targetPage !== currentPage) {
-          setCurrentPage(targetPage)
-        }
+        setCurrentPage(targetPage)
       }
     }
-  }, [highlightTransactionId, sortedData, pageSize, viewAll]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [highlightTransactionId, sortedData, pageSize, viewAll])
 
   // Reset to page 1 when filters change
   useEffect(() => {
