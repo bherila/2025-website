@@ -1,7 +1,7 @@
 import { renderHook, waitFor } from '@testing-library/react'
 
-import { fetchWrapper } from '@/fetchWrapper'
 import { normalizeFinanceTagsResponse, useFinanceTags } from '@/components/finance/useFinanceTags'
+import { fetchWrapper } from '@/fetchWrapper'
 
 jest.mock('@/fetchWrapper', () => ({
   fetchWrapper: {

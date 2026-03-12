@@ -1,7 +1,8 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+
 import TransactionsTable from '@/components/finance/TransactionsTable'
-import { fetchWrapper } from '@/fetchWrapper'
 import { useFinanceTags } from '@/components/finance/useFinanceTags'
+import { fetchWrapper } from '@/fetchWrapper'
 
 jest.mock('@/fetchWrapper', () => ({
   fetchWrapper: {

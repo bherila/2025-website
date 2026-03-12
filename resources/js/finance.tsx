@@ -5,6 +5,7 @@ import DuplicatesPage from '@/components/finance/DuplicatesPage'
 import FinanceAccountLotsPage from '@/components/finance/FinanceAccountLotsPage'
 import FinanceAccountsPage from '@/components/finance/FinanceAccountsPage'
 import FinanceAccountTransactionsPage from '@/components/finance/FinanceAccountTransactionsPage'
+import FinanceSubNav, { type FinanceSection } from '@/components/finance/FinanceSubNav'
 import ImportTransactionsClient from '@/components/finance/ImportTransactionsClient'
 import LinkerPage from '@/components/finance/LinkerPage'
 import ManageTagsPage from '@/components/finance/ManageTagsPage'
@@ -77,5 +78,13 @@ document.addEventListener('DOMContentLoaded', () => {
   if (manageTagsDiv) {
     const root = createRoot(manageTagsDiv)
     root.render(<ManageTagsPage />)
+  }
+
+  // Standalone FinanceSubNav (for pages like Payslips that need the nav bar)
+  const financeSubNavDiv = document.getElementById('FinanceSubNav')
+  if (financeSubNavDiv) {
+    const root = createRoot(financeSubNavDiv)
+    const activeSection = (financeSubNavDiv.dataset.activeSection || 'accounts') as FinanceSection
+    root.render(<FinanceSubNav activeSection={activeSection} />)
   }
 })

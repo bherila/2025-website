@@ -4,6 +4,8 @@ import './TransactionsTable.css'
 import currency from 'currency.js'
 import { useMemo, useState } from 'react'
 
+import { collectTagsFromRows, type TransactionTag } from '@/components/finance/transactionsTableTags'
+import { useFinanceTags } from '@/components/finance/useFinanceTags'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,8 +24,6 @@ import type { AccountLineItem } from '@/data/finance/AccountLineItem'
 import { isDuplicateTransaction } from '@/data/finance/isDuplicateTransaction'
 import { fetchWrapper } from '@/fetchWrapper'
 import { cn } from '@/lib/utils'
-import { collectTagsFromRows, type TransactionTag } from '@/components/finance/transactionsTableTags'
-import { useFinanceTags } from '@/components/finance/useFinanceTags'
 
 import { ClearFilterButton } from './ClearFilterButton'
 import TransactionLotsModal from './lots/TransactionLotsModal'
