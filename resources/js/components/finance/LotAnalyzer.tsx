@@ -1,5 +1,5 @@
 'use client'
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -15,6 +15,7 @@ import {
     TableRow,
 } from '@/components/ui/table'
 import type { AccountLineItem } from '@/data/finance/AccountLineItem'
+import { fetchWrapper } from '@/fetchWrapper'
 import {
     analyzeLots,
     computeSummary,
@@ -47,12 +48,16 @@ function formatDate(dateStr: string | null): string {
 interface LotAnalyzerProps {
     transactions: AccountLineItem[]
     accountMap?: Map<number, string>
+    /** When set, enables the "Save to Database" workflow for this account */
+    accountId?: number
 }
 
-export default function LotAnalyzer({ transactions, accountMap }: LotAnalyzerProps) {
+export default function LotAnalyzer({ transactions, accountMap, accountId }: LotAnalyzerProps) {
     const [options, setOptions] = useState<WashSaleOptions>({ ...WASH_SALE_METHOD_1 })
     const [showShortTermOnly, setShowShortTermOnly] = useState(false)
     const [showAccountNames, setShowAccountNames] = useState(false)
+    const [isSaving, setIsSaving] = useState(false)
+    const [saveResult, setSaveResult] = useState<{ success: boolean; message: string } | null>(null)
 
     const lots = useMemo(() => analyzeLots(transactions, options, accountMap), [transactions, options, accountMap])
     const summary = useMemo(() => computeSummary(lots), [lots])
@@ -64,6 +69,52 @@ export default function LotAnalyzer({ transactions, accountMap }: LotAnalyzerPro
 
     const shortTermLots = useMemo(() => lots.filter(l => l.isShortTerm), [lots])
     const longTermLots = useMemo(() => lots.filter(l => !l.isShortTerm), [lots])
+
+    const handleSave = useCallback(async () => {
+        if (!accountId) return
+        setIsSaving(true)
+        setSaveResult(null)
+        try {
+            const payload = lots.flatMap(lot => {
+                // Each lot sale can have multiple acquired transactions (FIFO splits)
+                if (lot.acquiredTransactions && lot.acquiredTransactions.length > 0) {
+                    return lot.acquiredTransactions.map(at => ({
+                        symbol: lot.symbol,
+                        description: lot.description,
+                        quantity: at.qty,
+                        purchase_date: at.date,
+                        cost_basis: at.price * at.qty,
+                        sale_date: lot.dateSold,
+                        proceeds: (lot.proceeds / lot.quantity) * at.qty,
+                        realized_gain_loss: ((lot.proceeds / lot.quantity) * at.qty) - (at.price * at.qty),
+                        is_short_term: lot.isShortTerm,
+                        open_t_id: at.id ?? null,
+                        close_t_id: lot.saleTransactionId ?? null,
+                    }))
+                }
+                // Unmatched sale – no opening transaction
+                return [{
+                    symbol: lot.symbol,
+                    description: lot.description,
+                    quantity: lot.quantity,
+                    purchase_date: lot.dateAcquired ?? lot.dateSold,
+                    cost_basis: lot.costBasis,
+                    sale_date: lot.dateSold,
+                    proceeds: lot.proceeds,
+                    realized_gain_loss: lot.gainOrLoss,
+                    is_short_term: lot.isShortTerm,
+                    open_t_id: null,
+                    close_t_id: lot.saleTransactionId ?? null,
+                }]
+            })
+            await fetchWrapper.post(`/api/finance/${accountId}/lots/save-analyzed`, { lots: payload })
+            setSaveResult({ success: true, message: `Saved ${payload.length} lot(s) to database.` })
+        } catch (err: any) {
+            setSaveResult({ success: false, message: err?.message || 'Failed to save lots.' })
+        } finally {
+            setIsSaving(false)
+        }
+    }, [accountId, lots])
 
     if (lots.length === 0) {
         return (
@@ -248,6 +299,23 @@ export default function LotAnalyzer({ transactions, accountMap }: LotAnalyzerPro
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Save to database (only for single-account view) */}
+            {accountId && (
+                <div className="flex items-center gap-3">
+                    <Button
+                        onClick={handleSave}
+                        disabled={isSaving || lots.length === 0}
+                    >
+                        {isSaving ? 'Saving…' : 'Save Lots to Database'}
+                    </Button>
+                    {saveResult && (
+                        <span className={`text-sm ${saveResult.success ? 'text-green-600' : 'text-red-600'}`}>
+                            {saveResult.message}
+                        </span>
+                    )}
+                </div>
+            )}
 
             {/* IRS Form 8949 Table */}
             <Form8949Table

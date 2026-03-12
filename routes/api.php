@@ -81,6 +81,9 @@ Route::middleware(['web', 'auth'])->post('/finance/{account_id}/import-pdf-state
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/lots', [FinanceLotsController::class, 'index']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/lots', [FinanceLotsController::class, 'store']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/lots/import', [FinanceLotsController::class, 'importLots']);
+Route::middleware(['web', 'auth'])->post('/finance/{account_id}/lots/save-analyzed', [FinanceLotsController::class, 'saveAnalyzedLots']);
+Route::middleware(['web', 'auth'])->put('/finance/{account_id}/lots/{lot_id}', [FinanceLotsController::class, 'updateLot']);
+Route::middleware(['web', 'auth'])->delete('/finance/{account_id}/lots/{lot_id}', [FinanceLotsController::class, 'deleteLot']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/lots/search-transactions', [FinanceLotsController::class, 'searchTransactions']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/lots/by-transaction/{t_id}', [FinanceLotsController::class, 'lotsByTransaction']);
 
