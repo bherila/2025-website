@@ -1,5 +1,6 @@
 'use client'
 import { useCallback, useEffect, useState } from 'react'
+import { z } from 'zod'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -21,10 +22,12 @@ import {
     TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
 import type { Lot, LotsResponse } from '@/types/finance/lot'
 
 import ImportLotsPanel from './lots/ImportLotsPanel'
+import LotAnalyzer from './LotAnalyzer'
 
 function formatCurrency(value: string | number | null | undefined): string {
     if (value === null || value === undefined) return '—'
@@ -61,6 +64,9 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
     const [data, setData] = useState<LotsResponse | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [showImport, setShowImport] = useState(false)
+    const [showLotAnalyzer, setShowLotAnalyzer] = useState(false)
+    const [transactions, setTransactions] = useState<AccountLineItem[]>([])
+    const [loadingTransactions, setLoadingTransactions] = useState(false)
 
     const fetchLots = useCallback(async () => {
         setIsLoading(true)
@@ -93,6 +99,23 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
         if (newStatus === 'open') {
             setSelectedYear('')
         }
+    }
+
+    const handleToggleLotAnalyzer = async () => {
+        if (!showLotAnalyzer && transactions.length === 0) {
+            // Fetch all transactions for this account
+            setLoadingTransactions(true)
+            try {
+                const fetchedData = await fetchWrapper.get(`/api/finance/${id}/line_items`)
+                const parsedData = z.array(AccountLineItemSchema).parse(fetchedData)
+                setTransactions(parsedData.filter(Boolean))
+            } catch (error) {
+                console.error('Error fetching transactions for lot analysis:', error)
+            } finally {
+                setLoadingTransactions(false)
+            }
+        }
+        setShowLotAnalyzer(!showLotAnalyzer)
     }
 
     if (isLoading && !data) {
@@ -161,8 +184,23 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
                     Import Lots
                 </Button>
 
+                <Button
+                    variant={showLotAnalyzer ? 'default' : 'outline'}
+                    onClick={handleToggleLotAnalyzer}
+                    disabled={loadingTransactions}
+                >
+                    {loadingTransactions ? 'Loading...' : showLotAnalyzer ? 'Hide Lot Analyzer' : 'Lot Analyzer'}
+                </Button>
+
                 {isLoading && <Spinner className="h-4 w-4" />}
             </div>
+
+            {/* Lot Analyzer */}
+            {showLotAnalyzer && transactions.length > 0 && (
+                <div className="mb-6">
+                    <LotAnalyzer transactions={transactions} />
+                </div>
+            )}
 
             {/* Gains/Losses Summary for closed lots */}
             {status === 'closed' && summary && (

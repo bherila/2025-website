@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client'
 
 import AccountNavigation from '@/components/finance/AccountNavigation'
+import AllTransactionsPage from '@/components/finance/AllTransactionsPage'
 import DuplicatesPage from '@/components/finance/DuplicatesPage'
 import FinanceAccountLotsPage from '@/components/finance/FinanceAccountLotsPage'
 import FinanceAccountsPage from '@/components/finance/FinanceAccountsPage'
@@ -86,5 +87,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const root = createRoot(financeSubNavDiv)
     const activeSection = (financeSubNavDiv.dataset.activeSection || 'accounts') as FinanceSection
     root.render(<FinanceSubNav activeSection={activeSection} />)
+  }
+
+  // All Transactions page
+  const allTransactionsDiv = document.getElementById('AllTransactionsPage')
+  if (allTransactionsDiv) {
+    const root = createRoot(allTransactionsDiv)
+    root.render(<AllTransactionsPage />)
   }
 })

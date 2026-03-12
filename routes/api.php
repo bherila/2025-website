@@ -27,6 +27,7 @@ Route::middleware(['web', 'auth'])->post('/rsu', [FinanceRsuController::class, '
 Route::middleware(['web', 'auth'])->delete('/rsu/{id}', [FinanceRsuController::class, 'deleteRsuGrant']);
 
 // Transaction routes (FinanceTransactionsApiController)
+Route::middleware(['web', 'auth'])->get('/finance/all-line-items', [FinanceTransactionsApiController::class, 'getAllLineItems']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/line_items', [FinanceTransactionsApiController::class, 'getLineItems']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/line_items', [FinanceTransactionsApiController::class, 'importLineItems']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/transaction', [FinanceTransactionsApiController::class, 'createTransaction']);

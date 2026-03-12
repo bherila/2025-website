@@ -45,6 +45,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/finance/payslips/entry', [FinancePayslipController::class, 'entry']);
 
     Route::get('/finance/accounts', [FinanceAccountsController::class, 'index']);
+    Route::get('/finance/all-transactions', function () {
+        return view('finance.all-transactions');
+    });
     Route::get('/finance/tags', function () {
         return view('finance.tags');
     });

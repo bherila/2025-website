@@ -108,6 +108,92 @@ class FinanceTransactionsApiController extends Controller
     }
 
     /**
+     * Get line items (transactions) across all accounts for the current user
+     */
+    public function getAllLineItems(Request $request)
+    {
+        $uid = Auth::id();
+
+        // Get all account IDs for this user
+        $accountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
+
+        $query = FinAccountLineItems::whereIn('t_account', $accountIds)
+            ->with(['tags', 'parentTransactions.account', 'childTransactions.account', 'clientExpense.clientCompany'])
+            ->orderBy('t_date', 'desc');
+
+        // Filter by year if provided
+        if ($request->has('year')) {
+            $year = $request->year;
+            $query->whereYear('t_date', $year);
+        }
+
+        $lineItems = $query->get();
+
+        // Transform line items (same as getLineItems)
+        $lineItems = $lineItems->map(function ($item) {
+            $itemArray = $item->toArray();
+            $itemArray['parent_of_t_ids'] = $item->childTransactions->pluck('t_id')->toArray();
+
+            $parentTransaction = $item->parentTransactions->first();
+            if ($parentTransaction) {
+                $itemArray['parent_transaction'] = [
+                    't_id' => $parentTransaction->t_id,
+                    't_account' => $parentTransaction->t_account,
+                    'acct_name' => $parentTransaction->account?->acct_name,
+                    't_date' => $parentTransaction->t_date,
+                    't_description' => $parentTransaction->t_description,
+                    't_amt' => $parentTransaction->t_amt,
+                ];
+            }
+
+            if ($item->childTransactions->count() > 0) {
+                $itemArray['child_transactions'] = $item->childTransactions->map(function ($child) {
+                    return [
+                        't_id' => $child->t_id,
+                        't_account' => $child->t_account,
+                        'acct_name' => $child->account?->acct_name,
+                        't_date' => $child->t_date,
+                        't_description' => $child->t_description,
+                        't_amt' => $child->t_amt,
+                    ];
+                })->toArray();
+            }
+
+            $clientExpenseData = null;
+            if ($item->clientExpense) {
+                $clientExpenseData = [
+                    'id' => $item->clientExpense->id,
+                    'description' => $item->clientExpense->description,
+                    'amount' => $item->clientExpense->amount,
+                    'is_reimbursable' => $item->clientExpense->is_reimbursable,
+                    'client_company' => $item->clientExpense->clientCompany ? [
+                        'id' => $item->clientExpense->clientCompany->id,
+                        'company_name' => $item->clientExpense->clientCompany->company_name,
+                        'slug' => $item->clientExpense->clientCompany->slug,
+                    ] : null,
+                ];
+            }
+
+            unset($itemArray['parent_transactions']);
+            unset($itemArray['client_expense']);
+
+            if ($clientExpenseData) {
+                $itemArray['client_expense'] = $clientExpenseData;
+            }
+            if (! $item->t_schc_category) {
+                unset($itemArray['t_schc_category']);
+            }
+            if (empty($itemArray['parent_of_t_ids'])) {
+                unset($itemArray['parent_of_t_ids']);
+            }
+
+            return $itemArray;
+        });
+
+        return response()->json($lineItems);
+    }
+
+    /**
      * Delete a line item (transaction)
      */
     public function deleteLineItem(Request $request, $account_id)
