@@ -254,7 +254,7 @@ function Form8949Table({ title, lots }: { title: string; lots: LotSale[] }) {
                                         )}
                                     </TableCell>
                                     <TableCell className="text-sm">
-                                        {lot.dateAcquired ? formatDate(lot.dateAcquired) : <VariousTransactionsModal lot={lot} />}
+                                        <VariousTransactionsModal lot={lot} />
                                     </TableCell>
                                     <TableCell className="text-sm">{formatDate(lot.dateSold)}</TableCell>
                                     <TableCell className="text-right font-mono text-sm">{formatCurrency(lot.proceeds)}</TableCell>

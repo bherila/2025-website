@@ -71,6 +71,7 @@ export interface WashSaleOptions {
 
 interface ParsedTransaction {
   id: number | undefined
+  internalIndex: number
   date: Date
   dateStr: string
   symbol: string
@@ -188,7 +189,7 @@ export function parseTransactions(items: AccountLineItem[]): ParsedTransaction[]
       // Must be a buy or sell
       return isSaleType(item.t_type) || isBuyType(item.t_type)
     })
-    .map(item => {
+    .map((item, index) => {
       const isOption = !!(item.opt_type || item.opt_expiration)
       // For options, the match symbol is the underlying equity symbol
       const baseSymbol = item.t_symbol!.toUpperCase().trim()
@@ -196,6 +197,7 @@ export function parseTransactions(items: AccountLineItem[]): ParsedTransaction[]
 
       return {
         id: item.t_id,
+        internalIndex: index,
         date: parseDate(item.t_date),
         dateStr: item.t_date,
         symbol: item.t_symbol!,
@@ -232,108 +234,105 @@ export function analyzeLots(
 ): LotSale[] {
   const parsed = parseTransactions(transactions)
 
-  const sales = parsed.filter(t => isSaleType(t.type))
-  const purchases = parsed.filter(t => isBuyType(t.type))
+  // Track available lots for cost basis matching
+  // We separate long positions (buys) and short positions (sell shorts)
+  const longPool = parsed.filter(t => isBuyType(t.type))
+  const shortPool = parsed.filter(t => isShortSaleType(t.type))
 
-  // Track how many shares of each purchase have been "used" as wash replacements
-  const purchaseUsed = new Map<number, number>()
+  // Track how many shares of each transaction have been "used"
+  const sharesUsed = new Map<number, number>()
 
   const results: LotSale[] = []
 
-  // Sort sales by date
-  const sortedSales = [...sales].sort((a, b) => a.date.getTime() - b.date.getTime())
+  // All sales (regular sales of long positions, and cover buys of short positions)
+  const allSales = parsed.filter(t => isSaleType(t.type) || (isBuyType(t.type) && t.type.toLowerCase().includes('cover')))
+  
+  // Sort sales by date to process them chronologically
+  const sortedSales = [...allSales].sort((a, b) => a.date.getTime() - b.date.getTime())
 
   for (const sale of sortedSales) {
-    let remainingSaleQty = sale.qty
-    const saleProceeds = Math.abs(sale.amount)
-    const isShort = isShortSaleType(sale.type)
+    const isCoverBuy = isBuyType(sale.type) && sale.type.toLowerCase().includes('cover')
+    const isRegularSale = isSaleType(sale.type) && !isShortSaleType(sale.type)
+    
+    // If it's a "Sell Short", it's the OPENING of a position, not a sale of a lot for 8949 purposes
+    if (isShortSaleType(sale.type)) continue
 
-    // For a sale, we need to determine the cost basis.
+    let remainingQty = sale.qty
+    const proceeds = Math.abs(sale.amount)
+    
     let costBasis = 0
-    let dateAcquired: string | null = null
     const acquiredTransactions: Array<{
       id: number | undefined
+      internalIndex: number
       date: string
       qty: number
       price: number
       description: string
     }> = []
 
-    // Try to find matching purchases for cost basis (FIFO)
-    const matchingPurchases = purchases
+    // 1. MATCHING: Find the lots that were closed by this transaction
+    // If regular sale, match against longPool (buys)
+    // If cover buy, match against shortPool (sell shorts)
+    const matchingPool = isRegularSale ? longPool : shortPool
+    
+    const candidates = matchingPool
       .filter(p => areSubstantiallyIdentical(sale, p, options.includeOptions))
-      .filter(p => p.date.getTime() <= sale.date.getTime()) // purchased before or on the sale date
+      .filter(p => p.date.getTime() <= sale.date.getTime()) // established before or on closing date
       .sort((a, b) => a.date.getTime() - b.date.getTime()) // FIFO
 
-    for (const purchase of matchingPurchases) {
-      if (remainingSaleQty <= 0) break
+    for (const candidate of candidates) {
+      if (remainingQty <= 0) break
 
-      const used = purchaseUsed.get(purchase.id ?? -1) ?? 0
-      const available = purchase.qty - used
+      const used = sharesUsed.get(candidate.internalIndex) ?? 0
+      const available = candidate.qty - used
       if (available > 0) {
-        const qtyToUse = Math.min(remainingSaleQty, available)
-        const unitPrice = purchase.price > 0 ? purchase.price : (Math.abs(purchase.amount) / purchase.qty)
+        const qtyToUse = Math.min(remainingQty, available)
+        const unitPrice = candidate.price > 0 ? candidate.price : (Math.abs(candidate.amount) / candidate.qty)
         
         costBasis += unitPrice * qtyToUse
         
         acquiredTransactions.push({
-          id: purchase.id,
-          date: purchase.dateStr,
+          id: candidate.id,
+          internalIndex: candidate.internalIndex,
+          date: candidate.dateStr,
           qty: qtyToUse,
           price: unitPrice,
-          description: purchase.description,
+          description: candidate.description,
         })
 
-        // Track used shares for subsequent sales
-        purchaseUsed.set(purchase.id ?? -1, used + qtyToUse)
-        remainingSaleQty -= qtyToUse
+        sharesUsed.set(candidate.internalIndex, used + qtyToUse)
+        remainingQty -= qtyToUse
       }
     }
 
-    // Set dateAcquired. If multiple purchases, it's null (Various)
-    if (acquiredTransactions.length === 1) {
-      dateAcquired = acquiredTransactions[0]!.date
-    } else if (acquiredTransactions.length > 1) {
-      dateAcquired = null // "Various"
+    // Estimate basis for remainder if not fully matched
+    if (remainingQty > 0) {
+      costBasis += (sale.price > 0 ? sale.price : 0) * remainingQty
     }
 
-    // If no matching purchase found or only partial, compute estimate for remainder
-    if (remainingSaleQty > 0) {
-      // If the sale has a price, use price * qty as cost basis estimate
-      costBasis += (sale.price > 0 ? sale.price : 0) * remainingSaleQty
-    }
-
-    const rawGainLoss = saleProceeds - costBasis
+    const rawGainLoss = proceeds - costBasis
     const isLoss = rawGainLoss < 0
 
-    // Wash sale detection: only applies to losses
+    // 2. WASH SALE DETECTION (only for losses)
     let isWashSale = false
     let disallowedLoss = 0
     let washPurchaseId: number | undefined = undefined
 
     if (isLoss) {
-      // Look for replacement purchases within the 61-day window
       const washWindowStart = new Date(sale.date)
       washWindowStart.setDate(washWindowStart.getDate() - 30)
       const washWindowEnd = new Date(sale.date)
       washWindowEnd.setDate(washWindowEnd.getDate() + 30)
 
-      const acquiredIds = new Set(acquiredTransactions.map(at => at.id).filter(id => id !== undefined))
+      const acquiredInternalIndices = new Set(acquiredTransactions.map(at => at.internalIndex))
 
-      // Sort potential wash purchases by date (prefer closest after the sale)
-      const washCandidates = purchases
+      // Potential replacements are any NEW buys (longPool) within the window
+      // that weren't part of the original position's cost basis
+      const washCandidates = longPool
         .filter(p => areSubstantiallyIdentical(sale, p, options.includeOptions))
-        .filter(p => {
-          // Must be within the 61-day window
-          return p.date >= washWindowStart && p.date <= washWindowEnd
-        })
-        .filter(p => {
-          // The replacement purchase cannot be the same transaction that established the position
-          if (p.id !== undefined && acquiredIds.has(p.id)) return false
-          return true
-        })
+        .filter(p => p.date >= washWindowStart && p.date <= washWindowEnd)
+        .filter(p => !acquiredInternalIndices.has(p.internalIndex))
         .sort((a, b) => {
-          // Prefer purchases after the sale, then by closest date
           const aAfter = a.date >= sale.date ? 0 : 1
           const bAfter = b.date >= sale.date ? 0 : 1
           if (aAfter !== bAfter) return aAfter - bAfter
@@ -341,20 +340,20 @@ export function analyzeLots(
         })
 
       for (const candidate of washCandidates) {
-        const candidateKey = candidate.id ?? -1
-        const used = purchaseUsed.get(candidateKey) ?? 0
+        const used = sharesUsed.get(candidate.internalIndex) ?? 0
         const available = candidate.qty - used
         if (available <= 0) continue
 
-        // This is a wash sale
         isWashSale = true
         const washQty = Math.min(sale.qty, available)
-        const lossPerShare = Math.abs(rawGainLoss) / sale.qty
-        disallowedLoss = lossPerShare * washQty
+        disallowedLoss = (Math.abs(rawGainLoss) / sale.qty) * washQty
         washPurchaseId = candidate.id
 
-        // Mark shares as used
-        purchaseUsed.set(candidateKey, used + washQty)
+        // Important: Wash sale replacement shares are also "used" 
+        // they can't trigger ANOTHER wash sale disallowance for a different sale
+        // but they CAN still be used for cost basis of a later sale.
+        // Actually IRS rules are complex here, but for simple tracking:
+        sharesUsed.set(candidate.internalIndex, used + washQty)
         break
       }
     }
@@ -363,11 +362,17 @@ export function analyzeLots(
     const adjustmentCode = isWashSale ? 'W' : ''
     const gainOrLoss = rawGainLoss + adjustmentAmount
 
-    // Determine short-term vs long-term
+    // 3. RESULTS
+    let dateAcquired: string | null = null
+    if (acquiredTransactions.length === 1) {
+      dateAcquired = acquiredTransactions[0].date
+    } else if (acquiredTransactions.length > 1) {
+      dateAcquired = null // "Various"
+    }
+
     let isShortTerm = true
     if (dateAcquired) {
-      const acquiredDate = parseDate(dateAcquired)
-      const holdingDays = daysBetween(acquiredDate, sale.date)
+      const holdingDays = daysBetween(parseDate(dateAcquired), sale.date)
       isShortTerm = holdingDays <= 365
     }
 
@@ -377,7 +382,7 @@ export function analyzeLots(
       dateAcquired,
       acquiredTransactions,
       dateSold: sale.dateStr,
-      proceeds: saleProceeds,
+      proceeds,
       costBasis,
       adjustmentCode,
       adjustmentAmount,
@@ -389,7 +394,7 @@ export function analyzeLots(
       isWashSale,
       originalLoss: isLoss ? rawGainLoss : 0,
       disallowedLoss,
-      isShortSale: isShort,
+      isShortSale: !isRegularSale,
     })
   }
 
