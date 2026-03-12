@@ -159,7 +159,7 @@ export default function AllTransactionsPage() {
                     </div>
                 )}
 
-                {filteredData && filteredData.length > 0 && (
+                {filteredData && filteredData.length > 0 && !showLotAnalyzer && (
                     <TransactionsTable
                         data={filteredData}
                         enableTagging
