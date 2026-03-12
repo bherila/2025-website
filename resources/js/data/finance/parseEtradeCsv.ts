@@ -14,10 +14,13 @@ export function parseEtradeCsv(text: string): AccountLineItem[] {
   // Known header variants
   const headerV1 = '"Date","Transaction type","Description","Quantity","Price","Commission","Fees","Amount"'
   const headerV2 = 'TransactionDate,TransactionType,SecurityType,Symbol,Quantity,Amount,Price,Commission,Description'
+  // New E-Trade "All Transactions" export format (2025+):
+  // Activity/Trade Date,Transaction Date,Settlement Date,Activity Type,Description,Symbol,Cusip,Quantity #,Price $,Amount $,Commission,Category,Note
+  const headerV3 = 'Activity/Trade Date,Transaction Date,Settlement Date,Activity Type,Description,Symbol'
 
-  // Find the header line index (skip preamble like "For Account:")
+  // Find the header line index (skip preamble like "For Account:" or "Total:")
   let headerIndex = -1
-  let headerType: 'v1' | 'v2' | null = null
+  let headerType: 'v1' | 'v2' | 'v3' | null = null
   for (const [i, lRaw] of lines.entries()) {
     const l = lRaw.trim()
     if (!l) continue
@@ -29,6 +32,11 @@ export function parseEtradeCsv(text: string): AccountLineItem[] {
     if (l.startsWith(headerV2)) {
       headerIndex = i
       headerType = 'v2'
+      break
+    }
+    if (l.startsWith(headerV3)) {
+      headerIndex = i
+      headerType = 'v3'
       break
     }
   }
@@ -82,6 +90,34 @@ export function parseEtradeCsv(text: string): AccountLineItem[] {
           t_amt: cols[5] ?? undefined,
           t_price: cols[6] ?? undefined,
           t_commission: cols[7] ?? undefined,
+        })
+        data.push(item)
+      } else if (headerType === 'v3') {
+        // New format: Activity/Trade Date,Transaction Date,Settlement Date,Activity Type,Description,Symbol,Cusip,Quantity #,Price $,Amount $,Commission,Category,Note
+        // col[0]=date, col[3]=activity type, col[4]=description, col[5]=symbol(or --),
+        // col[7]=quantity, col[8]=price, col[9]=amount, col[10]=commission
+        if (cols.length < 11) continue
+
+        // Skip footer/disclaimer rows — only process rows that start with a valid date
+        const parsedDate = parseDate(cols[0])
+        if (!parsedDate) continue
+
+        const symbolRaw = cols[5] || ''
+        const symbol = symbolRaw && symbolRaw !== '--' ? symbolRaw : undefined
+
+        // Quantity may be empty or '--' for non-equity rows (transfers, adjustments, etc.)
+        const qtyRaw = cols[7] || ''
+        const qty = qtyRaw && qtyRaw !== '--' ? parseFloat(qtyRaw) : undefined
+
+        const item = AccountLineItemSchema.parse({
+          t_date: parsedDate.formatYMD() ?? cols[0],
+          t_type: cols[3] || undefined,
+          t_description: cols[4] || undefined,
+          t_symbol: symbol,
+          t_qty: qty,
+          t_price: (cols[8] && cols[8] !== '--') ? cols[8] : undefined,
+          t_amt: (cols[9] && cols[9] !== '--') ? cols[9] : undefined,
+          t_commission: (cols[10] && cols[10] !== '--') ? cols[10] : undefined,
         })
         data.push(item)
       }

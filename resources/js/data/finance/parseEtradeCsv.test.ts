@@ -52,3 +52,191 @@ describe('parseEtradeCsv function', () => {
     expect(tsla).toMatchObject({ t_qty: -1, t_price: 3.55, t_commission: 0.52 })
   })
 })
+
+describe('parseEtradeCsv — new format (Activity/Trade Date header, 2025+)', () => {
+  // Representative rows from the new "All Transactions" export format
+  const newFormatCsv = [
+    'All Transactions Activity Types',
+    '',
+    'Account Activity for b -1847 from Prior Year',
+    '',
+    'Total:,-63559.99',
+    '',
+    'Activity/Trade Date,Transaction Date,Settlement Date,Activity Type,Description,Symbol,Cusip,Quantity #,Price $,Amount $,Commission,Category,Note',
+    '12/31/25,12/31/25,12/31/25,Interest Income,MORGAN STANLEY BANK N.A. (Period 12/01-12/31),MSBNK,--,,,0.09,0.0,--,--',
+    '06/09/25,06/09/25,06/09/25,Online Transfer,ACH WITHDRAWL  REFID:139875155906;,--,--,,,-28000.0,0.0,--,--',
+    '04/01/25,04/01/25,04/01/25,Adjustment,TRNSFR CASH TO MARGIN,--,--,,,63.46,0.0,--,--',
+    '04/01/25,04/01/25,04/01/25,Adjustment,TRNSFR CASH TO MARGIN,--,--,,,-63.46,0.0,--,--',
+    '03/31/25,03/31/25,03/31/25,Margin Interest,Thru 03/31/25 for 2 days,--,--,,,-63.46,0.0,--,--',
+    '03/03/25,03/03/25,02/28/25,Option Expired,CALL TSLA   02/28/25   380.000,TSLA,--,2.0,,0.0,0.0,--,--',
+    '02/28/25,02/28/25,02/27/25,Option Assigned,PUT  TSLA   02/28/25   370.000,TSLA,--,2.0,,0.0,0.0,--,--',
+    '02/28/25,02/28/25,03/03/25,Sold,TESLA INC UNSOLICITED TRADE,TSLA,--,-200.0,289.9,57978.35,1.62,--,--',
+    '02/28/25,02/28/25,02/28/25,Bought,TESLA INC,TSLA,--,200.0,370.0,-74000.0,0.0,--,--',
+    '02/24/25,02/24/25,02/25/25,Sold Short,PUT  TSLA   02/28/25   370.000,TSLA,--,-2.0,40.1,8018.73,1.26,--,--',
+    '02/21/25,02/21/25,02/24/25,Bought To Cover,PUT  NVDA   02/21/25   143.000,NVDA,--,5.0,8.65,-4327.58,2.58,--,--',
+    '"For all accounts, the Activity Date and the Processing Date are displayed."',
+  ].join('\n')
+
+  it('parses basic shape — returns rows and each has a valid t_date', () => {
+    const result = parseEtradeCsv(newFormatCsv)
+    expect(Array.isArray(result)).toBe(true)
+    expect(result.length).toBeGreaterThan(0)
+    for (const row of result) {
+      expect(typeof row.t_date).toBe('string')
+      expect(row.t_date).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    }
+  })
+
+  it('ignores the preamble (Total: line) and footer (disclaimer) rows', () => {
+    const result = parseEtradeCsv(newFormatCsv)
+    // Should only contain the 11 data rows, not the Total: or disclaimer lines
+    expect(result.length).toBe(11)
+  })
+
+  it('parses interest income row (MSBNK)', () => {
+    const result = parseEtradeCsv(newFormatCsv)
+    const row = result.find((r) => r.t_symbol === 'MSBNK')
+    expect(row).toBeTruthy()
+    expect(row).toMatchObject({
+      t_date: '2025-12-31',
+      t_type: 'Interest Income',
+      t_symbol: 'MSBNK',
+      t_description: 'MORGAN STANLEY BANK N.A. (Period 12/01-12/31)',
+      t_amt: 0.09,
+      t_commission: 0,
+    })
+  })
+
+  it('parses online transfer (ACH WITHDRAWL) row with no symbol', () => {
+    const result = parseEtradeCsv(newFormatCsv)
+    const row = result.find((r) => r.t_type === 'Online Transfer')
+    expect(row).toBeTruthy()
+    expect(row).toMatchObject({
+      t_date: '2025-06-09',
+      t_type: 'Online Transfer',
+      t_description: 'ACH WITHDRAWL  REFID:139875155906;',
+      t_amt: -28000,
+      t_commission: 0,
+    })
+    expect(row?.t_symbol == null).toBe(true)
+  })
+
+  it('parses adjustment rows (paired transfer, no symbol)', () => {
+    const result = parseEtradeCsv(newFormatCsv)
+    const adjustments = result.filter((r) => r.t_type === 'Adjustment')
+    expect(adjustments.length).toBe(2)
+    expect(adjustments.find((r) => r.t_amt === 63.46)).toBeTruthy()
+    expect(adjustments.find((r) => r.t_amt === -63.46)).toBeTruthy()
+    for (const row of adjustments) {
+      expect(row.t_symbol == null).toBe(true)
+      expect(row.t_description).toBe('TRNSFR CASH TO MARGIN')
+    }
+  })
+
+  it('parses margin interest row (no symbol, negative amount)', () => {
+    const result = parseEtradeCsv(newFormatCsv)
+    const row = result.find((r) => r.t_type === 'Margin Interest')
+    expect(row).toBeTruthy()
+    expect(row).toMatchObject({
+      t_date: '2025-03-31',
+      t_type: 'Margin Interest',
+      t_amt: -63.46,
+    })
+    expect(row?.t_symbol == null).toBe(true)
+  })
+
+  it('parses option expired row — symbol from Symbol column, not description', () => {
+    const result = parseEtradeCsv(newFormatCsv)
+    const row = result.find((r) => r.t_type === 'Option Expired')
+    expect(row).toBeTruthy()
+    expect(row).toMatchObject({
+      t_date: '2025-03-03',
+      t_type: 'Option Expired',
+      t_symbol: 'TSLA',
+      t_description: 'CALL TSLA   02/28/25   380.000',
+      t_qty: 2,
+      t_commission: 0,
+    })
+  })
+
+  it('parses option assigned row', () => {
+    const result = parseEtradeCsv(newFormatCsv)
+    const row = result.find((r) => r.t_type === 'Option Assigned')
+    expect(row).toBeTruthy()
+    expect(row).toMatchObject({
+      t_date: '2025-02-28',
+      t_type: 'Option Assigned',
+      t_symbol: 'TSLA',
+      t_description: 'PUT  TSLA   02/28/25   370.000',
+      t_qty: 2,
+    })
+  })
+
+  it('parses sold row with price and commission', () => {
+    const result = parseEtradeCsv(newFormatCsv)
+    const row = result.find((r) => r.t_type === 'Sold')
+    expect(row).toBeTruthy()
+    expect(row).toMatchObject({
+      t_date: '2025-02-28',
+      t_type: 'Sold',
+      t_symbol: 'TSLA',
+      t_description: 'TESLA INC UNSOLICITED TRADE',
+      t_qty: -200,
+      t_price: 289.9,
+      t_amt: 57978.35,
+      t_commission: 1.62,
+    })
+  })
+
+  it('parses bought row with negative amount', () => {
+    const result = parseEtradeCsv(newFormatCsv)
+    const row = result.find((r) => r.t_type === 'Bought')
+    expect(row).toBeTruthy()
+    expect(row).toMatchObject({
+      t_date: '2025-02-28',
+      t_type: 'Bought',
+      t_symbol: 'TSLA',
+      t_description: 'TESLA INC',
+      t_qty: 200,
+      t_price: 370,
+      t_amt: -74000,
+      t_commission: 0,
+    })
+  })
+
+  it('parses sold short option row', () => {
+    const result = parseEtradeCsv(newFormatCsv)
+    const row = result.find((r) => r.t_type === 'Sold Short')
+    expect(row).toBeTruthy()
+    expect(row).toMatchObject({
+      t_date: '2025-02-24',
+      t_type: 'Sold Short',
+      t_symbol: 'TSLA',
+      t_description: 'PUT  TSLA   02/28/25   370.000',
+      t_qty: -2,
+      t_price: 40.1,
+      t_amt: 8018.73,
+      t_commission: 1.26,
+    })
+  })
+
+  it('parses bought to cover row', () => {
+    const result = parseEtradeCsv(newFormatCsv)
+    const row = result.find((r) => r.t_type === 'Bought To Cover')
+    expect(row).toBeTruthy()
+    expect(row).toMatchObject({
+      t_date: '2025-02-21',
+      t_type: 'Bought To Cover',
+      t_symbol: 'NVDA',
+      t_description: 'PUT  NVDA   02/21/25   143.000',
+      t_qty: 5,
+      t_price: 8.65,
+      t_amt: -4327.58,
+      t_commission: 2.58,
+    })
+  })
+
+  it('returns empty array for an unrecognized format', () => {
+    expect(parseEtradeCsv('random,data\n1,2')).toEqual([])
+  })
+})
