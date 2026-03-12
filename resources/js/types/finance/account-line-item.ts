@@ -72,6 +72,7 @@ export const ClientExpenseLinkSchema = z.object({
 export const AccountLineItemSchema = z.object({
   t_id: z.number().optional(),
   t_account: z.number().nullable().optional(),
+  acct_name: z.string().nullable().optional(),
   t_date: z.string(),
   t_date_posted: z.string().nullable().optional(),
   t_type: z.string().optional().nullable(),

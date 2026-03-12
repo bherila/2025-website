@@ -27,7 +27,7 @@ class FinanceTransactionsApiController extends Controller
             $query = FinAccountLineItems::whereIn('t_account', $accountIds);
         }
 
-        $query->with(['tags', 'parentTransactions.account', 'childTransactions.account', 'clientExpense.clientCompany'])
+        $query->with(['account', 'tags', 'parentTransactions.account', 'childTransactions.account', 'clientExpense.clientCompany'])
             ->orderBy('t_date', 'desc');
 
         if ($request->has('start_date') && $request->has('end_date')) {
@@ -301,6 +301,7 @@ class FinanceTransactionsApiController extends Controller
     protected function transformLineItem($item)
     {
         $itemArray = $item->toArray();
+        $itemArray['acct_name'] = $item->account?->acct_name;
 
         // Add parent_of_t_ids array (IDs of child transactions)
         $itemArray['parent_of_t_ids'] = $item->childTransactions->pluck('t_id')->toArray();
