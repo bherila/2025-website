@@ -1,7 +1,9 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { fireEvent,render, screen } from '@testing-library/react'
 import React from 'react'
-import { VariousTransactionsModal } from '../VariousTransactionsModal'
+
 import type { LotSale } from '@/lib/finance/washSaleEngine'
+
+import { VariousTransactionsModal } from '../VariousTransactionsModal'
 
 // Mock Radix Dialog components more accurately
 jest.mock('@/components/ui/dialog', () => {

@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { z } from 'zod'
 
 import { Button } from '@/components/ui/button'
@@ -86,7 +86,7 @@ export default function AllTransactionsPage({ initialAvailableYears = [] }: AllT
         } finally {
             setIsLoading(false)
         }
-    }, [selectedYear, filter])
+    }, [selectedYear, filter, accountMap.size, fetchAccounts])
 
     // No client-side filtering needed anymore
     const filteredData = data

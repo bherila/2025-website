@@ -2,6 +2,7 @@
 import { useMemo, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -18,6 +19,8 @@ import {
     analyzeLots,
     computeSummary,
     type LotSale,
+    WASH_SALE_METHOD_1,
+    WASH_SALE_METHOD_2,
     type WashSaleOptions,
 } from '@/lib/finance/washSaleEngine'
 
@@ -47,13 +50,9 @@ interface LotAnalyzerProps {
 }
 
 export default function LotAnalyzer({ transactions, accountMap }: LotAnalyzerProps) {
-    const [includeOptions, setIncludeOptions] = useState(false)
+    const [options, setOptions] = useState<WashSaleOptions>({ ...WASH_SALE_METHOD_1 })
     const [showShortTermOnly, setShowShortTermOnly] = useState(false)
     const [showAccountNames, setShowAccountNames] = useState(false)
-
-    const options: WashSaleOptions = useMemo(() => ({
-        includeOptions,
-    }), [includeOptions])
 
     const lots = useMemo(() => analyzeLots(transactions, options, accountMap), [transactions, options, accountMap])
     const summary = useMemo(() => computeSummary(lots), [lots])
@@ -93,36 +92,98 @@ export default function LotAnalyzer({ transactions, accountMap }: LotAnalyzerPro
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <div className="flex flex-wrap items-center gap-6">
-                        <div className="flex items-center gap-2">
-                            <Switch
-                                id="include-options"
-                                checked={includeOptions}
-                                onCheckedChange={setIncludeOptions}
-                            />
-                            <Label htmlFor="include-options" className="text-sm cursor-pointer">
-                                Treat stock options as substantially similar to underlying stock
-                            </Label>
+                    <div className="space-y-4">
+                        {/* Method presets */}
+                        <div className="flex items-center gap-3">
+                            <span className="text-sm font-medium text-muted-foreground">Preset:</span>
+                            <Button
+                                variant={JSON.stringify(options) === JSON.stringify(WASH_SALE_METHOD_1) ? 'default' : 'outline'}
+                                size="sm"
+                                onClick={() => setOptions({ ...WASH_SALE_METHOD_1 })}
+                            >
+                                Method 1 – Same Underlying
+                            </Button>
+                            <Button
+                                variant={JSON.stringify(options) === JSON.stringify(WASH_SALE_METHOD_2) ? 'default' : 'outline'}
+                                size="sm"
+                                onClick={() => setOptions({ ...WASH_SALE_METHOD_2 })}
+                            >
+                                Method 2 – Identical Ticker
+                            </Button>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <Switch
-                                id="short-term-only"
-                                checked={showShortTermOnly}
-                                onCheckedChange={setShowShortTermOnly}
-                            />
-                            <Label htmlFor="short-term-only" className="text-sm cursor-pointer">
-                                Show short-term only
-                            </Label>
+
+                        {/* Individual settings */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="flex items-center gap-2">
+                                <Switch
+                                    id="adjust-same-underlying"
+                                    checked={options.adjustSameUnderlying}
+                                    onCheckedChange={(v) => {
+                                        const next = { ...options, adjustSameUnderlying: v }
+                                        if (!v) { next.adjustStockToOption = false; next.adjustOptionToStock = false }
+                                        setOptions(next)
+                                    }}
+                                />
+                                <Label htmlFor="adjust-same-underlying" className="text-sm cursor-pointer">
+                                    Wash sales between trades for same underlying ticker
+                                </Label>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Switch
+                                    id="adjust-short-long"
+                                    checked={options.adjustShortLong}
+                                    onCheckedChange={(v) => setOptions({ ...options, adjustShortLong: v })}
+                                />
+                                <Label htmlFor="adjust-short-long" className="text-sm cursor-pointer">
+                                    Wash sales between shorts and longs
+                                </Label>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Switch
+                                    id="adjust-stock-to-option"
+                                    checked={options.adjustStockToOption}
+                                    disabled={!options.adjustSameUnderlying}
+                                    onCheckedChange={(v) => setOptions({ ...options, adjustStockToOption: v })}
+                                />
+                                <Label htmlFor="adjust-stock-to-option" className={`text-sm cursor-pointer ${!options.adjustSameUnderlying ? 'opacity-50' : ''}`}>
+                                    Wash sales from stock to option positions
+                                </Label>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Switch
+                                    id="adjust-option-to-stock"
+                                    checked={options.adjustOptionToStock}
+                                    disabled={!options.adjustSameUnderlying}
+                                    onCheckedChange={(v) => setOptions({ ...options, adjustOptionToStock: v })}
+                                />
+                                <Label htmlFor="adjust-option-to-stock" className={`text-sm cursor-pointer ${!options.adjustSameUnderlying ? 'opacity-50' : ''}`}>
+                                    Wash sales from options to stock positions
+                                </Label>
+                            </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <Switch
-                                id="show-accounts"
-                                checked={showAccountNames}
-                                onCheckedChange={setShowAccountNames}
-                            />
-                            <Label htmlFor="show-accounts" className="text-sm cursor-pointer">
-                                Show account names
-                            </Label>
+
+                        {/* Display / filter settings */}
+                        <div className="flex flex-wrap items-center gap-6 pt-2 border-t">
+                            <div className="flex items-center gap-2">
+                                <Switch
+                                    id="short-term-only"
+                                    checked={showShortTermOnly}
+                                    onCheckedChange={setShowShortTermOnly}
+                                />
+                                <Label htmlFor="short-term-only" className="text-sm cursor-pointer">
+                                    Show short-term only
+                                </Label>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Switch
+                                    id="show-accounts"
+                                    checked={showAccountNames}
+                                    onCheckedChange={setShowAccountNames}
+                                />
+                                <Label htmlFor="show-accounts" className="text-sm cursor-pointer">
+                                    Show account names
+                                </Label>
+                            </div>
                         </div>
                     </div>
                 </CardContent>
