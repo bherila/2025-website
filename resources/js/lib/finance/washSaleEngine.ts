@@ -111,29 +111,71 @@ function daysBetween(a: Date, b: Date): number {
 }
 
 /**
- * Check if a transaction type represents a sale.
+ * Check if a transaction type represents a regular sale of a long position.
  */
-function isSaleType(type: string): boolean {
+function isRegularSale(type: string): boolean {
   const t = type.toLowerCase().trim()
-  return t === 'sell' || t === 'sell short' || t === 'sellshort' || t === 'sell to close' ||
-         t === 'assigned' || t === 'exercised' || t.startsWith('sell')
+  // "Sell to Close" or just "Sell"
+  return (t === 'sell' || t === 'sell to close' || t === 'assigned' || t === 'exercised' || (t.startsWith('sell') && !t.includes('short') && !t.includes('open')))
 }
 
 /**
- * Check if a transaction type represents a purchase.
+ * Check if a transaction type represents an opening of a short position.
+ */
+function isShortOpening(type: string): boolean {
+  const t = type.toLowerCase().trim()
+  return t === 'sell short' || t === 'sellshort' || t === 'sell to open'
+}
+
+/**
+ * Check if a transaction type represents a regular purchase (opening long).
+ */
+function isRegularBuy(type: string): boolean {
+  const t = type.toLowerCase().trim()
+  return (t === 'buy' || t === 'buy to open' || t === 'reinvest' || (t.startsWith('buy') && !t.includes('close') && !t.includes('cover')))
+}
+
+/**
+ * Check if a transaction type represents a closing of a short position (cover buy).
+ */
+function isShortClosing(type: string): boolean {
+  const t = type.toLowerCase().trim()
+  return t === 'buy to cover' || t === 'buytocover' || t === 'buy to close'
+}
+
+/**
+ * For initial filtering: Is it any kind of purchase?
  */
 function isBuyType(type: string): boolean {
-  const t = type.toLowerCase().trim()
-  return t === 'buy' || t === 'buy to cover' || t === 'buy to open' || t === 'buytocover' ||
-         t === 'reinvest' || t.startsWith('buy')
+  return isRegularBuy(type) || isShortClosing(type)
 }
 
 /**
- * Check if a transaction type represents a short sale.
+ * For initial filtering: Is it any kind of sale?
+ */
+function isSaleType(type: string): boolean {
+  return isRegularSale(type) || isShortOpening(type)
+}
+
+/**
+ * Is it any kind of opening transaction?
+ */
+function isOpeningTransaction(type: string): boolean {
+  return isRegularBuy(type) || isShortOpening(type)
+}
+
+/**
+ * Is it any kind of closing transaction?
+ */
+function isClosingTransaction(type: string): boolean {
+  return isRegularSale(type) || isShortClosing(type)
+}
+
+/**
+ * Check if a transaction type represents a short sale (opening short).
  */
 function isShortSaleType(type: string): boolean {
-  const t = type.toLowerCase().trim()
-  return t === 'sell short' || t === 'sellshort'
+  return isShortOpening(type)
 }
 
 /**
@@ -236,26 +278,23 @@ export function analyzeLots(
 
   // Track available lots for cost basis matching
   // We separate long positions (buys) and short positions (sell shorts)
-  const longPool = parsed.filter(t => isBuyType(t.type))
-  const shortPool = parsed.filter(t => isShortSaleType(t.type))
+  const longPool = parsed.filter(t => isRegularBuy(t.type))
+  const shortPool = parsed.filter(t => isShortOpening(t.type))
 
   // Track how many shares of each transaction have been "used"
   const sharesUsed = new Map<number, number>()
 
   const results: LotSale[] = []
 
-  // All sales (regular sales of long positions, and cover buys of short positions)
-  const allSales = parsed.filter(t => isSaleType(t.type) || (isBuyType(t.type) && t.type.toLowerCase().includes('cover')))
+  // All closing transactions (regular sales of long positions, and cover/close buys of short positions)
+  const allClosing = parsed.filter(t => isClosingTransaction(t.type))
   
   // Sort sales by date to process them chronologically
-  const sortedSales = [...allSales].sort((a, b) => a.date.getTime() - b.date.getTime())
+  const sortedSales = [...allClosing].sort((a, b) => a.date.getTime() - b.date.getTime())
 
   for (const sale of sortedSales) {
-    const isCoverBuy = isBuyType(sale.type) && sale.type.toLowerCase().includes('cover')
-    const isRegularSale = isSaleType(sale.type) && !isShortSaleType(sale.type)
-    
-    // If it's a "Sell Short", it's the OPENING of a position, not a sale of a lot for 8949 purposes
-    if (isShortSaleType(sale.type)) continue
+    const isClosingShort = isShortClosing(sale.type)
+    const isClosingLong = isRegularSale(sale.type)
 
     let remainingQty = sale.qty
     const proceeds = Math.abs(sale.amount)
@@ -272,8 +311,8 @@ export function analyzeLots(
 
     // 1. MATCHING: Find the lots that were closed by this transaction
     // If regular sale, match against longPool (buys)
-    // If cover buy, match against shortPool (sell shorts)
-    const matchingPool = isRegularSale ? longPool : shortPool
+    // If cover/close buy, match against shortPool (sell shorts)
+    const matchingPool = isClosingLong ? longPool : shortPool
     
     const candidates = matchingPool
       .filter(p => areSubstantiallyIdentical(sale, p, options.includeOptions))
@@ -326,7 +365,7 @@ export function analyzeLots(
 
       const acquiredInternalIndices = new Set(acquiredTransactions.map(at => at.internalIndex))
 
-      // Potential replacements are any NEW buys (longPool) within the window
+      // Potential replacements are any NEW regular buys (longPool) within the window
       // that weren't part of the original position's cost basis
       const washCandidates = longPool
         .filter(p => areSubstantiallyIdentical(sale, p, options.includeOptions))
@@ -349,10 +388,7 @@ export function analyzeLots(
         disallowedLoss = (Math.abs(rawGainLoss) / sale.qty) * washQty
         washPurchaseId = candidate.id
 
-        // Important: Wash sale replacement shares are also "used" 
-        // they can't trigger ANOTHER wash sale disallowance for a different sale
-        // but they CAN still be used for cost basis of a later sale.
-        // Actually IRS rules are complex here, but for simple tracking:
+        // Mark shares as used for wash sale disallowance tracking
         sharesUsed.set(candidate.internalIndex, used + washQty)
         break
       }
@@ -394,7 +430,7 @@ export function analyzeLots(
       isWashSale,
       originalLoss: isLoss ? rawGainLoss : 0,
       disallowedLoss,
-      isShortSale: !isRegularSale,
+      isShortSale: isClosingShort,
     })
   }
 

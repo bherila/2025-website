@@ -1,7 +1,5 @@
 'use client'
 
-import { Info } from 'lucide-react'
-
 import CustomLink from '@/components/link'
 import {
     Dialog,
@@ -53,13 +51,16 @@ export function VariousTransactionsModal({ lot }: VariousTransactionsModalProps)
             <DialogTrigger asChild>
                 <CustomLink 
                     href="#" 
-                    className="text-sm inline-flex items-center gap-1 group cursor-pointer"
+                    onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                    }}
+                    className="text-sm cursor-pointer"
                 >
                     {label}
-                    <Info className="h-3 w-3 opacity-70 group-hover:opacity-100 transition-opacity" />
                 </CustomLink>
             </DialogTrigger>
-            <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
+            <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col" onPointerDownOutside={(e) => e.preventDefault()}>
                 <DialogHeader>
                     <DialogTitle>Acquired Transactions Details</DialogTitle>
                 </DialogHeader>
@@ -86,7 +87,7 @@ export function VariousTransactionsModal({ lot }: VariousTransactionsModalProps)
                             </TableHeader>
                             <TableBody>
                                 {lot.acquiredTransactions.map((tx, idx) => (
-                                    <TableRow key={tx.id ?? idx}>
+                                    <TableRow key={`${tx.id}-${tx.internalIndex}-${idx}`}>
                                         <TableCell>{formatDate(tx.date)}</TableCell>
                                         <TableCell className="max-w-[300px] truncate" title={tx.description}>
                                             {tx.description}
