@@ -136,7 +136,15 @@ class FinanceTransactionTaggingApiController extends Controller
 
         $tag = FinAccountTag::where('tag_id', $request->tag_id)
             ->where('tag_userid', $uid)
-            ->firstOrFail();
+            ->first();
+
+        if (!$tag) {
+            \Illuminate\Support\Facades\Log::warning('Tag not found for user', [
+                'uid' => $uid,
+                'tag_id' => $request->tag_id,
+            ]);
+            return response()->json(['error' => 'Tag not found'], 404);
+        }
 
         $transaction_ids = explode(',', $request->transaction_ids);
 

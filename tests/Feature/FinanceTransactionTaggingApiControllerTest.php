@@ -62,4 +62,50 @@ class FinanceTransactionTaggingApiControllerTest extends TestCase
             ->assertJsonPath('data.0.tag_label', 'Travel')
             ->assertJsonPath('data.0.transaction_count', 0);
     }
+
+    public function test_apply_tag_to_transactions(): void
+    {
+        $user = $this->createUser();
+        $this->actingAs($user);
+
+        $tag = FinAccountTag::create([
+            'tag_userid' => $user->id,
+            'tag_label' => 'Work',
+            'tag_color' => 'blue',
+        ]);
+
+        // Creating dummy transaction IDs since we just want to test if the route is found
+        // and validation passes. We don't necessarily need real transaction records
+        // for testing if it reaches the controller and finds the tag.
+        // Wait, the controller calls updateOrCreate, which might fail on FKs.
+        // Let's create a real transaction.
+        $acct = \App\Models\FinanceTool\FinAccounts::create([
+            'acct_userid' => $user->id,
+            'acct_name' => 'Test Account',
+            'acct_currency' => 'USD',
+            'acct_type' => 'Asset',
+        ]);
+        $t = \App\Models\FinanceTool\FinAccountLineItems::create([
+            't_account' => $acct->acct_id,
+            't_date' => '2023-01-01',
+            't_amt' => 100,
+            't_description' => 'Test',
+        ]);
+
+        $response = $this->postJson('/api/finance/tags-apply', [
+            'tag_id' => $tag->tag_id,
+            'transaction_ids' => (string)$t->t_id,
+        ]);
+
+        $response->assertOk()->assertJson(['success' => true]);
+    }
+
+    public function test_apply_tag_route_not_found_on_get(): void
+    {
+        $user = $this->createUser();
+        $response = $this->actingAs($user)->getJson('/api/finance/tags-apply');
+        
+        // Should be 405 Method Not Allowed if route exists, 404 if not found at all
+        $response->assertStatus(405);
+    }
 }

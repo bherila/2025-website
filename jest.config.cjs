@@ -7,6 +7,7 @@ const config = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/resources/js/$1',
     '^pdfjs-dist$': '<rootDir>/resources/js/__mocks__/pdfjs-dist.ts',
+    '\\.(css|less|scss|sass)$': '<rootDir>/resources/js/__mocks__/styleMock.ts',
   },
   transformIgnorePatterns: [
     '/node_modules/(?!dayjs).+\\.js$',

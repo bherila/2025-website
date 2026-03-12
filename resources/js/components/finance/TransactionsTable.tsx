@@ -89,7 +89,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
   const handleApplyTag = async (tagId: number, tagLabel: string) => {
     const transactionIds = sortedData.map((r) => r.t_id).join(',')
     try {
-      await fetchWrapper.post('/api/finance/tags/apply', { tag_id: tagId, transaction_ids: transactionIds })
+      await fetchWrapper.post('/api/finance/tags-apply', { tag_id: tagId, transaction_ids: transactionIds })
       if (typeof refreshFn === 'function') {
         refreshFn()
       }
