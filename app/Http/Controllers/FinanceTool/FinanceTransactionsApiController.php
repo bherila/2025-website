@@ -12,50 +12,27 @@ use Illuminate\Support\Facades\Auth;
 class FinanceTransactionsApiController extends Controller
 {
     /**
-     * Get line items (transactions) for an account
+     * Get line items (transactions) for one or all accounts
      */
-    public function getLineItems(Request $request, $account_id)
+    public function getLineItems(Request $request, $account_id = null)
     {
         $uid = Auth::id();
-        $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
 
-        $query = FinAccountLineItems::where('t_account', $account->acct_id)
-            ->with(['tags', 'parentTransactions.account', 'childTransactions.account', 'clientExpense.clientCompany'])
+        if ($account_id) {
+            $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+            $query = FinAccountLineItems::where('t_account', $account->acct_id);
+        } else {
+            // Get all account IDs for this user
+            $accountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
+            $query = FinAccountLineItems::whereIn('t_account', $accountIds);
+        }
+
+        $query->with(['tags', 'parentTransactions.account', 'childTransactions.account', 'clientExpense.clientCompany'])
             ->orderBy('t_date', 'desc');
 
         if ($request->has('start_date') && $request->has('end_date')) {
             $query->whereBetween('t_date', [$request->start_date, $request->end_date]);
         }
-
-        // Filter by year if provided
-        if ($request->has('year')) {
-            $year = $request->year;
-            $query->whereYear('t_date', $year);
-        }
-
-        $lineItems = $query->get();
-
-        // Transform line items to include parent_of_t_ids array
-        $lineItems = $lineItems->map(function ($item) {
-            return $this->transformLineItem($item);
-        });
-
-        return response()->json($lineItems);
-    }
-
-    /**
-     * Get line items (transactions) across all accounts for the current user
-     */
-    public function getAllLineItems(Request $request)
-    {
-        $uid = Auth::id();
-
-        // Get all account IDs for this user
-        $accountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
-
-        $query = FinAccountLineItems::whereIn('t_account', $accountIds)
-            ->with(['tags', 'parentTransactions.account', 'childTransactions.account', 'clientExpense.clientCompany'])
-            ->orderBy('t_date', 'desc');
 
         // Filter by year if provided
         if ($request->has('year')) {
@@ -289,6 +266,24 @@ class FinanceTransactionsApiController extends Controller
     }
 
     /**
+     * Get available years for transactions across all accounts
+     */
+    public function getAllTransactionYears(Request $request)
+    {
+        $uid = Auth::id();
+        $accountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
+
+        $years = FinAccountLineItems::whereIn('t_account', $accountIds)
+            ->selectRaw('DISTINCT YEAR(t_date) as year')
+            ->whereNotNull('t_date')
+            ->orderBy('year', 'desc')
+            ->pluck('year')
+            ->toArray();
+
+        return response()->json($years);
+    }
+
+    /**
      * Get available years for transactions in an account
      */
     public function getTransactionYears(Request $request, $account_id)
@@ -298,6 +293,7 @@ class FinanceTransactionsApiController extends Controller
 
         $years = FinAccountLineItems::where('t_account', $account->acct_id)
             ->selectRaw('DISTINCT YEAR(t_date) as year')
+            ->whereNotNull('t_date')
             ->orderBy('year', 'desc')
             ->pluck('year')
             ->toArray();

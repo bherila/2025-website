@@ -18,12 +18,35 @@ import FinanceSubNav from './FinanceSubNav'
 import LotAnalyzer from './LotAnalyzer'
 import TransactionsTable from './TransactionsTable'
 
+type FilterType = 'all' | 'cash' | 'stock'
+
 export default function AllTransactionsPage() {
     const [data, setData] = useState<AccountLineItem[] | null>(null)
-    const [isLoading, setIsLoading] = useState(true)
-    const [selectedYear, setSelectedYear] = useState<string>('all')
+    const [isLoading, setIsLoading] = useState(false)
+    const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString())
     const [availableYears, setAvailableYears] = useState<number[]>([])
     const [showLotAnalyzer, setShowLotAnalyzer] = useState(false)
+    const [filter, setFilter] = useState<FilterType>('all')
+
+    const fetchYears = useCallback(async () => {
+        try {
+            const years = await fetchWrapper.get('/api/finance/all-transaction-years')
+            if (Array.isArray(years)) {
+                setAvailableYears(years)
+                // If current year is not in available years, default to "all" or first available
+                const currentYearStr = new Date().getFullYear().toString()
+                if (!years.includes(parseInt(currentYearStr))) {
+                    if (years.length > 0) {
+                        setSelectedYear(String(years[0]))
+                    } else {
+                        setSelectedYear('all')
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching available years:', error)
+        }
+    }, [])
 
     const fetchData = useCallback(async () => {
         try {
@@ -32,15 +55,6 @@ export default function AllTransactionsPage() {
             const fetchedData = await fetchWrapper.get(`/api/finance/all-line-items${yearParam}`)
             const parsedData = z.array(AccountLineItemSchema).parse(fetchedData)
             setData(parsedData.filter(Boolean))
-
-            // Extract available years from data
-            if (selectedYear === 'all' && parsedData.length > 0) {
-                const years = [...new Set(parsedData.map(t => {
-                    const d = t.t_date
-                    return d ? parseInt(d.substring(0, 4), 10) : null
-                }).filter((y): y is number => y !== null && !isNaN(y)))].sort((a, b) => b - a)
-                setAvailableYears(years)
-            }
         } catch (error) {
             console.error('Error fetching all transactions:', error)
             setData([])
@@ -50,8 +64,15 @@ export default function AllTransactionsPage() {
     }, [selectedYear])
 
     useEffect(() => {
-        fetchData()
-    }, [fetchData])
+        fetchYears()
+    }, [fetchYears])
+
+    const filteredData = data?.filter(item => {
+        if (filter === 'all') return true
+        if (filter === 'stock') return !!item.t_symbol
+        if (filter === 'cash') return !item.t_symbol
+        return true
+    })
 
     return (
         <>
@@ -72,36 +93,75 @@ export default function AllTransactionsPage() {
                             ))}
                         </SelectContent>
                     </Select>
-                    <Button
-                        variant={showLotAnalyzer ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => setShowLotAnalyzer(!showLotAnalyzer)}
+                    
+                    <div className="flex items-center gap-2 border rounded-md p-1 bg-muted/30">
+                        <Button
+                            variant={filter === 'all' ? 'secondary' : 'ghost'}
+                            size="sm"
+                            className="h-8"
+                            onClick={() => setFilter('all')}
+                        >
+                            Show All
+                        </Button>
+                        <Button
+                            variant={filter === 'cash' ? 'secondary' : 'ghost'}
+                            size="sm"
+                            className="h-8"
+                            onClick={() => setFilter('cash')}
+                        >
+                            Cash Only
+                        </Button>
+                        <Button
+                            variant={filter === 'stock' ? 'secondary' : 'ghost'}
+                            size="sm"
+                            className="h-8"
+                            onClick={() => setFilter('stock')}
+                        >
+                            Stock Only
+                        </Button>
+                    </div>
+
+                    <Button 
+                        onClick={fetchData} 
+                        disabled={isLoading}
                     >
-                        {showLotAnalyzer ? 'Hide Lot Analyzer' : 'Lot Analyzer'}
+                        {isLoading ? 'Loading...' : 'Get Transactions'}
                     </Button>
-                    {isLoading && <Spinner className="h-4 w-4" />}
+
+                    <div className="ml-auto flex items-center gap-4">
+                        <Button
+                            variant={showLotAnalyzer ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => setShowLotAnalyzer(!showLotAnalyzer)}
+                        >
+                            {showLotAnalyzer ? 'Hide Lot Analyzer' : 'Lot Analyzer'}
+                        </Button>
+                        {isLoading && <Spinner className="h-4 w-4" />}
+                    </div>
                 </div>
 
-                {showLotAnalyzer && data && data.length > 0 && (
+                {showLotAnalyzer && filteredData && filteredData.length > 0 && (
                     <div className="mb-6">
-                        <LotAnalyzer transactions={data} />
+                        <LotAnalyzer transactions={filteredData} />
                     </div>
                 )}
 
-                {!isLoading && data && data.length === 0 && (
+                {!isLoading && data && filteredData && filteredData.length === 0 && (
                     <div className="text-center p-8 bg-muted rounded-lg">
                         <h2 className="text-xl font-semibold mb-4">No Transactions Found</h2>
                         <p className="mb-6">
-                            {selectedYear === 'all'
+                            {filter === 'stock' ? 'No stock transactions found' : 
+                             filter === 'cash' ? 'No cash transactions found' :
+                             selectedYear === 'all'
                                 ? 'No transactions found across your accounts.'
                                 : `No transactions found for ${selectedYear}.`}
                         </p>
                     </div>
                 )}
 
-                {data && data.length > 0 && (
+                {filteredData && filteredData.length > 0 && (
                     <TransactionsTable
-                        data={data}
+                        data={filteredData}
                         enableTagging
                     />
                 )}
