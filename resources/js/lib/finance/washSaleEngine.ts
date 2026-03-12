@@ -285,7 +285,7 @@ export function analyzeLots(
   // Track how many shares of each transaction have been "used"
   const sharesUsed = new Map<number, number>()
 
-  const results: LotSale[] = []
+  const rawResults: LotSale[] = []
 
   // All closing transactions (regular sales of long positions, and cover/close buys of short positions)
   const allClosing = parsed.filter(t => isClosingTransaction(t.type))
@@ -298,19 +298,8 @@ export function analyzeLots(
     const isClosingLong = isRegularSale(sale.type)
 
     let remainingQty = sale.qty
-    const proceeds = Math.abs(sale.amount)
     
-    let costBasis = 0
-    const acquiredTransactions: Array<{
-      id: number | undefined
-      internalIndex: number
-      date: string
-      qty: number
-      price: number
-      description: string
-    }> = []
-
-    // 1. MATCHING: Find the lots that were closed by this transaction
+    // MATCHING: Find the lots that were closed by this transaction
     // If regular sale, match against longPool (buys)
     // If cover/close buy, match against shortPool (sell shorts)
     const matchingPool = isClosingLong ? longPool : shortPool
@@ -320,6 +309,9 @@ export function analyzeLots(
       .filter(p => p.date.getTime() <= sale.date.getTime()) // established before or on closing date
       .sort((a, b) => a.date.getTime() - b.date.getTime()) // FIFO
 
+    const stMatches: any[] = []
+    const ltMatches: any[] = []
+
     for (const candidate of candidates) {
       if (remainingQty <= 0) break
 
@@ -328,114 +320,166 @@ export function analyzeLots(
       if (available > 0) {
         const qtyToUse = Math.min(remainingQty, available)
         const unitPrice = candidate.price > 0 ? candidate.price : (Math.abs(candidate.amount) / candidate.qty)
-        
-        costBasis += unitPrice * qtyToUse
-        
-        acquiredTransactions.push({
+        const holdingDays = daysBetween(candidate.date, sale.date)
+        const isShortTerm = holdingDays <= 365
+
+        const match = {
           id: candidate.id,
           internalIndex: candidate.internalIndex,
           date: candidate.dateStr,
           qty: qtyToUse,
           price: unitPrice,
           description: candidate.description,
-        })
+        }
+
+        if (isShortTerm) stMatches.push(match)
+        else ltMatches.push(match)
 
         sharesUsed.set(candidate.internalIndex, used + qtyToUse)
         remainingQty -= qtyToUse
       }
     }
 
-    // Estimate basis for remainder if not fully matched
+    // Handle remainder (unmatched portions) - assign to ST by default
+    const unmatched: any[] = []
     if (remainingQty > 0) {
-      costBasis += (sale.price > 0 ? sale.price : 0) * remainingQty
+      unmatched.push({
+        id: undefined,
+        internalIndex: -1,
+        date: null,
+        qty: remainingQty,
+        price: sale.price > 0 ? sale.price : 0,
+        description: 'Unmatched',
+      })
     }
 
-    const rawGainLoss = proceeds - costBasis
-    const isLoss = rawGainLoss < 0
+    // Process ST and LT portions as separate potential LotSale records
+    const portions = [
+      { matches: stMatches.concat(unmatched), isShortTerm: true },
+      { matches: ltMatches, isShortTerm: false }
+    ].filter(p => p.matches.length > 0)
 
-    // 2. WASH SALE DETECTION (only for losses)
-    let isWashSale = false
-    let disallowedLoss = 0
-    let washPurchaseId: number | undefined = undefined
+    for (const portion of portions) {
+      const portionQty = portion.matches.reduce((sum: number, m: any) => sum + m.qty, 0)
+      const portionProceeds = (Math.abs(sale.amount) / sale.qty) * portionQty
+      const portionCostBasis = portion.matches.reduce((sum: number, m: any) => sum + (m.price * m.qty), 0)
+      const rawGainLoss = portionProceeds - portionCostBasis
+      const isLoss = rawGainLoss < 0
 
-    if (isLoss) {
-      const washWindowStart = new Date(sale.date)
-      washWindowStart.setDate(washWindowStart.getDate() - 30)
-      const washWindowEnd = new Date(sale.date)
-      washWindowEnd.setDate(washWindowEnd.getDate() + 30)
+      // Wash sale detection for this portion
+      let isWashSale = false
+      let disallowedLoss = 0
+      let washPurchaseId: number | undefined = undefined
 
-      const acquiredInternalIndices = new Set(acquiredTransactions.map(at => at.internalIndex))
+      if (isLoss) {
+        const washWindowStart = new Date(sale.date)
+        washWindowStart.setDate(washWindowStart.getDate() - 30)
+        const washWindowEnd = new Date(sale.date)
+        washWindowEnd.setDate(washWindowEnd.getDate() + 30)
 
-      // Potential replacements are any NEW regular buys (longPool) within the window
-      // that weren't part of the original position's cost basis
-      const washCandidates = longPool
-        .filter(p => areSubstantiallyIdentical(sale, p, options.includeOptions))
-        .filter(p => p.date >= washWindowStart && p.date <= washWindowEnd)
-        .filter(p => !acquiredInternalIndices.has(p.internalIndex))
-        .sort((a, b) => {
-          const aAfter = a.date >= sale.date ? 0 : 1
-          const bAfter = b.date >= sale.date ? 0 : 1
-          if (aAfter !== bAfter) return aAfter - bAfter
-          return Math.abs(a.date.getTime() - sale.date.getTime()) - Math.abs(b.date.getTime() - sale.date.getTime())
-        })
+        const acquiredInternalIndices = new Set(portion.matches.map((m: any) => m.internalIndex))
 
-      for (const candidate of washCandidates) {
-        const used = sharesUsed.get(candidate.internalIndex) ?? 0
-        const available = candidate.qty - used
-        if (available <= 0) continue
+        const washCandidates = longPool
+          .filter(p => areSubstantiallyIdentical(sale, p, options.includeOptions))
+          .filter(p => p.date >= washWindowStart && p.date <= washWindowEnd)
+          .filter(p => !acquiredInternalIndices.has(p.internalIndex))
+          .sort((a, b) => {
+            const aAfter = a.date >= sale.date ? 0 : 1
+            const bAfter = b.date >= sale.date ? 0 : 1
+            if (aAfter !== bAfter) return aAfter - bAfter
+            return Math.abs(a.date.getTime() - sale.date.getTime()) - Math.abs(b.date.getTime() - sale.date.getTime())
+          })
 
-        isWashSale = true
-        const washQty = Math.min(sale.qty, available)
-        disallowedLoss = (Math.abs(rawGainLoss) / sale.qty) * washQty
-        washPurchaseId = candidate.id
+        for (const candidate of washCandidates) {
+          const used = sharesUsed.get(candidate.internalIndex) ?? 0
+          const available = candidate.qty - used
+          if (available <= 0) continue
 
-        // Mark shares as used for wash sale disallowance tracking
-        sharesUsed.set(candidate.internalIndex, used + washQty)
-        break
+          isWashSale = true
+          const washQty = Math.min(portionQty, available)
+          disallowedLoss = (Math.abs(rawGainLoss) / portionQty) * washQty
+          washPurchaseId = candidate.id
+          sharesUsed.set(candidate.internalIndex, used + washQty)
+          break
+        }
       }
+
+      const adjustmentAmount = isWashSale ? disallowedLoss : 0
+      const adjustmentCode = isWashSale ? 'W' : ''
+      const gainOrLoss = rawGainLoss + adjustmentAmount
+
+      let dateAcquired: string | null = null
+      const actualMatches = portion.matches.filter((m: any) => m.internalIndex !== -1)
+      if (actualMatches.length === 1) {
+        dateAcquired = actualMatches[0].date
+      } else if (actualMatches.length > 1) {
+        dateAcquired = null // "Various"
+      }
+
+      rawResults.push({
+        description: `${portionQty} sh. ${sale.symbol}`,
+        symbol: sale.symbol,
+        dateAcquired,
+        acquiredTransactions: actualMatches,
+        dateSold: sale.dateStr,
+        proceeds: portionProceeds,
+        costBasis: portionCostBasis,
+        adjustmentCode,
+        adjustmentAmount,
+        gainOrLoss,
+        isShortTerm: portion.isShortTerm,
+        quantity: portionQty,
+        saleTransactionId: sale.id,
+        washPurchaseTransactionId: washPurchaseId,
+        isWashSale,
+        originalLoss: isLoss ? rawGainLoss : 0,
+        disallowedLoss,
+        isShortSale: isClosingShort,
+      })
     }
-
-    const adjustmentAmount = isWashSale ? disallowedLoss : 0
-    const adjustmentCode = isWashSale ? 'W' : ''
-    const gainOrLoss = rawGainLoss + adjustmentAmount
-
-    // 3. RESULTS
-    let dateAcquired: string | null = null
-    if (acquiredTransactions.length === 1) {
-      dateAcquired = acquiredTransactions[0].date
-    } else if (acquiredTransactions.length > 1) {
-      dateAcquired = null // "Various"
-    }
-
-    let isShortTerm = true
-    if (dateAcquired) {
-      const holdingDays = daysBetween(parseDate(dateAcquired), sale.date)
-      isShortTerm = holdingDays <= 365
-    }
-
-    results.push({
-      description: `${sale.qty} sh. ${sale.symbol}`,
-      symbol: sale.symbol,
-      dateAcquired,
-      acquiredTransactions,
-      dateSold: sale.dateStr,
-      proceeds,
-      costBasis,
-      adjustmentCode,
-      adjustmentAmount,
-      gainOrLoss,
-      isShortTerm,
-      quantity: sale.qty,
-      saleTransactionId: sale.id,
-      washPurchaseTransactionId: washPurchaseId,
-      isWashSale,
-      originalLoss: isLoss ? rawGainLoss : 0,
-      disallowedLoss,
-      isShortSale: isClosingShort,
-    })
   }
 
-  return results
+  // Merge records on the same date with the same term and adjustment code
+  return mergeLotSales(rawResults)
+}
+
+/**
+ * Merge LotSale records that occurred on the same day and have the same term/adjustments.
+ */
+function mergeLotSales(lots: LotSale[]): LotSale[] {
+  const merged: Map<string, LotSale> = new Map()
+
+  for (const lot of lots) {
+    // Key for grouping: symbol, dateSold, term, shortSale status, and adjustment code
+    const key = `${lot.symbol}|${lot.dateSold}|${lot.isShortTerm}|${lot.isShortSale}|${lot.adjustmentCode}`
+    
+    const existing = merged.get(key)
+    if (existing) {
+      existing.quantity += lot.quantity
+      existing.proceeds += lot.proceeds
+      existing.costBasis += lot.costBasis
+      existing.adjustmentAmount += lot.adjustmentAmount
+      existing.gainOrLoss += lot.gainOrLoss
+      existing.originalLoss += lot.originalLoss
+      existing.disallowedLoss += lot.disallowedLoss
+      existing.description = `${existing.quantity} sh. ${existing.symbol}`
+      
+      // Update date acquired
+      if (existing.dateAcquired !== lot.dateAcquired) {
+        existing.dateAcquired = null // Becomes "Various"
+      }
+      
+      // Merge acquired transactions
+      if (lot.acquiredTransactions) {
+        existing.acquiredTransactions = (existing.acquiredTransactions || []).concat(lot.acquiredTransactions)
+      }
+    } else {
+      // Clone to avoid mutating original
+      merged.set(key, { ...lot })
+    }
+  }
+
+  return Array.from(merged.values())
 }
 
 // ============================================================================
