@@ -17,6 +17,7 @@ The finance module uses a multi-level navigation system:
 A shared sub-navigation bar across all finance pages providing quick access to:
 - **Accounts** — Account list and management
 - **All Transactions** — Cross-account transaction view with Lot Analyzer
+- **Schedule C** — Tax year summary for IRS Schedule C expenses and home office deductions
 - **RSU** — Restricted Stock Unit tracking
 - **Payslips** — Payslip management
 
