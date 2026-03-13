@@ -14,28 +14,42 @@ class FinanceTransactionTaggingApiController extends Controller
     {
         $uid = Auth::id();
 
-        $query = FinAccountTag::where('tag_userid', $uid)
-            ->whereNull('when_deleted');
+        $tags = FinAccountTag::where('tag_userid', $uid)
+            ->whereNull('when_deleted')
+            ->get(['tag_id', 'tag_label', 'tag_color']);
 
-        // Include transaction counts if requested
-        if ($request->get('include_counts') === 'true') {
-            $tags = $query->get(['tag_id', 'tag_label', 'tag_color']);
+        $includeCounts = $request->get('include_counts') === 'true';
+        $includeTotals = $request->get('totals') === 'true';
 
-            // Get counts for each tag
-            $tags = $tags->map(function ($tag) {
-                $tag->transaction_count = FinAccountLineItemTagMap::where('tag_id', $tag->tag_id)
+        if ($includeCounts || $includeTotals) {
+            $tags = $tags->map(function ($tag) use ($includeCounts, $includeTotals) {
+                // Fetch active transaction IDs once (shared by counts and totals)
+                $tIds = FinAccountLineItemTagMap::where('tag_id', $tag->tag_id)
                     ->whereNull('when_deleted')
-                    ->count();
+                    ->pluck('t_id');
+
+                if ($includeCounts) {
+                    $tag->transaction_count = $tIds->count();
+                }
+
+                if ($includeTotals) {
+                    $yearlyTotals = \App\Models\FinanceTool\FinAccountLineItems::whereIn('t_id', $tIds)
+                        ->selectRaw("SUBSTR(t_date, 1, 4) as year, SUM(CAST(t_amt AS NUMERIC)) as total")
+                        ->groupBy('year')
+                        ->orderBy('year')
+                        ->get()
+                        ->pluck('total', 'year')
+                        ->map(fn($v) => (float) $v)
+                        ->toArray();
+
+                    // Add an 'all' entry for the sum across all years
+                    $yearlyTotals['all'] = array_sum($yearlyTotals);
+                    $tag->totals = $yearlyTotals;
+                }
 
                 return $tag;
             });
-
-            return response()->json([
-                'data' => $tags->values(),
-            ]);
         }
-
-        $tags = $query->get(['tag_id', 'tag_label', 'tag_color']);
 
         return response()->json([
             'data' => $tags->values(),

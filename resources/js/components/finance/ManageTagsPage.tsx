@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 
+import { TagTotalsView } from '@/components/finance/TagTotalsView'
 import { type FinanceTag, useFinanceTags } from '@/components/finance/useFinanceTags'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
@@ -34,7 +35,7 @@ const TAG_COLORS = [
 ]
 
 export default function ManageTagsPage() {
-  const { tags, isLoading, error: tagsError, refreshTags } = useFinanceTags({ includeCounts: true })
+  const { tags, isLoading, error: tagsError, refreshTags } = useFinanceTags({ includeCounts: true, includeTotals: true })
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   
@@ -349,6 +350,14 @@ export default function ManageTagsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Totals by Tag Section */}
+      {tags.some((t) => t.totals) && (
+        <div className="mt-8">
+          <h2 className="text-lg font-semibold mb-4">Totals by Tag</h2>
+          <TagTotalsView tags={tags} isLoading={isLoading} error={tagsError} />
+        </div>
+      )}
 
       {/* Back to accounts link */}
       <div className="mt-8 pt-4 border-t">

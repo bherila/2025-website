@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { collectTagsFromRows, type TransactionTag } from '@/components/finance/transactionsTableTags'
 import { useFinanceTags } from '@/components/finance/useFinanceTags'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -886,30 +887,39 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
 
       {enableTagging && (
         <div className="mt-4 p-4 border rounded">
-          <div className="flex flex-wrap items-center gap-4">
-            <span>Apply tag to {sortedData.length} selected transactions:</span>
-            {isLoadingTags ? (
-              <Spinner size="small" />
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {availableTags.map((tag) => (
-                  <TagApplyButton
-                    key={tag.tag_id}
-                    tagId={tag.tag_id}
-                    tagLabel={tag.tag_label}
-                    tagColor={tag.tag_color}
-                    disabled={sortedData.length === 0}
-                    onApplyTag={handleApplyTag}
-                  />
-                ))}
-                <a href="/finance/tags" className="ml-auto">
-                  <Button variant="secondary" size="sm">
-                    Manage Tags
-                  </Button>
-                </a>
-              </div>
-            )}
-          </div>
+          {sortedData.length > 1000 ? (
+            <Alert variant="destructive">
+              <AlertDescription>
+                There are too many items to tag ({sortedData.length.toLocaleString()} transactions). Please refine your
+                view to fewer than 1,000 items before applying tags.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <div className="flex flex-wrap items-center gap-4">
+              <span>Apply tag to {sortedData.length} selected transactions:</span>
+              {isLoadingTags ? (
+                <Spinner size="small" />
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {availableTags.map((tag) => (
+                    <TagApplyButton
+                      key={tag.tag_id}
+                      tagId={tag.tag_id}
+                      tagLabel={tag.tag_label}
+                      tagColor={tag.tag_color}
+                      disabled={sortedData.length === 0}
+                      onApplyTag={handleApplyTag}
+                    />
+                  ))}
+                  <a href="/finance/tags" className="ml-auto">
+                    <Button variant="secondary" size="sm">
+                      Manage Tags
+                    </Button>
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

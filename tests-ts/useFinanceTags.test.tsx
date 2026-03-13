@@ -48,6 +48,18 @@ describe('useFinanceTags', () => {
     expect(fetchWrapper.get).toHaveBeenCalledWith('/api/finance/tags?include_counts=true')
   })
 
+  it('uses totals query when includeTotals is requested', async () => {
+    ;(fetchWrapper.get as jest.Mock).mockResolvedValue({ data: [] })
+
+    const { result } = renderHook(() => useFinanceTags({ includeTotals: true }))
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false)
+    })
+
+    expect(fetchWrapper.get).toHaveBeenCalledWith('/api/finance/tags?totals=true')
+  })
+
   it('falls back to supplied tags on API error', async () => {
     ;(fetchWrapper.get as jest.Mock).mockRejectedValue(new Error('network'))
 
@@ -60,5 +72,21 @@ describe('useFinanceTags', () => {
 
     expect(result.current.tags).toEqual(fallbackTags)
     expect(result.current.error).toBe('network')
+  })
+
+  it('does not loop infinitely when called with default inline fallbackTags', async () => {
+    ;(fetchWrapper.get as jest.Mock).mockResolvedValue({ data: [] })
+
+    // Simulate the ManageTagsPage call pattern: no fallbackTags provided
+    // which means the default value [] is used — a new array on every render.
+    // This should NOT cause an infinite fetch loop.
+    const { result } = renderHook(() => useFinanceTags())
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false)
+    })
+
+    // The API should be called exactly once, not in an infinite loop
+    expect(fetchWrapper.get).toHaveBeenCalledTimes(1)
   })
 })
