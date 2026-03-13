@@ -15,6 +15,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import {
+  BreadcrumbItem,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
@@ -23,6 +28,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { deletePayslip,savePayslip } from '@/lib/api'
 import { parseDate } from '@/lib/DateHelper'
 
+import FinanceSubNav from '../finance/FinanceSubNav'
 import type { fin_payslip } from './payslipDbCols'
 import { fin_payslip_schema } from './payslipDbCols'
 
@@ -164,199 +170,212 @@ export default function PayrollForm({ initialPayslip }: PayslipDetailClientProps
   }
 
   return (
-    <div className="container">
-      {apiError && (
-        <AlertDialog open={!!apiError} onOpenChange={clearApiError}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Error</AlertDialogTitle>
-              <AlertDialogDescription>{apiError}</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogAction onClick={clearApiError}>OK</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      )}
+    <>
+      <FinanceSubNav
+        activeSection="payslips"
+        breadcrumbItems={
+          <>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>{initialPayslip ? 'Edit Payslip' : 'Add Payslip'}</BreadcrumbPage>
+            </BreadcrumbItem>
+          </>
+        }
+      />
+      <div className="container mt-6">
+        {apiError && (
+          <AlertDialog open={!!apiError} onOpenChange={clearApiError}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Error</AlertDialogTitle>
+                <AlertDialogDescription>{apiError}</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogAction onClick={clearApiError}>OK</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
 
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-          <div className="grid grid-cols-4 gap-4 border p-4 rounded-md">
-            <FormField
-              control={form.control}
-              name="period_start"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Period Start</FormLabel>
-                  <FormControl>
-                    <Input type="date" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="period_end"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Period End</FormLabel>
-                  <FormControl>
-                    <Input type="date" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="pay_date"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Pay Date</FormLabel>
-                  <FormControl>
-                    <Input type="date" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="ps_comment"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Comment</FormLabel>
-                  <FormControl>
-                    <Textarea {...field} value={field.value ?? ''} placeholder="Optional notes about this payslip" />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+            <div className="grid grid-cols-4 gap-4 border p-4 rounded-md">
+              <FormField
+                control={form.control}
+                name="period_start"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Period Start</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="period_end"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Period End</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="pay_date"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Pay Date</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="ps_comment"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Comment</FormLabel>
+                    <FormControl>
+                      <Textarea {...field} value={field.value ?? ''} placeholder="Optional notes about this payslip" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <PayslipFormSection
-              title="Earnings"
-              fields={[
-                'ps_salary',
-                'earnings_gross',
-                'earnings_bonus',
-                'earnings_rsu',
-                'earnings_net_pay',
-                'ps_vacation_payout',
-              ]}
-              control={form.control}
-            />
-            <PayslipFormSection
-              title="Imputed Income"
-              fields={['imp_legal', 'imp_fitness', 'imp_ltd', 'imp_other']}
-              control={form.control}
-            />
-            <PayslipFormSection
-              title="Federal Taxes Paid"
-              fields={['ps_oasdi', 'ps_medicare', 'ps_fed_tax', 'ps_fed_tax_addl', 'ps_fed_tax_refunded']}
-              control={form.control}
-            />
-            <PayslipFormSection
-              title="State Taxes"
-              fields={['ps_state_tax', 'ps_state_disability', 'ps_state_tax_addl']}
-              control={form.control}
-            />
-            <PayslipFormSection
-              title="Retirement Savings"
-              fields={['ps_401k_pretax', 'ps_401k_aftertax', 'ps_401k_employer']}
-              control={form.control}
-            />
-            <PayslipFormSection
-              title="Pretax Deductions"
-              fields={['ps_pretax_medical', 'ps_pretax_fsa', 'ps_pretax_vision', 'ps_pretax_dental']}
-              control={form.control}
-            />
-          </div>
+            <div className="grid grid-cols-2 gap-4">
+              <PayslipFormSection
+                title="Earnings"
+                fields={[
+                  'ps_salary',
+                  'earnings_gross',
+                  'earnings_bonus',
+                  'earnings_rsu',
+                  'earnings_net_pay',
+                  'ps_vacation_payout',
+                ]}
+                control={form.control}
+              />
+              <PayslipFormSection
+                title="Imputed Income"
+                fields={['imp_legal', 'imp_fitness', 'imp_ltd', 'imp_other']}
+                control={form.control}
+              />
+              <PayslipFormSection
+                title="Federal Taxes Paid"
+                fields={['ps_oasdi', 'ps_medicare', 'ps_fed_tax', 'ps_fed_tax_addl', 'ps_fed_tax_refunded']}
+                control={form.control}
+              />
+              <PayslipFormSection
+                title="State Taxes"
+                fields={['ps_state_tax', 'ps_state_disability', 'ps_state_tax_addl']}
+                control={form.control}
+              />
+              <PayslipFormSection
+                title="Retirement Savings"
+                fields={['ps_401k_pretax', 'ps_401k_aftertax', 'ps_401k_employer']}
+                control={form.control}
+              />
+              <PayslipFormSection
+                title="Pretax Deductions"
+                fields={['ps_pretax_medical', 'ps_pretax_fsa', 'ps_pretax_vision', 'ps_pretax_dental']}
+                control={form.control}
+              />
+            </div>
 
-          {hasYearChanged && (
-            <Alert variant="destructive">
-              <AlertTitle>Tax Year Change Warning</AlertTitle>
-              <AlertDescription>
-                The pay date year has changed. This will cause the payslip to move to a different Tax Year.
-              </AlertDescription>
-            </Alert>
-          )}
-
-          <div className="flex items-center justify-between">
-            <FormField
-              control={form.control}
-              name="ps_is_estimated"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                  <FormControl>
-                    <Checkbox checked={field.value ?? false} onCheckedChange={field.onChange} />
-                  </FormControl>
-                  <FormLabel>Values are estimated</FormLabel>
-                </FormItem>
-              )}
-            />
-
-            {initialPayslip && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="destructive" type="button">
-                    <Trash2 className="mr-2 h-4 w-4" /> Delete
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This action cannot be undone. This will permanently delete this payslip entry.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDelete} disabled={isDeleting}>
-                      {isDeleting ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Deleting...
-                        </>
-                      ) : (
-                        'Delete'
-                      )}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+            {hasYearChanged && (
+              <Alert variant="destructive">
+                <AlertTitle>Tax Year Change Warning</AlertTitle>
+                <AlertDescription>
+                  The pay date year has changed. This will cause the payslip to move to a different Tax Year.
+                </AlertDescription>
+              </Alert>
             )}
 
-            <div className="flex space-x-2">
+            <div className="flex items-center justify-between">
+              <FormField
+                control={form.control}
+                name="ps_is_estimated"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                    <FormControl>
+                      <Checkbox checked={field.value ?? false} onCheckedChange={field.onChange} />
+                    </FormControl>
+                    <FormLabel>Values are estimated</FormLabel>
+                  </FormItem>
+                )}
+              />
+
               {initialPayslip && (
-                <Button type="submit" onClick={() => setSaveMode('edit')} disabled={isSubmitting}>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" type="button">
+                      <Trash2 className="mr-2 h-4 w-4" /> Delete
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This action cannot be undone. This will permanently delete this payslip entry.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleDelete} disabled={isDeleting}>
+                        {isDeleting ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Deleting...
+                          </>
+                        ) : (
+                          'Delete'
+                        )}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+
+              <div className="flex space-x-2">
+                {initialPayslip && (
+                  <Button type="submit" onClick={() => setSaveMode('edit')} disabled={isSubmitting}>
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving Edits...
+                      </>
+                    ) : (
+                      'Save Edits'
+                    )}
+                  </Button>
+                )}
+                <Button type="submit" onClick={() => setSaveMode('new')} disabled={isSubmitting}>
                   {isSubmitting ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Saving Edits...
+                      Saving...
                     </>
                   ) : (
-                    'Save Edits'
+                    'Save as New'
                   )}
                 </Button>
-              )}
-              <Button type="submit" onClick={() => setSaveMode('new')} disabled={isSubmitting}>
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  'Save as New'
-                )}
-              </Button>
+              </div>
             </div>
-          </div>
-        </form>
-      </Form>
-    </div>
+          </form>
+        </Form>
+      </div>
+    </>
   )
 }

@@ -76,6 +76,7 @@ Route::middleware(['web', 'auth'])->get('/finance/statement/{statement_id}/detai
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/all-statement-details', [StatementController::class, 'getFinStatementDetails']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/import-ib-statement', [StatementController::class, 'importIbStatement']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/import-pdf-statement', [StatementController::class, 'importPdfStatement']);
+Route::middleware(['web', 'auth'])->post('/finance/statement/{statement_id}/import-gemini', [FinanceGeminiImportController::class, 'importStatementDetails']);
 
 // Lots API routes
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/lots', [FinanceLotsController::class, 'index']);

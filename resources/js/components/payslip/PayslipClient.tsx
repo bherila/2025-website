@@ -6,6 +6,7 @@ import Container from '@/components/container'
 import { Button } from '@/components/ui/button'
 import { fetchPayslips, fetchPayslipYears,savePayslip } from '@/lib/api'
 
+import FinanceSubNav from '../finance/FinanceSubNav'
 import { cols } from './config/payslipColumnsConfig'
 import type { fin_payslip } from './payslipDbCols'
 import { PayslipImportModal } from './PayslipImportModal' // Import the new dialog
@@ -73,72 +74,75 @@ export default function PayslipClient({ selectedYear: initialSelectedYear, initi
   ].filter(Boolean) as [string, fin_payslip[]][]
 
   return (
-    <Container fluid>
-      <div className="w-full my-2">
-        <div className="flex justify-between items-center px-4">
-          <div className="flex gap-2 items-center">
-            <span>Tax Year:</span>
-            {availableYears.map((year) => (
-              <Button asChild key={year} variant={year === selectedYear ? 'default' : 'outline'}>
-                <a href={`?year=${year}`}>{year}</a>
+    <>
+      <FinanceSubNav activeSection="payslips" />
+      <Container fluid>
+        <div className="w-full my-2">
+          <div className="flex justify-between items-center px-4">
+            <div className="flex gap-2 items-center">
+              <span>Tax Year:</span>
+              {availableYears.map((year) => (
+                <Button asChild key={year} variant={year === selectedYear ? 'default' : 'outline'}>
+                  <a href={`?year=${year}`}>{year}</a>
+                </Button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Button asChild variant="outline">
+                <a href={`/finance/payslips/entry?year=${selectedYear}`}>
+                  <PlusCircle className="mr-2" /> Add Payslip
+                </a>
               </Button>
-            ))}
+              <Button asChild variant="outline">
+                <a href="/payslip/import/json">Import JSON</a>
+              </Button>
+              <Button asChild variant="outline">
+                <a href="/payslip/import/tsv">
+                  <FileSpreadsheet className="mr-2" /> Import TSV
+                </a>
+              </Button>
+              <PayslipImportModal onImportSuccess={refreshPayslips} />
+            </div>
           </div>
-          <div className="flex gap-2">
-            <Button asChild variant="outline">
-              <a href={`/finance/payslips/entry?year=${selectedYear}`}>
-                <PlusCircle className="mr-2" /> Add Payslip
-              </a>
-            </Button>
-            <Button asChild variant="outline">
-              <a href="/payslip/import/json">Import JSON</a>
-            </Button>
-            <Button asChild variant="outline">
-              <a href="/payslip/import/tsv">
-                <FileSpreadsheet className="mr-2" /> Import TSV
-              </a>
-            </Button>
-            <PayslipImportModal onImportSuccess={refreshPayslips} />
+
+          <div className="px-4 mt-2">
+            Tax period:{' '}
+            <b>
+              {selectedYear}-01-01 through {selectedYear}-12-31
+            </b>
           </div>
         </div>
 
-        <div className="px-4 mt-2">
-          Tax period:{' '}
-          <b>
-            {selectedYear}-01-01 through {selectedYear}-12-31
-          </b>
-        </div>
-      </div>
-
-      {data.length === 0 ? (
-        <EmptyState selectedYear={selectedYear} />
-      ) : (
-        <>
-          <PayslipTable data={data} cols={cols} onRowEdited={editRow} />
-          <div className="mt-4">
-            <h2 className="text-lg font-semibold mx-2 mt-6 mb-2">Federal Taxes</h2>
-            <TotalsTable
-              series={dataSeries}
-              taxConfig={{
-                year: selectedYear,
-                state: '',
-                filingStatus: 'Single',
-                standardDeduction: 13850,
-              }}
-            />
-            <h2 className="text-lg font-semibold mx-2 mt-6 mb-2">California State Taxes</h2>
-            <TotalsTable
-              series={dataSeries}
-              taxConfig={{
-                year: selectedYear,
-                state: 'CA',
-                filingStatus: 'Single',
-                standardDeduction: 13850,
-              }}
-            />
-          </div>
-        </>
-      )}
-    </Container>
+        {data.length === 0 ? (
+          <EmptyState selectedYear={selectedYear} />
+        ) : (
+          <>
+            <PayslipTable data={data} cols={cols} onRowEdited={editRow} />
+            <div className="mt-4">
+              <h2 className="text-lg font-semibold mx-2 mt-6 mb-2">Federal Taxes</h2>
+              <TotalsTable
+                series={dataSeries}
+                taxConfig={{
+                  year: selectedYear,
+                  state: '',
+                  filingStatus: 'Single',
+                  standardDeduction: 13850,
+                }}
+              />
+              <h2 className="text-lg font-semibold mx-2 mt-6 mb-2">California State Taxes</h2>
+              <TotalsTable
+                series={dataSeries}
+                taxConfig={{
+                  year: selectedYear,
+                  state: 'CA',
+                  filingStatus: 'Single',
+                  standardDeduction: 13850,
+                }}
+              />
+            </div>
+          </>
+        )}
+      </Container>
+    </>
   )
 }
