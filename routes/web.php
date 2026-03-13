@@ -5,7 +5,6 @@ use App\Http\Controllers\ClientManagement\ClientCompanyController;
 use App\Http\Controllers\ClientManagement\ClientPortalAgreementController;
 use App\Http\Controllers\ClientManagement\ClientPortalController;
 use App\Http\Controllers\FinanceTool\FinanceAccountsController;
-use App\Http\Controllers\FinanceTool\FinancePayslipController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\UtilityBillTracker\UtilityAccountController;
@@ -22,10 +21,6 @@ Route::get('/login', function () {
 Route::post('/login', [LoginController::class, 'login']);
 Route::post('/login/dev', [LoginController::class, 'devLogin'])->name('login.dev');
 
-Route::get('/tools/maxmin', function () {
-    return view('tools.maxmin');
-});
-
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [App\Http\Controllers\DashboardController::class, 'index']);
 
@@ -40,9 +35,6 @@ Route::middleware('auth')->group(function () {
     Route::get('/finance/rsu/add-grant', function () {
         return view('finance.rsu-add-grant');
     });
-
-    Route::get('/finance/payslips', [FinancePayslipController::class, 'index']);
-    Route::get('/finance/payslips/entry', [FinancePayslipController::class, 'entry']);
 
     Route::get('/finance/accounts', [FinanceAccountsController::class, 'index']);
     Route::get('/finance/all-transactions', function () {

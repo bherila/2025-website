@@ -114,11 +114,9 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
               >
                 <div className='px-2 py-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]'>Finance</div>
                 <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/rsu'>Finance RSU</a>
-                <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/payslips'>Finance Payslips</a>
                 <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/accounts'>Finance Accounts</a>
                 <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/utility-bill-tracker'>Utility Bill Tracker</a>
                 <div className='px-2 pt-3 pb-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]'>Utilities</div>
-                <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/tools/maxmin'>MaxMin</a>
                 <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/tools/license-manager'>License Manager</a>
                 <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/tools/bingo'>Bingo Card Generator</a>
                 <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/tools/irs-f461'>Capital Loss Carryover Worksheet</a>
@@ -196,9 +194,6 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
                   <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/finance/rsu'>
                     Finance RSU
                   </a>
-                  <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/finance/payslips'>
-                    Finance Payslips
-                  </a>
                   <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/finance/accounts'>
                     Finance Accounts
                   </a>
@@ -206,9 +201,6 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
                     Utility Bill Tracker
                   </a>
                   <div className='px-3 pt-2 pb-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]'>Utilities</div>
-                  <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/tools/maxmin'>
-                    MaxMin
-                  </a>
                   <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/tools/license-manager'>
                     License Manager
                   </a>
