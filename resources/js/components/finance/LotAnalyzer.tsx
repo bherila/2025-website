@@ -396,8 +396,8 @@ function Form8949Table({
     title: string; 
     lots: LotSale[]; 
     showAccountNames: boolean; 
-    onLoadAllYears?: () => void;
-    allYearsLoaded?: boolean;
+    onLoadAllYears?: (() => void) | undefined;
+    allYearsLoaded?: boolean | undefined;
 }) {
     if (lots.length === 0) {
         return (

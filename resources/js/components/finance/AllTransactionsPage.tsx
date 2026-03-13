@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { z } from 'zod'
 
 import { TagTotalsView } from '@/components/finance/TagTotalsView'
@@ -58,7 +58,8 @@ export default function AllTransactionsPage({ initialAvailableYears = [] }: AllT
         if (initialAvailableYears.includes(currentYear)) {
             return currentYear.toString()
         }
-        return initialAvailableYears.length > 0 ? initialAvailableYears[0].toString() : 'all'
+        const firstYear = initialAvailableYears[0]
+        return firstYear !== undefined ? firstYear.toString() : 'all'
     })
     const [availableYears, setAvailableYears] = useState<number[]>(initialAvailableYears)
     const [view, setView] = useState<ViewType>(() => {

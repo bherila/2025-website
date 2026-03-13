@@ -26,9 +26,9 @@ export interface LotSale {
   /** Symbol of the security */
   symbol: string
   /** The account ID of the sale */
-  accountId?: number
+  accountId?: number | null | undefined
   /** The account name of the sale */
-  accountName?: string
+  accountName?: string | null | undefined
   /** Date acquired (purchase date) */
   dateAcquired: string | null
   /** Transactions that make up the cost basis of this sale */
@@ -130,8 +130,8 @@ export const WASH_SALE_METHOD_2: WashSaleOptions = {
 interface ParsedTransaction {
   id: number | undefined
   internalIndex: number
-  accountId: number | undefined
-  accountName: string | undefined
+  accountId: number | null | undefined
+  accountName: string | null | undefined
   date: Date
   dateStr: string
   symbol: string

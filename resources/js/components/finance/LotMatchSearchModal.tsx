@@ -27,7 +27,7 @@ interface LotMatchSearchModalProps {
     lot: LotSale
     isOpen: boolean
     onClose: () => void
-    onAssignmentSaved?: () => void
+    onAssignmentSaved?: (() => void) | undefined
 }
 
 interface SearchResult {

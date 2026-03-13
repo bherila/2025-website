@@ -46,18 +46,22 @@ function formatDate(dateStr: string | null): string {
 interface VariousTransactionsModalProps {
     lot: LotSale
     /** Called when the user wants to load all years of transactions */
-    onLoadAllYears?: () => void
+    onLoadAllYears?: (() => void) | undefined
     /** Whether all years of transactions have already been loaded */
-    allYearsLoaded?: boolean
+    allYearsLoaded?: boolean | undefined
     /** Called when a lot assignment is saved in the search modal */
-    onAssignmentSaved?: () => void
+    onAssignmentSaved?: (() => void) | undefined
 }
 
 export function VariousTransactionsModal({ lot, onLoadAllYears, allYearsLoaded, onAssignmentSaved }: VariousTransactionsModalProps) {
     const count = lot.acquiredTransactions?.length ?? 0
     const [showSearchModal, setShowSearchModal] = useState(false)
     const hasUnmatched = !lot.acquiredTransactions || lot.acquiredTransactions.length === 0
-    const label = count > 1 ? `Various (${count})` : count === 1 ? formatDate(lot.acquiredTransactions![0].date) : 'Unknown'
+    const label = count > 1 
+        ? `Various (${count})` 
+        : count === 1 && lot.acquiredTransactions?.[0]
+            ? formatDate(lot.acquiredTransactions[0].date) 
+            : 'Unknown'
 
     return (
         <>

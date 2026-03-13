@@ -16,9 +16,9 @@ jest.mock('@/components/finance/useFinanceTags', () => ({
 }))
 
 const mockData = [
-  { t_id: 1, t_description: 'Test Transaction 1', t_amt: 100, t_date: '2023-01-01' },
-  { t_id: 2, t_description: 'Test Transaction 2', t_amt: 200, t_date: '2023-01-02' },
-]
+  { t_id: 1, t_description: 'Test Transaction 1', t_amt: 100, t_date: '2023-01-01', t_account_balance: 100, t_price: 0, t_commission: 0, t_fee: 0 },
+  { t_id: 2, t_description: 'Test Transaction 2', t_amt: 200, t_date: '2023-01-02', t_account_balance: 300, t_price: 0, t_commission: 0, t_fee: 0 },
+] as any[] // Using as any[] to avoid missing other optional fields if necessary, but providing the ones mentioned in error.
 
 describe('TransactionsTable Tag Application', () => {
   beforeEach(() => {
