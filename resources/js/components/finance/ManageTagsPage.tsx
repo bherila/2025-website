@@ -1,4 +1,5 @@
 'use client'
+import { Pencil, Search, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
 import { TagTotalsView } from '@/components/finance/TagTotalsView'
@@ -18,6 +19,20 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { fetchWrapper } from '@/fetchWrapper'
 import { getTagColorDark, getTagColorHex, getTagColorLight } from '@/lib/finance/tagColorUtils'
 import { accountsUrl } from '@/lib/financeRouteBuilder'
@@ -235,92 +250,136 @@ export default function ManageTagsPage() {
       </div>
 
       {/* Existing Tags Section */}
-      <div>
+      <div className="mb-8">
         <h2 className="text-lg font-semibold mb-4">Your Tags ({tags.length})</h2>
         {tags.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground border rounded-lg">
             You haven't created any tags yet. Create one above to get started!
           </div>
         ) : (
-          <div className="space-y-3">
-            {tags.map((tag) => (
-              <div 
-                key={tag.tag_id} 
-                className="flex items-center justify-between p-3 border rounded-lg bg-background"
-              >
-                {editingTag?.tag_id === tag.tag_id ? (
-                  // Edit mode
-                  <div className="flex-1 space-y-3">
-                    <div className="flex items-center gap-4">
-                      <Input
-                        type="text"
-                        value={editLabel}
-                        onChange={(e) => setEditLabel(e.target.value)}
-                        placeholder="Tag name"
-                        maxLength={50}
-                        className="max-w-xs"
-                      />
-                    </div>
-                    <ColorPicker selectedColor={editColor} onColorChange={setEditColor} />
-                    <div className="flex items-center gap-2">
-                      <Button 
-                        size="sm" 
-                        onClick={handleUpdateTag}
-                        disabled={isUpdating || !editLabel.trim()}
-                      >
-                        {isUpdating ? 'Saving...' : 'Save'}
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
-                        onClick={handleCancelEdit}
-                        disabled={isUpdating}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  // View mode
-                  <>
-                    <div className="flex items-center gap-3">
-                      <Badge 
-                        className={`bg-${tag.tag_color}-200 text-${tag.tag_color}-800 dark:bg-${tag.tag_color}-800 dark:text-${tag.tag_color}-200`}
-                        style={{ 
-                          backgroundColor: getTagColorLight(tag.tag_color),
-                          color: getTagColorDark(tag.tag_color)
-                        }}
-                      >
-                        {tag.tag_label}
-                      </Badge>
-                      {tag.transaction_count !== undefined && (
-                        <span className="text-sm text-muted-foreground">
-                          {tag.transaction_count} transaction{tag.transaction_count !== 1 ? 's' : ''}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        onClick={() => handleStartEdit(tag)}
-                      >
-                        Edit
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        onClick={() => setDeleteConfirmTag(tag)}
-                      >
-                        Delete
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
+          <TooltipProvider>
+            <div className="border rounded-lg overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Tag</TableHead>
+                    <TableHead className="w-[150px]">Transactions</TableHead>
+                    <TableHead className="w-[150px] text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {tags.map((tag) => (
+                    <TableRow key={tag.tag_id}>
+                      <TableCell>
+                        {editingTag?.tag_id === tag.tag_id ? (
+                          <div className="space-y-3 py-2">
+                            <div className="flex items-center gap-4">
+                              <Input
+                                type="text"
+                                value={editLabel}
+                                onChange={(e) => setEditLabel(e.target.value)}
+                                placeholder="Tag name"
+                                maxLength={50}
+                                className="max-w-xs"
+                              />
+                            </div>
+                            <ColorPicker selectedColor={editColor} onColorChange={setEditColor} />
+                            <div className="flex items-center gap-2">
+                              <Button 
+                                size="sm" 
+                                onClick={handleUpdateTag}
+                                disabled={isUpdating || !editLabel.trim()}
+                              >
+                                {isUpdating ? 'Saving...' : 'Save'}
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                onClick={handleCancelEdit}
+                                disabled={isUpdating}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <Badge 
+                            className={`bg-${tag.tag_color}-200 text-${tag.tag_color}-800 dark:bg-${tag.tag_color}-800 dark:text-${tag.tag_color}-200`}
+                            style={{ 
+                              backgroundColor: getTagColorLight(tag.tag_color),
+                              color: getTagColorDark(tag.tag_color)
+                            }}
+                          >
+                            {tag.tag_label}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {tag.transaction_count !== undefined && (
+                          <span className="text-sm text-muted-foreground">
+                            {tag.transaction_count}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button 
+                                size="icon" 
+                                variant="ghost"
+                                asChild
+                              >
+                                <a href={`/finance/all-transactions?tag=${encodeURIComponent(tag.tag_label)}`}>
+                                  <Search className="h-4 w-4" />
+                                </a>
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>View all transactions with this tag</p>
+                            </TooltipContent>
+                          </Tooltip>
+
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button 
+                                size="icon" 
+                                variant="ghost"
+                                onClick={() => handleStartEdit(tag)}
+                                disabled={editingTag !== null}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Edit tag</p>
+                            </TooltipContent>
+                          </Tooltip>
+
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button 
+                                size="icon" 
+                                variant="ghost"
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
+                                onClick={() => setDeleteConfirmTag(tag)}
+                                disabled={editingTag !== null}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Delete tag</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </TooltipProvider>
         )}
       </div>
 

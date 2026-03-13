@@ -195,7 +195,7 @@ class FinanceTransactionTaggingApiControllerTest extends TestCase
             't_description' => 'Test',
         ]);
 
-        $response = $this->postJson('/api/finance/tags-apply', [
+        $response = $this->postJson('/api/finance/tags/apply', [
             'tag_id' => $tag->tag_id,
             'transaction_ids' => (string)$t->t_id,
         ]);
@@ -239,7 +239,7 @@ class FinanceTransactionTaggingApiControllerTest extends TestCase
             't_description' => 'T2',
         ]);
 
-        $response = $this->postJson('/api/finance/tags-apply', [
+        $response = $this->postJson('/api/finance/tags/apply', [
             'tag_id' => $tag->tag_id,
             'transaction_ids' => "{$t1->t_id},{$t2->t_id}",
         ]);
@@ -261,7 +261,7 @@ class FinanceTransactionTaggingApiControllerTest extends TestCase
             'tag_color' => 'red',
         ]);
 
-        $response = $this->actingAs($user)->postJson('/api/finance/tags-apply', [
+        $response = $this->actingAs($user)->postJson('/api/finance/tags/apply', [
             'tag_id' => $tag->tag_id,
             'transaction_ids' => '999',
         ]);
@@ -313,9 +313,9 @@ class FinanceTransactionTaggingApiControllerTest extends TestCase
     public function test_apply_tag_route_not_found_on_get(): void
     {
         $user = $this->createUser();
-        $response = $this->actingAs($user)->getJson('/api/finance/tags-apply');
+        $response = $this->actingAs($user)->getJson('/api/finance/tags/apply');
         
-        // Should be 405 Method Not Allowed if route exists, 404 if not found at all
+        // Should be 405 Method Not Allowed if route exists
         $response->assertStatus(405);
     }
 }

@@ -69,6 +69,9 @@ export default function AllTransactionsPage({ initialAvailableYears = [] }: AllT
         const fromUrl = getUrlParam('show') as FilterType | null
         return fromUrl === 'cash' || fromUrl === 'stock' ? fromUrl : 'all'
     })
+    const [selectedTag, setSelectedTag] = useState<string>(() => getUrlParam('tag') || 'all')
+
+    const { tags: availableTags } = useFinanceTags({ enabled: true })
 
     const handleYearChange = (year: string) => {
         setSelectedYear(year)
@@ -84,6 +87,19 @@ export default function AllTransactionsPage({ initialAvailableYears = [] }: AllT
         setFilter(f)
         setUrlParams({ show: f === 'all' ? '' : f })
     }
+
+    const handleTagChange = (tag: string) => {
+        setSelectedTag(tag)
+        setUrlParams({ tag: tag === 'all' ? '' : tag })
+    }
+
+    // Auto-fetch if tag is provided in URL on mount
+    useEffect(() => {
+        const tag = getUrlParam('tag')
+        if (tag) {
+            fetchData()
+        }
+    }, []) // Run once on mount
 
     const fetchAccounts = useCallback(async () => {
         try {
@@ -119,6 +135,7 @@ export default function AllTransactionsPage({ initialAvailableYears = [] }: AllT
             const params = new URLSearchParams()
             if (selectedYear !== 'all') params.append('year', selectedYear)
             if (filter !== 'all') params.append('filter', filter)
+            if (selectedTag !== 'all') params.append('tag', selectedTag)
             
             const queryString = params.toString() ? `?${params.toString()}` : ''
             const fetchedData = await fetchWrapper.get(`/api/finance/all-line-items${queryString}`)
@@ -130,7 +147,7 @@ export default function AllTransactionsPage({ initialAvailableYears = [] }: AllT
         } finally {
             setIsLoading(false)
         }
-    }, [selectedYear, filter, accountMap.size, fetchAccounts])
+    }, [selectedYear, filter, selectedTag, accountMap.size, fetchAccounts])
 
     const { tags: tagTotals, isLoading: isLoadingTagTotals, error: tagTotalsError } = useFinanceTags({
         enabled: view === 'tag-totals',
@@ -154,6 +171,20 @@ export default function AllTransactionsPage({ initialAvailableYears = [] }: AllT
                             {availableYears.map((year) => (
                                 <SelectItem key={year} value={String(year)}>
                                     {year}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+
+                    <Select value={selectedTag} onValueChange={handleTagChange}>
+                        <SelectTrigger className="w-44">
+                            <SelectValue placeholder="Select tag" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Tags</SelectItem>
+                            {availableTags.map((tag) => (
+                                <SelectItem key={tag.tag_id} value={tag.tag_label}>
+                                    {tag.tag_label}
                                 </SelectItem>
                             ))}
                         </SelectContent>

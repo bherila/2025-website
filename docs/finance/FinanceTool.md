@@ -49,8 +49,15 @@ To handle thousands of transactions across multiple accounts, the following opti
 1.  **JSON Streaming**: The backend (`FinanceTransactionsApiController@getLineItems`) uses `response()->stream()` to send data to the client as it's being read from the database.
 2.  **Lazy Loading**: The backend uses Eloquent's `lazy()` method to chunk database results, keeping memory usage constant regardless of the total number of records.
 3.  **Client-side Account Mapping**: To avoid repeating account name strings in every transaction record (saving significant bandwidth), the API returns only the account ID. The frontend fetches the account list once and builds an `accountMap` for display lookups.
-4.  **On-demand Loading**: Transactions are not loaded automatically on page mount. Users select a year and optional filters (Cash Only / Stock Only) and click **Get Transactions** to trigger the API request.
+4.  **On-demand Loading**: Transactions are not loaded automatically on page mount unless a `tag` parameter is provided in the URL. Users select a year, optional filters (Cash Only / Stock Only), and an optional tag filter and click **Get Transactions** to trigger the API request.
 5.  **Initial Data Bootstrapping**: Available transaction years are passed directly from the Blade template to the React component via a data attribute, eliminating an initial API request.
+
+### Tag Filtering
+
+The All Transactions page supports filtering by tag:
+- URL parameter: `?tag=TagName`
+- A **Select tag** dropdown allows choosing from all available user tags.
+- When a tag is specified in the URL on mount, the page automatically fetches transactions for that tag.
 
 ## Transaction Import
 
@@ -301,6 +308,7 @@ PDF statements can be imported using Gemini AI for parsing. The frontend now pro
 
 | Endpoint | Controller | Purpose |
 |----------|------------|---------|
+| `GET /api/finance/all-line-items` | `FinanceTransactionsApiController@getLineItems` | Get all transactions (supports streaming and year/filter/tag params) |
 | `POST /api/finance/transactions/import-gemini` | `FinanceGeminiImportController@parseDocument` | Parse PDF or other file with Gemini (cached by file hash) |
 | `POST /api/finance/{id}/import-pdf-statement` | `StatementController` | Save parsed statement data (details and lots) |
 | `GET /api/finance/{id}/lots` | `FinanceLotsController@index` | Fetch open/closed lots for an account |

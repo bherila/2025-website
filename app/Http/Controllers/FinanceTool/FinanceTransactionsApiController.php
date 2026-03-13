@@ -40,6 +40,15 @@ class FinanceTransactionsApiController extends Controller
             $query->whereYear('t_date', $year);
         }
 
+        // Filter by tag if provided
+        if ($request->has('tag')) {
+            $tagLabel = $request->tag;
+            $query->whereHas('tags', function ($q) use ($tagLabel) {
+                $q->where('tag_label', $tagLabel)
+                  ->whereNull('when_deleted');
+            });
+        }
+
         // Filter by type if provided
         if ($request->has('filter')) {
             $filter = $request->filter;
