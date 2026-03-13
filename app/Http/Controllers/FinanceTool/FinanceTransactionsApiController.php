@@ -12,15 +12,22 @@ use Illuminate\Support\Facades\Auth;
 class FinanceTransactionsApiController extends Controller
 {
     /**
-     * Get line items (transactions) for an account
+     * Get line items (transactions) for one or all accounts
      */
-    public function getLineItems(Request $request, $account_id)
+    public function getLineItems(Request $request, $account_id = null)
     {
         $uid = Auth::id();
-        $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
 
-        $query = FinAccountLineItems::where('t_account', $account->acct_id)
-            ->with(['tags', 'parentTransactions.account', 'childTransactions.account', 'clientExpense.clientCompany'])
+        if ($account_id) {
+            $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+            $query = FinAccountLineItems::where('t_account', $account->acct_id);
+        } else {
+            // Get all account IDs for this user
+            $accountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
+            $query = FinAccountLineItems::whereIn('t_account', $accountIds);
+        }
+
+        $query->with(['tags', 'parentTransactions.account', 'childTransactions.account', 'clientExpense.clientCompany'])
             ->orderBy('t_date', 'desc');
 
         if ($request->has('start_date') && $request->has('end_date')) {
@@ -33,78 +40,36 @@ class FinanceTransactionsApiController extends Controller
             $query->whereYear('t_date', $year);
         }
 
-        $lineItems = $query->get();
-
-        // Transform line items to include parent_of_t_ids array
-        $lineItems = $lineItems->map(function ($item) {
-            $itemArray = $item->toArray();
-
-            // Add parent_of_t_ids array (IDs of child transactions)
-            $itemArray['parent_of_t_ids'] = $item->childTransactions->pluck('t_id')->toArray();
-
-            // Add parent transaction info if exists (using the new many-to-many relationship)
-            $parentTransaction = $item->parentTransactions->first();
-            if ($parentTransaction) {
-                $itemArray['parent_transaction'] = [
-                    't_id' => $parentTransaction->t_id,
-                    't_account' => $parentTransaction->t_account,
-                    'acct_name' => $parentTransaction->account?->acct_name,
-                    't_date' => $parentTransaction->t_date,
-                    't_description' => $parentTransaction->t_description,
-                    't_amt' => $parentTransaction->t_amt,
-                ];
+        // Filter by type if provided
+        if ($request->has('filter')) {
+            $filter = $request->filter;
+            if ($filter === 'stock') {
+                $query->whereNotNull('t_symbol')->where('t_symbol', '!=', '');
+            } elseif ($filter === 'cash') {
+                $query->where(function ($q) {
+                    $q->whereNull('t_symbol')->orWhere('t_symbol', '');
+                });
             }
+        }
 
-            // Add child transactions info
-            if ($item->childTransactions->count() > 0) {
-                $itemArray['child_transactions'] = $item->childTransactions->map(function ($child) {
-                    return [
-                        't_id' => $child->t_id,
-                        't_account' => $child->t_account,
-                        'acct_name' => $child->account?->acct_name,
-                        't_date' => $child->t_date,
-                        't_description' => $child->t_description,
-                        't_amt' => $child->t_amt,
-                    ];
-                })->toArray();
-            }
-
-            // Add client expense info if exists (store in a temp variable first)
-            $clientExpenseData = null;
-            if ($item->clientExpense) {
-                $clientExpenseData = [
-                    'id' => $item->clientExpense->id,
-                    'description' => $item->clientExpense->description,
-                    'amount' => $item->clientExpense->amount,
-                    'is_reimbursable' => $item->clientExpense->is_reimbursable,
-                    'client_company' => $item->clientExpense->clientCompany ? [
-                        'id' => $item->clientExpense->clientCompany->id,
-                        'company_name' => $item->clientExpense->clientCompany->company_name,
-                        'slug' => $item->clientExpense->clientCompany->slug,
-                    ] : null,
-                ];
-            }
-
-            // Remove the raw relationship data
-            unset($itemArray['parent_transactions']);
-            unset($itemArray['client_expense']); // Remove the raw Eloquent relation data
-
-            // Add the formatted client expense data back
-            if ($clientExpenseData) {
-                $itemArray['client_expense'] = $clientExpenseData;
-            }
-
-            if (! $item->t_schc_category) {
-                unset($itemArray['t_schc_category']);
-            }
-            if (empty($itemArray['parent_of_t_ids'])) {
-                unset($itemArray['parent_of_t_ids']);
-            }
-
-            return $itemArray;
-        });
-
-        return response()->json($lineItems);
+        // Return a streamed response to save memory on large datasets
+        return response()->stream(function () use ($query) {
+            echo '[';
+            $first = true;
+            // lazy() chunks the results and eager loads relations for each chunk
+            $query->lazy()->each(function ($item) use (&$first) {
+                if (! $first) {
+                    echo ',';
+                }
+                echo json_encode($this->transformLineItem($item));
+                $first = false;
+            });
+            echo ']';
+        }, 200, [
+            'Content-Type' => 'application/json',
+            'Cache-Control' => 'no-cache',
+            'X-Accel-Buffering' => 'no',
+        ]);
     }
 
     /**
@@ -322,10 +287,83 @@ class FinanceTransactionsApiController extends Controller
 
         $years = FinAccountLineItems::where('t_account', $account->acct_id)
             ->selectRaw('DISTINCT YEAR(t_date) as year')
+            ->whereNotNull('t_date')
             ->orderBy('year', 'desc')
             ->pluck('year')
             ->toArray();
 
         return response()->json($years);
+    }
+
+    /**
+     * Transform a line item (transaction) to its API representation
+     */
+    protected function transformLineItem($item)
+    {
+        $itemArray = $item->toArray();
+
+        // Add parent_of_t_ids array (IDs of child transactions)
+        $itemArray['parent_of_t_ids'] = $item->childTransactions->pluck('t_id')->toArray();
+
+        // Add parent transaction info if exists (using the new many-to-many relationship)
+        $parentTransaction = $item->parentTransactions->first();
+        if ($parentTransaction) {
+            $itemArray['parent_transaction'] = [
+                't_id' => $parentTransaction->t_id,
+                't_account' => $parentTransaction->t_account,
+                'acct_name' => $parentTransaction->account?->acct_name,
+                't_date' => $parentTransaction->t_date,
+                't_description' => $parentTransaction->t_description,
+                't_amt' => $parentTransaction->t_amt,
+            ];
+        }
+
+        // Add child transactions info
+        if ($item->childTransactions->count() > 0) {
+            $itemArray['child_transactions'] = $item->childTransactions->map(function ($child) {
+                return [
+                    't_id' => $child->t_id,
+                    't_account' => $child->t_account,
+                    'acct_name' => $child->account?->acct_name,
+                    't_date' => $child->t_date,
+                    't_description' => $child->t_description,
+                    't_amt' => $child->t_amt,
+                ];
+            })->toArray();
+        }
+
+        // Add client expense info if exists (store in a temp variable first)
+        $clientExpenseData = null;
+        if ($item->clientExpense) {
+            $clientExpenseData = [
+                'id' => $item->clientExpense->id,
+                'description' => $item->clientExpense->description,
+                'amount' => $item->clientExpense->amount,
+                'is_reimbursable' => $item->clientExpense->is_reimbursable,
+                'client_company' => $item->clientExpense->clientCompany ? [
+                    'id' => $item->clientExpense->clientCompany->id,
+                    'company_name' => $item->clientExpense->clientCompany->company_name,
+                    'slug' => $item->clientExpense->clientCompany->slug,
+                ] : null,
+            ];
+        }
+
+        // Remove the raw relationship data
+        unset($itemArray['parent_transactions']);
+        unset($itemArray['client_expense']); // Remove the raw Eloquent relation data
+
+        // Add the formatted client expense data back
+        if ($clientExpenseData) {
+            $itemArray['client_expense'] = $clientExpenseData;
+        }
+
+        if (! $item->t_schc_category) {
+            unset($itemArray['t_schc_category']);
+        }
+        if (empty($itemArray['parent_of_t_ids'])) {
+            unset($itemArray['parent_of_t_ids']);
+        }
+
+        return $itemArray;
     }
 }

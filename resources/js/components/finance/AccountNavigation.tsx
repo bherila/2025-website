@@ -1,12 +1,9 @@
 'use client'
-import {Settings, Upload } from 'lucide-react'
-import { useCallback, useEffect, useMemo,useState } from 'react'
+import { Settings, Upload } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import {
-  Breadcrumb,
   BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
@@ -21,16 +18,16 @@ import {
 } from '@/components/ui/combobox'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
-  accountsUrl,
   getEffectiveYear,
   getTabUrl,
   importUrl,
   maintenanceUrl,
-  type YearSelection
+  type YearSelection,
 } from '@/lib/financeRouteBuilder'
 import { cn } from '@/lib/utils'
 
 import AccountYearSelector from './AccountYearSelector'
+import FinanceSubNav from './FinanceSubNav'
 
 interface FinAccount {
   acct_id: number
@@ -135,61 +132,56 @@ export default function AccountNavigation({
     window.location.href = getTabUrl(activeTab, account.acct_id, selectedYear)
   }
 
-  return (
-    <div className="mt-4 px-8">
-      <div className="py-4 px-4">
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink href={accountsUrl()}>Accounts</BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <Combobox
-                onValueChange={(val) => {
-                   if (val) onAccountSelect(val as FinAccount)
-                }}
-              >
-                <ComboboxInput
-                  placeholder={currentAccount.acct_name}
-                  className="h-8 min-w-[200px]"
-                  value={searchValue}
-                  onChange={(e) => setSearchValue(e.target.value)}
-                />
-                <ComboboxContent align="start" className="w-64">
-                  <ComboboxEmpty>No accounts found</ComboboxEmpty>
-                  <ComboboxList>
-                    {loadingAccounts ? (
-                      <div className="p-2 text-sm text-muted-foreground">Loading accounts...</div>
-                    ) : (
-                      filteredAccounts.map((account) => (
-                        <ComboboxItem
-                          key={account.acct_id}
-                          value={account}
-                          className={cn(
-                            account.acct_id === accountId && 'bg-accent font-medium'
-                          )}
-                        >
-                          {account.acct_name}
-                        </ComboboxItem>
-                      ))
+  const breadcrumbItems = (
+    <>
+      <BreadcrumbSeparator />
+      <BreadcrumbItem>
+        <Combobox
+          onValueChange={(val) => {
+             if (val) onAccountSelect(val as FinAccount)
+          }}
+        >
+          <ComboboxInput
+            placeholder={currentAccount.acct_name}
+            className="h-8 min-w-[200px]"
+            value={searchValue}
+            onChange={(e) => setSearchValue(e.target.value)}
+          />
+          <ComboboxContent align="start" className="w-64">
+            <ComboboxEmpty>No accounts found</ComboboxEmpty>
+            <ComboboxList>
+              {loadingAccounts ? (
+                <div className="p-2 text-sm text-muted-foreground">Loading accounts...</div>
+              ) : (
+                filteredAccounts.map((account) => (
+                  <ComboboxItem
+                    key={account.acct_id}
+                    value={account}
+                    className={cn(
+                      account.acct_id === accountId && 'bg-accent font-medium'
                     )}
-                  </ComboboxList>
-                </ComboboxContent>
-              </Combobox>
-            </BreadcrumbItem>
-            {activeTabTitle && (
-              <>
-                <BreadcrumbSeparator />
-                <BreadcrumbItem>
-                  <BreadcrumbPage>{activeTabTitle}</BreadcrumbPage>
-                </BreadcrumbItem>
-              </>
-            )}
-          </BreadcrumbList>
-        </Breadcrumb>
-      </div>
+                  >
+                    {account.acct_name}
+                  </ComboboxItem>
+                ))
+              )}
+            </ComboboxList>
+          </ComboboxContent>
+        </Combobox>
+      </BreadcrumbItem>
+      {activeTabTitle && (
+        <>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>{activeTabTitle}</BreadcrumbPage>
+          </BreadcrumbItem>
+        </>
+      )}
+    </>
+  )
 
+  return (
+    <FinanceSubNav activeSection="accounts" breadcrumbItems={breadcrumbItems}>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-4">
           <Tabs defaultValue={activeTab}>
@@ -226,6 +218,6 @@ export default function AccountNavigation({
           ))}
         </div>
       </div>
-    </div>
+    </FinanceSubNav>
   )
 }

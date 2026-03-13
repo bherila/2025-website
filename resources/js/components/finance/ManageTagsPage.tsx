@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 
+import { type FinanceTag, useFinanceTags } from '@/components/finance/useFinanceTags'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   AlertDialog,
@@ -16,7 +17,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
-import { type FinanceTag, useFinanceTags } from '@/components/finance/useFinanceTags'
 import { fetchWrapper } from '@/fetchWrapper'
 import { accountsUrl } from '@/lib/financeRouteBuilder'
 

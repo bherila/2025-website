@@ -1,6 +1,6 @@
 'use client'
 import { Download, Plus } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { z } from 'zod'
 
 import { Button } from '@/components/ui/button'
@@ -116,26 +116,30 @@ export default function FinanceAccountTransactionsPage({ id }: { id: number }) {
   }, [id, fetchKey, selectedYear])
 
   // Handle URL hash to scroll to specific transaction
-  useEffect(() => {
-    if (!data || data.length === 0) return
-    
+  const highlightTransactionId = useMemo(() => {
     const hash = window.location.hash
     if (hash && hash.startsWith('#t_id=')) {
-      const targetId = hash.replace('#t_id=', '')
-      // Small delay to ensure DOM is rendered
-      setTimeout(() => {
-        const element = document.querySelector(`tr[data-transaction-id="${targetId}"]`)
-        if (element) {
-          element.scrollIntoView({ behavior: 'smooth', block: 'center' })
-          // Highlight the row temporarily
-          element.classList.add('highlight-transaction')
-          setTimeout(() => {
-            element.classList.remove('highlight-transaction')
-          }, 3000)
-        }
-      }, 100)
+      return parseInt(hash.replace('#t_id=', ''), 10)
     }
-  }, [data])
+    return undefined
+  }, [])
+
+  useEffect(() => {
+    if (!data || data.length === 0 || !highlightTransactionId) return
+    
+    // Small delay to ensure DOM is rendered (pagination may have changed the page)
+    setTimeout(() => {
+      const element = document.querySelector(`tr[data-transaction-id="${highlightTransactionId}"]`)
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        // Highlight the row temporarily
+        element.classList.add('highlight-transaction')
+        setTimeout(() => {
+          element.classList.remove('highlight-transaction')
+        }, 3000)
+      }
+    }, 200)
+  }, [data, highlightTransactionId])
 
   const handleDeleteTransaction = async (t_id: string) => {
     try {
@@ -225,6 +229,7 @@ export default function FinanceAccountTransactionsPage({ id }: { id: number }) {
         data={data}
         onDeleteTransaction={handleDeleteTransaction}
         refreshFn={handleRefresh}
+        highlightTransactionId={highlightTransactionId}
       />
       <NewTransactionModal
         accountId={id}

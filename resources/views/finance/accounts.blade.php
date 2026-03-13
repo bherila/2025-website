@@ -3,6 +3,7 @@
 @section('title', 'Finance Accounts | ' . config('app.name', 'Ben Herila'))
 
 @section('content')
+  <div id="FinanceSubNav" data-active-section="accounts"></div>
   <div id="FinanceAccountsPage"></div>
 @endsection
 

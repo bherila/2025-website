@@ -120,7 +120,7 @@ See [docs/TESTING.md](docs/TESTING.md) for comprehensive testing documentation.
 - **Tagging System**: Many-to-many via `fin_account_line_item_tag_map` table
 - **Linking**: Transactions can link to related entries (e.g., buys/sells)
 - **Statements**: Balance snapshots with detailed line items in `fin_statement_details`
-- **Lot Tracking**: Investment lots stored in `fin_account_lots`; handles ST/LT holding periods (365 day threshold) and realized gain/loss calculation.
+- **Lot Tracking**: Investment lots stored in `fin_account_lots`; handles ST/LT holding periods (365 day threshold) and realized gain/loss calculation. Lot Analyzer component performs client-side FIFO matching and wash sale detection using currency.js for precise arithmetic. Supports four wash sale settings (adjustSameUnderlying, adjustShortLong, adjustStockToOption, adjustOptionToStock) with Method 1 (same underlying) and Method 2 (identical ticker) presets. Analysis results can be saved to the database via `POST /api/finance/{account_id}/lots/save-analyzed`. One closing transaction can map to multiple opening lots. Year-of-sale tabs group Form 8949 output by tax year. TXF export (`txfExport.ts`) generates TXF files for tax software import. Manual lot matching via `LotMatchSearchModal` queries backend for opening transactions by symbol across all accounts (`POST /api/finance/lots/search-opening`); assignments saved via `POST /api/finance/lots/save-assignment`. This is distinct from TransactionLinkModal which links cross-account transfers. See [docs/finance/LotAnalyzer.md](docs/finance/LotAnalyzer.md).
 - **File Uploads**: Handle CSV imports with validation and parsing logic
 - **Prior-Month Billing**: Invoices for month M cover work from M-1 (dated last day of M-1) plus retainer for M (dated first day of M). The system uses a "give and take" model where overages in M-1 are carried forward as a negative balance rather than billed immediately. Retainer hours in future months first offset any carried-forward negative balance. Pre-agreement months are treated as having 0 retainer hours, with their hours naturally carrying forward into the first active agreement month's pool.
 - **Minimum Availability Rule**: If the carried-forward negative balance reduces the new month's availability (Retainer - Debt) below 1 hour, the system automatically bills "catch-up hours" (appearing as `additional_hours`) to pay down the debt enough to restore 1 hour of availability.
@@ -153,6 +153,7 @@ See [docs/TESTING.md](docs/TESTING.md) for comprehensive testing documentation.
 - `routes/api.php`: Finance API endpoints
 - `routes/web.php`: Web routes for pages
 - `docs/`: Import schemas, data formats, and feature documentation
+- `docs/finance/`: Finance module docs — [LotAnalyzer.md](docs/finance/LotAnalyzer.md), [TransactionsTable.md](docs/finance/TransactionsTable.md), [FinanceTool.md](docs/finance/FinanceTool.md)
 - `training_data/`: Sample CSV files for testing imports
 
 Focus on financial data integrity, proper error handling for imports, and maintaining relationships between accounts, transactions, and statements.</content>

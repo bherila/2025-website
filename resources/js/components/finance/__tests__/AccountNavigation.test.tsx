@@ -84,8 +84,11 @@ describe('AccountNavigation account dropdown', () => {
       )
     })
 
-    const accountsLink = screen.getByRole('link', { name: /^Accounts$/i })
-    expect(accountsLink).toHaveAttribute('href', '/finance/accounts')
+    // Multiple "Accounts" links may exist (breadcrumb + sub-nav); find the breadcrumb one
+    const accountsLinks = screen.getAllByRole('link', { name: /^Accounts$/i })
+    const breadcrumbAccountsLink = accountsLinks.find(el => el.getAttribute('href') === '/finance/accounts')
+    expect(breadcrumbAccountsLink).toBeDefined()
+    expect(breadcrumbAccountsLink).toHaveAttribute('href', '/finance/accounts')
   })
 
   it('shows the active tab name in breadcrumb page element', async () => {

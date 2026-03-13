@@ -27,6 +27,7 @@ Route::middleware(['web', 'auth'])->post('/rsu', [FinanceRsuController::class, '
 Route::middleware(['web', 'auth'])->delete('/rsu/{id}', [FinanceRsuController::class, 'deleteRsuGrant']);
 
 // Transaction routes (FinanceTransactionsApiController)
+Route::middleware(['web', 'auth'])->get('/finance/all-line-items', [FinanceTransactionsApiController::class, 'getLineItems']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/line_items', [FinanceTransactionsApiController::class, 'getLineItems']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/line_items', [FinanceTransactionsApiController::class, 'importLineItems']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/transaction', [FinanceTransactionsApiController::class, 'createTransaction']);
@@ -80,8 +81,13 @@ Route::middleware(['web', 'auth'])->post('/finance/{account_id}/import-pdf-state
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/lots', [FinanceLotsController::class, 'index']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/lots', [FinanceLotsController::class, 'store']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/lots/import', [FinanceLotsController::class, 'importLots']);
+Route::middleware(['web', 'auth'])->post('/finance/{account_id}/lots/save-analyzed', [FinanceLotsController::class, 'saveAnalyzedLots']);
+Route::middleware(['web', 'auth'])->put('/finance/{account_id}/lots/{lot_id}', [FinanceLotsController::class, 'updateLot']);
+Route::middleware(['web', 'auth'])->delete('/finance/{account_id}/lots/{lot_id}', [FinanceLotsController::class, 'deleteLot']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/lots/search-transactions', [FinanceLotsController::class, 'searchTransactions']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/lots/by-transaction/{t_id}', [FinanceLotsController::class, 'lotsByTransaction']);
+Route::middleware(['web', 'auth'])->post('/finance/lots/search-opening', [FinanceLotsController::class, 'searchOpeningTransactions']);
+Route::middleware(['web', 'auth'])->post('/finance/lots/save-assignment', [FinanceLotsController::class, 'saveLotAssignment']);
 
 Route::middleware(['web', 'auth'])->post('/user/update-api-key', [App\Http\Controllers\UserApiController::class, 'updateApiKey']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/duplicates', [FinanceTransactionsDedupeApiController::class, 'findDuplicates']);

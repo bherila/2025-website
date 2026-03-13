@@ -69,4 +69,34 @@ describe('parseImportData', () => {
       t_type: 'deposit',
     })
   })
+
+  it('parses Fidelity-style E-Trade v3 CSV with Fees column', () => {
+    const fidelityCsv = [
+      'Activity/Trade Date,Transaction Date,Settlement Date,Activity Type,Description,Symbol,Cusip,Quantity #,Price $,Amount $,Commission,Fees,Category,Note',
+      '2017-11-09,2017-11-09,2017-11-13,SELL,YOU SOLD,MSFT,594918104,143.51,84.05,12053.44,0.0,0.25,Investment,',
+      '2016-01-06,2016-01-06,2016-01-06,CASH,DEPOSIT,,,,,78.85,0.0,0.0,Transfer,',
+    ].join('\n')
+
+    const result = parseImportData(fidelityCsv)
+
+    expect(result.parseError).toBeNull()
+    expect(result.statement).toBeNull()
+    expect(result.data).toHaveLength(2)
+    expect(result.data?.[0]).toMatchObject({
+      t_date: '2017-11-09',
+      t_type: 'SELL',
+      t_symbol: 'MSFT',
+      t_qty: 143.51,
+      t_price: 84.05,
+      t_amt: 12053.44,
+      t_commission: 0,
+      t_fee: 0.25,
+    })
+    expect(result.data?.[1]).toMatchObject({
+      t_date: '2016-01-06',
+      t_type: 'CASH',
+      t_description: 'DEPOSIT',
+      t_amt: 78.85,
+    })
+  })
 })
