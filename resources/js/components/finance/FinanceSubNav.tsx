@@ -9,11 +9,12 @@ import {
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
 
-export type FinanceSection = 'accounts' | 'rsu' | 'payslips' | 'all-transactions'
+export type FinanceSection = 'accounts' | 'rsu' | 'payslips' | 'all-transactions' | 'schedule-c'
 
 const FINANCE_SECTIONS: { value: FinanceSection; label: string; href: string }[] = [
   { value: 'accounts', label: 'Accounts', href: '/finance/accounts' },
   { value: 'all-transactions', label: 'All Transactions', href: '/finance/all-transactions' },
+  { value: 'schedule-c', label: 'Schedule C', href: '/finance/schedule-c' },
   { value: 'rsu', label: 'RSU', href: '/finance/rsu' },
   { value: 'payslips', label: 'Payslips', href: '/finance/payslips' },
 ]

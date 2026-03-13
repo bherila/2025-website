@@ -9,6 +9,33 @@ The development environment is configured to handle large datasets efficiently.
 ### Memory Limit
 The `composer run dev` command is configured to run PHP with a **1GB memory limit** (`-d memory_limit=1G`) for both `artisan serve` and `artisan queue:listen`. This prevents out-of-memory errors when processing or viewing thousands of transactions.
 
+## Main Navigation
+
+The main navigation bar includes a **Finance** dropdown (visible to authenticated users only) with links to all finance sections:
+
+| Menu Item | Route | Description |
+|-----------|-------|-------------|
+| Accounts | `/finance` | Account list and management |
+| All Transactions | `/finance/all-transactions` | Cross-account transaction view |
+| Schedule C View | `/finance/schedule-c` | Tax year summary for Schedule C |
+| RSU | `/finance/rsu` | Restricted Stock Unit tracking |
+| Payslips | `/finance/payslips` | Payslip management |
+| Utility Bill Tracker | `/utility-bill-tracker` | Track and manage utility bills |
+
+The main navbar is implemented in `resources/js/components/navbar.tsx`.
+
+## Finance Sub-Navigation
+
+All finance section pages share a common sub-navigation bar (`FinanceSubNav`, `resources/js/components/finance/FinanceSubNav.tsx`) that provides quick access between sections:
+
+| Link | Route |
+|------|-------|
+| Accounts | `/finance` |
+| All Transactions | `/finance/all-transactions` |
+| Schedule C | `/finance/schedule-c` |
+| RSU | `/finance/rsu` |
+| Payslips | `/finance/payslips` |
+
 ## Account Navigation
 
 The finance module uses a tabbed navigation system with a shared year selector at the account level.
@@ -199,6 +226,95 @@ The following state is persisted in the URL so the browser back button works:
 - `?show=cash|stock` — filter type (or omitted for "all")
 - `?view=lots|tag-totals` — active view (or omitted for default transactions view)
 
+## Schedule C View
+
+**Route**: `GET /finance/schedule-c`  
+**Component**: `resources/js/components/finance/ScheduleCPage.tsx`  
+**API**: `GET /api/finance/schedule-c` → `FinanceScheduleCController@getSummary`
+
+The Schedule C view is a dedicated tax-reporting summary page. It does not show a transaction list; instead it aggregates tagged transactions into IRS Schedule C (Profit or Loss from Business) line-item totals grouped by tax year.
+
+### What it Shows
+
+For each tax year (most recent first):
+- **Full-width year header** — e.g., "2024"
+- **Two 50/50 side-by-side tables**:
+  - **Table 1 — Schedule C Expenses**: One row per `sce_*` category with a positive dollar total
+  - **Table 2 — Home Office Deductions**: One row per `scho_*` category with a positive dollar total
+- **Total row** at the bottom of each table
+
+Amounts are stored as negatives in the database (expenses) but displayed as positive values in this view.
+
+### How it Works
+
+1. The API fetches all non-deleted tags for the authenticated user that have a non-null `tax_characteristic` starting with `sce_` or `scho_`.
+2. It JOINs `fin_account_line_items` → `fin_account_line_item_tag_map` → `fin_account_tag` → `fin_accounts`.
+3. `SUM(t_amt)` is grouped by `SUBSTR(t_date, 1, 4)` (year) and `tag_id`.
+4. The server applies `abs()` to normalize amounts to positive.
+5. Years are sorted descending.
+
+See `docs/finance/Tags.md` for the full list of valid `tax_characteristic` values and the tag management system.
+
+## Utility Bill Tracker
+
+**Routes**: `GET /utility-bill-tracker`, `GET /utility-bill-tracker/{id}/bills`  
+**Components**: `resources/js/components/utility-bill-tracker/`
+
+The Utility Bill Tracker is a standalone module within the Finance dropdown that allows users to track recurring utility bills across multiple accounts (e.g., electricity, gas, water, internet).
+
+### Concepts
+
+- **Utility Account** — A named account representing one utility service (e.g., "Pacific Gas & Electric"). Accounts have a type (`Electricity` or `General`) and optional notes.
+- **Bill** — A single billing record for an account, with a due date, amount due, status (paid/unpaid), and optional PDF attachment.
+
+### Pages
+
+| Page | Route | Component | Description |
+|------|-------|-----------|-------------|
+| Account List | `/utility-bill-tracker` | `UtilityAccountListPage.tsx` | List all utility accounts; click a row to view bills |
+| Bill List | `/utility-bill-tracker/{id}/bills` | `UtilityBillListPage.tsx` | View and manage bills for one account |
+
+### Features
+
+- **Add/Edit/Delete accounts** via modals
+- **Add/Edit/Delete bills** via modals
+- **Toggle paid/unpaid status** per bill
+- **Import bill from PDF** — uploads a PDF to Gemini AI for structured parsing, pre-filling the bill form
+- **PDF attachment** — store a PDF of the bill for reference (download/delete supported)
+- **Link to finance transaction** — associate a bill with a matching transaction in the Finance module via `LinkBillModal`
+- **Account notes** — free-form text notes per account (auto-saved on blur)
+
+### Electricity Account View
+
+When `accountType === 'Electricity'`, the bill list shows additional columns:
+- **kWh** — kilowatt-hours consumed
+- **Rate** — computed cost per kWh
+- Charts and trend analysis (if available)
+
+### API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/utility-bill-tracker/accounts` | List all accounts |
+| `POST` | `/api/utility-bill-tracker/accounts` | Create account |
+| `GET` | `/api/utility-bill-tracker/accounts/{id}` | Get account detail |
+| `PUT` | `/api/utility-bill-tracker/accounts/{id}/notes` | Update account notes |
+| `DELETE` | `/api/utility-bill-tracker/accounts/{id}` | Delete account |
+| `GET` | `/api/utility-bill-tracker/accounts/{id}/bills` | List bills for account |
+| `POST` | `/api/utility-bill-tracker/accounts/{id}/bills` | Create bill |
+| `GET` | `/api/utility-bill-tracker/accounts/{id}/bills/{billId}` | Get bill detail |
+| `PUT` | `/api/utility-bill-tracker/accounts/{id}/bills/{billId}` | Update bill |
+| `POST` | `/api/utility-bill-tracker/accounts/{id}/bills/{billId}/toggle-status` | Toggle paid/unpaid |
+| `DELETE` | `/api/utility-bill-tracker/accounts/{id}/bills/{billId}` | Delete bill |
+| `GET` | `/api/utility-bill-tracker/accounts/{id}/bills/{billId}/download-pdf` | Download PDF |
+| `DELETE` | `/api/utility-bill-tracker/accounts/{id}/bills/{billId}/pdf` | Delete PDF |
+| `POST` | `/api/utility-bill-tracker/accounts/{id}/bills/import-pdf` | Import bill from PDF via Gemini |
+| `GET` | `/api/utility-bill-tracker/accounts/{id}/bills/{billId}/linkable` | Find linkable finance transactions |
+| `POST` | `/api/utility-bill-tracker/accounts/{id}/bills/{billId}/link` | Link bill to transaction |
+| `POST` | `/api/utility-bill-tracker/accounts/{id}/bills/{billId}/unlink` | Unlink bill from transaction |
+
+**Controllers**: `app/Http/Controllers/UtilityBillTracker/`
+
 ## Stock Options
 
 ### Option Parsing
@@ -231,6 +347,7 @@ Option transactions may have special types:
 | `FinanceTransactionLinkingApiController` | Link/unlink transactions, find linkable pairs |
 | `FinanceTransactionTaggingApiController` | Tag CRUD and application |
 | `FinanceTransactionsDedupeApiController` | Find duplicate transactions |
+| `FinanceScheduleCController` | Schedule C tax-year summary aggregation |
 | `FinanceApiController` | Account summary, account list, and other utilities |
 
 ## CSV Parsers

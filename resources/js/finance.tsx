@@ -10,6 +10,7 @@ import FinanceSubNav, { type FinanceSection } from '@/components/finance/Finance
 import ImportTransactionsClient from '@/components/finance/ImportTransactionsClient'
 import LinkerPage from '@/components/finance/LinkerPage'
 import ManageTagsPage from '@/components/finance/ManageTagsPage'
+import ScheduleCPage from '@/components/finance/ScheduleCPage'
 import FinanceAccountStatementsPage from '@/components/finance/statements/FinanceAccountStatementsPage'
 import SummaryClient from '@/components/finance/SummaryClient'
 
@@ -79,6 +80,12 @@ document.addEventListener('DOMContentLoaded', () => {
   if (manageTagsDiv) {
     const root = createRoot(manageTagsDiv)
     root.render(<ManageTagsPage />)
+  }
+
+  const scheduleCDiv = document.getElementById('ScheduleCPage')
+  if (scheduleCDiv) {
+    const root = createRoot(scheduleCDiv)
+    root.render(<ScheduleCPage />)
   }
 
   // Standalone FinanceSubNav (for pages like Payslips that need the nav bar)

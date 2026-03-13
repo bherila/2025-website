@@ -5,9 +5,9 @@ namespace Tests\Feature;
 use App\Models\FinanceTool\FinStatementDetail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
 
 class StatementImportGeminiTest extends TestCase
@@ -76,7 +76,7 @@ class StatementImportGeminiTest extends TestCase
         Http::fake([
             '*' => Http::response($this->geminiJsonResponse([
                 ['section' => 'Summary', 'line_item' => 'Total', 'statement_period_value' => 100, 'ytd_value' => 200, 'is_percentage' => false],
-            ]), 200)
+            ]), 200),
         ]);
 
         $file = UploadedFile::fake()->create('test.txt', 100, 'text/plain');

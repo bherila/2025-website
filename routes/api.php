@@ -11,6 +11,7 @@ use App\Http\Controllers\FinanceTool\FinanceLotsController;
 use App\Http\Controllers\FinanceTool\FinancePayslipController;
 use App\Http\Controllers\FinanceTool\FinancePayslipImportController;
 use App\Http\Controllers\FinanceTool\FinanceRsuController;
+use App\Http\Controllers\FinanceTool\FinanceScheduleCController;
 use App\Http\Controllers\FinanceTool\FinanceTransactionLinkingApiController;
 use App\Http\Controllers\FinanceTool\FinanceTransactionsApiController;
 use App\Http\Controllers\FinanceTool\FinanceTransactionsDedupeApiController;
@@ -38,6 +39,7 @@ Route::middleware(['web', 'auth'])->post('/finance/tags/apply', [FinanceTransact
 Route::middleware(['web', 'auth'])->post('/finance/tags', [FinanceTransactionTaggingApiController::class, 'createTag']);
 Route::middleware(['web', 'auth'])->put('/finance/tags/{tag_id}', [FinanceTransactionTaggingApiController::class, 'updateTag']);
 Route::middleware(['web', 'auth'])->delete('/finance/tags/{tag_id}', [FinanceTransactionTaggingApiController::class, 'deleteTag']);
+Route::middleware(['web', 'auth'])->get('/finance/schedule-c', [FinanceScheduleCController::class, 'getSummary']);
 Route::middleware(['web', 'auth'])->post('/finance/transactions/{transaction_id}/update', [FinanceTransactionsApiController::class, 'updateTransaction']);
 Route::middleware(['web', 'auth'])->get('/finance/transactions/{transaction_id}/links', [FinanceTransactionLinkingApiController::class, 'getTransactionLinks']);
 Route::middleware(['web', 'auth'])->get('/finance/transactions/{transaction_id}/linkable', [FinanceTransactionLinkingApiController::class, 'findLinkableTransactions']);

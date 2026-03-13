@@ -158,10 +158,10 @@ class FinanceApiController extends Controller
             ->leftJoin('files_for_fin_accounts as ffa', 'fs.statement_id', '=', 'ffa.statement_id')
             ->where('fs.acct_id', $account->acct_id)
             ->select(
-                'fs.statement_id', 
-                'fs.statement_opening_date', 
-                'fs.statement_closing_date', 
-                'fs.balance', 
+                'fs.statement_id',
+                'fs.statement_opening_date',
+                'fs.statement_closing_date',
+                'fs.balance',
                 DB::raw('count(DISTINCT fsd.id) as lineItemCount'),
                 DB::raw('count(DISTINCT ffa.id) > 0 as hasPdf')
             )
