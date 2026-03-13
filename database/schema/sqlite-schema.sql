@@ -1,81 +1,11 @@
--- SQLite Schema for Testing
--- Converted from MySQL schema for use with RefreshDatabase trait
--- This schema is used by PHPUnit tests with in-memory SQLite database
-
-PRAGMA foreign_keys = OFF;
-
--- Drop all tables if they exist (reverse order for FK dependencies)
-DROP TABLE IF EXISTS `verification`;
-DROP TABLE IF EXISTS `vxcv_links`;
-DROP TABLE IF EXISTS `vxcv_files`;
-DROP TABLE IF EXISTS `utility_bill`;
-DROP TABLE IF EXISTS `utility_account`;
-DROP TABLE IF EXISTS `users`;
-DROP TABLE IF EXISTS `twoFactor`;
-DROP TABLE IF EXISTS `timeseries_datapoint`;
-DROP TABLE IF EXISTS `timeseries_series`;
-DROP TABLE IF EXISTS `timeseries_documents`;
-DROP TABLE IF EXISTS `stock_quotes_daily`;
-DROP TABLE IF EXISTS `sessions`;
-DROP TABLE IF EXISTS `session`;
-DROP TABLE IF EXISTS `product_keys`;
-DROP TABLE IF EXISTS `phr_patient_vitals`;
-DROP TABLE IF EXISTS `phr_lab_results`;
-DROP TABLE IF EXISTS `password_reset_tokens`;
-DROP TABLE IF EXISTS `migrations`;
-DROP TABLE IF EXISTS `jobs`;
-DROP TABLE IF EXISTS `job_batches`;
-DROP TABLE IF EXISTS `graduated_tax`;
-DROP TABLE IF EXISTS `fin_statements`;
-DROP TABLE IF EXISTS `fin_statement_securities_lent`;
-DROP TABLE IF EXISTS `fin_statement_positions`;
-DROP TABLE IF EXISTS `fin_statement_performance`;
-DROP TABLE IF EXISTS `fin_statement_nav`;
-DROP TABLE IF EXISTS `fin_statement_details`;
-DROP TABLE IF EXISTS `fin_statement_cash_report`;
-DROP TABLE IF EXISTS `fin_payslip_uploads`;
-DROP TABLE IF EXISTS `fin_payslip`;
-DROP TABLE IF EXISTS `fin_equity_awards`;
-DROP TABLE IF EXISTS `fin_account_tag`;
-DROP TABLE IF EXISTS `fin_account_line_item_tag_map`;
-DROP TABLE IF EXISTS `fin_account_line_item_links`;
-DROP TABLE IF EXISTS `fin_account_line_items`;
-DROP TABLE IF EXISTS `fin_accounts`;
-DROP TABLE IF EXISTS `files_for_tasks`;
-DROP TABLE IF EXISTS `files_for_projects`;
-DROP TABLE IF EXISTS `files_for_fin_accounts`;
-DROP TABLE IF EXISTS `files_for_client_companies`;
-DROP TABLE IF EXISTS `files_for_agreements`;
-DROP TABLE IF EXISTS `failed_jobs`;
-DROP TABLE IF EXISTS `earnings_quarterly`;
-DROP TABLE IF EXISTS `earnings_annual`;
-DROP TABLE IF EXISTS `client_time_entries`;
-DROP TABLE IF EXISTS `client_tasks`;
-DROP TABLE IF EXISTS `client_projects`;
-DROP TABLE IF EXISTS `client_invoices`;
-DROP TABLE IF EXISTS `client_invoice_payments`;
-DROP TABLE IF EXISTS `client_invoice_lines`;
-DROP TABLE IF EXISTS `client_expenses`;
-DROP TABLE IF EXISTS `client_company_user`;
-DROP TABLE IF EXISTS `client_companies`;
-DROP TABLE IF EXISTS `client_agreements`;
-DROP TABLE IF EXISTS `cache_locks`;
-DROP TABLE IF EXISTS `cache`;
-DROP TABLE IF EXISTS `account`;
-DROP TABLE IF EXISTS `AccountLineItemTag`;
-DROP TABLE IF EXISTS `user`;
-
--- Create tables
-
-CREATE TABLE `AccountLineItemTag` (
+CREATE TABLE `AccountLineItemTag`(
   `tag_id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `tag_userid` TEXT NOT NULL,
   `tag_color` TEXT NOT NULL,
   `tag_label` TEXT NOT NULL,
-  UNIQUE (`tag_userid`, `tag_label`)
+  UNIQUE(`tag_userid`, `tag_label`)
 );
-
-CREATE TABLE `user` (
+CREATE TABLE `user`(
   `id` TEXT PRIMARY KEY NOT NULL,
   `name` TEXT NOT NULL,
   `email` TEXT NOT NULL UNIQUE,
@@ -84,8 +14,7 @@ CREATE TABLE `user` (
   `createdAt` TEXT NOT NULL,
   `updatedAt` TEXT NOT NULL
 );
-
-CREATE TABLE `account` (
+CREATE TABLE `account`(
   `id` TEXT PRIMARY KEY NOT NULL,
   `accountId` TEXT NOT NULL,
   `providerId` TEXT NOT NULL,
@@ -99,22 +28,19 @@ CREATE TABLE `account` (
   `password` TEXT,
   `createdAt` TEXT NOT NULL,
   `updatedAt` TEXT NOT NULL,
-  FOREIGN KEY (`userId`) REFERENCES `user` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+  FOREIGN KEY(`userId`) REFERENCES `user`(`id`) ON DELETE CASCADE ON UPDATE CASCADE
 );
-
-CREATE TABLE `cache` (
+CREATE TABLE `cache`(
   `key` TEXT PRIMARY KEY NOT NULL,
   `value` TEXT NOT NULL,
   `expiration` INTEGER NOT NULL
 );
-
-CREATE TABLE `cache_locks` (
+CREATE TABLE `cache_locks`(
   `key` TEXT PRIMARY KEY NOT NULL,
   `owner` TEXT NOT NULL,
   `expiration` INTEGER NOT NULL
 );
-
-CREATE TABLE `users` (
+CREATE TABLE `users`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `name` TEXT NOT NULL,
   `email` TEXT NOT NULL UNIQUE,
@@ -127,10 +53,8 @@ CREATE TABLE `users` (
   `updated_at` TEXT,
   `gemini_api_key` TEXT
 );
-
-CREATE INDEX `users_user_role_index` ON `users` (`user_role`);
-
-CREATE TABLE `client_companies` (
+CREATE INDEX `users_user_role_index` ON `users`(`user_role`);
+CREATE TABLE `client_companies`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `company_name` TEXT NOT NULL,
   `slug` TEXT NOT NULL DEFAULT '' UNIQUE,
@@ -145,11 +69,13 @@ CREATE TABLE `client_companies` (
   `updated_at` TEXT,
   `deleted_at` TEXT
 );
-
-CREATE INDEX `client_companies_is_active_index` ON `client_companies` (`is_active`);
-CREATE INDEX `client_companies_company_name_index` ON `client_companies` (`company_name`);
-
-CREATE TABLE `client_agreements` (
+CREATE INDEX `client_companies_is_active_index` ON `client_companies`(
+  `is_active`
+);
+CREATE INDEX `client_companies_company_name_index` ON `client_companies`(
+  `company_name`
+);
+CREATE TABLE `client_agreements`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `client_company_id` INTEGER NOT NULL,
   `active_date` TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -169,26 +95,29 @@ CREATE TABLE `client_agreements` (
   `created_at` TEXT,
   `updated_at` TEXT,
   `deleted_at` TEXT,
-  FOREIGN KEY (`client_company_id`) REFERENCES `client_companies` (`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`client_company_signed_user_id`) REFERENCES `users` (`id`)
+  FOREIGN KEY(`client_company_id`) REFERENCES `client_companies`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY(`client_company_signed_user_id`) REFERENCES `users`(`id`)
 );
-
-CREATE INDEX `client_agreements_client_company_id_index` ON `client_agreements` (`client_company_id`);
-CREATE INDEX `client_agreements_active_date_index` ON `client_agreements` (`active_date`);
-CREATE INDEX `client_agreements_termination_date_index` ON `client_agreements` (`termination_date`);
-
-CREATE TABLE `client_company_user` (
+CREATE INDEX `client_agreements_client_company_id_index` ON `client_agreements`(
+  `client_company_id`
+);
+CREATE INDEX `client_agreements_active_date_index` ON `client_agreements`(
+  `active_date`
+);
+CREATE INDEX `client_agreements_termination_date_index` ON `client_agreements`(
+  `termination_date`
+);
+CREATE TABLE `client_company_user`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `client_company_id` INTEGER NOT NULL,
   `user_id` INTEGER NOT NULL,
   `created_at` TEXT,
   `updated_at` TEXT,
-  UNIQUE (`client_company_id`, `user_id`),
-  FOREIGN KEY (`client_company_id`) REFERENCES `client_companies` (`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+  UNIQUE(`client_company_id`, `user_id`),
+  FOREIGN KEY(`client_company_id`) REFERENCES `client_companies`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY(`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
 );
-
-CREATE TABLE `client_invoices` (
+CREATE TABLE `client_invoices`(
   `client_invoice_id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `client_company_id` INTEGER NOT NULL,
   `client_agreement_id` INTEGER,
@@ -210,16 +139,22 @@ CREATE TABLE `client_invoices` (
   `created_at` TEXT,
   `updated_at` TEXT,
   `deleted_at` TEXT,
-  FOREIGN KEY (`client_company_id`) REFERENCES `client_companies` (`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`client_agreement_id`) REFERENCES `client_agreements` (`id`) ON DELETE SET NULL
+  "starting_unused_hours" numeric,
+  "starting_negative_hours" numeric,
+  FOREIGN KEY(`client_company_id`) REFERENCES `client_companies`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY(`client_agreement_id`) REFERENCES `client_agreements`(`id`) ON DELETE SET NULL
 );
-
-CREATE INDEX `client_invoices_client_company_id_index` ON `client_invoices` (`client_company_id`);
-CREATE INDEX `client_invoices_client_agreement_id_index` ON `client_invoices` (`client_agreement_id`);
-CREATE INDEX `client_invoices_issue_date_index` ON `client_invoices` (`issue_date`);
-CREATE INDEX `client_invoices_status_index` ON `client_invoices` (`status`);
-
-CREATE TABLE `client_invoice_lines` (
+CREATE INDEX `client_invoices_client_company_id_index` ON `client_invoices`(
+  `client_company_id`
+);
+CREATE INDEX `client_invoices_client_agreement_id_index` ON `client_invoices`(
+  `client_agreement_id`
+);
+CREATE INDEX `client_invoices_issue_date_index` ON `client_invoices`(
+  `issue_date`
+);
+CREATE INDEX `client_invoices_status_index` ON `client_invoices`(`status`);
+CREATE TABLE `client_invoice_lines`(
   `client_invoice_line_id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `client_invoice_id` INTEGER NOT NULL,
   `client_agreement_id` INTEGER,
@@ -234,13 +169,13 @@ CREATE TABLE `client_invoice_lines` (
   `created_at` TEXT,
   `updated_at` TEXT,
   `deleted_at` TEXT,
-  FOREIGN KEY (`client_invoice_id`) REFERENCES `client_invoices` (`client_invoice_id`) ON DELETE CASCADE,
-  FOREIGN KEY (`client_agreement_id`) REFERENCES `client_agreements` (`id`)
+  FOREIGN KEY(`client_invoice_id`) REFERENCES `client_invoices`(`client_invoice_id`) ON DELETE CASCADE,
+  FOREIGN KEY(`client_agreement_id`) REFERENCES `client_agreements`(`id`)
 );
-
-CREATE INDEX `client_invoice_lines_client_invoice_id_index` ON `client_invoice_lines` (`client_invoice_id`);
-
-CREATE TABLE `client_invoice_payments` (
+CREATE INDEX `client_invoice_lines_client_invoice_id_index` ON `client_invoice_lines`(
+  `client_invoice_id`
+);
+CREATE TABLE `client_invoice_payments`(
   `client_invoice_payment_id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `client_invoice_id` INTEGER NOT NULL,
   `amount` REAL NOT NULL,
@@ -250,10 +185,9 @@ CREATE TABLE `client_invoice_payments` (
   `created_at` TEXT,
   `updated_at` TEXT,
   `deleted_at` TEXT,
-  FOREIGN KEY (`client_invoice_id`) REFERENCES `client_invoices` (`client_invoice_id`) ON DELETE CASCADE
+  FOREIGN KEY(`client_invoice_id`) REFERENCES `client_invoices`(`client_invoice_id`) ON DELETE CASCADE
 );
-
-CREATE TABLE `client_projects` (
+CREATE TABLE `client_projects`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `client_company_id` INTEGER NOT NULL,
   `name` TEXT NOT NULL,
@@ -263,13 +197,13 @@ CREATE TABLE `client_projects` (
   `created_at` TEXT,
   `updated_at` TEXT,
   `deleted_at` TEXT,
-  FOREIGN KEY (`client_company_id`) REFERENCES `client_companies` (`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`creator_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+  FOREIGN KEY(`client_company_id`) REFERENCES `client_companies`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY(`creator_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
 );
-
-CREATE INDEX `client_projects_client_company_id_index` ON `client_projects` (`client_company_id`);
-
-CREATE TABLE `client_tasks` (
+CREATE INDEX `client_projects_client_company_id_index` ON `client_projects`(
+  `client_company_id`
+);
+CREATE TABLE `client_tasks`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `project_id` INTEGER NOT NULL,
   `name` TEXT NOT NULL,
@@ -283,16 +217,18 @@ CREATE TABLE `client_tasks` (
   `created_at` TEXT,
   `updated_at` TEXT,
   `deleted_at` TEXT,
-  FOREIGN KEY (`project_id`) REFERENCES `client_projects` (`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`assignee_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-  FOREIGN KEY (`creator_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+  FOREIGN KEY(`project_id`) REFERENCES `client_projects`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY(`assignee_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
+  FOREIGN KEY(`creator_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
 );
-
-CREATE INDEX `client_tasks_project_id_index` ON `client_tasks` (`project_id`);
-CREATE INDEX `client_tasks_assignee_user_id_index` ON `client_tasks` (`assignee_user_id`);
-CREATE INDEX `client_tasks_completed_at_index` ON `client_tasks` (`completed_at`);
-
-CREATE TABLE `client_time_entries` (
+CREATE INDEX `client_tasks_project_id_index` ON `client_tasks`(`project_id`);
+CREATE INDEX `client_tasks_assignee_user_id_index` ON `client_tasks`(
+  `assignee_user_id`
+);
+CREATE INDEX `client_tasks_completed_at_index` ON `client_tasks`(
+  `completed_at`
+);
+CREATE TABLE `client_time_entries`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `project_id` INTEGER NOT NULL,
   `client_company_id` INTEGER NOT NULL,
@@ -308,22 +244,32 @@ CREATE TABLE `client_time_entries` (
   `created_at` TEXT,
   `updated_at` TEXT,
   `deleted_at` TEXT,
-  FOREIGN KEY (`project_id`) REFERENCES `client_projects` (`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`client_company_id`) REFERENCES `client_companies` (`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`task_id`) REFERENCES `client_tasks` (`id`) ON DELETE SET NULL,
-  FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-  FOREIGN KEY (`creator_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-  FOREIGN KEY (`client_invoice_line_id`) REFERENCES `client_invoice_lines` (`client_invoice_line_id`)
+  FOREIGN KEY(`project_id`) REFERENCES `client_projects`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY(`client_company_id`) REFERENCES `client_companies`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY(`task_id`) REFERENCES `client_tasks`(`id`) ON DELETE SET NULL,
+  FOREIGN KEY(`user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
+  FOREIGN KEY(`creator_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
+  FOREIGN KEY(`client_invoice_line_id`) REFERENCES `client_invoice_lines`(`client_invoice_line_id`)
 );
-
-CREATE INDEX `client_time_entries_project_id_index` ON `client_time_entries` (`project_id`);
-CREATE INDEX `client_time_entries_client_company_id_index` ON `client_time_entries` (`client_company_id`);
-CREATE INDEX `client_time_entries_task_id_index` ON `client_time_entries` (`task_id`);
-CREATE INDEX `client_time_entries_user_id_index` ON `client_time_entries` (`user_id`);
-CREATE INDEX `client_time_entries_date_worked_index` ON `client_time_entries` (`date_worked`);
-CREATE INDEX `client_time_entries_client_invoice_line_id_index` ON `client_time_entries` (`client_invoice_line_id`);
-
-CREATE TABLE `client_expenses` (
+CREATE INDEX `client_time_entries_project_id_index` ON `client_time_entries`(
+  `project_id`
+);
+CREATE INDEX `client_time_entries_client_company_id_index` ON `client_time_entries`(
+  `client_company_id`
+);
+CREATE INDEX `client_time_entries_task_id_index` ON `client_time_entries`(
+  `task_id`
+);
+CREATE INDEX `client_time_entries_user_id_index` ON `client_time_entries`(
+  `user_id`
+);
+CREATE INDEX `client_time_entries_date_worked_index` ON `client_time_entries`(
+  `date_worked`
+);
+CREATE INDEX `client_time_entries_client_invoice_line_id_index` ON `client_time_entries`(
+  `client_invoice_line_id`
+);
+CREATE TABLE `client_expenses`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `client_company_id` INTEGER NOT NULL,
   `project_id` INTEGER,
@@ -341,25 +287,30 @@ CREATE TABLE `client_expenses` (
   `created_at` TEXT,
   `updated_at` TEXT,
   `deleted_at` TEXT,
-  FOREIGN KEY (`client_company_id`) REFERENCES `client_companies` (`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`project_id`) REFERENCES `client_projects` (`id`) ON DELETE SET NULL,
-  FOREIGN KEY (`creator_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-  FOREIGN KEY (`client_invoice_line_id`) REFERENCES `client_invoice_lines` (`client_invoice_line_id`) ON DELETE SET NULL
+  FOREIGN KEY(`client_company_id`) REFERENCES `client_companies`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY(`project_id`) REFERENCES `client_projects`(`id`) ON DELETE SET NULL,
+  FOREIGN KEY(`creator_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
+  FOREIGN KEY(`client_invoice_line_id`) REFERENCES `client_invoice_lines`(`client_invoice_line_id`) ON DELETE SET NULL
 );
-
-CREATE INDEX `client_expenses_client_company_id_index` ON `client_expenses` (`client_company_id`);
-CREATE INDEX `client_expenses_project_id_index` ON `client_expenses` (`project_id`);
-CREATE INDEX `client_expenses_expense_date_index` ON `client_expenses` (`expense_date`);
-CREATE INDEX `client_expenses_is_reimbursable_index` ON `client_expenses` (`is_reimbursable`);
-
-CREATE TABLE `earnings_annual` (
+CREATE INDEX `client_expenses_client_company_id_index` ON `client_expenses`(
+  `client_company_id`
+);
+CREATE INDEX `client_expenses_project_id_index` ON `client_expenses`(
+  `project_id`
+);
+CREATE INDEX `client_expenses_expense_date_index` ON `client_expenses`(
+  `expense_date`
+);
+CREATE INDEX `client_expenses_is_reimbursable_index` ON `client_expenses`(
+  `is_reimbursable`
+);
+CREATE TABLE `earnings_annual`(
   `symbol` TEXT NOT NULL,
   `fiscalDateEnding` TEXT NOT NULL,
   `reportedEPS` REAL,
-  PRIMARY KEY (`symbol`, `fiscalDateEnding`)
+  PRIMARY KEY(`symbol`, `fiscalDateEnding`)
 );
-
-CREATE TABLE `earnings_quarterly` (
+CREATE TABLE `earnings_quarterly`(
   `symbol` TEXT NOT NULL,
   `fiscalDateEnding` TEXT NOT NULL,
   `reportedDate` TEXT,
@@ -367,10 +318,9 @@ CREATE TABLE `earnings_quarterly` (
   `estimatedEPS` REAL,
   `surprise` REAL,
   `surprisePercentage` REAL,
-  PRIMARY KEY (`symbol`, `fiscalDateEnding`)
+  PRIMARY KEY(`symbol`, `fiscalDateEnding`)
 );
-
-CREATE TABLE `failed_jobs` (
+CREATE TABLE `failed_jobs`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `uuid` TEXT NOT NULL UNIQUE,
   `connection` TEXT NOT NULL,
@@ -379,8 +329,7 @@ CREATE TABLE `failed_jobs` (
   `exception` TEXT NOT NULL,
   `failed_at` TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-
-CREATE TABLE `files_for_agreements` (
+CREATE TABLE `files_for_agreements`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `agreement_id` INTEGER NOT NULL,
   `original_filename` TEXT NOT NULL,
@@ -393,13 +342,13 @@ CREATE TABLE `files_for_agreements` (
   `created_at` TEXT,
   `updated_at` TEXT,
   `deleted_at` TEXT,
-  FOREIGN KEY (`agreement_id`) REFERENCES `client_agreements` (`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`uploaded_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+  FOREIGN KEY(`agreement_id`) REFERENCES `client_agreements`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY(`uploaded_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
 );
-
-CREATE INDEX `files_for_agreements_agreement_id_index` ON `files_for_agreements` (`agreement_id`);
-
-CREATE TABLE `files_for_client_companies` (
+CREATE INDEX `files_for_agreements_agreement_id_index` ON `files_for_agreements`(
+  `agreement_id`
+);
+CREATE TABLE `files_for_client_companies`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `client_company_id` INTEGER NOT NULL,
   `original_filename` TEXT NOT NULL,
@@ -412,13 +361,13 @@ CREATE TABLE `files_for_client_companies` (
   `created_at` TEXT,
   `updated_at` TEXT,
   `deleted_at` TEXT,
-  FOREIGN KEY (`client_company_id`) REFERENCES `client_companies` (`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`uploaded_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+  FOREIGN KEY(`client_company_id`) REFERENCES `client_companies`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY(`uploaded_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
 );
-
-CREATE INDEX `files_for_client_companies_client_company_id_index` ON `files_for_client_companies` (`client_company_id`);
-
-CREATE TABLE `files_for_fin_accounts` (
+CREATE INDEX `files_for_client_companies_client_company_id_index` ON `files_for_client_companies`(
+  `client_company_id`
+);
+CREATE TABLE `files_for_fin_accounts`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `acct_id` INTEGER NOT NULL,
   `statement_id` INTEGER,
@@ -432,13 +381,15 @@ CREATE TABLE `files_for_fin_accounts` (
   `created_at` TEXT,
   `updated_at` TEXT,
   `deleted_at` TEXT,
-  FOREIGN KEY (`uploaded_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+  FOREIGN KEY(`uploaded_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
 );
-
-CREATE INDEX `files_for_fin_accounts_acct_id_index` ON `files_for_fin_accounts` (`acct_id`);
-CREATE INDEX `files_for_fin_accounts_statement_id_index` ON `files_for_fin_accounts` (`statement_id`);
-
-CREATE TABLE `files_for_projects` (
+CREATE INDEX `files_for_fin_accounts_acct_id_index` ON `files_for_fin_accounts`(
+  `acct_id`
+);
+CREATE INDEX `files_for_fin_accounts_statement_id_index` ON `files_for_fin_accounts`(
+  `statement_id`
+);
+CREATE TABLE `files_for_projects`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `project_id` INTEGER NOT NULL,
   `original_filename` TEXT NOT NULL,
@@ -451,13 +402,13 @@ CREATE TABLE `files_for_projects` (
   `created_at` TEXT,
   `updated_at` TEXT,
   `deleted_at` TEXT,
-  FOREIGN KEY (`project_id`) REFERENCES `client_projects` (`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`uploaded_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+  FOREIGN KEY(`project_id`) REFERENCES `client_projects`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY(`uploaded_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
 );
-
-CREATE INDEX `files_for_projects_project_id_index` ON `files_for_projects` (`project_id`);
-
-CREATE TABLE `files_for_tasks` (
+CREATE INDEX `files_for_projects_project_id_index` ON `files_for_projects`(
+  `project_id`
+);
+CREATE TABLE `files_for_tasks`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `task_id` INTEGER NOT NULL,
   `original_filename` TEXT NOT NULL,
@@ -470,13 +421,11 @@ CREATE TABLE `files_for_tasks` (
   `created_at` TEXT,
   `updated_at` TEXT,
   `deleted_at` TEXT,
-  FOREIGN KEY (`task_id`) REFERENCES `client_tasks` (`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`uploaded_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+  FOREIGN KEY(`task_id`) REFERENCES `client_tasks`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY(`uploaded_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
 );
-
-CREATE INDEX `files_for_tasks_task_id_index` ON `files_for_tasks` (`task_id`);
-
-CREATE TABLE `fin_accounts` (
+CREATE INDEX `files_for_tasks_task_id_index` ON `files_for_tasks`(`task_id`);
+CREATE TABLE `fin_accounts`(
   `acct_id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `acct_owner` TEXT NOT NULL,
   `acct_name` TEXT NOT NULL,
@@ -489,10 +438,9 @@ CREATE TABLE `fin_accounts` (
   `when_closed` TEXT,
   `created_at` TEXT,
   `updated_at` TEXT,
-  UNIQUE (`acct_owner`, `acct_name`)
+  UNIQUE(`acct_owner`, `acct_name`)
 );
-
-CREATE TABLE `fin_account_line_items` (
+CREATE TABLE `fin_account_line_items`(
   `t_id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `t_account` INTEGER,
   `t_date` TEXT NOT NULL,
@@ -530,49 +478,51 @@ CREATE TABLE `fin_account_line_items` (
   `t_date_posted` TEXT,
   `t_account_balance` REAL,
   `statement_id` INTEGER,
-  FOREIGN KEY (`statement_id`) REFERENCES `fin_statements` (`statement_id`) ON DELETE SET NULL
+  FOREIGN KEY(`statement_id`) REFERENCES `fin_statements`(`statement_id`) ON DELETE SET NULL
 );
-
-CREATE INDEX `fin_account_line_items_t_account_index` ON `fin_account_line_items` (`t_account`);
-
-CREATE TABLE `fin_account_line_item_links` (
+CREATE INDEX `fin_account_line_items_t_account_index` ON `fin_account_line_items`(
+  `t_account`
+);
+CREATE TABLE `fin_account_line_item_links`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `parent_t_id` INTEGER NOT NULL,
   `child_t_id` INTEGER NOT NULL,
   `when_added` TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `when_deleted` TEXT,
-  UNIQUE (`parent_t_id`, `child_t_id`),
-  FOREIGN KEY (`parent_t_id`) REFERENCES `fin_account_line_items` (`t_id`) ON DELETE CASCADE,
-  FOREIGN KEY (`child_t_id`) REFERENCES `fin_account_line_items` (`t_id`) ON DELETE CASCADE
+  UNIQUE(`parent_t_id`, `child_t_id`),
+  FOREIGN KEY(`parent_t_id`) REFERENCES `fin_account_line_items`(`t_id`) ON DELETE CASCADE,
+  FOREIGN KEY(`child_t_id`) REFERENCES `fin_account_line_items`(`t_id`) ON DELETE CASCADE
 );
-
-CREATE INDEX `fin_account_line_item_links_parent_t_id_index` ON `fin_account_line_item_links` (`parent_t_id`);
-CREATE INDEX `fin_account_line_item_links_child_t_id_index` ON `fin_account_line_item_links` (`child_t_id`);
-
-CREATE TABLE `fin_account_tag` (
+CREATE INDEX `fin_account_line_item_links_parent_t_id_index` ON `fin_account_line_item_links`(
+  `parent_t_id`
+);
+CREATE INDEX `fin_account_line_item_links_child_t_id_index` ON `fin_account_line_item_links`(
+  `child_t_id`
+);
+CREATE TABLE `fin_account_tag`(
   `tag_id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `tag_userid` TEXT NOT NULL,
   `tag_color` TEXT NOT NULL,
   `tag_label` TEXT NOT NULL,
   `when_added` TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `when_deleted` TEXT,
-  UNIQUE (`tag_userid`, `tag_label`)
+  "tax_characteristic" varchar check("tax_characteristic" in('sce_advertising', 'sce_car_truck', 'sce_commissions_fees', 'sce_contract_labor', 'sce_depletion', 'sce_depreciation', 'sce_employee_benefits', 'sce_insurance', 'sce_interest_mortgage', 'sce_interest_other', 'sce_legal_professional', 'sce_office_expenses', 'sce_pension', 'sce_rent_vehicles', 'sce_rent_property', 'sce_repairs_maintenance', 'sce_supplies', 'sce_taxes_licenses', 'sce_travel', 'sce_meals', 'sce_utilities', 'sce_wages', 'sce_other', 'scho_rent', 'scho_mortgage_interest', 'scho_real_estate_taxes', 'scho_insurance', 'scho_utilities', 'scho_repairs_maintenance', 'scho_security', 'scho_depreciation', 'scho_cleaning', 'scho_hoa', 'scho_casualty_losses')),
+  UNIQUE(`tag_userid`, `tag_label`)
 );
-
-CREATE TABLE `fin_account_line_item_tag_map` (
+CREATE TABLE `fin_account_line_item_tag_map`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `t_id` INTEGER NOT NULL,
   `tag_id` INTEGER NOT NULL,
   `when_added` TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `when_deleted` TEXT,
-  UNIQUE (`t_id`, `tag_id`),
-  FOREIGN KEY (`t_id`) REFERENCES `fin_account_line_items` (`t_id`) ON DELETE CASCADE,
-  FOREIGN KEY (`tag_id`) REFERENCES `fin_account_tag` (`tag_id`) ON DELETE CASCADE
+  UNIQUE(`t_id`, `tag_id`),
+  FOREIGN KEY(`t_id`) REFERENCES `fin_account_line_items`(`t_id`) ON DELETE CASCADE,
+  FOREIGN KEY(`tag_id`) REFERENCES `fin_account_tag`(`tag_id`) ON DELETE CASCADE
 );
-
-CREATE INDEX `fin_account_line_item_tag_map_tag_id_index` ON `fin_account_line_item_tag_map` (`tag_id`);
-
-CREATE TABLE `fin_equity_awards` (
+CREATE INDEX `fin_account_line_item_tag_map_tag_id_index` ON `fin_account_line_item_tag_map`(
+  `tag_id`
+);
+CREATE TABLE `fin_equity_awards`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `award_id` TEXT NOT NULL,
   `grant_date` TEXT NOT NULL,
@@ -581,10 +531,9 @@ CREATE TABLE `fin_equity_awards` (
   `symbol` TEXT NOT NULL,
   `uid` TEXT NOT NULL,
   `vest_price` REAL,
-  UNIQUE (`grant_date`, `award_id`, `vest_date`, `symbol`)
+  UNIQUE(`grant_date`, `award_id`, `vest_date`, `symbol`)
 );
-
-CREATE TABLE `fin_payslip` (
+CREATE TABLE `fin_payslip`(
   `payslip_id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `uid` INTEGER NOT NULL,
   `period_start` TEXT,
@@ -622,28 +571,24 @@ CREATE TABLE `fin_payslip` (
   `created_at` TEXT,
   `updated_at` TEXT,
   `deleted_at` TEXT,
-  UNIQUE (`uid`, `period_start`, `period_end`, `pay_date`)
+  UNIQUE(`uid`, `period_start`, `period_end`, `pay_date`)
 );
-
-CREATE TABLE `fin_payslip_uploads` (
+CREATE TABLE `fin_payslip_uploads`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `file_name` TEXT,
   `file_hash` TEXT,
   `parsed_json` TEXT
 );
-
-CREATE TABLE `fin_statements` (
+CREATE TABLE `fin_statements`(
   `statement_id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `acct_id` INTEGER NOT NULL,
   `balance` TEXT NOT NULL,
   `statement_opening_date` TEXT,
   `statement_closing_date` TEXT,
-  FOREIGN KEY (`acct_id`) REFERENCES `fin_accounts` (`acct_id`)
+  FOREIGN KEY(`acct_id`) REFERENCES `fin_accounts`(`acct_id`)
 );
-
-CREATE INDEX `fin_statements_acct_id_index` ON `fin_statements` (`acct_id`);
-
-CREATE TABLE `fin_statement_cash_report` (
+CREATE INDEX `fin_statements_acct_id_index` ON `fin_statements`(`acct_id`);
+CREATE TABLE `fin_statement_cash_report`(
   `cash_id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `statement_id` INTEGER NOT NULL,
   `currency` TEXT NOT NULL,
@@ -651,12 +596,12 @@ CREATE TABLE `fin_statement_cash_report` (
   `total` REAL,
   `securities` REAL,
   `futures` REAL,
-  FOREIGN KEY (`statement_id`) REFERENCES `fin_statements` (`statement_id`) ON DELETE CASCADE
+  FOREIGN KEY(`statement_id`) REFERENCES `fin_statements`(`statement_id`) ON DELETE CASCADE
 );
-
-CREATE INDEX `fin_statement_cash_report_statement_id_index` ON `fin_statement_cash_report` (`statement_id`);
-
-CREATE TABLE `fin_statement_details` (
+CREATE INDEX `fin_statement_cash_report_statement_id_index` ON `fin_statement_cash_report`(
+  `statement_id`
+);
+CREATE TABLE `fin_statement_details`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `statement_id` INTEGER NOT NULL,
   `section` TEXT NOT NULL,
@@ -666,10 +611,9 @@ CREATE TABLE `fin_statement_details` (
   `is_percentage` INTEGER NOT NULL DEFAULT 0,
   `created_at` TEXT,
   `updated_at` TEXT,
-  FOREIGN KEY (`statement_id`) REFERENCES `fin_statements` (`statement_id`) ON DELETE CASCADE
+  FOREIGN KEY(`statement_id`) REFERENCES `fin_statements`(`statement_id`) ON DELETE CASCADE
 );
-
-CREATE TABLE `fin_statement_nav` (
+CREATE TABLE `fin_statement_nav`(
   `nav_id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `statement_id` INTEGER NOT NULL,
   `asset_class` TEXT NOT NULL,
@@ -678,12 +622,12 @@ CREATE TABLE `fin_statement_nav` (
   `current_short` REAL,
   `current_total` REAL,
   `change_amount` REAL,
-  FOREIGN KEY (`statement_id`) REFERENCES `fin_statements` (`statement_id`) ON DELETE CASCADE
+  FOREIGN KEY(`statement_id`) REFERENCES `fin_statements`(`statement_id`) ON DELETE CASCADE
 );
-
-CREATE INDEX `fin_statement_nav_statement_id_index` ON `fin_statement_nav` (`statement_id`);
-
-CREATE TABLE `fin_statement_performance` (
+CREATE INDEX `fin_statement_nav_statement_id_index` ON `fin_statement_nav`(
+  `statement_id`
+);
+CREATE TABLE `fin_statement_performance`(
   `perf_id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `statement_id` INTEGER NOT NULL,
   `perf_type` TEXT NOT NULL,
@@ -710,13 +654,15 @@ CREATE TABLE `fin_statement_performance` (
   `unrealized_lt_loss` REAL,
   `unrealized_total` REAL,
   `total_pl` REAL,
-  FOREIGN KEY (`statement_id`) REFERENCES `fin_statements` (`statement_id`) ON DELETE CASCADE
+  FOREIGN KEY(`statement_id`) REFERENCES `fin_statements`(`statement_id`) ON DELETE CASCADE
 );
-
-CREATE INDEX `fin_statement_performance_statement_id_index` ON `fin_statement_performance` (`statement_id`);
-CREATE INDEX `fin_statement_performance_symbol_index` ON `fin_statement_performance` (`symbol`);
-
-CREATE TABLE `fin_statement_positions` (
+CREATE INDEX `fin_statement_performance_statement_id_index` ON `fin_statement_performance`(
+  `statement_id`
+);
+CREATE INDEX `fin_statement_performance_symbol_index` ON `fin_statement_performance`(
+  `symbol`
+);
+CREATE TABLE `fin_statement_positions`(
   `position_id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `statement_id` INTEGER NOT NULL,
   `asset_category` TEXT,
@@ -732,13 +678,15 @@ CREATE TABLE `fin_statement_positions` (
   `opt_type` TEXT,
   `opt_strike` TEXT,
   `opt_expiration` TEXT,
-  FOREIGN KEY (`statement_id`) REFERENCES `fin_statements` (`statement_id`) ON DELETE CASCADE
+  FOREIGN KEY(`statement_id`) REFERENCES `fin_statements`(`statement_id`) ON DELETE CASCADE
 );
-
-CREATE INDEX `fin_statement_positions_statement_id_index` ON `fin_statement_positions` (`statement_id`);
-CREATE INDEX `fin_statement_positions_symbol_index` ON `fin_statement_positions` (`symbol`);
-
-CREATE TABLE `fin_statement_securities_lent` (
+CREATE INDEX `fin_statement_positions_statement_id_index` ON `fin_statement_positions`(
+  `statement_id`
+);
+CREATE INDEX `fin_statement_positions_symbol_index` ON `fin_statement_positions`(
+  `symbol`
+);
+CREATE TABLE `fin_statement_securities_lent`(
   `lent_id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `statement_id` INTEGER NOT NULL,
   `symbol` TEXT NOT NULL,
@@ -747,22 +695,21 @@ CREATE TABLE `fin_statement_securities_lent` (
   `quantity` REAL,
   `collateral_amount` REAL,
   `interest_earned` REAL,
-  FOREIGN KEY (`statement_id`) REFERENCES `fin_statements` (`statement_id`) ON DELETE CASCADE
+  FOREIGN KEY(`statement_id`) REFERENCES `fin_statements`(`statement_id`) ON DELETE CASCADE
 );
-
-CREATE INDEX `fin_statement_securities_lent_statement_id_index` ON `fin_statement_securities_lent` (`statement_id`);
-
-CREATE TABLE `graduated_tax` (
+CREATE INDEX `fin_statement_securities_lent_statement_id_index` ON `fin_statement_securities_lent`(
+  `statement_id`
+);
+CREATE TABLE `graduated_tax`(
   `year` INTEGER NOT NULL,
   `region` TEXT NOT NULL,
   `income_over` INTEGER NOT NULL,
   `type` TEXT NOT NULL DEFAULT 's',
   `rate` REAL NOT NULL,
   `verified` INTEGER NOT NULL DEFAULT 0,
-  UNIQUE (`year`, `region`, `income_over`, `type`)
+  UNIQUE(`year`, `region`, `income_over`, `type`)
 );
-
-CREATE TABLE `job_batches` (
+CREATE TABLE `job_batches`(
   `id` TEXT PRIMARY KEY NOT NULL,
   `name` TEXT NOT NULL,
   `total_jobs` INTEGER NOT NULL,
@@ -774,8 +721,7 @@ CREATE TABLE `job_batches` (
   `created_at` INTEGER NOT NULL,
   `finished_at` INTEGER
 );
-
-CREATE TABLE `jobs` (
+CREATE TABLE `jobs`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `queue` TEXT NOT NULL,
   `payload` TEXT NOT NULL,
@@ -784,22 +730,18 @@ CREATE TABLE `jobs` (
   `available_at` INTEGER NOT NULL,
   `created_at` INTEGER NOT NULL
 );
-
-CREATE INDEX `jobs_queue_index` ON `jobs` (`queue`);
-
-CREATE TABLE `migrations` (
+CREATE INDEX `jobs_queue_index` ON `jobs`(`queue`);
+CREATE TABLE `migrations`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `migration` TEXT NOT NULL,
   `batch` INTEGER NOT NULL
 );
-
-CREATE TABLE `password_reset_tokens` (
+CREATE TABLE `password_reset_tokens`(
   `email` TEXT PRIMARY KEY NOT NULL,
   `token` TEXT NOT NULL,
   `created_at` TEXT
 );
-
-CREATE TABLE `phr_lab_results` (
+CREATE TABLE `phr_lab_results`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `user_id` TEXT,
   `test_name` TEXT,
@@ -819,16 +761,14 @@ CREATE TABLE `phr_lab_results` (
   `result_comment` TEXT,
   `lab_director` TEXT
 );
-
-CREATE TABLE `phr_patient_vitals` (
+CREATE TABLE `phr_patient_vitals`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `user_id` TEXT,
   `vital_name` TEXT,
   `vital_date` TEXT,
   `vital_value` TEXT
 );
-
-CREATE TABLE `product_keys` (
+CREATE TABLE `product_keys`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `uid` TEXT,
   `product_id` TEXT,
@@ -841,8 +781,7 @@ CREATE TABLE `product_keys` (
   `key_type` TEXT,
   `key_retrieval_note` TEXT
 );
-
-CREATE TABLE `session` (
+CREATE TABLE `session`(
   `id` TEXT PRIMARY KEY NOT NULL,
   `expiresAt` TEXT NOT NULL,
   `token` TEXT NOT NULL UNIQUE,
@@ -851,10 +790,9 @@ CREATE TABLE `session` (
   `ipAddress` TEXT,
   `userAgent` TEXT,
   `userId` TEXT NOT NULL,
-  FOREIGN KEY (`userId`) REFERENCES `user` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+  FOREIGN KEY(`userId`) REFERENCES `user`(`id`) ON DELETE CASCADE ON UPDATE CASCADE
 );
-
-CREATE TABLE `sessions` (
+CREATE TABLE `sessions`(
   `id` TEXT PRIMARY KEY NOT NULL,
   `user_id` INTEGER,
   `ip_address` TEXT,
@@ -862,11 +800,9 @@ CREATE TABLE `sessions` (
   `payload` TEXT NOT NULL,
   `last_activity` INTEGER NOT NULL
 );
-
-CREATE INDEX `sessions_user_id_index` ON `sessions` (`user_id`);
-CREATE INDEX `sessions_last_activity_index` ON `sessions` (`last_activity`);
-
-CREATE TABLE `stock_quotes_daily` (
+CREATE INDEX `sessions_user_id_index` ON `sessions`(`user_id`);
+CREATE INDEX `sessions_last_activity_index` ON `sessions`(`last_activity`);
+CREATE TABLE `stock_quotes_daily`(
   `c_date` TEXT NOT NULL,
   `c_symb` TEXT NOT NULL,
   `c_open` REAL NOT NULL,
@@ -874,46 +810,44 @@ CREATE TABLE `stock_quotes_daily` (
   `c_low` REAL NOT NULL,
   `c_close` REAL NOT NULL,
   `c_vol` INTEGER NOT NULL,
-  UNIQUE (`c_symb`, `c_date`)
+  UNIQUE(`c_symb`, `c_date`)
 );
-
-CREATE INDEX `stock_quotes_daily_c_symb_index` ON `stock_quotes_daily` (`c_symb`);
-
-CREATE TABLE `timeseries_documents` (
+CREATE INDEX `stock_quotes_daily_c_symb_index` ON `stock_quotes_daily`(
+  `c_symb`
+);
+CREATE TABLE `timeseries_documents`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `uid` INTEGER NOT NULL,
   `name` TEXT NOT NULL
 );
-
-CREATE TABLE `timeseries_series` (
+CREATE TABLE `timeseries_series`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `document_id` INTEGER NOT NULL,
   `series_name` TEXT NOT NULL,
-  FOREIGN KEY (`document_id`) REFERENCES `timeseries_documents` (`id`)
+  FOREIGN KEY(`document_id`) REFERENCES `timeseries_documents`(`id`)
 );
-
-CREATE INDEX `timeseries_series_document_id_index` ON `timeseries_series` (`document_id`);
-
-CREATE TABLE `timeseries_datapoint` (
+CREATE INDEX `timeseries_series_document_id_index` ON `timeseries_series`(
+  `document_id`
+);
+CREATE TABLE `timeseries_datapoint`(
   `dp_id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `dp_series_id` INTEGER NOT NULL,
   `dp_date` TEXT,
   `dp_value` TEXT,
   `dp_comment` TEXT,
-  FOREIGN KEY (`dp_series_id`) REFERENCES `timeseries_series` (`id`)
+  FOREIGN KEY(`dp_series_id`) REFERENCES `timeseries_series`(`id`)
 );
-
-CREATE INDEX `timeseries_datapoint_dp_series_id_index` ON `timeseries_datapoint` (`dp_series_id`);
-
-CREATE TABLE `twoFactor` (
+CREATE INDEX `timeseries_datapoint_dp_series_id_index` ON `timeseries_datapoint`(
+  `dp_series_id`
+);
+CREATE TABLE `twoFactor`(
   `id` TEXT PRIMARY KEY NOT NULL,
   `secret` TEXT NOT NULL,
   `backupCodes` TEXT NOT NULL,
   `userId` TEXT NOT NULL,
-  FOREIGN KEY (`userId`) REFERENCES `user` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+  FOREIGN KEY(`userId`) REFERENCES `user`(`id`) ON DELETE CASCADE ON UPDATE CASCADE
 );
-
-CREATE TABLE `utility_account` (
+CREATE TABLE `utility_account`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `user_id` INTEGER NOT NULL,
   `account_name` TEXT NOT NULL,
@@ -921,12 +855,10 @@ CREATE TABLE `utility_account` (
   `notes` TEXT,
   `created_at` TEXT,
   `updated_at` TEXT,
-  FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+  FOREIGN KEY(`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
 );
-
-CREATE INDEX `utility_account_user_id_index` ON `utility_account` (`user_id`);
-
-CREATE TABLE `utility_bill` (
+CREATE INDEX `utility_account_user_id_index` ON `utility_account`(`user_id`);
+CREATE TABLE `utility_bill`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `utility_account_id` INTEGER NOT NULL,
   `bill_start_date` TEXT NOT NULL,
@@ -951,13 +883,13 @@ CREATE TABLE `utility_bill` (
   `pdf_file_size_bytes` INTEGER,
   `created_at` TEXT,
   `updated_at` TEXT,
-  FOREIGN KEY (`utility_account_id`) REFERENCES `utility_account` (`id`) ON DELETE CASCADE
+  FOREIGN KEY(`utility_account_id`) REFERENCES `utility_account`(`id`) ON DELETE CASCADE
 );
-
-CREATE INDEX `utility_bill_utility_account_id_index` ON `utility_bill` (`utility_account_id`);
-CREATE INDEX `utility_bill_t_id_index` ON `utility_bill` (`t_id`);
-
-CREATE TABLE `fin_account_lots` (
+CREATE INDEX `utility_bill_utility_account_id_index` ON `utility_bill`(
+  `utility_account_id`
+);
+CREATE INDEX `utility_bill_t_id_index` ON `utility_bill`(`t_id`);
+CREATE TABLE `fin_account_lots`(
   `lot_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
   `acct_id` INTEGER NOT NULL,
   `symbol` TEXT NOT NULL,
@@ -976,19 +908,23 @@ CREATE TABLE `fin_account_lots` (
   `close_t_id` INTEGER,
   `created_at` TEXT,
   `updated_at` TEXT,
-  FOREIGN KEY (`acct_id`) REFERENCES `fin_accounts` (`acct_id`) ON DELETE CASCADE,
-  FOREIGN KEY (`statement_id`) REFERENCES `fin_statements` (`statement_id`) ON DELETE SET NULL,
-  FOREIGN KEY (`open_t_id`) REFERENCES `fin_account_line_items` (`t_id`) ON DELETE SET NULL,
-  FOREIGN KEY (`close_t_id`) REFERENCES `fin_account_line_items` (`t_id`) ON DELETE SET NULL
+  FOREIGN KEY(`acct_id`) REFERENCES `fin_accounts`(`acct_id`) ON DELETE CASCADE,
+  FOREIGN KEY(`statement_id`) REFERENCES `fin_statements`(`statement_id`) ON DELETE SET NULL,
+  FOREIGN KEY(`open_t_id`) REFERENCES `fin_account_line_items`(`t_id`) ON DELETE SET NULL,
+  FOREIGN KEY(`close_t_id`) REFERENCES `fin_account_line_items`(`t_id`) ON DELETE SET NULL
 );
-
-CREATE INDEX `fin_account_lots_acct_id_index` ON `fin_account_lots` (`acct_id`);
-CREATE INDEX `fin_account_lots_symbol_index` ON `fin_account_lots` (`symbol`);
-CREATE INDEX `fin_account_lots_sale_date_index` ON `fin_account_lots` (`sale_date`);
-CREATE INDEX `fin_account_lots_open_t_id_index` ON `fin_account_lots` (`open_t_id`);
-CREATE INDEX `fin_account_lots_close_t_id_index` ON `fin_account_lots` (`close_t_id`);
-
-CREATE TABLE `verification` (
+CREATE INDEX `fin_account_lots_acct_id_index` ON `fin_account_lots`(`acct_id`);
+CREATE INDEX `fin_account_lots_symbol_index` ON `fin_account_lots`(`symbol`);
+CREATE INDEX `fin_account_lots_sale_date_index` ON `fin_account_lots`(
+  `sale_date`
+);
+CREATE INDEX `fin_account_lots_open_t_id_index` ON `fin_account_lots`(
+  `open_t_id`
+);
+CREATE INDEX `fin_account_lots_close_t_id_index` ON `fin_account_lots`(
+  `close_t_id`
+);
+CREATE TABLE `verification`(
   `id` TEXT PRIMARY KEY NOT NULL,
   `identifier` TEXT NOT NULL,
   `value` TEXT NOT NULL,
@@ -996,8 +932,7 @@ CREATE TABLE `verification` (
   `createdAt` TEXT,
   `updatedAt` TEXT
 );
-
-CREATE TABLE `vxcv_files` (
+CREATE TABLE `vxcv_files`(
   `hash` BLOB PRIMARY KEY NOT NULL,
   `filename` TEXT NOT NULL,
   `mime` TEXT NOT NULL,
@@ -1008,16 +943,17 @@ CREATE TABLE `vxcv_files` (
   `blocked` INTEGER NOT NULL DEFAULT 0,
   `ip` INTEGER NOT NULL
 );
-
-CREATE TABLE `vxcv_links` (
+CREATE TABLE `vxcv_links`(
   `uniqueid` TEXT PRIMARY KEY NOT NULL,
   `url` TEXT NOT NULL
 );
 
--- Insert migration records to mark schema as applied
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (1, '0001_01_01_000000_create_schema_baseline', 1);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (2, '2026_03_05_000000_create_fin_account_lots_table', 2);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (3, '2026_03_05_001906_add_hash_and_statement_id_to_finance_tables', 2);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (4, '2026_03_05_100000_add_transaction_ids_to_fin_account_lots', 2);
-
-PRAGMA foreign_keys = ON;
+INSERT INTO migrations VALUES(1,'0001_01_01_000000_create_schema_baseline',1);
+INSERT INTO migrations VALUES(2,'2026_03_05_000000_create_fin_account_lots_table',2);
+INSERT INTO migrations VALUES(3,'2026_03_05_001906_add_hash_and_statement_id_to_finance_tables',2);
+INSERT INTO migrations VALUES(4,'2026_03_05_100000_add_transaction_ids_to_fin_account_lots',2);
+INSERT INTO migrations VALUES(5,'2026_01_28_220930_update_client_invoice_lines_table',3);
+INSERT INTO migrations VALUES(6,'2026_01_29_031451_change_quantity_column_to_varchar_in_client_invoice_lines',3);
+INSERT INTO migrations VALUES(7,'2026_02_05_062520_add_catch_up_threshold_hours_to_client_agreements_table',3);
+INSERT INTO migrations VALUES(8,'2026_02_07_000000_add_starting_balances_to_client_invoices',3);
+INSERT INTO migrations VALUES(9,'2026_03_13_083906_add_tax_characteristic_to_fin_account_tag_table',3);

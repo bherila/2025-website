@@ -66,22 +66,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        $driver = Schema::getConnection()->getDriverName();
-
-        if ($driver === 'mysql') {
-            Schema::table('fin_account_tag', function (Blueprint $table) {
-                $table->enum('tax_characteristic', self::VALUES)->nullable()->after('tag_label');
-            });
-        } else {
-            // SQLite: use TEXT with CHECK constraint
-            // Values are quoted individually via PDO to prevent any future injection risk
-            $pdo = DB::connection()->getPdo();
-            $quoted = implode(', ', array_map(fn ($v) => $pdo->quote($v), self::VALUES));
-            DB::statement(
-                'ALTER TABLE fin_account_tag ADD COLUMN tax_characteristic TEXT'
-                ." CHECK(tax_characteristic IN ({$quoted})) NULL DEFAULT NULL"
-            );
-        }
+        Schema::table('fin_account_tag', function (Blueprint $table) {
+            $table->enum('tax_characteristic', self::VALUES)->nullable()->after('tag_label');
+        });
     }
 
     /**

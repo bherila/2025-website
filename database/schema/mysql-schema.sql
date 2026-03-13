@@ -1234,3 +1234,4 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (47,'2026_02_07_000
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (48,'2026_03_05_000000_create_fin_account_lots_table',27);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (49,'2026_03_05_001906_add_hash_and_statement_id_to_finance_tables',28);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (50,'2026_03_05_100000_add_transaction_ids_to_fin_account_lots',29);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (51,'2026_03_13_083906_add_tax_characteristic_to_fin_account_tag_table',30);
