@@ -1,33 +1,22 @@
 # Brevo Mailer Skill for Laravel 12
 
-This skill enables **Brevo (formerly Sendinblue)** as a first‑class mail transport in **Laravel 12**, using the official Symfony Brevo Mailer bridge. It provides a consistent setup you can reuse across multiple projects.
-
----
-
-## Overview
-
-Laravel 12 uses **Symfony Mailer** under the hood, which allows registering **custom Symfony transports**. The package `symfony/brevo-mailer` provides an official Brevo transport that integrates cleanly with Laravel once registered.
-
-This skill adds:
-
-- A custom `brevo` mail transport  
-- A reusable DSN configuration  
-- A standard `.env` pattern  
-- A consistent mailer entry for all your Laravel projects  
+This skill enables **Brevo (formerly Sendinblue)** as a first‑class mail transport in **Laravel 12**, using the official Symfony Brevo Mailer bridge. It standardizes the configuration so you can enable `MAIL_MAILER=brevo` across multiple projects.
 
 ---
 
 ## Installation
 
+You must install both the Brevo mailer bridge and the Symfony HTTP client (required for API transport):
+
 ```bash
-composer require symfony/brevo-mailer
+composer require symfony/brevo-mailer symfony/http-client
 ```
 
 ---
 
 ## Service Provider Setup
 
-Add the Brevo transport to your `AppServiceProvider`.
+Add the Brevo transport to your `AppServiceProvider.php`.
 
 ```php
 use Symfony\Component\Mailer\Transport\Dsn;
@@ -61,9 +50,9 @@ This registers a `brevo` transport that Laravel can use like any built‑in mail
 
 ### `config/mail.php`
 
-Add a mailer entry:
-
 ```php
+'default' => env('MAIL_MAILER', 'brevo'),
+
 'mailers' => [
     'brevo' => [
         'transport' => 'brevo',
@@ -71,21 +60,15 @@ Add a mailer entry:
 ],
 ```
 
-Set it as the default mailer:
-
-```php
-'default' => env('MAIL_MAILER', 'brevo'),
-```
-
 ---
 
 ## Environment Variables
 
-### API Transport (recommended)
+### API Transport (Brevo v3 API Key)
 
 ```
 MAIL_MAILER=brevo
-MAILER_DSN=brevo+api://YOUR_BREVO_API_KEY@default
+MAILER_DSN=brevo+api://xkeysib-YOUR_V3_API_KEY@default
 ```
 
 ### SMTP Transport (optional)
@@ -97,23 +80,22 @@ MAILER_DSN=brevo+smtp://SMTP_LOGIN:SMTP_PASSWORD@default
 
 ---
 
-## Usage
+## Testing & Troubleshooting
 
-Once configured, send mail normally:
+### Verify via Tinker
 
-```php
-Mail::to('user@example.com')->send(new WelcomeMail());
+Run this command to test transport registration and API connectivity:
+
+```bash
+php artisan tinker --execute="Mail::raw('Test', fn($m) => $m->to('your@email.com')->subject('Brevo Test'));"
 ```
 
-All Laravel features—Markdown mailables, queueing, attachments—work without modification.
+### Common Errors
+
+- **401 Unauthorized (“Key not found”)** — API key is invalid or truncated. Ensure it begins with `xkeysib-`. If using SMTP credentials, switch to the `brevo+smtp://` DSN.
+- **Missing HttpClient** — Install `symfony/http-client` if you see errors related to `AbstractHttpTransport`.
+- **405 Method Not Allowed** — Usually indicates an incorrect endpoint or a version mismatch between the Brevo bridge and your Symfony/Laravel version.
 
 ---
 
-## Notes
-
-- The API transport is faster and supports Brevo‑specific metadata.
-- This skill is intentionally minimal and reusable across projects.
-- For full Brevo API features (contacts, automations, webhooks), use a dedicated Brevo SDK separately.
-
----
-
+If you want to expand this into a reusable package instead of a copy‑paste skill, I can help outline the structure for that.
