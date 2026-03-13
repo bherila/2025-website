@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 
+import { TagTotalsView } from '@/components/finance/TagTotalsView'
 import { type FinanceTag, useFinanceTags } from '@/components/finance/useFinanceTags'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
@@ -18,6 +19,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { fetchWrapper } from '@/fetchWrapper'
+import { getTagColorDark, getTagColorHex, getTagColorLight } from '@/lib/finance/tagColorUtils'
 import { accountsUrl } from '@/lib/financeRouteBuilder'
 
 const TAG_COLORS = [
@@ -34,7 +36,7 @@ const TAG_COLORS = [
 ]
 
 export default function ManageTagsPage() {
-  const { tags, isLoading, error: tagsError, refreshTags } = useFinanceTags({ includeCounts: true })
+  const { tags, isLoading, error: tagsError, refreshTags } = useFinanceTags({ includeCounts: true, includeTotals: true })
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   
@@ -146,7 +148,7 @@ export default function ManageTagsPage() {
               ? 'border-black dark:border-white scale-110' 
               : 'border-transparent hover:border-gray-400'
           } bg-${color}-500`}
-          style={{ backgroundColor: getColorHex(color) }}
+          style={{ backgroundColor: getTagColorHex(color) }}
           onClick={() => onColorChange(color)}
           aria-label={`Select ${color} color`}
         />
@@ -221,8 +223,8 @@ export default function ManageTagsPage() {
               <Badge 
                 className={`ml-2 bg-${newTagColor}-200 text-${newTagColor}-800 dark:bg-${newTagColor}-800 dark:text-${newTagColor}-200`}
                 style={{ 
-                  backgroundColor: getColorLight(newTagColor),
-                  color: getColorDark(newTagColor)
+                  backgroundColor: getTagColorLight(newTagColor),
+                  color: getTagColorDark(newTagColor)
                 }}
               >
                 {newTagLabel || 'Tag Name'}
@@ -285,8 +287,8 @@ export default function ManageTagsPage() {
                       <Badge 
                         className={`bg-${tag.tag_color}-200 text-${tag.tag_color}-800 dark:bg-${tag.tag_color}-800 dark:text-${tag.tag_color}-200`}
                         style={{ 
-                          backgroundColor: getColorLight(tag.tag_color),
-                          color: getColorDark(tag.tag_color)
+                          backgroundColor: getTagColorLight(tag.tag_color),
+                          color: getTagColorDark(tag.tag_color)
                         }}
                       >
                         {tag.tag_label}
@@ -350,6 +352,14 @@ export default function ManageTagsPage() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Totals by Tag Section */}
+      {tags.some((t) => t.totals) && (
+        <div className="mt-8">
+          <h2 className="text-lg font-semibold mb-4">Totals by Tag</h2>
+          <TagTotalsView tags={tags} isLoading={isLoading} error={tagsError} />
+        </div>
+      )}
+
       {/* Back to accounts link */}
       <div className="mt-8 pt-4 border-t">
         <a href={accountsUrl()} className="text-blue-600 hover:underline">
@@ -358,53 +368,4 @@ export default function ManageTagsPage() {
       </div>
     </div>
   )
-}
-
-// Helper functions to get actual color values since Tailwind classes are purged at build time
-function getColorHex(colorName: string): string {
-  const colors: Record<string, string> = {
-    gray: '#6b7280',
-    red: '#ef4444',
-    orange: '#f97316',
-    yellow: '#eab308',
-    green: '#22c55e',
-    teal: '#14b8a6',
-    blue: '#3b82f6',
-    indigo: '#6366f1',
-    purple: '#a855f7',
-    pink: '#ec4899',
-  }
-  return colors[colorName] ?? '#3b82f6'
-}
-
-function getColorLight(colorName: string): string {
-  const colors: Record<string, string> = {
-    gray: '#e5e7eb',
-    red: '#fecaca',
-    orange: '#fed7aa',
-    yellow: '#fef08a',
-    green: '#bbf7d0',
-    teal: '#99f6e4',
-    blue: '#bfdbfe',
-    indigo: '#c7d2fe',
-    purple: '#e9d5ff',
-    pink: '#fbcfe8',
-  }
-  return colors[colorName] ?? '#bfdbfe'
-}
-
-function getColorDark(colorName: string): string {
-  const colors: Record<string, string> = {
-    gray: '#1f2937',
-    red: '#991b1b',
-    orange: '#9a3412',
-    yellow: '#854d0e',
-    green: '#166534',
-    teal: '#115e59',
-    blue: '#1e40af',
-    indigo: '#3730a3',
-    purple: '#6b21a8',
-    pink: '#9d174d',
-  }
-  return colors[colorName] ?? '#1e40af'
 }

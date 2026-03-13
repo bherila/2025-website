@@ -151,17 +151,45 @@ The Duplicates tab (`/finance/{id}/duplicates`) provides:
 
 Tags can be applied to transactions for categorization:
 - Tags have a label and color
-- Tags support parent-child hierarchy via `parent_tag_id`
-- Bulk apply tags to filtered transactions
+- Bulk apply tags to all currently-filtered transactions (up to 1,000 items)
 - Manage tags at `/finance/tags`
 
 ### Tag API Response Contract
 
 Tag fetch endpoints return a consistent JSON envelope:
-- `GET /api/finance/tags` -> `{ data: Tag[] }`
-- `GET /api/finance/tags?include_counts=true` -> `{ data: TagWithCount[] }`
+- `GET /api/finance/tags` → `{ data: Tag[] }`
+- `GET /api/finance/tags?include_counts=true` → `{ data: TagWithCount[] }`
+- `GET /api/finance/tags?totals=true` → `{ data: TagWithTotals[] }` — each tag includes a `totals` map of `{ year: amount, all: totalAllYears }`
+- Both `include_counts=true` and `totals=true` can be combined in one request.
 
 Both `TransactionsTable` and `ManageTagsPage` use the shared hook `resources/js/components/finance/useFinanceTags.ts` to consume this contract.
+
+**Important**: The `fallbackTags` option uses a `useRef` internally so that passing a default `[]` literal does **not** cause an infinite re-render loop. Do not include `fallbackTags` in `useCallback` dependencies.
+
+### Tagging Limit
+
+When more than 1,000 transactions are shown in the filtered view, the tagging apply buttons are disabled and a warning `Alert` is displayed. Users must refine their filters to fewer than 1,000 transactions before applying tags.
+
+### Totals by Tag
+
+The `TagTotalsView` component (`resources/js/components/finance/TagTotalsView.tsx`) renders a table of tag totals broken down by year plus an "All Years" column. It is used in:
+- **All Transactions page** (`?view=tag-totals`): accessible via the view selector ButtonGroup.
+- **Manage Tags page**: rendered below the tags list when totals are available.
+
+### All Transactions Page Views & URL State
+
+The All Transactions page supports three views selectable via a `ButtonGroup` in the toolbar:
+
+| View | URL param | Description |
+|------|-----------|-------------|
+| Transactions | `?view=` (default) | TransactionsTable with tagging enabled |
+| Lot Analyzer | `?view=lots` | LotAnalyzer component |
+| Totals by Tag | `?view=tag-totals` | TagTotalsView component |
+
+The following state is persisted in the URL so the browser back button works:
+- `?year=YYYY` — selected year (or omitted for "all")
+- `?show=cash|stock` — filter type (or omitted for "all")
+- `?view=lots|tag-totals` — active view (or omitted for default transactions view)
 
 ## Stock Options
 
