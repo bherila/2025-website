@@ -22,10 +22,6 @@ Route::get('/login', function () {
 Route::post('/login', [LoginController::class, 'login']);
 Route::post('/login/dev', [LoginController::class, 'devLogin'])->name('login.dev');
 
-Route::get('/tools/maxmin', function () {
-    return view('tools.maxmin');
-});
-
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [App\Http\Controllers\DashboardController::class, 'index']);
 
@@ -41,10 +37,9 @@ Route::middleware('auth')->group(function () {
         return view('finance.rsu-add-grant');
     });
 
+    Route::get('/finance/accounts', [FinanceAccountsController::class, 'index']);
     Route::get('/finance/payslips', [FinancePayslipController::class, 'index']);
     Route::get('/finance/payslips/entry', [FinancePayslipController::class, 'entry']);
-
-    Route::get('/finance/accounts', [FinanceAccountsController::class, 'index']);
     Route::get('/finance/all-transactions', function () {
         return view('finance.all-transactions');
     });
