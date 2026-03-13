@@ -240,3 +240,90 @@ describe('parseEtradeCsv — new format (Activity/Trade Date header, 2025+)', ()
     expect(parseEtradeCsv('random,data\n1,2')).toEqual([])
   })
 })
+
+describe('parseEtradeCsv — Fidelity v3 format with Fees column', () => {
+  // Subset of fidelity_transactions_2011_2019.csv — same v3 header but with an extra Fees column
+  const fidelityFmtCsv = [
+    'Activity/Trade Date,Transaction Date,Settlement Date,Activity Type,Description,Symbol,Cusip,Quantity #,Price $,Amount $,Commission,Fees,Category,Note',
+    '2011-12-30,2011-12-30,2012-01-04,BUY,YOU BOUGHT (ESPP),MSFT,594918104,148.0428,23.36,3457.79,0.0,0.0,Investment,Initial ESPP lot',
+    '2012-03-13,2012-03-13,2012-03-13,DIV,DIVIDEND RECEIVED,MSFT,594918104,,,29.61,0.0,0.0,Income,',
+    '2013-04-10,2013-04-10,2013-04-15,SELL,YOU SOLD,MSFT,594918104,200.0,30.23,6037.91,7.95,0.0,Investment,',
+    '2017-11-09,2017-11-09,2017-11-13,SELL,YOU SOLD,MSFT,594918104,143.51,84.05,12053.44,0.0,0.25,Investment,',
+    '2016-01-06,2016-01-06,2016-01-06,CASH,DEPOSIT,,,,,78.85,0.0,0.0,Transfer,',
+  ].join('\n')
+
+  it('detects and parses the format — returns all 5 data rows', () => {
+    const result = parseEtradeCsv(fidelityFmtCsv)
+    expect(Array.isArray(result)).toBe(true)
+    expect(result.length).toBe(5)
+    for (const row of result) {
+      expect(row.t_date).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    }
+  })
+
+  it('parses a BUY row with zero fees', () => {
+    const result = parseEtradeCsv(fidelityFmtCsv)
+    const row = result.find((r) => r.t_type === 'BUY')
+    expect(row).toBeTruthy()
+    expect(row).toMatchObject({
+      t_date: '2011-12-30',
+      t_type: 'BUY',
+      t_symbol: 'MSFT',
+      t_description: 'YOU BOUGHT (ESPP)',
+      t_qty: 148.0428,
+      t_price: 23.36,
+      t_amt: 3457.79,
+      t_commission: 0,
+      t_fee: 0,
+    })
+  })
+
+  it('parses a SELL row with non-zero commission and zero fee', () => {
+    const result = parseEtradeCsv(fidelityFmtCsv)
+    const row = result.find((r) => r.t_type === 'SELL' && r.t_date === '2013-04-10')
+    expect(row).toBeTruthy()
+    expect(row).toMatchObject({
+      t_date: '2013-04-10',
+      t_commission: 7.95,
+      t_fee: 0,
+    })
+  })
+
+  it('parses a SELL row with non-zero fee from the Fees column', () => {
+    const result = parseEtradeCsv(fidelityFmtCsv)
+    const row = result.find((r) => r.t_type === 'SELL' && r.t_date === '2017-11-09')
+    expect(row).toBeTruthy()
+    expect(row).toMatchObject({
+      t_date: '2017-11-09',
+      t_symbol: 'MSFT',
+      t_commission: 0,
+      t_fee: 0.25,
+    })
+  })
+
+  it('parses a DIV row (no quantity, no price)', () => {
+    const result = parseEtradeCsv(fidelityFmtCsv)
+    const row = result.find((r) => r.t_type === 'DIV')
+    expect(row).toBeTruthy()
+    expect(row).toMatchObject({
+      t_date: '2012-03-13',
+      t_type: 'DIV',
+      t_symbol: 'MSFT',
+      t_description: 'DIVIDEND RECEIVED',
+      t_amt: 29.61,
+    })
+  })
+
+  it('parses a CASH/DEPOSIT row (no symbol, no quantity)', () => {
+    const result = parseEtradeCsv(fidelityFmtCsv)
+    const row = result.find((r) => r.t_type === 'CASH')
+    expect(row).toBeTruthy()
+    expect(row).toMatchObject({
+      t_date: '2016-01-06',
+      t_type: 'CASH',
+      t_description: 'DEPOSIT',
+      t_amt: 78.85,
+    })
+    expect(row?.t_symbol == null).toBe(true)
+  })
+})

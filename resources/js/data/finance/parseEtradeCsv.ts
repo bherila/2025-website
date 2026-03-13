@@ -45,6 +45,13 @@ export function parseEtradeCsv(text: string): AccountLineItem[] {
     return data
   }
 
+  // For v3 format, parse the actual header columns to detect optional fields (e.g. Fees)
+  let v3FeesColIdx = -1
+  if (headerType === 'v3') {
+    const hcols = (lines[headerIndex] ?? '').split(',').map((c) => c.replace(/"/g, '').trim())
+    v3FeesColIdx = hcols.findIndex((c) => c.toLowerCase() === 'fees')
+  }
+
   // Parse rows after header using entries() to avoid lines[i] possibly undefined
   for (const [offset, rawLine] of lines.slice(headerIndex + 1).entries()) {
     if (!rawLine || !rawLine.trim()) continue
@@ -118,6 +125,7 @@ export function parseEtradeCsv(text: string): AccountLineItem[] {
           t_price: (cols[8] && cols[8] !== '--') ? cols[8] : undefined,
           t_amt: (cols[9] && cols[9] !== '--') ? cols[9] : undefined,
           t_commission: (cols[10] && cols[10] !== '--') ? cols[10] : undefined,
+          t_fee: (v3FeesColIdx >= 0 && cols[v3FeesColIdx] && cols[v3FeesColIdx] !== '--') ? cols[v3FeesColIdx] : undefined,
         })
         data.push(item)
       }
