@@ -14,6 +14,8 @@ class FinAccountTag extends Model
 
     /**
      * Valid tax_characteristic enum values (shared by migration, controller validation, and tests).
+     * WARNING: If editing this list, you must create a schema migration to ensure the ENUM and CHECK
+     * constraints are updated in the database (to add the new values).
      */
     public const TAX_CHARACTERISTIC_VALUES = [
         // Schedule C: Expense
