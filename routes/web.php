@@ -5,6 +5,7 @@ use App\Http\Controllers\ClientManagement\ClientCompanyController;
 use App\Http\Controllers\ClientManagement\ClientPortalAgreementController;
 use App\Http\Controllers\ClientManagement\ClientPortalController;
 use App\Http\Controllers\FinanceTool\FinanceAccountsController;
+use App\Http\Controllers\FinanceTool\FinancePayslipController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\UtilityBillTracker\UtilityAccountController;
@@ -37,6 +38,8 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::get('/finance/accounts', [FinanceAccountsController::class, 'index']);
+    Route::get('/finance/payslips', [FinancePayslipController::class, 'index']);
+    Route::get('/finance/payslips/entry', [FinancePayslipController::class, 'entry']);
     Route::get('/finance/all-transactions', function () {
         return view('finance.all-transactions');
     });

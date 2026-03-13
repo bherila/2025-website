@@ -9,8 +9,8 @@ This is a hybrid Laravel 12 + React TypeScript application for personal finance 
 - **Data Flow**: Blade passes initial data via `data-*` attributes; React handles UI updates via API calls
 - **API**: RESTful endpoints under `/api` for CRUD operations
   - recently a `GeminiImportController` was added to centralize PDF imports and cache AI responses by file hash; it automatically filters out fund-level data, normalizes any parsed dates to plain `YYYY-MM-DD` strings to avoid timezone issues, includes canonical section/line_item names in the prompt for consistent parsing, and supports lot extraction (open and closed positions with purchase dates)
-- **Domain**: Financial accounts, transactions, statements, investment lots, RSUs, CSV imports, and client management
-- **Modules**: Finance (accounts, transactions, statements, lots, RSUs), Tools (license manager, bingo, IRS F461, user management), Recipes, Projects, Client Management
+- **Domain**: Financial accounts, transactions, statements, investment lots, payslips, RSUs, CSV imports, and client management
+- **Modules**: Finance (accounts, transactions, statements, lots, payslips, RSUs), Tools (license manager, bingo, IRS F461, user management), Recipes, Projects, Client Management
 - **Authentication**: Session-based; protected routes use `auth` middleware (web routes) or `['web', 'auth']` (API routes)
 - **Authorization**: Gate-based authorization for admin-only features (e.g., Client Management uses 'admin' gate)
 - **User Roles**: Comma-separated roles in `user_role` column (e.g., `"admin,user"`). All roles lowercase. Available roles: `admin`, `user`
