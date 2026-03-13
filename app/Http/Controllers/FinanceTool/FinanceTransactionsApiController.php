@@ -45,7 +45,7 @@ class FinanceTransactionsApiController extends Controller
             $tagLabel = $request->tag;
             $query->whereHas('tags', function ($q) use ($tagLabel) {
                 $q->where('tag_label', $tagLabel)
-                  ->whereNull('when_deleted');
+                    ->whereNull('when_deleted');
             });
         }
 

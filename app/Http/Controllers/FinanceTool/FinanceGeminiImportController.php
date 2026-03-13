@@ -34,7 +34,7 @@ class FinanceGeminiImportController extends Controller
         $user = Auth::user();
         $apiKey = $user->getGeminiApiKey();
 
-        if (!$apiKey) {
+        if (! $apiKey) {
             return response()->json(['error' => 'Gemini API key is not set.'], 400);
         }
 
@@ -66,7 +66,7 @@ class FinanceGeminiImportController extends Controller
         } catch (GeminiApiException $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         } catch (Throwable $e) {
-            Log::error('Error during document parsing: ' . $e->getMessage());
+            Log::error('Error during document parsing: '.$e->getMessage());
 
             return response()->json(['error' => 'An unexpected error occurred during import.'], 500);
         }
@@ -97,13 +97,13 @@ class FinanceGeminiImportController extends Controller
             ->select('fin_statements.statement_id')
             ->first();
 
-        if (!$statement) {
+        if (! $statement) {
             return response()->json(['error' => 'Statement not found or access denied.'], 404);
         }
 
         $apiKey = $user->getGeminiApiKey();
 
-        if (!$apiKey) {
+        if (! $apiKey) {
             return response()->json(['error' => 'Gemini API key is not set.'], 400);
         }
 
@@ -132,7 +132,7 @@ class FinanceGeminiImportController extends Controller
             } catch (GeminiApiException $e) {
                 return response()->json(['error' => $e->getMessage()], 500);
             } catch (Throwable $e) {
-                Log::error('Error during statement import: ' . $e->getMessage());
+                Log::error('Error during statement import: '.$e->getMessage());
 
                 return response()->json(['error' => 'An unexpected error occurred during import.'], 500);
             }
@@ -193,27 +193,27 @@ class FinanceGeminiImportController extends Controller
             'x-goog-api-key' => $apiKey,
             'Content-Type' => 'application/json',
         ])->withOptions([
-                    'timeout' => 300,
-                ])->post('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', [
-                    'contents' => [
+            'timeout' => 300,
+        ])->post('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', [
+            'contents' => [
+                [
+                    'parts' => [
+                        ['text' => $prompt],
                         [
-                            'parts' => [
-                                ['text' => $prompt],
-                                [
-                                    'inline_data' => [
-                                        'mime_type' => 'application/pdf',
-                                        'data' => base64_encode($fileContent),
-                                    ],
-                                ],
+                            'inline_data' => [
+                                'mime_type' => 'application/pdf',
+                                'data' => base64_encode($fileContent),
                             ],
                         ],
                     ],
-                    'generationConfig' => [
-                        'response_mime_type' => 'application/json',
-                    ],
-                ]);
+                ],
+            ],
+            'generationConfig' => [
+                'response_mime_type' => 'application/json',
+            ],
+        ]);
 
-        if (!$response->successful()) {
+        if (! $response->successful()) {
             Log::error('Gemini API request failed', [
                 'status' => $response->status(),
                 'response' => $response->body(),
@@ -423,13 +423,9 @@ PROMPT;
 /**
  * Custom exception for Gemini API rate limiting.
  */
-class GeminiRateLimitException extends \RuntimeException
-{
-}
+class GeminiRateLimitException extends \RuntimeException {}
 
 /**
  * Custom exception for general Gemini API errors.
  */
-class GeminiApiException extends \RuntimeException
-{
-}
+class GeminiApiException extends \RuntimeException {}

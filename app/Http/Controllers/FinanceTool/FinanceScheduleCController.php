@@ -3,8 +3,6 @@
 namespace App\Http\Controllers\FinanceTool;
 
 use App\Http\Controllers\Controller;
-use App\Models\FinanceTool\FinAccountLineItems;
-use App\Models\FinanceTool\FinAccountLineItemTagMap;
 use App\Models\FinanceTool\FinAccountTag;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -52,11 +50,11 @@ class FinanceScheduleCController extends Controller
         $rows = DB::table('fin_account_line_items as li')
             ->join('fin_account_line_item_tag_map as tm', function ($join) {
                 $join->on('li.t_id', '=', 'tm.t_id')
-                     ->whereNull('tm.when_deleted');
+                    ->whereNull('tm.when_deleted');
             })
             ->join('fin_account_tag as t', function ($join) use ($tagIds) {
                 $join->on('tm.tag_id', '=', 't.tag_id')
-                     ->whereIn('t.tag_id', $tagIds->toArray());
+                    ->whereIn('t.tag_id', $tagIds->toArray());
             })
             ->join('fin_accounts as a', 'li.t_account', '=', 'a.acct_id')
             ->where('a.acct_owner', $uid)
@@ -70,11 +68,11 @@ class FinanceScheduleCController extends Controller
         foreach ($rows as $row) {
             $year = $row->year;
             $taxChar = $tagCharacteristicMap[$row->tag_id] ?? null;
-            if (!$taxChar) {
+            if (! $taxChar) {
                 continue;
             }
 
-            if (!isset($byYear[$year])) {
+            if (! isset($byYear[$year])) {
                 $byYear[$year] = [
                     'year' => $year,
                     'schedule_c_expense' => [],
@@ -95,7 +93,7 @@ class FinanceScheduleCController extends Controller
                 continue;
             }
 
-            if (!isset($byYear[$year][$key][$taxChar])) {
+            if (! isset($byYear[$year][$key][$taxChar])) {
                 $byYear[$year][$key][$taxChar] = ['label' => $label, 'total' => 0.0];
             }
             $byYear[$year][$key][$taxChar]['total'] += $amount;

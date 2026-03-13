@@ -4,8 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLineItemTagMap;
-use App\Models\FinanceTool\FinAccountTag;
 use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\FinAccountTag;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -29,8 +30,8 @@ class FinanceScheduleCControllerTest extends TestCase
     {
         return FinAccountLineItems::create([
             't_account' => $acctId,
-            't_date'    => $date,
-            't_amt'     => $amount,
+            't_date' => $date,
+            't_amt' => $amount,
             't_description' => $desc,
         ]);
     }
@@ -38,9 +39,9 @@ class FinanceScheduleCControllerTest extends TestCase
     private function createTagWithChar(int $userId, string $label, string $taxChar): FinAccountTag
     {
         return FinAccountTag::create([
-            'tag_userid'         => $userId,
-            'tag_label'          => $label,
-            'tag_color'          => 'blue',
+            'tag_userid' => $userId,
+            'tag_label' => $label,
+            'tag_color' => 'blue',
             'tax_characteristic' => $taxChar,
         ]);
     }
@@ -48,7 +49,7 @@ class FinanceScheduleCControllerTest extends TestCase
     private function applyTag(int $tId, int $tagId): void
     {
         FinAccountLineItemTagMap::create([
-            't_id'   => $tId,
+            't_id' => $tId,
             'tag_id' => $tagId,
         ]);
     }
@@ -64,8 +65,8 @@ class FinanceScheduleCControllerTest extends TestCase
         // Tag without tax_characteristic should be excluded
         FinAccountTag::create([
             'tag_userid' => $user->id,
-            'tag_label'  => 'Personal',
-            'tag_color'  => 'gray',
+            'tag_label' => 'Personal',
+            'tag_color' => 'gray',
         ]);
 
         $response = $this->actingAs($user)->getJson('/api/finance/schedule-c');
@@ -181,8 +182,8 @@ class FinanceScheduleCControllerTest extends TestCase
         $this->applyTag($t1->t_id, $tag->tag_id);
         // Soft-deleted mapping
         FinAccountLineItemTagMap::create([
-            't_id'         => $t2->t_id,
-            'tag_id'       => $tag->tag_id,
+            't_id' => $t2->t_id,
+            'tag_id' => $tag->tag_id,
             'when_deleted' => now(),
         ]);
 
@@ -206,13 +207,13 @@ class FinanceScheduleCControllerTest extends TestCase
         // Create other user's account while authenticated as them
         $this->actingAs($otherUser);
         $otherAcct = FinAccounts::create([
-            'acct_name'  => 'Other Checking',
+            'acct_name' => 'Other Checking',
         ]);
         $otherTag = $this->createTagWithChar($otherUser->id, 'Other Meals', 'sce_meals');
         $tOther = FinAccountLineItems::create([
             't_account' => $otherAcct->acct_id,
-            't_date'    => '2024-01-01',
-            't_amt'     => -500.00,
+            't_date' => '2024-01-01',
+            't_amt' => -500.00,
         ]);
         $this->applyTag($tOther->t_id, $otherTag->tag_id);
 
@@ -273,31 +274,35 @@ class FinanceScheduleCControllerTest extends TestCase
         $this->assertEqualsWithDelta(250.00, $total, 0.001);
     }
 
-    public function test_tags_with_none_tax_characteristic_are_excluded(): void
+    public function test_tags_with_null_tax_characteristic_are_excluded(): void
     {
         $user = $this->createUser();
         $this->actingAs($user);
 
-        $acct = $this->createAccount($user->id);
-
-        // Tag with 'none' tax_characteristic
+        // Tag with null tax_characteristic should be excluded from Schedule C
         FinAccountTag::create([
-            'tag_userid'         => $user->id,
-            'tag_label'          => 'Generic',
-            'tag_color'          => 'gray',
-            'tax_characteristic' => 'none',
-        ]);
-
-        // Tag with null tax_characteristic
-        FinAccountTag::create([
-            'tag_userid'         => $user->id,
-            'tag_label'          => 'Personal',
-            'tag_color'          => 'red',
+            'tag_userid' => $user->id,
+            'tag_label' => 'Personal',
+            'tag_color' => 'red',
             'tax_characteristic' => null,
         ]);
 
         $response = $this->actingAs($user)->getJson('/api/finance/schedule-c');
 
         $response->assertOk()->assertJson(['years' => []]);
+    }
+
+    public function test_sqlite_check_constraint_rejects_invalid_tax_characteristic(): void
+    {
+        // The CHECK constraint on SQLite (and ENUM on MySQL) should reject invalid values.
+        // Expect a QueryException when inserting a value not in the allowed set.
+        $this->expectException(QueryException::class);
+
+        FinAccountTag::create([
+            'tag_userid' => 1,
+            'tag_label' => 'Bad Tag',
+            'tag_color' => 'gray',
+            'tax_characteristic' => 'invalid_value_not_in_enum',
+        ]);
     }
 }

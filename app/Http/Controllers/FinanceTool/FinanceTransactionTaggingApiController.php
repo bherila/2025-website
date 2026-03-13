@@ -35,12 +35,12 @@ class FinanceTransactionTaggingApiController extends Controller
 
                 if ($includeTotals) {
                     $yearlyTotals = FinAccountLineItems::whereIn('t_id', $tIds)
-                        ->selectRaw("SUBSTR(t_date, 1, 4) as year, SUM(t_amt) as total")
+                        ->selectRaw('SUBSTR(t_date, 1, 4) as year, SUM(t_amt) as total')
                         ->groupBy('year')
                         ->orderBy('year')
                         ->get()
                         ->pluck('total', 'year')
-                        ->map(fn($v) => (float) $v)
+                        ->map(fn ($v) => (float) $v)
                         ->toArray();
 
                     // Add an 'all' entry for the sum across all years
@@ -64,7 +64,7 @@ class FinanceTransactionTaggingApiController extends Controller
         $request->validate([
             'tag_label' => 'required|string|max:50',
             'tag_color' => 'required|string|max:20',
-            'tax_characteristic' => 'nullable|string|max:100',
+            'tax_characteristic' => ['nullable', 'string', 'in:'.implode(',', FinAccountTag::TAX_CHARACTERISTIC_VALUES)],
         ]);
 
         // Check for duplicate tag label for this user
@@ -97,7 +97,7 @@ class FinanceTransactionTaggingApiController extends Controller
         $request->validate([
             'tag_label' => 'required|string|max:50',
             'tag_color' => 'required|string|max:20',
-            'tax_characteristic' => 'nullable|string|max:100',
+            'tax_characteristic' => ['nullable', 'string', 'in:'.implode(',', FinAccountTag::TAX_CHARACTERISTIC_VALUES)],
         ]);
 
         $tag = FinAccountTag::where('tag_id', $tag_id)
@@ -157,11 +157,12 @@ class FinanceTransactionTaggingApiController extends Controller
             ->where('tag_userid', $uid)
             ->first();
 
-        if (!$tag) {
+        if (! $tag) {
             \Illuminate\Support\Facades\Log::warning('Tag not found for user', [
                 'uid' => $uid,
                 'tag_id' => $request->tag_id,
             ]);
+
             return response()->json(['error' => 'Tag not found'], 404);
         }
 

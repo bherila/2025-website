@@ -610,7 +610,7 @@ CREATE TABLE `fin_account_tag` (
   `tag_userid` varchar(50) NOT NULL,
   `tag_color` varchar(20) NOT NULL,
   `tag_label` varchar(50) NOT NULL,
-  `tax_characteristic` varchar(100) DEFAULT NULL,
+  `tax_characteristic` enum('sce_advertising','sce_car_truck','sce_commissions_fees','sce_contract_labor','sce_depletion','sce_depreciation','sce_employee_benefits','sce_insurance','sce_interest_mortgage','sce_interest_other','sce_legal_professional','sce_office_expenses','sce_pension','sce_rent_vehicles','sce_rent_property','sce_repairs_maintenance','sce_supplies','sce_taxes_licenses','sce_travel','sce_meals','sce_utilities','sce_wages','sce_other','scho_rent','scho_mortgage_interest','scho_real_estate_taxes','scho_insurance','scho_utilities','scho_repairs_maintenance','scho_security','scho_depreciation','scho_cleaning','scho_hoa','scho_casualty_losses') DEFAULT NULL,
   `when_added` timestamp NOT NULL DEFAULT current_timestamp(),
   `when_deleted` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`tag_id`),

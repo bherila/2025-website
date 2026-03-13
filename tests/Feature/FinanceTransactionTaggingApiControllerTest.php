@@ -4,8 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLineItemTagMap;
-use App\Models\FinanceTool\FinAccountTag;
 use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\FinAccountTag;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -197,7 +197,7 @@ class FinanceTransactionTaggingApiControllerTest extends TestCase
 
         $response = $this->postJson('/api/finance/tags/apply', [
             'tag_id' => $tag->tag_id,
-            'transaction_ids' => (string)$t->t_id,
+            'transaction_ids' => (string) $t->t_id,
         ]);
 
         $response->assertOk()->assertJson(['success' => true]);
@@ -314,7 +314,7 @@ class FinanceTransactionTaggingApiControllerTest extends TestCase
     {
         $user = $this->createUser();
         $response = $this->actingAs($user)->getJson('/api/finance/tags/apply');
-        
+
         // Should be 405 Method Not Allowed if route exists
         $response->assertStatus(405);
     }

@@ -494,6 +494,7 @@ class FinanceLotsController extends Controller
         $accounts = FinAccounts::where('acct_owner', $uid)->pluck('acct_name', 'acct_id');
         $transactions->transform(function ($t) use ($accounts) {
             $t->acct_name = $accounts[$t->t_account] ?? null;
+
             return $t;
         });
 
@@ -560,9 +561,11 @@ class FinanceLotsController extends Controller
             }
 
             DB::commit();
+
             return response()->json(['success' => true, 'created' => $created]);
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json(['error' => 'Failed to save lot assignments: '.$e->getMessage()], 500);
         }
     }
