@@ -43,6 +43,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/finance/all-transactions', function () {
         return view('finance.all-transactions');
     });
+    Route::get('/finance/schedule-c', function () {
+        return view('finance.schedule-c');
+    });
     Route::get('/finance/tags', function () {
         return view('finance.tags');
     });

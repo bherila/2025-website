@@ -16,6 +16,7 @@ class FinAccountTag extends Model
         'tag_userid',
         'tag_label',
         'tag_color',
+        'tax_characteristic',
         'when_deleted',
     ];
 

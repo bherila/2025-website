@@ -25,17 +25,20 @@ function applyTheme(mode: ThemeMode) {
 }
 
 export default function Navbar({ authenticated, isAdmin, clientCompanies, currentUser }: NavbarProps) {
+  const [financeOpen, setFinanceOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const initials = currentUser && currentUser.name 
     ? currentUser.name.trim().split(/\s+/).map(p => p[0]).filter(Boolean).slice(0,2).join('').toUpperCase() 
     : '';
 
+  const financeRef = useRef<HTMLLIElement | null>(null);
   const toolsRef = useRef<HTMLLIElement | null>(null);
   
   const [clientsOpen, setClientsOpen] = useState(false);
   const clientsRef = useRef<HTMLLIElement | null>(null);
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileFinanceOpen, setMobileFinanceOpen] = useState(false);
   const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
   const [mobileClientsOpen, setMobileClientsOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement | null>(null);
@@ -49,6 +52,9 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
+      if (financeRef.current && !financeRef.current.contains(e.target as Node)) {
+        setFinanceOpen(false);
+      }
       if (toolsRef.current && !toolsRef.current.contains(e.target as Node)) {
         setToolsOpen(false);
       }
@@ -57,6 +63,7 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
       }
       if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target as Node)) {
         setMobileMenuOpen(false);
+        setMobileFinanceOpen(false);
         setMobileToolsOpen(false);
         setMobileClientsOpen(false);
       }
@@ -87,6 +94,7 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
             className='md:hidden p-2 hover:bg-gray-100 dark:hover:bg-[#1f1f1e] rounded-md'
             aria-label='Toggle menu'
             aria-expanded={mobileMenuOpen}
+            aria-controls='mobile-menu'
           >
             {mobileMenuOpen ? <X className='w-5 h-5' /> : <Menu className='w-5 h-5' />}
           </button>
@@ -97,6 +105,34 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
         <ul className='hidden md:flex items-center gap-4 text-sm print:hidden'>
           <li><a className='hover:underline underline-offset-4' href='/recipes'>Recipes</a></li>
           <li><a className='hover:underline underline-offset-4' href='/projects'>Projects</a></li>
+          {authenticated && (
+            <li ref={financeRef} className='relative'>
+              <button
+                type='button'
+                className='inline-flex items-center gap-1 hover:underline underline-offset-4'
+                onClick={() => setFinanceOpen((v) => !v)}
+                aria-expanded={financeOpen}
+                aria-haspopup='menu'
+                id='finance-menu-button'
+              >
+                Finance <ChevronDown className='w-4 h-4' aria-hidden='true' />
+              </button>
+              {financeOpen && (
+                <div
+                  role='menu'
+                  aria-labelledby='finance-menu-button'
+                  className='absolute z-50 mt-2 w-56 rounded-md border border-gray-200 dark:border-[#3E3E3A] bg-white dark:bg-[#161615] shadow-[0_10px_30px_rgba(0,0,0,0.08)] p-2'
+                >
+                  <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/accounts'>Accounts</a>
+                  <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/all-transactions'>All Transactions</a>
+                  <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/schedule-c'>Schedule C View</a>
+                  <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/rsu'>RSU</a>
+                  <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/payslips'>Payslips</a>
+                  <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/utility-bill-tracker'>Utility Bill Tracker</a>
+                </div>
+              )}
+            </li>
+          )}
           <li ref={toolsRef} className='relative'>
             <button
               type='button'
@@ -104,28 +140,25 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
               onClick={() => setToolsOpen((v) => !v)}
               aria-expanded={toolsOpen}
               aria-haspopup='menu'
+              id='tools-menu-button'
             >
-              Tools <ChevronDown className='w-4 h-4' />
+              Tools <ChevronDown className='w-4 h-4' aria-hidden='true' />
             </button>
             {toolsOpen && (
               <div
                 role='menu'
+                aria-labelledby='tools-menu-button'
                 className='absolute z-50 mt-2 w-64 rounded-md border border-gray-200 dark:border-[#3E3E3A] bg-white dark:bg-[#161615] shadow-[0_10px_30px_rgba(0,0,0,0.08)] p-2'
               >
-                <div className='px-2 py-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]'>Finance</div>
-                <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/rsu'>Finance RSU</a>
-                <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/payslips'>Finance Payslips</a>
-                <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/accounts'>Finance Accounts</a>
-                <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/utility-bill-tracker'>Utility Bill Tracker</a>
-                <div className='px-2 pt-3 pb-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]'>Utilities</div>
-                <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/tools/license-manager'>License Manager</a>
-                <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/tools/bingo'>Bingo Card Generator</a>
-                <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/tools/irs-f461'>Capital Loss Carryover Worksheet</a>
+                <div className='px-2 py-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]' aria-hidden='true'>Utilities</div>
+                <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/tools/license-manager'>License Manager</a>
+                <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/tools/bingo'>Bingo Card Generator</a>
+                <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/tools/irs-f461'>Capital Loss Carryover Worksheet</a>
                 {authenticated && isAdmin && (
                   <>
-                    <div className='px-2 pt-3 pb-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]'>Admin</div>
-                    <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/admin/users'>User Management</a>
-                    <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/client/mgmt'>Client Management</a>
+                    <div className='px-2 pt-3 pb-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]' aria-hidden='true'>Admin</div>
+                    <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/admin/users'>User Management</a>
+                    <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/client/mgmt'>Client Management</a>
                   </>
                 )}
               </div>
@@ -139,17 +172,20 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
                 onClick={() => setClientsOpen((v) => !v)}
                 aria-expanded={clientsOpen}
                 aria-haspopup='menu'
+                id='client-portal-menu-button'
               >
-                Client Portal <ChevronDown className='w-4 h-4' />
+                Client Portal <ChevronDown className='w-4 h-4' aria-hidden='true' />
               </button>
               {clientsOpen && (
                 <div
                   role='menu'
+                  aria-labelledby='client-portal-menu-button'
                   className='absolute z-50 mt-2 w-64 rounded-md border border-gray-200 dark:border-[#3E3E3A] bg-white dark:bg-[#161615] shadow-[0_10px_30px_rgba(0,0,0,0.08)] p-2'
                 >
                   {clientCompanies.map((company) => (
                     <a
                       key={company.id}
+                      role='menuitem'
                       className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] truncate'
                       href={`/client/portal/${company.slug}`}
                     >
@@ -166,6 +202,7 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
       {/* Mobile menu - Full screen overlay on small screens */}
       {mobileMenuOpen && (
         <div
+          id='mobile-menu'
           ref={mobileMenuRef}
           className='md:hidden fixed inset-0 top-[60px] z-40 bg-white dark:bg-[#161615] overflow-y-auto'
           role='menu'
@@ -177,6 +214,44 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
             <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base' href='/projects'>
               Projects
             </a>
+
+            {/* Finance section in mobile menu */}
+            {authenticated && (
+              <div>
+                <button
+                  type='button'
+                  className='w-full flex items-center justify-between px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base'
+                  onClick={() => setMobileFinanceOpen((v) => !v)}
+                  aria-expanded={mobileFinanceOpen}
+                  aria-controls='mobile-finance-menu'
+                >
+                  <span>Finance</span>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${mobileFinanceOpen ? 'rotate-180' : ''}`} aria-hidden='true' />
+                </button>
+                {mobileFinanceOpen && (
+                  <div id='mobile-finance-menu' className='pl-4 space-y-1'>
+                    <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/finance/accounts'>
+                      Accounts
+                    </a>
+                    <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/finance/all-transactions'>
+                      All Transactions
+                    </a>
+                    <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/finance/schedule-c'>
+                      Schedule C View
+                    </a>
+                    <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/finance/rsu'>
+                      RSU
+                    </a>
+                    <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/finance/payslips'>
+                      Payslips
+                    </a>
+                    <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/utility-bill-tracker'>
+                      Utility Bill Tracker
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
             
             {/* Tools section in mobile menu */}
             <div>
@@ -185,26 +260,14 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
                 className='w-full flex items-center justify-between px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base'
                 onClick={() => setMobileToolsOpen((v) => !v)}
                 aria-expanded={mobileToolsOpen}
+                aria-controls='mobile-tools-menu'
               >
                 <span>Tools</span>
-                <ChevronDown className={`w-4 h-4 transition-transform ${mobileToolsOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`w-4 h-4 transition-transform ${mobileToolsOpen ? 'rotate-180' : ''}`} aria-hidden='true' />
               </button>
               {mobileToolsOpen && (
-                <div className='pl-4 space-y-1'>
-                  <div className='px-3 py-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]'>Finance</div>
-                  <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/finance/rsu'>
-                    Finance RSU
-                  </a>
-                  <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/finance/payslips'>
-                    Finance Payslips
-                  </a>
-                  <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/finance/accounts'>
-                    Finance Accounts
-                  </a>
-                  <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/utility-bill-tracker'>
-                    Utility Bill Tracker
-                  </a>
-                  <div className='px-3 pt-2 pb-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]'>Utilities</div>
+                <div id='mobile-tools-menu' className='pl-4 space-y-1'>
+                  <div className='px-3 py-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]' aria-hidden='true'>Utilities</div>
                   <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/tools/license-manager'>
                     License Manager
                   </a>
@@ -216,7 +279,7 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
                   </a>
                   {authenticated && isAdmin && (
                     <>
-                      <div className='px-3 pt-2 pb-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]'>Admin</div>
+                      <div className='px-3 pt-2 pb-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]' aria-hidden='true'>Admin</div>
                       <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/admin/users'>
                         User Management
                       </a>
@@ -237,12 +300,13 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
                   className='w-full flex items-center justify-between px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base'
                   onClick={() => setMobileClientsOpen((v) => !v)}
                   aria-expanded={mobileClientsOpen}
+                  aria-controls='mobile-clients-menu'
                 >
                   <span>Client Portal</span>
-                  <ChevronDown className={`w-4 h-4 transition-transform ${mobileClientsOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`w-4 h-4 transition-transform ${mobileClientsOpen ? 'rotate-180' : ''}`} aria-hidden='true' />
                 </button>
                 {mobileClientsOpen && (
-                  <div className='pl-4 space-y-1'>
+                  <div id='mobile-clients-menu' className='pl-4 space-y-1'>
                     {clientCompanies.map((company) => (
                       <a
                         key={company.id}
@@ -263,15 +327,16 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
       {/* Right: Theme toggle + external link + auth */}
       <div className='flex items-center gap-3 print:hidden'>
         {/* Tri-state theme toggle */}
-        <div className='inline-flex items-center overflow-hidden rounded-md border border-gray-200 dark:border-[#3E3E3A]'>
+        <div className='inline-flex items-center overflow-hidden rounded-md border border-gray-200 dark:border-[#3E3E3A]' role='group' aria-label='Color theme'>
           <button
             type='button'
             onClick={() => setTheme('system')}
             className={`px-2 py-1.5 transition-colors ${theme === 'system' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-gray-100 dark:hover:bg-[#1f1f1e]'}`}
             title='System'
             aria-pressed={theme === 'system'}
+            aria-label='Use system theme'
           >
-            <Laptop className='w-4 h-4' />
+            <Laptop className='w-4 h-4' aria-hidden='true' />
           </button>
           <button
             type='button'
@@ -279,8 +344,9 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
             className={`px-2 py-1.5 transition-colors ${theme === 'dark' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-gray-100 dark:hover:bg-[#1f1f1e]'}`}
             title='Dark'
             aria-pressed={theme === 'dark'}
+            aria-label='Use dark theme'
           >
-            <Moon className='w-4 h-4' />
+            <Moon className='w-4 h-4' aria-hidden='true' />
           </button>
           <button
             type='button'
@@ -288,8 +354,9 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
             className={`px-2 py-1.5 transition-colors ${theme === 'light' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-gray-100 dark:hover:bg-[#1f1f1e]'}`}
             title='Light'
             aria-pressed={theme === 'light'}
+            aria-label='Use light theme'
           >
-            <Sun className='w-4 h-4' />
+            <Sun className='w-4 h-4' aria-hidden='true' />
           </button>
         </div>
 
@@ -304,7 +371,7 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
 
         {authenticated ? (
           <a href='/dashboard' className='inline-flex items-center gap-2 px-3 py-1.5 rounded border border-gray-200 dark:border-[#3E3E3A] hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm'>
-            <div className='h-6 w-6 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-medium'>
+            <div className='h-6 w-6 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-medium' aria-hidden='true'>
               {initials || 'U'}
             </div>
             <span className='hidden sm:inline'>{currentUser?.name ?? 'My Account'}</span>

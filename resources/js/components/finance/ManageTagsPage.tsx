@@ -18,6 +18,15 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
 import {
   Table,
@@ -50,6 +59,60 @@ const TAG_COLORS = [
   'pink',
 ]
 
+const SCHEDULE_C_EXPENSE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'sce_advertising', label: 'Advertising' },
+  { value: 'sce_car_truck', label: 'Car and truck expenses' },
+  { value: 'sce_commissions_fees', label: 'Commissions and fees' },
+  { value: 'sce_contract_labor', label: 'Contract labor' },
+  { value: 'sce_depletion', label: 'Depletion' },
+  { value: 'sce_depreciation', label: 'Depreciation and Section 179 expense' },
+  { value: 'sce_employee_benefits', label: 'Employee benefit programs' },
+  { value: 'sce_insurance', label: 'Insurance (other than health)' },
+  { value: 'sce_interest_mortgage', label: 'Interest (mortgage)' },
+  { value: 'sce_interest_other', label: 'Interest (other)' },
+  { value: 'sce_legal_professional', label: 'Legal and professional services' },
+  { value: 'sce_office_expenses', label: 'Office expenses' },
+  { value: 'sce_pension', label: 'Pension and profit-sharing plans' },
+  { value: 'sce_rent_vehicles', label: 'Rent or lease (vehicles, machinery, equipment)' },
+  { value: 'sce_rent_property', label: 'Rent or lease (other business property)' },
+  { value: 'sce_repairs_maintenance', label: 'Repairs and maintenance' },
+  { value: 'sce_supplies', label: 'Supplies' },
+  { value: 'sce_taxes_licenses', label: 'Taxes and licenses' },
+  { value: 'sce_travel', label: 'Travel' },
+  { value: 'sce_meals', label: 'Meals' },
+  { value: 'sce_utilities', label: 'Utilities' },
+  { value: 'sce_wages', label: 'Wages' },
+  { value: 'sce_other', label: 'Other expenses' },
+]
+
+const SCHEDULE_C_HOME_OFFICE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'scho_rent', label: 'Rent' },
+  { value: 'scho_mortgage_interest', label: 'Mortgage interest (business-use portion)' },
+  { value: 'scho_real_estate_taxes', label: 'Real estate taxes' },
+  { value: 'scho_insurance', label: 'Homeowners or renters insurance' },
+  { value: 'scho_utilities', label: 'Utilities' },
+  { value: 'scho_repairs_maintenance', label: 'Repairs and maintenance' },
+  { value: 'scho_security', label: 'Security system costs' },
+  { value: 'scho_depreciation', label: 'Depreciation' },
+  { value: 'scho_cleaning', label: 'Cleaning services' },
+  { value: 'scho_hoa', label: 'HOA fees' },
+  { value: 'scho_casualty_losses', label: 'Casualty losses (business-use portion)' },
+]
+
+const ALL_TAX_OPTIONS = [
+  ...SCHEDULE_C_EXPENSE_OPTIONS,
+  ...SCHEDULE_C_HOME_OFFICE_OPTIONS,
+]
+
+const TAX_OPTION_LABEL_MAP: Record<string, string> = Object.fromEntries(
+  ALL_TAX_OPTIONS.map((o) => [o.value, o.label])
+)
+
+function getTaxCharacteristicLabel(value: string | null | undefined): string {
+  if (!value || value === 'none') return '—'
+  return TAX_OPTION_LABEL_MAP[value] ?? value
+}
+
 export default function ManageTagsPage() {
   const { tags, isLoading, error: tagsError, refreshTags } = useFinanceTags({ includeCounts: true, includeTotals: true })
   const [error, setError] = useState<string | null>(null)
@@ -58,12 +121,14 @@ export default function ManageTagsPage() {
   // New tag form state
   const [newTagLabel, setNewTagLabel] = useState('')
   const [newTagColor, setNewTagColor] = useState('blue')
+  const [newTagTaxChar, setNewTagTaxChar] = useState<string>('none')
   const [isCreating, setIsCreating] = useState(false)
   
   // Edit state
   const [editingTag, setEditingTag] = useState<FinanceTag | null>(null)
   const [editLabel, setEditLabel] = useState('')
   const [editColor, setEditColor] = useState('')
+  const [editTaxChar, setEditTaxChar] = useState<string>('none')
   const [isUpdating, setIsUpdating] = useState(false)
   
   // Delete confirmation state
@@ -82,10 +147,12 @@ export default function ManageTagsPage() {
       await fetchWrapper.post('/api/finance/tags', {
         tag_label: newTagLabel.trim(),
         tag_color: newTagColor,
+        tax_characteristic: newTagTaxChar === 'none' ? null : newTagTaxChar,
       })
       setSuccessMessage('Tag created successfully')
       setNewTagLabel('')
       setNewTagColor('blue')
+      setNewTagTaxChar('none')
       await refreshTags()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create tag')
@@ -98,12 +165,14 @@ export default function ManageTagsPage() {
     setEditingTag(tag)
     setEditLabel(tag.tag_label)
     setEditColor(tag.tag_color)
+    setEditTaxChar(tag.tax_characteristic || 'none')
   }
 
   const handleCancelEdit = () => {
     setEditingTag(null)
     setEditLabel('')
     setEditColor('')
+    setEditTaxChar('none')
   }
 
   const handleUpdateTag = async () => {
@@ -118,6 +187,7 @@ export default function ManageTagsPage() {
       await fetchWrapper.put(`/api/finance/tags/${editingTag.tag_id}`, {
         tag_label: editLabel.trim(),
         tag_color: editColor,
+        tax_characteristic: editTaxChar === 'none' ? null : editTaxChar,
       })
       setSuccessMessage('Tag updated successfully')
       setEditingTag(null)
@@ -171,6 +241,39 @@ export default function ManageTagsPage() {
     </div>
   )
 
+  const TaxCharacteristicSelect = ({
+    value,
+    onChange,
+  }: {
+    value: string
+    onChange: (v: string) => void
+  }) => (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="w-full max-w-sm">
+        <SelectValue placeholder="None (no tax characteristic)" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="none">None</SelectItem>
+        <SelectGroup>
+          <SelectLabel>Schedule C: Expense</SelectLabel>
+          {SCHEDULE_C_EXPENSE_OPTIONS.map((opt) => (
+            <SelectItem key={opt.value} value={opt.value}>
+              {opt.label}
+            </SelectItem>
+          ))}
+        </SelectGroup>
+        <SelectGroup>
+          <SelectLabel>Schedule C: Home Office Item</SelectLabel>
+          {SCHEDULE_C_HOME_OFFICE_OPTIONS.map((opt) => (
+            <SelectItem key={opt.value} value={opt.value}>
+              {opt.label}
+            </SelectItem>
+          ))}
+        </SelectGroup>
+      </SelectContent>
+    </Select>
+  )
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -219,6 +322,10 @@ export default function ManageTagsPage() {
             <label className="block text-sm font-medium mb-2">Tag Color</label>
             <ColorPicker selectedColor={newTagColor} onColorChange={setNewTagColor} />
           </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Tax Characteristic</label>
+            <TaxCharacteristicSelect value={newTagTaxChar} onChange={setNewTagTaxChar} />
+          </div>
           <div className="flex items-center gap-4">
             <Button 
               onClick={handleCreateTag} 
@@ -263,6 +370,7 @@ export default function ManageTagsPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Tag</TableHead>
+                    <TableHead>Tax Characteristic</TableHead>
                     <TableHead className="w-[150px]">Transactions</TableHead>
                     <TableHead className="w-[150px] text-right">Actions</TableHead>
                   </TableRow>
@@ -284,6 +392,10 @@ export default function ManageTagsPage() {
                               />
                             </div>
                             <ColorPicker selectedColor={editColor} onColorChange={setEditColor} />
+                            <div>
+                              <label className="block text-xs font-medium mb-1 text-muted-foreground">Tax Characteristic</label>
+                              <TaxCharacteristicSelect value={editTaxChar} onChange={setEditTaxChar} />
+                            </div>
                             <div className="flex items-center gap-2">
                               <Button 
                                 size="sm" 
@@ -313,6 +425,9 @@ export default function ManageTagsPage() {
                             {tag.tag_label}
                           </Badge>
                         )}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {editingTag?.tag_id !== tag.tag_id && getTaxCharacteristicLabel(tag.tax_characteristic)}
                       </TableCell>
                       <TableCell>
                         {tag.transaction_count !== undefined && (
@@ -428,3 +543,4 @@ export default function ManageTagsPage() {
     </div>
   )
 }
+

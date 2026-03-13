@@ -610,6 +610,7 @@ CREATE TABLE `fin_account_tag` (
   `tag_userid` varchar(50) NOT NULL,
   `tag_color` varchar(20) NOT NULL,
   `tag_label` varchar(50) NOT NULL,
+  `tax_characteristic` varchar(100) DEFAULT NULL,
   `when_added` timestamp NOT NULL DEFAULT current_timestamp(),
   `when_deleted` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`tag_id`),
