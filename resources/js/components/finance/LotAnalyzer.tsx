@@ -54,9 +54,11 @@ interface LotAnalyzerProps {
     accountId?: number
     /** Called when user wants to reload with all years of data */
     onLoadAllYears?: () => void
+    /** Whether all years of transactions have already been loaded */
+    allYearsLoaded?: boolean
 }
 
-export default function LotAnalyzer({ transactions, accountMap, accountId, onLoadAllYears }: LotAnalyzerProps) {
+export default function LotAnalyzer({ transactions, accountMap, accountId, onLoadAllYears, allYearsLoaded }: LotAnalyzerProps) {
     const [options, setOptions] = useState<WashSaleOptions>({ ...WASH_SALE_METHOD_1 })
     const [showShortTermOnly, setShowShortTermOnly] = useState(false)
     const [showAccountNames, setShowAccountNames] = useState(false)
@@ -368,6 +370,7 @@ export default function LotAnalyzer({ transactions, accountMap, accountId, onLoa
                 lots={showShortTermOnly ? filteredLots : shortTermLots}
                 showAccountNames={showAccountNames}
                 onLoadAllYears={onLoadAllYears}
+                allYearsLoaded={allYearsLoaded}
             />
 
             {!showShortTermOnly && (
@@ -376,13 +379,26 @@ export default function LotAnalyzer({ transactions, accountMap, accountId, onLoa
                     lots={longTermLots}
                     showAccountNames={showAccountNames}
                     onLoadAllYears={onLoadAllYears}
+                    allYearsLoaded={allYearsLoaded}
                 />
             )}
         </div>
     )
 }
 
-function Form8949Table({ title, lots, showAccountNames, onLoadAllYears }: { title: string; lots: LotSale[]; showAccountNames: boolean; onLoadAllYears?: () => void }) {
+function Form8949Table({ 
+    title, 
+    lots, 
+    showAccountNames, 
+    onLoadAllYears,
+    allYearsLoaded
+}: { 
+    title: string; 
+    lots: LotSale[]; 
+    showAccountNames: boolean; 
+    onLoadAllYears?: () => void;
+    allYearsLoaded?: boolean;
+}) {
     if (lots.length === 0) {
         return (
             <Card>
@@ -458,7 +474,11 @@ function Form8949Table({ title, lots, showAccountNames, onLoadAllYears }: { titl
                                             )}
                                         </TableCell>
                                         <TableCell className="text-sm whitespace-nowrap">
-                                            <VariousTransactionsModal lot={lot} onLoadAllYears={onLoadAllYears} />
+                                            <VariousTransactionsModal 
+                                                lot={lot} 
+                                                onLoadAllYears={onLoadAllYears}
+                                                allYearsLoaded={allYearsLoaded}
+                                            />
                                         </TableCell>
                                         <TableCell className="text-sm whitespace-nowrap">{formatDate(lot.dateSold)}</TableCell>
                                         <TableCell className="text-right font-mono text-sm whitespace-nowrap">{formatCurrency(lot.proceeds)}</TableCell>

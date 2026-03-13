@@ -162,6 +162,7 @@ export default function AllTransactionsPage({ initialAvailableYears = [] }: AllT
                         <LotAnalyzer
                             transactions={filteredData}
                             accountMap={accountMap}
+                            allYearsLoaded={selectedYear === 'all'}
                             onLoadAllYears={() => {
                                 setSelectedYear('all')
                                 // fetchData will be called via useEffect or user clicks Get Transactions

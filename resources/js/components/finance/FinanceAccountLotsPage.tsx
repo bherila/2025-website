@@ -198,7 +198,11 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
             {/* Lot Analyzer */}
             {showLotAnalyzer && transactions.length > 0 && (
                 <div className="mb-6">
-                    <LotAnalyzer transactions={transactions} accountId={id} />
+                    <LotAnalyzer 
+                        transactions={transactions} 
+                        accountId={id} 
+                        allYearsLoaded={true}
+                    />
                 </div>
             )}
 

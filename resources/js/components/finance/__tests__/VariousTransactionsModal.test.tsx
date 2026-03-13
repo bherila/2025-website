@@ -160,6 +160,19 @@ describe('VariousTransactionsModal', () => {
     expect(onLoadAllYears).toHaveBeenCalledTimes(1)
   })
 
+  it('disables "Load All Years" button when allYearsLoaded is true', () => {
+    const onLoadAllYears = jest.fn()
+    render(<VariousTransactionsModal lot={baseLot} onLoadAllYears={onLoadAllYears} allYearsLoaded={true} />)
+    
+    // Open the dialog
+    fireEvent.click(screen.getByText('Unknown'))
+    
+    const loadAllBtn = screen.getByText('Load All Years')
+    expect(loadAllBtn).toBeDisabled()
+    fireEvent.click(loadAllBtn)
+    expect(onLoadAllYears).not.toHaveBeenCalled()
+  })
+
   it('shows "Search for Opening Transaction" button when no matches found', () => {
     render(<VariousTransactionsModal lot={baseLot} />)
     

@@ -47,11 +47,13 @@ interface VariousTransactionsModalProps {
     lot: LotSale
     /** Called when the user wants to load all years of transactions */
     onLoadAllYears?: () => void
+    /** Whether all years of transactions have already been loaded */
+    allYearsLoaded?: boolean
     /** Called when a lot assignment is saved in the search modal */
     onAssignmentSaved?: () => void
 }
 
-export function VariousTransactionsModal({ lot, onLoadAllYears, onAssignmentSaved }: VariousTransactionsModalProps) {
+export function VariousTransactionsModal({ lot, onLoadAllYears, allYearsLoaded, onAssignmentSaved }: VariousTransactionsModalProps) {
     const count = lot.acquiredTransactions?.length ?? 0
     const [showSearchModal, setShowSearchModal] = useState(false)
     const hasUnmatched = !lot.acquiredTransactions || lot.acquiredTransactions.length === 0
@@ -87,7 +89,13 @@ export function VariousTransactionsModal({ lot, onLoadAllYears, onAssignmentSave
                                 </p>
                                 <div className="flex justify-center gap-3">
                                     {onLoadAllYears && (
-                                        <Button variant="outline" size="sm" onClick={onLoadAllYears}>
+                                        <Button 
+                                            variant="outline" 
+                                            size="sm" 
+                                            onClick={onLoadAllYears}
+                                            disabled={allYearsLoaded}
+                                            title={allYearsLoaded ? "All years are already loaded" : undefined}
+                                        >
                                             Load All Years
                                         </Button>
                                     )}
