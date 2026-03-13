@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\FinanceTool;
 
 use App\Http\Controllers\Controller;
+use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLineItemTagMap;
 use App\Models\FinanceTool\FinAccountTag;
 use Illuminate\Http\Request;
@@ -33,7 +34,7 @@ class FinanceTransactionTaggingApiController extends Controller
                 }
 
                 if ($includeTotals) {
-                    $yearlyTotals = \App\Models\FinanceTool\FinAccountLineItems::whereIn('t_id', $tIds)
+                    $yearlyTotals = FinAccountLineItems::whereIn('t_id', $tIds)
                         ->selectRaw("SUBSTR(t_date, 1, 4) as year, SUM(t_amt) as total")
                         ->groupBy('year')
                         ->orderBy('year')

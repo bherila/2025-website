@@ -42,7 +42,7 @@ describe('TransactionsTable Tag Application', () => {
 
     await waitFor(() => {
       expect(fetchWrapper.post).toHaveBeenCalledWith(
-        '/api/finance/tags-apply',
+        '/api/finance/tags/apply',
         expect.objectContaining({
           tag_id: 10,
           transaction_ids: expect.stringContaining('1')

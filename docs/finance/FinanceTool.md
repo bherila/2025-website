@@ -160,6 +160,7 @@ Tag fetch endpoints return a consistent JSON envelope:
 - `GET /api/finance/tags` → `{ data: Tag[] }`
 - `GET /api/finance/tags?include_counts=true` → `{ data: TagWithCount[] }`
 - `GET /api/finance/tags?totals=true` → `{ data: TagWithTotals[] }` — each tag includes a `totals` map of `{ year: amount, all: totalAllYears }`
+- `POST /api/finance/tags/apply` → Bulk apply a tag to multiple transactions.
 - Both `include_counts=true` and `totals=true` can be combined in one request.
 
 Both `TransactionsTable` and `ManageTagsPage` use the shared hook `resources/js/components/finance/useFinanceTags.ts` to consume this contract.
