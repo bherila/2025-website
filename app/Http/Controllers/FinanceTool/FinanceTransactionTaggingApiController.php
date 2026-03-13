@@ -34,7 +34,7 @@ class FinanceTransactionTaggingApiController extends Controller
 
                 if ($includeTotals) {
                     $yearlyTotals = \App\Models\FinanceTool\FinAccountLineItems::whereIn('t_id', $tIds)
-                        ->selectRaw("SUBSTR(t_date, 1, 4) as year, SUM(CAST(t_amt AS NUMERIC)) as total")
+                        ->selectRaw("SUBSTR(t_date, 1, 4) as year, SUM(t_amt) as total")
                         ->groupBy('year')
                         ->orderBy('year')
                         ->get()

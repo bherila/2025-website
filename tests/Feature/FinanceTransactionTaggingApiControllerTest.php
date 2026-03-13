@@ -115,9 +115,9 @@ class FinanceTransactionTaggingApiControllerTest extends TestCase
         $this->assertArrayHasKey('2023', $totals);
         $this->assertArrayHasKey('2024', $totals);
         $this->assertArrayHasKey('all', $totals);
-        $this->assertEqualsWithDelta(-50.00, $totals['2023'], 0.01);
-        $this->assertEqualsWithDelta(-75.00, $totals['2024'], 0.01);
-        $this->assertEqualsWithDelta(-125.00, $totals['all'], 0.01);
+        $this->assertEqualsWithDelta(-50.00, $totals['2023'], 0.001);
+        $this->assertEqualsWithDelta(-75.00, $totals['2024'], 0.001);
+        $this->assertEqualsWithDelta(-125.00, $totals['all'], 0.001);
     }
 
     public function test_get_user_tags_totals_excludes_soft_deleted_mappings(): void
@@ -163,7 +163,7 @@ class FinanceTransactionTaggingApiControllerTest extends TestCase
         $response->assertOk();
         $totals = $response->json('data.0.totals');
         // Only the non-deleted mapping should count
-        $this->assertEqualsWithDelta(-100.00, $totals['all'], 0.01);
+        $this->assertEqualsWithDelta(-100.00, $totals['all'], 0.001);
     }
 
     public function test_apply_tag_to_transactions(): void

@@ -1,9 +1,11 @@
 'use client'
 import currency from 'currency.js'
+import React from 'react'
 
 import { type FinanceTag } from '@/components/finance/useFinanceTags'
 import { Spinner } from '@/components/ui/spinner'
 import { Table } from '@/components/ui/table'
+import { tagBadgeStyle } from '@/lib/finance/tagColorUtils'
 
 interface Props {
   tags: FinanceTag[]
@@ -68,7 +70,8 @@ export function TagTotalsView({ tags, isLoading, error }: Props) {
             <tr key={tag.tag_id}>
               <td className="px-2 py-1">
                 <span
-                  className={`inline-block px-2 py-0.5 rounded text-xs font-medium bg-${tag.tag_color}-200 text-${tag.tag_color}-800`}
+                  className="inline-block px-2 py-0.5 rounded text-xs font-medium"
+                  style={tagBadgeStyle(tag.tag_color)}
                 >
                   {tag.tag_label}
                 </span>
