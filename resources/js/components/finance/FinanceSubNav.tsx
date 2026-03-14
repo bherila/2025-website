@@ -65,6 +65,7 @@ function readIsAdmin(): boolean {
 export default function FinanceSubNav({ activeSection, breadcrumbItems, children }: FinanceSubNavProps) {
   const activeSectionInfo = FINANCE_SECTIONS.find(s => s.value === activeSection)
   const [isAdmin] = useState(readIsAdmin)
+  const isTagsPage = typeof window !== 'undefined' && window.location.pathname === '/finance/tags'
 
   return (
     <div>
@@ -104,10 +105,11 @@ export default function FinanceSubNav({ activeSection, breadcrumbItems, children
             <div className="ml-auto">
               <a
                 href="/finance/tags"
+                aria-current={isTagsPage ? 'page' : undefined}
                 className={cn(
                   navigationMenuTriggerStyle(),
                   'h-8 px-3 text-sm',
-                  activeSection === ('tags' as string)
+                  isTagsPage
                     ? 'bg-accent text-accent-foreground font-medium'
                     : 'text-muted-foreground',
                 )}
