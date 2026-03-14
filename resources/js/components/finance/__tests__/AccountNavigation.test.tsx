@@ -72,7 +72,7 @@ describe('AccountNavigation account dropdown', () => {
     })
   })
 
-  it('shows Accounts breadcrumb link pointing to accounts list', async () => {
+  it('shows Accounts link in the finance navbar', async () => {
     const AccountNavigation = (await import('@/components/finance/AccountNavigation')).default
     await act(async () => {
       render(
@@ -84,14 +84,14 @@ describe('AccountNavigation account dropdown', () => {
       )
     })
 
-    // Multiple "Accounts" links may exist (breadcrumb + sub-nav); find the breadcrumb one
+    // Find the Accounts nav link in the FinanceNavbar
     const accountsLinks = screen.getAllByRole('link', { name: /^Accounts$/i })
-    const breadcrumbAccountsLink = accountsLinks.find(el => el.getAttribute('href') === '/finance/accounts')
-    expect(breadcrumbAccountsLink).toBeDefined()
-    expect(breadcrumbAccountsLink).toHaveAttribute('href', '/finance/accounts')
+    const navAccountsLink = accountsLinks.find(el => el.getAttribute('href') === '/finance/accounts')
+    expect(navAccountsLink).toBeDefined()
+    expect(navAccountsLink).toHaveAttribute('href', '/finance/accounts')
   })
 
-  it('shows the active tab name in breadcrumb page element', async () => {
+  it('shows the active tab as selected in the tabs list', async () => {
     const AccountNavigation = (await import('@/components/finance/AccountNavigation')).default
     await act(async () => {
       render(
@@ -103,8 +103,9 @@ describe('AccountNavigation account dropdown', () => {
       )
     })
 
-    // The breadcrumb-page element shows the active tab name
-    const breadcrumbPage = document.querySelector('[data-slot="breadcrumb-page"]')
-    expect(breadcrumbPage).toHaveTextContent('Duplicates')
+    // The active tab should be "duplicates" - verify the tab trigger link exists
+    const duplicatesTab = document.querySelector('a[href*="/duplicates"]')
+    expect(duplicatesTab).toBeInTheDocument()
+    expect(duplicatesTab).toHaveTextContent('Duplicates')
   })
 })

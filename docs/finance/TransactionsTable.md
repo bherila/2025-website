@@ -10,16 +10,17 @@ The **TransactionsTable** component is a comprehensive, feature-rich table for d
 
 The finance module uses a multi-level navigation system:
 
-### Finance Sub-Navigation
+### Finance Navigation Bar
 
-**Location**: `resources/js/components/finance/FinanceSubNav.tsx`
+**Location**: `resources/js/components/finance/FinanceNavbar.tsx` (re-exported from `FinanceSubNav.tsx` for backwards compat)
 
-A sticky full-width sub-navigation bar rendered directly below the main navbar on all Finance pages. It uses the shadcn `NavigationMenu` component. Layout:
+The primary navigation bar for all Finance pages, replacing the main site navbar. Finance pages use the `layouts.finance` blade layout which does not render the main navbar. Layout:
+- **Far-left**: "←" back button (links to `/`, tooltip "Back to BWH")
 - **Left**: "FINANCE" branding in all-caps
 - **Centre**: Section links — Accounts, Transactions, Schedule C, RSU, Payslips (active item highlighted)
-- **Right**: "Manage Tags" link (admin users only, reads `isAdmin` from the `app-initial-data` script tag)
+- **Right**: "Manage Tags" link (all authenticated users)
 
-Below the bar, a breadcrumb trail and any `children` (e.g., account-specific tabs) are rendered.
+Any `children` (e.g., account-specific tabs) are rendered below the bar.
 
 ### All Transactions Page
 

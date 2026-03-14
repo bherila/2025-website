@@ -17,7 +17,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
 
-import FinanceSubNav from './FinanceSubNav'
+import FinanceNavbar from './FinanceNavbar'
 import LotAnalyzer from './LotAnalyzer'
 import TransactionsTable from './TransactionsTable'
 
@@ -159,7 +159,7 @@ export default function AllTransactionsPage({ initialAvailableYears = [] }: AllT
 
     return (
         <>
-            <FinanceSubNav activeSection="all-transactions" />
+            <FinanceNavbar activeSection="all-transactions" />
             <div className="px-8 pb-8">
                 <div className="flex items-center gap-4 mb-4 flex-wrap">
                     <h2 className="text-xl font-semibold">All Transactions</h2>

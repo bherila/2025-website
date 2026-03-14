@@ -1,6 +1,6 @@
 import { List, Plus, Settings } from 'lucide-react'
 
-import FinanceSubNav from '@/components/finance/FinanceSubNav'
+import FinanceNavbar from '@/components/finance/FinanceNavbar'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -26,7 +26,7 @@ export default function RsuSubNav() {
   ]
 
   return (
-    <FinanceSubNav activeSection="rsu">
+    <FinanceNavbar activeSection="rsu">
       <div className="flex flex-col md:flex-row items-center justify-between mb-2 mt-2 gap-4 px-4">
         <div id="rsu-branding" className="mb-4 md:mb-0">
           <h2 className="text-2xl font-bold tracking-tight">RSU App</h2>
@@ -55,6 +55,6 @@ export default function RsuSubNav() {
           })}
         </nav>
       </div>
-    </FinanceSubNav>
+    </FinanceNavbar>
   )
 }

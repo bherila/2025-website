@@ -1,6 +1,6 @@
-@extends('layouts.app')
+@extends('layouts.finance')
 
-@section('title', 'All Transactions | ' . config('app.name', 'Ben Herila'))
+@section('title', 'Transactions | ' . config('app.name', 'Ben Herila'))
 
 @php
   $uid = Auth::id();

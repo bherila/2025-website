@@ -11,32 +11,24 @@ The `composer run dev` command is configured to run PHP with a **1GB memory limi
 
 ## Main Navigation
 
-The main navigation bar includes a **Finance** dropdown (visible to authenticated users only) with links to all finance sections:
+Finance pages use a dedicated layout (`resources/views/layouts/finance.blade.php`) that **replaces** the main site navbar with the Finance-specific navigation bar. The main site navbar (`resources/js/components/navbar.tsx`) is not rendered on finance pages.
 
-| Menu Item | Route | Description |
-|-----------|-------|-------------|
-| Accounts | `/finance/accounts` | Account list and management |
-| Transactions | `/finance/all-transactions` | Cross-account transaction view |
-| Schedule C | `/finance/schedule-c` | Tax year summary for Schedule C |
-| RSU | `/finance/rsu` | Restricted Stock Unit tracking |
-| Payslips | `/finance/payslips` | Payslip management |
-| Utility Bill Tracker | `/utility-bill-tracker` | Track and manage utility bills |
+## Finance Navigation Bar
 
-The main navbar is implemented in `resources/js/components/navbar.tsx`.
+All finance pages share a **FINANCE** navigation bar (`FinanceNavbar`, `resources/js/components/finance/FinanceNavbar.tsx`) that serves as the primary navigation when inside the Finance tool.
 
-## Finance Sub-Navigation
-
-All finance section pages share a **FINANCE** sub-navigation bar (`FinanceSubNav`, `resources/js/components/finance/FinanceSubNav.tsx`) that is displayed as a sticky full-width bar directly below the main navbar.
+The legacy name `FinanceSubNav` (`resources/js/components/finance/FinanceSubNav.tsx`) is preserved as a backwards-compatible re-export.
 
 ### Layout
 
 | Region | Content |
 |--------|---------|
+| Far Left | "←" back button (links to `/`, tooltip "Back to BWH") |
 | Left | "FINANCE" branding in all-caps (tracked text) |
-| Centre | Section navigation links (active section highlighted) |
-| Right | "Manage Tags" admin link (visible to admin users only) |
+| Centre | Section navigation links (active section highlighted via `bg-accent` + `aria-current="page"`) |
+| Far Right | "Manage Tags" link (available to all authenticated users) |
 
-Below the bar, a breadcrumb trail is shown. Any page-specific content (e.g., account-level tabs) is rendered as `children` of `FinanceSubNav`.
+Page-specific content (e.g., account-level tabs, year selector) is rendered as `children` of `FinanceNavbar`.
 
 ### Section Links
 
@@ -48,17 +40,22 @@ Below the bar, a breadcrumb trail is shown. Any page-specific content (e.g., acc
 | RSU | `/finance/rsu` |
 | Payslips | `/finance/payslips` |
 
-### Admin Links (far-right)
+### Utility Links (far-right)
 
 | Link | Route | Condition |
 |------|-------|-----------|
-| Manage Tags | `/finance/tags` | `isAdmin` only |
-
-`isAdmin` is read from the `app-initial-data` script tag that is injected into every page by the app layout (`resources/views/layouts/app.blade.php`).
+| Manage Tags | `/finance/tags` | All authenticated users |
 
 ### Navigation Menu Component
 
-The sub-navigation uses the shadcn `NavigationMenu` component (`resources/js/components/ui/navigation-menu.tsx`) built on `@radix-ui/react-navigation-menu`.
+The navigation uses the shadcn `NavigationMenu` component (`resources/js/components/ui/navigation-menu.tsx`) built on `@radix-ui/react-navigation-menu`.
+
+### Blade Layout
+
+Finance pages extend `layouts.finance` instead of `layouts.app`. This layout:
+- Includes the `app-initial-data` script tag for server-provided JSON (auth, user info)
+- Loads CSS and `back-to-top.tsx` only (no main navbar)
+- Skips the `<header>` section and `navbar.tsx` bundle
 
 ## Account Navigation
 

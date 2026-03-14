@@ -1,4 +1,4 @@
-@extends('layouts.app')
+@extends('layouts.finance')
 
 @section('title', 'Import Transactions - ' . $accountName . ' | ' . config('app.name', 'Ben Herila'))
 

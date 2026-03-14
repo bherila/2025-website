@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
 
-import FinanceSubNav from './FinanceSubNav'
+import FinanceNavbar from './FinanceNavbar'
 
 interface CategoryTotal {
   label: string
@@ -107,7 +107,7 @@ export default function ScheduleCPage() {
   }, [])
 
   return (
-    <FinanceSubNav activeSection="schedule-c">
+    <FinanceNavbar activeSection="schedule-c">
       <div className="px-4 pb-8">
         <h1 className="text-2xl font-bold mb-2">Schedule C View</h1>
         <p className="text-muted-foreground mb-6">
@@ -165,6 +165,6 @@ export default function ScheduleCPage() {
           </div>
         )}
       </div>
-    </FinanceSubNav>
+    </FinanceNavbar>
   )
 }

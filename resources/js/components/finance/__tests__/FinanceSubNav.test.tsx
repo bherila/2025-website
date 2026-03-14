@@ -1,39 +1,27 @@
 import { act, render, screen } from '@testing-library/react'
 
-describe('FinanceSubNav', () => {
-  function injectInitialData(data: object) {
-    const existing = document.getElementById('app-initial-data')
-    if (existing) existing.remove()
-    const script = document.createElement('script')
-    script.id = 'app-initial-data'
-    script.type = 'application/json'
-    script.textContent = JSON.stringify(data)
-    document.head.appendChild(script)
-  }
-
+describe('FinanceNavbar', () => {
   afterEach(() => {
     const el = document.getElementById('app-initial-data')
     if (el) el.remove()
   })
 
   it('renders FINANCE branding', async () => {
-    injectInitialData({ isAdmin: false })
-    const FinanceSubNav = (await import('@/components/finance/FinanceSubNav')).default
+    const FinanceNavbar = (await import('@/components/finance/FinanceNavbar')).default
     await act(async () => {
-      render(<FinanceSubNav activeSection="accounts" />)
+      render(<FinanceNavbar activeSection="accounts" />)
     })
     expect(screen.getByLabelText('Finance section')).toBeInTheDocument()
     expect(screen.getByLabelText('Finance section').textContent).toBe('Finance')
   })
 
   it('renders all section links', async () => {
-    injectInitialData({ isAdmin: false })
-    const FinanceSubNav = (await import('@/components/finance/FinanceSubNav')).default
+    const FinanceNavbar = (await import('@/components/finance/FinanceNavbar')).default
     await act(async () => {
-      render(<FinanceSubNav activeSection="accounts" />)
+      render(<FinanceNavbar activeSection="accounts" />)
     })
 
-    // Check nav links by href (to distinguish from breadcrumb page items)
+    // Check nav links by href
     expect(document.querySelector('a[href="/finance/accounts"]')).toBeInTheDocument()
     expect(document.querySelector('a[href="/finance/all-transactions"]')).toBeInTheDocument()
     expect(document.querySelector('a[href="/finance/schedule-c"]')).toBeInTheDocument()
@@ -46,73 +34,76 @@ describe('FinanceSubNav', () => {
   })
 
   it('marks the active section with aria-current="page"', async () => {
-    injectInitialData({ isAdmin: false })
-    const FinanceSubNav = (await import('@/components/finance/FinanceSubNav')).default
+    const FinanceNavbar = (await import('@/components/finance/FinanceNavbar')).default
     await act(async () => {
-      render(<FinanceSubNav activeSection="rsu" />)
+      render(<FinanceNavbar activeSection="rsu" />)
     })
 
-    // Find the navigation menu link (not the breadcrumb page which also has role=link)
+    // Find the navigation menu link (not the breadcrumb page)
     const rsuLinks = screen.getAllByRole('link', { name: 'RSU' })
     const navRsuLink = rsuLinks.find(el => el.getAttribute('href') === '/finance/rsu')
     expect(navRsuLink).toBeDefined()
     expect(navRsuLink).toHaveAttribute('aria-current', 'page')
 
     // Other nav links should not be aria-current
-    const accountsLink = screen.getByRole('link', { name: 'Accounts' })
+    const accountsLink = document.querySelector('a[href="/finance/accounts"]')
     expect(accountsLink).not.toHaveAttribute('aria-current')
   })
 
-  it('does NOT show Manage Tags link when user is not admin', async () => {
-    injectInitialData({ isAdmin: false })
-    const FinanceSubNav = (await import('@/components/finance/FinanceSubNav')).default
+  it('shows Manage Tags link for all authenticated users (not admin-only)', async () => {
+    const FinanceNavbar = (await import('@/components/finance/FinanceNavbar')).default
     await act(async () => {
-      render(<FinanceSubNav activeSection="accounts" />)
-    })
-    expect(screen.queryByRole('link', { name: 'Manage Tags' })).not.toBeInTheDocument()
-  })
-
-  it('shows Manage Tags link when user is admin', async () => {
-    injectInitialData({ isAdmin: true })
-    const FinanceSubNav = (await import('@/components/finance/FinanceSubNav')).default
-    await act(async () => {
-      render(<FinanceSubNav activeSection="accounts" />)
+      render(<FinanceNavbar activeSection="accounts" />)
     })
     const manageTagsLink = screen.getByRole('link', { name: 'Manage Tags' })
     expect(manageTagsLink).toBeInTheDocument()
     expect(manageTagsLink).toHaveAttribute('href', '/finance/tags')
   })
 
-  it('renders breadcrumb with Finance root link', async () => {
-    injectInitialData({ isAdmin: false })
-    const FinanceSubNav = (await import('@/components/finance/FinanceSubNav')).default
+  it('renders back button with link to homepage', async () => {
+    const FinanceNavbar = (await import('@/components/finance/FinanceNavbar')).default
     await act(async () => {
-      render(<FinanceSubNav activeSection="schedule-c" />)
+      render(<FinanceNavbar activeSection="accounts" />)
     })
-    const financeLink = screen.getByRole('link', { name: 'Finance' })
-    expect(financeLink).toHaveAttribute('href', '/finance/accounts')
-  })
-
-  it('renders breadcrumb page for active section when no extra items', async () => {
-    injectInitialData({ isAdmin: false })
-    const FinanceSubNav = (await import('@/components/finance/FinanceSubNav')).default
-    await act(async () => {
-      render(<FinanceSubNav activeSection="payslips" />)
-    })
-    const page = document.querySelector('[data-slot="breadcrumb-page"]')
-    expect(page).toHaveTextContent('Payslips')
+    const backLink = screen.getByRole('link', { name: 'Back to BWH' })
+    expect(backLink).toBeInTheDocument()
+    expect(backLink).toHaveAttribute('href', '/')
   })
 
   it('renders children below the nav bar', async () => {
-    injectInitialData({ isAdmin: false })
-    const FinanceSubNav = (await import('@/components/finance/FinanceSubNav')).default
+    const FinanceNavbar = (await import('@/components/finance/FinanceNavbar')).default
     await act(async () => {
       render(
-        <FinanceSubNav activeSection="accounts">
+        <FinanceNavbar activeSection="accounts">
           <div data-testid="child-content">Child content</div>
-        </FinanceSubNav>,
+        </FinanceNavbar>,
       )
     })
     expect(screen.getByTestId('child-content')).toBeInTheDocument()
+  })
+
+  it('highlights Manage Tags when activeSection is tags', async () => {
+    const FinanceNavbar = (await import('@/components/finance/FinanceNavbar')).default
+    await act(async () => {
+      render(<FinanceNavbar activeSection="tags" />)
+    })
+    const manageTagsLink = screen.getByRole('link', { name: 'Manage Tags' })
+    expect(manageTagsLink).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('is non-sticky (no sticky class)', async () => {
+    const FinanceNavbar = (await import('@/components/finance/FinanceNavbar')).default
+    await act(async () => {
+      render(<FinanceNavbar activeSection="accounts" />)
+    })
+    // The nav bar should NOT have a sticky class
+    const navBar = screen.getByLabelText('Finance section').closest('.border-b')
+    expect(navBar).not.toHaveClass('sticky')
+  })
+
+  it('backwards-compatible re-export from FinanceSubNav', async () => {
+    const mod = await import('@/components/finance/FinanceSubNav')
+    expect(mod.default).toBeDefined()
+    expect(mod.FINANCE_SECTIONS).toBeDefined()
   })
 })

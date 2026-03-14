@@ -6,7 +6,7 @@ import DuplicatesPage from '@/components/finance/DuplicatesPage'
 import FinanceAccountLotsPage from '@/components/finance/FinanceAccountLotsPage'
 import FinanceAccountsPage from '@/components/finance/FinanceAccountsPage'
 import FinanceAccountTransactionsPage from '@/components/finance/FinanceAccountTransactionsPage'
-import FinanceSubNav, { type FinanceSection } from '@/components/finance/FinanceSubNav'
+import FinanceNavbar, { type FinanceSection } from '@/components/finance/FinanceNavbar'
 import ImportTransactionsClient from '@/components/finance/ImportTransactionsClient'
 import LinkerPage from '@/components/finance/LinkerPage'
 import ManageTagsPage from '@/components/finance/ManageTagsPage'
@@ -88,12 +88,12 @@ document.addEventListener('DOMContentLoaded', () => {
     root.render(<ScheduleCPage />)
   }
 
-  // Standalone FinanceSubNav (for pages like Payslips that need the nav bar)
-  const financeSubNavDiv = document.getElementById('FinanceSubNav')
-  if (financeSubNavDiv) {
-    const root = createRoot(financeSubNavDiv)
-    const activeSection = (financeSubNavDiv.dataset.activeSection || 'accounts') as FinanceSection
-    root.render(<FinanceSubNav activeSection={activeSection} />)
+  // Standalone FinanceNavbar (for pages like Accounts that need only the nav bar)
+  const financeNavbarDiv = document.getElementById('FinanceNavbar')
+  if (financeNavbarDiv) {
+    const root = createRoot(financeNavbarDiv)
+    const activeSection = (financeNavbarDiv.dataset.activeSection || 'accounts') as FinanceSection
+    root.render(<FinanceNavbar activeSection={activeSection} />)
   }
 
   // All Transactions page

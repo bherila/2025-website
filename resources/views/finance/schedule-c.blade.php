@@ -1,4 +1,4 @@
-@extends('layouts.app')
+@extends('layouts.finance')
 
 @section('title', 'Schedule C View | ' . config('app.name', 'Ben Herila'))
 

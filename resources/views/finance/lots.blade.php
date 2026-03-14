@@ -1,4 +1,4 @@
-@extends('layouts.app')
+@extends('layouts.finance')
 
 @section('title', $accountName . ' Lots | ' . config('app.name', 'Ben Herila'))
 
