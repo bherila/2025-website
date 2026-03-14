@@ -15,9 +15,9 @@ The main navigation bar includes a **Finance** dropdown (visible to authenticate
 
 | Menu Item | Route | Description |
 |-----------|-------|-------------|
-| Accounts | `/finance` | Account list and management |
-| All Transactions | `/finance/all-transactions` | Cross-account transaction view |
-| Schedule C View | `/finance/schedule-c` | Tax year summary for Schedule C |
+| Accounts | `/finance/accounts` | Account list and management |
+| Transactions | `/finance/all-transactions` | Cross-account transaction view |
+| Schedule C | `/finance/schedule-c` | Tax year summary for Schedule C |
 | RSU | `/finance/rsu` | Restricted Stock Unit tracking |
 | Payslips | `/finance/payslips` | Payslip management |
 | Utility Bill Tracker | `/utility-bill-tracker` | Track and manage utility bills |
@@ -26,15 +26,39 @@ The main navbar is implemented in `resources/js/components/navbar.tsx`.
 
 ## Finance Sub-Navigation
 
-All finance section pages share a common sub-navigation bar (`FinanceSubNav`, `resources/js/components/finance/FinanceSubNav.tsx`) that provides quick access between sections:
+All finance section pages share a **FINANCE** sub-navigation bar (`FinanceSubNav`, `resources/js/components/finance/FinanceSubNav.tsx`) that is displayed as a sticky full-width bar directly below the main navbar.
+
+### Layout
+
+| Region | Content |
+|--------|---------|
+| Left | "FINANCE" branding in all-caps (tracked text) |
+| Centre | Section navigation links (active section highlighted) |
+| Right | "Manage Tags" admin link (visible to admin users only) |
+
+Below the bar, a breadcrumb trail is shown. Any page-specific content (e.g., account-level tabs) is rendered as `children` of `FinanceSubNav`.
+
+### Section Links
 
 | Link | Route |
 |------|-------|
-| Accounts | `/finance` |
-| All Transactions | `/finance/all-transactions` |
+| Accounts | `/finance/accounts` |
+| Transactions | `/finance/all-transactions` |
 | Schedule C | `/finance/schedule-c` |
 | RSU | `/finance/rsu` |
 | Payslips | `/finance/payslips` |
+
+### Admin Links (far-right)
+
+| Link | Route | Condition |
+|------|-------|-----------|
+| Manage Tags | `/finance/tags` | `isAdmin` only |
+
+`isAdmin` is read from the `app-initial-data` script tag that is injected into every page by the app layout (`resources/views/layouts/app.blade.php`).
+
+### Navigation Menu Component
+
+The sub-navigation uses the shadcn `NavigationMenu` component (`resources/js/components/ui/navigation-menu.tsx`) built on `@radix-ui/react-navigation-menu`.
 
 ## Account Navigation
 

@@ -14,14 +14,12 @@ The finance module uses a multi-level navigation system:
 
 **Location**: `resources/js/components/finance/FinanceSubNav.tsx`
 
-A shared sub-navigation bar across all finance pages providing quick access to:
-- **Accounts** — Account list and management
-- **All Transactions** — Cross-account transaction view with Lot Analyzer
-- **Schedule C** — Tax year summary for IRS Schedule C expenses and home office deductions
-- **RSU** — Restricted Stock Unit tracking
-- **Payslips** — Payslip management
+A sticky full-width sub-navigation bar rendered directly below the main navbar on all Finance pages. It uses the shadcn `NavigationMenu` component. Layout:
+- **Left**: "FINANCE" branding in all-caps
+- **Centre**: Section links — Accounts, Transactions, Schedule C, RSU, Payslips (active item highlighted)
+- **Right**: "Manage Tags" link (admin users only, reads `isAdmin` from the `app-initial-data` script tag)
 
-This component renders a breadcrumb and a horizontal section-switcher bar. It accepts `breadcrumbItems` (additional breadcrumb entries) and `children` (content below the breadcrumb, like account-specific tabs).
+Below the bar, a breadcrumb trail and any `children` (e.g., account-specific tabs) are rendered.
 
 ### All Transactions Page
 

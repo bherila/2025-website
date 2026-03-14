@@ -124,8 +124,8 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
                   className='absolute z-50 mt-2 w-56 rounded-md border border-gray-200 dark:border-[#3E3E3A] bg-white dark:bg-[#161615] shadow-[0_10px_30px_rgba(0,0,0,0.08)] p-2'
                 >
                   <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/accounts'>Accounts</a>
-                  <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/all-transactions'>All Transactions</a>
-                  <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/schedule-c'>Schedule C View</a>
+                  <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/all-transactions'>Transactions</a>
+                  <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/schedule-c'>Schedule C</a>
                   <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/rsu'>RSU</a>
                   <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/payslips'>Payslips</a>
                   <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/utility-bill-tracker'>Utility Bill Tracker</a>
@@ -234,10 +234,10 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
                       Accounts
                     </a>
                     <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/finance/all-transactions'>
-                      All Transactions
+                      Transactions
                     </a>
                     <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/finance/schedule-c'>
-                      Schedule C View
+                      Schedule C
                     </a>
                     <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/finance/rsu'>
                       RSU
