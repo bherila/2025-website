@@ -67,6 +67,14 @@ export interface LotSale {
   disallowedLoss: number
   /** Whether this was a short sale (Sell short) */
   isShortSale: boolean
+  /** Date of the disqualifying wash purchase (the acquisition that triggered the wash sale) */
+  washPurchaseDate?: string | undefined
+  /** Account ID of the disqualifying wash purchase */
+  washPurchaseAccountId?: number | null | undefined
+  /** Description of the disqualifying wash purchase transaction */
+  washPurchaseDescription?: string | undefined
+  /** Human-readable reason explaining the wash sale rule that was applied */
+  washSaleReason?: string | undefined
 }
 
 /**
@@ -215,6 +223,30 @@ function isClosingTransaction(type: string): boolean {
 }
 
 // -- Symbol matching ---------------------------------------------------------
+
+/**
+ * Returns a human-readable explanation of why a sale is a wash sale,
+ * identifying the IRS rule (§1091) and the matching method applied.
+ */
+function getWashSaleReason(
+  sale: ParsedTransaction,
+  purchase: ParsedTransaction,
+  opts: WashSaleOptions,
+): string {
+  if (!sale.isOption && !purchase.isOption) {
+    return `Purchased substantially identical stock (${purchase.symbol}) within the 30-day wash sale window (§1091).`
+  }
+  if (!sale.isOption && purchase.isOption && opts.adjustStockToOption) {
+    return `Purchased a call/put option on the same underlying (${purchase.symbol}) within the 30-day wash sale window (§1091, Method 1 – same underlying).`
+  }
+  if (sale.isOption && !purchase.isOption && opts.adjustOptionToStock) {
+    return `Purchased the underlying stock (${purchase.symbol}) after selling the option at a loss within the 30-day wash sale window (§1091, Method 1 – same underlying).`
+  }
+  if (sale.isOption && purchase.isOption) {
+    return `Purchased a substantially identical option (${purchase.symbol}) within the 30-day wash sale window (§1091).`
+  }
+  return `Purchased a substantially identical security (${purchase.symbol}) within the 30-day wash sale window (§1091).`
+}
 
 function areSubstantiallyIdentical(
   sale: ParsedTransaction,
@@ -368,6 +400,10 @@ export function analyzeLots(
       let isWashSale = false
       let disallowedLoss = currency(0)
       let washPurchaseId: number | undefined
+      let washPurchaseDate: string | undefined
+      let washPurchaseAccountId: number | null | undefined
+      let washPurchaseDescription: string | undefined
+      let washSaleReason: string | undefined
 
       if (isLoss) {
         const washStart = new Date(sale.date)
@@ -397,6 +433,10 @@ export function analyzeLots(
           const washQty = Math.min(portionQty, available)
           disallowedLoss = currency(rawGainLoss.value).multiply(-1).divide(portionQty).multiply(washQty)
           washPurchaseId = cand.id
+          washPurchaseDate = cand.dateStr
+          washPurchaseAccountId = cand.accountId
+          washPurchaseDescription = cand.description
+          washSaleReason = getWashSaleReason(sale, cand, opts)
           sharesUsed.set(cand.internalIndex, used + washQty)
           break
         }
@@ -427,6 +467,10 @@ export function analyzeLots(
         quantity: portionQty,
         saleTransactionId: sale.id,
         washPurchaseTransactionId: washPurchaseId,
+        washPurchaseDate,
+        washPurchaseAccountId,
+        washPurchaseDescription,
+        washSaleReason,
         isWashSale,
         originalLoss: isLoss ? rawGainLoss.value : 0,
         disallowedLoss: disallowedLoss.value,
