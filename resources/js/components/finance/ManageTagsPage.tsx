@@ -70,6 +70,11 @@ const TAG_COLORS = [
   'pink',
 ]
 
+const SCHEDULE_C_INCOME_OPTIONS: { value: string; label: string }[] = [
+  { value: 'business_income', label: 'Gross receipts or sales (Business Income)' },
+  { value: 'business_returns', label: 'Returns and allowances' },
+]
+
 const SCHEDULE_C_EXPENSE_OPTIONS: { value: string; label: string }[] = [
   { value: 'sce_advertising', label: 'Advertising' },
   { value: 'sce_car_truck', label: 'Car and truck expenses' },
@@ -111,6 +116,7 @@ const SCHEDULE_C_HOME_OFFICE_OPTIONS: { value: string; label: string }[] = [
 ]
 
 const ALL_TAX_OPTIONS = [
+  ...SCHEDULE_C_INCOME_OPTIONS,
   ...SCHEDULE_C_EXPENSE_OPTIONS,
   ...SCHEDULE_C_HOME_OFFICE_OPTIONS,
 ]
@@ -168,6 +174,14 @@ function TaxCharacteristicSelect({
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="none">None</SelectItem>
+        <SelectGroup>
+          <SelectLabel>Schedule C: Income</SelectLabel>
+          {SCHEDULE_C_INCOME_OPTIONS.map((opt) => (
+            <SelectItem key={opt.value} value={opt.value}>
+              {opt.label}
+            </SelectItem>
+          ))}
+        </SelectGroup>
         <SelectGroup>
           <SelectLabel>Schedule C: Expense</SelectLabel>
           {SCHEDULE_C_EXPENSE_OPTIONS.map((opt) => (

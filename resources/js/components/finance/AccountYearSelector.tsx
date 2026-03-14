@@ -1,9 +1,16 @@
 'use client'
 
-import { useCallback,useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { z } from 'zod'
 
-import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Skeleton } from '@/components/ui/skeleton'
 import { fetchWrapper } from '@/fetchWrapper'
 import { 
   getEffectiveYear, 
@@ -102,33 +109,30 @@ export default function AccountYearSelector({
 
   if (isLoading) {
     return (
-      <div className={`flex gap-1 items-center ${className}`}>
-        <span className="text-sm text-muted-foreground mr-2">Year:</span>
-        <span className="text-sm text-muted-foreground">Loading...</span>
+      <div className={`flex items-center ${className}`}>
+        <Skeleton className="h-8 w-28" />
       </div>
     )
   }
 
   return (
-    <div className={`flex gap-1 items-center flex-wrap ${className}`}>
-      <span className="text-sm text-muted-foreground mr-2">Year:</span>
-      <Button
-        variant={selectedYear === 'all' ? 'default' : 'outline'}
-        size="sm"
-        onClick={() => handleYearChange('all')}
+    <div className={`flex items-center ${className}`}>
+      <Select
+        value={String(selectedYear ?? 'all')}
+        onValueChange={(v) => handleYearChange(v === 'all' ? 'all' : parseInt(v, 10))}
       >
-        All
-      </Button>
-      {availableYears.map((year) => (
-        <Button
-          key={year}
-          variant={selectedYear === year ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => handleYearChange(year)}
-        >
-          {year}
-        </Button>
-      ))}
+        <SelectTrigger className="w-28">
+          <SelectValue placeholder="Year" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All Years</SelectItem>
+          {availableYears.map((year) => (
+            <SelectItem key={year} value={String(year)}>
+              {year}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   )
 }

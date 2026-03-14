@@ -12,7 +12,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select'
-import { Spinner } from '@/components/ui/spinner'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
     Table,
     TableBody,
@@ -120,8 +120,10 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
 
     if (isLoading && !data) {
         return (
-            <div className="flex justify-center p-8">
-                <Spinner />
+            <div className="space-y-2 px-8 pt-8">
+                {Array.from({ length: 5 }).map((_, i) => (
+                    <Skeleton key={i} className="h-10 w-full" />
+                ))}
             </div>
         )
     }
@@ -192,7 +194,7 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
                     {loadingTransactions ? 'Loading...' : showLotAnalyzer ? 'Hide Lot Analyzer' : 'Lot Analyzer'}
                 </Button>
 
-                {isLoading && <Spinner className="h-4 w-4" />}
+                {isLoading && <Skeleton className="h-4 w-16 rounded" />}
             </div>
 
             {/* Lot Analyzer */}

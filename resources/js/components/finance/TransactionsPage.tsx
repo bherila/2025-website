@@ -3,10 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { z } from 'zod'
 
-import { TagTotalsView } from '@/components/finance/TagTotalsView'
 import { useFinanceTags } from '@/components/finance/useFinanceTags'
-import { Button } from '@/components/ui/button'
-import { ButtonGroup } from '@/components/ui/button-group'
 import {
   Select,
   SelectContent,
@@ -14,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Spinner } from '@/components/ui/spinner'
+import { Skeleton } from '@/components/ui/skeleton'
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
 
@@ -22,7 +19,6 @@ import FinanceAccountTransactionsPage from './FinanceAccountTransactionsPage'
 import TransactionsTable from './TransactionsTable'
 
 type FilterType = 'all' | 'cash' | 'stock'
-type ViewType = 'transactions' | 'tag-totals'
 
 interface TransactionsPageProps {
   accountId: number | 'all'
@@ -61,10 +57,6 @@ function AllAccountsTransactionsContent({ initialAvailableYears = [] }: { initia
     return firstYear !== undefined ? firstYear.toString() : 'all'
   })
   const [availableYears] = useState<number[]>(initialAvailableYears)
-  const [view, setView] = useState<ViewType>(() => {
-    const fromUrl = getUrlParam('view') as ViewType | null
-    return fromUrl === 'tag-totals' ? fromUrl : 'transactions'
-  })
   const [filter, setFilter] = useState<FilterType>(() => {
     const fromUrl = getUrlParam('show') as FilterType | null
     return fromUrl === 'cash' || fromUrl === 'stock' ? fromUrl : 'all'
@@ -76,11 +68,6 @@ function AllAccountsTransactionsContent({ initialAvailableYears = [] }: { initia
   const handleYearChange = (year: string) => {
     setSelectedYear(year)
     setUrlParams({ year })
-  }
-
-  const handleViewChange = (v: ViewType) => {
-    setView(v)
-    setUrlParams({ view: v === 'transactions' ? '' : v })
   }
 
   const handleFilterChange = (f: FilterType) => {
@@ -138,15 +125,9 @@ function AllAccountsTransactionsContent({ initialAvailableYears = [] }: { initia
     }
   }, [selectedYear, filter, selectedTag, accountMap.size, fetchAccounts])
 
-  // Auto-fetch on mount and when filters change
   useEffect(() => {
     fetchData()
   }, [fetchData])
-
-  const { tags: tagTotals, isLoading: isLoadingTagTotals, error: tagTotalsError } = useFinanceTags({
-    enabled: view === 'tag-totals',
-    includeTotals: true,
-  })
 
   return (
     <div className="px-8 pb-8">
@@ -180,65 +161,28 @@ function AllAccountsTransactionsContent({ initialAvailableYears = [] }: { initia
           </SelectContent>
         </Select>
 
-        <div className="flex items-center gap-2 border rounded-md p-1 bg-muted/30">
-          <Button
-            variant={filter === 'all' ? 'secondary' : 'ghost'}
-            size="sm"
-            className="h-8"
-            onClick={() => handleFilterChange('all')}
-          >
-            Show All
-          </Button>
-          <Button
-            variant={filter === 'cash' ? 'secondary' : 'ghost'}
-            size="sm"
-            className="h-8"
-            onClick={() => handleFilterChange('cash')}
-          >
-            Cash Only
-          </Button>
-          <Button
-            variant={filter === 'stock' ? 'secondary' : 'ghost'}
-            size="sm"
-            className="h-8"
-            onClick={() => handleFilterChange('stock')}
-          >
-            Stock Only
-          </Button>
-        </div>
+        <Select value={filter} onValueChange={(v) => handleFilterChange(v as FilterType)}>
+          <SelectTrigger className="w-36">
+            <SelectValue placeholder="Show" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Cash + Stock</SelectItem>
+            <SelectItem value="cash">Cash Only</SelectItem>
+            <SelectItem value="stock">Stock Only</SelectItem>
+          </SelectContent>
+        </Select>
 
         <div className="ml-auto flex items-center gap-4">
-          <ButtonGroup>
-            <Button
-              variant={view === 'transactions' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => handleViewChange('transactions')}
-            >
-              Transactions
-            </Button>
-            <Button
-              variant={view === 'tag-totals' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => handleViewChange('tag-totals')}
-            >
-              Totals by Tag
-            </Button>
-          </ButtonGroup>
-          {isLoading && <Spinner className="h-4 w-4" />}
+          {isLoading && (
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-4 w-4 rounded-full" />
+              <Skeleton className="h-4 w-16" />
+            </div>
+          )}
         </div>
       </div>
 
-      {view === 'tag-totals' && (
-        <div className="mb-6">
-          <TagTotalsView
-            tags={tagTotals}
-            isLoading={isLoadingTagTotals}
-            error={tagTotalsError}
-          />
-        </div>
-      )}
-
-      {!isLoading && data && data.length === 0 && view === 'transactions' && (
+      {!isLoading && data && data.length === 0 && (
         <div className="text-center p-8 bg-muted rounded-lg">
           <h2 className="text-xl font-semibold mb-4">No Transactions Found</h2>
           <p className="mb-6">
@@ -253,7 +197,15 @@ function AllAccountsTransactionsContent({ initialAvailableYears = [] }: { initia
         </div>
       )}
 
-      {view === 'transactions' && data && data.length > 0 && (
+      {isLoading && (
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-10 w-full" />
+          ))}
+        </div>
+      )}
+
+      {!isLoading && data && data.length > 0 && (
         <TransactionsTable
           data={data}
           enableTagging

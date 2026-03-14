@@ -120,10 +120,14 @@ export default function FinanceNavbar({
   }, [accounts, searchValue])
 
   const handleAccountSelect = (account: FinAccount) => {
-    const tab = activeTab || 'transactions'
+    const currentTab = activeTab || 'transactions'
+    let tab = currentTab
     setSearchValue('')
     setIsComboboxOpen(false)
     if (account.acct_id === 0) {
+      // Fall back to transactions if current tab is disabled for all-accounts
+      const tabConfig = ACCOUNT_TABS.find(t => t.value === currentTab)
+      if (tabConfig?.disabledForAll) tab = 'transactions'
       window.location.href = allAccountsUrl(tab)
     } else {
       const year: YearSelection | undefined = undefined
@@ -139,7 +143,7 @@ export default function FinanceNavbar({
 
   return (
     <div>
-      <div className="w-full border-b bg-background">
+      <div className="w-full border-b border-border/40 bg-background">
         <div className="flex items-center gap-2 px-4 h-12">
           {/* Back button */}
           <Tooltip>

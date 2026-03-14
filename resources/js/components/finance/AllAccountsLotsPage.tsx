@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Spinner } from '@/components/ui/spinner'
+import { Skeleton } from '@/components/ui/skeleton'
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
 
@@ -117,7 +117,7 @@ export default function AllAccountsLotsPage({ initialAvailableYears = [] }: AllA
             ))}
           </SelectContent>
         </Select>
-        {isLoading && <Spinner className="h-4 w-4" />}
+        {isLoading && <Skeleton className="h-4 w-16 rounded" />}
       </div>
 
       {!isLoading && data && data.length === 0 && (

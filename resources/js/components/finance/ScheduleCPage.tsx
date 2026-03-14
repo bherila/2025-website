@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 
-import { Spinner } from '@/components/ui/spinner'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
   TableBody,
@@ -20,6 +20,7 @@ interface CategoryTotal {
 
 interface YearData {
   year: string
+  schedule_c_income?: Record<string, CategoryTotal>
   schedule_c_expense: Record<string, CategoryTotal>
   schedule_c_home_office: Record<string, CategoryTotal>
 }
@@ -118,9 +119,10 @@ export default function ScheduleCPage() {
       </p>
 
       {isLoading && (
-        <div className="flex items-center gap-2 py-8">
-          <Spinner size="large" />
-          <span>Loading Schedule C data…</span>
+        <div className="space-y-4">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-48 w-full" />
+          <Skeleton className="h-48 w-full" />
         </div>
       )}
 
@@ -144,6 +146,14 @@ export default function ScheduleCPage() {
               <div className="w-full bg-muted rounded-md px-4 py-2 mb-4">
                 <h2 className="text-xl font-bold">{yearData.year}</h2>
               </div>
+              {yearData.schedule_c_income && Object.keys(yearData.schedule_c_income).length > 0 && (
+                <div className="mb-6">
+                  <CategoryTable
+                    title="Schedule C: Income"
+                    categories={yearData.schedule_c_income}
+                  />
+                </div>
+              )}
               <div className="flex flex-col md:flex-row gap-6">
                 <div className="md:w-1/2">
                   <CategoryTable
