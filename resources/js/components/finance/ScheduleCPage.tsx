@@ -12,7 +12,6 @@ import {
 } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
 
-import FinanceNavbar from './FinanceNavbar'
 
 interface CategoryTotal {
   label: string
@@ -107,64 +106,62 @@ export default function ScheduleCPage() {
   }, [])
 
   return (
-    <FinanceNavbar activeSection="schedule-c">
-      <div className="px-4 pb-8">
-        <h1 className="text-2xl font-bold mb-2">Schedule C View</h1>
-        <p className="text-muted-foreground mb-6">
-          Totals of transactions tagged with Schedule C tax characteristics, grouped by year.
-          Tag transactions with a tax characteristic on the{' '}
-          <a href="/finance/tags" className="text-blue-600 hover:underline">
-            Manage Tags
-          </a>{' '}
-          page.
-        </p>
+    <div className="px-4 pb-8">
+      <h1 className="text-2xl font-bold mb-2">Schedule C View</h1>
+      <p className="text-muted-foreground mb-6">
+        Totals of transactions tagged with Schedule C tax characteristics, grouped by year.
+        Tag transactions with a tax characteristic on the{' '}
+        <a href="/finance/tags" className="text-blue-600 hover:underline">
+          Manage Tags
+        </a>{' '}
+        page.
+      </p>
 
-        {isLoading && (
-          <div className="flex items-center gap-2 py-8">
-            <Spinner size="large" />
-            <span>Loading Schedule C data…</span>
-          </div>
-        )}
+      {isLoading && (
+        <div className="flex items-center gap-2 py-8">
+          <Spinner size="large" />
+          <span>Loading Schedule C data…</span>
+        </div>
+      )}
 
-        {error && (
-          <div className="text-red-600 dark:text-red-400 py-4">{error}</div>
-        )}
+      {error && (
+        <div className="text-red-600 dark:text-red-400 py-4">{error}</div>
+      )}
 
-        {!isLoading && !error && data && data.length === 0 && (
-          <div className="text-center py-12 text-muted-foreground border rounded-md">
-            <p className="mb-2 font-medium">No Schedule C data found.</p>
-            <p className="text-sm">
-              Tag your transactions with Schedule C tax characteristics to see totals here.
-            </p>
-          </div>
-        )}
+      {!isLoading && !error && data && data.length === 0 && (
+        <div className="text-center py-12 text-muted-foreground border rounded-md">
+          <p className="mb-2 font-medium">No Schedule C data found.</p>
+          <p className="text-sm">
+            Tag your transactions with Schedule C tax characteristics to see totals here.
+          </p>
+        </div>
+      )}
 
-        {!isLoading && !error && data && data.length > 0 && (
-          <div className="space-y-10">
-            {data.map((yearData) => (
-              <div key={yearData.year}>
-                <div className="w-full bg-muted rounded-md px-4 py-2 mb-4">
-                  <h2 className="text-xl font-bold">{yearData.year}</h2>
+      {!isLoading && !error && data && data.length > 0 && (
+        <div className="space-y-10">
+          {data.map((yearData) => (
+            <div key={yearData.year}>
+              <div className="w-full bg-muted rounded-md px-4 py-2 mb-4">
+                <h2 className="text-xl font-bold">{yearData.year}</h2>
+              </div>
+              <div className="flex flex-col md:flex-row gap-6">
+                <div className="md:w-1/2">
+                  <CategoryTable
+                    title="Schedule C: Expenses"
+                    categories={yearData.schedule_c_expense}
+                  />
                 </div>
-                <div className="flex flex-col md:flex-row gap-6">
-                  <div className="md:w-1/2">
-                    <CategoryTable
-                      title="Schedule C: Expenses"
-                      categories={yearData.schedule_c_expense}
-                    />
-                  </div>
-                  <div className="md:w-1/2">
-                    <CategoryTable
-                      title="Schedule C: Home Office Deduction"
-                      categories={yearData.schedule_c_home_office}
-                    />
-                  </div>
+                <div className="md:w-1/2">
+                  <CategoryTable
+                    title="Schedule C: Home Office Deduction"
+                    categories={yearData.schedule_c_home_office}
+                  />
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </FinanceNavbar>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }

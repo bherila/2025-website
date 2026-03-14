@@ -4,6 +4,7 @@
 
 @section('content')
   <div class="w-full">
+    <div id="FinanceNavbar" data-active-section="schedule-c"></div>
     <div id="ScheduleCPage"></div>
   </div>
 @endsection

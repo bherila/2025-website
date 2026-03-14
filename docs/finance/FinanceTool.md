@@ -21,30 +21,39 @@ The legacy name `FinanceSubNav` (`resources/js/components/finance/FinanceSubNav.
 
 ### Layout
 
+The navbar has a **two-sided layout**:
+
 | Region | Content |
 |--------|---------|
 | Far Left | "←" back button (links to `/`, tooltip "Back to BWH") |
 | Left | "FINANCE" branding in all-caps (tracked text) |
-| Centre | Section navigation links (active section highlighted via `bg-accent` + `aria-current="page"`) |
-| Far Right | "Manage Tags" link (available to all authenticated users) |
+| Left (account pages) | Account combobox (with "All Accounts" option) |
+| Left (account pages) | Account tabs: Transactions, Duplicates, Linker, Statements, Lots, Summary |
+| Right (`ml-auto`) | Section links: Schedule C, RSU, Payslips, Tags, Accounts |
 
-Page-specific content (e.g., account-level tabs, year selector) is rendered as `children` of `FinanceNavbar`.
+Account combobox and tabs appear only when `accountId` prop is provided.
+Duplicates, Linker, Statements, and Summary tabs are disabled when `accountId === 'all'`; Transactions and Lots are always enabled.
 
-### Section Links
+### Props
+
+```ts
+interface FinanceNavbarProps {
+  accountId?: number | 'all'   // number = specific account, 'all' = all accounts, undefined = no account nav
+  activeTab?: string            // active account tab (left side)
+  activeSection?: FinanceSection // active right-side section
+  children?: React.ReactNode
+}
+```
+
+### Right-Side Section Links
 
 | Link | Route |
 |------|-------|
-| Accounts | `/finance/accounts` |
-| Transactions | `/finance/all-transactions` |
 | Schedule C | `/finance/schedule-c` |
 | RSU | `/finance/rsu` |
 | Payslips | `/finance/payslips` |
-
-### Utility Links (far-right)
-
-| Link | Route | Condition |
-|------|-------|-----------|
-| Manage Tags | `/finance/tags` | All authenticated users |
+| Tags | `/finance/tags` |
+| Accounts | `/finance/accounts` |
 
 ### Navigation Menu Component
 
@@ -57,26 +66,37 @@ Finance pages extend `layouts.finance` instead of `layouts.app`. This layout:
 - Loads CSS and `back-to-top.tsx` only (no main navbar)
 - Skips the `<header>` section and `navbar.tsx` bundle
 
+Finance pages mount `FinanceNavbar` from a `<div id="FinanceNavbar" data-account-id="..." data-active-tab="..." data-active-section="...">` element. The `finance.tsx` entry point reads these data attributes.
+
 ## Account Navigation
 
-The finance module uses a tabbed navigation system with a shared year selector at the account level.
+The `AccountNavigation` component (`resources/js/components/finance/AccountNavigation.tsx`) renders a simplified toolbar below `FinanceNavbar` on account-specific pages.
 
-### Navigation Tabs
+### Content
+
+- **Year selector** (shown for tabs that support year filtering: transactions, duplicates, linker, statements, summary)
+- **Import** button → `/finance/account/{id}/import`
+- **Maintenance** button → `/finance/account/{id}/maintenance`
+
+Account tabs and account combobox have moved to `FinanceNavbar`.
+
+### Navigation Tabs (now in FinanceNavbar)
 
 | Tab | Route | Description |
 |-----|-------|-------------|
-| Transactions | `/finance/{id}` | Main transaction list with filtering, sorting, tagging, linking |
-| Duplicates | `/finance/{id}/duplicates` | Find and remove duplicate transactions |
-| Statements | `/finance/{id}/statements` | Upload and view account statements (detail view on the same page via query params) |
-| Lots | `/finance/{id}/lots` | Track investment positions and lots (open/closed, ST/LT gains) |
-| Linker | `/finance/{id}/linker` | Bulk transaction linking tool |
+| Transactions | `/finance/account/{id}/transactions` | Main transaction list with filtering, sorting, tagging, linking |
+| Duplicates | `/finance/account/{id}/duplicates` | Find and remove duplicate transactions |
+| Linker | `/finance/account/{id}/linker` | Bulk transaction linking tool |
+| Statements | `/finance/account/{id}/statements` | Upload and view account statements |
+| Lots | `/finance/account/{id}/lots` | Track investment positions and lots (open/closed, ST/LT gains) |
+| Summary | `/finance/account/{id}/summary` | Account summary |
 
 ### Utility Buttons
 
 | Button | Route | Description |
 |--------|-------|-------------|
-| Import | `/finance/{id}/import` | Import transactions from CSV files |
-| Maintenance | `/finance/{id}/maintenance` | Account maintenance operations |
+| Import | `/finance/account/{id}/import` | Import transactions from CSV files |
+| Maintenance | `/finance/account/{id}/maintenance` | Account maintenance operations |
 
 ### Year Selector
 
@@ -86,9 +106,34 @@ The year selector uses URL query strings for shareable, bookmarkable links:
 - All tab navigation preserves the year selection
 - Uses `financeRouteBuilder.ts` for centralized URL construction
 
+## URL Routes
+
+### New account-prefixed routes
+
+| Route | Handler |
+|-------|---------|
+| `/finance/account/all/transactions` | `showAllTransactions()` |
+| `/finance/account/all/lots` | `showAllLots()` |
+| `/finance/account/{id}/transactions` | `show()` |
+| `/finance/account/{id}/duplicates` | `duplicates()` |
+| `/finance/account/{id}/linker` | `linker()` |
+| `/finance/account/{id}/statements` | `statements()` |
+| `/finance/account/{id}/lots` | `lots()` |
+| `/finance/account/{id}/summary` | `summary()` |
+| `/finance/account/{id}/maintenance` | `maintenance()` |
+| `/finance/account/{id}/import` | `showImportTransactionsPage()` |
+
+### Backward-compat redirects (301)
+
+| Old Route | New Route |
+|-----------|-----------|
+| `/finance/all-transactions` | `/finance/account/all/transactions` |
+| `/finance/{id}` | (kept, numeric constraint) |
+| `/finance/{id}/duplicates` etc. | (kept with numeric constraint) |
+
 ## All Transactions Page
 
-The **All Transactions** page (`/finance/all-transactions`) provides a unified view of all transactions across all accounts for the current user.
+The **All Transactions** page (`/finance/account/all/transactions`) provides a unified view of all transactions across all accounts for the current user.
 
 ### Performance Optimizations
 
@@ -97,7 +142,7 @@ To handle thousands of transactions across multiple accounts, the following opti
 1.  **JSON Streaming**: The backend (`FinanceTransactionsApiController@getLineItems`) uses `response()->stream()` to send data to the client as it's being read from the database.
 2.  **Lazy Loading**: The backend uses Eloquent's `lazy()` method to chunk database results, keeping memory usage constant regardless of the total number of records.
 3.  **Client-side Account Mapping**: To avoid repeating account name strings in every transaction record (saving significant bandwidth), the API returns only the account ID. The frontend fetches the account list once and builds an `accountMap` for display lookups.
-4.  **On-demand Loading**: Transactions are not loaded automatically on page mount unless a `tag` parameter is provided in the URL. Users select a year, optional filters (Cash Only / Stock Only), and an optional tag filter and click **Get Transactions** to trigger the API request.
+4.  **Auto-loading**: Transactions are loaded automatically on page mount and re-fetched when year/filter/tag controls change.
 5.  **Initial Data Bootstrapping**: Available transaction years are passed directly from the Blade template to the React component via a data attribute, eliminating an initial API request.
 
 ### Tag Filtering
