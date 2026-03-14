@@ -28,6 +28,7 @@ import {
 } from '@/lib/finance/washSaleEngine'
 
 import { VariousTransactionsModal } from './VariousTransactionsModal'
+import { WashSaleDetailModal } from './WashSaleDetailModal'
 
 function formatCurrency(value: number): string {
     return value.toLocaleString('en-US', {
@@ -399,6 +400,7 @@ function Form8949Table({
     onLoadAllYears?: (() => void) | undefined;
     allYearsLoaded?: boolean | undefined;
 }) {
+    const [washSaleLot, setWashSaleLot] = useState<LotSale | null>(null)
     if (lots.length === 0) {
         return (
             <Card>
@@ -423,6 +425,7 @@ function Form8949Table({
     )
 
     return (
+        <>
         <Card>
             <CardHeader>
                 <CardTitle className="text-sm">{title}</CardTitle>
@@ -468,7 +471,20 @@ function Form8949Table({
                                                 </Badge>
                                             )}
                                             {lot.isWashSale && (
-                                                <Badge variant="destructive" className="ml-1 text-xs font-sans uppercase tracking-tight">
+                                                <Badge
+                                                    variant="destructive"
+                                                    className="ml-1 text-xs font-sans uppercase tracking-tight cursor-pointer hover:opacity-80"
+                                                    onClick={() => setWashSaleLot(lot)}
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter' || e.key === ' ') {
+                                                            e.preventDefault()
+                                                            setWashSaleLot(lot)
+                                                        }
+                                                    }}
+                                                    title="Click to see wash sale details"
+                                                >
                                                     Wash
                                                 </Badge>
                                             )}
@@ -511,5 +527,13 @@ function Form8949Table({
                 </div>
             </CardContent>
         </Card>
+        {washSaleLot && (
+            <WashSaleDetailModal
+                lot={washSaleLot}
+                isOpen={true}
+                onClose={() => setWashSaleLot(null)}
+            />
+        )}
+    </>
     )
 }

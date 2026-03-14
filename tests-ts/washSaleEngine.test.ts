@@ -580,4 +580,78 @@ describe('washSaleEngine', () => {
       expect(results[0]!.isWashSale).toBe(true)
     })
   })
+
+  // =========================================================================
+  // Wash sale detail fields (washPurchaseDate, washPurchaseAccountId, etc.)
+  // =========================================================================
+  describe('analyzeLots – wash sale detail fields', () => {
+    it('should populate washPurchaseDate when a wash sale is detected', () => {
+      const items = [
+        tx({ t_id: 1, t_date: '2024-01-15', t_type: 'Buy', t_symbol: 'XYZ', t_qty: 100, t_amt: -10000, t_price: 100, t_account: 1 }),
+        tx({ t_id: 2, t_date: '2024-02-15', t_type: 'Sell', t_symbol: 'XYZ', t_qty: 100, t_amt: 8000, t_price: 80, t_account: 1 }),
+        tx({ t_id: 3, t_date: '2024-02-20', t_type: 'Buy', t_symbol: 'XYZ', t_qty: 100, t_amt: -8500, t_price: 85, t_account: 1 }),
+      ]
+      const results = analyzeLots(items)
+      expect(results[0]!.isWashSale).toBe(true)
+      expect(results[0]!.washPurchaseDate).toBe('2024-02-20')
+    })
+
+    it('should populate washPurchaseAccountId when a wash sale is detected', () => {
+      const items = [
+        tx({ t_id: 1, t_date: '2024-01-15', t_type: 'Buy', t_symbol: 'XYZ', t_qty: 100, t_amt: -10000, t_price: 100, t_account: 42 }),
+        tx({ t_id: 2, t_date: '2024-02-15', t_type: 'Sell', t_symbol: 'XYZ', t_qty: 100, t_amt: 8000, t_price: 80, t_account: 42 }),
+        tx({ t_id: 3, t_date: '2024-02-20', t_type: 'Buy', t_symbol: 'XYZ', t_qty: 100, t_amt: -8500, t_price: 85, t_account: 42 }),
+      ]
+      const results = analyzeLots(items)
+      expect(results[0]!.isWashSale).toBe(true)
+      expect(results[0]!.washPurchaseAccountId).toBe(42)
+    })
+
+    it('should populate washPurchaseDescription when a wash sale is detected', () => {
+      const items = [
+        tx({ t_id: 1, t_date: '2024-01-15', t_type: 'Buy', t_symbol: 'XYZ', t_qty: 100, t_amt: -10000, t_price: 100, t_description: 'Buy XYZ' }),
+        tx({ t_id: 2, t_date: '2024-02-15', t_type: 'Sell', t_symbol: 'XYZ', t_qty: 100, t_amt: 8000, t_price: 80 }),
+        tx({ t_id: 3, t_date: '2024-02-20', t_type: 'Buy', t_symbol: 'XYZ', t_qty: 100, t_amt: -8500, t_price: 85, t_description: 'Repurchase XYZ' }),
+      ]
+      const results = analyzeLots(items)
+      expect(results[0]!.isWashSale).toBe(true)
+      expect(results[0]!.washPurchaseDescription).toBe('Repurchase XYZ')
+    })
+
+    it('should populate washSaleReason for stock-to-stock wash sale', () => {
+      const items = [
+        tx({ t_id: 1, t_date: '2024-01-15', t_type: 'Buy', t_symbol: 'XYZ', t_qty: 100, t_amt: -10000, t_price: 100 }),
+        tx({ t_id: 2, t_date: '2024-02-15', t_type: 'Sell', t_symbol: 'XYZ', t_qty: 100, t_amt: 8000, t_price: 80 }),
+        tx({ t_id: 3, t_date: '2024-02-20', t_type: 'Buy', t_symbol: 'XYZ', t_qty: 100, t_amt: -8500, t_price: 85 }),
+      ]
+      const results = analyzeLots(items)
+      expect(results[0]!.isWashSale).toBe(true)
+      expect(results[0]!.washSaleReason).toContain('§1091')
+      expect(results[0]!.washSaleReason).toContain('XYZ')
+    })
+
+    it('should populate washSaleReason for stock-to-option wash sale (Method 1)', () => {
+      const items = [
+        tx({ t_id: 1, t_date: '2024-01-15', t_type: 'Buy', t_symbol: 'AAPL', t_qty: 100, t_amt: -15000, t_price: 150 }),
+        tx({ t_id: 2, t_date: '2024-03-15', t_type: 'Sell', t_symbol: 'AAPL', t_qty: 100, t_amt: 13000, t_price: 130 }),
+        tx({ t_id: 3, t_date: '2024-03-20', t_type: 'Buy', t_symbol: 'AAPL', t_qty: 1, t_amt: -500, t_price: 5, opt_type: 'call', opt_expiration: '2024-06-15' }),
+      ]
+      const results = analyzeLots(items, WASH_SALE_METHOD_1)
+      expect(results[0]!.isWashSale).toBe(true)
+      expect(results[0]!.washSaleReason).toContain('Method 1')
+      expect(results[0]!.washSaleReason).toContain('§1091')
+    })
+
+    it('should leave washSaleReason undefined for non-wash-sale lots', () => {
+      const items = [
+        tx({ t_id: 1, t_date: '2024-01-15', t_type: 'Buy', t_symbol: 'AAPL', t_qty: 100, t_amt: -13000, t_price: 130 }),
+        tx({ t_id: 2, t_date: '2024-03-15', t_type: 'Sell', t_symbol: 'AAPL', t_qty: 100, t_amt: 15000, t_price: 150 }),
+      ]
+      const results = analyzeLots(items)
+      expect(results[0]!.isWashSale).toBe(false)
+      expect(results[0]!.washSaleReason).toBeUndefined()
+      expect(results[0]!.washPurchaseDate).toBeUndefined()
+      expect(results[0]!.washPurchaseAccountId).toBeUndefined()
+    })
+  })
 })

@@ -185,8 +185,17 @@ The "Save as TXF File" button generates a TXF (Tax eXchange Format) file for imp
 
 ### Badge Indicators
 - **SHORT**: Blue outline badge for short sale closings.
-- **WASH**: Red destructive badge for wash sale disallowances.
+- **WASH**: Red destructive badge for wash sale disallowances. **Clickable** — opens the Wash Sale Detail Modal.
 - **Account Names**: Gray outline badges showing the first word of the account name (when enabled).
+
+### Wash Sale Detail Modal
+Clicking the **WASH** badge opens a modal dialog (`WashSaleDetailModal.tsx`) showing:
+- **Sale**: security description and date sold
+- **Disqualifying Acquisition**: description, purchase date, and number of days between the sale and the acquisition
+- **Rule Applied**: a human-readable explanation of which IRS §1091 rule was triggered (e.g., same security, same underlying via Method 1, option-to-stock, etc.)
+- **Go to Transaction** button: navigates directly to the disqualifying purchase in the account's Transactions page (uses `goToTransaction` from `financeRouteBuilder.ts`). Shown only when the purchase account ID is known.
+
+The wash sale reason and purchase metadata are computed by the engine during `analyzeLots()` and stored in the `LotSale` object as `washSaleReason`, `washPurchaseDate`, `washPurchaseAccountId`, and `washPurchaseDescription`.
 
 ### Performance Optimization
 The transaction list table is automatically hidden when the Lot Analyzer is open to improve browser rendering performance for large datasets.
@@ -211,7 +220,7 @@ php artisan test --filter=FinanceLotsControllerTest
 ```
 
 ### JS Test Coverage
-- **Wash sale engine** (40 tests): normalizeOptions, gain/loss calculation, ST/LT classification, wash sale detection (30-day window, boundary conditions), cross-type settings, Method 1 vs 2, currency precision, edge cases
+- **Wash sale engine** (46 tests): normalizeOptions, gain/loss calculation, ST/LT classification, wash sale detection (30-day window, boundary conditions), cross-type settings, Method 1 vs 2, currency precision, edge cases, wash sale detail fields (washPurchaseDate, washPurchaseAccountId, washPurchaseDescription, washSaleReason)
 - **TXF export** (11 tests): header format, reference numbers, date formatting, amounts, wash sale inclusion, multi-lot handling
 - **VariousTransactionsModal** (6 tests): render states, Load All Years button, Search for Opening Transaction button
 
