@@ -91,14 +91,14 @@ describe('FinanceNavbar', () => {
     expect(manageTagsLink).toHaveAttribute('aria-current', 'page')
   })
 
-  it('is non-sticky (no sticky class)', async () => {
+  it('is non-sticky (no positioning classes)', async () => {
     const FinanceNavbar = (await import('@/components/finance/FinanceNavbar')).default
     await act(async () => {
       render(<FinanceNavbar activeSection="accounts" />)
     })
-    // The nav bar should NOT have a sticky class
+    // The nav bar should NOT have sticky, fixed, or absolute positioning
     const navBar = screen.getByLabelText('Finance section').closest('.border-b')
-    expect(navBar).not.toHaveClass('sticky')
+    expect(navBar?.className).not.toMatch(/\b(sticky|fixed|absolute)\b/)
   })
 
   it('backwards-compatible re-export from FinanceSubNav', async () => {

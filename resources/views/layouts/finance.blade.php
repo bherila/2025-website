@@ -38,6 +38,7 @@
     {{-- Finance layout: skip the main navbar, only load css + back-to-top --}}
     @vite(['resources/css/app.css', 'resources/js/back-to-top.tsx'])
     @stack('head')
+    {{-- Noop script to trigger Vite JS parsing (mirrors app layout) --}}
     <script>(_=>{let a})()</script>
   </head>
   <body class="min-h-screen flex flex-col">
