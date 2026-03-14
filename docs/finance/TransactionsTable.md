@@ -22,23 +22,32 @@ The primary navigation bar for all Finance pages, replacing the main site navbar
 
 Any `children` (e.g., account-specific tabs) are rendered below the bar.
 
-### All Transactions Page
+### Transactions Page (Unified)
 
-**Location**: `resources/js/components/finance/AllTransactionsPage.tsx`
+**Location**: `resources/js/components/finance/TransactionsPage.tsx`
 
-Unified view across all accounts with advanced features:
-- **Year Selector**: Defaults to the current year.
-- **Filter Bar**: Toggle between **Show All**, **Cash Only**, and **Stock Only**.
-- **On-demand Loading**: Click **Get Transactions** to fetch data based on the selected year and filter.
-- **Lot Analyzer**: Toggle button to display IRS Form 8949 style wash sale and gain/loss analysis.
+Single unified component that handles both single-account and all-accounts views. It replaces the former `AllAccountsTransactionsContent` (all-accounts inline component) and `FinanceAccountTransactionsPage` (single-account component).
+
+Features provided in both views:
+- **Year Selector**: Fetched from API (`/api/finance/{accountId}/transaction-years` or `/api/finance/all/transaction-years`). Defaults to current year when available.
+- **Tag Selector**: Filter transactions by tag (All Tags is default).
+- **Cash/Stock Filter**: Toggle between Cash + Stock, Cash Only, and Stock Only.
+- **Export**: CSV and JSON download buttons.
+- **Full TransactionsTable features**: editing, tagging, viewing details, lot details (all columns).
+
+When a **single account** is selected:
+- **Linking** is enabled in the transactions table.
+- **Import**, **Maintenance**, and **New Transaction** action buttons are shown and active (top-right of the toolbar).
+
+When **All Accounts** is selected:
+- **Import**, **Maintenance**, and **New Transaction** buttons are rendered but **disabled**. A shadcn `Tooltip` explains: _"Select an account to import or modify that account."_
+- Linking is disabled (since cross-account linking does not apply here).
 
 ### Account Navigation Component
 
 **Location**: `resources/js/components/finance/AccountNavigation.tsx`
 
-Wraps `FinanceSubNav` and adds account-specific navigation:
-- **Breadcrumb**: Finance > Accounts > [Account Combobox] > [Active Tab]
-- **Tabs** (left side): Transactions, Duplicates, Statements, Linker, Lots, Summary
+Used on non-transaction account pages (duplicates, linker, statements, lots, summary, maintenance, import):
 - **Year Selector** (inline): Shared across tabs that support year filtering
 - **Utility Buttons** (right side): Import, Maintenance
 
@@ -58,7 +67,7 @@ The year selector uses URL query strings for shareable, bookmarkable links:
 
 - **Frontend Component**: `resources/js/components/finance/TransactionsTable.tsx`
 - **CSS Styles**: `resources/js/components/finance/TransactionsTable.css`
-- **Primary Usage**: `resources/js/components/finance/FinanceAccountTransactionsPage.tsx`
+- **Primary Usage**: `resources/js/components/finance/TransactionsPage.tsx`
 - **Type Definitions**: `resources/js/data/finance/AccountLineItem.ts`
 
 ---
@@ -187,14 +196,19 @@ When `enableTagging` is true:
 
 ### Transaction Operations
 
+Both `{account_id}` routes and their `all`-account counterparts share the same controller logic. Pass `all` as the account ID to query across all accounts owned by the authenticated user.
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/finance/all-line-items` | Get all transactions (supports streaming and year/filter params) |
-| GET | `/api/finance/{account_id}/line_items` | Get transactions for an account |
-| POST | `/api/finance/{account_id}/line_items` | Import transactions |
-| DELETE | `/api/finance/{account_id}/line_items` | Delete transaction |
+| GET | `/api/finance/all/line_items` | Get all transactions across all accounts (consolidated) |
+| GET | `/api/finance/{account_id}/line_items` | Get transactions for a single account |
+| POST | `/api/finance/{account_id}/line_items` | Import transactions for an account |
+| DELETE | `/api/finance/{account_id}/line_items` | Delete a transaction from an account |
 | POST | `/api/finance/transactions/{id}/update` | Update transaction fields |
-| GET | `/api/finance/{account_id}/transaction-years` | Get available years |
+| GET | `/api/finance/all/transaction-years` | Get distinct years across all accounts |
+| GET | `/api/finance/{account_id}/transaction-years` | Get distinct years for a single account |
 | GET | `/api/finance/{account_id}/summary` | Get account summary |
+
+> **Deprecated:** `/api/finance/all-line-items` is kept for backwards compatibility and maps to the same handler as `/api/finance/all/line_items`. Prefer the new endpoint.
 
 ...
