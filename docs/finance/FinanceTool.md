@@ -70,11 +70,13 @@ Finance pages mount `FinanceNavbar` from a `<div id="FinanceNavbar" data-account
 
 ## Account Navigation
 
-The `AccountNavigation` component (`resources/js/components/finance/AccountNavigation.tsx`) renders a simplified toolbar below `FinanceNavbar` on account-specific pages.
+The `AccountNavigation` component (`resources/js/components/finance/AccountNavigation.tsx`) renders a simplified toolbar below `FinanceNavbar` on account-specific non-transaction pages (duplicates, linker, statements, lots, summary, maintenance, import).
+
+> **Transactions page:** The `TransactionsPage` component now renders its own inline toolbar with year selector, tag/filter dropdowns, and Import/Maintenance/New Transaction action buttons. `AccountNavigation` is **not** rendered on the transactions page.
 
 ### Content
 
-- **Year selector** (shown for tabs that support year filtering: transactions, duplicates, linker, statements, summary)
+- **Year selector** (shown for tabs that support year filtering: duplicates, linker, statements, summary)
 - **Import** button → `/finance/account/{id}/import`
 - **Maintenance** button → `/finance/account/{id}/maintenance`
 
@@ -491,7 +493,8 @@ PDF statements can be imported using Gemini AI for parsing. The frontend now pro
 
 | Endpoint | Controller | Purpose |
 |----------|------------|---------|
-| `GET /api/finance/all-line-items` | `FinanceTransactionsApiController@getLineItems` | Get all transactions (supports streaming and year/filter/tag params) |
+| `GET /api/finance/all/line_items` | `FinanceTransactionsApiController@getLineItems` | Get all transactions across all accounts (supports streaming, year/filter/tag params) |
+| `GET /api/finance/{account_id}/line_items` | `FinanceTransactionsApiController@getLineItems` | Get transactions for a single account |
 | `POST /api/finance/transactions/import-gemini` | `FinanceGeminiImportController@parseDocument` | Parse PDF or other file with Gemini (cached by file hash) |
 | `POST /api/finance/{id}/import-pdf-statement` | `StatementController` | Save parsed statement data (details and lots) |
 | `GET /api/finance/{id}/lots` | `FinanceLotsController@index` | Fetch open/closed lots for an account |

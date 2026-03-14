@@ -15,10 +15,13 @@ class FinanceAccountsController extends Controller
         $uid = Auth::id();
         $accountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
         $years = FinAccountLineItems::whereIn('t_account', $accountIds)
-            ->selectRaw('DISTINCT YEAR(t_date) as year')
             ->whereNotNull('t_date')
-            ->orderBy('year', 'desc')
-            ->pluck('year')
+            ->pluck('t_date')
+            ->map(fn ($date) => (int) substr((string) $date, 0, 4))
+            ->filter(fn ($year) => $year > 0)
+            ->unique()
+            ->sort(fn ($a, $b) => $b - $a)
+            ->values()
             ->toArray();
 
         return view('finance.account-all-transactions', ['availableYears' => $years]);
@@ -29,10 +32,13 @@ class FinanceAccountsController extends Controller
         $uid = Auth::id();
         $accountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
         $years = FinAccountLineItems::whereIn('t_account', $accountIds)
-            ->selectRaw('DISTINCT YEAR(t_date) as year')
             ->whereNotNull('t_date')
-            ->orderBy('year', 'desc')
-            ->pluck('year')
+            ->pluck('t_date')
+            ->map(fn ($date) => (int) substr((string) $date, 0, 4))
+            ->filter(fn ($year) => $year > 0)
+            ->unique()
+            ->sort(fn ($a, $b) => $b - $a)
+            ->values()
             ->toArray();
 
         return view('finance.account-all-lots', ['availableYears' => $years]);

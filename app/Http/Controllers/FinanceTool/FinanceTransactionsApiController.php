@@ -12,13 +12,14 @@ use Illuminate\Support\Facades\Auth;
 class FinanceTransactionsApiController extends Controller
 {
     /**
-     * Get line items (transactions) for one or all accounts
+     * Get line items (transactions) for one or all accounts.
+     * Pass account_id = 'all' (or null) to retrieve transactions across all accounts.
      */
     public function getLineItems(Request $request, $account_id = null)
     {
         $uid = Auth::id();
 
-        if ($account_id) {
+        if ($account_id && $account_id !== 'all') {
             $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
             $query = FinAccountLineItems::where('t_account', $account->acct_id);
         } else {
@@ -287,18 +288,28 @@ class FinanceTransactionsApiController extends Controller
     }
 
     /**
-     * Get available years for transactions in an account
+     * Get available years for transactions in one or all accounts.
+     * Pass account_id = 'all' (or omit to use the default) to retrieve years across all accounts.
      */
-    public function getTransactionYears(Request $request, $account_id)
+    public function getTransactionYears(Request $request, $account_id = 'all')
     {
         $uid = Auth::id();
-        $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
 
-        $years = FinAccountLineItems::where('t_account', $account->acct_id)
-            ->selectRaw('DISTINCT YEAR(t_date) as year')
-            ->whereNotNull('t_date')
-            ->orderBy('year', 'desc')
-            ->pluck('year')
+        if ($account_id === 'all') {
+            $accountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
+            $query = FinAccountLineItems::whereIn('t_account', $accountIds)->whereNotNull('t_date');
+        } else {
+            $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+            $query = FinAccountLineItems::where('t_account', $account->acct_id)->whereNotNull('t_date');
+        }
+
+        // Use a database-agnostic approach: extract year in PHP
+        $years = $query->pluck('t_date')
+            ->map(fn ($date) => (int) substr((string) $date, 0, 4))
+            ->filter(fn ($year) => $year > 0)
+            ->unique()
+            ->sort(fn ($a, $b) => $b - $a)
+            ->values()
             ->toArray();
 
         return response()->json($years);
