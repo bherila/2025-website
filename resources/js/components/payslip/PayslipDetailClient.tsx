@@ -28,7 +28,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { deletePayslip,savePayslip } from '@/lib/api'
 import { parseDate } from '@/lib/DateHelper'
 
-import FinanceSubNav from '../finance/FinanceSubNav'
+import FinanceNavbar from '../finance/FinanceNavbar'
 import type { fin_payslip } from './payslipDbCols'
 import { fin_payslip_schema } from './payslipDbCols'
 
@@ -171,7 +171,7 @@ export default function PayrollForm({ initialPayslip }: PayslipDetailClientProps
 
   return (
     <>
-      <FinanceSubNav
+      <FinanceNavbar
         activeSection="payslips"
         breadcrumbItems={
           <>

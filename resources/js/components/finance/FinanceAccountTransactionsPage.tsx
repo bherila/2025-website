@@ -10,7 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Spinner } from '@/components/ui/spinner'
+import { Skeleton } from '@/components/ui/skeleton'
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
 import { 
@@ -188,8 +188,10 @@ export default function FinanceAccountTransactionsPage({ id }: { id: number }) {
 
   if (isLoading && !data) {
     return (
-      <div className="d-flex justify-content-center">
-        <Spinner />
+      <div className="space-y-2 px-8 pt-4">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Skeleton key={i} className="h-10 w-full" />
+        ))}
       </div>
     )
   }

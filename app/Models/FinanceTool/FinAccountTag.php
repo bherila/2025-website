@@ -18,6 +18,9 @@ class FinAccountTag extends Model
      * constraints are updated in the database (to add the new values).
      */
     public const TAX_CHARACTERISTIC_VALUES = [
+        // Schedule C: Income
+        'business_income',
+        'business_returns',
         // Schedule C: Expense
         'sce_advertising',
         'sce_car_truck',

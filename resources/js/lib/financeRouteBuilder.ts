@@ -104,56 +104,70 @@ function buildHash(hash?: string): string {
  * Build URL for account transactions page
  */
 export function transactionsUrl(accountId: number, options: RouteOptions = {}): string {
-  return `/finance/${accountId}${buildQueryString(options.year)}${buildHash(options.hash)}`
+  return `/finance/account/${accountId}/transactions${buildQueryString(options.year)}${buildHash(options.hash)}`
 }
 
 /**
  * Build URL for duplicates page
  */
 export function duplicatesUrl(accountId: number, options: RouteOptions = {}): string {
-  return `/finance/${accountId}/duplicates${buildQueryString(options.year)}`
+  return `/finance/account/${accountId}/duplicates${buildQueryString(options.year)}`
 }
 
 /**
  * Build URL for linker page
  */
 export function linkerUrl(accountId: number, options: RouteOptions = {}): string {
-  return `/finance/${accountId}/linker${buildQueryString(options.year)}`
+  return `/finance/account/${accountId}/linker${buildQueryString(options.year)}`
 }
 
 /**
  * Build URL for statements page
  */
 export function statementsUrl(accountId: number, options: RouteOptions = {}): string {
-  return `/finance/${accountId}/statements${buildQueryString(options.year)}`
+  return `/finance/account/${accountId}/statements${buildQueryString(options.year)}`
 }
 
 /**
  * Build URL for lots page
  */
 export function lotsUrl(accountId: number): string {
-  return `/finance/${accountId}/lots`
+  return `/finance/account/${accountId}/lots`
 }
 
 /**
  * Build URL for summary page
  */
 export function summaryUrl(accountId: number, options: RouteOptions = {}): string {
-  return `/finance/${accountId}/summary${buildQueryString(options.year)}`
+  return `/finance/account/${accountId}/summary${buildQueryString(options.year)}`
 }
 
 /**
  * Build URL for import transactions page
  */
 export function importUrl(accountId: number): string {
-  return `/finance/${accountId}/import-transactions`
+  return `/finance/account/${accountId}/import`
 }
 
 /**
  * Build URL for maintenance page
  */
 export function maintenanceUrl(accountId: number): string {
-  return `/finance/${accountId}/maintenance`
+  return `/finance/account/${accountId}/maintenance`
+}
+
+/**
+ * Build URL for all-accounts view with a specific tab.
+ */
+export function allAccountsUrl(tab: string = 'transactions'): string {
+  return `/finance/account/all/${tab}`
+}
+
+/**
+ * Build URL for a specific account and tab, with optional year.
+ */
+export function accountTabUrl(tab: string, accountId: number, year?: YearSelection): string {
+  return getTabUrl(tab, accountId, year)
 }
 
 /**

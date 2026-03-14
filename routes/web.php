@@ -40,23 +40,35 @@ Route::middleware('auth')->group(function () {
     Route::get('/finance/accounts', [FinanceAccountsController::class, 'index']);
     Route::get('/finance/payslips', [FinancePayslipController::class, 'index']);
     Route::get('/finance/payslips/entry', [FinancePayslipController::class, 'entry']);
-    Route::get('/finance/all-transactions', function () {
-        return view('finance.all-transactions');
-    });
     Route::get('/finance/schedule-c', function () {
         return view('finance.schedule-c');
     });
     Route::get('/finance/tags', function () {
         return view('finance.tags');
     });
-    Route::get('/finance/{account_id}', [FinanceAccountsController::class, 'show']);
-    Route::get('/finance/{account_id}/summary', [FinanceAccountsController::class, 'summary']);
-    Route::get('/finance/{account_id}/statements', [FinanceAccountsController::class, 'statements']);
-    Route::get('/finance/{account_id}/lots', [FinanceAccountsController::class, 'lots']);
-    Route::get('/finance/{account_id}/maintenance', [FinanceAccountsController::class, 'maintenance']);
-    Route::get('/finance/{account_id}/duplicates', [FinanceAccountsController::class, 'duplicates']);
-    Route::get('/finance/{account_id}/linker', [FinanceAccountsController::class, 'linker']);
-    Route::get('/finance/{account_id}/import-transactions', [FinanceAccountsController::class, 'showImportTransactionsPage']);
+
+    // New account-prefixed routes
+    Route::get('/finance/account/all/transactions', [FinanceAccountsController::class, 'showAllTransactions']);
+    Route::get('/finance/account/all/lots', [FinanceAccountsController::class, 'showAllLots']);
+    Route::get('/finance/account/{account_id}/transactions', [FinanceAccountsController::class, 'show'])->where('account_id', '[0-9]+');
+    Route::get('/finance/account/{account_id}/duplicates', [FinanceAccountsController::class, 'duplicates'])->where('account_id', '[0-9]+');
+    Route::get('/finance/account/{account_id}/linker', [FinanceAccountsController::class, 'linker'])->where('account_id', '[0-9]+');
+    Route::get('/finance/account/{account_id}/statements', [FinanceAccountsController::class, 'statements'])->where('account_id', '[0-9]+');
+    Route::get('/finance/account/{account_id}/lots', [FinanceAccountsController::class, 'lots'])->where('account_id', '[0-9]+');
+    Route::get('/finance/account/{account_id}/summary', [FinanceAccountsController::class, 'summary'])->where('account_id', '[0-9]+');
+    Route::get('/finance/account/{account_id}/maintenance', [FinanceAccountsController::class, 'maintenance'])->where('account_id', '[0-9]+');
+    Route::get('/finance/account/{account_id}/import', [FinanceAccountsController::class, 'showImportTransactionsPage'])->where('account_id', '[0-9]+');
+
+    // Backward compat: 301 redirects from old URL structure to new /finance/account/{id}/{tab} routes
+    Route::redirect('/finance/all-transactions', '/finance/account/all/transactions', 301);
+    Route::get('/finance/{account_id}', fn ($account_id) => redirect("/finance/account/{$account_id}/transactions", 301))->where('account_id', '[0-9]+');
+    Route::get('/finance/{account_id}/summary', fn ($account_id) => redirect("/finance/account/{$account_id}/summary", 301))->where('account_id', '[0-9]+');
+    Route::get('/finance/{account_id}/statements', fn ($account_id) => redirect("/finance/account/{$account_id}/statements", 301))->where('account_id', '[0-9]+');
+    Route::get('/finance/{account_id}/lots', fn ($account_id) => redirect("/finance/account/{$account_id}/lots", 301))->where('account_id', '[0-9]+');
+    Route::get('/finance/{account_id}/maintenance', fn ($account_id) => redirect("/finance/account/{$account_id}/maintenance", 301))->where('account_id', '[0-9]+');
+    Route::get('/finance/{account_id}/duplicates', fn ($account_id) => redirect("/finance/account/{$account_id}/duplicates", 301))->where('account_id', '[0-9]+');
+    Route::get('/finance/{account_id}/linker', fn ($account_id) => redirect("/finance/account/{$account_id}/linker", 301))->where('account_id', '[0-9]+');
+    Route::get('/finance/{account_id}/import-transactions', fn ($account_id) => redirect("/finance/account/{$account_id}/import", 301))->where('account_id', '[0-9]+');
 
     Route::get('/tools/license-manager', function () {
         return view('tools.license-manager');

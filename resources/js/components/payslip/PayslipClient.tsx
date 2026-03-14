@@ -6,7 +6,7 @@ import Container from '@/components/container'
 import { Button } from '@/components/ui/button'
 import { fetchPayslips, fetchPayslipYears,savePayslip } from '@/lib/api'
 
-import FinanceSubNav from '../finance/FinanceSubNav'
+import FinanceNavbar from '../finance/FinanceNavbar'
 import { cols } from './config/payslipColumnsConfig'
 import type { fin_payslip } from './payslipDbCols'
 import { PayslipImportModal } from './PayslipImportModal' // Import the new dialog
@@ -75,7 +75,7 @@ export default function PayslipClient({ selectedYear: initialSelectedYear, initi
 
   return (
     <>
-      <FinanceSubNav activeSection="payslips" />
+      <FinanceNavbar activeSection="payslips" />
       <Container fluid>
         <div className="w-full my-2">
           <div className="flex justify-between items-center px-4">

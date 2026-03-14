@@ -4,11 +4,40 @@ namespace App\Http\Controllers\FinanceTool;
 
 use App\Http\Controllers\Controller;
 use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\FinAccountLineItems;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class FinanceAccountsController extends Controller
 {
+    public function showAllTransactions()
+    {
+        $uid = Auth::id();
+        $accountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
+        $years = FinAccountLineItems::whereIn('t_account', $accountIds)
+            ->selectRaw('DISTINCT YEAR(t_date) as year')
+            ->whereNotNull('t_date')
+            ->orderBy('year', 'desc')
+            ->pluck('year')
+            ->toArray();
+
+        return view('finance.account-all-transactions', ['availableYears' => $years]);
+    }
+
+    public function showAllLots()
+    {
+        $uid = Auth::id();
+        $accountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
+        $years = FinAccountLineItems::whereIn('t_account', $accountIds)
+            ->selectRaw('DISTINCT YEAR(t_date) as year')
+            ->whereNotNull('t_date')
+            ->orderBy('year', 'desc')
+            ->pluck('year')
+            ->toArray();
+
+        return view('finance.account-all-lots', ['availableYears' => $years]);
+    }
+
     public function index()
     {
         return view('finance.accounts');

@@ -1,9 +1,9 @@
+import { Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import AccountGrouping from '@/components/finance/AccountGrouping'
 import NewAccountForm from '@/components/finance/NewAccountForm'
 import StackedBalanceChart from '@/components/finance/StackedBalanceChart'
-import Link from '@/components/link'
 import MainTitle from '@/components/MainTitle'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -105,9 +105,9 @@ export default function FinanceAccountsPage() {
       <div className="flex justify-between items-center">
         <MainTitle>Accounting</MainTitle>
         <div className="flex space-x-2">
-          <Button onClick={() => setIsModalOpen(true)}>New Account</Button>
-          <Button asChild>
-            <Link href="/finance/tags">Manage Tags</Link>
+          <Button onClick={() => setIsModalOpen(true)}>
+            <Plus className="h-4 w-4 mr-1" />
+            New Account
           </Button>
         </div>
       </div>

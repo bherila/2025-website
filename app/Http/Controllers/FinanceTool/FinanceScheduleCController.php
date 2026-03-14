@@ -75,20 +75,25 @@ class FinanceScheduleCController extends Controller
             if (! isset($byYear[$year])) {
                 $byYear[$year] = [
                     'year' => $year,
+                    'schedule_c_income' => [],
                     'schedule_c_expense' => [],
                     'schedule_c_home_office' => [],
                 ];
             }
 
-            // Amounts are typically negative (expenses); display as positive
-            $amount = abs((float) $row->total);
-
-            if (str_starts_with($taxChar, 'sce_')) {
+            if (str_starts_with($taxChar, 'business_')) {
+                $label = self::scheduleIncomeLabel($taxChar);
+                $key = 'schedule_c_income';
+                // Income items are positive, show as-is (not negated)
+                $amount = (float) $row->total;
+            } elseif (str_starts_with($taxChar, 'sce_')) {
                 $label = self::scheduleExpenseLabel($taxChar);
                 $key = 'schedule_c_expense';
+                $amount = abs((float) $row->total);
             } elseif (str_starts_with($taxChar, 'scho_')) {
                 $label = self::homeOfficeLabel($taxChar);
                 $key = 'schedule_c_home_office';
+                $amount = abs((float) $row->total);
             } else {
                 continue;
             }
@@ -103,6 +108,15 @@ class FinanceScheduleCController extends Controller
         krsort($byYear);
 
         return response()->json(['years' => array_values($byYear)]);
+    }
+
+    public static function scheduleIncomeLabel(string $value): string
+    {
+        $labels = [
+            'business_income' => 'Gross receipts or sales (Business Income)',
+            'business_returns' => 'Returns and allowances',
+        ];
+        return $labels[$value] ?? $value;
     }
 
     public static function scheduleExpenseLabel(string $value): string

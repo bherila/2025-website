@@ -1,28 +1,71 @@
 import { createRoot } from 'react-dom/client'
 
 import AccountNavigation from '@/components/finance/AccountNavigation'
-import AllTransactionsPage from '@/components/finance/AllTransactionsPage'
+import AllAccountsLotsPage from '@/components/finance/AllAccountsLotsPage'
 import DuplicatesPage from '@/components/finance/DuplicatesPage'
 import FinanceAccountLotsPage from '@/components/finance/FinanceAccountLotsPage'
 import FinanceAccountsPage from '@/components/finance/FinanceAccountsPage'
-import FinanceAccountTransactionsPage from '@/components/finance/FinanceAccountTransactionsPage'
-import FinanceSubNav, { type FinanceSection } from '@/components/finance/FinanceSubNav'
+import FinanceNavbar, { type FinanceSection } from '@/components/finance/FinanceNavbar'
 import ImportTransactionsClient from '@/components/finance/ImportTransactionsClient'
 import LinkerPage from '@/components/finance/LinkerPage'
 import ManageTagsPage from '@/components/finance/ManageTagsPage'
 import ScheduleCPage from '@/components/finance/ScheduleCPage'
 import FinanceAccountStatementsPage from '@/components/finance/statements/FinanceAccountStatementsPage'
 import SummaryClient from '@/components/finance/SummaryClient'
+import TransactionsPage from '@/components/finance/TransactionsPage'
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Standalone FinanceNavbar
+  const financeNavbarDiv = document.getElementById('FinanceNavbar')
+  if (financeNavbarDiv) {
+    const root = createRoot(financeNavbarDiv)
+    const rawAccountId = financeNavbarDiv.dataset.accountId
+    const accountId: number | 'all' | undefined =
+      rawAccountId === 'all' ? 'all' : rawAccountId ? parseInt(rawAccountId) : undefined
+    const activeTab = financeNavbarDiv.dataset.activeTab
+    const activeSection = (financeNavbarDiv.dataset.activeSection || undefined) as FinanceSection | undefined
+    root.render(
+      <FinanceNavbar
+        accountId={accountId}
+        activeTab={activeTab}
+        activeSection={activeSection}
+      />,
+    )
+  }
+
+  // Simplified AccountNavigation (year selector + import + maintenance)
   const navDiv = document.getElementById('AccountNavigation')
   if (navDiv) {
     const root = createRoot(navDiv)
-    root.render(<AccountNavigation
-      accountId={parseInt(navDiv.dataset.accountId!)}
-      activeTab={navDiv.dataset.activeTab!}
-      accountName={navDiv.dataset.accountName!}
-    />)
+    root.render(
+      <AccountNavigation
+        accountId={parseInt(navDiv.dataset.accountId!)}
+        activeTab={navDiv.dataset.activeTab}
+      />,
+    )
+  }
+
+  // Unified TransactionsPage (replaces AllTransactionsPage + FinanceAccountTransactionsPage)
+  const transactionsPageDiv = document.getElementById('TransactionsPage')
+  if (transactionsPageDiv) {
+    const root = createRoot(transactionsPageDiv)
+    const rawAccountId = transactionsPageDiv.dataset.accountId
+    const accountId: number | 'all' = rawAccountId === 'all' ? 'all' : parseInt(rawAccountId!)
+    const initialAvailableYears = JSON.parse(transactionsPageDiv.dataset.availableYears || '[]')
+    root.render(
+      <TransactionsPage
+        accountId={accountId}
+        initialAvailableYears={initialAvailableYears}
+      />,
+    )
+  }
+
+  // All accounts lots analysis
+  const allLotsDiv = document.getElementById('AllAccountsLotsPage')
+  if (allLotsDiv) {
+    const root = createRoot(allLotsDiv)
+    const initialAvailableYears = JSON.parse(allLotsDiv.dataset.availableYears || '[]')
+    root.render(<AllAccountsLotsPage initialAvailableYears={initialAvailableYears} />)
   }
 
   const summaryDiv = document.getElementById('AccountSummaryClient')
@@ -37,12 +80,6 @@ document.addEventListener('DOMContentLoaded', () => {
     root.render(<FinanceAccountsPage />)
   }
 
-  const accountIndexDiv = document.getElementById('FinanceAccountTransactionsPage')
-  if (accountIndexDiv) {
-    const root = createRoot(accountIndexDiv)
-    root.render(<FinanceAccountTransactionsPage id={parseInt(accountIndexDiv.dataset.accountId!)} />)
-  }
-
   const balanceHistoryDiv = document.getElementById('FinanceAccountStatementsPage')
   if (balanceHistoryDiv) {
     const root = createRoot(balanceHistoryDiv)
@@ -52,10 +89,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const importTransactionsDiv = document.getElementById('ImportTransactionsClient')
   if (importTransactionsDiv) {
     const root = createRoot(importTransactionsDiv)
-    root.render(<ImportTransactionsClient
-      id={parseInt(importTransactionsDiv.dataset.accountId!)}
-      accountName={importTransactionsDiv.dataset.accountName!}
-    />)
+    root.render(
+      <ImportTransactionsClient
+        id={parseInt(importTransactionsDiv.dataset.accountId!)}
+        accountName={importTransactionsDiv.dataset.accountName!}
+      />,
+    )
   }
 
   const duplicatesDiv = document.getElementById('DuplicatesPage')
@@ -86,21 +125,5 @@ document.addEventListener('DOMContentLoaded', () => {
   if (scheduleCDiv) {
     const root = createRoot(scheduleCDiv)
     root.render(<ScheduleCPage />)
-  }
-
-  // Standalone FinanceSubNav (for pages like Payslips that need the nav bar)
-  const financeSubNavDiv = document.getElementById('FinanceSubNav')
-  if (financeSubNavDiv) {
-    const root = createRoot(financeSubNavDiv)
-    const activeSection = (financeSubNavDiv.dataset.activeSection || 'accounts') as FinanceSection
-    root.render(<FinanceSubNav activeSection={activeSection} />)
-  }
-
-  // All Transactions page
-  const allTransactionsDiv = document.getElementById('AllTransactionsPage')
-  if (allTransactionsDiv) {
-    const root = createRoot(allTransactionsDiv)
-    const initialAvailableYears = JSON.parse(allTransactionsDiv.dataset.availableYears || '[]')
-    root.render(<AllTransactionsPage initialAvailableYears={initialAvailableYears} />)
   }
 })

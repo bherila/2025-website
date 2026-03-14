@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 
-import { Spinner } from '@/components/ui/spinner'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
   TableBody,
@@ -12,7 +12,6 @@ import {
 } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
 
-import FinanceSubNav from './FinanceSubNav'
 
 interface CategoryTotal {
   label: string
@@ -21,6 +20,7 @@ interface CategoryTotal {
 
 interface YearData {
   year: string
+  schedule_c_income?: Record<string, CategoryTotal>
   schedule_c_expense: Record<string, CategoryTotal>
   schedule_c_home_office: Record<string, CategoryTotal>
 }
@@ -107,64 +107,71 @@ export default function ScheduleCPage() {
   }, [])
 
   return (
-    <FinanceSubNav activeSection="schedule-c">
-      <div className="px-4 pb-8">
-        <h1 className="text-2xl font-bold mb-2">Schedule C View</h1>
-        <p className="text-muted-foreground mb-6">
-          Totals of transactions tagged with Schedule C tax characteristics, grouped by year.
-          Tag transactions with a tax characteristic on the{' '}
-          <a href="/finance/tags" className="text-blue-600 hover:underline">
-            Manage Tags
-          </a>{' '}
-          page.
-        </p>
+    <div className="px-4 pb-8">
+      <h1 className="text-2xl font-bold mb-2">Schedule C View</h1>
+      <p className="text-muted-foreground mb-6">
+        Totals of transactions tagged with Schedule C tax characteristics, grouped by year.
+        Tag transactions with a tax characteristic on the{' '}
+        <a href="/finance/tags" className="text-blue-600 hover:underline">
+          Manage Tags
+        </a>{' '}
+        page.
+      </p>
 
-        {isLoading && (
-          <div className="flex items-center gap-2 py-8">
-            <Spinner size="large" />
-            <span>Loading Schedule C data…</span>
-          </div>
-        )}
+      {isLoading && (
+        <div className="space-y-4">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-48 w-full" />
+          <Skeleton className="h-48 w-full" />
+        </div>
+      )}
 
-        {error && (
-          <div className="text-red-600 dark:text-red-400 py-4">{error}</div>
-        )}
+      {error && (
+        <div className="text-red-600 dark:text-red-400 py-4">{error}</div>
+      )}
 
-        {!isLoading && !error && data && data.length === 0 && (
-          <div className="text-center py-12 text-muted-foreground border rounded-md">
-            <p className="mb-2 font-medium">No Schedule C data found.</p>
-            <p className="text-sm">
-              Tag your transactions with Schedule C tax characteristics to see totals here.
-            </p>
-          </div>
-        )}
+      {!isLoading && !error && data && data.length === 0 && (
+        <div className="text-center py-12 text-muted-foreground border rounded-md">
+          <p className="mb-2 font-medium">No Schedule C data found.</p>
+          <p className="text-sm">
+            Tag your transactions with Schedule C tax characteristics to see totals here.
+          </p>
+        </div>
+      )}
 
-        {!isLoading && !error && data && data.length > 0 && (
-          <div className="space-y-10">
-            {data.map((yearData) => (
-              <div key={yearData.year}>
-                <div className="w-full bg-muted rounded-md px-4 py-2 mb-4">
-                  <h2 className="text-xl font-bold">{yearData.year}</h2>
+      {!isLoading && !error && data && data.length > 0 && (
+        <div className="space-y-10">
+          {data.map((yearData) => (
+            <div key={yearData.year}>
+              <div className="w-full bg-muted rounded-md px-4 py-2 mb-4">
+                <h2 className="text-xl font-bold">{yearData.year}</h2>
+              </div>
+              {yearData.schedule_c_income && Object.keys(yearData.schedule_c_income).length > 0 && (
+                <div className="mb-6">
+                  <CategoryTable
+                    title="Schedule C: Income"
+                    categories={yearData.schedule_c_income}
+                  />
                 </div>
-                <div className="flex flex-col md:flex-row gap-6">
-                  <div className="md:w-1/2">
-                    <CategoryTable
-                      title="Schedule C: Expenses"
-                      categories={yearData.schedule_c_expense}
-                    />
-                  </div>
-                  <div className="md:w-1/2">
-                    <CategoryTable
-                      title="Schedule C: Home Office Deduction"
-                      categories={yearData.schedule_c_home_office}
-                    />
-                  </div>
+              )}
+              <div className="flex flex-col md:flex-row gap-6">
+                <div className="md:w-1/2">
+                  <CategoryTable
+                    title="Schedule C: Expenses"
+                    categories={yearData.schedule_c_expense}
+                  />
+                </div>
+                <div className="md:w-1/2">
+                  <CategoryTable
+                    title="Schedule C: Home Office Deduction"
+                    categories={yearData.schedule_c_home_office}
+                  />
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </FinanceSubNav>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }

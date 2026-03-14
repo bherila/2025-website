@@ -1,12 +1,12 @@
-@extends('layouts.app')
+@extends('layouts.finance')
 
 @section('title', $accountName . ' Transactions | ' . config('app.name', 'Ben Herila'))
 
 @section('content')
   <div class="w-full">
-    <div id="AccountNavigation" data-account-id="{{ $account_id }}" data-active-tab="transactions"
-      data-account-name="{{ $accountName }}"></div>
-    <div id="FinanceAccountTransactionsPage" data-account-id="{{ $account_id }}"></div>
+    <div id="FinanceNavbar" data-account-id="{{ $account_id }}" data-active-tab="transactions"></div>
+    <div id="AccountNavigation" data-account-id="{{ $account_id }}" data-active-tab="transactions"></div>
+    <div id="TransactionsPage" data-account-id="{{ $account_id }}"></div>
   </div>
 @endsection
 
