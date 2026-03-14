@@ -886,7 +886,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
       {paginationControls}
 
       {enableTagging && (
-        <div className="mt-4 p-4 border rounded">
+        <div className="mt-4">
           {sortedData.length > 1000 ? (
             <Alert variant="destructive">
               <AlertDescription>
@@ -895,7 +895,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
               </AlertDescription>
             </Alert>
           ) : (
-            <div className="flex flex-wrap items-center gap-4">
+            <div className="p-4 border rounded flex flex-wrap items-center gap-4">
               <span>Apply tag to {sortedData.length} selected transactions:</span>
               {isLoadingTags ? (
                 <Spinner size="small" />
