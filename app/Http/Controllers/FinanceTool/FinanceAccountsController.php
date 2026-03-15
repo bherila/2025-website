@@ -129,6 +129,7 @@ class FinanceAccountsController extends Controller
             'whenClosed' => $account->when_closed,
             'isDebt' => $account->acct_is_debt,
             'isRetirement' => $account->acct_is_retirement,
+            'acctNumber' => $account->acct_number,
         ]);
     }
 

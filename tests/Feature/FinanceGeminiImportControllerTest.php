@@ -179,9 +179,10 @@ class FinanceGeminiImportControllerTest extends TestCase
             ->postJson('/api/finance/transactions/import-gemini', ['file' => $file]);
         $response1->assertStatus(500);
 
-        // Verify nothing was cached
+        // Verify nothing was cached (key includes accounts context hash)
         $hash = hash('sha256', 'deterministic-pdf-content-for-test');
-        $this->assertNull(Cache::get("gemini_import:transactions:{$hash}"));
+        $contextHash = hash('sha256', json_encode([]));
+        $this->assertNull(Cache::get("gemini_import:transactions:{$hash}:{$contextHash}"));
 
         // Re-create the file (the previous upload consumed it)
         file_put_contents($tmpPath, 'deterministic-pdf-content-for-test');
@@ -243,6 +244,127 @@ class FinanceGeminiImportControllerTest extends TestCase
         $this->assertEquals('2025-01-01', $json['statementInfo']['periodStart']);
         $this->assertEquals('2025-01-31', $json['statementInfo']['periodEnd']);
         $this->assertEquals('2025-01-15', $json['transactions'][0]['date']);
+        // Also check that the accounts array is present and normalized
+        $this->assertArrayHasKey('accounts', $json);
+        $this->assertCount(1, $json['accounts']);
+        $this->assertEquals('2025-01-01', $json['accounts'][0]['statementInfo']['periodStart']);
+        $this->assertEquals('2025-01-15', $json['accounts'][0]['transactions'][0]['date']);
+    }
+
+    public function test_parse_document_wraps_single_account_in_accounts_array(): void
+    {
+        $user = $this->createAdminUser(['gemini_api_key' => 'test-key']);
+
+        $data = [
+            'statementInfo' => ['brokerName' => 'Test Bank', 'accountNumber' => 'xxxx1234'],
+            'statementDetails' => [],
+            'transactions' => [
+                ['date' => '2025-01-15', 'description' => 'Deposit', 'amount' => 1000],
+            ],
+        ];
+
+        Http::fake([
+            'generativelanguage.googleapis.com/*' => Http::response($this->geminiJsonResponse($data), 200),
+        ]);
+
+        $file = UploadedFile::fake()->create('statement.pdf', 100, 'application/pdf');
+
+        $response = $this->actingAs($user)
+            ->postJson('/api/finance/transactions/import-gemini', ['file' => $file]);
+
+        $response->assertOk();
+        $json = $response->json();
+        // Single-account response is wrapped in accounts array
+        $this->assertArrayHasKey('accounts', $json);
+        $this->assertCount(1, $json['accounts']);
+        $this->assertEquals('Test Bank', $json['accounts'][0]['statementInfo']['brokerName']);
+        $this->assertEquals('xxxx1234', $json['accounts'][0]['statementInfo']['accountNumber']);
+        $this->assertCount(1, $json['accounts'][0]['transactions']);
+        // Top-level fields are preserved for backwards compatibility
+        $this->assertEquals('Test Bank', $json['statementInfo']['brokerName']);
+    }
+
+    public function test_parse_document_returns_multi_account_response(): void
+    {
+        $user = $this->createAdminUser(['gemini_api_key' => 'test-key']);
+
+        $data = [
+            'accounts' => [
+                [
+                    'statementInfo' => ['brokerName' => 'Ally Bank', 'accountNumber' => 'xxxx1234', 'accountName' => 'Savings'],
+                    'transactions' => [['date' => '2025-01-10', 'description' => 'Deposit', 'amount' => 500]],
+                    'statementDetails' => [],
+                    'lots' => [],
+                ],
+                [
+                    'statementInfo' => ['brokerName' => 'Ally Bank', 'accountNumber' => 'xxxx5678', 'accountName' => 'Checking'],
+                    'transactions' => [['date' => '2025-01-12', 'description' => 'Withdrawal', 'amount' => -100]],
+                    'statementDetails' => [],
+                    'lots' => [],
+                ],
+            ],
+        ];
+
+        Http::fake([
+            'generativelanguage.googleapis.com/*' => Http::response($this->geminiJsonResponse($data), 200),
+        ]);
+
+        $file = UploadedFile::fake()->create('statement.pdf', 100, 'application/pdf');
+
+        $response = $this->actingAs($user)
+            ->postJson('/api/finance/transactions/import-gemini', ['file' => $file]);
+
+        $response->assertOk();
+        $json = $response->json();
+        $this->assertArrayHasKey('accounts', $json);
+        $this->assertCount(2, $json['accounts']);
+        $this->assertEquals('xxxx1234', $json['accounts'][0]['statementInfo']['accountNumber']);
+        $this->assertEquals('xxxx5678', $json['accounts'][1]['statementInfo']['accountNumber']);
+    }
+
+    public function test_parse_document_accepts_accounts_context(): void
+    {
+        $user = $this->createAdminUser(['gemini_api_key' => 'test-key']);
+
+        $data = [
+            'statementInfo' => ['brokerName' => 'Test Bank'],
+            'statementDetails' => [],
+            'transactions' => [],
+        ];
+
+        Http::fake([
+            'generativelanguage.googleapis.com/*' => Http::response($this->geminiJsonResponse($data), 200),
+        ]);
+
+        $file = UploadedFile::fake()->create('statement.pdf', 100, 'application/pdf');
+
+        $accountsCtx = [
+            ['name' => 'Savings Account', 'last4' => '1234'],
+            ['name' => 'Checking Account', 'last4' => '5678'],
+        ];
+
+        $response = $this->actingAs($user)
+            ->postJson('/api/finance/transactions/import-gemini', [
+                'file' => $file,
+                'accounts' => $accountsCtx,
+            ]);
+
+        $response->assertOk();
+    }
+
+    public function test_parse_document_validates_accounts_context(): void
+    {
+        $user = $this->createAdminUser(['gemini_api_key' => 'test-key']);
+        $file = UploadedFile::fake()->create('statement.pdf', 100, 'application/pdf');
+
+        $response = $this->actingAs($user)
+            ->postJson('/api/finance/transactions/import-gemini', [
+                'file' => $file,
+                'accounts' => [['name' => 'Missing last4']],  // missing 'last4'
+            ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors('accounts.0.last4');
     }
 
     public function test_prompt_is_well_formed(): void
@@ -254,5 +376,56 @@ class FinanceGeminiImportControllerTest extends TestCase
         $this->assertStringContainsString('transactions', $transactionPrompt);
         $this->assertStringContainsString('statementDetails', $transactionPrompt);
         $this->assertStringContainsString('lots', $transactionPrompt);
+        $this->assertStringContainsString('accounts', $transactionPrompt);
+    }
+
+    public function test_prompt_includes_accounts_context_when_provided(): void
+    {
+        $controller = new \App\Http\Controllers\FinanceTool\FinanceGeminiImportController;
+
+        $accountsCtx = [
+            ['name' => 'My Savings', 'last4' => '1234'],
+            ['name' => 'My Checking', 'last4' => '5678'],
+        ];
+
+        $prompt = $controller->getTransactionPrompt($accountsCtx);
+        $this->assertStringContainsString('My Savings: last 4 digits 1234', $prompt);
+        $this->assertStringContainsString('My Checking: last 4 digits 5678', $prompt);
+        $this->assertStringContainsString('Multi-account statements', $prompt);
+    }
+
+    public function test_normalize_multi_account_response_wraps_single_account(): void
+    {
+        $controller = new \App\Http\Controllers\FinanceTool\FinanceGeminiImportController;
+
+        $input = [
+            'statementInfo' => ['brokerName' => 'Test Bank'],
+            'transactions' => [['date' => '2025-01-15', 'description' => 'Dep', 'amount' => 100]],
+            'statementDetails' => [],
+            'lots' => [],
+        ];
+
+        $result = $controller->normalizeMultiAccountResponse($input);
+        $this->assertArrayHasKey('accounts', $result);
+        $this->assertCount(1, $result['accounts']);
+        $this->assertEquals('Test Bank', $result['accounts'][0]['statementInfo']['brokerName']);
+        // Top-level fields preserved
+        $this->assertEquals('Test Bank', $result['statementInfo']['brokerName']);
+    }
+
+    public function test_normalize_multi_account_response_preserves_multi_account(): void
+    {
+        $controller = new \App\Http\Controllers\FinanceTool\FinanceGeminiImportController;
+
+        $input = [
+            'accounts' => [
+                ['statementInfo' => ['accountNumber' => 'xxxx1234'], 'transactions' => [], 'statementDetails' => [], 'lots' => []],
+                ['statementInfo' => ['accountNumber' => 'xxxx5678'], 'transactions' => [], 'statementDetails' => [], 'lots' => []],
+            ],
+        ];
+
+        $result = $controller->normalizeMultiAccountResponse($input);
+        $this->assertCount(2, $result['accounts']);
+        $this->assertEquals('xxxx1234', $result['accounts'][0]['statementInfo']['accountNumber']);
     }
 }

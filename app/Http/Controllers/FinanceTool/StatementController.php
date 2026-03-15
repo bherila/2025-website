@@ -433,4 +433,164 @@ class StatementController extends Controller
             'lots_count' => $lotsCount,
         ]);
     }
+
+    /**
+     * Import a multi-account PDF statement — one statement record per account.
+     * Accepts an array of account data blocks, each with its own statementInfo,
+     * transactions, statementDetails, and lots. The file_hash (if provided) is
+     * stored once in files_for_fin_accounts and referenced by all created statements.
+     */
+    public function importMultiAccountPdf(Request $request)
+    {
+        $uid = Auth::id();
+
+        $request->validate([
+            'accounts' => 'required|array|min:1',
+            'accounts.*.acct_id' => 'required|integer',
+            'accounts.*.statementInfo' => 'nullable|array',
+            'accounts.*.statementInfo.periodStart' => 'nullable|string',
+            'accounts.*.statementInfo.periodEnd' => 'nullable|string',
+            'accounts.*.statementInfo.closingBalance' => 'nullable|numeric',
+            'accounts.*.statementDetails' => 'nullable|array',
+            'accounts.*.statementDetails.*.section' => 'required|string',
+            'accounts.*.statementDetails.*.line_item' => 'required|string',
+            'accounts.*.statementDetails.*.statement_period_value' => 'nullable|numeric',
+            'accounts.*.statementDetails.*.ytd_value' => 'nullable|numeric',
+            'accounts.*.statementDetails.*.is_percentage' => 'nullable|boolean',
+            'accounts.*.transactions' => 'nullable|array',
+            'accounts.*.transactions.*.t_date' => 'required|date',
+            'accounts.*.transactions.*.t_amt' => 'required|numeric',
+            'accounts.*.transactions.*.t_description' => 'nullable|string|max:255',
+            'accounts.*.lots' => 'nullable|array',
+            'accounts.*.lots.*.symbol' => 'required|string|max:50',
+            'accounts.*.lots.*.quantity' => 'required|numeric',
+            'accounts.*.lots.*.purchaseDate' => 'required|date',
+            'accounts.*.lots.*.costBasis' => 'required|numeric',
+            'accounts.*.lots.*.costPerUnit' => 'nullable|numeric',
+            'accounts.*.lots.*.saleDate' => 'nullable|date',
+            'accounts.*.lots.*.proceeds' => 'nullable|numeric',
+            'accounts.*.lots.*.realizedGainLoss' => 'nullable|numeric',
+            'accounts.*.lots.*.marketValue' => 'nullable|numeric',
+            'accounts.*.lots.*.unrealizedGainLoss' => 'nullable|numeric',
+            'file_hash' => 'nullable|string',
+        ]);
+
+        $results = [];
+
+        DB::transaction(function () use ($request, $uid, &$results) {
+            foreach ($request->input('accounts') as $accountData) {
+                $account = FinAccounts::where('acct_id', $accountData['acct_id'])
+                    ->where('acct_owner', $uid)
+                    ->firstOrFail();
+
+                $statementInfo = $accountData['statementInfo'] ?? [];
+                $statementDetails = $accountData['statementDetails'] ?? [];
+                $transactions = $accountData['transactions'] ?? [];
+                $lots = $accountData['lots'] ?? [];
+
+                $periodStart = isset($statementInfo['periodStart']) ? substr($statementInfo['periodStart'], 0, 10) : null;
+                $periodEnd = isset($statementInfo['periodEnd']) ? substr($statementInfo['periodEnd'], 0, 10) : now()->format('Y-m-d');
+                $closingBalance = $statementInfo['closingBalance'] ?? null;
+
+                $statementId = DB::table('fin_statements')->insertGetId([
+                    'acct_id' => $account->acct_id,
+                    'balance' => $closingBalance,
+                    'statement_opening_date' => $periodStart,
+                    'statement_closing_date' => $periodEnd,
+                ]);
+
+                if (! empty($statementDetails)) {
+                    $detailRows = array_map(function ($row) use ($statementId) {
+                        return [
+                            'statement_id' => $statementId,
+                            'section' => $row['section'] ?? '',
+                            'line_item' => $row['line_item'] ?? '',
+                            'statement_period_value' => $row['statement_period_value'] ?? 0,
+                            'ytd_value' => $row['ytd_value'] ?? 0,
+                            'is_percentage' => $row['is_percentage'] ?? false,
+                        ];
+                    }, $statementDetails);
+                    FinStatementDetail::insert($detailRows);
+                }
+
+                $transactionsCount = 0;
+                if (! empty($transactions)) {
+                    $txRows = array_map(function ($tx) use ($account, $statementId) {
+                        return [
+                            't_account' => $account->acct_id,
+                            'statement_id' => $statementId,
+                            't_date' => substr($tx['t_date'], 0, 10),
+                            't_amt' => $tx['t_amt'],
+                            't_description' => $tx['t_description'] ?? null,
+                            't_type' => $tx['t_type'] ?? null,
+                            't_symbol' => $tx['t_symbol'] ?? null,
+                            't_qty' => $tx['t_qty'] ?? 0,
+                            't_price' => $tx['t_price'] ?? 0,
+                            't_commission' => $tx['t_commission'] ?? 0,
+                            't_fee' => $tx['t_fee'] ?? 0,
+                            't_source' => 'import',
+                            'when_added' => now(),
+                        ];
+                    }, $transactions);
+                    FinAccountLineItems::insert($txRows);
+                    $transactionsCount = count($txRows);
+                }
+
+                $lotsCount = 0;
+                if (! empty($lots)) {
+                    $lotRows = [];
+                    foreach ($lots as $lot) {
+                        $purchaseDate = $lot['purchaseDate'] ?? null;
+                        $saleDate = $lot['saleDate'] ?? null;
+                        $isShortTerm = null;
+                        $realizedGainLoss = $lot['realizedGainLoss'] ?? null;
+
+                        if ($saleDate && $purchaseDate) {
+                            $pDate = new \DateTime($purchaseDate);
+                            $sDate = new \DateTime($saleDate);
+                            $diff = $pDate->diff($sDate);
+                            $isShortTerm = $diff->days <= 365;
+
+                            if ($realizedGainLoss === null && isset($lot['proceeds']) && isset($lot['costBasis'])) {
+                                $realizedGainLoss = $lot['proceeds'] - $lot['costBasis'];
+                            }
+                        }
+
+                        $lotRows[] = [
+                            'acct_id' => $account->acct_id,
+                            'symbol' => $lot['symbol'] ?? '',
+                            'description' => $lot['description'] ?? null,
+                            'quantity' => $lot['quantity'] ?? 0,
+                            'purchase_date' => $purchaseDate,
+                            'cost_basis' => $lot['costBasis'] ?? 0,
+                            'cost_per_unit' => $lot['costPerUnit'] ?? null,
+                            'sale_date' => $saleDate,
+                            'proceeds' => $lot['proceeds'] ?? null,
+                            'realized_gain_loss' => $realizedGainLoss,
+                            'is_short_term' => $isShortTerm,
+                            'lot_source' => 'import',
+                            'statement_id' => $statementId,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ];
+                    }
+                    FinAccountLot::insert($lotRows);
+                    $lotsCount = count($lotRows);
+                }
+
+                $results[] = [
+                    'acct_id' => $account->acct_id,
+                    'statement_id' => $statementId,
+                    'transactions_count' => $transactionsCount,
+                    'lots_count' => $lotsCount,
+                    'details_count' => count($statementDetails),
+                ];
+            }
+        });
+
+        return response()->json([
+            'success' => true,
+            'accounts' => $results,
+        ]);
+    }
 }

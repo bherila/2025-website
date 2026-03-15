@@ -7,7 +7,8 @@
     <div id="FinanceNavbar" data-account-id="{{ $account_id }}" data-active-tab="maintenance"></div>
     <div id="AccountNavigation" data-account-id="{{ $account_id }}" data-active-tab="maintenance"></div>
     <div id="FinanceAccountMaintenancePage" data-account-id="{{ $account_id }}" data-account-name="{{ $accountName }}"
-      data-when-closed="{{ $whenClosed }}" data-is-debt="{{ $isDebt }}" data-is-retirement="{{ $isRetirement }}"></div>
+      data-when-closed="{{ $whenClosed }}" data-is-debt="{{ $isDebt }}" data-is-retirement="{{ $isRetirement }}"
+      data-acct-number="{{ $acctNumber ?? '' }}"></div>
   </div>
 @endsection
 
