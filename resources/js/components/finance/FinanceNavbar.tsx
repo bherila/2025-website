@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button'
 import {
   Combobox,
   ComboboxContent,
-  ComboboxEmpty,
   ComboboxInput,
   ComboboxItem,
   ComboboxList,
@@ -186,7 +185,6 @@ export default function FinanceNavbar({
                 }}
               />
               <ComboboxContent align="start" className="w-64">
-                <ComboboxEmpty>No accounts found</ComboboxEmpty>
                 <ComboboxList>
                   {filteredAccounts.map((account) => (
                     <ComboboxItem
@@ -199,9 +197,25 @@ export default function FinanceNavbar({
                       {account.acct_name}
                     </ComboboxItem>
                   ))}
+                  {filteredAccounts.length === 0 && searchValue && (
+                    <div className="py-2 text-center text-sm text-muted-foreground">No accounts found</div>
+                  )}
                 </ComboboxList>
               </ComboboxContent>
             </Combobox>
+          )}
+
+          {/* Transactions link (only when accountId is undefined, i.e. non-account pages) */}
+          {accountId === undefined && (
+            <a
+              href="/finance/account/all/transactions"
+              className={cn(
+                navigationMenuTriggerStyle(),
+                'h-8 px-3 text-sm text-muted-foreground',
+              )}
+            >
+              Transactions
+            </a>
           )}
 
           {/* Account tabs (only when accountId is defined) */}

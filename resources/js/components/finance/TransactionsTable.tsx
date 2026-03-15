@@ -158,6 +158,19 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
     }
   }
 
+  const [removeTagsConfirmOpen, setRemoveTagsConfirmOpen] = useState(false)
+  const handleRemoveAllTags = async () => {
+    const transactionIds = sortedData.map((r) => r.t_id).join(',')
+    try {
+      await fetchWrapper.post('/api/finance/tags/remove', { transaction_ids: transactionIds })
+      if (typeof refreshFn === 'function') {
+        refreshFn()
+      }
+    } catch (error) {
+      console.error('Failed to remove tags:', error)
+    }
+  }
+
   const renderTransactionTags = (row: AccountLineItem) => (
     <div className="flex gap-1">
       {row.tags?.map((tag) => (
@@ -911,6 +924,14 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                       onApplyTag={handleApplyTag}
                     />
                   ))}
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={sortedData.length === 0}
+                    onClick={() => setRemoveTagsConfirmOpen(true)}
+                  >
+                    Remove all tags
+                  </Button>
                   <a href="/finance/tags" className="ml-auto">
                     <Button variant="secondary" size="sm">
                       Manage Tags
@@ -922,6 +943,28 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
           )}
         </div>
       )}
+
+      <AlertDialog open={removeTagsConfirmOpen} onOpenChange={setRemoveTagsConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove all tags</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove all tags from the {sortedData.length} transaction{sortedData.length !== 1 ? 's' : ''} currently in the view. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                setRemoveTagsConfirmOpen(false)
+                await handleRemoveAllTags()
+              }}
+            >
+              Remove all tags
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {selectedTransaction && (
         <TransactionDetailsModal

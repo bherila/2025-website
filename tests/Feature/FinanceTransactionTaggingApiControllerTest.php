@@ -318,4 +318,80 @@ class FinanceTransactionTaggingApiControllerTest extends TestCase
         // Should be 405 Method Not Allowed if route exists
         $response->assertStatus(405);
     }
+
+    public function test_remove_tags_from_transactions(): void
+    {
+        $user = $this->createUser();
+        $this->actingAs($user);
+
+        $tag1 = FinAccountTag::create(['tag_userid' => $user->id, 'tag_label' => 'Tag1', 'tag_color' => 'blue']);
+        $tag2 = FinAccountTag::create(['tag_userid' => $user->id, 'tag_label' => 'Tag2', 'tag_color' => 'red']);
+
+        $acct = FinAccounts::create([
+            'acct_userid' => $user->id,
+            'acct_name' => 'Test Account',
+            'acct_currency' => 'USD',
+            'acct_type' => 'Asset',
+        ]);
+        $t = FinAccountLineItems::create([
+            't_account' => $acct->acct_id,
+            't_date' => '2024-01-01',
+            't_amt' => -100,
+            't_description' => 'Test',
+        ]);
+
+        FinAccountLineItemTagMap::create(['t_id' => $t->t_id, 'tag_id' => $tag1->tag_id]);
+        FinAccountLineItemTagMap::create(['t_id' => $t->t_id, 'tag_id' => $tag2->tag_id]);
+
+        $response = $this->postJson('/api/finance/tags/remove', [
+            'transaction_ids' => (string) $t->t_id,
+        ]);
+
+        $response->assertOk()->assertJson(['success' => true]);
+
+        // Both tag mappings should be soft-deleted
+        $this->assertNotNull(
+            FinAccountLineItemTagMap::where('t_id', $t->t_id)->where('tag_id', $tag1->tag_id)->first()->when_deleted
+        );
+        $this->assertNotNull(
+            FinAccountLineItemTagMap::where('t_id', $t->t_id)->where('tag_id', $tag2->tag_id)->first()->when_deleted
+        );
+    }
+
+    public function test_remove_tags_only_affects_own_tags(): void
+    {
+        $user = $this->createUser();
+        $otherUser = $this->createUser();
+
+        $userTag = FinAccountTag::create(['tag_userid' => $user->id, 'tag_label' => 'Mine', 'tag_color' => 'blue']);
+        $otherTag = FinAccountTag::create(['tag_userid' => $otherUser->id, 'tag_label' => 'Others', 'tag_color' => 'red']);
+
+        $this->actingAs($user);
+        $acct = FinAccounts::create([
+            'acct_name' => 'Shared Account',
+            'acct_currency' => 'USD',
+            'acct_type' => 'Asset',
+        ]);
+        $t = FinAccountLineItems::create([
+            't_account' => $acct->acct_id,
+            't_date' => '2024-01-01',
+            't_amt' => -50,
+        ]);
+
+        FinAccountLineItemTagMap::create(['t_id' => $t->t_id, 'tag_id' => $userTag->tag_id]);
+        FinAccountLineItemTagMap::create(['t_id' => $t->t_id, 'tag_id' => $otherTag->tag_id]);
+
+        $this->postJson('/api/finance/tags/remove', [
+            'transaction_ids' => (string) $t->t_id,
+        ]);
+
+        // User's tag should be soft-deleted
+        $this->assertNotNull(
+            FinAccountLineItemTagMap::where('t_id', $t->t_id)->where('tag_id', $userTag->tag_id)->first()->when_deleted
+        );
+        // Other user's tag should NOT be soft-deleted
+        $this->assertNull(
+            FinAccountLineItemTagMap::where('t_id', $t->t_id)->where('tag_id', $otherTag->tag_id)->first()->when_deleted
+        );
+    }
 }

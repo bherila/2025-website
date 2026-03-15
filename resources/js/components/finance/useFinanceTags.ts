@@ -100,6 +100,7 @@ export function useFinanceTags({ enabled = true, includeCounts = false, includeT
 
   return {
     tags,
+    setTags,
     isLoading,
     error,
     refreshTags: fetchTags,

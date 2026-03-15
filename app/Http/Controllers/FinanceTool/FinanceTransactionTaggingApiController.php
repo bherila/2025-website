@@ -144,6 +144,29 @@ class FinanceTransactionTaggingApiController extends Controller
         return response()->json(['success' => true]);
     }
 
+    public function removeTagsFromTransactions(Request $request)
+    {
+        $uid = Auth::id();
+
+        $request->validate([
+            'transaction_ids' => 'required|string',
+        ]);
+
+        $transaction_ids = explode(',', $request->transaction_ids);
+
+        // Only remove tags that belong to this user (via fin_account_tag)
+        $userTagIds = FinAccountTag::where('tag_userid', $uid)
+            ->whereNull('when_deleted')
+            ->pluck('tag_id');
+
+        FinAccountLineItemTagMap::whereIn('t_id', $transaction_ids)
+            ->whereIn('tag_id', $userTagIds)
+            ->whereNull('when_deleted')
+            ->update(['when_deleted' => now()]);
+
+        return response()->json(['success' => true]);
+    }
+
     public function applyTagToTransactions(Request $request)
     {
         $uid = Auth::id();

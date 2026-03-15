@@ -1,6 +1,14 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { ExternalLink } from 'lucide-react'
+import { useState } from 'react'
 
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
@@ -11,11 +19,21 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
+import { useEffect } from 'react'
 
+
+interface ScheduleCTransaction {
+  t_id: number
+  t_date: string
+  t_description: string | null
+  t_amt: number
+  t_account: number
+}
 
 interface CategoryTotal {
   label: string
   total: number
+  transactions?: ScheduleCTransaction[]
 }
 
 interface YearData {
@@ -37,6 +55,55 @@ function formatCurrency(amount: number): string {
   }).format(amount)
 }
 
+interface TransactionListModalProps {
+  label: string
+  transactions: ScheduleCTransaction[]
+  onClose: () => void
+}
+
+function TransactionListModal({ label, transactions, onClose }: TransactionListModalProps) {
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-[700px] max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{label}</DialogTitle>
+        </DialogHeader>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Date</TableHead>
+              <TableHead>Description</TableHead>
+              <TableHead className="text-right">Amount</TableHead>
+              <TableHead className="w-12" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {transactions.map((t) => (
+              <TableRow key={t.t_id}>
+                <TableCell className="text-sm font-mono">{t.t_date}</TableCell>
+                <TableCell className="text-sm">{t.t_description ?? '—'}</TableCell>
+                <TableCell className="text-right text-sm font-mono">{formatCurrency(t.t_amt)}</TableCell>
+                <TableCell>
+                  <a
+                    href={`/finance/account/${t.t_account}/transactions#t_id=${t.t_id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="Go to transaction"
+                  >
+                    <Button variant="ghost" size="icon" className="h-7 w-7">
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                  </a>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function CategoryTable({
   title,
   categories,
@@ -44,6 +111,7 @@ function CategoryTable({
   title: string
   categories: Record<string, CategoryTotal>
 }) {
+  const [selectedEntry, setSelectedEntry] = useState<{ label: string; transactions: ScheduleCTransaction[] } | null>(null)
   const entries = Object.entries(categories)
   const total = entries.reduce((sum, [, cat]) => sum + cat.total, 0)
 
@@ -65,7 +133,12 @@ function CategoryTable({
             </TableHeader>
             <TableBody>
               {entries.map(([key, cat]) => (
-                <TableRow key={key}>
+                <TableRow
+                  key={key}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => setSelectedEntry({ label: cat.label, transactions: cat.transactions ?? [] })}
+                  title="Click to view transactions"
+                >
                   <TableCell className="text-sm">{cat.label}</TableCell>
                   <TableCell className="text-right text-sm font-mono">
                     {formatCurrency(cat.total)}
@@ -81,6 +154,13 @@ function CategoryTable({
             </TableBody>
           </Table>
         </div>
+      )}
+      {selectedEntry && (
+        <TransactionListModal
+          label={selectedEntry.label}
+          transactions={selectedEntry.transactions}
+          onClose={() => setSelectedEntry(null)}
+        />
       )}
     </div>
   )
@@ -111,7 +191,7 @@ export default function ScheduleCPage() {
       <h1 className="text-2xl font-bold mb-2">Schedule C View</h1>
       <p className="text-muted-foreground mb-6">
         Totals of transactions tagged with Schedule C tax characteristics, grouped by year.
-        Tag transactions with a tax characteristic on the{' '}
+        Click any row to see the individual transactions. Tag transactions with a tax characteristic on the{' '}
         <a href="/finance/tags" className="text-blue-600 hover:underline">
           Manage Tags
         </a>{' '}

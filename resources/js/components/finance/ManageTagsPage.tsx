@@ -1,5 +1,5 @@
 'use client'
-import { Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { ChevronsUpDown, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
 import { TagTotalsView } from '@/components/finance/TagTotalsView'
@@ -29,14 +29,10 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
 import {
@@ -54,6 +50,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { fetchWrapper } from '@/fetchWrapper'
+import { cn } from '@/lib/utils'
 import { getTagColorDark, getTagColorHex, getTagColorLight } from '@/lib/finance/tagColorUtils'
 import { accountsUrl } from '@/lib/financeRouteBuilder'
 
@@ -158,7 +155,7 @@ function ColorPicker({
   )
 }
 
-function TaxCharacteristicSelect({
+function TaxCharacteristicCombobox({
   id,
   value,
   onChange,
@@ -167,44 +164,97 @@ function TaxCharacteristicSelect({
   value: string
   onChange: (v: string) => void
 }) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+
+  const GROUPED_OPTIONS = [
+    { label: 'Schedule C: Income', options: SCHEDULE_C_INCOME_OPTIONS },
+    { label: 'Schedule C: Expense', options: SCHEDULE_C_EXPENSE_OPTIONS },
+    { label: 'Schedule C: Home Office Item', options: SCHEDULE_C_HOME_OFFICE_OPTIONS },
+  ]
+
+  const NONE_OPTION = { value: 'none', label: 'None (no tax characteristic)' }
+
+  const q = search.toLowerCase()
+  const filteredGroups = GROUPED_OPTIONS.map((group) => ({
+    ...group,
+    options: group.options.filter((opt) => opt.label.toLowerCase().includes(q) || opt.value.includes(q)),
+  })).filter((g) => g.options.length > 0)
+  const showNone = !q || NONE_OPTION.label.toLowerCase().includes(q)
+
+  const selectedLabel =
+    value === 'none' || !value
+      ? NONE_OPTION.label
+      : (ALL_TAX_OPTIONS.find((o) => o.value === value)?.label ?? value)
+
   return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger id={id} className="w-full max-w-sm">
-        <SelectValue placeholder="None (no tax characteristic)" />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="none">None</SelectItem>
-        <SelectGroup>
-          <SelectLabel>Schedule C: Income</SelectLabel>
-          {SCHEDULE_C_INCOME_OPTIONS.map((opt) => (
-            <SelectItem key={opt.value} value={opt.value}>
-              {opt.label}
-            </SelectItem>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          id={id}
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full max-w-sm justify-between font-normal"
+        >
+          <span className="truncate">{selectedLabel}</span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] max-w-sm p-0" align="start">
+        <div className="p-2 border-b">
+          <Input
+            placeholder="Search tax characteristics…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-8"
+            autoFocus
+          />
+        </div>
+        <div className="max-h-72 overflow-y-auto py-1">
+          {showNone && (
+            <button
+              type="button"
+              className={cn(
+                'w-full px-3 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground rounded-sm',
+                (value === 'none' || !value) && 'bg-accent font-medium',
+              )}
+              onClick={() => { onChange('none'); setOpen(false); setSearch('') }}
+            >
+              None
+            </button>
+          )}
+          {filteredGroups.map((group) => (
+            <div key={group.label}>
+              <div className="px-3 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                {group.label}
+              </div>
+              {group.options.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  className={cn(
+                    'w-full px-3 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground rounded-sm',
+                    value === opt.value && 'bg-accent font-medium',
+                  )}
+                  onClick={() => { onChange(opt.value); setOpen(false); setSearch('') }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           ))}
-        </SelectGroup>
-        <SelectGroup>
-          <SelectLabel>Schedule C: Expense</SelectLabel>
-          {SCHEDULE_C_EXPENSE_OPTIONS.map((opt) => (
-            <SelectItem key={opt.value} value={opt.value}>
-              {opt.label}
-            </SelectItem>
-          ))}
-        </SelectGroup>
-        <SelectGroup>
-          <SelectLabel>Schedule C: Home Office Item</SelectLabel>
-          {SCHEDULE_C_HOME_OFFICE_OPTIONS.map((opt) => (
-            <SelectItem key={opt.value} value={opt.value}>
-              {opt.label}
-            </SelectItem>
-          ))}
-        </SelectGroup>
-      </SelectContent>
-    </Select>
+          {!showNone && filteredGroups.length === 0 && (
+            <div className="px-3 py-2 text-sm text-muted-foreground">No matching characteristics found.</div>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }
 
 export default function ManageTagsPage() {
-  const { tags, isLoading, error: tagsError, refreshTags } = useFinanceTags({ includeCounts: true, includeTotals: true })
+  const { tags, setTags, isLoading, error: tagsError, refreshTags } = useFinanceTags({ includeCounts: true, includeTotals: true })
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   
@@ -280,14 +330,22 @@ export default function ManageTagsPage() {
     try {
       setIsUpdating(true)
       setEditError(null)
+      const updatedTaxChar = editTaxChar === 'none' ? null : editTaxChar
       await fetchWrapper.put(`/api/finance/tags/${editingTag.tag_id}`, {
         tag_label: editLabel.trim(),
         tag_color: editColor,
-        tax_characteristic: editTaxChar === 'none' ? null : editTaxChar,
+        tax_characteristic: updatedTaxChar,
       })
+      // Patch the updated tag into local state to avoid page flicker from re-querying
+      setTags((prev) =>
+        prev.map((t) =>
+          t.tag_id === editingTag.tag_id
+            ? { ...t, tag_label: editLabel.trim(), tag_color: editColor, tax_characteristic: updatedTaxChar }
+            : t,
+        ),
+      )
       setSuccessMessage('Tag updated successfully')
       setEditingTag(null)
-      await refreshTags()
     } catch (err) {
       setEditError(err instanceof Error ? err.message : 'Failed to update tag')
     } finally {
@@ -498,7 +556,7 @@ export default function ManageTagsPage() {
             <div>
               <Label htmlFor="create-tax-char">Tax Characteristic</Label>
               <div className="mt-1">
-                <TaxCharacteristicSelect id="create-tax-char" value={newTagTaxChar} onChange={setNewTagTaxChar} />
+                <TaxCharacteristicCombobox id="create-tax-char" value={newTagTaxChar} onChange={setNewTagTaxChar} />
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -577,7 +635,7 @@ export default function ManageTagsPage() {
             <div>
               <Label htmlFor="edit-tax-char">Tax Characteristic</Label>
               <div className="mt-1">
-                <TaxCharacteristicSelect id="edit-tax-char" value={editTaxChar} onChange={setEditTaxChar} />
+                <TaxCharacteristicCombobox id="edit-tax-char" value={editTaxChar} onChange={setEditTaxChar} />
               </div>
             </div>
             <div className="flex items-center gap-3">
