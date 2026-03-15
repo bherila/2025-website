@@ -71,7 +71,7 @@ class FinanceScheduleCControllerTest extends TestCase
 
         $response = $this->actingAs($user)->getJson('/api/finance/schedule-c');
 
-        $response->assertOk()->assertJson(['years' => []]);
+        $response->assertOk()->assertJson(['available_years' => [], 'years' => []]);
     }
 
     public function test_returns_expense_totals_grouped_by_year(): void
@@ -220,13 +220,79 @@ class FinanceScheduleCControllerTest extends TestCase
         // Now request as the primary user (who has no tagged transactions)
         $response = $this->actingAs($user)->getJson('/api/finance/schedule-c');
 
-        $response->assertOk()->assertJson(['years' => []]);
+        $response->assertOk()->assertJson(['available_years' => [], 'years' => []]);
     }
 
     public function test_unauthenticated_request_returns_401(): void
     {
         $response = $this->getJson('/api/finance/schedule-c');
         $response->assertUnauthorized();
+    }
+
+    public function test_year_filter_returns_only_matching_year(): void
+    {
+        $user = $this->createUser();
+        $this->actingAs($user);
+
+        $acct = $this->createAccount($user->id);
+        $tag = $this->createTagWithChar($user->id, 'Office Supplies', 'sce_office_expenses');
+
+        $t2023 = $this->createTransaction($acct->acct_id, '2023-06-01', -150.00, 'Printer paper');
+        $t2024 = $this->createTransaction($acct->acct_id, '2024-03-15', -200.00, 'Desk lamp');
+
+        $this->applyTag($t2023->t_id, $tag->tag_id);
+        $this->applyTag($t2024->t_id, $tag->tag_id);
+
+        $response = $this->actingAs($user)->getJson('/api/finance/schedule-c?year=2024');
+
+        $response->assertOk();
+        $years = $response->json('years');
+
+        // Only 2024 should be returned
+        $this->assertCount(1, $years);
+        $this->assertEquals('2024', $years[0]['year']);
+    }
+
+    public function test_year_filter_available_years_always_includes_all_years(): void
+    {
+        $user = $this->createUser();
+        $this->actingAs($user);
+
+        $acct = $this->createAccount($user->id);
+        $tag = $this->createTagWithChar($user->id, 'Meals Tag', 'sce_meals');
+
+        $t2022 = $this->createTransaction($acct->acct_id, '2022-01-01', -50.00, 'Lunch 2022');
+        $t2024 = $this->createTransaction($acct->acct_id, '2024-01-01', -80.00, 'Lunch 2024');
+
+        $this->applyTag($t2022->t_id, $tag->tag_id);
+        $this->applyTag($t2024->t_id, $tag->tag_id);
+
+        // Filter by 2024 — but available_years should still contain both 2024 and 2022
+        $response = $this->actingAs($user)->getJson('/api/finance/schedule-c?year=2024');
+
+        $response->assertOk();
+        $availableYears = $response->json('available_years');
+        $this->assertContains('2024', $availableYears);
+        $this->assertContains('2022', $availableYears);
+    }
+
+    public function test_year_filter_returns_empty_years_when_no_data_for_year(): void
+    {
+        $user = $this->createUser();
+        $this->actingAs($user);
+
+        $acct = $this->createAccount($user->id);
+        $tag = $this->createTagWithChar($user->id, 'Travel', 'sce_travel');
+        $t = $this->createTransaction($acct->acct_id, '2023-06-01', -300.00, 'Flight 2023');
+        $this->applyTag($t->t_id, $tag->tag_id);
+
+        // Filter by 2024 — no data exists for 2024
+        $response = $this->actingAs($user)->getJson('/api/finance/schedule-c?year=2024');
+
+        $response->assertOk();
+        $this->assertEmpty($response->json('years'));
+        // But available_years should still contain 2023
+        $this->assertContains('2023', $response->json('available_years'));
     }
 
     public function test_response_has_correct_structure(): void
@@ -243,6 +309,7 @@ class FinanceScheduleCControllerTest extends TestCase
 
         $response->assertOk()
             ->assertJsonStructure([
+                'available_years',
                 'years' => [
                     [
                         'year',
@@ -251,6 +318,9 @@ class FinanceScheduleCControllerTest extends TestCase
                     ],
                 ],
             ]);
+
+        // Verify available_years is populated
+        $this->assertContains('2024', $response->json('available_years'));
 
         // Verify transaction sub-array is included
         $expense = $response->json('years.0.schedule_c_expense.sce_advertising');

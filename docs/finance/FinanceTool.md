@@ -109,6 +109,13 @@ The year selector uses URL query strings for shareable, bookmarkable links:
 - All tab navigation preserves the year selection
 - Uses `financeRouteBuilder.ts` for centralized URL construction
 
+**`YearSelectorWithNav` component** (`resources/js/components/finance/YearSelectorWithNav.tsx`) is the reusable year-selection widget used across the finance module. It renders a dropdown with −/+ navigation buttons to step through available years:
+- The **−** button goes to the previous (older) year
+- The **+** button goes to the next (newer) year
+- Buttons are disabled when no older/newer year is available
+- Supports optional "All Years" entry (enabled by default via `includeAll` prop)
+- Used by `AccountYearSelector`, `TransactionsPage`, and `ScheduleCPage`
+
 ## URL Routes
 
 ### New account-prefixed routes
@@ -299,27 +306,54 @@ The following state is persisted in the URL so the browser back button works:
 
 **Route**: `GET /finance/schedule-c`  
 **Component**: `resources/js/components/finance/ScheduleCPage.tsx`  
-**API**: `GET /api/finance/schedule-c` → `FinanceScheduleCController@getSummary`
+**API**: `GET /api/finance/schedule-c[?year=YYYY]` → `FinanceScheduleCController@getSummary`
 
-The Schedule C view is a dedicated tax-reporting summary page. It aggregates tagged transactions into IRS Schedule C (Profit or Loss from Business) line-item totals grouped by tax year. Clicking any row opens a modal listing the individual transactions that contributed to the total.
+The Schedule C view is a dedicated tax-reporting summary page. It aggregates tagged transactions into IRS Schedule C (Profit or Loss from Business) line-item totals grouped by tax year.
 
 ### What it Shows
 
-For each tax year (most recent first):
-- **Full-width year header** — e.g., "2024"
-- **Two 50/50 side-by-side tables**:
-  - **Table 1 — Schedule C Expenses**: One row per `sce_*` category with a positive dollar total
-  - **Table 2 — Home Office Deductions**: One row per `scho_*` category with a positive dollar total
-- **Total row** at the bottom of each table
-- **Click any row** to open a Transaction List Modal showing each transaction that contributes to that line, with a "Go to" link to the account's transaction list
+- **Year selector** (top-right) with −/+ navigation buttons to step through years; defaults to the current year. Choosing "All Years" shows all years.
+- **"List transactions in-line" toggle** (top-right Switch) — when enabled, each Schedule C line item expands to show individual transactions (Date, Name, Amount with a "Go to" link) indented beneath it.
+- For each tax year (most recent first):
+  - **Full-width year header** — e.g., "2024"
+  - **Income table** — one row per `business_*` category (shown only when there is data)
+  - **Two 50/50 side-by-side tables**:
+    - **Schedule C Expenses**: One row per `sce_*` category with a positive dollar total
+    - **Home Office Deductions**: One row per `scho_*` category with a positive dollar total
+  - **Total row** at the bottom of each table
+  - **Click any row** to open a Transaction List Modal showing each transaction that contributes to that line, with a "Go to" link using `transactionsUrl()` from `financeRouteBuilder.ts`
 
 Amounts are stored as negatives in the database (expenses) but displayed as positive values in this view.
+
+### API Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `year` | (optional) Filter to a single year, e.g. `?year=2024`. Omit for all years. |
+
+### API Response Shape
+
+```json
+{
+  "available_years": ["2024", "2023"],
+  "years": [
+    {
+      "year": "2024",
+      "schedule_c_income": { ... },
+      "schedule_c_expense": { ... },
+      "schedule_c_home_office": { ... }
+    }
+  ]
+}
+```
+
+`available_years` always contains all years with data regardless of the `year` filter. This allows the year-selector UI to populate correctly even when a specific year is selected.
 
 ### How it Works
 
 1. The API fetches all non-deleted tags for the authenticated user that have a non-null `tax_characteristic` starting with `sce_`, `scho_`, or `business_`.
 2. It JOINs `fin_account_line_items` → `fin_account_line_item_tag_map` → `fin_account_tag` → `fin_accounts`.
-3. Individual transactions are fetched (not pre-aggregated) so totals and transaction lists can be built together.
+3. All rows are fetched (unfiltered) to derive `available_years`. The year filter is then applied on the collection.
 4. The server applies `abs()` for expense and home-office items; income items are shown as-is.
 5. Years are sorted descending.
 6. Each category entry in the JSON response includes a `transactions` array with `t_id`, `t_date`, `t_description`, `t_amt`, and `t_account`.

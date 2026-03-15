@@ -27,6 +27,7 @@ import { importUrl, maintenanceUrl } from '@/lib/financeRouteBuilder'
 
 import NewTransactionModal from './NewTransactionModal'
 import TransactionsTable from './TransactionsTable'
+import { YearSelectorWithNav } from './YearSelectorWithNav'
 
 type FilterType = 'all' | 'cash' | 'stock'
 
@@ -229,19 +230,11 @@ export default function TransactionsPage({ accountId, initialAvailableYears = []
   // Toolbar with filters (left) and action buttons (right)
   const toolbar = (
     <div className="flex items-center gap-4 mb-4 flex-wrap px-8">
-      <Select value={selectedYear} onValueChange={handleYearChange}>
-        <SelectTrigger className="w-32">
-          <SelectValue placeholder="Year" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All Years</SelectItem>
-          {availableYears.map((year) => (
-            <SelectItem key={year} value={String(year)}>
-              {year}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <YearSelectorWithNav
+        selectedYear={selectedYear === 'all' ? 'all' : parseInt(selectedYear, 10)}
+        availableYears={availableYears}
+        onYearChange={(year) => handleYearChange(String(year))}
+      />
 
       <Select value={selectedTag} onValueChange={handleTagChange}>
         <SelectTrigger className="w-44">
