@@ -108,21 +108,9 @@ export default function TransactionDetailsModal({ transaction, isOpen, onClose, 
     try {
       await fetchWrapper.post('/api/finance/tags/remove', {
         transaction_ids: String(transaction.t_id),
+        tag_id: tagId,
       })
-      // Remove only the specific tag by applying all remaining tags back
-      const remaining = currentTags.filter((t) => t.tag_id !== tagId)
-      // Re-apply the remaining tags if any
-      if (remaining.length > 0) {
-        for (const tag of remaining) {
-          if (tag.tag_id !== undefined) {
-            await fetchWrapper.post('/api/finance/tags/apply', {
-              tag_id: tag.tag_id,
-              transaction_ids: String(transaction.t_id),
-            })
-          }
-        }
-      }
-      setCurrentTags(remaining)
+      setCurrentTags((prev) => prev.filter((t) => t.tag_id !== tagId))
     } catch (error) {
       console.error('Failed to remove tag', error)
     }

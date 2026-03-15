@@ -1,6 +1,6 @@
 'use client'
 import { ExternalLink } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -19,7 +19,6 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
-import { useEffect } from 'react'
 
 
 interface ScheduleCTransaction {

@@ -95,10 +95,12 @@ The Manage Tags page provides full CRUD for tags:
 Each tag form contains:
 - **Label** — unique name (up to 50 characters)
 - **Color** — chosen from a color palette
-- **Tax Characteristic** — a `<Select>` dropdown (shadcn/ui) organized into two `<SelectGroup>`s:
+- **Tax Characteristic** — an autocomplete combobox (`TaxCharacteristicCombobox` in `ManageTagsPage.tsx`) implemented with a `Popover` + `Input` search field and a scrollable list, organized into three groups:
+  - `Schedule C: Income` — lists `business_income`, `business_returns`
   - `Schedule C: Expense` — lists all `sce_*` values
   - `Schedule C: Home Office Item` — lists all `scho_*` values
   - A "None" option clears the field (`null` in the database)
+- Saving a tag patches the updated tag directly into local state to avoid a full page reload flicker.
 
 ### Tags Table
 
@@ -117,19 +119,27 @@ The Tax Characteristic display uses a client-side `Map` built from all option de
 
 ## Applying Tags to Transactions
 
-Tags can be applied in two places:
+Tags can be applied and removed in multiple places:
 
 ### TransactionsTable (single-account or all-accounts view)
 
 When `enableTagging` is `true`:
 1. Use the filter inputs to narrow visible transactions.
-2. Click **Apply Tag** → choose a tag from the dropdown.
+2. Click **Apply Tag** → choose a tag from the available tag buttons.
 3. The tag is applied to all currently-filtered transactions (limit: 1,000 per batch).
-4. When more than 1,000 transactions match the filter, the apply buttons are disabled and a warning is shown.
+4. Click **Remove all tags** to soft-delete all tags from the currently-filtered transactions (a confirmation dialog is shown first).
+5. When more than 1,000 transactions match the filter, the apply and remove buttons are disabled and a warning is shown.
+
+### Transaction Details Modal
+
+When you click a transaction row to open the Transaction Details modal:
+- The **Tags** section at the bottom shows all currently applied tags as colored badges.
+- Click a badge to remove that tag from the transaction.
+- Available tags not yet applied are shown below as "+ TagName" badges; click one to add it.
 
 ### All Transactions Page Tag URL Filter
 
-The All Transactions page (`/finance/all-transactions`) supports filtering by tag via:
+The All Transactions page (`/finance/account/all/transactions`) supports filtering by tag via:
 - URL parameter: `?tag=TagName`
 - **Select tag** dropdown in the toolbar
 
@@ -146,6 +156,7 @@ The All Transactions page (`/finance/all-transactions`) supports filtering by ta
 | `PUT` | `/api/finance/tags/{id}` | Update a tag (label, color, tax_characteristic) |
 | `DELETE` | `/api/finance/tags/{id}` | Soft-delete a tag |
 | `POST` | `/api/finance/tags/apply` | Bulk apply a tag to a list of transaction IDs |
+| `POST` | `/api/finance/tags/remove` | Bulk remove all of the user's tags from a list of transaction IDs |
 
 ### Tag response shape
 
@@ -185,6 +196,7 @@ For each tax year (shown in descending order):
   - **Schedule C Expenses** — sums all `sce_*` tagged transactions for the year
   - **Home Office Deductions** — sums all `scho_*` tagged transactions for the year
 - Each table shows a **Total row** at the bottom
+- **Click any row** to open a Transaction List Modal showing each transaction that contributes to that line, with a link to the transaction in the account's transaction list
 - Amounts are displayed as **positive numbers** (expenses are stored as negative in the database but negated for display)
 
 ### API Response Shape
@@ -195,11 +207,20 @@ For each tax year (shown in descending order):
     {
       "year": "2024",
       "schedule_c_expense": {
-        "sce_office_expenses": { "label": "Office expenses", "total": 1234.56 },
-        "sce_meals": { "label": "Meals", "total": 456.78 }
+        "sce_office_expenses": {
+          "label": "Office expenses",
+          "total": 1234.56,
+          "transactions": [
+            { "t_id": 42, "t_date": "2024-03-15", "t_description": "Desk lamp", "t_amt": -200.00, "t_account": 5 }
+          ]
+        }
       },
       "schedule_c_home_office": {
-        "scho_rent": { "label": "Rent", "total": 14400.00 }
+        "scho_rent": {
+          "label": "Rent",
+          "total": 14400.00,
+          "transactions": [...]
+        }
       }
     }
   ]
@@ -209,7 +230,7 @@ For each tax year (shown in descending order):
 - Years are sorted **most recent first**.
 - Only years with at least one tagged transaction appear in the response.
 - Tags with `tax_characteristic = null` (or soft-deleted tags/mappings) are excluded.
-- Multiple tags pointing to the same `tax_characteristic` value are summed together.
+- Multiple transactions across multiple tags pointing to the same `tax_characteristic` value are aggregated into a single total; individual transactions are included in the `transactions` array.
 
 ### Schedule C Navigation
 
@@ -235,7 +256,8 @@ php artisan test --filter=FinanceScheduleCControllerTest
 - Soft-deleted tag mappings excluded from totals
 - Cross-user isolation (other users' transactions not included)
 - Unauthenticated request returns 401
-- Correct JSON structure
+- Correct JSON structure including `transactions` sub-array
+- Transaction sub-array contains correct `t_id`, `t_date`, `t_account` fields
 - Amounts displayed as positive numbers
 - Tags with `null` tax_characteristic excluded
 - SQLite CHECK constraint rejects invalid `tax_characteristic` values

@@ -358,6 +358,44 @@ class FinanceTransactionTaggingApiControllerTest extends TestCase
         );
     }
 
+    public function test_remove_specific_tag_from_transaction(): void
+    {
+        $user = $this->createUser();
+        $this->actingAs($user);
+
+        $tag1 = FinAccountTag::create(['tag_userid' => $user->id, 'tag_label' => 'Keep', 'tag_color' => 'blue']);
+        $tag2 = FinAccountTag::create(['tag_userid' => $user->id, 'tag_label' => 'Remove', 'tag_color' => 'red']);
+
+        $acct = FinAccounts::create([
+            'acct_name' => 'Test Account',
+            'acct_currency' => 'USD',
+            'acct_type' => 'Asset',
+        ]);
+        $t = FinAccountLineItems::create([
+            't_account' => $acct->acct_id,
+            't_date' => '2024-01-01',
+            't_amt' => -100,
+        ]);
+
+        FinAccountLineItemTagMap::create(['t_id' => $t->t_id, 'tag_id' => $tag1->tag_id]);
+        FinAccountLineItemTagMap::create(['t_id' => $t->t_id, 'tag_id' => $tag2->tag_id]);
+
+        $response = $this->postJson('/api/finance/tags/remove', [
+            'transaction_ids' => (string) $t->t_id,
+            'tag_id' => $tag2->tag_id,
+        ]);
+
+        $response->assertOk()->assertJson(['success' => true]);
+
+        // Only tag2 should be soft-deleted
+        $this->assertNull(
+            FinAccountLineItemTagMap::where('t_id', $t->t_id)->where('tag_id', $tag1->tag_id)->first()->when_deleted
+        );
+        $this->assertNotNull(
+            FinAccountLineItemTagMap::where('t_id', $t->t_id)->where('tag_id', $tag2->tag_id)->first()->when_deleted
+        );
+    }
+
     public function test_remove_tags_only_affects_own_tags(): void
     {
         $user = $this->createUser();
