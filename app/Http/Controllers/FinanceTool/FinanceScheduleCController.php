@@ -13,8 +13,12 @@ class FinanceScheduleCController extends Controller
     /**
      * Returns Schedule C totals grouped by year and tax_characteristic.
      *
+     * Optional query parameters:
+     *   - year: Filter results to a specific year (e.g. "2024"). Omit for all years.
+     *
      * Response shape:
      * {
+     *   "available_years": ["2024", "2023"],
      *   "years": [
      *     {
      *       "year": "2024",
@@ -36,6 +40,7 @@ class FinanceScheduleCController extends Controller
     public function getSummary(Request $request)
     {
         $uid = Auth::id();
+        $yearFilter = $request->query('year');
 
         // Get all Schedule C tags for this user
         $tags = FinAccountTag::where('tag_userid', $uid)
@@ -46,14 +51,14 @@ class FinanceScheduleCController extends Controller
             ->get(['tag_id', 'tax_characteristic']);
 
         if ($tags->isEmpty()) {
-            return response()->json(['years' => []]);
+            return response()->json(['available_years' => [], 'years' => []]);
         }
 
         $tagIds = $tags->pluck('tag_id');
         $tagCharacteristicMap = $tags->pluck('tax_characteristic', 'tag_id');
 
         // Query individual transactions (not aggregated) for both totals and transaction lists
-        $rows = DB::table('fin_account_line_items as li')
+        $query = DB::table('fin_account_line_items as li')
             ->join('fin_account_line_item_tag_map as tm', function ($join) {
                 $join->on('li.t_id', '=', 'tm.t_id')
                     ->whereNull('tm.when_deleted');
@@ -65,8 +70,21 @@ class FinanceScheduleCController extends Controller
             ->join('fin_accounts as a', 'li.t_account', '=', 'a.acct_id')
             ->where('a.acct_owner', $uid)
             ->select('li.t_id', 'li.t_date', 'li.t_description', 'li.t_amt', 'li.t_account', 't.tag_id')
-            ->orderBy('li.t_date')
-            ->get();
+            ->orderBy('li.t_date');
+
+        // Fetch all rows (unfiltered) first to determine available years, then apply year filter
+        $allRows = $query->get();
+        $availableYears = $allRows
+            ->map(fn($row) => substr($row->t_date, 0, 4))
+            ->unique()
+            ->sortDesc()
+            ->values()
+            ->toArray();
+
+        // Apply year filter if provided
+        $rows = $yearFilter
+            ? $allRows->filter(fn($row) => substr($row->t_date, 0, 4) === (string) $yearFilter)
+            : $allRows;
 
         // Build result grouped by year
         $byYear = [];
@@ -119,7 +137,7 @@ class FinanceScheduleCController extends Controller
         // Sort years descending (most recent first)
         krsort($byYear);
 
-        return response()->json(['years' => array_values($byYear)]);
+        return response()->json(['available_years' => $availableYears, 'years' => array_values($byYear)]);
     }
 
     public static function scheduleIncomeLabel(string $value): string

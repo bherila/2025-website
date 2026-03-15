@@ -3,14 +3,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { z } from 'zod'
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Skeleton } from '@/components/ui/skeleton'
 import { fetchWrapper } from '@/fetchWrapper'
 import { 
   getEffectiveYear, 
@@ -19,6 +11,8 @@ import {
   YEAR_CHANGED_EVENT,
   type YearSelection 
 } from '@/lib/financeRouteBuilder'
+
+import { YearSelectorWithNav } from './YearSelectorWithNav'
 
 // Re-export types and functions for convenience (backwards compatibility)
 export type { YearSelection } from '@/lib/financeRouteBuilder'
@@ -107,32 +101,13 @@ export default function AccountYearSelector({
     onYearChange?.(year)
   }
 
-  if (isLoading) {
-    return (
-      <div className={`flex items-center ${className}`}>
-        <Skeleton className="h-8 w-28" />
-      </div>
-    )
-  }
-
   return (
-    <div className={`flex items-center ${className}`}>
-      <Select
-        value={String(selectedYear ?? 'all')}
-        onValueChange={(v) => handleYearChange(v === 'all' ? 'all' : parseInt(v, 10))}
-      >
-        <SelectTrigger className="w-28">
-          <SelectValue placeholder="Year" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All Years</SelectItem>
-          {availableYears.map((year) => (
-            <SelectItem key={year} value={String(year)}>
-              {year}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+    <YearSelectorWithNav
+      selectedYear={selectedYear ?? 'all'}
+      availableYears={availableYears}
+      isLoading={isLoading}
+      onYearChange={handleYearChange}
+      className={className}
+    />
   )
 }

@@ -183,26 +183,30 @@ The All Transactions page (`/finance/account/all/transactions`) supports filteri
 
 **Route**: `GET /finance/schedule-c`  
 **Component**: `resources/js/components/finance/ScheduleCPage.tsx`  
-**API Endpoint**: `GET /api/finance/schedule-c`  
+**API Endpoint**: `GET /api/finance/schedule-c[?year=YYYY]`  
 **Controller**: `app/Http/Controllers/FinanceTool/FinanceScheduleCController.php`
 
 The Schedule C view aggregates all tagged transactions by their `tax_characteristic` code and groups the results by tax year. It provides a ready-made summary for completing IRS Schedule C (Profit or Loss from Business) and the Home Office Deduction worksheet.
 
 ### Page Layout
 
-For each tax year (shown in descending order):
-- **Full-width year header** (`<h2>`) displaying the year
-- **Two side-by-side tables** (50%/50%):
-  - **Schedule C Expenses** — sums all `sce_*` tagged transactions for the year
-  - **Home Office Deductions** — sums all `scho_*` tagged transactions for the year
-- Each table shows a **Total row** at the bottom
-- **Click any row** to open a Transaction List Modal showing each transaction that contributes to that line, with a link to the transaction in the account's transaction list
-- Amounts are displayed as **positive numbers** (expenses are stored as negative in the database but negated for display)
+- **Year selector** (top-right) with −/+ navigation buttons; defaults to the current year.
+- **"List transactions in-line" toggle** (Switch) — shows individual transactions indented beneath each line item.
+- For each tax year (shown in descending order):
+  - **Full-width year header** (`<h2>`) displaying the year
+  - **Income table** (shown only when `business_*` tagged transactions exist)
+  - **Two side-by-side tables** (50%/50%):
+    - **Schedule C Expenses** — sums all `sce_*` tagged transactions for the year
+    - **Home Office Deductions** — sums all `scho_*` tagged transactions for the year
+  - Each table shows a **Total row** at the bottom
+  - **Click any row** to open a Transaction List Modal showing each transaction that contributes to that line, with a link to the transaction in the account's transaction list
+  - Amounts are displayed as **positive numbers** (expenses are stored as negative in the database but negated for display)
 
 ### API Response Shape
 
 ```json
 {
+  "available_years": ["2024", "2023"],
   "years": [
     {
       "year": "2024",
@@ -227,8 +231,9 @@ For each tax year (shown in descending order):
 }
 ```
 
-- Years are sorted **most recent first**.
-- Only years with at least one tagged transaction appear in the response.
+- `available_years` always reflects all years that have data, regardless of the `?year` filter.
+- Years in the `years` array are sorted **most recent first**.
+- Only years with at least one tagged transaction (matching the optional year filter) appear in `years`.
 - Tags with `tax_characteristic = null` (or soft-deleted tags/mappings) are excluded.
 - Multiple transactions across multiple tags pointing to the same `tax_characteristic` value are aggregated into a single total; individual transactions are included in the `transactions` array.
 

@@ -1,6 +1,6 @@
 'use client'
 import { ExternalLink } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -9,7 +9,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
 import {
   Table,
   TableBody,
@@ -19,7 +21,9 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
+import { transactionsUrl } from '@/lib/financeRouteBuilder'
 
+import { YearSelectorWithNav } from './YearSelectorWithNav'
 
 interface ScheduleCTransaction {
   t_id: number
@@ -43,6 +47,7 @@ interface YearData {
 }
 
 interface ScheduleCResponse {
+  available_years: string[]
   years: YearData[]
 }
 
@@ -84,7 +89,7 @@ function TransactionListModal({ label, transactions, onClose }: TransactionListM
                 <TableCell className="text-right text-sm font-mono">{formatCurrency(t.t_amt)}</TableCell>
                 <TableCell>
                   <a
-                    href={`/finance/account/${t.t_account}/transactions#t_id=${t.t_id}`}
+                    href={transactionsUrl(t.t_account, { hash: `t_id=${t.t_id}` })}
                     target="_blank"
                     rel="noreferrer"
                     title="Go to transaction"
@@ -103,13 +108,43 @@ function TransactionListModal({ label, transactions, onClose }: TransactionListM
   )
 }
 
-function CategoryTable({
-  title,
-  categories,
-}: {
+/** Inline transaction rows rendered beneath a category row when showInline is true */
+function InlineTransactions({ transactions }: { transactions: ScheduleCTransaction[] }) {
+  return (
+    <>
+      {transactions.map((t) => (
+        <TableRow key={`inline-${t.t_id}`} className="bg-muted/30 hover:bg-muted/30">
+          <TableCell className="pl-8 text-xs font-mono text-muted-foreground">{t.t_date}</TableCell>
+          <TableCell className="text-xs text-muted-foreground">
+            <span className="flex items-center gap-1">
+              {t.t_description ?? '—'}
+              <a
+                href={transactionsUrl(t.t_account, { hash: `t_id=${t.t_id}` })}
+                target="_blank"
+                rel="noreferrer"
+                title="Go to transaction"
+                className="ml-1 shrink-0"
+              >
+                <ExternalLink className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+              </a>
+            </span>
+          </TableCell>
+          <TableCell className="text-right text-xs font-mono text-muted-foreground">
+            {formatCurrency(t.t_amt)}
+          </TableCell>
+        </TableRow>
+      ))}
+    </>
+  )
+}
+
+interface CategoryTableProps {
   title: string
   categories: Record<string, CategoryTotal>
-}) {
+  showInline: boolean
+}
+
+function CategoryTable({ title, categories, showInline }: CategoryTableProps) {
   const [selectedEntry, setSelectedEntry] = useState<{ label: string; transactions: ScheduleCTransaction[] } | null>(null)
   const entries = Object.entries(categories)
   const total = entries.reduce((sum, [, cat]) => sum + cat.total, 0)
@@ -132,17 +167,21 @@ function CategoryTable({
             </TableHeader>
             <TableBody>
               {entries.map(([key, cat]) => (
-                <TableRow
-                  key={key}
-                  className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => setSelectedEntry({ label: cat.label, transactions: cat.transactions ?? [] })}
-                  title="Click to view transactions"
-                >
-                  <TableCell className="text-sm">{cat.label}</TableCell>
-                  <TableCell className="text-right text-sm font-mono">
-                    {formatCurrency(cat.total)}
-                  </TableCell>
-                </TableRow>
+                <Fragment key={key}>
+                  <TableRow
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => setSelectedEntry({ label: cat.label, transactions: cat.transactions ?? [] })}
+                    title="Click to view transactions"
+                  >
+                    <TableCell className="text-sm">{cat.label}</TableCell>
+                    <TableCell className="text-right text-sm font-mono">
+                      {formatCurrency(cat.total)}
+                    </TableCell>
+                  </TableRow>
+                  {showInline && cat.transactions && cat.transactions.length > 0 && (
+                    <InlineTransactions transactions={cat.transactions} />
+                  )}
+                </Fragment>
               ))}
               <TableRow className="font-semibold bg-muted/50">
                 <TableCell>Total</TableCell>
@@ -167,15 +206,22 @@ function CategoryTable({
 
 export default function ScheduleCPage() {
   const [data, setData] = useState<YearData[] | null>(null)
+  const [availableYears, setAvailableYears] = useState<number[]>([])
+  const [selectedYear, setSelectedYear] = useState<number | 'all'>(() => new Date().getFullYear())
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showInline, setShowInline] = useState(false)
 
   useEffect(() => {
     const load = async () => {
       try {
         setIsLoading(true)
-        const response = (await fetchWrapper.get('/api/finance/schedule-c')) as ScheduleCResponse
+        const params = selectedYear !== 'all' ? `?year=${selectedYear}` : ''
+        const response = (await fetchWrapper.get(`/api/finance/schedule-c${params}`)) as ScheduleCResponse
         setData(response.years ?? [])
+        if (response.available_years) {
+          setAvailableYears(response.available_years.map(Number).filter((y) => !isNaN(y)).sort((a, b) => b - a))
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load Schedule C data')
       } finally {
@@ -183,11 +229,31 @@ export default function ScheduleCPage() {
       }
     }
     void load()
-  }, [])
+  }, [selectedYear])
 
   return (
     <div className="px-4 pb-8">
-      <h1 className="text-2xl font-bold mb-2">Schedule C View</h1>
+      <div className="flex items-center gap-4 mb-2 flex-wrap">
+        <h1 className="text-2xl font-bold">Schedule C View</h1>
+        <div className="ml-auto flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Switch
+              id="show-inline"
+              checked={showInline}
+              onCheckedChange={setShowInline}
+            />
+            <Label htmlFor="show-inline" className="text-sm cursor-pointer">
+              List transactions in-line
+            </Label>
+          </div>
+          <YearSelectorWithNav
+            selectedYear={selectedYear}
+            availableYears={availableYears}
+            isLoading={isLoading && availableYears.length === 0}
+            onYearChange={setSelectedYear}
+          />
+        </div>
+      </div>
       <p className="text-muted-foreground mb-6">
         Totals of transactions tagged with Schedule C tax characteristics, grouped by year.
         Click any row to see the individual transactions. Tag transactions with a tax characteristic on the{' '}
@@ -230,6 +296,7 @@ export default function ScheduleCPage() {
                   <CategoryTable
                     title="Schedule C: Income"
                     categories={yearData.schedule_c_income}
+                    showInline={showInline}
                   />
                 </div>
               )}
@@ -238,12 +305,14 @@ export default function ScheduleCPage() {
                   <CategoryTable
                     title="Schedule C: Expenses"
                     categories={yearData.schedule_c_expense}
+                    showInline={showInline}
                   />
                 </div>
                 <div className="md:w-1/2">
                   <CategoryTable
                     title="Schedule C: Home Office Deduction"
                     categories={yearData.schedule_c_home_office}
+                    showInline={showInline}
                   />
                 </div>
               </div>
