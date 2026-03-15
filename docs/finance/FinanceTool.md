@@ -32,6 +32,7 @@ The navbar has a **two-sided layout**:
 | Right (`ml-auto`) | Section links: Schedule C, RSU, Payslips, Tags, Accounts |
 
 Account combobox and tabs appear only when `accountId` prop is provided.
+When `accountId === undefined` (non-account pages such as Schedule C, Tags, RSU), a standalone **Transactions** link is shown instead of the account combobox and tabs; it defaults to the All Accounts transactions view (`/finance/account/all/transactions`).
 Duplicates, Linker, Statements, and Summary tabs are disabled when `accountId === 'all'`; Transactions and Lots are always enabled.
 
 ### Props
@@ -300,7 +301,7 @@ The following state is persisted in the URL so the browser back button works:
 **Component**: `resources/js/components/finance/ScheduleCPage.tsx`  
 **API**: `GET /api/finance/schedule-c` → `FinanceScheduleCController@getSummary`
 
-The Schedule C view is a dedicated tax-reporting summary page. It does not show a transaction list; instead it aggregates tagged transactions into IRS Schedule C (Profit or Loss from Business) line-item totals grouped by tax year.
+The Schedule C view is a dedicated tax-reporting summary page. It aggregates tagged transactions into IRS Schedule C (Profit or Loss from Business) line-item totals grouped by tax year. Clicking any row opens a modal listing the individual transactions that contributed to the total.
 
 ### What it Shows
 
@@ -310,16 +311,18 @@ For each tax year (most recent first):
   - **Table 1 — Schedule C Expenses**: One row per `sce_*` category with a positive dollar total
   - **Table 2 — Home Office Deductions**: One row per `scho_*` category with a positive dollar total
 - **Total row** at the bottom of each table
+- **Click any row** to open a Transaction List Modal showing each transaction that contributes to that line, with a "Go to" link to the account's transaction list
 
 Amounts are stored as negatives in the database (expenses) but displayed as positive values in this view.
 
 ### How it Works
 
-1. The API fetches all non-deleted tags for the authenticated user that have a non-null `tax_characteristic` starting with `sce_` or `scho_`.
+1. The API fetches all non-deleted tags for the authenticated user that have a non-null `tax_characteristic` starting with `sce_`, `scho_`, or `business_`.
 2. It JOINs `fin_account_line_items` → `fin_account_line_item_tag_map` → `fin_account_tag` → `fin_accounts`.
-3. `SUM(t_amt)` is grouped by `SUBSTR(t_date, 1, 4)` (year) and `tag_id`.
-4. The server applies `abs()` to normalize amounts to positive.
+3. Individual transactions are fetched (not pre-aggregated) so totals and transaction lists can be built together.
+4. The server applies `abs()` for expense and home-office items; income items are shown as-is.
 5. Years are sorted descending.
+6. Each category entry in the JSON response includes a `transactions` array with `t_id`, `t_date`, `t_description`, `t_amt`, and `t_account`.
 
 See `docs/finance/Tags.md` for the full list of valid `tax_characteristic` values and the tag management system.
 

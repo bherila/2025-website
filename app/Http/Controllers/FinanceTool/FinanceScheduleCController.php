@@ -18,8 +18,14 @@ class FinanceScheduleCController extends Controller
      *   "years": [
      *     {
      *       "year": "2024",
-     *       "schedule_c_expense": { "Advertising": 123.45, ... },
-     *       "schedule_c_home_office": { "Rent": 100.00, ... }
+     *       "schedule_c_expense": {
+     *         "sce_office_expenses": {
+     *           "label": "Office expenses",
+     *           "total": 200.00,
+     *           "transactions": [{ "t_id": 1, "t_date": "2024-03-15", "t_description": "...", "t_amt": -200.00, "t_account": 5 }]
+     *         }
+     *       },
+     *       ...
      *     },
      *     ...
      *   ]
@@ -46,7 +52,7 @@ class FinanceScheduleCController extends Controller
         $tagIds = $tags->pluck('tag_id');
         $tagCharacteristicMap = $tags->pluck('tax_characteristic', 'tag_id');
 
-        // Query: join tag map with line items, group by year and tag_id
+        // Query individual transactions (not aggregated) for both totals and transaction lists
         $rows = DB::table('fin_account_line_items as li')
             ->join('fin_account_line_item_tag_map as tm', function ($join) {
                 $join->on('li.t_id', '=', 'tm.t_id')
@@ -58,15 +64,14 @@ class FinanceScheduleCController extends Controller
             })
             ->join('fin_accounts as a', 'li.t_account', '=', 'a.acct_id')
             ->where('a.acct_owner', $uid)
-            ->selectRaw('SUBSTR(li.t_date, 1, 4) as year, t.tag_id, SUM(li.t_amt) as total')
-            ->groupBy('year', 't.tag_id')
-            ->orderBy('year')
+            ->select('li.t_id', 'li.t_date', 'li.t_description', 'li.t_amt', 'li.t_account', 't.tag_id')
+            ->orderBy('li.t_date')
             ->get();
 
         // Build result grouped by year
         $byYear = [];
         foreach ($rows as $row) {
-            $year = $row->year;
+            $year = substr($row->t_date, 0, 4);
             $taxChar = $tagCharacteristicMap[$row->tag_id] ?? null;
             if (! $taxChar) {
                 continue;
@@ -85,23 +90,30 @@ class FinanceScheduleCController extends Controller
                 $label = self::scheduleIncomeLabel($taxChar);
                 $key = 'schedule_c_income';
                 // Income items are positive, show as-is (not negated)
-                $amount = (float) $row->total;
+                $amount = (float) $row->t_amt;
             } elseif (str_starts_with($taxChar, 'sce_')) {
                 $label = self::scheduleExpenseLabel($taxChar);
                 $key = 'schedule_c_expense';
-                $amount = abs((float) $row->total);
+                $amount = abs((float) $row->t_amt);
             } elseif (str_starts_with($taxChar, 'scho_')) {
                 $label = self::homeOfficeLabel($taxChar);
                 $key = 'schedule_c_home_office';
-                $amount = abs((float) $row->total);
+                $amount = abs((float) $row->t_amt);
             } else {
                 continue;
             }
 
             if (! isset($byYear[$year][$key][$taxChar])) {
-                $byYear[$year][$key][$taxChar] = ['label' => $label, 'total' => 0.0];
+                $byYear[$year][$key][$taxChar] = ['label' => $label, 'total' => 0.0, 'transactions' => []];
             }
             $byYear[$year][$key][$taxChar]['total'] += $amount;
+            $byYear[$year][$key][$taxChar]['transactions'][] = [
+                't_id' => $row->t_id,
+                't_date' => substr($row->t_date, 0, 10),
+                't_description' => $row->t_description,
+                't_amt' => (float) $row->t_amt,
+                't_account' => $row->t_account,
+            ];
         }
 
         // Sort years descending (most recent first)

@@ -251,6 +251,14 @@ class FinanceScheduleCControllerTest extends TestCase
                     ],
                 ],
             ]);
+
+        // Verify transaction sub-array is included
+        $expense = $response->json('years.0.schedule_c_expense.sce_advertising');
+        $this->assertArrayHasKey('transactions', $expense);
+        $this->assertCount(1, $expense['transactions']);
+        $this->assertEquals($t->t_id, $expense['transactions'][0]['t_id']);
+        $this->assertEquals('2024-01-01', $expense['transactions'][0]['t_date']);
+        $this->assertEquals($acct->acct_id, $expense['transactions'][0]['t_account']);
     }
 
     public function test_amounts_are_displayed_as_positive_numbers(): void

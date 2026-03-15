@@ -2,14 +2,17 @@
 
 import { useEffect,useState } from 'react'
 
+import { useFinanceTags } from '@/components/finance/useFinanceTags'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter,DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import type { AccountLineItem } from '@/data/finance/AccountLineItem'
+import type { AccountLineItem, AccountLineItemTag } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
+import { getTagColorDark, getTagColorLight } from '@/lib/finance/tagColorUtils'
 
 // Common transaction types
 const TRANSACTION_TYPES = [
@@ -42,6 +45,8 @@ interface TransactionDetailsModalProps {
 
 export default function TransactionDetailsModal({ transaction, isOpen, onClose, onSave }: TransactionDetailsModalProps) {
   const [isSaving, setIsSaving] = useState(false)
+  const { tags: availableTags } = useFinanceTags({ enabled: isOpen })
+  const [currentTags, setCurrentTags] = useState<AccountLineItemTag[]>(transaction.tags ?? [])
 
   // Helper to format numeric value for form input (as text)
   const formatNumericValue = (value: number | string | null | undefined): string => {
@@ -83,7 +88,33 @@ export default function TransactionDetailsModal({ transaction, isOpen, onClose, 
     setCommission(formatNumericValue(transaction.t_commission))
     setFee(formatNumericValue(transaction.t_fee))
     setSymbol(transaction.t_symbol || '')
+    setCurrentTags(transaction.tags ?? [])
   }, [transaction])
+
+  const handleAddTag = async (tagId: number, tagLabel: string, tagColor: string) => {
+    if (currentTags.some((t) => t.tag_id === tagId)) return
+    try {
+      await fetchWrapper.post('/api/finance/tags/apply', {
+        tag_id: tagId,
+        transaction_ids: String(transaction.t_id),
+      })
+      setCurrentTags((prev) => [...prev, { tag_id: tagId, tag_label: tagLabel, tag_color: tagColor, tag_userid: '' }])
+    } catch (error) {
+      console.error('Failed to add tag', error)
+    }
+  }
+
+  const handleRemoveTag = async (tagId: number) => {
+    try {
+      await fetchWrapper.post('/api/finance/tags/remove', {
+        transaction_ids: String(transaction.t_id),
+        tag_id: tagId,
+      })
+      setCurrentTags((prev) => prev.filter((t) => t.tag_id !== tagId))
+    } catch (error) {
+      console.error('Failed to remove tag', error)
+    }
+  }
 
   const handleSave = async () => {
     setIsSaving(true)
@@ -249,6 +280,55 @@ export default function TransactionDetailsModal({ transaction, isOpen, onClose, 
               rows={3}
               className="col-span-3"
             />
+          </div>
+          {/* Tags section */}
+          <div className="grid grid-cols-4 gap-4">
+            <Label className="text-right pt-2">Tags</Label>
+            <div className="col-span-3 space-y-2">
+              {currentTags.length > 0 ? (
+                <div className="flex flex-wrap gap-1">
+                  {currentTags.map((tag) => (
+                    <Badge
+                      key={tag.tag_id}
+                      style={{
+                        backgroundColor: getTagColorLight(tag.tag_color ?? ''),
+                        color: getTagColorDark(tag.tag_color ?? ''),
+                      }}
+                      className="cursor-pointer hover:opacity-70"
+                      onClick={() => tag.tag_id !== undefined && handleRemoveTag(tag.tag_id)}
+                      title="Click to remove tag"
+                    >
+                      {tag.tag_label} ×
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No tags applied.</p>
+              )}
+              {availableTags.filter((t) => !currentTags.some((ct) => ct.tag_id === t.tag_id)).length > 0 && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Add tag:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {availableTags
+                      .filter((t) => !currentTags.some((ct) => ct.tag_id === t.tag_id))
+                      .map((tag) => (
+                        <Badge
+                          key={tag.tag_id}
+                          variant="outline"
+                          style={{
+                            backgroundColor: getTagColorLight(tag.tag_color),
+                            color: getTagColorDark(tag.tag_color),
+                          }}
+                          className="cursor-pointer hover:opacity-70"
+                          onClick={() => handleAddTag(tag.tag_id, tag.tag_label, tag.tag_color)}
+                        >
+                          + {tag.tag_label}
+                        </Badge>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
         <DialogFooter>
