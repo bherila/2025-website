@@ -406,24 +406,27 @@ export function analyzeLots(
       let washSaleReason: string | undefined
 
       if (isLoss) {
-        const washStart = new Date(sale.date)
-        washStart.setDate(washStart.getDate() - 30)
         const washEnd = new Date(sale.date)
         washEnd.setDate(washEnd.getDate() + 30)
         const acquiredIndices = new Set(portion.matches.map((m: any) => m.internalIndex))
-        const replacementPool = opts.adjustShortLong ? [...longPool, ...shortPool] : longPool
 
+        // Determine the replacement pool based on position direction.
+        // When adjustShortLong is enabled, both long buys and short openings
+        // qualify as replacement shares for any type of closing transaction.
+        // When adjustShortLong is disabled, only same-direction acquisitions
+        // count: long buys replace long sales, short openings replace short covers.
+        const replacementPool = opts.adjustShortLong
+          ? [...longPool, ...shortPool]
+          : isClosingShort ? shortPool : longPool
+
+        // Only acquisitions strictly after the sale date (within 30 days) are
+        // replacement shares. Pre-sale acquisitions are the lots being closed,
+        // not new replacements, so they must never trigger a wash sale.
         const washCandidates = replacementPool
           .filter(p => areSubstantiallyIdentical(sale, p, opts))
-          .filter(p => p.date >= washStart && p.date <= washEnd)
+          .filter(p => p.date > sale.date && p.date <= washEnd)
           .filter(p => !acquiredIndices.has(p.internalIndex))
-          .sort((a, b) => {
-            const aAfter = a.date >= sale.date ? 0 : 1
-            const bAfter = b.date >= sale.date ? 0 : 1
-            if (aAfter !== bAfter) return aAfter - bAfter
-            return Math.abs(a.date.getTime() - sale.date.getTime()) -
-              Math.abs(b.date.getTime() - sale.date.getTime())
-          })
+          .sort((a, b) => a.date.getTime() - b.date.getTime())
 
         for (const cand of washCandidates) {
           const used = sharesUsed.get(cand.internalIndex) ?? 0

@@ -48,13 +48,19 @@ All currency calculations use **currency.js** to avoid floating-point drift. Thi
 ### Overview
 A wash sale occurs when:
 1. A security is sold at a **loss**
-2. A "substantially identical" security is purchased within a **61-day window** (30 days before to 30 days after the sale date)
+2. A "substantially identical" security is purchased **within 30 days after** the sale date
 
 When a wash sale is detected:
 - The loss is **disallowed** (partially or fully)
 - Column (f) shows code "W"
 - Column (g) shows the disallowed loss amount
 - Column (h) shows the adjusted gain/loss
+
+> **Important**: Only acquisitions that occur **strictly after** the sale date (days +1 through +30) are
+> treated as replacement shares. Pre-sale acquisitions — even those that fall within 30 calendar days of
+> the sale — are the lots being closed, not new replacements, and therefore cannot trigger a wash sale.
+> This prevents false positives when multiple lots acquired on the same date are sold in separate
+> transactions close together in time (see the [ENOV Example](#enov-regression-example) below).
 
 ### Four-Flag Configuration (`WashSaleOptions`)
 
@@ -63,7 +69,7 @@ The wash sale engine supports four independent boolean settings:
 | Setting | Description |
 |---------|-------------|
 | `adjustSameUnderlying` | Master flag: when true, option contracts for the same underlying are considered substantially identical regardless of strike, expiration, or type. When false, `adjustStockToOption` and `adjustOptionToStock` are forced to false. |
-| `adjustShortLong` | When true, wash sales can trigger across short and long positions. |
+| `adjustShortLong` | When true, wash sales can trigger across short and long positions. When false, only same-direction acquisitions count: long buys replace long sales; short openings replace short covers. |
 | `adjustStockToOption` | When true, selling stock at a loss then buying a CALL option on the same underlying triggers a wash sale. |
 | `adjustOptionToStock` | When true, selling a CALL option at a loss then buying shares of the underlying stock triggers a wash sale. |
 
@@ -115,15 +121,19 @@ The engine uses **FIFO (First In, First Out)** matching:
 Multiple sales of the same security on the same day within the same account are merged into a single line item, provided they have the same term (ST/LT) and adjustment codes.
 
 ### Wash Sale Window
-The 61-day wash sale window is centered on the sale date:
-- **30 days before** the sale date
-- **The sale date itself**
-- **30 days after** the sale date
+The wash sale window covers only post-sale acquisitions:
+- **Day +1 through Day +30** after the sale date (strictly after the sale)
+- Pre-sale acquisitions **never** qualify as replacement shares
+
+Examples:
+- Sale on Jan 28 → window: Jan 29 – Feb 27 (days +1 to +30)
+- Buy on Feb 27 (day +30) → **inside** the window → triggers a wash sale
+- Buy on Feb 28 (day +31) → **outside** the window → no wash sale
+- Buy on Dec 29 (30 days before a Jan 28 sale) → **pre-sale** → no wash sale
 
 ### Replacement Share Priority
-When multiple purchases fall within the wash sale window, the engine prioritizes:
-1. Purchases **after** the sale (most likely to be the "replacement")
-2. Among those, the **closest** to the sale date
+When multiple purchases fall within the wash sale window, the engine uses the earliest post-sale purchase
+(chronological FIFO order among replacement candidates).
 
 ---
 
@@ -204,6 +214,32 @@ The transaction list table is automatically hidden when the Lot Analyzer is open
 
 ## Testing
 
+### ENOV Regression Example
+
+This scenario was previously mis-classified as a wash sale and is now covered by a regression test.
+
+**Acquisitions:**
+| Date | Symbol | Qty | Price | Basis |
+|------|--------|-----|-------|-------|
+| Dec 29, 2025 | ENOV | 56 | $27.12 | $1,518.72 |
+| Dec 29, 2025 | ENOV | 9 | $27.12 | $244.08 |
+| **Total** | | **65** | | **$1,762.80** |
+
+**Sale:**
+| Date Sold | Proceeds | Basis | Gain/Loss |
+|-----------|----------|-------|-----------|
+| Jan 28, 2026 | $1,396.20 | $1,762.80 | −$366.60 |
+
+**Why this is NOT a wash sale:**
+- Both acquisition lots (Dec 29) are exactly 30 days prior to the sale.
+- Post-sale window: Jan 29 – Feb 27. No ENOV acquisitions occurred in that window.
+- Correct result: loss of −$366.60 is **fully deductible** (no wash sale adjustment).
+
+The engine previously triggered a false positive when the broker reported the two lots as separate sale
+transactions. In that case, the Dec 29 lot being sold second appeared to be a "replacement share" for
+the first sale. The fix: only post-sale acquisitions (strictly after the sale date) qualify as
+replacement shares.
+
 Run wash sale engine tests:
 ```bash
 pnpm test -- tests-ts/washSaleEngine.test.ts
@@ -220,7 +256,7 @@ php artisan test --filter=FinanceLotsControllerTest
 ```
 
 ### JS Test Coverage
-- **Wash sale engine** (46 tests): normalizeOptions, gain/loss calculation, ST/LT classification, wash sale detection (30-day window, boundary conditions), cross-type settings, Method 1 vs 2, currency precision, edge cases, wash sale detail fields (washPurchaseDate, washPurchaseAccountId, washPurchaseDescription, washSaleReason)
+- **Wash sale engine** (66 tests): normalizeOptions, gain/loss calculation, ST/LT classification, wash sale detection (post-sale-only window, boundary conditions, ENOV regression), full test matrix (stock↔stock, stock→option, option→stock, short↔long, quantity mismatch, non-wash regression), cross-type settings, Method 1 vs 2, currency precision, edge cases, wash sale detail fields (washPurchaseDate, washPurchaseAccountId, washPurchaseDescription, washSaleReason)
 - **TXF export** (11 tests): header format, reference numbers, date formatting, amounts, wash sale inclusion, multi-lot handling
 - **VariousTransactionsModal** (6 tests): render states, Load All Years button, Search for Opening Transaction button
 
