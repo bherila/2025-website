@@ -11,7 +11,7 @@ import { filterOutDuplicates, findDuplicateTransactions } from '@/data/finance/i
 import type { IbStatementData } from '@/data/finance/parseIbCsv'
 import { parseImportData } from '@/data/finance/parseImportData'
 import { fetchWrapper } from '@/fetchWrapper'
-import { buildAccountsContext, matchAccount, type AccountForMatching } from '@/lib/finance/accountMatcher'
+import { type AccountForMatching, matchAccount } from '@/lib/finance/accountMatcher'
 
 import { useFinanceAccounts } from './AccountNavigation'
 import { ImportProgressDialog } from './ImportProgressDialog'
