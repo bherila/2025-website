@@ -44,6 +44,13 @@ class FinanceAccountsController extends Controller
         return view('finance.account-all-lots', ['availableYears' => $years]);
     }
 
+    public function showAllImportPage()
+    {
+        // Multi-account import page - doesn't need to validate a specific account
+        // The import component will handle account selection/mapping
+        return view('finance.import-transactions-all', ['account_id' => 'all', 'accountName' => 'All Accounts']);
+    }
+
     public function index()
     {
         return view('finance.accounts');

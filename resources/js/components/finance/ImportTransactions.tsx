@@ -11,7 +11,7 @@ import { filterOutDuplicates, findDuplicateTransactions } from '@/data/finance/i
 import type { IbStatementData } from '@/data/finance/parseIbCsv'
 import { parseImportData } from '@/data/finance/parseImportData'
 import { fetchWrapper } from '@/fetchWrapper'
-import { buildAccountsContext, matchAccount, type AccountForMatching } from '@/lib/finance/accountMatcher'
+import { type AccountForMatching, matchAccount } from '@/lib/finance/accountMatcher'
 
 import { useFinanceAccounts } from './AccountNavigation'
 import { ImportProgressDialog } from './ImportProgressDialog'
@@ -79,12 +79,12 @@ interface AccountMapping {
   targetAccountId: number | null
 }
 
-export default function ImportTransactions({ 
-  accountId, 
+export default function ImportTransactions({
+  accountId,
   onImportFinished,
   onStatementParsed,
-}: { 
-  accountId: number
+}: {
+  accountId: number | 'all'
   onImportFinished: () => void
   onStatementParsed?: (statement: IbStatementData | null) => void
 }) {
@@ -165,8 +165,15 @@ export default function ImportTransactions({
     setAccountMappings(mappings)
   }, [pdfData, pdfAccountBlocks, accountsForMatching])
 
-  // Load all existing transactions upfront
+  // Load all existing transactions upfront (skip if accountId is 'all')
   useEffect(() => {
+    if (accountId === 'all') {
+      // For "all accounts" page, we can't load existing transactions
+      // Multi-account imports will handle duplicate detection per account
+      setLoadingExisting(false)
+      return
+    }
+
     const loadExistingTransactions = async () => {
       try {
         setLoadingExisting(true)
@@ -184,7 +191,8 @@ export default function ImportTransactions({
   const processChunks = useCallback(async (chunks: AccountLineItem[][], chunkIndex: number, statementId?: number) => {
     if (chunkIndex >= chunks.length) {
       setIsImporting(false)
-      window.location.href = `/finance/${accountId}`
+      const backUrl = accountId === 'all' ? '/finance/account/all/transactions' : `/finance/account/${accountId}/transactions`
+      window.location.href = backUrl
       return
     }
 
@@ -192,11 +200,17 @@ export default function ImportTransactions({
     if (!chunk) {
       // Should not happen if logic is correct, but satisfies TypeScript
       setIsImporting(false)
-      window.location.href = `/finance/${accountId}`
+      const backUrl = accountId === 'all' ? '/finance/account/all/transactions' : `/finance/account/${accountId}/transactions`
+      window.location.href = backUrl
       return
     }
 
     try {
+      // When accountId is 'all', we should not reach here (multi-account imports use different flow)
+      if (accountId === 'all') {
+        throw new Error('Cannot import to "all accounts" - please select a specific account')
+      }
+
       await fetchWrapper.post(`/api/finance/${accountId}/line_items`, {
         transactions: chunk,
         statement_id: statementId
@@ -221,6 +235,14 @@ export default function ImportTransactions({
 
     // Import IB statement first (if available)
     if (statementToImport) {
+      // IB statements are single-account, so we can't import to "all"
+      if (accountId === 'all') {
+        setImportError('IB statement import requires a specific account. Please navigate to a specific account to import IB statements.')
+        setIsImporting(false)
+        setLoading(false)
+        return
+      }
+
       try {
         const response = await fetchWrapper.post(`/api/finance/${accountId}/import-ib-statement`, {
           statement: statementToImport,
@@ -276,8 +298,32 @@ export default function ImportTransactions({
             setImportedStatementId(statementId)
           }
 
-          // Attach the uploaded file to all additional accounts (store PDF once)
-          if (saveFileToS3 && uploadedFileHash && response.accounts?.length > 1) {
+          // If we're on the "all" page and need to upload the file, upload to the first account
+          if (saveFileToS3 && !uploadedFileHash && pendingPdfFile && response.accounts?.length > 0) {
+            try {
+              const uploadForm = new FormData()
+              uploadForm.append('file', pendingPdfFile)
+              const firstAccountId = response.accounts[0]!.acct_id
+              const uploadResult = await fetchWrapper.post(`/api/finance/${firstAccountId}/files`, uploadForm) as { file_hash?: string }
+              if (uploadResult?.file_hash) {
+                setUploadedFileHash(uploadResult.file_hash)
+                // Attach to remaining accounts
+                for (const acctResult of response.accounts.slice(1)) {
+                  try {
+                    await fetchWrapper.post(`/api/finance/${acctResult.acct_id}/files/attach`, {
+                      file_hash: uploadResult.file_hash,
+                      statement_id: acctResult.statement_id,
+                    })
+                  } catch (attachErr) {
+                    console.error(`Failed to attach file to account ${acctResult.acct_id}:`, attachErr)
+                  }
+                }
+              }
+            } catch (uploadErr) {
+              console.error('Failed to save file to S3:', uploadErr)
+            }
+          } else if (saveFileToS3 && uploadedFileHash && response.accounts?.length > 1) {
+            // Attach the uploaded file to all additional accounts (store PDF once)
             for (const acctResult of response.accounts.slice(1)) {
               try {
                 await fetchWrapper.post(`/api/finance/${acctResult.acct_id}/files/attach`, {
@@ -299,6 +345,14 @@ export default function ImportTransactions({
       }
     } else if (pdfData) {
       // Single-account legacy flow
+      // Can't import single-account PDF to "all"
+      if (accountId === 'all') {
+        setImportError('Single-account PDF import requires a specific account. The multi-account import should have been used instead.')
+        setIsImporting(false)
+        setLoading(false)
+        return
+      }
+
       const hasDetails = (pdfData.statementDetails?.length ?? 0) > 0
       const hasLots = (pdfData.lots?.length ?? 0) > 0
       if ((attachAsStatement || hasLots) && (hasDetails || hasLots)) {
@@ -404,7 +458,8 @@ export default function ImportTransactions({
         setPdfData(response)
         // Upload file to S3 once (for the current account); for multi-account imports
         // the file will be attached to additional accounts at import time
-        if (saveFileToS3) {
+        // If accountId is 'all', we'll upload to the first matched account later
+        if (saveFileToS3 && accountId !== 'all') {
           try {
             const uploadForm = new FormData()
             uploadForm.append('file', pendingPdfFile)

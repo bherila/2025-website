@@ -98,8 +98,8 @@ Account tabs and account combobox have moved to `FinanceNavbar`.
 
 | Button | Route | Description |
 |--------|-------|-------------|
-| Import | `/finance/account/{id}/import` | Import transactions from CSV files |
-| Maintenance | `/finance/account/{id}/maintenance` | Account maintenance operations |
+| Import | `/finance/account/{id}/import` or `/finance/account/all/import` | Import transactions from CSV files or multi-account PDFs |
+| Maintenance | `/finance/account/{id}/maintenance` | Account maintenance operations (hidden when viewing "All" accounts) |
 
 ### Year Selector
 
@@ -124,6 +124,7 @@ The year selector uses URL query strings for shareable, bookmarkable links:
 |-------|---------|
 | `/finance/account/all/transactions` | `showAllTransactions()` |
 | `/finance/account/all/lots` | `showAllLots()` |
+| `/finance/account/all/import` | `showAllImportPage()` |
 | `/finance/account/{id}/transactions` | `show()` |
 | `/finance/account/{id}/duplicates` | `duplicates()` |
 | `/finance/account/{id}/linker` | `linker()` |
@@ -164,10 +165,23 @@ The All Transactions page supports filtering by tag:
 
 ## Transaction Import
 
+The transaction import feature allows users to import transactions from various file formats. Import is available from both specific account pages (`/finance/account/{id}/import`) and the all-accounts view (`/finance/account/all/import`).
+
+### Import Modes
+
+1. **Single-Account Import** (from `/finance/account/{id}/import`):
+   - Supports CSV, QFX, HAR, IB statements, and PDF files
+   - All imports are associated with the specific account
+   - Duplicate detection compares against existing transactions in that account
+
+2. **Multi-Account Import** (from `/finance/account/all/import`):
+   - **PDF only**: Multi-account PDFs are parsed with Gemini AI and automatically distributed to the correct accounts
+   - CSV/QFX/HAR imports require a specific account and will show an error if attempted from the "all" page
+   - User can override automatic account assignments via dropdown selectors
+
 (see PDF Import Enhancements below for additional options when processing PDF files)
 
-
-The transaction import feature allows users to import transactions from a file. The import process is as follows:
+The transaction import process is as follows:
 
 1.  The user drops a file onto the import page.
 2.  The frontend parses the file and determines the earliest and latest transaction dates.
@@ -203,8 +217,7 @@ viewing/downloading any PDF tied to a statement.
 
 ### Multi-Account PDF Import
 
-When a bank summary statement (e.g. Ally Bank combined statement) contains transactions for
-multiple accounts, the system supports automatic distribution:
+When a bank summary statement (e.g. Ally Bank combined statement) contains transactions for multiple accounts, the system supports automatic distribution. This feature works from **both** the specific account import page and the "All Accounts" import page (`/finance/account/all/import`):
 
 1. **AI Context**: The import page sends the user’s account names and last-4 digits of account
    numbers to the Gemini API along with the PDF. The full account number is **never** sent to the AI.

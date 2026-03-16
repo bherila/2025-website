@@ -23,26 +23,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const accountId: number | 'all' | undefined =
       rawAccountId === 'all' ? 'all' : rawAccountId ? parseInt(rawAccountId) : undefined
     const activeTab = financeNavbarDiv.dataset.activeTab
-    const activeSection = (financeNavbarDiv.dataset.activeSection || undefined) as FinanceSection | undefined
-    root.render(
-      <FinanceNavbar
-        accountId={accountId}
-        activeTab={activeTab}
-        activeSection={activeSection}
-      />,
-    )
+    const activeSection = financeNavbarDiv.dataset.activeSection as FinanceSection | undefined
+    const navbarProps: {
+      accountId?: number | 'all'
+      activeTab?: string
+      activeSection?: FinanceSection
+    } = {}
+    if (accountId !== undefined) navbarProps.accountId = accountId
+    if (activeTab) navbarProps.activeTab = activeTab
+    if (activeSection) navbarProps.activeSection = activeSection
+    root.render(<FinanceNavbar {...navbarProps} />)
   }
 
   // Simplified AccountNavigation (year selector + import + maintenance)
   const navDiv = document.getElementById('AccountNavigation')
   if (navDiv) {
     const root = createRoot(navDiv)
-    root.render(
-      <AccountNavigation
-        accountId={parseInt(navDiv.dataset.accountId!)}
-        activeTab={navDiv.dataset.activeTab}
-      />,
-    )
+    const rawAccountId = navDiv.dataset.accountId
+    const accountId: number | 'all' = rawAccountId === 'all' ? 'all' : parseInt(rawAccountId!)
+    const activeTab = navDiv.dataset.activeTab
+    const navProps: {
+      accountId: number | 'all'
+      activeTab?: string
+    } = { accountId }
+    if (activeTab) navProps.activeTab = activeTab
+    root.render(<AccountNavigation {...navProps} />)
   }
 
   // Unified TransactionsPage (replaces AllTransactionsPage + FinanceAccountTransactionsPage)
@@ -89,9 +94,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const importTransactionsDiv = document.getElementById('ImportTransactionsClient')
   if (importTransactionsDiv) {
     const root = createRoot(importTransactionsDiv)
+    const rawAccountId = importTransactionsDiv.dataset.accountId
+    const accountId: number | 'all' = rawAccountId === 'all' ? 'all' : parseInt(rawAccountId!)
     root.render(
       <ImportTransactionsClient
-        id={parseInt(importTransactionsDiv.dataset.accountId!)}
+        id={accountId}
         accountName={importTransactionsDiv.dataset.accountName!}
       />,
     )

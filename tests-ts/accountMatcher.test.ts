@@ -1,10 +1,10 @@
 import {
+  type AccountForMatching,
   buildAccountsContext,
   getAccountSuffix,
   matchAccount,
   matchAccountByNumber,
   redactAccountNumber,
-  type AccountForMatching,
 } from '@/lib/finance/accountMatcher'
 
 const accounts: AccountForMatching[] = [
