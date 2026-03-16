@@ -329,6 +329,7 @@ class FinanceApiController extends Controller
         $request->validate([
             'isDebt' => 'boolean',
             'isRetirement' => 'boolean',
+            'acctNumber' => 'nullable|string|max:255',
         ]);
 
         $uid = Auth::id();
@@ -337,10 +338,16 @@ class FinanceApiController extends Controller
             ->where('acct_owner', $uid)
             ->firstOrFail();
 
-        $account->update([
+        $updates = [
             'acct_is_debt' => $request->has('isDebt') ? $request->isDebt : $account->acct_is_debt,
             'acct_is_retirement' => $request->has('isRetirement') ? $request->isRetirement : $account->acct_is_retirement,
-        ]);
+        ];
+
+        if ($request->has('acctNumber')) {
+            $updates['acct_number'] = $request->acctNumber ?: null;
+        }
+
+        $account->update($updates);
 
         return response()->json(['success' => true]);
     }

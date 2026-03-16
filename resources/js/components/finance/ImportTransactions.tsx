@@ -4,13 +4,16 @@ import { z } from 'zod'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { filterOutDuplicates, findDuplicateTransactions } from '@/data/finance/isDuplicateTransaction'
 import type { IbStatementData } from '@/data/finance/parseIbCsv'
 import { parseImportData } from '@/data/finance/parseImportData'
 import { fetchWrapper } from '@/fetchWrapper'
+import { buildAccountsContext, matchAccount, type AccountForMatching } from '@/lib/finance/accountMatcher'
 
+import { useFinanceAccounts } from './AccountNavigation'
 import { ImportProgressDialog } from './ImportProgressDialog'
 import { PdfStatementPreviewCard } from './PdfStatementPreviewCard'
 import { StatementPreviewCard } from './StatementPreviewCard'
@@ -18,8 +21,8 @@ import TransactionsTable from './TransactionsTable'
 
 const CHUNK_SIZE = 100
 
-/** Response structure from the Gemini PDF import endpoint */
-interface GeminiImportResponse {
+/** A single account block within a Gemini response */
+export interface GeminiAccountBlock {
   statementInfo?: {
     brokerName?: string
     accountNumber?: string
@@ -54,6 +57,12 @@ interface GeminiImportResponse {
     proceeds?: number
     realizedGainLoss?: number
   }>
+}
+
+/** Response structure from the Gemini PDF import endpoint */
+interface GeminiImportResponse extends GeminiAccountBlock {
+  /** Multi-account responses include this array; single-account responses do not */
+  accounts?: GeminiAccountBlock[]
   error?: string
 }
 
@@ -62,6 +71,12 @@ interface FileInfo {
   name: string
   type: string
   size: number
+}
+
+/** Per-account mapping: which user account to import this block into */
+interface AccountMapping {
+  /** acct_id of the selected destination account (null = use page's accountId) */
+  targetAccountId: number | null
 }
 
 export default function ImportTransactions({ 
@@ -89,8 +104,12 @@ export default function ImportTransactions({
   const [importedStatementId, setImportedStatementId] = useState<number | undefined>(undefined)
   // Pending PDF file waiting for user to click "Process with AI"
   const [pendingPdfFile, setPendingPdfFile] = useState<File | null>(null)
+  // Hash of the uploaded PDF (returned after upload so it can be attached to additional accounts)
+  const [uploadedFileHash, setUploadedFileHash] = useState<string | null>(null)
   // Gemini-specific error for retry
   const [geminiError, setGeminiError] = useState<string | null>(null)
+  // Per-account mappings for multi-account imports: index → target acct_id (null = page accountId)
+  const [accountMappings, setAccountMappings] = useState<AccountMapping[]>([])
   // Checkboxes for PDF import options — persisted in localStorage
   // "Import Transactions" and "Attach as Statement" are shown AFTER Gemini parsing
   const [importTransactions, setImportTransactions] = useState(() => {
@@ -105,6 +124,46 @@ export default function ImportTransactions({
   })
   const dropZoneRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Fetch all user accounts (including acct_number for suffix matching)
+  const { accounts: allAccounts } = useFinanceAccounts()
+
+  // Adapt accounts for the matcher utility
+  const accountsForMatching = useMemo((): AccountForMatching[] => {
+    return allAccounts.map(a => ({
+      acct_id: a.acct_id,
+      acct_name: a.acct_name,
+      acct_number: (a as { acct_number?: string | null }).acct_number ?? null,
+    }))
+  }, [allAccounts])
+
+  // Normalize the pdfData into a list of account blocks
+  const pdfAccountBlocks = useMemo((): GeminiAccountBlock[] => {
+    if (!pdfData) return []
+    if (pdfData.accounts && pdfData.accounts.length > 0) return pdfData.accounts
+    // Single-account: wrap in array, omitting undefined properties
+    const block: GeminiAccountBlock = {}
+    if (pdfData.statementInfo !== undefined) block.statementInfo = pdfData.statementInfo
+    if (pdfData.statementDetails !== undefined) block.statementDetails = pdfData.statementDetails
+    if (pdfData.transactions !== undefined) block.transactions = pdfData.transactions
+    if (pdfData.lots !== undefined) block.lots = pdfData.lots
+    return [block]
+  }, [pdfData])
+
+  // Auto-detect account mappings when pdfData changes
+  useEffect(() => {
+    if (!pdfData || pdfAccountBlocks.length === 0) {
+      setAccountMappings([])
+      return
+    }
+    const mappings: AccountMapping[] = pdfAccountBlocks.map(block => {
+      const parsedNumber = block.statementInfo?.accountNumber ?? null
+      const parsedName = block.statementInfo?.accountName ?? null
+      const matchedId = matchAccount(parsedNumber, parsedName, accountsForMatching)
+      return { targetAccountId: matchedId }
+    })
+    setAccountMappings(mappings)
+  }, [pdfData, pdfAccountBlocks, accountsForMatching])
 
   // Load all existing transactions upfront
   useEffect(() => {
@@ -176,25 +235,88 @@ export default function ImportTransactions({
         return
       }
     }
-    
-    // Import PDF statement + lots (if user opted to attach as statement, or if there are lots)
-    const hasDetails = (pdfData?.statementDetails?.length ?? 0) > 0
-    const hasLots = (pdfData?.lots?.length ?? 0) > 0
-    if (pdfData && (attachAsStatement || hasLots) && (hasDetails || hasLots)) {
-      try {
-        const response = await fetchWrapper.post(`/api/finance/${accountId}/import-pdf-statement`, {
-          statementInfo: pdfData.statementInfo,
-          statementDetails: attachAsStatement ? pdfData.statementDetails : [],
-          lots: pdfData.lots,
-        }) as { statement_id: number }
-        statementId = response.statement_id
-        setImportedStatementId(statementId)
-      } catch (e) {
-        const errorMessage = e instanceof Error ? e.message : String(e)
-        setImportError(`Failed to import statement details: ${errorMessage}`)
-        setIsImporting(false)
-        setLoading(false)
-        return
+
+    // Multi-account PDF import: use the multi-import endpoint when there are multiple blocks
+    // or when the single block targets a different account than the current page account
+    const isMultiAccount = pdfData && pdfAccountBlocks.length > 0
+    if (isMultiAccount) {
+      const hasAnyContent = pdfAccountBlocks.some(block => {
+        const hasDetails = (block.statementDetails?.length ?? 0) > 0
+        const hasLots = (block.lots?.length ?? 0) > 0
+        const hasTx = (block.transactions?.length ?? 0) > 0
+        return (importTransactions && hasTx) || (attachAsStatement && hasDetails) || hasLots
+      })
+
+      if (hasAnyContent) {
+        try {
+          const accountsPayload = pdfAccountBlocks.map((block, idx) => {
+            const mapping = accountMappings[idx]
+            const targetId = mapping?.targetAccountId ?? accountId
+            return {
+              acct_id: targetId,
+              statementInfo: block.statementInfo,
+              statementDetails: attachAsStatement ? (block.statementDetails ?? []) : [],
+              transactions: importTransactions ? (block.transactions?.map(tx => ({
+                t_date: tx.date,
+                t_amt: tx.amount,
+                t_description: tx.description,
+                t_type: tx.type,
+              })) ?? []) : [],
+              lots: block.lots ?? [],
+            }
+          })
+
+          const response = await fetchWrapper.post('/api/finance/multi-import-pdf', {
+            accounts: accountsPayload,
+          }) as { accounts: Array<{ acct_id: number; statement_id: number }> }
+
+          // Use the first statement_id as the primary reference
+          if (response.accounts?.length > 0) {
+            statementId = response.accounts[0]!.statement_id
+            setImportedStatementId(statementId)
+          }
+
+          // Attach the uploaded file to all additional accounts (store PDF once)
+          if (saveFileToS3 && uploadedFileHash && response.accounts?.length > 1) {
+            for (const acctResult of response.accounts.slice(1)) {
+              try {
+                await fetchWrapper.post(`/api/finance/${acctResult.acct_id}/files/attach`, {
+                  file_hash: uploadedFileHash,
+                  statement_id: acctResult.statement_id,
+                })
+              } catch (attachErr) {
+                console.error(`Failed to attach file to account ${acctResult.acct_id}:`, attachErr)
+              }
+            }
+          }
+        } catch (e) {
+          const errorMessage = e instanceof Error ? e.message : String(e)
+          setImportError(`Failed to import multi-account statement: ${errorMessage}`)
+          setIsImporting(false)
+          setLoading(false)
+          return
+        }
+      }
+    } else if (pdfData) {
+      // Single-account legacy flow
+      const hasDetails = (pdfData.statementDetails?.length ?? 0) > 0
+      const hasLots = (pdfData.lots?.length ?? 0) > 0
+      if ((attachAsStatement || hasLots) && (hasDetails || hasLots)) {
+        try {
+          const response = await fetchWrapper.post(`/api/finance/${accountId}/import-pdf-statement`, {
+            statementInfo: pdfData.statementInfo,
+            statementDetails: attachAsStatement ? pdfData.statementDetails : [],
+            lots: pdfData.lots,
+          }) as { statement_id: number }
+          statementId = response.statement_id
+          setImportedStatementId(statementId)
+        } catch (e) {
+          const errorMessage = e instanceof Error ? e.message : String(e)
+          setImportError(`Failed to import statement details: ${errorMessage}`)
+          setIsImporting(false)
+          setLoading(false)
+          return
+        }
       }
     }
     
@@ -216,7 +338,7 @@ export default function ImportTransactions({
       setIsImporting(false)
       onImportFinished()
     }
-  }, [accountId, existingTransactions, processChunks, onImportFinished, pdfData, attachAsStatement, importTransactions])
+  }, [accountId, existingTransactions, processChunks, onImportFinished, pdfData, pdfAccountBlocks, accountMappings, attachAsStatement, importTransactions, saveFileToS3, uploadedFileHash])
 
   const clearData = useCallback(() => {
     setText('')
@@ -225,6 +347,8 @@ export default function ImportTransactions({
     setPendingPdfFile(null)
     setGeminiError(null)
     setError(null)
+    setUploadedFileHash(null)
+    setAccountMappings([])
   }, [])
 
   /** Accept a file but do NOT auto-submit PDFs to Gemini */
@@ -261,18 +385,33 @@ export default function ImportTransactions({
     setError(null)
     const formData = new FormData()
     formData.append('file', pendingPdfFile)
+    // Include accounts context (name + last4 only, never full numbers) so the LLM
+    // can map multi-account statements to the correct user accounts
+    const accountsCtx = accountsForMatching
+      .filter(a => a.acct_number)
+      .map(a => ({
+        name: a.acct_name,
+        last4: a.acct_number!.replace(/\D/g, '').slice(-4),
+      }))
+    if (accountsCtx.length > 0) {
+      formData.append('accounts', JSON.stringify(accountsCtx))
+    }
     try {
       const response = await fetchWrapper.post('/api/finance/transactions/import-gemini', formData) as GeminiImportResponse
       if (response.error) {
         setGeminiError(response.error)
       } else {
         setPdfData(response)
-        // Upload file to S3 if the checkbox is checked
+        // Upload file to S3 once (for the current account); for multi-account imports
+        // the file will be attached to additional accounts at import time
         if (saveFileToS3) {
           try {
             const uploadForm = new FormData()
             uploadForm.append('file', pendingPdfFile)
-            await fetchWrapper.post(`/api/finance/${accountId}/files`, uploadForm)
+            const uploadResult = await fetchWrapper.post(`/api/finance/${accountId}/files`, uploadForm) as { file_hash?: string }
+            if (uploadResult?.file_hash) {
+              setUploadedFileHash(uploadResult.file_hash)
+            }
           } catch (uploadErr) {
             console.error('Failed to save file to S3:', uploadErr)
           }
@@ -284,7 +423,7 @@ export default function ImportTransactions({
     } finally {
       setLoading(false)
     }
-  }, [pendingPdfFile, saveFileToS3, accountId])
+  }, [pendingPdfFile, saveFileToS3, accountId, accountsForMatching])
 
   /** Handle click-to-select file via hidden input */
   const handleFileInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -388,13 +527,13 @@ export default function ImportTransactions({
     }
   }, [handlePaste])
 
-  // Parse PDF data to AccountLineItem format
+  // Parse PDF data to AccountLineItem format (for single-account or text-based imports)
   const pdfParsedData = useMemo((): AccountLineItem[] | null => {
-    if (!pdfData?.transactions || pdfData.transactions.length === 0) {
-      return null
-    }
-    return pdfData.transactions.map(tx => {
-      // ensure date string has only YYYY-MM-DD
+    // For multi-account PDFs we show per-block previews, not a flat list
+    if (pdfAccountBlocks.length > 1) return null
+    const transactions = pdfAccountBlocks[0]?.transactions ?? pdfData?.transactions
+    if (!transactions || transactions.length === 0) return null
+    return transactions.map(tx => {
       const dateStr = tx.date ? tx.date.split(/[ T]/)[0] : ''
       return AccountLineItemSchema.parse({
         t_date: dateStr,
@@ -403,7 +542,7 @@ export default function ImportTransactions({
         t_type: tx.type,
       })
     })
-  }, [pdfData])
+  }, [pdfData, pdfAccountBlocks])
 
   // Helper to format file size
   const formatFileSize = (bytes: number): string => {
@@ -415,35 +554,58 @@ export default function ImportTransactions({
   // Combine data from text parsing or PDF parsing
   const effectiveData = data ?? pdfParsedData
   
-  // Check if we have statement details or lots from PDF
-  const hasStatementDetails = (pdfData?.statementDetails?.length ?? 0) > 0
-  const hasLots = (pdfData?.lots?.length ?? 0) > 0
+  // Check if we have statement details or lots from PDF (aggregated across all blocks)
+  const hasStatementDetails = pdfAccountBlocks.some(b => (b.statementDetails?.length ?? 0) > 0)
+  const hasLots = pdfAccountBlocks.some(b => (b.lots?.length ?? 0) > 0)
   const transactionCount = effectiveData?.length ?? 0
+
+  // For multi-account PDF: total transaction count across all blocks
+  const multiAccountTransactionCount = useMemo(() => {
+    if (pdfAccountBlocks.length <= 1) return 0
+    return pdfAccountBlocks.reduce((sum, b) => sum + (b.transactions?.length ?? 0), 0)
+  }, [pdfAccountBlocks])
   
   // Build import button text
   const getImportButtonText = () => {
     const parts: string[] = []
-    if (importTransactions && transactionCount > 0) {
-      parts.push(`${transactionCount} Transaction${transactionCount !== 1 ? 's' : ''}`)
-    }
-    if (statement) {
-      parts.push('1 Statement')
-    } else if (attachAsStatement && hasStatementDetails) {
-      parts.push('1 Statement')
-    }
-    if (hasLots) {
-      parts.push(`${pdfData!.lots!.length} Lot${pdfData!.lots!.length !== 1 ? 's' : ''}`)
+    const isMulti = pdfAccountBlocks.length > 1
+    if (isMulti) {
+      if (importTransactions && multiAccountTransactionCount > 0) {
+        parts.push(`${multiAccountTransactionCount} Transaction${multiAccountTransactionCount !== 1 ? 's' : ''}`)
+      }
+      const statementCount = pdfAccountBlocks.filter(b => attachAsStatement && (b.statementDetails?.length ?? 0) > 0).length
+      if (statementCount > 0) parts.push(`${statementCount} Statement${statementCount !== 1 ? 's' : ''}`)
+      const lotsCount = pdfAccountBlocks.reduce((s, b) => s + (b.lots?.length ?? 0), 0)
+      if (lotsCount > 0) parts.push(`${lotsCount} Lot${lotsCount !== 1 ? 's' : ''}`)
+    } else {
+      if (importTransactions && transactionCount > 0) {
+        parts.push(`${transactionCount} Transaction${transactionCount !== 1 ? 's' : ''}`)
+      }
+      if (statement) {
+        parts.push('1 Statement')
+      } else if (attachAsStatement && hasStatementDetails) {
+        parts.push('1 Statement')
+      }
+      if (hasLots) {
+        const lotsCount = pdfAccountBlocks[0]?.lots?.length ?? 0
+        parts.push(`${lotsCount} Lot${lotsCount !== 1 ? 's' : ''}`)
+      }
     }
     if (parts.length === 0) return 'Import'
     return `Import ${parts.join(' and ')}`
   }
 
   // Determine if there is anything to import
-  const hasImportableContent = 
-    (importTransactions && transactionCount > 0) || 
-    (attachAsStatement && hasStatementDetails) ||
-    hasLots ||
-    !!statement
+  const hasImportableContent = pdfAccountBlocks.length > 1
+    ? pdfAccountBlocks.some(b =>
+        (importTransactions && (b.transactions?.length ?? 0) > 0) ||
+        (attachAsStatement && (b.statementDetails?.length ?? 0) > 0) ||
+        (b.lots?.length ?? 0) > 0
+      )
+    : (importTransactions && transactionCount > 0) || 
+      (attachAsStatement && hasStatementDetails) ||
+      hasLots ||
+      !!statement
 
   return (
     <div
@@ -550,12 +712,71 @@ export default function ImportTransactions({
         </div>
       )}
 
-      {/* PDF statement preview card */}
-      {hasStatementDetails && pdfData?.statementDetails && (
-        <PdfStatementPreviewCard 
-          statementInfo={pdfData.statementInfo} 
-          statementDetails={pdfData.statementDetails} 
-        />
+      {/* PDF statement preview card — single account or per-block for multi-account */}
+      {pdfData && pdfAccountBlocks.length > 0 && (
+        <div className="my-3 text-left space-y-4">
+          {pdfAccountBlocks.map((block, idx) => {
+            const mapping = accountMappings[idx]
+            const targetId = mapping?.targetAccountId ?? accountId
+            const blockHasDetails = (block.statementDetails?.length ?? 0) > 0
+            const blockTxCount = block.transactions?.length ?? 0
+            const blockLotsCount = block.lots?.length ?? 0
+            const parsedAcctNum = block.statementInfo?.accountNumber
+            const parsedAcctName = block.statementInfo?.accountName
+            const showAccountSelector = pdfAccountBlocks.length > 1 || !!(parsedAcctNum && parsedAcctNum !== '')
+
+            return (
+              <div key={idx} className={`border rounded-lg p-4 ${pdfAccountBlocks.length > 1 ? 'border-blue-200 dark:border-blue-800' : ''}`}>
+                {pdfAccountBlocks.length > 1 && (
+                  <div className="text-sm font-semibold text-blue-700 dark:text-blue-300 mb-2">
+                    Account {idx + 1} of {pdfAccountBlocks.length}
+                  </div>
+                )}
+                {parsedAcctNum && (
+                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">
+                    Parsed account: <span className="font-mono">{parsedAcctNum}</span>
+                    {parsedAcctName && <span className="ml-1">({parsedAcctName})</span>}
+                  </div>
+                )}
+                {showAccountSelector && (
+                  <div className="flex items-center gap-2 mb-3">
+                    <Label className="whitespace-nowrap text-sm">Import into:</Label>
+                    <Select
+                      value={String(targetId)}
+                      onValueChange={(v) => {
+                        const newMappings = [...accountMappings]
+                        newMappings[idx] = { targetAccountId: parseInt(v) }
+                        setAccountMappings(newMappings)
+                      }}
+                    >
+                      <SelectTrigger className="w-64">
+                        <SelectValue placeholder="Select account" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {allAccounts.map(a => (
+                          <SelectItem key={a.acct_id} value={String(a.acct_id)}>
+                            {a.acct_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                <div className="text-sm text-gray-600 dark:text-gray-400">
+                  {blockTxCount > 0 && <span className="mr-3">{blockTxCount} transaction{blockTxCount !== 1 ? 's' : ''}</span>}
+                  {blockHasDetails && <span className="mr-3">Statement details</span>}
+                  {blockLotsCount > 0 && <span>{blockLotsCount} lot{blockLotsCount !== 1 ? 's' : ''}</span>}
+                </div>
+                {blockHasDetails && block.statementDetails && (
+                  <PdfStatementPreviewCard
+                    statementInfo={block.statementInfo}
+                    statementDetails={block.statementDetails}
+                  />
+                )}
+              </div>
+            )
+          })}
+        </div>
       )}
 
       {currentDuplicates.length > 0 && (
@@ -568,12 +789,12 @@ export default function ImportTransactions({
       {statement && <StatementPreviewCard statement={statement} />}
 
       {/* Show import button if we have data, statement details, or lots */}
-      {(effectiveData && effectiveData.length > 0) || hasStatementDetails || hasLots ? (
+      {(effectiveData && effectiveData.length > 0) || hasStatementDetails || hasLots || pdfAccountBlocks.length > 1 ? (
         <div style={{textAlign: 'left'}}>
           {/* Post-Gemini import options for PDF data */}
-          {pdfData && (transactionCount > 0 || hasStatementDetails) && (
+          {pdfData && (transactionCount > 0 || multiAccountTransactionCount > 0 || hasStatementDetails) && (
             <div className="flex items-center gap-4 my-3">
-              {transactionCount > 0 && (
+              {(transactionCount > 0 || multiAccountTransactionCount > 0) && (
                 <div className="flex items-center gap-2">
                   <Checkbox
                     id="import-transactions"
@@ -624,7 +845,7 @@ export default function ImportTransactions({
         </div>
       ) : null}
       {/* Show clear button if we have file info but no valid data and not a pending PDF and not already shown in other blocks */}
-      {fileInfo && !effectiveData && !loading && !pendingPdfFile && !hasStatementDetails && !hasLots && !geminiError && (
+      {fileInfo && !effectiveData && !loading && !pendingPdfFile && !hasStatementDetails && !hasLots && pdfAccountBlocks.length === 0 && !geminiError && (
         <div className="mt-4">
           <Button variant="outline" onClick={clearData}>
             Clear

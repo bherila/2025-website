@@ -676,9 +676,63 @@ class FileController extends Controller
     }
 
     /**
-     * Helper to generate a unique filename within a given scope.
-     * Appends _1, _2, etc. before the extension if name exists.
+     * Attach an already-stored file (identified by file_hash) to an additional financial account.
+     * This enables "store PDF once, reference from multiple accounts/statements" for multi-account imports.
      */
+    public function attachFinAccountFile(Request $request, int $accountId): JsonResponse
+    {
+        $userId = Auth::id();
+        $account = FinAccounts::where('acct_id', $accountId)
+            ->where('acct_owner', $userId)
+            ->firstOrFail();
+
+        $request->validate([
+            'file_hash' => 'required|string',
+            'statement_id' => 'nullable|integer',
+        ]);
+
+        $fileHash = $request->file_hash;
+
+        // Check if already attached to this account
+        $alreadyAttached = FileForFinAccount::where('acct_id', $account->acct_id)
+            ->where('file_hash', $fileHash)
+            ->first();
+
+        if ($alreadyAttached) {
+            if ($request->statement_id && ! $alreadyAttached->statement_id) {
+                $alreadyAttached->statement_id = $request->statement_id;
+                $alreadyAttached->save();
+            }
+            return response()->json($alreadyAttached->load('uploader:id,name'), 200);
+        }
+
+        // Find the source file from any of the user's accounts
+        $sourceFile = FileForFinAccount::whereHas('account', function ($q) use ($userId) {
+            $q->where('acct_owner', $userId);
+        })
+            ->where('file_hash', $fileHash)
+            ->first();
+
+        if (! $sourceFile) {
+            return response()->json(['error' => 'File not found.'], 404);
+        }
+
+        // Create a new record for this account pointing to the same S3 path
+        $fileModel = FileForFinAccount::create([
+            'acct_id' => $account->acct_id,
+            'statement_id' => $request->statement_id,
+            'file_hash' => $fileHash,
+            'original_filename' => $sourceFile->original_filename,
+            'stored_filename' => $sourceFile->stored_filename,
+            's3_path' => $sourceFile->s3_path,
+            'mime_type' => $sourceFile->mime_type,
+            'file_size_bytes' => $sourceFile->file_size_bytes,
+            'uploaded_by_user_id' => $userId,
+        ]);
+
+        return response()->json($fileModel->load('uploader:id,name'), 201);
+    }
+
     protected function generateUniqueFilename(string $filename, callable $existsCheck): string
     {
         if (! $existsCheck($filename)) {

@@ -17,7 +17,10 @@ class FinanceGeminiImportController extends Controller
 {
     /**
      * Parse a PDF document via Gemini for transactions + statement details.
-     * Returns parsed data without writing to DB. Results are cached by file hash.
+     * Returns parsed data without writing to DB. Results are cached by file hash + accounts context.
+     *
+     * Accepts an optional `accounts` array of { name, last4 } objects used to help the AI
+     * assign transactions to the correct account. Full account numbers are never sent.
      */
     public function parseDocument(Request $request)
     {
@@ -25,6 +28,9 @@ class FinanceGeminiImportController extends Controller
 
         $validator = Validator::make($request->all(), [
             'file' => 'required|file|max:10240', // 10MB max
+            'accounts' => 'nullable|array',
+            'accounts.*.name' => 'required|string',
+            'accounts.*.last4' => 'required|string|max:4',
         ]);
 
         if ($validator->fails()) {
@@ -42,8 +48,10 @@ class FinanceGeminiImportController extends Controller
         $fileContent = $file->get();
         $fileHash = hash('sha256', $fileContent);
 
-        // Check cache first
-        $cacheKey = "gemini_import:transactions:{$fileHash}";
+        // Include accounts context in cache key (only name + last4, never full numbers)
+        $accountsContext = $request->input('accounts', []);
+        $contextHash = hash('sha256', json_encode($accountsContext));
+        $cacheKey = "gemini_import:transactions:{$fileHash}:{$contextHash}";
         $cached = Cache::get($cacheKey);
 
         if ($cached !== null) {
@@ -51,11 +59,15 @@ class FinanceGeminiImportController extends Controller
         }
 
         try {
-            $data = $this->callGeminiApi($apiKey, $fileContent, $this->getTransactionPrompt());
+            $prompt = $this->getTransactionPrompt($accountsContext);
+            $data = $this->callGeminiApi($apiKey, $fileContent, $prompt);
 
             if ($data === null) {
                 return response()->json(['error' => 'Failed to parse response from AI.'], 500);
             }
+
+            // Normalize response: ensure we always have an `accounts` array
+            $data = $this->normalizeMultiAccountResponse($data);
 
             // Cache successful result for 1 hour
             Cache::put($cacheKey, $data, 3600);
@@ -269,16 +281,94 @@ class FinanceGeminiImportController extends Controller
         return $data;
     }
 
-    public function getTransactionPrompt(): string
+    /**
+     * Normalize Gemini response to always include an `accounts` array.
+     * Supports both single-account (legacy) and multi-account response formats.
+     * Also normalizes date strings within all account data.
+     */
+    public function normalizeMultiAccountResponse(array $data): array
     {
-        return <<<'PROMPT'
+        if (isset($data['accounts']) && is_array($data['accounts'])) {
+            // Multi-account format — normalize dates in each account
+            foreach ($data['accounts'] as &$account) {
+                $account = $this->normalizeSingleAccountDates($account);
+            }
+        } else {
+            // Single-account / legacy format — normalize dates then wrap
+            $data = $this->normalizeSingleAccountDates($data);
+            $data['accounts'] = [
+                [
+                    'statementInfo' => $data['statementInfo'] ?? null,
+                    'statementDetails' => $data['statementDetails'] ?? [],
+                    'transactions' => $data['transactions'] ?? [],
+                    'lots' => $data['lots'] ?? [],
+                ],
+            ];
+        }
+
+        return $data;
+    }
+
+    /**
+     * Normalize date strings within a single account data block (in-place).
+     */
+    private function normalizeSingleAccountDates(array $data): array
+    {
+        if (isset($data['statementInfo']) && is_array($data['statementInfo'])) {
+            foreach (['periodStart', 'periodEnd'] as $key) {
+                if (! empty($data['statementInfo'][$key]) && is_string($data['statementInfo'][$key])) {
+                    $data['statementInfo'][$key] = substr($data['statementInfo'][$key], 0, 10);
+                }
+            }
+        }
+
+        if (isset($data['transactions']) && is_array($data['transactions'])) {
+            foreach ($data['transactions'] as &$tx) {
+                if (! empty($tx['date']) && is_string($tx['date'])) {
+                    $tx['date'] = substr($tx['date'], 0, 10);
+                }
+            }
+        }
+
+        if (isset($data['lots']) && is_array($data['lots'])) {
+            foreach ($data['lots'] as &$lot) {
+                foreach (['purchaseDate', 'saleDate'] as $dateKey) {
+                    if (! empty($lot[$dateKey]) && is_string($lot[$dateKey])) {
+                        $lot[$dateKey] = substr($lot[$dateKey], 0, 10);
+                    }
+                }
+            }
+        }
+
+        return $data;
+    }
+
+    /**
+     * @param array $accountsContext Array of { name, last4 } objects for prompt context
+     */
+    public function getTransactionPrompt(array $accountsContext = []): string
+    {
+        $accountsSection = '';
+        if (! empty($accountsContext)) {
+            $lines = array_map(
+                fn ($a) => "- {$a['name']}: last 4 digits {$a['last4']}",
+                $accountsContext
+            );
+            $accountsSection = "\n\nKnown user accounts (use these to assign transactions to the correct account):\n".implode("\n", $lines);
+        }
+
+        $multiAccountNote = ! empty($accountsContext)
+            ? "\n16. **Multi-account statements**: If the document contains transactions for multiple accounts (e.g. a bank summary statement), group the data by account and return an `accounts` array instead of flat top-level fields. Each element of `accounts` must have the same structure as the single-account format (`statementInfo`, `statementDetails`, `transactions`, `lots`). Match each account's number to the known accounts above using the last 4 digits, and set `statementInfo.accountName` to the matched account name when possible."
+            : '';
+
+        return <<<PROMPT
 Analyze the provided bank or brokerage statement PDF and extract:
 1. Statement summary information
 2. Statement detail line items (sections with MTD/YTD or period columns showing performance, capital, taxes, etc.)
 3. Transaction entries (individual transactions with dates)
-4. Lot-level position data (open and closed lots with purchase/sale details)
+4. Lot-level position data (open and closed lots with purchase/sale details){$accountsSection}
 
-Return the data as JSON with this structure:
+Return the data as JSON with this structure for a **single-account** statement:
 
 ```json
 {
@@ -292,18 +382,11 @@ Return the data as JSON with this structure:
   },
   "statementDetails": [
     {
-      "section": "Statement Summary ($)",
+      "section": "Statement Summary (\$)",
       "line_item": "Pre-Tax Return",
       "statement_period_value": -23355.87,
       "ytd_value": 12312.59,
       "is_percentage": false
-    },
-    {
-      "section": "Statement Summary (%)",
-      "line_item": "Pre-Tax Return",
-      "statement_period_value": -1.75,
-      "ytd_value": 1.76,
-      "is_percentage": true
     }
   ],
   "transactions": [
@@ -332,26 +415,47 @@ Return the data as JSON with this structure:
 }
 ```
 
+For a **multi-account** statement (e.g. a bank summary with multiple sub-accounts), return:
+
+```json
+{
+  "accounts": [
+    {
+      "statementInfo": { "brokerName": "Bank", "accountNumber": "xxxx1234", "accountName": "Savings", "periodStart": "YYYY-MM-DD", "periodEnd": "YYYY-MM-DD", "closingBalance": 5000.00 },
+      "statementDetails": [],
+      "transactions": [{ "date": "YYYY-MM-DD", "description": "Deposit", "amount": 100.00, "type": "deposit" }],
+      "lots": []
+    },
+    {
+      "statementInfo": { "brokerName": "Bank", "accountNumber": "xxxx5678", "accountName": "Checking", "periodStart": "YYYY-MM-DD", "periodEnd": "YYYY-MM-DD", "closingBalance": 1200.00 },
+      "statementDetails": [],
+      "transactions": [],
+      "lots": []
+    }
+  ]
+}
+```
+
 **Instructions:**
 1. Return ONLY valid JSON with no other text.
 2. All dates should be in YYYY-MM-DD format.
 3. **IMPORTANT: Only extract PARTNER-LEVEL or INVESTOR-LEVEL data.** Do NOT extract data from fund-level sections such as "Fund Level Capital Account", "Fund Level Summary", "Statement of Operations", "Statement of changes in partners' capital", "Statement of assets, liabilities, and partners' capital", "Statement of cash flows", or any section that describes the overall fund rather than the individual partner/investor.
 4. **Statement Details**: Extract ALL line items from PARTNER/INVESTOR-level sections with columns like "MTD" and "YTD", "Statement Period" and "YTD", or similar period-based columns. These include:
-   - Statement Summary ($ and %)
+   - Statement Summary (\$ and %)
    - Investor Capital Account
    - Tax and Pre-Tax Return Detail
    - Any similar partner/investor-level summary/performance sections
 5. For statement details:
-   - `section`: The section header (e.g., "Statement Summary ($)", "Investor Capital Account")
+   - `section`: The section header (e.g., "Statement Summary (\$)", "Investor Capital Account")
    - `line_item`: The row label (e.g., "Pre-Tax Return", "Total Beginning Capital")
    - `statement_period_value`: The MTD/Statement Period value as a number
    - `ytd_value`: The YTD value as a number
    - `is_percentage`: true if the values are percentages, false if currency amounts
 6. **CRITICAL for consistency**: Use these exact canonical section names when they match the content:
-   - "Statement Summary ($)" for dollar-value summary items
+   - "Statement Summary (\$)" for dollar-value summary items
    - "Statement Summary (%)" for percentage summary items
    - "Investor Capital Account" for capital account items
-   - "Tax and Pre-Tax Return Detail ($)" for dollar tax detail
+   - "Tax and Pre-Tax Return Detail (\$)" for dollar tax detail
    - "Tax and Pre-Tax Return Detail (%)" for percentage tax detail
    If the document uses a similar but slightly different section name (e.g. "Statement Summary (Dollars)"), map it to the canonical name above. Only create new section names for genuinely different sections not covered above.
 7. **CRITICAL for consistency**: Use these exact canonical line item names when they match the content:
@@ -371,7 +475,7 @@ Return the data as JSON with this structure:
 12. Condense spacing (e.g., "Pre - Tax Return" → "Pre-Tax Return").
 13. If PDF has no transactions, return an empty transactions array.
 14. If PDF has no statement details, return an empty statementDetails array.
-15. If PDF has no lot data, return an empty lots array.
+15. If PDF has no lot data, return an empty lots array.{$multiAccountNote}
 PROMPT;
     }
 

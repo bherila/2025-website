@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
       whenClosed={maintenanceDiv.dataset.whenClosed || null}
       isDebt={maintenanceDiv.dataset.isDebt === '1'}
       isRetirement={maintenanceDiv.dataset.isRetirement === '1'}
+      acctNumber={maintenanceDiv.dataset.acctNumber || null}
     />)
   }
 })

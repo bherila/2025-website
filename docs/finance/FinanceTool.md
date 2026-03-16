@@ -197,10 +197,45 @@ record will surface in the **Statement Files** card on the Statements page even
 if no transactions or details were imported.
 
 The backend endpoint for AI parsing (`FinanceGeminiImportController@parseDocument`)
-caches responses by SHA-256 file hash for one hour. A companion endpoint
+caches responses by SHA-256 file hash **and** accounts context hash for one hour. A companion endpoint
 (`/api/finance/statement/{statement_id}/pdf`) returns signed URLs for
 viewing/downloading any PDF tied to a statement.
 
+### Multi-Account PDF Import
+
+When a bank summary statement (e.g. Ally Bank combined statement) contains transactions for
+multiple accounts, the system supports automatic distribution:
+
+1. **AI Context**: The import page sends the user’s account names and last-4 digits of account
+   numbers to the Gemini API along with the PDF. The full account number is **never** sent to the AI.
+2. **Grouped Response**: Gemini returns an `accounts[]` array grouping transactions by account.
+   Single-account PDFs also return this format (array of one element) for consistency.
+3. **Suffix Matching**: The frontend (`accountMatcher.ts`) automatically matches each parsed
+   account block to the user’s accounts using:
+   - Exact account number match
+   - Last-4-digit suffix match
+   - Word-overlap name disambiguation when multiple accounts share the same suffix
+4. **Per-Account Preview**: Each account group is shown as a separate card before import,
+   with a dropdown for manual account assignment override.
+5. **Import**: Clicking "Import" calls `POST /api/finance/multi-import-pdf` which creates
+   statement records and inserts transactions for each account in a single DB transaction.
+6. **Store PDF Once**: The PDF file is uploaded to S3 once (for the primary account).
+   For additional accounts, `POST /api/finance/{accountId}/files/attach` creates a
+   `files_for_fin_accounts` record pointing to the same S3 path by file hash.
+
+#### Account Mapping Override
+
+The per-account dropdowns in the import preview default to auto-detected accounts.
+The current page’s account (from the URL) is used as the fallback for unmatched blocks.
+Users can change any mapping before clicking import.
+
+#### Backend API
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/finance/transactions/import-gemini` | Parse PDF with Gemini; accepts optional `accounts[]` context (name + last4 only) |
+| `POST /api/finance/multi-import-pdf` | Import data for multiple accounts in one transaction |
+| `POST /api/finance/{accountId}/files/attach` | Attach an already-stored file (by hash) to an account |
 
 ### Duplicate File Prevention
 To save storage and processing time, the file management system uses SHA-256 hashing:
@@ -209,9 +244,34 @@ To save storage and processing time, the file management system uses SHA-256 has
 - If the file was already uploaded but not yet linked to a statement, it is updated with the new `statement_id`.
 
 ### Gemini Cache Management
-Gemini API responses are cached by file hash. To allow re-processing a file:
+Gemini API responses are cached by file hash + accounts context hash. To allow re-processing a file:
 - Deleting a statement from the **Statements** tab will automatically clear the Gemini cache for all associated files.
 - This allows the user to re-upload the same file and have Gemini parse it again (useful if the prompt or parsing logic changed).
+
+## Account Settings
+
+Each account has configurable settings accessible from the **Maintenance** page:
+
+### Account Type
+The account type determines how balances are treated in net-worth calculations:
+- **Asset** – positive contribution (e.g. checking, savings, brokerage accounts)
+- **Liability** – negative contribution (e.g. credit cards, loans)
+- **Retirement** – positive contribution but shown separately in reports
+
+Account type is stored as two boolean flags on the `fin_accounts` table:
+- `acct_is_debt` = `true` → Liability
+- `acct_is_retirement` = `true` → Retirement
+- Both `false` → Asset
+
+### Account Number
+The full account number can be stored in `fin_accounts.acct_number` (nullable string).
+It is used for:
+- Suffix matching during multi-account PDF import (only last 4 digits are sent to AI)
+- Display in the account settings UI
+
+The account number is stored at rest in the database. Only the last 4 digits are ever
+shared with third-party AI services for account matching purposes.
+
 ## Duplicate Detection
 
 Duplicate detection is performed on the client-side. A transaction is considered a duplicate if it has the same `t_date`, `t_type`, `t_description`, `t_qty`, and `t_amt` as an existing transaction. The comparison for `t_type` and `t_description` is a substring match.

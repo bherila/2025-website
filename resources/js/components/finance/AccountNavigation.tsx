@@ -15,6 +15,7 @@ import AccountYearSelector from './AccountYearSelector'
 interface FinAccount {
   acct_id: number
   acct_name: string
+  acct_number?: string | null
 }
 
 /**

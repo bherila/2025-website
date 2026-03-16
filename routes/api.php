@@ -78,6 +78,7 @@ Route::middleware(['web', 'auth'])->post('/license-keys/import', [App\Http\Contr
 Route::middleware(['web', 'auth'])->post('/user/update-email', [App\Http\Controllers\UserApiController::class, 'updateEmail']);
 Route::middleware(['web', 'auth'])->post('/user/update-password', [App\Http\Controllers\UserApiController::class, 'updatePassword']);
 Route::middleware(['web', 'auth'])->post('/finance/transactions/import-gemini', [FinanceGeminiImportController::class, 'parseDocument']);
+Route::middleware(['web', 'auth'])->post('/finance/multi-import-pdf', [StatementController::class, 'importMultiAccountPdf']);
 Route::middleware(['web', 'auth'])->get('/finance/statement/{statement_id}/details', [StatementController::class, 'getDetails']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/all-statement-details', [StatementController::class, 'getFinStatementDetails']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/import-ib-statement', [StatementController::class, 'importIbStatement']);
@@ -210,6 +211,7 @@ Route::middleware(['web', 'auth'])->delete('/client/portal/{slug}/projects/{proj
 // Financial account files
 Route::middleware(['web', 'auth'])->get('/finance/{accountId}/files', [FileController::class, 'listFinAccountFiles']);
 Route::middleware(['web', 'auth'])->post('/finance/{accountId}/files', [FileController::class, 'uploadFinAccountFile']);
+Route::middleware(['web', 'auth'])->post('/finance/{accountId}/files/attach', [FileController::class, 'attachFinAccountFile']);
 Route::middleware(['web', 'auth'])->get('/finance/{accountId}/files/{fileId}/download', [FileController::class, 'downloadFinAccountFile']);
 Route::middleware(['web', 'auth'])->delete('/finance/{accountId}/files/{fileId}', [FileController::class, 'deleteFinAccountFile']);
 Route::middleware(['web', 'auth'])->get('/finance/{accountId}/statements/{statementId}/pdf', [FileController::class, 'viewStatementPdf']);

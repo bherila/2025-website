@@ -14,6 +14,7 @@ class FinAccounts extends Model
     protected $fillable = [
         'acct_owner',
         'acct_name',
+        'acct_number',
         'acct_last_balance',
         'acct_last_balance_date',
         'acct_is_debt',

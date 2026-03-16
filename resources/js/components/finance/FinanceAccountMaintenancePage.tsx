@@ -11,12 +11,14 @@ export default function FinanceAccountMaintenancePage({
   whenClosed,
   isDebt,
   isRetirement,
+  acctNumber,
 }: {
   accountId: number
   accountName: string
   whenClosed: string | null
   isDebt: boolean
   isRetirement: boolean
+  acctNumber: string | null
 }) {
   return (
     <div className="container mx-auto px-4 py-8 w-500">
@@ -26,7 +28,7 @@ export default function FinanceAccountMaintenancePage({
           <AccountMaintenanceClient accountId={accountId} accountName={accountName} whenClosed={whenClosed} />
         </div>
         <div>
-          <EditAccountFlags accountId={accountId.toString()} isDebt={isDebt} isRetirement={isRetirement} />
+          <EditAccountFlags accountId={accountId.toString()} isDebt={isDebt} isRetirement={isRetirement} acctNumber={acctNumber} />
         </div>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
