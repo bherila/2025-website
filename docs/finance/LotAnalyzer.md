@@ -48,13 +48,17 @@ All currency calculations use **currency.js** to avoid floating-point drift. Thi
 ### Overview
 A wash sale occurs when:
 1. A security is sold at a **loss**
-2. A "substantially identical" security is purchased within a **61-day window** (30 days before to 30 days after the sale date)
+2. A "substantially identical" security is purchased within the **61-day window** — 30 calendar days **before** through 30 calendar days **after** the sale date
 
 When a wash sale is detected:
 - The loss is **disallowed** (partially or fully)
 - Column (f) shows code "W"
 - Column (g) shows the disallowed loss amount
 - Column (h) shows the adjusted gain/loss
+
+> **Consumed-lot exclusion (IRS rule):** Lots that are consumed (FIFO-matched) to close the sale itself are *never* treated as replacement shares — they are the positions being sold. Only open lots that remain after FIFO matching qualify as replacement shares.
+
+> **Same-day exclusion:** Without intra-day trade times, purchases on the exact same calendar day as the sale are excluded from the wash window. Order cannot be determined without trade-time data; see `isWithinWashWindow` for details.
 
 ### Four-Flag Configuration (`WashSaleOptions`)
 
@@ -63,7 +67,7 @@ The wash sale engine supports four independent boolean settings:
 | Setting | Description |
 |---------|-------------|
 | `adjustSameUnderlying` | Master flag: when true, option contracts for the same underlying are considered substantially identical regardless of strike, expiration, or type. When false, `adjustStockToOption` and `adjustOptionToStock` are forced to false. |
-| `adjustShortLong` | When true, wash sales can trigger across short and long positions. |
+| `adjustShortLong` | When true, wash sales can trigger across short and long positions. When false, only same-direction acquisitions count: long buys replace long sales; short openings replace short covers. |
 | `adjustStockToOption` | When true, selling stock at a loss then buying a CALL option on the same underlying triggers a wash sale. |
 | `adjustOptionToStock` | When true, selling a CALL option at a loss then buying shares of the underlying stock triggers a wash sale. |
 
@@ -115,15 +119,23 @@ The engine uses **FIFO (First In, First Out)** matching:
 Multiple sales of the same security on the same day within the same account are merged into a single line item, provided they have the same term (ST/LT) and adjustment codes.
 
 ### Wash Sale Window
-The 61-day wash sale window is centered on the sale date:
-- **30 days before** the sale date
-- **The sale date itself**
-- **30 days after** the sale date
+The IRS 61-day wash sale window is:
+- **30 days before** the sale date (look-back)
+- **30 days after** the sale date (look-forward)
+- **The sale date itself** is excluded when no intra-day trade time is available
+
+Examples:
+- Sale on Jan 28 → look-back: Dec 29 – Jan 27 (days −30 to −1); look-forward: Jan 29 – Feb 27 (days +1 to +30)
+- Buy on Dec 29 (day −30) and all Dec 29 lots consumed by the Jan 28 sale → consumed lots excluded → **no wash sale** (ENOV scenario)
+- Buy on Dec 29 (day −30) and Dec 29 lot is **not** consumed by the Jan 28 sale → open lot is a replacement share → **wash sale** (look-back rule)
+- Buy on Apr 14 (day +30 from Mar 15 sale) → **inside** the window → wash sale
+- Buy on Apr 15 (day +31) → **outside** the window → no wash sale
+
+### Exclusion Rule
+Lots consumed by the FIFO match for a given sale are excluded from being replacement shares. This prevents the lots being closed from appearing as their own replacements.
 
 ### Replacement Share Priority
-When multiple purchases fall within the wash sale window, the engine prioritizes:
-1. Purchases **after** the sale (most likely to be the "replacement")
-2. Among those, the **closest** to the sale date
+When multiple purchases fall within the wash sale window, the engine uses the **earliest** qualifying replacement (chronological order, oldest first).
 
 ---
 
@@ -204,6 +216,30 @@ The transaction list table is automatically hidden when the Lot Analyzer is open
 
 ## Testing
 
+### ENOV Regression Example
+
+This scenario was previously mis-classified as a wash sale and is now covered by a regression test.
+
+**Acquisitions:**
+| Date | Symbol | Qty | Price | Basis |
+|------|--------|-----|-------|-------|
+| Dec 29, 2025 | ENOV | 56 | $27.12 | $1,518.72 |
+| Dec 29, 2025 | ENOV | 9 | $27.12 | $244.08 |
+| **Total** | | **65** | | **$1,762.80** |
+
+**Sale:**
+| Date Sold | Proceeds | Basis | Gain/Loss |
+|-----------|----------|-------|-----------|
+| Jan 28, 2026 | $1,396.20 | $1,762.80 | −$366.60 |
+
+**Why this is NOT a wash sale:**
+- Dec 29 is exactly 30 days prior to Jan 28 — it IS within the 61-day look-back window.
+- However, **both Dec 29 lots are FIFO-consumed** by the single 65-share sale (S10 / exclusion rule).
+- The consumed lots are excluded from being replacement shares via `acquiredIndices`.
+- No other open ENOV lots exist in the window → no replacement shares → correct result: **loss of −$366.60 is fully deductible**.
+
+This is the S10 scenario in the test matrix (see `tests-ts/washSaleEngine.test.ts`).
+
 Run wash sale engine tests:
 ```bash
 pnpm test -- tests-ts/washSaleEngine.test.ts
@@ -220,7 +256,8 @@ php artisan test --filter=FinanceLotsControllerTest
 ```
 
 ### JS Test Coverage
-- **Wash sale engine** (46 tests): normalizeOptions, gain/loss calculation, ST/LT classification, wash sale detection (30-day window, boundary conditions), cross-type settings, Method 1 vs 2, currency precision, edge cases, wash sale detail fields (washPurchaseDate, washPurchaseAccountId, washPurchaseDescription, washSaleReason)
+- **`isWithinWashWindow`** (7 tests): day −30 inclusive, day −31 exclusive, day +30 inclusive, day +31 exclusive, same-day excluded, day ±1 boundaries
+- **Wash sale engine** (84 tests total): normalizeOptions, gain/loss calculation, ST/LT classification, full IRS 61-day window (look-back + look-forward), exclusion rule for consumed lots (S10/ENOV), look-back boundary conditions, same-day ordering (D1–D4), full scenario matrix (S1–S10, SO1–SO2, OS1–OS3, SL1–SL3, SI1–SI2, R1), sharesUsed invariants, cross-type settings, Method 1 vs 2, currency precision, edge cases, wash sale detail fields
 - **TXF export** (11 tests): header format, reference numbers, date formatting, amounts, wash sale inclusion, multi-lot handling
 - **VariousTransactionsModal** (6 tests): render states, Load All Years button, Search for Opening Transaction button
 
