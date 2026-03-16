@@ -175,6 +175,29 @@ function daysBetween(a: Date, b: Date): number {
   return Math.round(Math.abs(a.getTime() - b.getTime()) / msPerDay)
 }
 
+/**
+ * Returns true iff `purchaseDate` falls within the IRS 61-day wash sale window
+ * centred on `saleDate` (30 calendar days before through 30 calendar days after).
+ *
+ * **Same-day exclusion**: purchases on the exact same calendar day as the sale
+ * are excluded when no intra-day trade time is available. Without trade-time
+ * data we cannot determine whether the purchase preceded or followed the sale,
+ * so we conservatively exclude same-day purchases to avoid false positives.
+ * When trade times are available and a same-day purchase is confirmed to be
+ * after the sale, it should be passed as a distinct Date with a timestamp.
+ */
+export function isWithinWashWindow(saleDate: Date, purchaseDate: Date): boolean {
+  const washStart = new Date(saleDate)
+  washStart.setDate(washStart.getDate() - 30)
+  const washEnd = new Date(saleDate)
+  washEnd.setDate(washEnd.getDate() + 30)
+  return (
+    purchaseDate >= washStart &&
+    purchaseDate <= washEnd &&
+    purchaseDate.getTime() !== saleDate.getTime()
+  )
+}
+
 /** Normalise WashSaleOptions, handling legacy single-boolean format. */
 export function normalizeOptions(opts: WashSaleOptions | LegacyWashSaleOptions): WashSaleOptions {
   if ('includeOptions' in opts) {
@@ -406,8 +429,6 @@ export function analyzeLots(
       let washSaleReason: string | undefined
 
       if (isLoss) {
-        const washEnd = new Date(sale.date)
-        washEnd.setDate(washEnd.getDate() + 30)
         const acquiredIndices = new Set(portion.matches.map((m: any) => m.internalIndex))
 
         // Determine the replacement pool based on position direction.
@@ -419,12 +440,17 @@ export function analyzeLots(
           ? [...longPool, ...shortPool]
           : isClosingShort ? shortPool : longPool
 
-        // Only acquisitions strictly after the sale date (within 30 days) are
-        // replacement shares. Pre-sale acquisitions are the lots being closed,
-        // not new replacements, so they must never trigger a wash sale.
+        // Full IRS 61-day wash sale window: 30 days before through 30 days after
+        // the sale date (see isWithinWashWindow).
+        //
+        // Lots consumed by the FIFO match for this sale (acquiredIndices) are
+        // excluded — they are the positions being closed, not replacement shares.
+        //
+        // Candidates are sorted earliest-first so the first replacement purchase
+        // in the window is allocated before later ones.
         const washCandidates = replacementPool
           .filter(p => areSubstantiallyIdentical(sale, p, opts))
-          .filter(p => p.date > sale.date && p.date <= washEnd)
+          .filter(p => isWithinWashWindow(sale.date, p.date))
           .filter(p => !acquiredIndices.has(p.internalIndex))
           .sort((a, b) => a.date.getTime() - b.date.getTime())
 

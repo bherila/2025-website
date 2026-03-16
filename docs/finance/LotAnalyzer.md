@@ -48,7 +48,7 @@ All currency calculations use **currency.js** to avoid floating-point drift. Thi
 ### Overview
 A wash sale occurs when:
 1. A security is sold at a **loss**
-2. A "substantially identical" security is purchased **within 30 days after** the sale date
+2. A "substantially identical" security is purchased within the **61-day window** — 30 calendar days **before** through 30 calendar days **after** the sale date
 
 When a wash sale is detected:
 - The loss is **disallowed** (partially or fully)
@@ -56,11 +56,9 @@ When a wash sale is detected:
 - Column (g) shows the disallowed loss amount
 - Column (h) shows the adjusted gain/loss
 
-> **Important**: Only acquisitions that occur **strictly after** the sale date (days +1 through +30) are
-> treated as replacement shares. Pre-sale acquisitions — even those that fall within 30 calendar days of
-> the sale — are the lots being closed, not new replacements, and therefore cannot trigger a wash sale.
-> This prevents false positives when multiple lots acquired on the same date are sold in separate
-> transactions close together in time (see the [ENOV Example](#enov-regression-example) below).
+> **Consumed-lot exclusion (IRS rule):** Lots that are consumed (FIFO-matched) to close the sale itself are *never* treated as replacement shares — they are the positions being sold. Only open lots that remain after FIFO matching qualify as replacement shares.
+
+> **Same-day exclusion:** Without intra-day trade times, purchases on the exact same calendar day as the sale are excluded from the wash window. Order cannot be determined without trade-time data; see `isWithinWashWindow` for details.
 
 ### Four-Flag Configuration (`WashSaleOptions`)
 
@@ -121,19 +119,23 @@ The engine uses **FIFO (First In, First Out)** matching:
 Multiple sales of the same security on the same day within the same account are merged into a single line item, provided they have the same term (ST/LT) and adjustment codes.
 
 ### Wash Sale Window
-The wash sale window covers only post-sale acquisitions:
-- **Day +1 through Day +30** after the sale date (strictly after the sale)
-- Pre-sale acquisitions **never** qualify as replacement shares
+The IRS 61-day wash sale window is:
+- **30 days before** the sale date (look-back)
+- **30 days after** the sale date (look-forward)
+- **The sale date itself** is excluded when no intra-day trade time is available
 
 Examples:
-- Sale on Jan 28 → window: Jan 29 – Feb 27 (days +1 to +30)
-- Buy on Feb 27 (day +30) → **inside** the window → triggers a wash sale
-- Buy on Feb 28 (day +31) → **outside** the window → no wash sale
-- Buy on Dec 29 (30 days before a Jan 28 sale) → **pre-sale** → no wash sale
+- Sale on Jan 28 → look-back: Dec 29 – Jan 27 (days −30 to −1); look-forward: Jan 29 – Feb 27 (days +1 to +30)
+- Buy on Dec 29 (day −30) and all Dec 29 lots consumed by the Jan 28 sale → consumed lots excluded → **no wash sale** (ENOV scenario)
+- Buy on Dec 29 (day −30) and Dec 29 lot is **not** consumed by the Jan 28 sale → open lot is a replacement share → **wash sale** (look-back rule)
+- Buy on Apr 14 (day +30 from Mar 15 sale) → **inside** the window → wash sale
+- Buy on Apr 15 (day +31) → **outside** the window → no wash sale
+
+### Exclusion Rule
+Lots consumed by the FIFO match for a given sale are excluded from being replacement shares. This prevents the lots being closed from appearing as their own replacements.
 
 ### Replacement Share Priority
-When multiple purchases fall within the wash sale window, the engine uses the earliest post-sale purchase
-(chronological FIFO order among replacement candidates).
+When multiple purchases fall within the wash sale window, the engine uses the **earliest** qualifying replacement (chronological order, oldest first).
 
 ---
 
@@ -231,14 +233,12 @@ This scenario was previously mis-classified as a wash sale and is now covered by
 | Jan 28, 2026 | $1,396.20 | $1,762.80 | −$366.60 |
 
 **Why this is NOT a wash sale:**
-- Both acquisition lots (Dec 29) are exactly 30 days prior to the sale.
-- Post-sale window: Jan 29 – Feb 27. No ENOV acquisitions occurred in that window.
-- Correct result: loss of −$366.60 is **fully deductible** (no wash sale adjustment).
+- Dec 29 is exactly 30 days prior to Jan 28 — it IS within the 61-day look-back window.
+- However, **both Dec 29 lots are FIFO-consumed** by the single 65-share sale (S10 / exclusion rule).
+- The consumed lots are excluded from being replacement shares via `acquiredIndices`.
+- No other open ENOV lots exist in the window → no replacement shares → correct result: **loss of −$366.60 is fully deductible**.
 
-The engine previously triggered a false positive when the broker reported the two lots as separate sale
-transactions. In that case, the Dec 29 lot being sold second appeared to be a "replacement share" for
-the first sale. The fix: only post-sale acquisitions (strictly after the sale date) qualify as
-replacement shares.
+This is the S10 scenario in the test matrix (see `tests-ts/washSaleEngine.test.ts`).
 
 Run wash sale engine tests:
 ```bash
@@ -256,7 +256,8 @@ php artisan test --filter=FinanceLotsControllerTest
 ```
 
 ### JS Test Coverage
-- **Wash sale engine** (66 tests): normalizeOptions, gain/loss calculation, ST/LT classification, wash sale detection (post-sale-only window, boundary conditions, ENOV regression), full test matrix (stock↔stock, stock→option, option→stock, short↔long, quantity mismatch, non-wash regression), cross-type settings, Method 1 vs 2, currency precision, edge cases, wash sale detail fields (washPurchaseDate, washPurchaseAccountId, washPurchaseDescription, washSaleReason)
+- **`isWithinWashWindow`** (7 tests): day −30 inclusive, day −31 exclusive, day +30 inclusive, day +31 exclusive, same-day excluded, day ±1 boundaries
+- **Wash sale engine** (84 tests total): normalizeOptions, gain/loss calculation, ST/LT classification, full IRS 61-day window (look-back + look-forward), exclusion rule for consumed lots (S10/ENOV), look-back boundary conditions, same-day ordering (D1–D4), full scenario matrix (S1–S10, SO1–SO2, OS1–OS3, SL1–SL3, SI1–SI2, R1), sharesUsed invariants, cross-type settings, Method 1 vs 2, currency precision, edge cases, wash sale detail fields
 - **TXF export** (11 tests): header format, reference numbers, date formatting, amounts, wash sale inclusion, multi-lot handling
 - **VariousTransactionsModal** (6 tests): render states, Load All Years button, Search for Opening Transaction button
 
