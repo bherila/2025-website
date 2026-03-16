@@ -50,6 +50,7 @@ Route::middleware('auth')->group(function () {
     // New account-prefixed routes
     Route::get('/finance/account/all/transactions', [FinanceAccountsController::class, 'showAllTransactions']);
     Route::get('/finance/account/all/lots', [FinanceAccountsController::class, 'showAllLots']);
+    Route::get('/finance/account/all/import', [FinanceAccountsController::class, 'showAllImportPage']);
     Route::get('/finance/account/{account_id}/transactions', [FinanceAccountsController::class, 'show'])->where('account_id', '[0-9]+');
     Route::get('/finance/account/{account_id}/duplicates', [FinanceAccountsController::class, 'duplicates'])->where('account_id', '[0-9]+');
     Route::get('/finance/account/{account_id}/linker', [FinanceAccountsController::class, 'linker'])->where('account_id', '[0-9]+');

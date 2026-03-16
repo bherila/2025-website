@@ -145,7 +145,7 @@ export function summaryUrl(accountId: number, options: RouteOptions = {}): strin
 /**
  * Build URL for import transactions page
  */
-export function importUrl(accountId: number): string {
+export function importUrl(accountId: number | 'all'): string {
   return `/finance/account/${accountId}/import`
 }
 

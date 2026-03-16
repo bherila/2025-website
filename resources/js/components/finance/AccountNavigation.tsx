@@ -66,16 +66,18 @@ export default function AccountNavigation({
   activeTab = 'transactions',
   onYearChange,
 }: {
-  accountId: number
+  accountId: number | 'all'
   activeTab?: string
   onYearChange?: (year: YearSelection) => void
 }) {
-  const [selectedYear, setSelectedYear] = useState<YearSelection>(() => getEffectiveYear(accountId))
+  const [selectedYear, setSelectedYear] = useState<YearSelection>(() =>
+    typeof accountId === 'number' ? getEffectiveYear(accountId) : 'all'
+  )
 
   useEffect(() => {
     const handleYearChange = (e: Event) => {
       const customEvent = e as CustomEvent<{ accountId: number; year: YearSelection }>
-      if (customEvent.detail.accountId === accountId) {
+      if (typeof accountId === 'number' && customEvent.detail.accountId === accountId) {
         setSelectedYear(customEvent.detail.year)
       }
     }
@@ -89,7 +91,7 @@ export default function AccountNavigation({
   return (
     <div className="flex items-center justify-between px-4 py-2 border-b border-border/40">
       <div className="flex items-center gap-4">
-        {showYearSelector && (
+        {showYearSelector && typeof accountId === 'number' && (
           <AccountYearSelector
             accountId={accountId}
             onYearChange={onYearChange}
@@ -108,16 +110,18 @@ export default function AccountNavigation({
             Import
           </a>
         </Button>
-        <Button
-          variant={activeTab === 'maintenance' ? 'default' : 'outline'}
-          size="sm"
-          asChild
-        >
-          <a href={maintenanceUrl(accountId)} className="flex items-center gap-1">
-            <Settings className="h-4 w-4" />
-            Maintenance
-          </a>
-        </Button>
+        {typeof accountId === 'number' && (
+          <Button
+            variant={activeTab === 'maintenance' ? 'default' : 'outline'}
+            size="sm"
+            asChild
+          >
+            <a href={maintenanceUrl(accountId)} className="flex items-center gap-1">
+              <Settings className="h-4 w-4" />
+              Maintenance
+            </a>
+          </Button>
+        )}
       </div>
     </div>
   )

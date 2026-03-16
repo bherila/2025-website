@@ -7,13 +7,15 @@ import { type IbStatementData } from '@/data/finance/parseIbCsv'
 
 import ImportTransactions from './ImportTransactions'
 
-export default function ImportTransactionsClient({ id, accountName }: { id: number; accountName: string }) {
+export default function ImportTransactionsClient({ id, accountName }: { id: number | 'all'; accountName: string }) {
   const [importFinished, setImportFinished] = useState(false)
   const [currentStatement, setCurrentStatement] = useState<IbStatementData | null>(null)
 
   const handleStatementParsed = useCallback((statement: IbStatementData | null) => {
     setCurrentStatement(statement)
   }, [])
+
+  const backUrl = id === 'all' ? '/finance/account/all/transactions' : `/finance/account/${id}/transactions`
 
   return (
     <Container fluid className="px-4">
@@ -26,7 +28,9 @@ export default function ImportTransactionsClient({ id, accountName }: { id: numb
             Import finished. Duplicates were ignored.
             {currentStatement && ' Statement data was imported.'}
           </p>
-          <Button onClick={() => (window.location.href = `/finance/${id}`)}>Back to Account</Button>
+          <Button onClick={() => (window.location.href = backUrl)}>
+            {id === 'all' ? 'Back to All Transactions' : 'Back to Account'}
+          </Button>
         </div>
       )}
       <ImportTransactions
