@@ -37,7 +37,7 @@ interface Company {
 interface ClientPortalNavProps {
   slug: string
   companyName: string
-  currentPage: 'home' | 'project' | 'time' | 'invoices' | 'invoice' | 'agreement' | 'expenses'
+  currentPage: 'home' | 'project' | 'time' | 'invoices' | 'invoice' | 'agreement' | 'expenses' | 'manage'
   currentProjectSlug?: string | undefined
   projectName?: string | undefined
   invoiceNumber?: string | undefined
@@ -59,6 +59,7 @@ export function getPagePathSuffix(currentPage: ClientPortalNavProps['currentPage
     case 'home':
     case 'project':    // project slugs are company-specific
     case 'agreement':  // agreement IDs are company-specific
+    case 'manage':     // manage pages use a different URL scheme entirely
     default:
       // Unknown or home-equivalent pages return to the company home
       return ''
@@ -148,7 +149,9 @@ export default function ClientPortalNav({
                     {companies.map(company => (
                       <DropdownMenuItem key={company.id} asChild>
                         <a
-                          href={`/client/portal/${company.slug}${getPagePathSuffix(currentPage)}`}
+                          href={currentPage === 'manage'
+                            ? `/client/mgmt/${company.id}`
+                            : `/client/portal/${company.slug}${getPagePathSuffix(currentPage)}`}
                           className={cn(
                             slug === company.slug && 'bg-accent font-medium'
                           )}
@@ -258,8 +261,8 @@ export default function ClientPortalNav({
             </div>
           </div>
 
-          {/* Right side: Manage Company button */}
-          {isAdmin && companyId && (
+          {/* Right side: Manage Company button (hidden when already on manage page) */}
+          {isAdmin && companyId && currentPage !== 'manage' && (
             <div className="flex items-center">
               <Button variant="outline" size="sm" asChild className="gap-2">
                 <a href={`/client/mgmt/${companyId}`}>
@@ -335,6 +338,15 @@ export default function ClientPortalNav({
                   <BreadcrumbSeparator />
                   <BreadcrumbItem>
                     <BreadcrumbPage>Agreement</BreadcrumbPage>
+                  </BreadcrumbItem>
+                </>
+              )}
+
+              {currentPage === 'manage' && (
+                <>
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem>
+                    <BreadcrumbPage>Manage Company</BreadcrumbPage>
                   </BreadcrumbItem>
                 </>
               )}

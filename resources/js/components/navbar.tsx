@@ -192,6 +192,18 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
                       {company.company_name}
                     </a>
                   ))}
+                  {isAdmin && (
+                    <>
+                      <div className='my-1 border-t border-gray-100 dark:border-[#3E3E3A]' />
+                      <a
+                        role='menuitem'
+                        className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]'
+                        href='/client/mgmt'
+                      >
+                        All Companies
+                      </a>
+                    </>
+                  )}
                 </div>
               )}
             </li>
@@ -316,6 +328,17 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
                         {company.company_name}
                       </a>
                     ))}
+                    {isAdmin && (
+                      <>
+                        <div className='my-1 border-t border-gray-100 dark:border-[#3E3E3A]' />
+                        <a
+                          className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm'
+                          href='/client/mgmt'
+                        >
+                          All Companies
+                        </a>
+                      </>
+                    )}
                   </div>
                 )}
               </div>

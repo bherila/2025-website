@@ -1,6 +1,7 @@
 import { ArrowLeft, ExternalLink, FileText,X } from 'lucide-react'
 import { useCallback,useEffect,useState } from 'react'
 
+import ClientPortalNav from '@/components/client-management/portal/ClientPortalNav'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -195,46 +196,53 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
   }
 
   return (
-    <div className="container mx-auto p-8 max-w-4xl">
-      {alertInfo?.show && (
-        <Alert variant={alertInfo.variant} className="mb-4 relative">
-          <AlertTitle>{alertInfo.variant === 'destructive' ? 'Error' : 'Success'}</AlertTitle>
-          <AlertDescription>{alertInfo.message}</AlertDescription>
-          <button onClick={() => setAlertInfo(null)} className="absolute top-2 right-2 p-1">
-            <X className="h-4 w-4" />
-          </button>
-        </Alert>
-      )}
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Client Company Details</h1>
-        <div className="flex gap-2">
-          {company.slug && (
+    <>
+      <ClientPortalNav
+        slug={company.slug || ''}
+        companyName={company.company_name}
+        companyId={company.id}
+        currentPage="manage"
+      />
+      <div className="container mx-auto p-8 max-w-4xl">
+        {alertInfo?.show && (
+          <Alert variant={alertInfo.variant} className="mb-4 relative">
+            <AlertTitle>{alertInfo.variant === 'destructive' ? 'Error' : 'Success'}</AlertTitle>
+            <AlertDescription>{alertInfo.message}</AlertDescription>
+            <button onClick={() => setAlertInfo(null)} className="absolute top-2 right-2 p-1">
+              <X className="h-4 w-4" />
+            </button>
+          </Alert>
+        )}
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-bold">Client Company Details</h1>
+          <div className="flex gap-2">
+            {company.slug && (
+              <Button 
+                variant="secondary"
+                onClick={() => window.location.href = `/client/portal/${company.slug}/invoices`}
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Invoices
+              </Button>
+            )}
             <Button 
-              variant="secondary"
-              onClick={() => window.location.href = `/client/portal/${company.slug}/invoices`}
+              variant="secondary" 
+              onClick={() => window.location.href = '/client/mgmt'}
             >
-              <FileText className="mr-2 h-4 w-4" />
-              Invoices
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to List
             </Button>
-          )}
-          <Button 
-            variant="secondary" 
-            onClick={() => window.location.href = '/client/mgmt'}
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to List
-          </Button>
-          {company.slug && (
-            <Button
-              variant="default"
-              onClick={() => window.location.href = `/client/portal/${company.slug}`}
-            >
-              <ExternalLink className="mr-2 h-4 w-4" />
-              View Portal
-            </Button>
-          )}
+            {company.slug && (
+              <Button
+                variant="default"
+                onClick={() => window.location.href = `/client/portal/${company.slug}`}
+              >
+                <ExternalLink className="mr-2 h-4 w-4" />
+                View Portal
+              </Button>
+            )}
+          </div>
         </div>
-      </div>
 
       <div className="space-y-6">
         <Card>
@@ -456,5 +464,6 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
         </Card>
       </div>
     </div>
+    </>
   )
 }

@@ -172,6 +172,8 @@ class ClientPortalApiController extends Controller
             ->where('client_company_id', $company->id)
             ->firstOrFail();
 
+        $isAdmin = Gate::allows('Admin');
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
@@ -179,6 +181,7 @@ class ClientPortalApiController extends Controller
             'assignee_user_id' => 'nullable|exists:users,id',
             'is_high_priority' => 'boolean',
             'is_hidden_from_clients' => 'boolean',
+            'milestone_price' => 'nullable|numeric|min:0',
         ]);
 
         $task = ClientTask::create([
@@ -190,6 +193,7 @@ class ClientPortalApiController extends Controller
             'creator_user_id' => Auth::id(),
             'is_high_priority' => $validated['is_high_priority'] ?? false,
             'is_hidden_from_clients' => $validated['is_hidden_from_clients'] ?? false,
+            'milestone_price' => $isAdmin ? round((float) ($validated['milestone_price'] ?? 0), 2) : 0.00,
         ]);
 
         return response()->json($task->load(['assignee:id,name,email', 'creator:id,name']), 201);
@@ -210,6 +214,8 @@ class ClientPortalApiController extends Controller
 
         $task = ClientTask::where('project_id', $project->id)->findOrFail($taskId);
 
+        $isAdmin = Gate::allows('Admin');
+
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'description' => 'nullable|string',
@@ -218,6 +224,7 @@ class ClientPortalApiController extends Controller
             'is_high_priority' => 'boolean',
             'is_hidden_from_clients' => 'boolean',
             'completed' => 'boolean',
+            'milestone_price' => 'nullable|numeric|min:0',
         ]);
 
         if (isset($validated['completed'])) {
@@ -227,6 +234,13 @@ class ClientPortalApiController extends Controller
                 $task->completed_at = null;
             }
             unset($validated['completed']);
+        }
+
+        // Only admins can set milestone_price
+        if ($isAdmin && array_key_exists('milestone_price', $validated)) {
+            $validated['milestone_price'] = round((float) $validated['milestone_price'], 2);
+        } else {
+            unset($validated['milestone_price']);
         }
 
         $task->update($validated);

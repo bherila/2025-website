@@ -23,6 +23,8 @@ class ClientTask extends Model
         'creator_user_id',
         'is_high_priority',
         'is_hidden_from_clients',
+        'milestone_price',
+        'client_invoice_line_id',
     ];
 
     protected $casts = [
@@ -30,6 +32,7 @@ class ClientTask extends Model
         'completed_at' => 'datetime',
         'is_high_priority' => 'boolean',
         'is_hidden_from_clients' => 'boolean',
+        'milestone_price' => 'decimal:2',
     ];
 
     /**
@@ -62,6 +65,14 @@ class ClientTask extends Model
     public function timeEntries()
     {
         return $this->hasMany(ClientTimeEntry::class, 'task_id');
+    }
+
+    /**
+     * Get the invoice line this task was billed on.
+     */
+    public function invoiceLine()
+    {
+        return $this->belongsTo(ClientInvoiceLine::class, 'client_invoice_line_id', 'client_invoice_line_id');
     }
 
     /**

@@ -27,6 +27,8 @@ interface Task {
   is_high_priority: boolean
   is_hidden_from_clients: boolean
   project_id: number
+  milestone_price?: number | null
+  client_invoice_line_id?: number | null
 }
 
 interface EditTaskModalProps {
@@ -47,6 +49,7 @@ export default function EditTaskModal({ open, onOpenChange, task, slug, projectS
   const [assigneeId, setAssigneeId] = useState(task.assignee?.id.toString() || '')
   const [isHighPriority, setIsHighPriority] = useState(task.is_high_priority)
   const [isHiddenFromClients, setIsHiddenFromClients] = useState(task.is_hidden_from_clients)
+  const [milestonePrice, setMilestonePrice] = useState(task.milestone_price != null ? String(task.milestone_price) : '0.00')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   
@@ -73,6 +76,7 @@ export default function EditTaskModal({ open, onOpenChange, task, slug, projectS
     setAssigneeId(task.assignee?.id.toString() || '')
     setIsHighPriority(task.is_high_priority)
     setIsHiddenFromClients(task.is_hidden_from_clients)
+    setMilestonePrice(task.milestone_price != null ? String(task.milestone_price) : '0.00')
     fileManager.fetchFiles()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fileManager.fetchFiles excluded to avoid infinite loop
   }, [task])
@@ -99,6 +103,7 @@ export default function EditTaskModal({ open, onOpenChange, task, slug, projectS
           assignee_user_id: assigneeId || null,
           is_high_priority: isHighPriority,
           is_hidden_from_clients: isHiddenFromClients,
+          milestone_price: parseFloat(milestonePrice) || 0,
         })
       })
 
@@ -262,6 +267,27 @@ export default function EditTaskModal({ open, onOpenChange, task, slug, projectS
                   </Label>
                 </div>
               </div>
+
+              {isAdmin && (
+                <div className="space-y-2">
+                  <Label htmlFor="edit-milestone-price">Milestone Price ($)</Label>
+                  <Input
+                    id="edit-milestone-price"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={milestonePrice}
+                    onChange={(e) => setMilestonePrice(e.target.value)}
+                    placeholder="0.00"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Set a non-zero price to make this task a billable milestone. It will be billed on the invoice covering its completion date.
+                    {task.client_invoice_line_id && (
+                      <span className="ml-1 text-green-600 dark:text-green-400">✓ Already invoiced</span>
+                    )}
+                  </p>
+                </div>
+              )}
 
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

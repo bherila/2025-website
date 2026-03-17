@@ -40,6 +40,8 @@ interface Task {
   is_high_priority: boolean
   is_hidden_from_clients: boolean
   created_at: string
+  milestone_price?: number | null
+  client_invoice_line_id?: number | null
 }
 
 interface ClientPortalProjectPageProps {
@@ -268,6 +270,11 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
                             {task.is_hidden_from_clients && (
                               <EyeOff className="h-4 w-4 text-muted-foreground" />
                             )}
+                            {task.milestone_price != null && task.milestone_price > 0 && (
+                              <Badge className="bg-green-600 hover:bg-green-700 text-white text-xs">
+                                ${Number(task.milestone_price).toFixed(2)}
+                              </Badge>
+                            )}
                           </div>
                           {task.description && (
                             <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{task.description}</p>
@@ -307,7 +314,15 @@ export default function ClientPortalProjectPage({ slug, companyName, companyId, 
                               )}
                             </div>
                             <div className="flex-1 cursor-pointer" onClick={() => handleTaskClick(task)}>
-                              <span className="font-medium line-through">{task.name}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium line-through">{task.name}</span>
+                                {task.milestone_price != null && task.milestone_price > 0 && (
+                                  <Badge className="bg-green-600 hover:bg-green-700 text-white text-xs">
+                                    ${Number(task.milestone_price).toFixed(2)}
+                                    {task.client_invoice_line_id && ' ✓'}
+                                  </Badge>
+                                )}
+                              </div>
                               <div className="flex gap-2 mt-1 items-center">
                                 {task.assignee && (
                                   <Badge variant="secondary" className="ml-0 text-xs">{task.assignee.name}</Badge>

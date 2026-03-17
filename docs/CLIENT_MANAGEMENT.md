@@ -58,10 +58,13 @@ The Client Management system is an admin-only feature for managing client compan
 - `project_id`: Foreign key to `client_projects` (cascade on delete)
 - `name`: Task name (required)
 - `description`: Task description (text, nullable)
-- `priority`: Task priority (integer, default 0)
-- `completion_date`: When task was completed (nullable)
+- `due_date`: Optional due date
+- `completed_at`: When task was completed (nullable)
 - `assignee_user_id`: Foreign key to `users` (set null on delete)
-- `is_hidden`: Hidden from main view (boolean, default false)
+- `is_high_priority`: High priority flag (boolean, default false)
+- `is_hidden_from_clients`: Hidden from client view (boolean, default false)
+- `milestone_price`: Flat-fee billing amount for this task (decimal 10,2, default 0.00). Non-zero marks the task as a billable milestone.
+- `client_invoice_line_id`: Foreign key to `client_invoice_lines` (set null on delete). Populated when the task has been billed on an invoice.
 - `creator_user_id`: Foreign key to `users` (set null on delete)
 - `created_at`, `updated_at`: Timestamps
 

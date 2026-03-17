@@ -279,6 +279,8 @@ CREATE TABLE `client_tasks` (
   `creator_user_id` bigint(20) unsigned DEFAULT NULL,
   `is_high_priority` tinyint(1) NOT NULL DEFAULT 0,
   `is_hidden_from_clients` tinyint(1) NOT NULL DEFAULT 0,
+  `milestone_price` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `client_invoice_line_id` bigint(20) unsigned DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   `deleted_at` timestamp NULL DEFAULT NULL,
@@ -287,9 +289,11 @@ CREATE TABLE `client_tasks` (
   KEY `client_tasks_project_id_index` (`project_id`),
   KEY `client_tasks_assignee_user_id_index` (`assignee_user_id`),
   KEY `client_tasks_completed_at_index` (`completed_at`),
+  KEY `client_tasks_client_invoice_line_id_foreign` (`client_invoice_line_id`),
   CONSTRAINT `client_tasks_assignee_user_id_foreign` FOREIGN KEY (`assignee_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
   CONSTRAINT `client_tasks_creator_user_id_foreign` FOREIGN KEY (`creator_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `client_tasks_project_id_foreign` FOREIGN KEY (`project_id`) REFERENCES `client_projects` (`id`) ON DELETE CASCADE
+  CONSTRAINT `client_tasks_project_id_foreign` FOREIGN KEY (`project_id`) REFERENCES `client_projects` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `client_tasks_client_invoice_line_id_foreign` FOREIGN KEY (`client_invoice_line_id`) REFERENCES `client_invoice_lines` (`client_invoice_line_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `client_time_entries`;
