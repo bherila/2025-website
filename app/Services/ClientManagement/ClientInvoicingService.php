@@ -7,6 +7,7 @@ use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientExpense;
 use App\Models\ClientManagement\ClientInvoice;
 use App\Models\ClientManagement\ClientInvoiceLine;
+use App\Models\ClientManagement\ClientTask;
 use App\Models\ClientManagement\ClientTimeEntry;
 use App\Services\ClientManagement\DataTransferObjects\ClosingBalance;
 use App\Services\ClientManagement\DataTransferObjects\MonthSummary;
@@ -377,11 +378,12 @@ class ClientInvoicingService
                 // Update existing draft invoice
                 $invoice->update($invoiceData);
 
-                // Delete system-generated line items
-                $systemGeneratedTypes = ['retainer', 'additional_hours', 'credit', 'prior_month_retainer', 'prior_month_billable'];
+                // Delete system-generated line items (includes milestone lines for billable tasks)
+                $systemGeneratedTypes = ['retainer', 'additional_hours', 'credit', 'prior_month_retainer', 'prior_month_billable', 'milestone'];
                 $systemLines = $invoice->lineItems()->whereIn('line_type', $systemGeneratedTypes)->get();
                 foreach ($systemLines as $line) {
                     $line->timeEntries()->update(['client_invoice_line_id' => null]);
+                    $line->tasks()->update(['client_invoice_line_id' => null]);
                 }
                 $invoice->lineItems()->whereIn('line_type', $systemGeneratedTypes)->delete();
 
@@ -567,6 +569,7 @@ class ClientInvoicingService
             ]);
 
             $this->addReimbursableExpenses($company, $invoice, $periodEnd, $sortOrder);
+            $this->addBillableMilestoneTasks($company, $invoice, $periodEnd, $sortOrder);
             $invoice->recalculateTotal();
             $this->updateInvoicePeriodFromLineItems($invoice);
 
@@ -654,6 +657,49 @@ class ClientInvoicingService
 
             // Link expense to invoice line
             $expense->update(['client_invoice_line_id' => $line->client_invoice_line_id]);
+        }
+    }
+
+    /**
+     * Add billable milestone tasks (with milestone_price > 0) to the invoice.
+     *
+     * Includes all unbilled tasks completed on or before the period end.
+     * This handles the case where a task was completed in a prior period where
+     * the invoice was already issued/paid — such tasks are carried forward to
+     * the next available (draft or new) invoice.
+     */
+    protected function addBillableMilestoneTasks(
+        ClientCompany $company,
+        ClientInvoice $invoice,
+        Carbon $periodEnd,
+        int &$sortOrder
+    ): void {
+        $tasks = ClientTask::whereHas('project', function ($q) use ($company) {
+            $q->where('client_company_id', $company->id);
+        })
+            ->where('milestone_price', '>', 0)
+            ->whereNotNull('completed_at')
+            ->whereNull('client_invoice_line_id')
+            ->where('completed_at', '<=', $periodEnd->copy()->endOfDay())
+            ->orderBy('completed_at')
+            ->get();
+
+        foreach ($tasks as $task) {
+            $line = ClientInvoiceLine::create([
+                'client_invoice_id' => $invoice->client_invoice_id,
+                'client_agreement_id' => $invoice->client_agreement_id,
+                'description' => 'Milestone: '.$task->name,
+                'quantity' => '1',
+                'unit_price' => $task->milestone_price,
+                'line_total' => $task->milestone_price,
+                'line_type' => 'milestone',
+                'hours' => null,
+                'line_date' => $task->completed_at,
+                'sort_order' => $sortOrder++,
+            ]);
+
+            // Link task to invoice line
+            $task->update(['client_invoice_line_id' => $line->client_invoice_line_id]);
         }
     }
 

@@ -45,6 +45,8 @@ class ClientInvoiceLine extends Model
             $line->timeEntries()->update(['client_invoice_line_id' => null]);
             // Unlink expenses linked to this line
             $line->expenses()->update(['client_invoice_line_id' => null]);
+            // Unlink tasks billed on this line
+            $line->tasks()->update(['client_invoice_line_id' => null]);
         });
     }
 
@@ -78,6 +80,14 @@ class ClientInvoiceLine extends Model
     public function timeEntries()
     {
         return $this->hasMany(ClientTimeEntry::class, 'client_invoice_line_id', 'client_invoice_line_id');
+    }
+
+    /**
+     * Get the tasks billed on this invoice line.
+     */
+    public function tasks()
+    {
+        return $this->hasMany(ClientTask::class, 'client_invoice_line_id', 'client_invoice_line_id');
     }
 
     /**
