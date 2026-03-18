@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Clock, DollarSign, ExternalLink, FileText, Plus } from 'lucide-react'
+import { ChevronDown, ChevronUp, Clock, DollarSign, ExternalLink, FileText, Package, Plus, TrendingUp } from 'lucide-react'
 import { useEffect,useState } from 'react'
 
 import InvitePeopleModal from '@/components/client-management/InvitePeopleModal'
@@ -19,6 +19,7 @@ export default function ClientManagementIndexPage() {
   const [loading, setLoading] = useState(true)
   const [showInactive, setShowInactive] = useState(false)
   const [inviteModalOpen, setInviteModalOpen] = useState(false)
+  const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null)
 
   useEffect(() => {
     fetchCompanies()
@@ -34,6 +35,11 @@ export default function ClientManagementIndexPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const openInviteModal = (companyId?: number) => {
+    setSelectedCompanyId(companyId || null)
+    setInviteModalOpen(true)
   }
 
   const activeCompanies = companies.filter(c => c.is_active)
@@ -63,7 +69,7 @@ export default function ClientManagementIndexPage() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Client Management</h1>
         <div className="flex gap-2">
-          <Button onClick={() => setInviteModalOpen(true)}>
+          <Button onClick={() => openInviteModal()}>
             <Plus className="mr-2 h-4 w-4" />
             Invite People
           </Button>
@@ -80,7 +86,18 @@ export default function ClientManagementIndexPage() {
             <CardHeader className="pb-3">
               <div className="flex justify-between items-start">
                 <div className="flex-1">
-                  <CardTitle className="text-xl">{company.company_name}</CardTitle>
+                  <div className="flex items-center gap-3">
+                    <CardTitle className="text-xl">{company.company_name}</CardTitle>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openInviteModal(company.id)}
+                      className="h-7"
+                    >
+                      <Plus className="h-3 w-3 mr-1" />
+                      Add User
+                    </Button>
+                  </div>
                   <div className="mt-2 space-y-1">
                     <div className="text-sm text-muted-foreground">
                       {company.users.length} {company.users.length === 1 ? 'user' : 'users'}
@@ -101,28 +118,49 @@ export default function ClientManagementIndexPage() {
                         </span>
                       </div>
                     )}
+                    {company.uninvoiced_task_total !== undefined && company.uninvoiced_task_total > 0 && (
+                      <div className="flex items-center gap-1.5 text-sm">
+                        <Package className="h-4 w-4 text-purple-600" />
+                        <span className="font-medium text-purple-600">
+                          ${company.uninvoiced_task_total.toFixed(2)} uninvoiced tasks
+                          {company.uninvoiced_task_complete_total !== undefined && company.uninvoiced_task_complete_total > 0 && (
+                            <span className="ml-1 text-xs">
+                              (${company.uninvoiced_task_complete_total.toFixed(2)} complete, ${company.uninvoiced_task_incomplete_total?.toFixed(2) || '0.00'} incomplete)
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    )}
+                    {company.lifetime_value !== undefined && company.lifetime_value > 0 && (
+                      <div className="flex items-center gap-1.5 text-sm">
+                        <TrendingUp className="h-4 w-4 text-green-600" />
+                        <span className="font-medium text-green-600">
+                          ${company.lifetime_value.toFixed(2)} lifetime value
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="flex gap-2">
                   {company.slug && (
-                    <Button 
-                      variant="secondary" 
+                    <Button
+                      variant="secondary"
                       size="sm"
                       onClick={() => window.location.href = `/client/portal/${company.slug}/invoices`}
                     >
                       Invoices
                     </Button>
                   )}
-                  <Button 
-                    variant="secondary" 
+                  <Button
+                    variant="secondary"
                     size="sm"
                     onClick={() => window.location.href = `/client/mgmt/${company.id}`}
                   >
                     Details
                   </Button>
                   {company.slug && (
-                    <Button 
-                      variant="default" 
+                    <Button
+                      variant="default"
                       size="sm"
                       onClick={() => window.location.href = `/client/portal/${company.slug}`}
                     >
@@ -219,11 +257,12 @@ export default function ClientManagementIndexPage() {
         </div>
       )}
 
-      <InvitePeopleModal 
+      <InvitePeopleModal
         open={inviteModalOpen}
         onOpenChange={setInviteModalOpen}
         companies={companies}
         onSuccess={fetchCompanies}
+        preselectedCompanyId={selectedCompanyId}
       />
     </div>
   )

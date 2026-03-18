@@ -103,6 +103,21 @@ class ClientCompany extends Model
     }
 
     /**
+     * Get tasks for this client company (through projects).
+     */
+    public function tasks()
+    {
+        return $this->hasManyThrough(
+            ClientTask::class,
+            ClientProject::class,
+            'client_company_id', // Foreign key on projects table
+            'project_id',        // Foreign key on tasks table
+            'id',                // Local key on companies table
+            'id'                 // Local key on projects table
+        );
+    }
+
+    /**
      * Update the last activity timestamp.
      */
     public function touchLastActivity()

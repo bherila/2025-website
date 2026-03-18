@@ -13,12 +13,14 @@ interface InvitePeopleModalProps {
   onOpenChange: (open: boolean) => void
   companies: ClientCompany[]
   onSuccess: () => void
+  preselectedCompanyId?: number | null
 }
 
 const NEW_USER_VALUE = '__new_user__'
 
-export default function InvitePeopleModal({ open, onOpenChange, companies, onSuccess }: InvitePeopleModalProps) {
+export default function InvitePeopleModal({ open, onOpenChange, companies, onSuccess, preselectedCompanyId }: InvitePeopleModalProps) {
   const [users, setUsers] = useState<User[]>([])
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null)
   const [selectedUserId, setSelectedUserId] = useState('')
   const [selectedCompanyId, setSelectedCompanyId] = useState('')
   const [newUserName, setNewUserName] = useState('')
@@ -31,9 +33,14 @@ export default function InvitePeopleModal({ open, onOpenChange, companies, onSuc
   useEffect(() => {
     if (open) {
       fetchUsers()
+      fetchCurrentUser()
       setError(null)
+      // Pre-select company if provided
+      if (preselectedCompanyId) {
+        setSelectedCompanyId(preselectedCompanyId.toString())
+      }
     }
-  }, [open])
+  }, [open, preselectedCompanyId])
 
   const fetchUsers = async () => {
     try {
@@ -42,6 +49,23 @@ export default function InvitePeopleModal({ open, onOpenChange, companies, onSuc
       setUsers(data)
     } catch (error) {
       console.error('Error fetching users:', error)
+    }
+  }
+
+  const fetchCurrentUser = async () => {
+    try {
+      // Get current user from app-initial-data script tag
+      const script = document.getElementById('app-initial-data')
+      if (script && script.textContent) {
+        const data = JSON.parse(script.textContent)
+        if (data.user && data.user.id) {
+          setCurrentUserId(data.user.id)
+          // Pre-select current user
+          setSelectedUserId(data.user.id.toString())
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching current user:', error)
     }
   }
 
@@ -113,8 +137,8 @@ export default function InvitePeopleModal({ open, onOpenChange, companies, onSuc
 
   const handleClose = () => {
     onOpenChange(false)
-    setSelectedUserId('')
-    setSelectedCompanyId('')
+    setSelectedUserId(currentUserId ? currentUserId.toString() : '')
+    setSelectedCompanyId(preselectedCompanyId ? preselectedCompanyId.toString() : '')
     setNewUserName('')
     setNewUserEmail('')
     setError(null)
