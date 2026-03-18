@@ -4,8 +4,9 @@ namespace App\Finance\RulesEngine\Conditions;
 
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinRuleCondition;
+use Illuminate\Database\Eloquent\Builder;
 
-class AccountConditionEvaluator implements RuleConditionEvaluatorInterface
+class AccountConditionEvaluator implements QueryConditionEvaluatorInterface
 {
     public function matches(FinAccountLineItems $tx, FinRuleCondition $condition): bool
     {
@@ -13,5 +14,11 @@ class AccountConditionEvaluator implements RuleConditionEvaluatorInterface
             'EQUALS' => (string) $tx->t_account === (string) $condition->value,
             default => false,
         };
+    }
+
+    public function applyToQuery(Builder $query, FinRuleCondition $condition): void
+    {
+        $accountId = (int) $condition->value;
+        $query->where('t_account', $accountId);
     }
 }

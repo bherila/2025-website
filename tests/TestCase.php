@@ -2,6 +2,7 @@
 
 namespace Tests;
 
+use App\Models\User;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 
 /**
@@ -51,9 +52,9 @@ abstract class TestCase extends BaseTestCase
      *
      * @param  array  $attributes  Additional attributes for the user
      */
-    protected function createAdminUser(array $attributes = []): \App\Models\User
+    protected function createAdminUser(array $attributes = []): User
     {
-        return \App\Models\User::factory()->create(array_merge([
+        return User::factory()->create(array_merge([
             'user_role' => 'admin',
         ], $attributes));
     }
@@ -63,9 +64,9 @@ abstract class TestCase extends BaseTestCase
      *
      * @param  array  $attributes  Additional attributes for the user
      */
-    protected function createUser(array $attributes = []): \App\Models\User
+    protected function createUser(array $attributes = []): User
     {
-        return \App\Models\User::factory()->create(array_merge([
+        return User::factory()->create(array_merge([
             'user_role' => 'user',
         ], $attributes));
     }

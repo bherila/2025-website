@@ -703,6 +703,7 @@ class FileController extends Controller
                 $alreadyAttached->statement_id = $request->statement_id;
                 $alreadyAttached->save();
             }
+
             return response()->json($alreadyAttached->load('uploader:id,name'), 200);
         }
 

@@ -54,7 +54,10 @@ export function ConditionsEditor({ conditions, onChange }: ConditionsEditorProps
 
   return (
     <div className="space-y-3">
-      <Label className="text-sm font-medium">Conditions</Label>
+      <div>
+        <Label className="text-sm font-medium">Conditions</Label>
+        <p className="text-xs text-muted-foreground">ALL conditions must match for the rule to apply</p>
+      </div>
       {conditions.length === 0 && (
         <p className="text-sm text-muted-foreground">No conditions — rule matches all transactions.</p>
       )}
@@ -64,7 +67,7 @@ export function ConditionsEditor({ conditions, onChange }: ConditionsEditorProps
         const showExtra = condition.type === 'amount' && condition.operator === 'BETWEEN'
 
         return (
-          <div key={index} className="flex flex-wrap items-end gap-2 rounded-md border p-3">
+          <div key={index} className="flex flex-wrap items-end gap-2 rounded-md border border-border/40 p-3">
             <div className="min-w-[150px] flex-1">
               <Label className="text-xs text-muted-foreground">Type</Label>
               <Select value={condition.type} onValueChange={(v) => handleTypeChange(index, v)}>

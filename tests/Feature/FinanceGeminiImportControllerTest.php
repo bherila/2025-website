@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\FinanceTool\FinanceGeminiImportController;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
@@ -369,7 +370,7 @@ class FinanceGeminiImportControllerTest extends TestCase
 
     public function test_prompt_is_well_formed(): void
     {
-        $controller = new \App\Http\Controllers\FinanceTool\FinanceGeminiImportController;
+        $controller = new FinanceGeminiImportController;
 
         $transactionPrompt = $controller->getTransactionPrompt();
         $this->assertStringContainsString('statementInfo', $transactionPrompt);
@@ -381,7 +382,7 @@ class FinanceGeminiImportControllerTest extends TestCase
 
     public function test_prompt_includes_accounts_context_when_provided(): void
     {
-        $controller = new \App\Http\Controllers\FinanceTool\FinanceGeminiImportController;
+        $controller = new FinanceGeminiImportController;
 
         $accountsCtx = [
             ['name' => 'My Savings', 'last4' => '1234'],
@@ -396,7 +397,7 @@ class FinanceGeminiImportControllerTest extends TestCase
 
     public function test_normalize_multi_account_response_wraps_single_account(): void
     {
-        $controller = new \App\Http\Controllers\FinanceTool\FinanceGeminiImportController;
+        $controller = new FinanceGeminiImportController;
 
         $input = [
             'statementInfo' => ['brokerName' => 'Test Bank'],
@@ -415,7 +416,7 @@ class FinanceGeminiImportControllerTest extends TestCase
 
     public function test_normalize_multi_account_response_preserves_multi_account(): void
     {
-        $controller = new \App\Http\Controllers\FinanceTool\FinanceGeminiImportController;
+        $controller = new FinanceGeminiImportController;
 
         $input = [
             'accounts' => [

@@ -75,7 +75,7 @@ class FinanceScheduleCController extends Controller
         // Fetch all rows (unfiltered) first to determine available years, then apply year filter
         $allRows = $query->get();
         $availableYears = $allRows
-            ->map(fn($row) => substr($row->t_date, 0, 4))
+            ->map(fn ($row) => substr($row->t_date, 0, 4))
             ->unique()
             ->sortDesc()
             ->values()
@@ -83,7 +83,7 @@ class FinanceScheduleCController extends Controller
 
         // Apply year filter if provided
         $rows = $yearFilter
-            ? $allRows->filter(fn($row) => substr($row->t_date, 0, 4) === (string) $yearFilter)
+            ? $allRows->filter(fn ($row) => substr($row->t_date, 0, 4) === (string) $yearFilter)
             : $allRows;
 
         // Build result grouped by year
@@ -146,6 +146,7 @@ class FinanceScheduleCController extends Controller
             'business_income' => 'Gross receipts or sales (Business Income)',
             'business_returns' => 'Returns and allowances',
         ];
+
         return $labels[$value] ?? $value;
     }
 

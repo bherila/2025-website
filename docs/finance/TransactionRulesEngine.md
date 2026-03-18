@@ -18,6 +18,7 @@ app/Finance/RulesEngine/
 │   └── RuleRunSummary.php
 ├── Conditions/
 │   ├── RuleConditionEvaluatorInterface.php
+│   ├── QueryConditionEvaluatorInterface.php (new)
 │   ├── AmountConditionEvaluator.php
 │   ├── StockSymbolConditionEvaluator.php
 │   ├── OptionTypeConditionEvaluator.php
@@ -34,7 +35,6 @@ app/Finance/RulesEngine/
 │   ├── SetDescriptionActionHandler.php
 │   ├── SetMemoActionHandler.php
 │   ├── NegateAmountActionHandler.php
-│   ├── StopProcessingActionHandler.php
 │   └── ActionHandlerRegistry.php
 ├── TransactionRuleLoader.php
 └── TransactionRuleProcessor.php
@@ -82,7 +82,8 @@ Actions are executed in their defined order. They mutate the in-memory transacti
 | `set_description` | New description | — | Sets the transaction description |
 | `set_memo` | New memo | — | Sets the transaction memo/comment |
 | `negate_amount` | — | — | Multiplies the amount by -1 |
-| `stop_processing_if_match` | — | — | Stops evaluating further rules for this transaction |
+
+**Note:** The `stop_processing_if_match` action has been removed. Use the rule-level `stop_processing_if_match` flag instead.
 
 ## Processing Logic
 
@@ -92,9 +93,50 @@ Actions are executed in their defined order. They mutate the in-memory transacti
       - Evaluate all conditions (AND). If any fail, skip (no log entry).
       - If all match: execute actions in order, mutating the transaction
       - On action error: catch, log to `fin_rule_logs`, report to Sentry, continue
-      - If `stop_processing_if_match` flag or action: stop evaluating further rules
+      - If rule's `stop_processing_if_match` flag is set: stop evaluating further rules
       - Write log entry with action summary and processing time
 3. Errors on one transaction do not stop the batch
+
+### Query-Level Optimization
+
+The rules engine uses **database-level filtering** to significantly improve performance by applying rule conditions as SQL WHERE clauses before fetching transactions.
+
+**Architecture:**
+- All condition evaluators implement `QueryConditionEvaluatorInterface`
+- The processor attempts to apply conditions to the query builder before calling `->get()`
+- Shared code between `runRuleNow()`, `processTransactions()`, and `getMatchingTransactions()` via `getTransactionsForRule()` private method
+- Query materialization is delayed until after all conditions are applied
+
+**When Query Optimization Applies:**
+- **Always for known condition types**: All 6 built-in condition evaluators support query-level filtering
+- Only falls back to PHP evaluation if:
+  - Condition type is not registered in the registry (unknown/custom condition)
+  - An exception is thrown during query building
+
+**Exception Handling:**
+- Exceptions during `applyToQuery()` are reported to Sentry via `report()` function
+- Logged as errors (not warnings) since they indicate bugs in condition evaluators
+- The rule will fail to process (no fallback) to ensure bugs are caught and fixed
+- Exception details include rule ID, condition type, condition ID, and full stack trace
+
+**SQL Compatibility:**
+- All raw queries are compatible with both **MySQL** and **SQLite**
+- Uses standard SQL functions (`ABS()`, `LIKE`, `IN`)
+- Parameter binding prevents SQL injection
+
+**Optimization Implementation by Condition Type:**
+- `amount`: Uses `ABS(t_amt)` with comparison operators (`>`, `<`, `>=`, `<=`)
+- `direction`: Simple `t_amt > 0` or `t_amt < 0` checks
+- `account_id`: Direct `t_account = ?` equality
+- `stock_symbol_presence`: `IS NULL` / `IS NOT NULL` with empty string checks
+- `option_type`: `IN` clause with case-insensitive matching
+- `description_contains`: `LIKE` queries on `t_description` and `t_comment`
+
+**Performance Benefits:**
+- Eliminates need to materialize all transactions in PHP memory
+- Database can use indexes for filtering
+- Significantly reduced network transfer for large transaction sets
+- Supports processing specific transaction IDs without fetching all user transactions
 
 ### Run Now
 
@@ -110,37 +152,71 @@ The "Run Rule Now" feature processes the rule against the latest **1,000 transac
 | `DELETE` | `/api/finance/rules/{id}` | Soft-delete a rule |
 | `POST` | `/api/finance/rules/reorder` | Swap order of two adjacent rules |
 | `POST` | `/api/finance/rules/{id}/run` | Run a rule against latest 1,000 transactions |
+| `POST` | `/api/finance/rules/preview-matches` | Preview matching transactions without applying actions (see below) |
+
+### Preview Matches Endpoint
+
+The `/api/finance/rules/preview-matches` endpoint allows previewing which transactions would match a rule's conditions without applying any actions. This is useful for testing rules before saving or running them.
+
+**Request body options:**
+- `rule_id`: Integer (optional) - Preview matches for an existing saved rule
+- `conditions`: Array (optional) - Preview matches for unsaved rule conditions
+
+**Response:**
+```json
+{
+  "success": true,
+  "count": 42,
+  "transactions": [
+    {
+      "t_id": 123,
+      "t_date": "2025-01-15",
+      "t_amt": "100.00",
+      "t_description": "Amazon purchase",
+      "t_comment": null,
+      "t_symbol": null,
+      "opt_type": null
+    }
+    // ... up to 1000 transactions
+  ]
+}
+```
 
 ## UI
 
 The rules management UI is accessible from the **Config** page (`/finance/config`), represented by a gear (Settings) icon in the Finance navigation bar.
 
-### Components
+### UI Components & UX Improvements
 
 | Component | Description |
 |-----------|-------------|
 | `RulesList` | Main page showing all rules with empty state |
 | `RuleRow` | Individual rule display with controls |
 | `RuleEditorModal` | Dialog for creating/editing rules |
-| `ConditionsEditor` | Dynamic condition row builder |
-| `ActionsEditor` | Dynamic action row builder |
+| `ConditionsEditor` | Dynamic condition row builder with info text ("ALL conditions must match") |
+| `ActionsEditor` | Dynamic action row builder with reduced border contrast |
+| `TagSelect` | Shared component for tag selection with color badges (used in add_tag/remove_tag actions) |
 | `OrderControls` | Up/down arrow buttons for reordering |
 
-### Features
+### UI Features
 
 - **Empty state**: "No rules yet. Create your first rule to automate transaction processing."
 - **Ordering**: Up/down arrows swap adjacent rules (no rule re-execution on reorder)
 - **Run Now**: Optional checkbox in editor with confirmation prompt
+- **Preview Matches**: Button in rule editor to preview matching transactions before saving
 - **Keyboard**: Ctrl+Enter submits the editor dialog
-- **Loading state**: Save button shows spinner during save operation
+- **Loading state**: Save and Preview buttons show spinner during operations
+- **Tag selection**: Visual dropdown with inline color badges for better UX
+- **Find & Replace**: Search and Replace fields stacked on separate lines for clarity
+- **Visual polish**: Reduced border contrast (border-border/40) on condition/action cards
 
 ## Testing
 
 ### PHP Tests (`tests/Feature/FinanceRulesEngine/`)
 
-- `RuleConditionEvaluatorTest` — All 6 condition evaluators
-- `RuleActionHandlerTest` — All 8 action handlers including tag idempotency
-- `TransactionRuleProcessorTest` — End-to-end processing, ordering, stop-processing, batch
+- `RuleConditionEvaluatorTest` — All 6 condition evaluators with query-level optimization support
+- `RuleActionHandlerTest` — All 7 action handlers (stop_processing action removed)
+- `TransactionRuleProcessorTest` — End-to-end processing, ordering, stop-processing flag, batch, query optimization
 - `TransactionRuleLoaderTest` — Loading, ordering, user isolation
 - `FinRuleLogTest` — Audit logging, error recording, timing
 
@@ -148,12 +224,20 @@ The rules management UI is accessible from the **Config** page (`/finance/config
 
 - `RulesList.test.tsx` — Empty state, loading, list rendering
 - `RuleEditorModal.test.tsx` — Form validation, loading state, Ctrl+Enter
-- `ConditionsEditor.test.tsx` — Add/remove conditions
-- `ActionsEditor.test.tsx` — Add/remove actions
+- `ConditionsEditor.test.tsx` — Add/remove conditions, info text display
+- `ActionsEditor.test.tsx` — Add/remove actions, TagSelect integration
 - `OrderControls.test.tsx` — Arrow button behavior and disabled states
+- `TagSelect.test.tsx` — Tag selection with color badges
 
 ## Future Improvements
 
+### Performance & Scalability
+- **Full query optimization**: Extend query-level filtering to `processTransactions()` for all rules, not just `runRuleNow()`
+- **Parallel processing**: Process independent rules in parallel for better performance
+- **Caching**: Cache compiled query constraints for frequently-used rule combinations
+- **Batch actions**: Execute actions in bulk (e.g., bulk tag updates) to reduce database round-trips
+
+### Features
 - **OR groups / nested logic**: Allow combining conditions with OR in addition to AND
 - **Regex support**: Add regex matching for description/memo conditions
 - **Scheduled rule execution**: Run rules on a schedule (e.g., daily)
@@ -162,10 +246,16 @@ The rules management UI is accessible from the **Config** page (`/finance/config
 - **Rule import/export**: JSON-based rule sharing between users
 - **Condition: date range**: Match transactions by date range
 - **Condition: tag presence**: Match transactions that have/don't have specific tags
+- **Condition: amount change**: Match transactions where amount changed by certain threshold
 - **Action: set category**: Set Schedule C category directly
 - **Action: merge transactions**: Combine related transactions
+- **Action: create linked transaction**: Automatically create offsetting entry in another account
+
+### UI/UX
 - **Audit trail UI**: View rule execution history in the UI
 - **Rule performance metrics**: Dashboard showing rule match rates and processing times
 - **Dry-run mode**: Preview what a rule would do without applying changes
 - **Rule groups/folders**: Organize rules into categories
 - **Webhook/notification**: Notify user when rules match specific patterns
+- **Rule suggestions**: AI-powered suggestions based on transaction patterns
+- **Undo/rollback**: Ability to undo rule actions or rollback to previous state

@@ -55,6 +55,31 @@ Fallbacks & migration:
 - **Testing**: `composer test` for PHPUnit; `npm test` for Jest (React components)
 - **Build**: `npm run build` for production assets
 
+## Validation Requirements
+
+**IMPORTANT**: All validations MUST pass before committing code:
+
+### PHP Validations
+- **PHPUnit Tests**: Run `php artisan test` or `composer test` - all tests must pass
+- **PHP Type Checks**: Run `./vendor/bin/phpstan analyse` if configured, or ensure proper type hints
+- **PHP Linter**: Laravel Pint is configured - run `./vendor/bin/pint` to format code
+
+### Frontend Validations
+- **TypeScript Type Check**: Run `npm run type-check` - no TypeScript errors
+- **ESLint**: Run `npm run lint` - no linting errors
+- **Jest Tests**: Run `npm test` - all tests must pass
+
+### When to Run Validations
+- Before every commit
+- After making any code changes
+- When addressing PR comments
+- Before marking work as complete
+
+### Fixing Pre-existing Issues
+If you encounter pre-existing validation failures unrelated to your changes:
+- Fix them if they're simple and in files you're modifying
+- Otherwise, note them separately but don't let them block your PR
+
 ## Testing Guidelines
 
 **IMPORTANT**: All tests use SQLite in-memory database, never MySQL. This is a safety feature.

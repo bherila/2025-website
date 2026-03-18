@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class UserManagementApiController extends Controller
 {
@@ -157,7 +158,7 @@ class UserManagementApiController extends Controller
             $userData['password'] = Hash::make($request->password);
         } else {
             // Generate a random password if none provided
-            $userData['password'] = Hash::make(\Illuminate\Support\Str::random(32));
+            $userData['password'] = Hash::make(Str::random(32));
         }
 
         $user = User::create($userData);

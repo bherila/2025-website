@@ -44,7 +44,7 @@ class FinanceRulesApiController extends Controller
             'conditions.*.value' => 'nullable|string',
             'conditions.*.value_extra' => 'nullable|string',
             'actions' => 'array',
-            'actions.*.type' => 'required|string|in:add_tag,remove_tag,remove_all_tags,find_replace,set_description,set_memo,negate_amount,stop_processing_if_match',
+            'actions.*.type' => 'required|string|in:add_tag,remove_tag,remove_all_tags,find_replace,set_description,set_memo,negate_amount',
             'actions.*.target' => 'nullable|string',
             'actions.*.payload' => 'nullable|string',
             'actions.*.order' => 'required|integer',
@@ -111,7 +111,7 @@ class FinanceRulesApiController extends Controller
             'conditions.*.value' => 'nullable|string',
             'conditions.*.value_extra' => 'nullable|string',
             'actions' => 'array',
-            'actions.*.type' => 'required|string|in:add_tag,remove_tag,remove_all_tags,find_replace,set_description,set_memo,negate_amount,stop_processing_if_match',
+            'actions.*.type' => 'required|string|in:add_tag,remove_tag,remove_all_tags,find_replace,set_description,set_memo,negate_amount',
             'actions.*.target' => 'nullable|string',
             'actions.*.payload' => 'nullable|string',
             'actions.*.order' => 'required|integer',
@@ -230,6 +230,70 @@ class FinanceRulesApiController extends Controller
                 'actions_applied' => $summary->actionsApplied,
                 'errors' => $summary->errors,
             ],
+        ]);
+    }
+
+    /**
+     * Preview transactions that match a rule's conditions without applying actions.
+     * Accepts either a rule ID or rule data (conditions) in the request body.
+     */
+    public function previewMatches(Request $request): JsonResponse
+    {
+        $user = Auth::user();
+
+        // If rule_id provided, load existing rule
+        if ($request->has('rule_id')) {
+            $rule = FinRule::where('user_id', $user->id)->findOrFail($request->integer('rule_id'));
+        } else {
+            // Create temporary rule from request data
+            $request->validate([
+                'conditions' => 'array',
+                'conditions.*.type' => 'required|string|in:amount,stock_symbol_presence,option_type,account_id,direction,description_contains',
+                'conditions.*.operator' => 'required|string',
+                'conditions.*.value' => 'nullable|string',
+                'conditions.*.value_extra' => 'nullable|string',
+            ]);
+
+            $rule = new FinRule([
+                'user_id' => $user->id,
+                'title' => 'Preview',
+            ]);
+            $rule->setRelation('conditions', collect());
+            $rule->setRelation('actions', collect());
+
+            if ($request->has('conditions')) {
+                $conditions = collect($request->input('conditions'))->map(function ($condData) {
+                    return new FinRuleCondition([
+                        'type' => $condData['type'],
+                        'operator' => $condData['operator'],
+                        'value' => $condData['value'] ?? null,
+                        'value_extra' => $condData['value_extra'] ?? null,
+                    ]);
+                });
+                $rule->setRelation('conditions', $conditions);
+            }
+        }
+
+        $processor = new TransactionRuleProcessor(
+            new TransactionRuleLoader,
+            new ConditionEvaluatorRegistry,
+            new ActionHandlerRegistry,
+        );
+
+        $matchingTransactions = $processor->getMatchingTransactions($rule, $user);
+
+        return response()->json([
+            'success' => true,
+            'count' => $matchingTransactions->count(),
+            'transactions' => $matchingTransactions->map(fn ($tx) => [
+                't_id' => $tx->t_id,
+                't_date' => $tx->t_date,
+                't_amt' => $tx->t_amt,
+                't_description' => $tx->t_description,
+                't_comment' => $tx->t_comment,
+                't_symbol' => $tx->t_symbol,
+                'opt_type' => $tx->opt_type,
+            ])->values(),
         ]);
     }
 }

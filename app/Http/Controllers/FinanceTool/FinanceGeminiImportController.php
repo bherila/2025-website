@@ -344,7 +344,7 @@ class FinanceGeminiImportController extends Controller
     }
 
     /**
-     * @param array $accountsContext Array of { name, last4 } objects for prompt context
+     * @param  array  $accountsContext  Array of { name, last4 } objects for prompt context
      */
     public function getTransactionPrompt(array $accountsContext = []): string
     {

@@ -2,6 +2,7 @@
 
 namespace App\Traits;
 
+use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 
 /**
@@ -80,6 +81,6 @@ trait HasFileStorage
      */
     public function uploader()
     {
-        return $this->belongsTo(\App\Models\User::class, 'uploaded_by_user_id');
+        return $this->belongsTo(User::class, 'uploaded_by_user_id');
     }
 }

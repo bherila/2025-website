@@ -8,6 +8,7 @@ use App\Models\FinanceTool\FinAccountLineItemTagMap;
 use App\Models\FinanceTool\FinAccountTag;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class FinanceTransactionTaggingApiController extends Controller
 {
@@ -188,7 +189,7 @@ class FinanceTransactionTaggingApiController extends Controller
             ->first();
 
         if (! $tag) {
-            \Illuminate\Support\Facades\Log::warning('Tag not found for user', [
+            Log::warning('Tag not found for user', [
                 'uid' => $uid,
                 'tag_id' => $request->tag_id,
             ]);
