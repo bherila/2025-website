@@ -66,7 +66,7 @@ class ClientInvoicingService
         $currentDate = Carbon::parse($agreement->active_date)->startOfMonth();
         $endDate = $agreement->termination_date
             ? Carbon::parse($agreement->termination_date)
-            : now();
+            : now()->startOfMonth()->addMonth();
 
         // Generate invoices for each calendar month
         while ($currentDate->lte($endDate)) {

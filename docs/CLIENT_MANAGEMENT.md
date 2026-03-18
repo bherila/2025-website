@@ -1094,12 +1094,14 @@ The Client Management admin page (`/client/mgmt`) now displays key metrics for e
   - Shows breakdown: `($X.XX complete, $Y.YY incomplete)`
 - **Lifetime Value**: Sum of all paid invoices for the client (green badge with trending up icon)
 - **Run Invoicing Button**: Per-company button to auto-generate invoices for all months
-- **+Add User Button**: Quick access button on each company card to add users to that specific company (opens Invite People dialog pre-selected)
+- **+Add User Button**: Quick access button inline with the user badges on each company card to add users to that specific company (opens Invite People dialog pre-selected)
+- **Manage Button**: (wrench icon) navigates to the company's detail/management page
+- **Portal Button**: navigates to the client portal for the company
 
 **Workflow:**
 
 1. Admin clicks "Run Invoicing" for a company
-2. System automatically generates invoices for ALL calendar months from agreement start date to present
+2. System automatically generates invoices for ALL calendar months from agreement start date to **the first day of the next month** (inclusive), enabling preview of the current period
 3. Results summary shows:
    - **Generated**: New invoices created (draft status)
    - **Updated**: Existing draft invoices regenerated with latest data
@@ -1108,6 +1110,7 @@ The Client Management admin page (`/client/mgmt`) now displays key metrics for e
 **Key Features:**
 
 - **No manual date selection**: Automatically uses calendar month boundaries
+- **Upcoming period preview**: Generates a draft invoice for the current calendar month so current-period time entries and expenses can be previewed before the month closes
 - **Smart detection**: Skips months without time entries or where invoice already finalized
 - **Draft regeneration**: Updates existing draft invoices with latest time entry data
 - **Protected invoices**: Never modifies issued, paid, or voided invoices
