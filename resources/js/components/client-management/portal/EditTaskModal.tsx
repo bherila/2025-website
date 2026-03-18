@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { useIsUserAdmin } from '@/hooks/useAppInitialData'
+import { TaskFormFields } from './TaskFormFields'
 
 interface User {
   id: number
@@ -194,100 +195,26 @@ export default function EditTaskModal({ open, onOpenChange, task, slug, projectS
                 </div>
               )}
               
-              <div className="space-y-2">
-                <Label htmlFor="edit-name">Task name *</Label>
-                <Input
-                  id="edit-name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Enter task name"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-description">Description</Label>
-                <Textarea
-                  id="edit-description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Task description"
-                  rows={4}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-assignee">Assignee</Label>
-                  <select
-                    id="edit-assignee"
-                    value={assigneeId}
-                    onChange={(e) => setAssigneeId(e.target.value)}
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <option value="">No Assignee...</option>
-                    {users.map(user => (
-                      <option key={user.id} value={user.id}>
-                        {user.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="edit-duedate">Due Date</Label>
-                  <Input
-                    id="edit-duedate"
-                    type="date"
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="flex gap-6">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="edit-hidden"
-                    checked={isHiddenFromClients}
-                    onCheckedChange={(checked) => setIsHiddenFromClients(checked as boolean)}
-                  />
-                  <Label htmlFor="edit-hidden" className="font-normal cursor-pointer">
-                    Hidden from clients
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="edit-priority"
-                    checked={isHighPriority}
-                    onCheckedChange={(checked) => setIsHighPriority(checked as boolean)}
-                  />
-                  <Label htmlFor="edit-priority" className="font-normal cursor-pointer">
-                    High priority
-                  </Label>
-                </div>
-              </div>
-
-              {isAdmin && (
-                <div className="space-y-2">
-                  <Label htmlFor="edit-milestone-price">Milestone Price ($)</Label>
-                  <Input
-                    id="edit-milestone-price"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={milestonePrice}
-                    onChange={(e) => setMilestonePrice(e.target.value)}
-                    placeholder="0.00"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Set a non-zero price to make this task a billable milestone. It will be billed on the invoice covering its completion date.
-                    {task.client_invoice_line_id && (
-                      <span className="ml-1 text-green-600 dark:text-green-400">✓ Already invoiced</span>
-                    )}
-                  </p>
-                </div>
-              )}
+              <TaskFormFields
+                name={name}
+                setName={setName}
+                description={description}
+                setDescription={setDescription}
+                dueDate={dueDate}
+                setDueDate={setDueDate}
+                assigneeId={assigneeId}
+                setAssigneeId={setAssigneeId}
+                isHighPriority={isHighPriority}
+                setIsHighPriority={setIsHighPriority}
+                isHiddenFromClients={isHiddenFromClients}
+                setIsHiddenFromClients={setIsHiddenFromClients}
+                milestonePrice={milestonePrice}
+                setMilestonePrice={setMilestonePrice}
+                users={users}
+                isAdmin={isAdmin}
+                alreadyInvoiced={!!task.client_invoice_line_id}
+                idPrefix="edit-"
+              />
 
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
