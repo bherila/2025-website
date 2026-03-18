@@ -9,7 +9,6 @@ use App\Finance\RulesEngine\Actions\RemoveAllTagsActionHandler;
 use App\Finance\RulesEngine\Actions\RemoveTagActionHandler;
 use App\Finance\RulesEngine\Actions\SetDescriptionActionHandler;
 use App\Finance\RulesEngine\Actions\SetMemoActionHandler;
-use App\Finance\RulesEngine\Actions\StopProcessingActionHandler;
 use App\Models\FinanceTool\FinAccountLineItemTagMap;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountTag;
@@ -329,33 +328,5 @@ class RuleActionHandlerTest extends TestCase
         $tx->refresh();
         $this->assertEquals(75.50, (float) $tx->t_amt, '', 0.01);
     }
-
-    // -------------------------------------------------------------------------
-    // StopProcessingActionHandler
-    // -------------------------------------------------------------------------
-
-    public function test_stop_processing_returns_stop_flag(): void
-    {
-        $tx = $this->createTransaction();
-        $action = $this->makeAction(['type' => 'stop_processing_if_match']);
-
-        $handler = new StopProcessingActionHandler;
-        $result = $handler->apply($tx, $action, $this->user);
-
-        $this->assertTrue($result->applied);
-        $this->assertTrue($result->stopProcessing);
-    }
-
-    public function test_stop_processing_does_not_mutate_transaction(): void
-    {
-        $tx = $this->createTransaction(['t_description' => 'Original', 't_amt' => '100.00']);
-        $action = $this->makeAction(['type' => 'stop_processing_if_match']);
-
-        $handler = new StopProcessingActionHandler;
-        $handler->apply($tx, $action, $this->user);
-
-        $tx->refresh();
-        $this->assertEquals('Original', $tx->t_description);
-        $this->assertEquals(100.00, (float) $tx->t_amt, '', 0.01);
-    }
 }
+

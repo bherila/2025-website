@@ -4,8 +4,9 @@ namespace App\Finance\RulesEngine\Conditions;
 
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinRuleCondition;
+use Illuminate\Database\Eloquent\Builder;
 
-class OptionTypeConditionEvaluator implements RuleConditionEvaluatorInterface
+class OptionTypeConditionEvaluator implements QueryConditionEvaluatorInterface
 {
     public function matches(FinAccountLineItems $tx, FinRuleCondition $condition): bool
     {
@@ -18,5 +19,24 @@ class OptionTypeConditionEvaluator implements RuleConditionEvaluatorInterface
             'PUT' => $hasOption && in_array(strtolower(trim($optType)), ['p', 'put'], true),
             default => false,
         };
+    }
+
+    public function applyToQuery(Builder $query, FinRuleCondition $condition): void
+    {
+        $operator = strtoupper($condition->operator);
+
+        match ($operator) {
+            'ANY' => $query->whereNotNull('opt_type')->where('opt_type', '!=', ''),
+            'CALL' => $query->whereNotNull('opt_type')
+                ->whereIn('opt_type', ['c', 'C', 'call', 'Call', 'CALL']),
+            'PUT' => $query->whereNotNull('opt_type')
+                ->whereIn('opt_type', ['p', 'P', 'put', 'Put', 'PUT']),
+            default => null,
+        };
+    }
+
+    public function canApplyToQuery(FinRuleCondition $condition): bool
+    {
+        return true; // All option type conditions can be applied at query level
     }
 }

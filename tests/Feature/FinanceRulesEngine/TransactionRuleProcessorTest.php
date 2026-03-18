@@ -190,7 +190,8 @@ class TransactionRuleProcessorTest extends TestCase
     {
         $tx = $this->createTransaction(['t_amt' => '100.00']);
 
-        $rule1 = $this->createRule(['title' => 'Rule with stop action', 'order' => 1]);
+        // This test now verifies that actions execute properly without the deprecated stop_processing action
+        $rule1 = $this->createRule(['title' => 'Rule 1', 'order' => 1]);
         FinRuleCondition::create([
             'rule_id' => $rule1->id,
             'type' => 'direction',
@@ -202,13 +203,8 @@ class TransactionRuleProcessorTest extends TestCase
             'target' => 'Applied',
             'order' => 1,
         ]);
-        FinRuleAction::create([
-            'rule_id' => $rule1->id,
-            'type' => 'stop_processing_if_match',
-            'order' => 2,
-        ]);
 
-        $rule2 = $this->createRule(['title' => 'Should not run', 'order' => 2]);
+        $rule2 = $this->createRule(['title' => 'Rule 2', 'order' => 2]);
         FinRuleCondition::create([
             'rule_id' => $rule2->id,
             'type' => 'direction',
@@ -217,16 +213,17 @@ class TransactionRuleProcessorTest extends TestCase
         FinRuleAction::create([
             'rule_id' => $rule2->id,
             'type' => 'set_memo',
-            'target' => 'Should not appear',
+            'target' => 'From rule 2',
             'order' => 1,
         ]);
 
         $result = $this->processor->processTransaction($tx, $this->user);
 
-        $this->assertEquals(1, $result->rulesMatched);
+        // Both rules should match now
+        $this->assertEquals(2, $result->rulesMatched);
         $tx->refresh();
         $this->assertEquals('Applied', $tx->t_description);
-        $this->assertNull($tx->t_comment);
+        $this->assertEquals('From rule 2', $tx->t_comment);
     }
 
     // -------------------------------------------------------------------------

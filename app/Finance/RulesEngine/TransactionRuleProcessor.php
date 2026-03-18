@@ -4,6 +4,7 @@ namespace App\Finance\RulesEngine;
 
 use App\Finance\RulesEngine\Actions\ActionHandlerRegistry;
 use App\Finance\RulesEngine\Conditions\ConditionEvaluatorRegistry;
+use App\Finance\RulesEngine\Conditions\QueryConditionEvaluatorInterface;
 use App\Finance\RulesEngine\DTOs\ActionResult;
 use App\Finance\RulesEngine\DTOs\RuleRunSummary;
 use App\Finance\RulesEngine\DTOs\TransactionProcessingResult;
@@ -12,6 +13,7 @@ use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinRule;
 use App\Models\FinanceTool\FinRuleLog;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Log;
 
 class TransactionRuleProcessor
@@ -34,10 +36,33 @@ class TransactionRuleProcessor
 
     /**
      * Run all active rules against multiple transactions.
+     *
+     * @param array<FinAccountLineItems>|array<int>|null $transactionsOrIds Optional array of transaction models or IDs.
+     *                                                                       If null, processes against all user transactions (future: with query optimization).
+     * @param User $user The user whose rules to apply
+     * @return RuleRunSummary Summary of the rule processing
      */
-    public function processTransactions(array $transactions, User $user): RuleRunSummary
+    public function processTransactions($transactionsOrIds, User $user): RuleRunSummary
     {
         $rules = $this->loader->loadActiveRules($user);
+
+        // Handle different input types
+        if ($transactionsOrIds === null || (is_array($transactionsOrIds) && count($transactionsOrIds) === 0)) {
+            // No specific transactions - fetch all user transactions
+            $accountIds = FinAccounts::where('acct_owner', $user->id)->pluck('acct_id');
+            $transactions = FinAccountLineItems::whereIn('t_account', $accountIds)->get();
+        } elseif (is_array($transactionsOrIds) && count($transactionsOrIds) > 0 && is_int($transactionsOrIds[0])) {
+            // Array of IDs - fetch by IDs
+            $accountIds = FinAccounts::where('acct_owner', $user->id)->pluck('acct_id');
+            $transactions = FinAccountLineItems::whereIn('t_account', $accountIds)
+                ->whereIn('t_id', $transactionsOrIds)
+                ->get();
+        } else {
+            // Array of transaction models
+            $transactions = $transactionsOrIds;
+        }
+
+        // Process each transaction
         $results = [];
         $totalMatched = 0;
         $totalApplied = 0;
@@ -62,16 +87,23 @@ class TransactionRuleProcessor
 
     /**
      * Run a single rule against the latest 1000 transactions for the user.
+     * Uses database-level filtering when all rule conditions support query optimization.
      */
     public function runRuleNow(FinRule $rule, User $user): RuleRunSummary
     {
         $accountIds = FinAccounts::where('acct_owner', $user->id)
             ->pluck('acct_id');
 
-        $transactions = FinAccountLineItems::whereIn('t_account', $accountIds)
+        // Start with base query
+        $query = FinAccountLineItems::whereIn('t_account', $accountIds)
             ->orderByDesc('t_id')
-            ->limit(1000)
-            ->get();
+            ->limit(1000);
+
+        // Attempt to apply rule conditions at query level for optimization
+        $canUseQueryOptimization = $this->tryApplyRuleConditionsToQuery($query, $rule);
+
+        // Fetch transactions (filtered if optimization succeeded)
+        $transactions = $query->get();
 
         $rules = collect([$rule->load(['conditions', 'actions'])]);
         $results = [];
@@ -80,6 +112,13 @@ class TransactionRuleProcessor
         $totalErrors = 0;
 
         foreach ($transactions as $tx) {
+            // Still apply in-memory check if query optimization wasn't possible
+            if (! $canUseQueryOptimization) {
+                if (! $this->allConditionsMatch($tx, $rule)) {
+                    continue;
+                }
+            }
+
             $result = $this->applyRulesToTransaction($tx, $rules, $user, isManualRun: true);
             $results[] = $result;
             $totalMatched += $result->rulesMatched;
@@ -94,6 +133,52 @@ class TransactionRuleProcessor
             errors: $totalErrors,
             transactionResults: $results,
         );
+    }
+
+    /**
+     * Try to apply rule conditions to query builder for database-level filtering.
+     * Returns true if all conditions were successfully applied, false otherwise.
+     *
+     * @param Builder $query The query builder to modify
+     * @param FinRule $rule The rule whose conditions to apply
+     * @return bool True if query optimization was successful
+     */
+    private function tryApplyRuleConditionsToQuery(Builder $query, FinRule $rule): bool
+    {
+        if ($rule->conditions->isEmpty()) {
+            return true; // No conditions means match all
+        }
+
+        foreach ($rule->conditions as $condition) {
+            if (! $this->conditionRegistry->has($condition->type)) {
+                return false; // Unknown condition type
+            }
+
+            $evaluator = $this->conditionRegistry->get($condition->type);
+
+            // Check if evaluator supports query-level filtering
+            if (! ($evaluator instanceof QueryConditionEvaluatorInterface)) {
+                return false;
+            }
+
+            if (! $evaluator->canApplyToQuery($condition)) {
+                return false;
+            }
+
+            try {
+                $evaluator->applyToQuery($query, $condition);
+            } catch (\Throwable $e) {
+                Log::warning('Failed to apply condition to query, falling back to PHP evaluation', [
+                    'rule_id' => $rule->id,
+                    'condition_type' => $condition->type,
+                    'error' => $e->getMessage(),
+                ]);
+
+                return false;
+            }
+        }
+
+        return true; // All conditions applied successfully
     }
 
     /**
