@@ -1317,13 +1317,18 @@ class ClientInvoiceTest extends TestCase
 
     public function test_generate_all_includes_current_month_as_upcoming_invoice(): void
     {
+        // Freeze time to a known date for deterministic behavior
+        Carbon::setTestNow(Carbon::parse('2025-06-15'));
+
         // Agreement starts 2 months ago so we have some history
-        $twoMonthsAgo = Carbon::now()->subMonths(2)->startOfMonth();
+        $twoMonthsAgo = Carbon::now()->subMonths(2)->startOfMonth(); // 2025-04-01
         $this->agreement->update(['active_date' => $twoMonthsAgo]);
 
         $results = $this->invoicingService->generateAllMonthlyInvoices($this->company);
 
-        // Should generate at least 2 invoices: last month and current month (upcoming)
+        Carbon::setTestNow(); // Reset
+
+        // Should generate at least 2 invoices: last month (May) and current month (June, upcoming)
         $totalGenerated = count($results['generated']) + count($results['updated']);
         $this->assertGreaterThanOrEqual(2, $totalGenerated, 'Should generate at least 2 invoices (past + upcoming period)');
 
@@ -1332,30 +1337,42 @@ class ClientInvoiceTest extends TestCase
             array_column($results['generated'], 'period'),
             array_column($results['updated'], 'period')
         );
-        $currentPeriod = Carbon::now()->startOfMonth()->format('Y-m');
-        $this->assertContains($currentPeriod, $allPeriods, 'Should include current month period as upcoming draft invoice');
+        $this->assertContains('2025-06', $allPeriods, 'Should include current month (June 2025) as upcoming draft invoice');
     }
 
     public function test_generate_all_stops_at_one_month_ahead_without_termination(): void
     {
-        // Agreement starts from January 2024
+        // Freeze time to a known date for deterministic behavior
+        Carbon::setTestNow(Carbon::parse('2025-06-15'));
+
         $results = $this->invoicingService->generateAllMonthlyInvoices($this->company);
 
-        // Verify no invoice is generated for two months from now
-        $twoMonthsFromNow = Carbon::now()->addMonths(2)->startOfMonth();
+        Carbon::setTestNow(); // Reset
+
+        // Verify no invoice is generated for August 2025 (two months from now)
+        $twoMonthsFromNow = Carbon::parse('2025-08-01');
 
         $futureInvoice = \App\Models\ClientManagement\ClientInvoice::where('client_company_id', $this->company->id)
             ->where('period_start', $twoMonthsFromNow->toDateString())
             ->first();
 
         $this->assertNull($futureInvoice, 'Should not generate invoices more than one month ahead');
+
+        // Also verify July 2025 (next month) is also not generated (only current month is the upcoming period)
+        $nextMonth = Carbon::parse('2025-07-01');
+        $nextMonthInvoice = \App\Models\ClientManagement\ClientInvoice::where('client_company_id', $this->company->id)
+            ->where('period_start', $nextMonth->toDateString())
+            ->first();
+        $this->assertNull($nextMonthInvoice, 'Should not generate invoices for next month');
     }
 
     public function test_generate_all_respects_termination_date(): void
     {
         // Set termination date to 3 months ago - agreement is terminated so no active agreement
-        $terminationDate = Carbon::now()->subMonths(3)->endOfMonth();
+        Carbon::setTestNow(Carbon::parse('2025-06-15'));
+        $terminationDate = Carbon::parse('2025-03-31'); // 3 months ago
         $this->agreement->update(['termination_date' => $terminationDate]);
+        Carbon::setTestNow(); // Reset
 
         // The service should throw when no active agreement is found
         $this->expectException(\Exception::class);
@@ -1366,14 +1383,17 @@ class ClientInvoiceTest extends TestCase
 
     public function test_generate_all_with_future_termination_excludes_post_termination_periods(): void
     {
-        // Set termination date to 1 month from now - still active, but limits future invoices
-        $terminationDate = Carbon::now()->addMonth()->endOfMonth();
+        // Freeze time to a known date for deterministic behavior
+        Carbon::setTestNow(Carbon::parse('2025-06-15'));
+
+        // Set termination date to 1 month from now (July 31) - still active, limits future coverage
+        $terminationDate = Carbon::parse('2025-07-31');
         $this->agreement->update(['termination_date' => $terminationDate]);
 
         $results = $this->invoicingService->generateAllMonthlyInvoices($this->company);
 
-        // Should still generate for current month (within termination date)
-        $currentPeriod = Carbon::now()->startOfMonth()->format('Y-m');
+        Carbon::setTestNow(); // Reset
+
         $allPeriods = array_merge(
             array_column($results['generated'], 'period'),
             array_column($results['updated'], 'period')
@@ -1382,21 +1402,25 @@ class ClientInvoiceTest extends TestCase
         // Verify the result is not empty - agreement is still active
         $this->assertNotEmpty(array_merge($results['generated'], $results['updated'], $results['skipped']));
 
-        // Verify no period after termination was generated
-        $terminationMonth = $terminationDate->format('Y-m');
+        // Verify no period after July 2025 was generated (July is the termination month)
         foreach ($allPeriods as $period) {
-            $this->assertLessThanOrEqual($terminationMonth, $period, 'Should not generate invoices after termination date');
+            $this->assertLessThanOrEqual('2025-07', $period, 'Should not generate invoices after termination date');
         }
     }
 
     public function test_generate_all_via_api_includes_upcoming_period(): void
     {
-        // Agreement starts 2 months ago
-        $twoMonthsAgo = Carbon::now()->subMonths(2)->startOfMonth();
+        // Freeze time to a known date for deterministic behavior
+        Carbon::setTestNow(Carbon::parse('2025-06-15'));
+
+        // Agreement starts 2 months ago (April 2025)
+        $twoMonthsAgo = Carbon::parse('2025-04-01');
         $this->agreement->update(['active_date' => $twoMonthsAgo]);
 
         $response = $this->actingAs($this->admin)
             ->postJson("/api/client/mgmt/companies/{$this->company->id}/invoices/generate-all");
+
+        Carbon::setTestNow(); // Reset
 
         $response->assertStatus(200);
         $response->assertJsonStructure([
@@ -1409,9 +1433,12 @@ class ClientInvoiceTest extends TestCase
             ],
         ]);
 
-        // The total invoices generated or updated should include the upcoming month
+        // The total invoices generated or updated should include the upcoming month (June 2025)
         $data = $response->json('results');
-        $totalCount = $data['summary']['generated_count'] + $data['summary']['updated_count'];
-        $this->assertGreaterThanOrEqual(2, $totalCount, 'API should generate at least 2 invoices including upcoming period');
+        $allPeriods = array_merge(
+            array_column($data['generated'], 'period'),
+            array_column($data['updated'], 'period')
+        );
+        $this->assertContains('2025-06', $allPeriods, 'API should include June 2025 as the upcoming draft invoice period');
     }
 }
