@@ -1,4 +1,5 @@
-import { ChevronDown, ChevronUp, Clock, DollarSign, ExternalLink, FileText, Package, Plus, TrendingUp } from 'lucide-react'
+import currency from 'currency.js'
+import { ChevronDown, ChevronUp, Clock, DollarSign, ExternalLink, FileText, Package, Plus, TrendingUp, Wrench } from 'lucide-react'
 import { useEffect,useState } from 'react'
 
 import InvitePeopleModal from '@/components/client-management/InvitePeopleModal'
@@ -88,15 +89,6 @@ export default function ClientManagementIndexPage() {
                 <div className="flex-1">
                   <div className="flex items-center gap-3">
                     <CardTitle className="text-xl">{company.company_name}</CardTitle>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openInviteModal(company.id)}
-                      className="h-7"
-                    >
-                      <Plus className="h-3 w-3 mr-1" />
-                      Add User
-                    </Button>
                   </div>
                   <div className="mt-2 space-y-1">
                     <div className="text-sm text-muted-foreground">
@@ -106,7 +98,7 @@ export default function ClientManagementIndexPage() {
                       <div className="flex items-center gap-1.5 text-sm">
                         <DollarSign className="h-4 w-4 text-orange-600" />
                         <span className="font-medium text-orange-600">
-                          ${company.total_balance_due.toFixed(2)} balance due
+                          {currency(company.total_balance_due).format()} balance due
                         </span>
                       </div>
                     )}
@@ -122,10 +114,10 @@ export default function ClientManagementIndexPage() {
                       <div className="flex items-center gap-1.5 text-sm">
                         <Package className="h-4 w-4 text-purple-600" />
                         <span className="font-medium text-purple-600">
-                          ${company.uninvoiced_task_total.toFixed(2)} uninvoiced tasks
+                          {currency(company.uninvoiced_task_total).format()} uninvoiced tasks
                           {company.uninvoiced_task_complete_total !== undefined && company.uninvoiced_task_complete_total > 0 && (
                             <span className="ml-1 text-xs">
-                              (${company.uninvoiced_task_complete_total.toFixed(2)} complete, ${company.uninvoiced_task_incomplete_total?.toFixed(2) || '0.00'} incomplete)
+                              ({currency(company.uninvoiced_task_complete_total).format()} complete, {currency(company.uninvoiced_task_incomplete_total ?? 0).format()} incomplete)
                             </span>
                           )}
                         </span>
@@ -135,28 +127,20 @@ export default function ClientManagementIndexPage() {
                       <div className="flex items-center gap-1.5 text-sm">
                         <TrendingUp className="h-4 w-4 text-green-600" />
                         <span className="font-medium text-green-600">
-                          ${company.lifetime_value.toFixed(2)} lifetime value
+                          {currency(company.lifetime_value).format()} lifetime value
                         </span>
                       </div>
                     )}
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  {company.slug && (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => window.location.href = `/client/portal/${company.slug}/invoices`}
-                    >
-                      Invoices
-                    </Button>
-                  )}
                   <Button
                     variant="secondary"
                     size="sm"
                     onClick={() => window.location.href = `/client/mgmt/${company.id}`}
                   >
-                    Details
+                    <Wrench className="mr-1.5 h-3.5 w-3.5" />
+                    Manage
                   </Button>
                   {company.slug && (
                     <Button
@@ -189,7 +173,7 @@ export default function ClientManagementIndexPage() {
                           </Badge>
                         </div>
                         <div className="flex items-center gap-3">
-                          <span className="font-bold text-orange-600">${Number(invoice.remaining_balance).toFixed(2)}</span>
+                          <span className="font-bold text-orange-600">{currency(Number(invoice.remaining_balance)).format()}</span>
                           <Button 
                             variant="ghost" 
                             size="sm" 
@@ -205,15 +189,34 @@ export default function ClientManagementIndexPage() {
                 </div>
               )}
 
-              {company.users.length > 0 && (
-                <div className="flex flex-wrap gap-2">
+              {company.users.length > 0 ? (
+                <div className="flex flex-wrap gap-2 items-center">
                   {company.users.map(user => (
                     <Badge key={user.id} variant="secondary" className="py-1">
                       <span>{user.name}</span>
                       <span className="ml-1 text-xs opacity-70">({formatLastLogin(user.last_login_date)})</span>
                     </Badge>
                   ))}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openInviteModal(company.id)}
+                    className="h-7"
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    Add User
+                  </Button>
                 </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openInviteModal(company.id)}
+                  className="h-7"
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Add User
+                </Button>
               )}
             </CardContent>
           </Card>
@@ -246,7 +249,8 @@ export default function ClientManagementIndexPage() {
                         size="sm"
                         onClick={() => window.location.href = `/client/mgmt/${company.id}`}
                       >
-                        Details
+                        <Wrench className="mr-1.5 h-3.5 w-3.5" />
+                        Manage
                       </Button>
                     </div>
                   </CardHeader>
