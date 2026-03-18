@@ -437,11 +437,35 @@ Location: `resources/js/components/client-management/portal/`
 4. `last_activity` automatically updated to current timestamp
 
 ### Assigning Users to Companies
-1. Admin clicks "Invite People" button on list page
+
+**From Main List Page (`/client/mgmt`):**
+1. Admin clicks "Invite People" button in top-right corner
 2. Modal opens with user and company dropdowns
-3. Selects user and target company
+3. Current user is pre-selected in the user dropdown
+4. Selects target company from dropdown
+5. Clicks "Add User"
+6. List refreshes showing updated associations
+
+**From Company Card on List Page:**
+1. Admin clicks "+Add User" button on any company card
+2. Modal opens with the company pre-selected
+3. Current user is pre-selected in the user dropdown
 4. Clicks "Add User"
 5. List refreshes showing updated associations
+
+**From Company Details Page (`/client/mgmt/{id}`):**
+1. Admin clicks "+Add User" button in Associated Users section
+2. Modal opens with the current company pre-selected
+3. Current user is pre-selected in the user dropdown
+4. Clicks "Add User"
+5. Page refreshes showing updated user list
+
+**Creating New Users:**
+1. In the Invite People modal, select "Add a new user" from the user dropdown
+2. Enter name and email for the new user
+3. System creates user with a random password
+4. User receives access and can reset their password on first login
+5. User is automatically assigned to the selected company
 
 ### Removing Users from Companies
 1. Admin views company details page
@@ -1066,7 +1090,11 @@ The Client Management admin page (`/client/mgmt`) now displays key metrics for e
 
 - **Invoice Balance Due**: Total outstanding balance across all unpaid/issued invoices (orange badge with $ icon)
 - **Uninvoiced Hours**: Total billable hours not yet linked to any invoice (blue badge with clock icon)
+- **Uninvoiced Tasks**: Total value of completed and incomplete milestone tasks not yet billed (purple badge with package icon)
+  - Shows breakdown: `($X.XX complete, $Y.YY incomplete)`
+- **Lifetime Value**: Sum of all paid invoices for the client (green badge with trending up icon)
 - **Run Invoicing Button**: Per-company button to auto-generate invoices for all months
+- **+Add User Button**: Quick access button on each company card to add users to that specific company (opens Invite People dialog pre-selected)
 
 **Workflow:**
 

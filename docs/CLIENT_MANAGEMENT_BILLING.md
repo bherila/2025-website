@@ -129,6 +129,18 @@ Tasks can be designated as billable milestones by setting a non-zero `milestone_
 4. If a task was completed in a period where the corresponding invoice is already **Issued** or **Paid**, the task is automatically carried forward to the next available draft or new invoice.
 5. The task's `client_invoice_line_id` is set to reference the invoice line it was billed on.
 
+### Invoice Generation Workflow with Tasks
+
+When running "Generate Invoices" via the admin interface:
+
+1. **Draft Invoice Detection**: The system finds or creates draft invoices for each billing period.
+2. **Task Collection**: For each invoice period, the system identifies all completed, unbilled tasks (`milestone_price > 0`, `client_invoice_line_id IS NULL`, `completed_at <= period_end`).
+3. **Draft Invoice Updates**: If a draft invoice already exists for the period, it is regenerated to include any newly completed tasks.
+4. **Carry-Forward Logic**: If a task's completion date falls within a period that already has an **Issued** or **Paid** invoice, the task is automatically added to the next available **Draft** invoice instead.
+5. **Immutability**: Non-draft invoices (Issued, Paid, Void) are **NEVER** modified. Their milestone line items remain locked and unchanged.
+
+This ensures that completed billable tasks are always captured on an invoice, even if their natural period has already been finalized.
+
 ### Visual Indicator
 Tasks with a non-zero `milestone_price` display a **green badge** showing the price (e.g., `$500.00`). Completed tasks that have been invoiced show a `✓` in the badge.
 
