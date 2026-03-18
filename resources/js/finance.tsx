@@ -9,11 +9,11 @@ import FinanceNavbar, { type FinanceSection } from '@/components/finance/Finance
 import ImportTransactionsClient from '@/components/finance/ImportTransactionsClient'
 import LinkerPage from '@/components/finance/LinkerPage'
 import ManageTagsPage from '@/components/finance/ManageTagsPage'
+import RulesList from '@/components/finance/rules_engine/RulesList'
 import ScheduleCPage from '@/components/finance/ScheduleCPage'
 import FinanceAccountStatementsPage from '@/components/finance/statements/FinanceAccountStatementsPage'
 import SummaryClient from '@/components/finance/SummaryClient'
 import TransactionsPage from '@/components/finance/TransactionsPage'
-import RulesList from '@/components/finance/rules_engine/RulesList'
 
 document.addEventListener('DOMContentLoaded', () => {
   // Standalone FinanceNavbar

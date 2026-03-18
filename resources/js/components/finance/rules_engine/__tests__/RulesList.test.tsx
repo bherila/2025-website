@@ -55,6 +55,7 @@ jest.mock('../RuleRow', () => ({
 }))
 
 import { fetchWrapper } from '@/fetchWrapper'
+
 import RulesList from '../RulesList'
 
 const mockRules: FinRule[] = [

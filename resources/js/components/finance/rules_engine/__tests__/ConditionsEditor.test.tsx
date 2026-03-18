@@ -89,7 +89,7 @@ describe('ConditionsEditor', () => {
     const removeButtons = screen.getAllByTitle('Remove condition')
     expect(removeButtons).toHaveLength(2)
 
-    fireEvent.click(removeButtons[0])
+    fireEvent.click(removeButtons[0]!)
 
     expect(onChange).toHaveBeenCalledTimes(1)
     const updated = onChange.mock.calls[0][0]
@@ -108,7 +108,7 @@ describe('ConditionsEditor', () => {
 
     // Remove middle condition
     const removeButtons = screen.getAllByTitle('Remove condition')
-    fireEvent.click(removeButtons[1])
+    fireEvent.click(removeButtons[1]!)
 
     const updated = onChange.mock.calls[0][0]
     expect(updated).toHaveLength(2)
