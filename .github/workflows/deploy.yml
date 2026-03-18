@@ -82,8 +82,8 @@ jobs:
             composer.lock \
             ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:~/bwh-php/
 
-      - name: Run artisan config clear/cache on server
+      - name: Run artisan migrate, config clear/cache on server
         run: |
           sshpass -p "${{ secrets.SSH_PASSWORD }}" ssh -o StrictHostKeyChecking=no \
             ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} \
-            "cd ~/bwh-php && /opt/cpanel/ea-php83/root/usr/bin/php artisan config:clear && /opt/cpanel/ea-php83/root/usr/bin/php artisan config:cache"
+            "cd ~/bwh-php && /opt/cpanel/ea-php83/root/usr/bin/php artisan migrate --force && /opt/cpanel/ea-php83/root/usr/bin/php artisan config:clear && /opt/cpanel/ea-php83/root/usr/bin/php artisan config:cache"

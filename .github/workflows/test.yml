@@ -1,0 +1,51 @@
+name: Run Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+
+      - name: Install Composer dependencies (with dev)
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend (generates Vite manifest for PHPUnit blade tests)
+        run: pnpm run build
+
+      - name: Run pnpm tests (Jest)
+        run: pnpm run test
+
+      - name: Run pnpm lint (ESLint)
+        run: pnpm run lint
+
+      - name: Run pnpm type-check (TypeScript)
+        run: pnpm run type-check
+
+      - name: Run PHP linter (Pint)
+        run: vendor/bin/pint --test
+
+      - name: Run PHPUnit
+        # SQLite in-memory DB is configured in phpunit.xml and tests/bootstrap.php.
+        # RefreshDatabase trait sets up the schema automatically — no dedicated DB step needed.
+        # Vite manifest is already present from the "Build frontend" step above,
+        # so blade views are tested with real asset loading (no withoutVite() needed).
+        run: vendor/bin/phpunit --configuration phpunit.xml

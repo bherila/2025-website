@@ -19,7 +19,6 @@ class ClientPortalInvoiceViewTest extends TestCase
 
     public function test_invoice_page_hydrates_hourly_summary_fields()
     {
-        $this->withoutVite();
         $admin = User::factory()->create(['user_role' => 'admin']);
         $client = User::factory()->create(['user_role' => 'user']);
 
