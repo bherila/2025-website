@@ -78,6 +78,7 @@ jest.mock('../ActionsEditor', () => ({
 }))
 
 import { fetchWrapper } from '@/fetchWrapper'
+
 import { RuleEditorModal } from '../RuleEditorModal'
 
 const existingRule: FinRule = {

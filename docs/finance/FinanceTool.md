@@ -55,6 +55,7 @@ interface FinanceNavbarProps {
 | Payslips | `/finance/payslips` |
 | Tags | `/finance/tags` |
 | Accounts | `/finance/accounts` |
+| Config (⚙ icon) | `/finance/config` |
 
 ### Navigation Menu Component
 
@@ -700,3 +701,9 @@ When a statement is deleted:
 - Associated **Lots** are un-linked (their `statement_id` is set to NULL) but the data remains.
 - Associated **Transactions** are un-linked (their `statement_id` is set to NULL) but the data remains.
 - This ensures that deleting a statement doesn't accidentally wipe out your transaction history or position tracking.
+
+## Transaction Rules Engine
+
+The rules engine automates actions on transactions when they are created, imported, or when rules are explicitly run. Rules are user-owned and combine conditions (AND logic) with ordered actions.
+
+For full documentation, see [TransactionRulesEngine.md](TransactionRulesEngine.md).

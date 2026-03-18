@@ -89,13 +89,12 @@ describe('ActionsEditor', () => {
     const removeButtons = screen.getAllByTitle('Remove action')
     expect(removeButtons).toHaveLength(2)
 
-    fireEvent.click(removeButtons[0])
+    fireEvent.click(removeButtons[0]!)
 
     expect(onChange).toHaveBeenCalledTimes(1)
     const updated = onChange.mock.calls[0][0]
     expect(updated).toHaveLength(1)
     expect(updated[0].type).toBe('set_description')
-    // Order should be renumbered
     expect(updated[0].order).toBe(0)
   })
 
@@ -110,7 +109,7 @@ describe('ActionsEditor', () => {
 
     // Remove middle action
     const removeButtons = screen.getAllByTitle('Remove action')
-    fireEvent.click(removeButtons[1])
+    fireEvent.click(removeButtons[1]!)
 
     const updated = onChange.mock.calls[0][0]
     expect(updated).toHaveLength(2)
