@@ -53,5 +53,9 @@ class AppServiceProvider extends ServiceProvider
 
             return $company->users()->where('user_id', $user->id)->exists();
         });
+
+        // Register Spatie CSP middleware globally so CSP headers are added
+        $kernel = $this->app->make(\Illuminate\Contracts\Http\Kernel::class);
+        $kernel->pushMiddleware(\Spatie\Csp\AddCspHeaders::class);
     }
 }
