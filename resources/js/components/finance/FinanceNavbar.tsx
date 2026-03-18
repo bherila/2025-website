@@ -66,6 +66,8 @@ export interface FinanceNavbarProps {
   activeTab?: string
   /** Active right-side section */
   activeSection?: FinanceSection
+  /** Additional breadcrumb items to display */
+  breadcrumbItems?: React.ReactNode
   /** Additional content below nav bar */
   children?: React.ReactNode
 }

@@ -20,7 +20,7 @@ class ClientCompanyApiController extends Controller
     {
         Gate::authorize('Admin');
 
-        $companies = ClientCompany::with(['users', 'invoices.payments'])->get()->map(function ($company) {
+        $companies = ClientCompany::with(['users', 'invoices.payments', 'tasks'])->get()->map(function ($company) {
             $unpaidInvoices = $company->invoices
                 ->whereNotIn('status', ['paid', 'void'])
                 ->filter(function ($invoice) {
@@ -35,6 +35,25 @@ class ClientCompanyApiController extends Controller
                 ->where('is_billable', true)
                 ->whereNull('client_invoice_line_id')
                 ->sum('minutes_worked') / 60;
+
+            // Calculate task totals
+            $unbilledTasks = $company->tasks()
+                ->where('milestone_price', '>', 0)
+                ->whereNull('client_invoice_line_id')
+                ->get();
+
+            $company->uninvoiced_task_total = $unbilledTasks->sum('milestone_price');
+            $company->uninvoiced_task_complete_total = $unbilledTasks
+                ->whereNotNull('completed_at')
+                ->sum('milestone_price');
+            $company->uninvoiced_task_incomplete_total = $unbilledTasks
+                ->whereNull('completed_at')
+                ->sum('milestone_price');
+
+            // Calculate lifetime value (sum of all paid invoices)
+            $company->lifetime_value = $company->invoices
+                ->where('status', 'paid')
+                ->sum('invoice_total');
 
             return $company;
         });

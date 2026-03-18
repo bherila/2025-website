@@ -1,6 +1,7 @@
-import { ArrowLeft, ExternalLink, FileText,X } from 'lucide-react'
+import { ArrowLeft, ExternalLink, FileText, Plus, X } from 'lucide-react'
 import { useCallback,useEffect,useState } from 'react'
 
+import InvitePeopleModal from '@/components/client-management/InvitePeopleModal'
 import ClientPortalNav from '@/components/client-management/portal/ClientPortalNav'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -20,6 +21,7 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
   const [company, setCompany] = useState<ClientCompany | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [inviteModalOpen, setInviteModalOpen] = useState(false)
   const [alertInfo, setAlertInfo] = useState<{
     show: boolean
     message: string
@@ -370,7 +372,17 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
 
         <Card>
           <CardHeader>
-            <CardTitle>Associated Users</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>Associated Users</CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setInviteModalOpen(true)}
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                Add User
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {company.users.length === 0 ? (
@@ -391,9 +403,6 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
                 ))}
               </div>
             )}
-            <p className="text-sm text-muted-foreground mt-4">
-              Use "Invite People" from the main list page to add users to this company.
-            </p>
           </CardContent>
         </Card>
 
@@ -463,6 +472,14 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
           </CardContent>
         </Card>
       </div>
+
+      <InvitePeopleModal
+        open={inviteModalOpen}
+        onOpenChange={setInviteModalOpen}
+        companies={company ? [company] : []}
+        onSuccess={fetchCompany}
+        preselectedCompanyId={company?.id || null}
+      />
     </div>
     </>
   )

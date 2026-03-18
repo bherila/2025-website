@@ -32,6 +32,10 @@ export interface ClientCompany {
   agreements: Agreement[]
   total_balance_due?: number
   uninvoiced_hours?: number
+  uninvoiced_task_total?: number
+  uninvoiced_task_complete_total?: number
+  uninvoiced_task_incomplete_total?: number
+  lifetime_value?: number
   unpaid_invoices?: ClientInvoice[]
 }
 
