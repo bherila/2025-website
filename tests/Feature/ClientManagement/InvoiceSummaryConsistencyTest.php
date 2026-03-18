@@ -51,6 +51,7 @@ class InvoiceSummaryConsistencyTest extends TestCase
 
     public function test_invoice_navigation_ids_are_present_in_controller_response()
     {
+        $this->withoutVite();
         $admin = User::factory()->create(['user_role' => 'admin']);
         $company = ClientCompany::factory()->create(['slug' => 'test-co']);
 

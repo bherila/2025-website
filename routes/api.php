@@ -3,8 +3,11 @@
 use App\Http\Controllers\ClientManagement\ClientAgreementApiController;
 use App\Http\Controllers\ClientManagement\ClientCompanyApiController;
 use App\Http\Controllers\ClientManagement\ClientCompanyUserController;
+use App\Http\Controllers\ClientManagement\ClientExpenseApiController;
+use App\Http\Controllers\ClientManagement\ClientInvoiceApiController;
 use App\Http\Controllers\ClientManagement\ClientPortalAgreementApiController;
 use App\Http\Controllers\ClientManagement\ClientPortalApiController;
+use App\Http\Controllers\FileController;
 use App\Http\Controllers\FinanceTool\FinanceApiController;
 use App\Http\Controllers\FinanceTool\FinanceGeminiImportController;
 use App\Http\Controllers\FinanceTool\FinanceLotsController;
@@ -18,6 +21,13 @@ use App\Http\Controllers\FinanceTool\FinanceTransactionsApiController;
 use App\Http\Controllers\FinanceTool\FinanceTransactionsDedupeApiController;
 use App\Http\Controllers\FinanceTool\FinanceTransactionTaggingApiController;
 use App\Http\Controllers\FinanceTool\StatementController;
+use App\Http\Controllers\LicenseKeyController;
+use App\Http\Controllers\UserApiController;
+use App\Http\Controllers\UserManagementApiController;
+use App\Http\Controllers\UtilityBillTracker\UtilityAccountApiController;
+use App\Http\Controllers\UtilityBillTracker\UtilityBillApiController;
+use App\Http\Controllers\UtilityBillTracker\UtilityBillImportController;
+use App\Http\Controllers\UtilityBillTracker\UtilityBillLinkingController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['web', 'auth'])->get('/finance/accounts', [FinanceApiController::class, 'accounts']);
@@ -190,7 +200,6 @@ Route::middleware(['web', 'auth'])->post('/admin/users/{id}/password', [UserMana
 Route::middleware(['web', 'auth'])->post('/admin/users/{id}/email', [UserManagementApiController::class, 'updateEmail']);
 
 // File Management API routes
-use App\Http\Controllers\FileController;
 
 // Project files
 Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/projects/{projectSlug}/files', [FileController::class, 'listProjectFiles']);
@@ -228,15 +237,6 @@ Route::middleware(['web', 'auth'])->delete('/finance/{accountId}/files/{fileId}'
 Route::middleware(['web', 'auth'])->get('/finance/{accountId}/statements/{statementId}/pdf', [FileController::class, 'viewStatementPdf']);
 
 // Utility Bill Tracker API routes
-use App\Http\Controllers\ClientManagement\ClientExpenseApiController;
-use App\Http\Controllers\ClientManagement\ClientInvoiceApiController;
-use App\Http\Controllers\LicenseKeyController;
-use App\Http\Controllers\UserApiController;
-use App\Http\Controllers\UserManagementApiController;
-use App\Http\Controllers\UtilityBillTracker\UtilityAccountApiController;
-use App\Http\Controllers\UtilityBillTracker\UtilityBillApiController;
-use App\Http\Controllers\UtilityBillTracker\UtilityBillImportController;
-use App\Http\Controllers\UtilityBillTracker\UtilityBillLinkingController;
 
 Route::middleware(['web', 'auth'])->get('/utility-bill-tracker/accounts', [UtilityAccountApiController::class, 'index']);
 Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts', [UtilityAccountApiController::class, 'store']);
