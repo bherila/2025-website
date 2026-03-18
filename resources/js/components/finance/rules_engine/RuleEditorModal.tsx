@@ -28,6 +28,16 @@ interface RuleEditorModalProps {
   onSaved: () => void
 }
 
+interface PreviewTransaction {
+  t_id: number
+  t_date: string
+  t_amt: string
+  t_description: string | null
+  t_comment: string | null
+  t_symbol: string | null
+  opt_type: string | null
+}
+
 function emptyFormData(): RuleFormData {
   return {
     title: '',
@@ -43,6 +53,9 @@ export function RuleEditorModal({ open, onOpenChange, rule, onSaved }: RuleEdito
   const [runNow, setRunNow] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [previewing, setPreviewing] = useState(false)
+  const [previewData, setPreviewData] = useState<PreviewTransaction[] | null>(null)
+  const [previewCount, setPreviewCount] = useState<number>(0)
 
   const isEditing = rule !== null
 
@@ -61,6 +74,8 @@ export function RuleEditorModal({ open, onOpenChange, rule, onSaved }: RuleEdito
       }
       setRunNow(false)
       setError(null)
+      setPreviewData(null)
+      setPreviewCount(0)
     }
   }, [open, rule])
 
@@ -92,6 +107,28 @@ export function RuleEditorModal({ open, onOpenChange, rule, onSaved }: RuleEdito
       setSaving(false)
     }
   }, [form, isEditing, rule, runNow, onSaved, onOpenChange])
+
+  const handlePreview = useCallback(async () => {
+    setPreviewing(true)
+    setError(null)
+    setPreviewData(null)
+
+    try {
+      const payload: Record<string, unknown> = isEditing && rule ? { rule_id: rule.id } : { conditions: form.conditions }
+      const response = (await fetchWrapper.post('/api/finance/rules/preview-matches', payload)) as {
+        success: boolean
+        count: number
+        transactions: PreviewTransaction[]
+      }
+
+      setPreviewCount(response.count)
+      setPreviewData(response.transactions)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to preview matches.')
+    } finally {
+      setPreviewing(false)
+    }
+  }, [form.conditions, isEditing, rule])
 
   useEffect(() => {
     if (!open) return
@@ -180,9 +217,36 @@ export function RuleEditorModal({ open, onOpenChange, rule, onSaved }: RuleEdito
               <Label htmlFor="run-now">Run this rule now against existing transactions</Label>
             </div>
           )}
+
+          {previewData && (
+            <div className="rounded-md border p-4">
+              <div className="mb-2 font-semibold">
+                Preview: {previewCount} matching transaction{previewCount !== 1 ? 's' : ''}
+              </div>
+              <div className="max-h-64 space-y-1 overflow-y-auto text-sm">
+                {previewData.slice(0, 10).map((tx) => (
+                  <div key={tx.t_id} className="flex gap-2 border-b py-1">
+                    <span className="text-muted-foreground">{tx.t_date}</span>
+                    <span className="font-mono">${tx.t_amt}</span>
+                    <span className="flex-1 truncate">{tx.t_description}</span>
+                    {tx.t_symbol && <span className="text-xs text-muted-foreground">{tx.t_symbol}</span>}
+                  </div>
+                ))}
+                {previewCount > 10 && (
+                  <div className="pt-1 text-xs text-muted-foreground">
+                    ... and {previewCount - 10} more transaction{previewCount - 10 !== 1 ? 's' : ''}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         <DialogFooter>
+          <Button variant="outline" onClick={handlePreview} disabled={saving || previewing}>
+            {previewing && <Spinner size="small" className="mr-2" />}
+            {previewing ? 'Loading…' : 'Preview Matches'}
+          </Button>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>

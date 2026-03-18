@@ -21,9 +21,4 @@ class AccountConditionEvaluator implements QueryConditionEvaluatorInterface
         $accountId = (int) $condition->value;
         $query->where('t_account', $accountId);
     }
-
-    public function canApplyToQuery(FinRuleCondition $condition): bool
-    {
-        return true; // All account conditions can be applied at query level
-    }
 }

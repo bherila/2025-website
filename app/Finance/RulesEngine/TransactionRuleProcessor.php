@@ -161,10 +161,6 @@ class TransactionRuleProcessor
                 return false;
             }
 
-            if (! $evaluator->canApplyToQuery($condition)) {
-                return false;
-            }
-
             try {
                 $evaluator->applyToQuery($query, $condition);
             } catch (\Throwable $e) {
@@ -179,6 +175,38 @@ class TransactionRuleProcessor
         }
 
         return true; // All conditions applied successfully
+    }
+
+    /**
+     * Get transactions that match a rule's conditions without applying actions.
+     * Returns up to 1000 matching transactions for preview purposes.
+     *
+     * @param FinRule $rule The rule whose conditions to match against
+     * @param User $user The user whose transactions to search
+     * @return \Illuminate\Support\Collection<FinAccountLineItems> Matching transactions
+     */
+    public function getMatchingTransactions(FinRule $rule, User $user): \Illuminate\Support\Collection
+    {
+        $accountIds = FinAccounts::where('acct_owner', $user->id)
+            ->pluck('acct_id');
+
+        // Start with base query
+        $query = FinAccountLineItems::whereIn('t_account', $accountIds)
+            ->orderByDesc('t_id')
+            ->limit(1000);
+
+        // Attempt to apply rule conditions at query level for optimization
+        $canUseQueryOptimization = $this->tryApplyRuleConditionsToQuery($query, $rule);
+
+        // Fetch transactions (filtered if optimization succeeded)
+        $transactions = $query->get();
+
+        // If query optimization wasn't possible, filter in PHP
+        if (! $canUseQueryOptimization) {
+            return $transactions->filter(fn ($tx) => $this->allConditionsMatch($tx, $rule));
+        }
+
+        return $transactions;
     }
 
     /**

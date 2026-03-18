@@ -43,9 +43,4 @@ class DescriptionContainsConditionEvaluator implements QueryConditionEvaluatorIn
             }
         });
     }
-
-    public function canApplyToQuery(FinRuleCondition $condition): bool
-    {
-        return true; // All description contains conditions can be applied at query level
-    }
 }

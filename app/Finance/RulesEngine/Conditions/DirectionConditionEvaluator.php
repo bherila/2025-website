@@ -29,9 +29,4 @@ class DirectionConditionEvaluator implements QueryConditionEvaluatorInterface
             default => null,
         };
     }
-
-    public function canApplyToQuery(FinRuleCondition $condition): bool
-    {
-        return true; // All direction conditions can be applied at query level
-    }
 }

@@ -52,6 +52,7 @@ Route::middleware(['web', 'auth'])->put('/finance/rules/{id}', [FinanceRulesApiC
 Route::middleware(['web', 'auth'])->delete('/finance/rules/{id}', [FinanceRulesApiController::class, 'destroy']);
 Route::middleware(['web', 'auth'])->post('/finance/rules/reorder', [FinanceRulesApiController::class, 'reorder']);
 Route::middleware(['web', 'auth'])->post('/finance/rules/{id}/run', [FinanceRulesApiController::class, 'runNow']);
+Route::middleware(['web', 'auth'])->post('/finance/rules/preview-matches', [FinanceRulesApiController::class, 'previewMatches']);
 
 Route::middleware(['web', 'auth'])->get('/finance/schedule-c', [FinanceScheduleCController::class, 'getSummary']);
 Route::middleware(['web', 'auth'])->post('/finance/transactions/{transaction_id}/update', [FinanceTransactionsApiController::class, 'updateTransaction']);

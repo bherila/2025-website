@@ -34,9 +34,4 @@ class OptionTypeConditionEvaluator implements QueryConditionEvaluatorInterface
             default => null,
         };
     }
-
-    public function canApplyToQuery(FinRuleCondition $condition): bool
-    {
-        return true; // All option type conditions can be applied at query level
-    }
 }

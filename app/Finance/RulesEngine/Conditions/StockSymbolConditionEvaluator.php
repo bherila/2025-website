@@ -31,9 +31,4 @@ class StockSymbolConditionEvaluator implements QueryConditionEvaluatorInterface
             default => null,
         };
     }
-
-    public function canApplyToQuery(FinRuleCondition $condition): bool
-    {
-        return true; // All stock symbol conditions can be applied at query level
-    }
 }

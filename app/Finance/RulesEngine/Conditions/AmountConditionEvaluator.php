@@ -51,9 +51,4 @@ class AmountConditionEvaluator implements QueryConditionEvaluatorInterface
             }
         });
     }
-
-    public function canApplyToQuery(FinRuleCondition $condition): bool
-    {
-        return true; // All amount conditions can be applied at query level
-    }
 }

@@ -101,14 +101,24 @@ Actions are executed in their defined order. They mutate the in-memory transacti
 
 As of the latest version, the rules engine supports **database-level filtering** to significantly improve performance:
 
-- All condition evaluators implement `QueryConditionEvaluatorInterface`
+- **All condition evaluators support query-level optimization** via `QueryConditionEvaluatorInterface`
 - When running a rule via "Run Now", conditions are applied as SQL WHERE clauses
 - Only matching transactions are fetched from the database
-- Falls back to PHP evaluation if any condition can't be applied at query level
-- This reduces memory usage and improves speed, especially for large transaction sets
+- Significantly reduces memory usage and improves speed, especially for large transaction sets
 
-**Optimization Details:**
-- `amount`: Uses `ABS(t_amt)` with comparison operators
+**When Query Optimization Applies:**
+- **Always for known condition types**: All 6 built-in condition evaluators support query-level filtering
+- Only falls back to PHP evaluation if:
+  - Condition type is not registered in the registry (unknown/custom condition)
+  - An exception is thrown during query building (logged with warning)
+
+**SQL Compatibility:**
+- All raw queries are compatible with both **MySQL** and **SQLite**
+- Uses standard SQL functions (`ABS()`, `LIKE`, `IN`)
+- Parameter binding prevents SQL injection
+
+**Optimization Implementation by Condition Type:**
+- `amount`: Uses `ABS(t_amt)` with comparison operators (`>`, `<`, `>=`, `<=`)
 - `direction`: Simple `t_amt > 0` or `t_amt < 0` checks
 - `account_id`: Direct `t_account = ?` equality
 - `stock_symbol_presence`: `IS NULL` / `IS NOT NULL` with empty string checks
@@ -129,6 +139,35 @@ The "Run Rule Now" feature processes the rule against the latest **1,000 transac
 | `DELETE` | `/api/finance/rules/{id}` | Soft-delete a rule |
 | `POST` | `/api/finance/rules/reorder` | Swap order of two adjacent rules |
 | `POST` | `/api/finance/rules/{id}/run` | Run a rule against latest 1,000 transactions |
+| `POST` | `/api/finance/rules/preview-matches` | Preview matching transactions without applying actions (see below) |
+
+### Preview Matches Endpoint
+
+The `/api/finance/rules/preview-matches` endpoint allows previewing which transactions would match a rule's conditions without applying any actions. This is useful for testing rules before saving or running them.
+
+**Request body options:**
+- `rule_id`: Integer (optional) - Preview matches for an existing saved rule
+- `conditions`: Array (optional) - Preview matches for unsaved rule conditions
+
+**Response:**
+```json
+{
+  "success": true,
+  "count": 42,
+  "transactions": [
+    {
+      "t_id": 123,
+      "t_date": "2025-01-15",
+      "t_amt": "100.00",
+      "t_description": "Amazon purchase",
+      "t_comment": null,
+      "t_symbol": null,
+      "opt_type": null
+    }
+    // ... up to 1000 transactions
+  ]
+}
+```
 
 ## UI
 
@@ -151,8 +190,9 @@ The rules management UI is accessible from the **Config** page (`/finance/config
 - **Empty state**: "No rules yet. Create your first rule to automate transaction processing."
 - **Ordering**: Up/down arrows swap adjacent rules (no rule re-execution on reorder)
 - **Run Now**: Optional checkbox in editor with confirmation prompt
+- **Preview Matches**: Button in rule editor to preview matching transactions before saving
 - **Keyboard**: Ctrl+Enter submits the editor dialog
-- **Loading state**: Save button shows spinner during save operation
+- **Loading state**: Save and Preview buttons show spinner during operations
 - **Tag selection**: Visual dropdown with inline color badges for better UX
 - **Find & Replace**: Search and Replace fields stacked on separate lines for clarity
 - **Visual polish**: Reduced border contrast (border-border/40) on condition/action cards
