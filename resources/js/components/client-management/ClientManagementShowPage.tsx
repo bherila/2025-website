@@ -1,8 +1,8 @@
 import { ArrowLeft, ExternalLink, FileText, Plus, X } from 'lucide-react'
 import { useCallback,useEffect,useState } from 'react'
 
-import ClientPortalNav from '@/components/client-management/portal/ClientPortalNav'
 import InvitePeopleModal from '@/components/client-management/InvitePeopleModal'
+import ClientPortalNav from '@/components/client-management/portal/ClientPortalNav'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
