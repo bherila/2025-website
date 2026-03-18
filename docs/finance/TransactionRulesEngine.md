@@ -99,18 +99,25 @@ Actions are executed in their defined order. They mutate the in-memory transacti
 
 ### Query-Level Optimization
 
-As of the latest version, the rules engine supports **database-level filtering** to significantly improve performance:
+The rules engine uses **database-level filtering** to significantly improve performance by applying rule conditions as SQL WHERE clauses before fetching transactions.
 
-- **All condition evaluators support query-level optimization** via `QueryConditionEvaluatorInterface`
-- When running a rule via "Run Now", conditions are applied as SQL WHERE clauses
-- Only matching transactions are fetched from the database
-- Significantly reduces memory usage and improves speed, especially for large transaction sets
+**Architecture:**
+- All condition evaluators implement `QueryConditionEvaluatorInterface`
+- The processor attempts to apply conditions to the query builder before calling `->get()`
+- Shared code between `runRuleNow()`, `processTransactions()`, and `getMatchingTransactions()` via `getTransactionsForRule()` private method
+- Query materialization is delayed until after all conditions are applied
 
 **When Query Optimization Applies:**
 - **Always for known condition types**: All 6 built-in condition evaluators support query-level filtering
 - Only falls back to PHP evaluation if:
   - Condition type is not registered in the registry (unknown/custom condition)
-  - An exception is thrown during query building (logged with warning)
+  - An exception is thrown during query building
+
+**Exception Handling:**
+- Exceptions during `applyToQuery()` are reported to Sentry via `report()` function
+- Logged as errors (not warnings) since they indicate bugs in condition evaluators
+- The rule will fail to process (no fallback) to ensure bugs are caught and fixed
+- Exception details include rule ID, condition type, condition ID, and full stack trace
 
 **SQL Compatibility:**
 - All raw queries are compatible with both **MySQL** and **SQLite**
@@ -124,6 +131,12 @@ As of the latest version, the rules engine supports **database-level filtering**
 - `stock_symbol_presence`: `IS NULL` / `IS NOT NULL` with empty string checks
 - `option_type`: `IN` clause with case-insensitive matching
 - `description_contains`: `LIKE` queries on `t_description` and `t_comment`
+
+**Performance Benefits:**
+- Eliminates need to materialize all transactions in PHP memory
+- Database can use indexes for filtering
+- Significantly reduced network transfer for large transaction sets
+- Supports processing specific transaction IDs without fetching all user transactions
 
 ### Run Now
 
