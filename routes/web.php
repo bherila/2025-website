@@ -46,6 +46,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/finance/tags', function () {
         return view('finance.tags');
     });
+    Route::get('/finance/config', function () {
+        return view('finance.config');
+    });
 
     // New account-prefixed routes
     Route::get('/finance/account/all/transactions', [FinanceAccountsController::class, 'showAllTransactions']);

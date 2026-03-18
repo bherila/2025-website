@@ -14,6 +14,7 @@ use App\Http\Controllers\FinanceTool\FinanceRsuController;
 use App\Http\Controllers\FinanceTool\FinanceScheduleCController;
 use App\Http\Controllers\FinanceTool\FinanceTransactionLinkingApiController;
 use App\Http\Controllers\FinanceTool\FinanceTransactionsApiController;
+use App\Http\Controllers\FinanceTool\FinanceRulesApiController;
 use App\Http\Controllers\FinanceTool\FinanceTransactionsDedupeApiController;
 use App\Http\Controllers\FinanceTool\FinanceTransactionTaggingApiController;
 use App\Http\Controllers\FinanceTool\StatementController;
@@ -43,6 +44,15 @@ Route::middleware(['web', 'auth'])->post('/finance/tags/remove', [FinanceTransac
 Route::middleware(['web', 'auth'])->post('/finance/tags', [FinanceTransactionTaggingApiController::class, 'createTag']);
 Route::middleware(['web', 'auth'])->put('/finance/tags/{tag_id}', [FinanceTransactionTaggingApiController::class, 'updateTag']);
 Route::middleware(['web', 'auth'])->delete('/finance/tags/{tag_id}', [FinanceTransactionTaggingApiController::class, 'deleteTag']);
+
+// Finance Rules Engine
+Route::middleware(['web', 'auth'])->get('/finance/rules', [FinanceRulesApiController::class, 'index']);
+Route::middleware(['web', 'auth'])->post('/finance/rules', [FinanceRulesApiController::class, 'store']);
+Route::middleware(['web', 'auth'])->put('/finance/rules/{id}', [FinanceRulesApiController::class, 'update']);
+Route::middleware(['web', 'auth'])->delete('/finance/rules/{id}', [FinanceRulesApiController::class, 'destroy']);
+Route::middleware(['web', 'auth'])->post('/finance/rules/reorder', [FinanceRulesApiController::class, 'reorder']);
+Route::middleware(['web', 'auth'])->post('/finance/rules/{id}/run', [FinanceRulesApiController::class, 'runNow']);
+
 Route::middleware(['web', 'auth'])->get('/finance/schedule-c', [FinanceScheduleCController::class, 'getSummary']);
 Route::middleware(['web', 'auth'])->post('/finance/transactions/{transaction_id}/update', [FinanceTransactionsApiController::class, 'updateTransaction']);
 Route::middleware(['web', 'auth'])->get('/finance/transactions/{transaction_id}/links', [FinanceTransactionLinkingApiController::class, 'getTransactionLinks']);
