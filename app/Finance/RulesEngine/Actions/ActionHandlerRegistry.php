@@ -18,7 +18,7 @@ class ActionHandlerRegistry
         $this->register('set_description', new SetDescriptionActionHandler);
         $this->register('set_memo', new SetMemoActionHandler);
         $this->register('negate_amount', new NegateAmountActionHandler);
-        $this->register('stop_processing', new StopProcessingActionHandler);
+        $this->register('stop_processing_if_match', new StopProcessingActionHandler);
     }
 
     public function register(string $type, RuleActionHandlerInterface $handler): void

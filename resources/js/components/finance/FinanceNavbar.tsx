@@ -1,6 +1,6 @@
 'use client'
 
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Settings } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -36,6 +36,7 @@ export type FinanceSection =
   | 'all-transactions'
   | 'schedule-c'
   | 'tags'
+  | 'config'
 
 /** Right-side nav items */
 const RIGHT_SECTIONS: { value: FinanceSection; label: string; href: string }[] = [
@@ -266,6 +267,27 @@ export default function FinanceNavbar({
                   </NavigationMenuLink>
                 </NavigationMenuItem>
               ))}
+              <NavigationMenuItem>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <NavigationMenuLink
+                      href="/finance/config"
+                      aria-current={activeSection === 'config' ? 'page' : undefined}
+                      aria-label="Config"
+                      className={cn(
+                        navigationMenuTriggerStyle(),
+                        'h-8 w-8 p-0',
+                        activeSection === 'config'
+                          ? 'bg-accent text-accent-foreground'
+                          : 'text-muted-foreground',
+                      )}
+                    >
+                      <Settings className="h-4 w-4" />
+                    </NavigationMenuLink>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Config</TooltipContent>
+                </Tooltip>
+              </NavigationMenuItem>
             </NavigationMenuList>
           </NavigationMenu>
         </div>

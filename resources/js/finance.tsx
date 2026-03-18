@@ -13,6 +13,7 @@ import ScheduleCPage from '@/components/finance/ScheduleCPage'
 import FinanceAccountStatementsPage from '@/components/finance/statements/FinanceAccountStatementsPage'
 import SummaryClient from '@/components/finance/SummaryClient'
 import TransactionsPage from '@/components/finance/TransactionsPage'
+import RulesList from '@/components/finance/rules_engine/RulesList'
 
 document.addEventListener('DOMContentLoaded', () => {
   // Standalone FinanceNavbar
@@ -132,5 +133,11 @@ document.addEventListener('DOMContentLoaded', () => {
   if (scheduleCDiv) {
     const root = createRoot(scheduleCDiv)
     root.render(<ScheduleCPage />)
+  }
+
+  const configPageDiv = document.getElementById('FinanceConfigPage')
+  if (configPageDiv) {
+    const root = createRoot(configPageDiv)
+    root.render(<RulesList />)
   }
 })
