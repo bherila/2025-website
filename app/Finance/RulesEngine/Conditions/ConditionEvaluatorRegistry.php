@@ -12,9 +12,9 @@ class ConditionEvaluatorRegistry
     public function __construct()
     {
         $this->register('amount', new AmountConditionEvaluator);
-        $this->register('stock_symbol', new StockSymbolConditionEvaluator);
+        $this->register('stock_symbol_presence', new StockSymbolConditionEvaluator);
         $this->register('option_type', new OptionTypeConditionEvaluator);
-        $this->register('account', new AccountConditionEvaluator);
+        $this->register('account_id', new AccountConditionEvaluator);
         $this->register('direction', new DirectionConditionEvaluator);
         $this->register('description_contains', new DescriptionContainsConditionEvaluator);
     }

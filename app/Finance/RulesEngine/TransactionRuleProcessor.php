@@ -140,7 +140,7 @@ class TransactionRuleProcessor
                     }
                 }
 
-                $processingTime = microtime(true) - $startTime;
+                $processingTimeMicros = (int) ((microtime(true) - $startTime) * 1_000_000);
 
                 FinRuleLog::create([
                     'user_id' => $user->id,
@@ -148,7 +148,7 @@ class TransactionRuleProcessor
                     'transaction_id' => $tx->t_id,
                     'is_manual_run' => $isManualRun,
                     'action_summary' => implode('; ', $actionSummaries),
-                    'processing_time_mtime' => $processingTime,
+                    'processing_time_mtime' => $processingTimeMicros,
                 ]);
 
                 if ($stopProcessing || $rule->stop_processing_if_match) {
