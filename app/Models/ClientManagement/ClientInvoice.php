@@ -4,6 +4,7 @@ namespace App\Models\ClientManagement;
 
 use App\Services\ClientManagement\DataTransferObjects\InvoiceHoursBreakdown;
 use App\Traits\SerializesDatesAsLocal;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -147,7 +148,7 @@ class ClientInvoice extends Model
     /**
      * Mark the invoice as paid.
      *
-     * @param  \Carbon\Carbon|string|null  $paidDate  The date the invoice was paid. Defaults to now().
+     * @param  Carbon|string|null  $paidDate  The date the invoice was paid. Defaults to now().
      */
     public function markPaid($paidDate = null): void
     {

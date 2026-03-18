@@ -5,6 +5,7 @@ namespace Tests\Feature\ClientManagement;
 use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientExpense;
+use App\Models\ClientManagement\ClientInvoice;
 use App\Models\ClientManagement\ClientProject;
 use App\Models\ClientManagement\ClientTimeEntry;
 use App\Models\User;
@@ -1352,7 +1353,7 @@ class ClientInvoiceTest extends TestCase
         // Verify no invoice is generated for August 2025 (two months from now)
         $twoMonthsFromNow = Carbon::parse('2025-08-01');
 
-        $futureInvoice = \App\Models\ClientManagement\ClientInvoice::where('client_company_id', $this->company->id)
+        $futureInvoice = ClientInvoice::where('client_company_id', $this->company->id)
             ->where('period_start', $twoMonthsFromNow->toDateString())
             ->first();
 
@@ -1360,7 +1361,7 @@ class ClientInvoiceTest extends TestCase
 
         // Also verify July 2025 (next month) is also not generated (only current month is the upcoming period)
         $nextMonth = Carbon::parse('2025-07-01');
-        $nextMonthInvoice = \App\Models\ClientManagement\ClientInvoice::where('client_company_id', $this->company->id)
+        $nextMonthInvoice = ClientInvoice::where('client_company_id', $this->company->id)
             ->where('period_start', $nextMonth->toDateString())
             ->first();
         $this->assertNull($nextMonthInvoice, 'Should not generate invoices for next month');

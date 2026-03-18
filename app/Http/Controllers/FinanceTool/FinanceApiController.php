@@ -7,6 +7,7 @@ use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class FinanceApiController extends Controller
@@ -265,8 +266,8 @@ class FinanceApiController extends Controller
 
             foreach ($files as $file) {
                 if ($file->file_hash) {
-                    \Illuminate\Support\Facades\Cache::forget("gemini_import:transactions:{$file->file_hash}");
-                    \Illuminate\Support\Facades\Cache::forget("gemini_import:statement:{$file->file_hash}");
+                    Cache::forget("gemini_import:transactions:{$file->file_hash}");
+                    Cache::forget("gemini_import:statement:{$file->file_hash}");
                 }
             }
 

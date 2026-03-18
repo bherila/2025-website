@@ -1,8 +1,11 @@
 <?php
 
+use App\Csp\CloudflareCspPolicy;
+use Spatie\Csp\Nonce\RandomString;
+
 return [
     'presets' => [
-        App\Csp\CloudflareCspPolicy::class,
+        CloudflareCspPolicy::class,
     ],
 
     'directives' => [],
@@ -17,7 +20,7 @@ return [
 
     'enabled_while_hot_reloading' => env('CSP_ENABLED_WHILE_HOT_RELOADING', false),
 
-    'nonce_generator' => Spatie\Csp\Nonce\RandomString::class,
+    'nonce_generator' => RandomString::class,
 
     'nonce_enabled' => env('CSP_NONCE_ENABLED', true),
 ];

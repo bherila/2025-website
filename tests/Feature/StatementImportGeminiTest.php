@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\FinanceTool\FinanceGeminiImportController;
 use App\Models\FinanceTool\FinStatementDetail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -380,7 +381,7 @@ class StatementImportGeminiTest extends TestCase
 
     public function test_prompt_is_well_formed(): void
     {
-        $controller = new \App\Http\Controllers\FinanceTool\FinanceGeminiImportController;
+        $controller = new FinanceGeminiImportController;
         $prompt = $controller->getStatementPrompt();
 
         $this->assertStringContainsString('JSON', $prompt);

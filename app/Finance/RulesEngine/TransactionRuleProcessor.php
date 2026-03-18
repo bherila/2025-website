@@ -11,9 +11,11 @@ use App\Finance\RulesEngine\DTOs\TransactionProcessingResult;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinRule;
+use App\Models\FinanceTool\FinRuleAction;
 use App\Models\FinanceTool\FinRuleLog;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 
 class TransactionRuleProcessor
@@ -36,35 +38,29 @@ class TransactionRuleProcessor
 
     /**
      * Run all active rules against multiple transactions.
+     * All rule matching is performed at the database level for optimal performance.
      *
-     * @param array<FinAccountLineItems>|array<int>|null $transactionsOrIds Optional array of transaction models, IDs, or null for all transactions.
-     * @param User $user The user whose rules to apply
+     * @param  array<int>|null  $transactionIds  Optional array of transaction IDs to process, or null for all user transactions.
+     * @param  User  $user  The user whose rules to apply
      * @return RuleRunSummary Summary of the rule processing
      */
-    public function processTransactions($transactionsOrIds, User $user): RuleRunSummary
+    public function processTransactions(?array $transactionIds, User $user): RuleRunSummary
     {
         $rules = $this->loader->loadActiveRules($user);
 
-        // Handle different input types
-        if (is_array($transactionsOrIds) && count($transactionsOrIds) > 0 && $transactionsOrIds[0] instanceof FinAccountLineItems) {
-            // Array of transaction models - process directly without query optimization
-            $transactions = $transactionsOrIds;
-        } else {
-            // Transaction IDs or null - use query optimization
-            $accountIds = FinAccounts::where('acct_owner', $user->id)->pluck('acct_id');
+        // Build query for user's transactions
+        $accountIds = FinAccounts::where('acct_owner', $user->id)->pluck('acct_id');
+        $query = FinAccountLineItems::whereIn('t_account', $accountIds);
 
-            $query = FinAccountLineItems::whereIn('t_account', $accountIds);
-
-            // Add transaction ID filter if provided
-            if (is_array($transactionsOrIds) && count($transactionsOrIds) > 0) {
-                $query->whereIn('t_id', $transactionsOrIds);
-            }
-
-            // Try to apply rule conditions at query level for each rule
-            // Since we have multiple rules, we fetch all transactions first
-            // Future optimization: Process rules one at a time with query optimization
-            $transactions = $query->get();
+        // Add transaction ID filter if provided
+        if ($transactionIds !== null && count($transactionIds) > 0) {
+            $query->whereIn('t_id', $transactionIds);
         }
+
+        // Fetch transactions - note: we fetch all transactions first since we have
+        // multiple rules. Future optimization: process rules one at a time with
+        // query optimization per rule.
+        $transactions = $query->get();
 
         // Process each transaction
         $results = [];
@@ -124,12 +120,12 @@ class TransactionRuleProcessor
      * Get transactions that match a rule's conditions with query-level optimization.
      * This method is shared between runRuleNow() and getMatchingTransactions().
      *
-     * @param FinRule $rule The rule whose conditions to apply
-     * @param User $user The user whose transactions to search
-     * @param int|null $limit Maximum number of transactions to return
-     * @return \Illuminate\Support\Collection<FinAccountLineItems> Matching transactions
+     * @param  FinRule  $rule  The rule whose conditions to apply
+     * @param  User  $user  The user whose transactions to search
+     * @param  int|null  $limit  Maximum number of transactions to return
+     * @return Collection<FinAccountLineItems> Matching transactions
      */
-    private function getTransactionsForRule(FinRule $rule, User $user, ?int $limit = null): \Illuminate\Support\Collection
+    private function getTransactionsForRule(FinRule $rule, User $user, ?int $limit = null): Collection
     {
         $accountIds = FinAccounts::where('acct_owner', $user->id)
             ->pluck('acct_id');
@@ -160,8 +156,8 @@ class TransactionRuleProcessor
      * Try to apply rule conditions to query builder for database-level filtering.
      * Returns true if all conditions were successfully applied, false otherwise.
      *
-     * @param Builder $query The query builder to modify
-     * @param FinRule $rule The rule whose conditions to apply
+     * @param  Builder  $query  The query builder to modify
+     * @param  FinRule  $rule  The rule whose conditions to apply
      * @return bool True if query optimization was successful
      */
     private function tryApplyRuleConditionsToQuery(Builder $query, FinRule $rule): bool
@@ -209,11 +205,11 @@ class TransactionRuleProcessor
      * Get transactions that match a rule's conditions without applying actions.
      * Returns up to 1000 matching transactions for preview purposes.
      *
-     * @param FinRule $rule The rule whose conditions to match against
-     * @param User $user The user whose transactions to search
-     * @return \Illuminate\Support\Collection<FinAccountLineItems> Matching transactions
+     * @param  FinRule  $rule  The rule whose conditions to match against
+     * @param  User  $user  The user whose transactions to search
+     * @return Collection<FinAccountLineItems> Matching transactions
      */
-    public function getMatchingTransactions(FinRule $rule, User $user): \Illuminate\Support\Collection
+    public function getMatchingTransactions(FinRule $rule, User $user): Collection
     {
         return $this->getTransactionsForRule($rule, $user, limit: 1000);
     }
@@ -331,7 +327,7 @@ class TransactionRuleProcessor
      */
     private function executeAction(
         FinAccountLineItems $tx,
-        \App\Models\FinanceTool\FinRuleAction $action,
+        FinRuleAction $action,
         User $user,
     ): ActionResult {
         if (! $this->actionRegistry->has($action->type)) {

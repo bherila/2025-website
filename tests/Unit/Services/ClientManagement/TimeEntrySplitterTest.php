@@ -2,6 +2,8 @@
 
 namespace Tests\Unit\Services\ClientManagement;
 
+use App\Models\ClientManagement\ClientCompany;
+use App\Models\ClientManagement\ClientProject;
 use App\Models\ClientManagement\ClientTimeEntry;
 use App\Services\ClientManagement\TimeEntrySplitter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -166,7 +168,7 @@ class TimeEntrySplitterTest extends TestCase
     {
         $user = $this->createUser();
         $company = $this->createClientCompany();
-        $project = \App\Models\ClientManagement\ClientProject::factory()->create([
+        $project = ClientProject::factory()->create([
             'client_company_id' => $company->id,
         ]);
 
@@ -200,7 +202,7 @@ class TimeEntrySplitterTest extends TestCase
 
         $user = $this->createUser();
         $company = $this->createClientCompany();
-        $project = \App\Models\ClientManagement\ClientProject::factory()->create([
+        $project = ClientProject::factory()->create([
             'client_company_id' => $company->id,
         ]);
 
@@ -225,7 +227,7 @@ class TimeEntrySplitterTest extends TestCase
 
         $user = $this->createUser();
         $company = $this->createClientCompany();
-        $project = \App\Models\ClientManagement\ClientProject::factory()->create([
+        $project = ClientProject::factory()->create([
             'client_company_id' => $company->id,
         ]);
 
@@ -269,7 +271,7 @@ class TimeEntrySplitterTest extends TestCase
         }
 
         if (! isset($this->testProject)) {
-            $this->testProject = \App\Models\ClientManagement\ClientProject::factory()->create([
+            $this->testProject = ClientProject::factory()->create([
                 'client_company_id' => $this->testCompany->id,
             ]);
         }
@@ -288,7 +290,7 @@ class TimeEntrySplitterTest extends TestCase
 
     protected function createClientCompany()
     {
-        return \App\Models\ClientManagement\ClientCompany::factory()->create();
+        return ClientCompany::factory()->create();
     }
 
     private $testCompany;

@@ -7,8 +7,8 @@ use App\Finance\RulesEngine\Conditions\ConditionEvaluatorRegistry;
 use App\Finance\RulesEngine\TransactionRuleLoader;
 use App\Finance\RulesEngine\TransactionRuleProcessor;
 use App\Models\FinanceTool\FinAccountLineItems;
-use App\Models\FinanceTool\FinAccountTag;
 use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\FinAccountTag;
 use App\Models\FinanceTool\FinRule;
 use App\Models\FinanceTool\FinRuleAction;
 use App\Models\FinanceTool\FinRuleCondition;
@@ -379,7 +379,7 @@ class TransactionRuleProcessorTest extends TestCase
             'order' => 1,
         ]);
 
-        $summary = $this->processor->processTransactions([$tx1, $tx2], $this->user);
+        $summary = $this->processor->processTransactions([$tx1->t_id, $tx2->t_id], $this->user);
 
         $this->assertEquals(2, $summary->transactionsProcessed);
         $this->assertEquals(1, $summary->rulesMatched);

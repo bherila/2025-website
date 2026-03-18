@@ -5,9 +5,11 @@ namespace App\Providers;
 use App\Listeners\UpdateLastLoginDate;
 use App\Models\ClientManagement\ClientCompany;
 use Illuminate\Auth\Events\Login;
+use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
+use Spatie\Csp\AddCspHeaders;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -55,7 +57,7 @@ class AppServiceProvider extends ServiceProvider
         });
 
         // Register Spatie CSP middleware globally so CSP headers are added
-        $kernel = $this->app->make(\Illuminate\Contracts\Http\Kernel::class);
-        $kernel->pushMiddleware(\Spatie\Csp\AddCspHeaders::class);
+        $kernel = $this->app->make(Kernel::class);
+        $kernel->pushMiddleware(AddCspHeaders::class);
     }
 }

@@ -6,6 +6,7 @@ use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientInvoice;
 use App\Models\ClientManagement\ClientInvoiceLine;
+use App\Models\ClientManagement\ClientProject;
 use App\Models\ClientManagement\ClientTimeEntry;
 use App\Models\User;
 use Carbon\Carbon;
@@ -63,7 +64,7 @@ class ClientPortalInvoiceViewTest extends TestCase
         ]);
 
         // Create a project (project_id is not nullable in schema)
-        $project = \App\Models\ClientManagement\ClientProject::factory()->create([
+        $project = ClientProject::factory()->create([
             'client_company_id' => $company->id,
         ]);
 

@@ -26,8 +26,9 @@ interface QueryConditionEvaluatorInterface extends RuleConditionEvaluatorInterfa
      *
      * All SQL queries must be compatible with both MySQL and SQLite.
      *
-     * @param Builder $query The Eloquent query builder to modify
-     * @param FinRuleCondition $condition The condition to apply
+     * @param  Builder  $query  The Eloquent query builder to modify
+     * @param  FinRuleCondition  $condition  The condition to apply
+     *
      * @throws \Exception If the condition cannot be applied
      */
     public function applyToQuery(Builder $query, FinRuleCondition $condition): void;

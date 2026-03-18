@@ -2,6 +2,10 @@
 
 namespace Tests\Unit\Services\ClientManagement;
 
+use App\Models\ClientManagement\ClientCompany;
+use App\Models\ClientManagement\ClientInvoice;
+use App\Models\ClientManagement\ClientInvoiceLine;
+use App\Models\ClientManagement\ClientProject;
 use App\Models\ClientManagement\ClientTimeEntry;
 use App\Services\ClientManagement\AllocationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -78,7 +82,7 @@ class AllocationServiceTest extends TestCase
         $project = $this->createClientProject($company->id);
 
         // Create an invoice with a line for linking
-        $invoice = \App\Models\ClientManagement\ClientInvoice::create([
+        $invoice = ClientInvoice::create([
             'client_company_id' => $company->id,
             'invoice_number' => 'TEST-001',
             'period_start' => '2024-01-01',
@@ -86,7 +90,7 @@ class AllocationServiceTest extends TestCase
             'total' => 1000.00,
             'status' => 'draft',
         ]);
-        $invoiceLine = \App\Models\ClientManagement\ClientInvoiceLine::create([
+        $invoiceLine = ClientInvoiceLine::create([
             'client_invoice_id' => $invoice->client_invoice_id,
             'line_type' => 'prior_month_retainer',
             'description' => 'Test line',
@@ -399,12 +403,12 @@ class AllocationServiceTest extends TestCase
 
     protected function createClientCompany()
     {
-        return \App\Models\ClientManagement\ClientCompany::factory()->create();
+        return ClientCompany::factory()->create();
     }
 
     protected function createClientProject(int $companyId)
     {
-        return \App\Models\ClientManagement\ClientProject::factory()->create([
+        return ClientProject::factory()->create([
             'client_company_id' => $companyId,
         ]);
     }

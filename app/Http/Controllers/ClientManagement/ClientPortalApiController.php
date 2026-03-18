@@ -10,10 +10,12 @@ use App\Models\ClientManagement\ClientTask;
 use App\Models\ClientManagement\ClientTimeEntry;
 use App\Models\User;
 use App\Services\ClientManagement\ClientInvoicingService;
+use App\Services\ClientManagement\DataTransferObjects\MonthSummary;
 use App\Services\ClientManagement\RolloverCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 
 class ClientPortalApiController extends Controller
 {
@@ -384,7 +386,7 @@ class ClientPortalApiController extends Controller
 
         // Calculate balances using RolloverCalculator
         $calculator = new RolloverCalculator;
-        /** @var \App\Services\ClientManagement\DataTransferObjects\MonthSummary[] $balances */
+        /** @var MonthSummary[] $balances */
         $balances = $calculator->calculateMultipleMonths(
             $months,
             (int) $agreement->rollover_months
@@ -621,7 +623,7 @@ class ClientPortalApiController extends Controller
                     $invoice->period_end
                 );
             } catch (\Exception $e) {
-                \Illuminate\Support\Facades\Log::warning('Failed to regenerate draft invoice on time entry change', [
+                Log::warning('Failed to regenerate draft invoice on time entry change', [
                     'invoice_id' => $invoice->client_invoice_id,
                     'error' => $e->getMessage(),
                 ]);

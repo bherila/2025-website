@@ -1,12 +1,15 @@
 <?php
 
+use App\Http\Controllers\BingoController;
 use App\Http\Controllers\ClientManagement\ClientAgreementController;
 use App\Http\Controllers\ClientManagement\ClientCompanyController;
 use App\Http\Controllers\ClientManagement\ClientPortalAgreementController;
 use App\Http\Controllers\ClientManagement\ClientPortalController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FinanceTool\FinanceAccountsController;
 use App\Http\Controllers\FinanceTool\FinancePayslipController;
 use App\Http\Controllers\LoginController;
+use App\Http\Controllers\RecipeController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\UtilityBillTracker\UtilityAccountController;
 use Illuminate\Support\Facades\Route;
@@ -23,7 +26,7 @@ Route::post('/login', [LoginController::class, 'login']);
 Route::post('/login/dev', [LoginController::class, 'devLogin'])->name('login.dev');
 
 Route::middleware('auth')->group(function () {
-    Route::get('/dashboard', [App\Http\Controllers\DashboardController::class, 'index']);
+    Route::get('/dashboard', [DashboardController::class, 'index']);
 
     Route::get('/finance/rsu', function () {
         return view('finance.rsu');
@@ -106,14 +109,14 @@ Route::middleware('auth')->group(function () {
     Route::get('/utility-bill-tracker/{id}/bills', [UtilityAccountController::class, 'bills'])->name('utility-bill-tracker.bills');
 });
 
-Route::get('/tools/bingo', [App\Http\Controllers\BingoController::class, 'index']);
+Route::get('/tools/bingo', [BingoController::class, 'index']);
 
 Route::get('/tools/irs-f461', function () {
     return view('tools.irs-f461');
 });
 
-Route::get('/recipes', [App\Http\Controllers\RecipeController::class, 'index'])->name('recipes.index');
-Route::get('/recipes/{slug}', [App\Http\Controllers\RecipeController::class, 'show'])->name('recipes.show');
+Route::get('/recipes', [RecipeController::class, 'index'])->name('recipes.index');
+Route::get('/recipes/{slug}', [RecipeController::class, 'show'])->name('recipes.show');
 
 Route::get('/projects', function () {
     return view('projects');

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -17,7 +18,7 @@ class FinanceTransactionsApiControllerTest extends TestCase
 
     private function createAccountWithTransactions(int $userId, string $accountName = 'Checking'): FinAccounts
     {
-        $this->actingAs(\App\Models\User::find($userId));
+        $this->actingAs(User::find($userId));
 
         $account = FinAccounts::create([
             'acct_name' => $accountName,
