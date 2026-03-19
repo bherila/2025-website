@@ -1,3 +1,9 @@
+/** Per-account mapping: which user account to import this block into */
+export interface AccountMapping {
+  /** acct_id of the selected destination account (null = use page's accountId) */
+  targetAccountId: number | null
+}
+
 /** A single account block within a Gemini response */
 export interface GeminiAccountBlock {
   statementInfo?: {
