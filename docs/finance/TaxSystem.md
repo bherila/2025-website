@@ -105,7 +105,7 @@ Marriage/filing status is stored per year as a JSON column (`marriage_status_by_
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/api/finance/schedule-c?year=YYYY` | Tax data grouped by characteristic and year |
+| `GET` | `/api/finance/schedule-c` | Tax data grouped by characteristic and year (all years returned; UI filters client-side) |
 
 ---
 
@@ -148,4 +148,3 @@ Non-entity Tags (interest, dividends, etc.)
 - [FinanceTool.md](FinanceTool.md) — Finance tool overview and navigation
 - [TransactionsTable.md](TransactionsTable.md) — Transaction display and filtering
 - `/database/schema/mysql-schema.sql` — Full database schema
-

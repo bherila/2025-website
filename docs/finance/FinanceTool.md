@@ -376,13 +376,13 @@ The following state is persisted in the URL so the browser back button works:
 - `?show=cash|stock` — filter type (or omitted for "all")
 - `?view=lots|tag-totals` — active view (or omitted for default transactions view)
 
-## Schedule C View
+## Tax Preview View
 
-**Route**: `GET /finance/schedule-c`  
+**Route**: `GET /finance/tax-preview` (`/finance/schedule-c` redirects here)  
 **Component**: `resources/js/components/finance/ScheduleCPage.tsx`  
-**API**: `GET /api/finance/schedule-c[?year=YYYY]` → `FinanceScheduleCController@getSummary`
+**API**: `GET /api/finance/schedule-c` → `FinanceScheduleCController@getSummary`
 
-The Schedule C view is a dedicated tax-reporting summary page. It aggregates tagged transactions into IRS Schedule C (Profit or Loss from Business) line-item totals grouped by tax year.
+The Tax Preview view is a dedicated tax-reporting summary page. It aggregates tagged transactions into IRS Schedule C (Profit or Loss from Business) line-item totals grouped by tax year.
 
 ### What it Shows
 
@@ -408,7 +408,7 @@ Amounts are stored as negatives in the database (expenses) but displayed as posi
 
 | Parameter | Description |
 |-----------|-------------|
-| `year` | (optional) Filter to a single year, e.g. `?year=2024`. Omit for all years. |
+| `year` | URL state only (`?year=2024` or `?year=all`) used by the UI; API still returns all years |
 
 ### API Response Shape
 
@@ -430,11 +430,11 @@ Amounts are stored as negatives in the database (expenses) but displayed as posi
 
 ### How it Works
 
-1. The API fetches all non-deleted tags for the authenticated user that have a non-null `tax_characteristic` starting with `sce_`, `scho_`, or `business_`.
+1. The API fetches all non-deleted tags for the authenticated user that have a non-null `tax_characteristic`.
 2. It JOINs `fin_account_line_items` → `fin_account_line_item_tag_map` → `fin_account_tag` → `fin_accounts`.
-3. All rows are fetched (unfiltered) to derive `available_years`. The year filter is then applied on the collection.
-4. The server applies `abs()` for expense and home-office items; income items are shown as-is.
-5. Years are sorted descending.
+3. All rows are fetched (unfiltered) to derive `available_years`.
+4. Server grouping returns Schedule C income/expenses/home-office plus ordinary-income and W-2-income groupings.
+5. Years are sorted descending, and the client filters visible years based on URL state.
 6. Each category entry in the JSON response includes a `transactions` array with `t_id`, `t_date`, `t_description`, `t_amt`, and `t_account`.
 
 See `docs/finance/Tags.md` for the full list of valid `tax_characteristic` values and the tag management system.

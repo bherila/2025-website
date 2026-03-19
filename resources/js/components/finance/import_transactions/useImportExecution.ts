@@ -143,7 +143,7 @@ export function useImportExecution({
       }
 
       // Multi-account PDF import
-      const isMultiAccount = pdfData && pdfAccountBlocks.length > 0
+      const isMultiAccount = pdfData && pdfAccountBlocks.length > 1
       if (isMultiAccount) {
         const payload = buildMultiImportPayload(pdfAccountBlocks, accountMappings, accountId, {
           importTransactions,
