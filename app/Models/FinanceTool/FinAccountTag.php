@@ -57,6 +57,53 @@ class FinAccountTag extends Model
         'scho_cleaning',
         'scho_hoa',
         'scho_casualty_losses',
+        // Non-Schedule C characteristics (no employment entity required)
+        'interest',
+        'ordinary_dividend',
+        'qualified_dividend',
+        'other_ordinary_income',
+    ];
+
+    /**
+     * Tax characteristic values that require a Schedule C employment entity.
+     */
+    public const SCHEDULE_C_CHARACTERISTICS = [
+        'business_income',
+        'business_returns',
+        'sce_advertising',
+        'sce_car_truck',
+        'sce_commissions_fees',
+        'sce_contract_labor',
+        'sce_depletion',
+        'sce_depreciation',
+        'sce_employee_benefits',
+        'sce_insurance',
+        'sce_interest_mortgage',
+        'sce_interest_other',
+        'sce_legal_professional',
+        'sce_office_expenses',
+        'sce_pension',
+        'sce_rent_vehicles',
+        'sce_rent_property',
+        'sce_repairs_maintenance',
+        'sce_supplies',
+        'sce_taxes_licenses',
+        'sce_travel',
+        'sce_meals',
+        'sce_utilities',
+        'sce_wages',
+        'sce_other',
+        'scho_rent',
+        'scho_mortgage_interest',
+        'scho_real_estate_taxes',
+        'scho_insurance',
+        'scho_utilities',
+        'scho_repairs_maintenance',
+        'scho_security',
+        'scho_depreciation',
+        'scho_cleaning',
+        'scho_hoa',
+        'scho_casualty_losses',
     ];
 
     protected $fillable = [
@@ -64,11 +111,25 @@ class FinAccountTag extends Model
         'tag_label',
         'tag_color',
         'tax_characteristic',
+        'employment_entity_id',
         'when_deleted',
     ];
 
     public function user()
     {
         return $this->belongsTo(User::class, 'tag_userid', 'id');
+    }
+
+    public function employmentEntity()
+    {
+        return $this->belongsTo(FinEmploymentEntity::class, 'employment_entity_id');
+    }
+
+    /**
+     * Check if a tax characteristic requires a Schedule C employment entity.
+     */
+    public static function isScheduleCCharacteristic(?string $value): bool
+    {
+        return $value && in_array($value, self::SCHEDULE_C_CHARACTERISTICS);
     }
 }

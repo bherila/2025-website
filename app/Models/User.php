@@ -27,6 +27,7 @@ class User extends Authenticatable
         'gemini_api_key',
         'user_role',
         'last_login_date',
+        'marriage_status_by_year',
     ];
 
     /**
