@@ -62,6 +62,15 @@ describe('ImportTransactions', () => {
     jest.clearAllMocks();
     localStorage.clear();
     (fetchWrapper.get as jest.Mock).mockResolvedValue([]);
+    // Mock window.fetch used by useFinanceAccounts
+    ;(window as any).fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ assetAccounts: [], liabilityAccounts: [], retirementAccounts: [] }),
+    });
+  });
+
+  afterEach(() => {
+    delete (window as any).fetch;
   });
 
   it('parses CSV data and displays the import button', async () => {
