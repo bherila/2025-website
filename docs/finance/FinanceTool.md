@@ -707,3 +707,9 @@ When a statement is deleted:
 The rules engine automates actions on transactions when they are created, imported, or when rules are explicitly run. Rules are user-owned and combine conditions (AND logic) with ordered actions.
 
 For full documentation, see [TransactionRulesEngine.md](TransactionRulesEngine.md).
+
+## Tax System
+
+The tax system tracks employment entities (Schedule C businesses, W-2 employers, hobbies), links them to transaction tags and payslips, and provides tax-year summaries. Tags carry tax characteristics (Schedule C expenses, home office deductions, and non-Schedule C items like interest and dividends). Marriage/filing status is tracked per year.
+
+For full documentation, see [TaxSystem.md](TaxSystem.md).
