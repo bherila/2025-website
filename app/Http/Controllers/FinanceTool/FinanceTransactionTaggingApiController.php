@@ -18,7 +18,7 @@ class FinanceTransactionTaggingApiController extends Controller
 
         $tags = FinAccountTag::where('tag_userid', $uid)
             ->whereNull('when_deleted')
-            ->get(['tag_id', 'tag_label', 'tag_color', 'tax_characteristic']);
+            ->get(['tag_id', 'tag_label', 'tag_color', 'tax_characteristic', 'employment_entity_id']);
 
         $includeCounts = $request->get('include_counts') === 'true';
         $includeTotals = $request->get('totals') === 'true';
@@ -66,6 +66,7 @@ class FinanceTransactionTaggingApiController extends Controller
             'tag_label' => 'required|string|max:50',
             'tag_color' => 'required|string|max:20',
             'tax_characteristic' => ['nullable', 'string', 'in:'.implode(',', FinAccountTag::TAX_CHARACTERISTIC_VALUES)],
+            'employment_entity_id' => 'nullable|integer|exists:fin_employment_entity,id',
         ]);
 
         // Check for duplicate tag label for this user
@@ -83,6 +84,7 @@ class FinanceTransactionTaggingApiController extends Controller
             'tag_label' => $request->tag_label,
             'tag_color' => $request->tag_color,
             'tax_characteristic' => $request->tax_characteristic ?? null,
+            'employment_entity_id' => $request->employment_entity_id ?? null,
         ]);
 
         return response()->json([
@@ -99,6 +101,7 @@ class FinanceTransactionTaggingApiController extends Controller
             'tag_label' => 'required|string|max:50',
             'tag_color' => 'required|string|max:20',
             'tax_characteristic' => ['nullable', 'string', 'in:'.implode(',', FinAccountTag::TAX_CHARACTERISTIC_VALUES)],
+            'employment_entity_id' => 'nullable|integer|exists:fin_employment_entity,id',
         ]);
 
         $tag = FinAccountTag::where('tag_id', $tag_id)
@@ -121,6 +124,7 @@ class FinanceTransactionTaggingApiController extends Controller
             'tag_label' => $request->tag_label,
             'tag_color' => $request->tag_color,
             'tax_characteristic' => $request->tax_characteristic ?? null,
+            'employment_entity_id' => $request->employment_entity_id ?? null,
         ]);
 
         return response()->json(['success' => true]);

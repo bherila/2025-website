@@ -42,22 +42,35 @@ class FinanceScheduleCController extends Controller
         $uid = Auth::id();
         $yearFilter = $request->query('year');
 
-        // Get all Schedule C tags for this user
+        // Get all tags with tax characteristics for this user (Schedule C + non-Schedule C)
         $tags = FinAccountTag::where('tag_userid', $uid)
             ->whereNull('when_deleted')
             ->whereNotNull('tax_characteristic')
             ->where('tax_characteristic', '!=', '')
             ->where('tax_characteristic', '!=', 'none')
-            ->get(['tag_id', 'tax_characteristic']);
+            ->get(['tag_id', 'tax_characteristic', 'employment_entity_id']);
 
         if ($tags->isEmpty()) {
-            return response()->json(['available_years' => [], 'years' => []]);
+            return response()->json(['available_years' => [], 'years' => [], 'entities' => []]);
         }
 
         $tagIds = $tags->pluck('tag_id');
         $tagCharacteristicMap = $tags->pluck('tax_characteristic', 'tag_id');
+        $tagEntityMap = $tags->pluck('employment_entity_id', 'tag_id');
 
-        // Query individual transactions (not aggregated) for both totals and transaction lists
+        // Fetch employment entities for display names
+        $entityIds = $tags->pluck('employment_entity_id')->filter()->unique()->values();
+        $entities = [];
+        if ($entityIds->isNotEmpty()) {
+            $entities = DB::table('fin_employment_entity')
+                ->whereIn('id', $entityIds->toArray())
+                ->where('user_id', $uid)
+                ->get(['id', 'display_name', 'type'])
+                ->keyBy('id')
+                ->toArray();
+        }
+
+        // Query individual transactions
         $query = DB::table('fin_account_line_items as li')
             ->join('fin_account_line_item_tag_map as tm', function ($join) {
                 $join->on('li.t_id', '=', 'tm.t_id')
@@ -72,7 +85,7 @@ class FinanceScheduleCController extends Controller
             ->select('li.t_id', 'li.t_date', 'li.t_description', 'li.t_amt', 'li.t_account', 't.tag_id')
             ->orderBy('li.t_date');
 
-        // Fetch all rows (unfiltered) first to determine available years, then apply year filter
+        // Fetch all rows first for available years, then filter
         $allRows = $query->get();
         $availableYears = $allRows
             ->map(fn ($row) => substr($row->t_date, 0, 4))
@@ -81,12 +94,12 @@ class FinanceScheduleCController extends Controller
             ->values()
             ->toArray();
 
-        // Apply year filter if provided
         $rows = $yearFilter
             ? $allRows->filter(fn ($row) => substr($row->t_date, 0, 4) === (string) $yearFilter)
             : $allRows;
 
-        // Build result grouped by year
+        // Build result grouped by year and entity
+        // Key structure: byYear[year][entityId] = { schedule_c_income, schedule_c_expense, schedule_c_home_office }
         $byYear = [];
         foreach ($rows as $row) {
             $year = substr($row->t_date, 0, 4);
@@ -95,9 +108,21 @@ class FinanceScheduleCController extends Controller
                 continue;
             }
 
+            $entityId = $tagEntityMap[$row->tag_id] ?? null;
+
             if (! isset($byYear[$year])) {
-                $byYear[$year] = [
-                    'year' => $year,
+                $byYear[$year] = [];
+            }
+
+            $entityKey = $entityId ?? 'unassigned';
+            if (! isset($byYear[$year][$entityKey])) {
+                $entityName = null;
+                if ($entityId && isset($entities[$entityId])) {
+                    $entityName = $entities[$entityId]->display_name;
+                }
+                $byYear[$year][$entityKey] = [
+                    'entity_id' => $entityId,
+                    'entity_name' => $entityName,
                     'schedule_c_income' => [],
                     'schedule_c_expense' => [],
                     'schedule_c_home_office' => [],
@@ -107,7 +132,6 @@ class FinanceScheduleCController extends Controller
             if (str_starts_with($taxChar, 'business_')) {
                 $label = self::scheduleIncomeLabel($taxChar);
                 $key = 'schedule_c_income';
-                // Income items are positive, show as-is (not negated)
                 $amount = (float) $row->t_amt;
             } elseif (str_starts_with($taxChar, 'sce_')) {
                 $label = self::scheduleExpenseLabel($taxChar);
@@ -118,14 +142,15 @@ class FinanceScheduleCController extends Controller
                 $key = 'schedule_c_home_office';
                 $amount = abs((float) $row->t_amt);
             } else {
+                // Non-Schedule C characteristics (interest, dividends, etc.) - skip for Schedule C view
                 continue;
             }
 
-            if (! isset($byYear[$year][$key][$taxChar])) {
-                $byYear[$year][$key][$taxChar] = ['label' => $label, 'total' => 0.0, 'transactions' => []];
+            if (! isset($byYear[$year][$entityKey][$key][$taxChar])) {
+                $byYear[$year][$entityKey][$key][$taxChar] = ['label' => $label, 'total' => 0.0, 'transactions' => []];
             }
-            $byYear[$year][$key][$taxChar]['total'] += $amount;
-            $byYear[$year][$key][$taxChar]['transactions'][] = [
+            $byYear[$year][$entityKey][$key][$taxChar]['total'] += $amount;
+            $byYear[$year][$entityKey][$key][$taxChar]['transactions'][] = [
                 't_id' => $row->t_id,
                 't_date' => substr($row->t_date, 0, 10),
                 't_description' => $row->t_description,
@@ -134,10 +159,27 @@ class FinanceScheduleCController extends Controller
             ];
         }
 
-        // Sort years descending (most recent first)
+        // Sort years descending
         krsort($byYear);
 
-        return response()->json(['available_years' => $availableYears, 'years' => array_values($byYear)]);
+        // Format into response shape: years -> [ { year, entities: [ { entity_id, entity_name, schedule_c_* } ] } ]
+        $result = [];
+        foreach ($byYear as $year => $entitiesData) {
+            $yearEntry = [
+                'year' => $year,
+                'entities' => array_values($entitiesData),
+            ];
+            $result[] = $yearEntry;
+        }
+
+        // Include entity info for the frontend
+        $entityList = array_map(fn ($e) => ['id' => $e->id, 'display_name' => $e->display_name, 'type' => $e->type], array_values($entities));
+
+        return response()->json([
+            'available_years' => $availableYears,
+            'years' => $result,
+            'entities' => $entityList,
+        ]);
     }
 
     public static function scheduleIncomeLabel(string $value): string
