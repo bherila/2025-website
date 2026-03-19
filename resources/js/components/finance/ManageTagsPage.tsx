@@ -730,7 +730,7 @@ export default function ManageTagsPage() {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!deleteConfirmTag} onOpenChange={(open) => { if (!open) setDeleteConfirmTag(null) }}>
+      <AlertDialog open={!!deleteConfirmTag} onOpenChange={() => setDeleteConfirmTag(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Tag?</AlertDialogTitle>

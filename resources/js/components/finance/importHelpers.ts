@@ -57,7 +57,8 @@ export async function uploadPdfFile(accountId: number, file: File): Promise<stri
       file_hash?: string
     }
     return result?.file_hash ?? null
-  } catch {
+  } catch (err) {
+    console.error('Failed to upload PDF:', err)
     return null
   }
 }

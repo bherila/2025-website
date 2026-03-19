@@ -18,11 +18,7 @@ import { fetchWrapper } from '@/fetchWrapper'
 
 /** Generate a contiguous range of years from startYear to currentYear (inclusive) */
 function generateYearRange(startYear: number, endYear: number): string[] {
-  const years: string[] = []
-  for (let y = startYear; y <= endYear; y++) {
-    years.push(String(y))
-  }
-  return years
+  return Array.from({ length: endYear - startYear + 1 }, (_, i) => String(startYear + i))
 }
 
 function MarriageStatusSection() {

@@ -99,17 +99,26 @@ export function optionsForEntityType(entityType: string | null): { value: string
     .map(([value, meta]) => ({ value, label: meta.label }))
 }
 
-/** Get grouped options filtered to characteristics applicable to a given entity type */
+/** Get grouped options filtered to characteristics applicable to a given entity type.
+ * Categories are derived from the registry — no hardcoded list needed. */
 export function groupedOptionsForEntityType(entityType: string | null): Array<{ label: string; options: { value: string; label: string }[] }> {
-  const relevantCategories = entityType === 'sch_c'
-    ? ['sch_c_income', 'sch_c_expense', 'sch_c_home_office']
-    : entityType === 'w2'
-    ? ['w2_income']
-    : ['other']
+  // Collect matching entries from the registry
+  const entries = Object.entries(TAX_CHARACTERISTICS).filter(([, meta]) => {
+    if (!entityType) return meta.entityTypes.length === 0
+    return meta.entityTypes.includes(entityType)
+  })
 
-  return relevantCategories
-    .map((cat) => ({ label: CATEGORY_LABELS[cat] ?? cat, options: optionsByCategory(cat) }))
-    .filter((g) => g.options.length > 0)
+  // Group by category, preserving CATEGORY_ORDER
+  const byCategory = new Map<string, Array<{ value: string; label: string }>>()
+  for (const [value, meta] of entries) {
+    const existing = byCategory.get(meta.category) ?? []
+    existing.push({ value, label: meta.label })
+    byCategory.set(meta.category, existing)
+  }
+
+  return CATEGORY_ORDER
+    .filter((cat) => byCategory.has(cat))
+    .map((cat) => ({ label: CATEGORY_LABELS[cat] ?? cat, options: byCategory.get(cat)! }))
 }
 
 /** Check if a tax characteristic requires a Schedule C employment entity */
