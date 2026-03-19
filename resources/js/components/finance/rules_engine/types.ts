@@ -54,6 +54,7 @@ export const CONDITION_OPERATORS: Record<string, { value: string; label: string 
   stock_symbol_presence: [
     { value: 'HAVE', label: 'Has Symbol' },
     { value: 'DO_NOT_HAVE', label: 'No Symbol' },
+    { value: 'IS_SYMBOL', label: 'Is Symbol' },
   ],
   option_type: [
     { value: 'ANY', label: 'Any Option' },

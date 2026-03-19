@@ -39,7 +39,7 @@ jest.mock('@/components/ui/select', () => ({
     </div>
   ),
   SelectTrigger: ({ children }: any) => <div data-testid="select-trigger">{children}</div>,
-  SelectValue: () => <span data-testid="select-value" />,
+  SelectValue: ({ placeholder }: any) => <span data-testid="select-value">{placeholder}</span>,
   SelectContent: ({ children, onValueChange }: any) => (
     <div data-testid="select-content">
       {React.Children.map(children, (child: any) =>
@@ -53,6 +53,16 @@ jest.mock('@/components/ui/select', () => ({
     </option>
   ),
 }))
+
+// Mock fetch for accounts API — return a never-resolving promise so state updates
+// don't fire after test cleanup and produce act() warnings.
+beforeEach(() => {
+  (globalThis as Record<string, unknown>)['fetch'] = jest.fn().mockReturnValue(new Promise(() => {}))
+})
+
+afterEach(() => {
+  jest.restoreAllMocks()
+})
 
 describe('ConditionsEditor', () => {
   it('renders empty state with "Add Condition" button', () => {
@@ -115,4 +125,70 @@ describe('ConditionsEditor', () => {
     expect(updated[0].type).toBe('amount')
     expect(updated[1].type).toBe('description_contains')
   })
+
+  it('hides Value box for direction INCOME operator', () => {
+    render(
+      <ConditionsEditor
+        conditions={[{ type: 'direction', operator: 'INCOME', value: null, value_extra: null }]}
+        onChange={jest.fn()}
+      />,
+    )
+    // No value input should be rendered
+    expect(screen.queryByPlaceholderText('Value')).not.toBeInTheDocument()
+  })
+
+  it('hides Value box for direction EXPENSE operator', () => {
+    render(
+      <ConditionsEditor
+        conditions={[{ type: 'direction', operator: 'EXPENSE', value: null, value_extra: null }]}
+        onChange={jest.fn()}
+      />,
+    )
+    expect(screen.queryByPlaceholderText('Value')).not.toBeInTheDocument()
+  })
+
+  it('hides Value box for stock_symbol_presence HAVE operator', () => {
+    render(
+      <ConditionsEditor
+        conditions={[{ type: 'stock_symbol_presence', operator: 'HAVE', value: null, value_extra: null }]}
+        onChange={jest.fn()}
+      />,
+    )
+    expect(screen.queryByPlaceholderText('Value')).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('e.g. AAPL, TSLA')).not.toBeInTheDocument()
+  })
+
+  it('hides Value box for stock_symbol_presence DO_NOT_HAVE operator', () => {
+    render(
+      <ConditionsEditor
+        conditions={[{ type: 'stock_symbol_presence', operator: 'DO_NOT_HAVE', value: null, value_extra: null }]}
+        onChange={jest.fn()}
+      />,
+    )
+    expect(screen.queryByPlaceholderText('Value')).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('e.g. AAPL, TSLA')).not.toBeInTheDocument()
+  })
+
+  it('shows Value input with symbol placeholder for stock_symbol_presence IS_SYMBOL operator', () => {
+    render(
+      <ConditionsEditor
+        conditions={[{ type: 'stock_symbol_presence', operator: 'IS_SYMBOL', value: 'AAPL', value_extra: null }]}
+        onChange={jest.fn()}
+      />,
+    )
+    expect(screen.getByPlaceholderText('e.g. AAPL, TSLA')).toBeInTheDocument()
+  })
+
+  it('shows account Select (not plain text input) for account_id condition', () => {
+    render(
+      <ConditionsEditor
+        conditions={[{ type: 'account_id', operator: 'EQUALS', value: '42', value_extra: null }]}
+        onChange={jest.fn()}
+      />,
+    )
+    // Account Select should render "Select account" placeholder, not a plain "Value" input
+    expect(screen.getByText('Select account')).toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('Value')).not.toBeInTheDocument()
+  })
 })
+
