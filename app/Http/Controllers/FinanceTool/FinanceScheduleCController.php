@@ -130,15 +130,15 @@ class FinanceScheduleCController extends Controller
             }
 
             if (str_starts_with($taxChar, 'business_')) {
-                $label = self::scheduleIncomeLabel($taxChar);
+                $label = FinAccountTag::labelFor($taxChar);
                 $key = 'schedule_c_income';
                 $amount = (float) $row->t_amt;
             } elseif (str_starts_with($taxChar, 'sce_')) {
-                $label = self::scheduleExpenseLabel($taxChar);
+                $label = FinAccountTag::labelFor($taxChar);
                 $key = 'schedule_c_expense';
                 $amount = abs((float) $row->t_amt);
             } elseif (str_starts_with($taxChar, 'scho_')) {
-                $label = self::homeOfficeLabel($taxChar);
+                $label = FinAccountTag::labelFor($taxChar);
                 $key = 'schedule_c_home_office';
                 $amount = abs((float) $row->t_amt);
             } else {
@@ -180,65 +180,5 @@ class FinanceScheduleCController extends Controller
             'years' => $result,
             'entities' => $entityList,
         ]);
-    }
-
-    public static function scheduleIncomeLabel(string $value): string
-    {
-        $labels = [
-            'business_income' => 'Gross receipts or sales (Business Income)',
-            'business_returns' => 'Returns and allowances',
-        ];
-
-        return $labels[$value] ?? $value;
-    }
-
-    public static function scheduleExpenseLabel(string $value): string
-    {
-        $labels = [
-            'sce_advertising' => 'Advertising',
-            'sce_car_truck' => 'Car and truck expenses',
-            'sce_commissions_fees' => 'Commissions and fees',
-            'sce_contract_labor' => 'Contract labor',
-            'sce_depletion' => 'Depletion',
-            'sce_depreciation' => 'Depreciation and Section 179 expense',
-            'sce_employee_benefits' => 'Employee benefit programs',
-            'sce_insurance' => 'Insurance (other than health)',
-            'sce_interest_mortgage' => 'Interest (mortgage)',
-            'sce_interest_other' => 'Interest (other)',
-            'sce_legal_professional' => 'Legal and professional services',
-            'sce_office_expenses' => 'Office expenses',
-            'sce_pension' => 'Pension and profit-sharing plans',
-            'sce_rent_vehicles' => 'Rent or lease (vehicles, machinery, equipment)',
-            'sce_rent_property' => 'Rent or lease (other business property)',
-            'sce_repairs_maintenance' => 'Repairs and maintenance',
-            'sce_supplies' => 'Supplies',
-            'sce_taxes_licenses' => 'Taxes and licenses',
-            'sce_travel' => 'Travel',
-            'sce_meals' => 'Meals',
-            'sce_utilities' => 'Utilities',
-            'sce_wages' => 'Wages',
-            'sce_other' => 'Other expenses',
-        ];
-
-        return $labels[$value] ?? $value;
-    }
-
-    public static function homeOfficeLabel(string $value): string
-    {
-        $labels = [
-            'scho_rent' => 'Rent',
-            'scho_mortgage_interest' => 'Mortgage interest (business-use portion)',
-            'scho_real_estate_taxes' => 'Real estate taxes',
-            'scho_insurance' => 'Homeowners or renters insurance',
-            'scho_utilities' => 'Utilities',
-            'scho_repairs_maintenance' => 'Repairs and maintenance',
-            'scho_security' => 'Security system costs',
-            'scho_depreciation' => 'Depreciation',
-            'scho_cleaning' => 'Cleaning services',
-            'scho_hoa' => 'HOA fees',
-            'scho_casualty_losses' => 'Casualty losses (business-use portion)',
-        ];
-
-        return $labels[$value] ?? $value;
     }
 }

@@ -65,7 +65,7 @@ class FinanceTransactionTaggingApiController extends Controller
         $request->validate([
             'tag_label' => 'required|string|max:50',
             'tag_color' => 'required|string|max:20',
-            'tax_characteristic' => ['nullable', 'string', 'in:'.implode(',', FinAccountTag::TAX_CHARACTERISTIC_VALUES)],
+            'tax_characteristic' => ['nullable', 'string', 'in:'.implode(',', FinAccountTag::validValues())],
             'employment_entity_id' => 'nullable|integer|exists:fin_employment_entity,id',
         ]);
 
@@ -100,7 +100,7 @@ class FinanceTransactionTaggingApiController extends Controller
         $request->validate([
             'tag_label' => 'required|string|max:50',
             'tag_color' => 'required|string|max:20',
-            'tax_characteristic' => ['nullable', 'string', 'in:'.implode(',', FinAccountTag::TAX_CHARACTERISTIC_VALUES)],
+            'tax_characteristic' => ['nullable', 'string', 'in:'.implode(',', FinAccountTag::validValues())],
             'employment_entity_id' => 'nullable|integer|exists:fin_employment_entity,id',
         ]);
 

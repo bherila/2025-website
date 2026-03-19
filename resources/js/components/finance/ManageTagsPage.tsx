@@ -51,6 +51,13 @@ import {
 } from '@/components/ui/tooltip'
 import { fetchWrapper } from '@/fetchWrapper'
 import { getTagColorDark, getTagColorHex, getTagColorLight } from '@/lib/finance/tagColorUtils'
+import {
+  CATEGORY_LABELS,
+  CATEGORY_ORDER,
+  getLabel,
+  isScheduleCCharacteristic,
+  optionsByCategory,
+} from '@/lib/finance/taxCharacteristics'
 import { accountsUrl } from '@/lib/financeRouteBuilder'
 import { cn } from '@/lib/utils'
 
@@ -67,80 +74,6 @@ const TAG_COLORS = [
   'pink',
 ]
 
-const SCHEDULE_C_INCOME_OPTIONS: { value: string; label: string }[] = [
-  { value: 'business_income', label: 'Gross receipts or sales (Business Income)' },
-  { value: 'business_returns', label: 'Returns and allowances' },
-]
-
-const SCHEDULE_C_EXPENSE_OPTIONS: { value: string; label: string }[] = [
-  { value: 'sce_advertising', label: 'Advertising' },
-  { value: 'sce_car_truck', label: 'Car and truck expenses' },
-  { value: 'sce_commissions_fees', label: 'Commissions and fees' },
-  { value: 'sce_contract_labor', label: 'Contract labor' },
-  { value: 'sce_depletion', label: 'Depletion' },
-  { value: 'sce_depreciation', label: 'Depreciation and Section 179 expense' },
-  { value: 'sce_employee_benefits', label: 'Employee benefit programs' },
-  { value: 'sce_insurance', label: 'Insurance (other than health)' },
-  { value: 'sce_interest_mortgage', label: 'Interest (mortgage)' },
-  { value: 'sce_interest_other', label: 'Interest (other)' },
-  { value: 'sce_legal_professional', label: 'Legal and professional services' },
-  { value: 'sce_office_expenses', label: 'Office expenses' },
-  { value: 'sce_pension', label: 'Pension and profit-sharing plans' },
-  { value: 'sce_rent_vehicles', label: 'Rent or lease (vehicles, machinery, equipment)' },
-  { value: 'sce_rent_property', label: 'Rent or lease (other business property)' },
-  { value: 'sce_repairs_maintenance', label: 'Repairs and maintenance' },
-  { value: 'sce_supplies', label: 'Supplies' },
-  { value: 'sce_taxes_licenses', label: 'Taxes and licenses' },
-  { value: 'sce_travel', label: 'Travel' },
-  { value: 'sce_meals', label: 'Meals' },
-  { value: 'sce_utilities', label: 'Utilities' },
-  { value: 'sce_wages', label: 'Wages' },
-  { value: 'sce_other', label: 'Other expenses' },
-]
-
-const SCHEDULE_C_HOME_OFFICE_OPTIONS: { value: string; label: string }[] = [
-  { value: 'scho_rent', label: 'Rent' },
-  { value: 'scho_mortgage_interest', label: 'Mortgage interest (business-use portion)' },
-  { value: 'scho_real_estate_taxes', label: 'Real estate taxes' },
-  { value: 'scho_insurance', label: 'Homeowners or renters insurance' },
-  { value: 'scho_utilities', label: 'Utilities' },
-  { value: 'scho_repairs_maintenance', label: 'Repairs and maintenance' },
-  { value: 'scho_security', label: 'Security system costs' },
-  { value: 'scho_depreciation', label: 'Depreciation' },
-  { value: 'scho_cleaning', label: 'Cleaning services' },
-  { value: 'scho_hoa', label: 'HOA fees' },
-  { value: 'scho_casualty_losses', label: 'Casualty losses (business-use portion)' },
-]
-
-const OTHER_TAX_OPTIONS: { value: string; label: string }[] = [
-  { value: 'interest', label: 'Interest' },
-  { value: 'ordinary_dividend', label: 'Ordinary Dividend' },
-  { value: 'qualified_dividend', label: 'Qualified Dividend' },
-  { value: 'other_ordinary_income', label: 'Other Ordinary Income' },
-]
-
-const ALL_TAX_OPTIONS = [
-  ...SCHEDULE_C_INCOME_OPTIONS,
-  ...SCHEDULE_C_EXPENSE_OPTIONS,
-  ...SCHEDULE_C_HOME_OFFICE_OPTIONS,
-  ...OTHER_TAX_OPTIONS,
-]
-
-const TAX_OPTION_LABEL_MAP: Record<string, string> = Object.fromEntries(
-  ALL_TAX_OPTIONS.map((o) => [o.value, o.label])
-)
-
-/** Schedule C tax characteristic values that require an employment entity */
-const SCHEDULE_C_VALUES = new Set([
-  ...SCHEDULE_C_INCOME_OPTIONS.map(o => o.value),
-  ...SCHEDULE_C_EXPENSE_OPTIONS.map(o => o.value),
-  ...SCHEDULE_C_HOME_OFFICE_OPTIONS.map(o => o.value),
-])
-
-function isScheduleCCharacteristic(value: string | null | undefined): boolean {
-  return !!value && value !== 'none' && SCHEDULE_C_VALUES.has(value)
-}
-
 interface EmploymentEntity {
   id: number
   display_name: string
@@ -149,7 +82,7 @@ interface EmploymentEntity {
 
 function getTaxCharacteristicLabel(value: string | null | undefined): string {
   if (!value || value === 'none') return '—'
-  return TAX_OPTION_LABEL_MAP[value] ?? value
+  return getLabel(value)
 }
 
 function ColorPicker({ 
@@ -192,12 +125,10 @@ function TaxCharacteristicCombobox({
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
 
-  const GROUPED_OPTIONS = [
-    { label: 'Schedule C: Income', options: SCHEDULE_C_INCOME_OPTIONS },
-    { label: 'Schedule C: Expense', options: SCHEDULE_C_EXPENSE_OPTIONS },
-    { label: 'Schedule C: Home Office Item', options: SCHEDULE_C_HOME_OFFICE_OPTIONS },
-    { label: 'Other Income / Investments', options: OTHER_TAX_OPTIONS },
-  ]
+  const GROUPED_OPTIONS = CATEGORY_ORDER.map((cat) => ({
+    label: CATEGORY_LABELS[cat],
+    options: optionsByCategory(cat),
+  }))
 
   const NONE_OPTION = { value: 'none', label: 'None (no tax characteristic)' }
 
@@ -211,7 +142,7 @@ function TaxCharacteristicCombobox({
   const selectedLabel =
     value === 'none' || !value
       ? NONE_OPTION.label
-      : (ALL_TAX_OPTIONS.find((o) => o.value === value)?.label ?? value)
+      : getLabel(value)
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
