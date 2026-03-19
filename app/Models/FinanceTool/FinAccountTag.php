@@ -20,6 +20,10 @@ class FinAccountTag extends Model
      *   - category:     Grouping key ('sch_c_income', 'sch_c_expense', 'sch_c_home_office', 'other')
      *   - entity_types: Which employment-entity types this characteristic applies to (empty = no entity required)
      *
+     * SYNC WARNING: This registry MUST be kept in sync with TAX_CHARACTERISTICS
+     * in resources/js/lib/finance/taxCharacteristics.ts. When adding or removing entries here,
+     * make the same change in the TypeScript file.
+     *
      * WARNING: If adding new entries, you must also create a schema migration
      * to update the ENUM / CHECK constraint in the database.
      * Migration files must hardcode values — never reference this constant.
@@ -69,6 +73,9 @@ class FinAccountTag extends Model
         'ordinary_dividend' => ['label' => 'Ordinary Dividend', 'category' => 'other', 'entity_types' => []],
         'qualified_dividend' => ['label' => 'Qualified Dividend', 'category' => 'other', 'entity_types' => []],
         'other_ordinary_income' => ['label' => 'Other Ordinary Income', 'category' => 'other', 'entity_types' => []],
+        // W-2 income items
+        'w2_wages' => ['label' => 'W-2 Wages / Salary', 'category' => 'w2_income', 'entity_types' => ['w2']],
+        'w2_other_comp' => ['label' => 'W-2 Other Compensation', 'category' => 'w2_income', 'entity_types' => ['w2']],
     ];
 
     /** All valid tax_characteristic enum values (flat list). */

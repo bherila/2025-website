@@ -125,7 +125,7 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
                 >
                   <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/accounts'>Accounts</a>
                   <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/all-transactions'>Transactions</a>
-                  <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/schedule-c'>Schedule C</a>
+                  <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/tax-preview'>Tax Preview</a>
                   <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/rsu'>RSU</a>
                   <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/payslips'>Payslips</a>
                   <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/utility-bill-tracker'>Utility Bill Tracker</a>
@@ -248,8 +248,8 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
                     <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/finance/all-transactions'>
                       Transactions
                     </a>
-                    <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/finance/schedule-c'>
-                      Schedule C
+                    <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/finance/tax-preview'>
+                      Tax Preview
                     </a>
                     <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/finance/rsu'>
                       RSU

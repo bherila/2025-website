@@ -1,10 +1,9 @@
 'use client'
 
-import { Loader2 } from 'lucide-react'
+import { Heart, Loader2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -16,6 +15,11 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { fetchWrapper } from '@/fetchWrapper'
+
+/** Generate a contiguous range of years from startYear to currentYear (inclusive) */
+function generateYearRange(startYear: number, endYear: number): string[] {
+  return Array.from({ length: endYear - startYear + 1 }, (_, i) => String(startYear + i))
+}
 
 function MarriageStatusSection() {
   const [years, setYears] = useState<string[]>([])
@@ -32,8 +36,18 @@ function MarriageStatusSection() {
         fetchWrapper.get('/api/payslips/years') as Promise<string[]>,
         fetchWrapper.get('/api/finance/marriage-status') as Promise<Record<string, boolean>>,
       ])
-      const availableYears = yearsData.length > 0 ? yearsData : [String(new Date().getFullYear())]
-      setYears(availableYears)
+      const currentYear = new Date().getFullYear()
+      // Determine the earliest year from payslip data or status data
+      const allKnownYears = [
+        ...(Array.isArray(yearsData) ? yearsData : []),
+        ...Object.keys(statusData ?? {}),
+      ].map(Number).filter((y) => !isNaN(y))
+      const startYear = allKnownYears.length > 0
+        ? Math.min(...allKnownYears)
+        : currentYear
+      // Generate all years from start to current so every year is visible and editable
+      const fullYearRange = generateYearRange(startYear, currentYear)
+      setYears(fullYearRange)
       setStatus(statusData ?? {})
     } catch {
       setYears([String(new Date().getFullYear())])
@@ -68,6 +82,7 @@ function MarriageStatusSection() {
         }
         throw new Error(data?.message ?? data?.error ?? 'Failed to update marriage status')
       }
+      // Only update the specific year's status — don't cascade to other years
       setStatus((prev) => ({ ...prev, [year]: isMarried }))
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to update marriage status'
@@ -80,18 +95,18 @@ function MarriageStatusSection() {
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <CardTitle>Taxpayer Marriage Status</CardTitle>
-          <CardDescription>
-            Manage your filing status for each tax year. This is used to determine filing status for
-            tax preview calculations. By default, you are assumed not married. If a year is not
-            shown, the most recent year&apos;s status before it will be used.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+      <div className="mx-auto max-w-4xl space-y-4 p-4">
+        <div className="flex items-center gap-2">
+          <Heart className="h-5 w-5" />
+          <h2 className="text-xl font-semibold">Taxpayer Marriage Status</h2>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Manage your filing status for each tax year. This is used to determine filing status for
+          tax preview calculations. By default, you are assumed not married.
+        </p>
+        <div className="rounded-lg border border-border/50 overflow-hidden">
           {loading ? (
-            <div className="space-y-4">
+            <div className="space-y-4 p-4">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="flex items-center justify-between">
                   <Skeleton className="h-5 w-16" />
@@ -100,9 +115,9 @@ function MarriageStatusSection() {
               ))}
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="divide-y divide-border/50">
               {years.map((year) => (
-                <div key={year} className="flex items-center justify-between">
+                <div key={year} className="flex items-center justify-between px-4 py-3">
                   <Label htmlFor={`marriage-${year}`} className="text-sm font-medium">
                     {year}
                   </Label>
@@ -122,8 +137,8 @@ function MarriageStatusSection() {
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       <Dialog open={errorDialogOpen} onOpenChange={setErrorDialogOpen}>
         <DialogContent>

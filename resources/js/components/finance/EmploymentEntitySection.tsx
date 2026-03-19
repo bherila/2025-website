@@ -225,11 +225,11 @@ export default function EmploymentEntitySection() {
   )
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto max-w-4xl space-y-4 p-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Building2 className="h-5 w-5" />
-          <h2 className="text-lg font-semibold">Employment and Self-Employment</h2>
+          <h2 className="text-xl font-semibold">Employment and Self-Employment</h2>
         </div>
         <Button size="sm" onClick={openCreate}>
           <Plus className="mr-1 h-4 w-4" />
@@ -238,7 +238,7 @@ export default function EmploymentEntitySection() {
       </div>
 
       {error && (
-        <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
       )}
@@ -252,7 +252,7 @@ export default function EmploymentEntitySection() {
           No employment entities yet. Add your W-2 jobs, Schedule C businesses, or hobbies.
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border">
+        <div className="overflow-x-auto rounded-lg border border-border/50">
           <Table>
             <TableHeader>
               <TableRow>
@@ -260,7 +260,9 @@ export default function EmploymentEntitySection() {
                 <TableHead>Type</TableHead>
                 <TableHead className="hidden sm:table-cell">Start</TableHead>
                 <TableHead className="hidden sm:table-cell">End</TableHead>
-                <TableHead className="hidden md:table-cell">Spouse</TableHead>
+                {entities.some(e => e.is_spouse) && (
+                  <TableHead className="hidden md:table-cell">Spouse</TableHead>
+                )}
                 <TableHead className="w-[100px] text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -283,9 +285,11 @@ export default function EmploymentEntitySection() {
                       '—'
                     )}
                   </TableCell>
-                  <TableCell className="hidden md:table-cell">
-                    {entity.is_spouse && <Badge variant="secondary">Spouse</Badge>}
-                  </TableCell>
+                  {entities.some(e => e.is_spouse) && (
+                    <TableCell className="hidden md:table-cell">
+                      {entity.is_spouse && <Badge variant="secondary">Spouse</Badge>}
+                    </TableCell>
+                  )}
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
                       <Button

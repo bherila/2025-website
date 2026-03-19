@@ -74,7 +74,10 @@ export default function RulesList() {
   return (
     <div className="mx-auto max-w-4xl space-y-4 p-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Transaction Rules</h2>
+        <div className="flex items-center gap-2">
+          <ListPlus className="h-5 w-5" />
+          <h2 className="text-xl font-semibold">Transaction Rules</h2>
+        </div>
         <Button onClick={handleCreate}>
           <ListPlus className="mr-2 h-4 w-4" />
           New Rule
