@@ -74,6 +74,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'last_login_date' => 'datetime',
+            'marriage_status_by_year' => 'array',
         ];
     }
 

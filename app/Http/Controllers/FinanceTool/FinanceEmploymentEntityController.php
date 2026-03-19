@@ -6,228 +6,129 @@ use App\Http\Controllers\Controller;
 use App\Models\FinanceTool\FinEmploymentEntity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Validator;
 
 class FinanceEmploymentEntityController extends Controller
 {
+    /** Shared validation rules for create and update. */
+    private function rules(): array
+    {
+        return [
+            'display_name' => 'required|string|max:255',
+            'start_date' => 'required|date',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
+            'is_current' => 'boolean',
+            'ein' => 'nullable|string|max:20',
+            'address' => 'nullable|string',
+            'type' => 'required|in:sch_c,w2,hobby',
+            'sic_code' => 'nullable|integer',
+            'is_spouse' => 'boolean',
+        ];
+    }
+
+    /** Normalize is_current/end_date consistency and validate sic_code. */
+    private function normalize(array $data, string $type): array
+    {
+        if (! empty($data['is_current'])) {
+            $data['end_date'] = null;
+        } elseif (! empty($data['end_date'])) {
+            $data['is_current'] = false;
+        }
+
+        return $data;
+    }
+
     public function index()
     {
-        try {
-            $uid = Auth::id();
-            $entities = FinEmploymentEntity::where('user_id', $uid)
+        return response()->json(
+            FinEmploymentEntity::where('user_id', Auth::id())
                 ->orderBy('start_date', 'desc')
-                ->get();
-
-            return response()->json($entities);
-        } catch (\Exception $e) {
-            Log::error('Failed to fetch employment entities: '.$e->getMessage());
-
-            return response()->json(['error' => 'Failed to fetch employment entities'], 500);
-        }
+                ->get()
+        );
     }
 
     public function store(Request $request)
     {
-        try {
-            $validator = Validator::make($request->all(), [
-                'display_name' => 'required|string|max:255',
-                'start_date' => 'required|date',
-                'end_date' => 'nullable|date|after_or_equal:start_date',
-                'is_current' => 'boolean',
-                'ein' => 'nullable|string|max:20',
-                'address' => 'nullable|string',
-                'type' => 'required|in:sch_c,w2,hobby',
-                'sic_code' => 'nullable|integer',
-                'is_spouse' => 'boolean',
-            ]);
+        $data = $request->validate($this->rules());
 
-            if ($validator->fails()) {
-                return response()->json(['errors' => $validator->errors()], 422);
-            }
-
-            $data = $validator->validated();
-
-            // sic_code is only allowed for sch_c type
-            if (($data['type'] ?? null) !== 'sch_c' && ! empty($data['sic_code'])) {
-                return response()->json(['errors' => ['sic_code' => ['SIC code is only allowed for Schedule C entities.']]], 422);
-            }
-
-            // If is_current is true, clear end_date
-            if (! empty($data['is_current'])) {
-                $data['end_date'] = null;
-            }
-
-            // If end_date is set, force is_current to false
-            if (! empty($data['end_date'])) {
-                $data['is_current'] = false;
-            }
-
-            $entity = FinEmploymentEntity::create($data);
-
-            return response()->json($entity, 201);
-        } catch (\Exception $e) {
-            Log::error('Failed to create employment entity: '.$e->getMessage());
-
-            return response()->json(['error' => 'Failed to create employment entity'], 500);
+        if (($data['type'] ?? null) !== 'sch_c' && ! empty($data['sic_code'])) {
+            return response()->json(['errors' => ['sic_code' => ['SIC code is only allowed for Schedule C entities.']]], 422);
         }
+
+        $data['user_id'] = Auth::id();
+        $data = $this->normalize($data, $data['type']);
+
+        return response()->json(FinEmploymentEntity::create($data), 201);
     }
 
     public function update(Request $request, $id)
     {
-        try {
-            $uid = Auth::id();
-            $entity = FinEmploymentEntity::where('id', $id)
-                ->where('user_id', $uid)
-                ->first();
+        $entity = FinEmploymentEntity::where('id', $id)
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
 
-            if (! $entity) {
-                return response()->json(['error' => 'Employment entity not found'], 404);
-            }
-
-            // Reject attempts to change type
-            if ($request->has('type') && $request->input('type') !== $entity->type) {
-                return response()->json(['error' => 'The entity type cannot be changed after creation.'], 422);
-            }
-
-            $validator = Validator::make($request->all(), [
-                'display_name' => 'required|string|max:255',
-                'start_date' => 'required|date',
-                'end_date' => 'nullable|date|after_or_equal:start_date',
-                'is_current' => 'boolean',
-                'ein' => 'nullable|string|max:20',
-                'address' => 'nullable|string',
-                'type' => 'required|in:sch_c,w2,hobby',
-                'sic_code' => 'nullable|integer',
-                'is_spouse' => 'boolean',
-            ]);
-
-            if ($validator->fails()) {
-                return response()->json(['errors' => $validator->errors()], 422);
-            }
-
-            $data = $validator->validated();
-
-            // sic_code is only allowed for sch_c type
-            if (($data['type'] ?? $entity->type) !== 'sch_c' && ! empty($data['sic_code'])) {
-                return response()->json(['errors' => ['sic_code' => ['SIC code is only allowed for Schedule C entities.']]], 422);
-            }
-
-            // Remove type from update data since it cannot be changed
-            unset($data['type']);
-
-            // If is_current is true, clear end_date
-            if (! empty($data['is_current'])) {
-                $data['end_date'] = null;
-            }
-
-            // If end_date is set, force is_current to false
-            if (! empty($data['end_date'])) {
-                $data['is_current'] = false;
-            }
-
-            $entity->update($data);
-
-            return response()->json($entity->fresh());
-        } catch (\Exception $e) {
-            Log::error('Failed to update employment entity: '.$e->getMessage());
-
-            return response()->json(['error' => 'Failed to update employment entity'], 500);
+        if ($request->has('type') && $request->input('type') !== $entity->type) {
+            return response()->json(['error' => 'The entity type cannot be changed after creation.'], 422);
         }
+
+        $data = $request->validate($this->rules());
+
+        if (($data['type'] ?? $entity->type) !== 'sch_c' && ! empty($data['sic_code'])) {
+            return response()->json(['errors' => ['sic_code' => ['SIC code is only allowed for Schedule C entities.']]], 422);
+        }
+
+        unset($data['type']); // type is immutable
+
+        $entity->update($this->normalize($data, $entity->type));
+
+        return response()->json($entity->fresh());
     }
 
     public function destroy($id)
     {
-        try {
-            $uid = Auth::id();
-            $entity = FinEmploymentEntity::where('id', $id)
-                ->where('user_id', $uid)
-                ->first();
+        $entity = FinEmploymentEntity::where('id', $id)
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
 
-            if (! $entity) {
-                return response()->json(['error' => 'Employment entity not found'], 404);
-            }
+        $entity->delete();
 
-            $entity->delete();
-
-            return response()->json(['success' => true]);
-        } catch (\Exception $e) {
-            Log::error('Failed to delete employment entity: '.$e->getMessage());
-
-            return response()->json(['error' => 'Failed to delete employment entity'], 500);
-        }
+        return response()->json(['success' => true]);
     }
 
     public function getMarriageStatus()
     {
-        try {
-            $user = Auth::user();
-            $statusByYear = $user->marriage_status_by_year;
-
-            if (is_string($statusByYear)) {
-                $statusByYear = json_decode($statusByYear, true) ?? [];
-            }
-
-            return response()->json($statusByYear ?? []);
-        } catch (\Exception $e) {
-            Log::error('Failed to fetch marriage status: '.$e->getMessage());
-
-            return response()->json(['error' => 'Failed to fetch marriage status'], 500);
-        }
+        return response()->json(Auth::user()->marriage_status_by_year ?? []);
     }
 
     public function updateMarriageStatus(Request $request)
     {
-        try {
-            $validator = Validator::make($request->all(), [
-                'year' => 'required|integer|min:1900|max:2100',
-                'is_married' => 'required|boolean',
-            ]);
+        $data = $request->validate([
+            'year' => 'required|integer|min:1900|max:2100',
+            'is_married' => 'required|boolean',
+        ]);
 
-            if ($validator->fails()) {
-                return response()->json(['errors' => $validator->errors()], 422);
+        $year = (string) $data['year'];
+        $uid = Auth::id();
+
+        if (! $data['is_married']) {
+            $hasSpouse = FinEmploymentEntity::where('user_id', $uid)
+                ->where('is_spouse', true)
+                ->where('start_date', '<=', $year.'-12-31')
+                ->where(fn ($q) => $q->whereNull('end_date')->orWhere('end_date', '>=', $year.'-01-01'))
+                ->exists();
+
+            if ($hasSpouse) {
+                return response()->json([
+                    'error' => 'Cannot set marriage status to unmarried for '.$year.' because there are spouse employment entities that overlap with that year. Remove or update those entities first.',
+                ], 422);
             }
-
-            $data = $validator->validated();
-            $year = (string) $data['year'];
-            $isMarried = $data['is_married'];
-            $uid = Auth::id();
-
-            // If unmarrying, check for spouse employment entities that overlap with that year
-            if (! $isMarried) {
-                $spouseEntities = FinEmploymentEntity::where('user_id', $uid)
-                    ->where('is_spouse', true)
-                    ->where('start_date', '<=', $year.'-12-31')
-                    ->where(function ($query) use ($year) {
-                        $query->whereNull('end_date')
-                            ->orWhere('end_date', '>=', $year.'-01-01');
-                    })
-                    ->exists();
-
-                if ($spouseEntities) {
-                    return response()->json([
-                        'error' => 'Cannot set marriage status to unmarried for '.$year.' because there are spouse employment entities that overlap with that year. Remove or update those entities first.',
-                    ], 422);
-                }
-            }
-
-            $user = Auth::user();
-            $statusByYear = $user->marriage_status_by_year;
-
-            if (is_string($statusByYear)) {
-                $statusByYear = json_decode($statusByYear, true) ?? [];
-            }
-
-            $statusByYear[$year] = $isMarried;
-
-            $user->marriage_status_by_year = json_encode($statusByYear);
-            $user->save();
-
-            return response()->json($statusByYear);
-        } catch (\Exception $e) {
-            Log::error('Failed to update marriage status: '.$e->getMessage());
-
-            return response()->json(['error' => 'Failed to update marriage status'], 500);
         }
+
+        $user = Auth::user();
+        $statusByYear = $user->marriage_status_by_year ?? [];
+        $statusByYear[$year] = $data['is_married'];
+        $user->marriage_status_by_year = $statusByYear;
+        $user->save();
+
+        return response()->json($statusByYear);
     }
 }

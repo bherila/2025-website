@@ -100,6 +100,11 @@ class FinanceScheduleCController extends Controller
 
         // Build result grouped by year and entity
         // Key structure: byYear[year][entityId] = { schedule_c_income, schedule_c_expense, schedule_c_home_office }
+        $categoryKeyMap = [
+            'sch_c_income' => 'schedule_c_income',
+            'sch_c_expense' => 'schedule_c_expense',
+            'sch_c_home_office' => 'schedule_c_home_office',
+        ];
         $byYear = [];
         foreach ($rows as $row) {
             $year = substr($row->t_date, 0, 4);
@@ -108,18 +113,28 @@ class FinanceScheduleCController extends Controller
                 continue;
             }
 
+            $meta = FinAccountTag::TAX_CHARACTERISTICS[$taxChar] ?? null;
+            if (! $meta || ! isset($categoryKeyMap[$meta['category']])) {
+                // Non-Schedule C characteristics (interest, dividends, etc.) — skip
+                continue;
+            }
+
+            $key = $categoryKeyMap[$meta['category']];
+            $amount = $meta['category'] === 'sch_c_income'
+                ? (float) $row->t_amt
+                : abs((float) $row->t_amt);
+
             $entityId = $tagEntityMap[$row->tag_id] ?? null;
+            $entityKey = $entityId ?? 'unassigned';
 
             if (! isset($byYear[$year])) {
                 $byYear[$year] = [];
             }
 
-            $entityKey = $entityId ?? 'unassigned';
             if (! isset($byYear[$year][$entityKey])) {
-                $entityName = null;
-                if ($entityId && isset($entities[$entityId])) {
-                    $entityName = $entities[$entityId]->display_name;
-                }
+                $entityName = $entityId && isset($entities[$entityId])
+                    ? $entities[$entityId]->display_name
+                    : null;
                 $byYear[$year][$entityKey] = [
                     'entity_id' => $entityId,
                     'entity_name' => $entityName,
@@ -129,25 +144,8 @@ class FinanceScheduleCController extends Controller
                 ];
             }
 
-            if (str_starts_with($taxChar, 'business_')) {
-                $label = FinAccountTag::labelFor($taxChar);
-                $key = 'schedule_c_income';
-                $amount = (float) $row->t_amt;
-            } elseif (str_starts_with($taxChar, 'sce_')) {
-                $label = FinAccountTag::labelFor($taxChar);
-                $key = 'schedule_c_expense';
-                $amount = abs((float) $row->t_amt);
-            } elseif (str_starts_with($taxChar, 'scho_')) {
-                $label = FinAccountTag::labelFor($taxChar);
-                $key = 'schedule_c_home_office';
-                $amount = abs((float) $row->t_amt);
-            } else {
-                // Non-Schedule C characteristics (interest, dividends, etc.) - skip for Schedule C view
-                continue;
-            }
-
             if (! isset($byYear[$year][$entityKey][$key][$taxChar])) {
-                $byYear[$year][$entityKey][$key][$taxChar] = ['label' => $label, 'total' => 0.0, 'transactions' => []];
+                $byYear[$year][$entityKey][$key][$taxChar] = ['label' => $meta['label'], 'total' => 0.0, 'transactions' => []];
             }
             $byYear[$year][$entityKey][$key][$taxChar]['total'] += $amount;
             $byYear[$year][$entityKey][$key][$taxChar]['transactions'][] = [
