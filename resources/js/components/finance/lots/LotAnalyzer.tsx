@@ -27,7 +27,7 @@ import {
     type WashSaleOptions,
 } from '@/lib/finance/washSaleEngine'
 
-import { VariousTransactionsModal } from './VariousTransactionsModal'
+import { VariousTransactionsModal } from '../VariousTransactionsModal'
 import { WashSaleDetailModal } from './WashSaleDetailModal'
 
 function formatCurrency(value: number): string {

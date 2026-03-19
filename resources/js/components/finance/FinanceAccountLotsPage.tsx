@@ -26,7 +26,7 @@ import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/Acco
 import { fetchWrapper } from '@/fetchWrapper'
 import type { Lot, LotsResponse } from '@/types/finance/lot'
 
-import LotAnalyzer from './LotAnalyzer'
+import LotAnalyzer from './lots/LotAnalyzer'
 import ImportLotsPanel from './lots/ImportLotsPanel'
 
 function formatCurrency(value: string | number | null | undefined): string {

@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/table'
 import type { LotSale } from '@/lib/finance/washSaleEngine'
 
-import { LotMatchSearchModal } from './LotMatchSearchModal'
+import { LotMatchSearchModal } from './lots/LotMatchSearchModal'
 
 // Re-declaring these here to keep the component self-contained, 
 // or they could be imported from a common utils file.

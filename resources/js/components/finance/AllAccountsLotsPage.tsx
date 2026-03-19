@@ -14,7 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
 
-import LotAnalyzer from './LotAnalyzer'
+import LotAnalyzer from './lots/LotAnalyzer'
 
 interface AllAccountsLotsPageProps {
   initialAvailableYears?: number[]
