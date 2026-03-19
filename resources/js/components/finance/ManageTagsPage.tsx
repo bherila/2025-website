@@ -1,6 +1,6 @@
 'use client'
 import { ChevronsUpDown, Pencil, Plus, Search, Trash2 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { TagTotalsView } from '@/components/finance/TagTotalsView'
 import { type FinanceTag, useFinanceTags } from '@/components/finance/useFinanceTags'
@@ -52,11 +52,8 @@ import {
 import { fetchWrapper } from '@/fetchWrapper'
 import { getTagColorDark, getTagColorHex, getTagColorLight } from '@/lib/finance/tagColorUtils'
 import {
-  CATEGORY_LABELS,
-  CATEGORY_ORDER,
   getLabel,
-  isScheduleCCharacteristic,
-  optionsByCategory,
+  groupedOptionsForEntityType,
 } from '@/lib/finance/taxCharacteristics'
 import { accountsUrl } from '@/lib/financeRouteBuilder'
 import { cn } from '@/lib/utils'
@@ -77,7 +74,7 @@ const TAG_COLORS = [
 interface EmploymentEntity {
   id: number
   display_name: string
-  type: string
+  type: 'sch_c' | 'w2' | 'hobby'
 }
 
 function getTaxCharacteristicLabel(value: string | null | undefined): string {
@@ -113,27 +110,27 @@ function ColorPicker({
   )
 }
 
+/** Combobox for tax characteristics, filtered by entity type */
 function TaxCharacteristicCombobox({
   id,
   value,
   onChange,
+  entityType,
 }: {
   id?: string
   value: string
   onChange: (v: string) => void
+  entityType: string | null
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
 
-  const GROUPED_OPTIONS = CATEGORY_ORDER.map((cat) => ({
-    label: CATEGORY_LABELS[cat],
-    options: optionsByCategory(cat),
-  }))
+  const groupedOptions = groupedOptionsForEntityType(entityType)
 
   const NONE_OPTION = { value: 'none', label: 'None (no tax characteristic)' }
 
   const q = search.toLowerCase()
-  const filteredGroups = GROUPED_OPTIONS.map((group) => ({
+  const filteredGroups = groupedOptions.map((group) => ({
     ...group,
     options: group.options.filter((opt) => opt.label.toLowerCase().includes(q) || opt.value.includes(q)),
   })).filter((g) => g.options.length > 0)
@@ -210,13 +207,48 @@ function TaxCharacteristicCombobox({
   )
 }
 
+/** Entity selector dropdown - shown first in the tag form */
+function EntitySelector({
+  id,
+  entities,
+  selectedEntityId,
+  onEntityChange,
+}: {
+  id?: string
+  entities: EmploymentEntity[]
+  selectedEntityId: number | null
+  onEntityChange: (entityId: number | null) => void
+}) {
+  const TYPE_LABELS: Record<string, string> = {
+    sch_c: 'Schedule C',
+    w2: 'W-2',
+    hobby: 'Hobby',
+  }
+
+  return (
+    <select
+      id={id}
+      className="mt-1 w-full max-w-sm rounded-md border border-input bg-background px-3 py-2 text-sm"
+      value={selectedEntityId ?? ''}
+      onChange={(e) => onEntityChange(e.target.value ? Number(e.target.value) : null)}
+    >
+      <option value="">None (no entity / investment income)</option>
+      {entities.map((entity) => (
+        <option key={entity.id} value={entity.id}>
+          {entity.display_name} ({TYPE_LABELS[entity.type] ?? entity.type})
+        </option>
+      ))}
+    </select>
+  )
+}
+
 export default function ManageTagsPage() {
   const { tags, setTags, isLoading, error: tagsError, refreshTags } = useFinanceTags({ includeCounts: true, includeTotals: true })
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   
-  // Employment entities for Schedule C linking
-  const [schCEntities, setSchCEntities] = useState<EmploymentEntity[]>([])
+  // All employment entities (W-2, Schedule C, hobby)
+  const [allEntities, setAllEntities] = useState<EmploymentEntity[]>([])
   
   // Create dialog state
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
@@ -240,15 +272,22 @@ export default function ManageTagsPage() {
   const [deleteConfirmTag, setDeleteConfirmTag] = useState<FinanceTag | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
-  // Fetch Schedule C employment entities
-  useState(() => {
+  // Fetch all employment entities
+  useEffect(() => {
     fetchWrapper.get('/api/finance/employment-entities')
       .then((data: unknown) => {
         const entities = data as EmploymentEntity[]
-        setSchCEntities(entities.filter(e => e.type === 'sch_c'))
+        setAllEntities(Array.isArray(entities) ? entities : [])
       })
       .catch(() => { /* ignore - entities are optional */ })
-  })
+  }, [])
+
+  // Derive the entity type from a selected entity ID
+  const getEntityType = (entityId: number | null): string | null => {
+    if (!entityId) return null
+    const entity = allEntities.find(e => e.id === entityId)
+    return entity?.type ?? null
+  }
 
   const handleCreateTag = async () => {
     if (!newTagLabel.trim()) {
@@ -263,7 +302,7 @@ export default function ManageTagsPage() {
         tag_label: newTagLabel.trim(),
         tag_color: newTagColor,
         tax_characteristic: newTagTaxChar === 'none' ? null : newTagTaxChar,
-        employment_entity_id: isScheduleCCharacteristic(newTagTaxChar) ? newTagEntityId : null,
+        employment_entity_id: newTagEntityId,
       })
       setSuccessMessage('Tag created successfully')
       setNewTagLabel('')
@@ -284,7 +323,7 @@ export default function ManageTagsPage() {
     setEditLabel(tag.tag_label)
     setEditColor(tag.tag_color)
     setEditTaxChar(tag.tax_characteristic || 'none')
-    setEditEntityId((tag as FinanceTag & { employment_entity_id?: number | null }).employment_entity_id ?? null)
+    setEditEntityId(tag.employment_entity_id ?? null)
     setEditError(null)
   }
 
@@ -306,18 +345,17 @@ export default function ManageTagsPage() {
       setIsUpdating(true)
       setEditError(null)
       const updatedTaxChar = editTaxChar === 'none' ? null : editTaxChar
-      const updatedEntityId = isScheduleCCharacteristic(editTaxChar) ? editEntityId : null
       await fetchWrapper.put(`/api/finance/tags/${editingTag.tag_id}`, {
         tag_label: editLabel.trim(),
         tag_color: editColor,
         tax_characteristic: updatedTaxChar,
-        employment_entity_id: updatedEntityId,
+        employment_entity_id: editEntityId,
       })
       // Patch the updated tag into local state to avoid page flicker from re-querying
       setTags((prev) =>
         prev.map((t) =>
           t.tag_id === editingTag.tag_id
-            ? { ...t, tag_label: editLabel.trim(), tag_color: editColor, tax_characteristic: updatedTaxChar }
+            ? { ...t, tag_label: editLabel.trim(), tag_color: editColor, tax_characteristic: updatedTaxChar, employment_entity_id: editEntityId }
             : t,
         ),
       )
@@ -339,6 +377,7 @@ export default function ManageTagsPage() {
       await fetchWrapper.delete(`/api/finance/tags/${deleteConfirmTag.tag_id}`, {})
       setSuccessMessage('Tag deleted successfully')
       setDeleteConfirmTag(null)
+      setEditingTag(null)
       await refreshTags()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete tag')
@@ -407,89 +446,81 @@ export default function ManageTagsPage() {
                 <TableRow>
                   <TableHead>Tag</TableHead>
                   <TableHead>Tax Characteristic</TableHead>
+                  <TableHead>Entity</TableHead>
                   <TableHead className="w-[120px]">Transactions</TableHead>
-                  <TableHead className="w-[120px] text-right">Actions</TableHead>
+                  <TableHead className="w-[80px] text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {tags.map((tag) => (
-                  <TableRow key={tag.tag_id}>
-                    <TableCell className="py-2">
-                      <Badge 
-                        style={{ 
-                          backgroundColor: getTagColorLight(tag.tag_color),
-                          color: getTagColorDark(tag.tag_color)
-                        }}
-                      >
-                        {tag.tag_label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="py-2 text-sm text-muted-foreground">
-                      {getTaxCharacteristicLabel(tag.tax_characteristic)}
-                    </TableCell>
-                    <TableCell className="py-2">
-                      {tag.transaction_count !== undefined && (
-                        <span className="text-sm text-muted-foreground">
-                          {tag.transaction_count}
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="py-2 text-right">
-                      <div className="flex justify-end gap-1">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button 
-                              size="icon" 
-                              variant="ghost"
-                              asChild
-                              aria-label={`View all transactions tagged ${tag.tag_label}`}
-                            >
-                              <a href={`/finance/all-transactions?tag=${encodeURIComponent(tag.tag_label)}`}>
-                                <Search className="h-4 w-4" aria-hidden="true" />
-                              </a>
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>View all transactions with this tag</p>
-                          </TooltipContent>
-                        </Tooltip>
+                {tags.map((tag) => {
+                  const linkedEntity = tag.employment_entity_id
+                    ? allEntities.find(e => e.id === tag.employment_entity_id)
+                    : null
+                  return (
+                    <TableRow key={tag.tag_id}>
+                      <TableCell className="py-2">
+                        <Badge 
+                          style={{ 
+                            backgroundColor: getTagColorLight(tag.tag_color),
+                            color: getTagColorDark(tag.tag_color)
+                          }}
+                        >
+                          {tag.tag_label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="py-2 text-sm text-muted-foreground">
+                        {getTaxCharacteristicLabel(tag.tax_characteristic)}
+                      </TableCell>
+                      <TableCell className="py-2 text-sm text-muted-foreground">
+                        {linkedEntity ? linkedEntity.display_name : '—'}
+                      </TableCell>
+                      <TableCell className="py-2">
+                        {tag.transaction_count !== undefined && (
+                          <span className="text-sm text-muted-foreground">
+                            {tag.transaction_count}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="py-2 text-right">
+                        <div className="flex justify-end gap-1">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button 
+                                size="icon" 
+                                variant="ghost"
+                                asChild
+                                aria-label={`View all transactions tagged ${tag.tag_label}`}
+                              >
+                                <a href={`/finance/all-transactions?tag=${encodeURIComponent(tag.tag_label)}`}>
+                                  <Search className="h-4 w-4" aria-hidden="true" />
+                                </a>
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>View all transactions with this tag</p>
+                            </TooltipContent>
+                          </Tooltip>
 
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button 
-                              size="icon" 
-                              variant="ghost"
-                              onClick={() => handleStartEdit(tag)}
-                              aria-label={`Edit tag ${tag.tag_label}`}
-                            >
-                              <Pencil className="h-4 w-4" aria-hidden="true" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Edit tag</p>
-                          </TooltipContent>
-                        </Tooltip>
-
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button 
-                              size="icon" 
-                              variant="ghost"
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
-                              onClick={() => setDeleteConfirmTag(tag)}
-                              aria-label={`Delete tag ${tag.tag_label}`}
-                            >
-                              <Trash2 className="h-4 w-4" aria-hidden="true" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Delete tag</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button 
+                                size="icon" 
+                                variant="ghost"
+                                onClick={() => handleStartEdit(tag)}
+                                aria-label={`Edit tag ${tag.tag_label}`}
+                              >
+                                <Pencil className="h-4 w-4" aria-hidden="true" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Edit tag</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
               </TableBody>
             </Table>
           </TooltipProvider>
@@ -530,28 +561,28 @@ export default function ManageTagsPage() {
                 <ColorPicker selectedColor={newTagColor} onColorChange={setNewTagColor} />
               </div>
             </div>
+            {allEntities.length > 0 && (
+              <div>
+                <Label htmlFor="create-entity">Applicable Entity</Label>
+                <EntitySelector
+                  id="create-entity"
+                  entities={allEntities}
+                  selectedEntityId={newTagEntityId}
+                  onEntityChange={(id) => { setNewTagEntityId(id); setNewTagTaxChar('none') }}
+                />
+              </div>
+            )}
             <div>
               <Label htmlFor="create-tax-char">Tax Characteristic</Label>
               <div className="mt-1">
-                <TaxCharacteristicCombobox id="create-tax-char" value={newTagTaxChar} onChange={(v) => { setNewTagTaxChar(v); if (!isScheduleCCharacteristic(v)) setNewTagEntityId(null) }} />
+                <TaxCharacteristicCombobox
+                  id="create-tax-char"
+                  value={newTagTaxChar}
+                  onChange={setNewTagTaxChar}
+                  entityType={getEntityType(newTagEntityId)}
+                />
               </div>
             </div>
-            {isScheduleCCharacteristic(newTagTaxChar) && schCEntities.length > 0 && (
-              <div>
-                <Label htmlFor="create-entity">Schedule C Business</Label>
-                <select
-                  id="create-entity"
-                  className="mt-1 w-full max-w-sm rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={newTagEntityId ?? ''}
-                  onChange={(e) => setNewTagEntityId(e.target.value ? Number(e.target.value) : null)}
-                >
-                  <option value="">Select a business…</option>
-                  {schCEntities.map(e => (
-                    <option key={e.id} value={e.id}>{e.display_name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
             <div className="flex items-center gap-3">
               <span className="text-sm text-muted-foreground">Preview:</span>
               <Badge 
@@ -625,28 +656,28 @@ export default function ManageTagsPage() {
                 <ColorPicker selectedColor={editColor} onColorChange={setEditColor} />
               </div>
             </div>
+            {allEntities.length > 0 && (
+              <div>
+                <Label htmlFor="edit-entity">Applicable Entity</Label>
+                <EntitySelector
+                  id="edit-entity"
+                  entities={allEntities}
+                  selectedEntityId={editEntityId}
+                  onEntityChange={(id) => { setEditEntityId(id); setEditTaxChar('none') }}
+                />
+              </div>
+            )}
             <div>
               <Label htmlFor="edit-tax-char">Tax Characteristic</Label>
               <div className="mt-1">
-                <TaxCharacteristicCombobox id="edit-tax-char" value={editTaxChar} onChange={(v) => { setEditTaxChar(v); if (!isScheduleCCharacteristic(v)) setEditEntityId(null) }} />
+                <TaxCharacteristicCombobox
+                  id="edit-tax-char"
+                  value={editTaxChar}
+                  onChange={setEditTaxChar}
+                  entityType={getEntityType(editEntityId)}
+                />
               </div>
             </div>
-            {isScheduleCCharacteristic(editTaxChar) && schCEntities.length > 0 && (
-              <div>
-                <Label htmlFor="edit-entity">Schedule C Business</Label>
-                <select
-                  id="edit-entity"
-                  className="mt-1 w-full max-w-sm rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={editEntityId ?? ''}
-                  onChange={(e) => setEditEntityId(e.target.value ? Number(e.target.value) : null)}
-                >
-                  <option value="">Select a business…</option>
-                  {schCEntities.map(e => (
-                    <option key={e.id} value={e.id}>{e.display_name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
             <div className="flex items-center gap-3">
               <span className="text-sm text-muted-foreground">Preview:</span>
               <Badge 
@@ -660,33 +691,46 @@ export default function ManageTagsPage() {
               </Badge>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-row items-center justify-between sm:justify-between gap-2">
             <Button
-              variant="outline"
-              onClick={handleCancelEdit}
+              variant="ghost"
+              size="sm"
+              className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
+              onClick={() => setDeleteConfirmTag(editingTag)}
               disabled={isUpdating}
+              aria-label={`Delete tag ${editLabel}`}
             >
-              Cancel
+              <Trash2 className="h-4 w-4 mr-1" aria-hidden="true" />
+              Delete
             </Button>
-            <Button 
-              onClick={handleUpdateTag} 
-              disabled={isUpdating || !editLabel.trim()}
-            >
-              {isUpdating ? (
-                <>
-                  <Spinner size="small" className="mr-2" aria-hidden="true" />
-                  Saving...
-                </>
-              ) : (
-                'Save Changes'
-              )}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={handleCancelEdit}
+                disabled={isUpdating}
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleUpdateTag} 
+                disabled={isUpdating || !editLabel.trim()}
+              >
+                {isUpdating ? (
+                  <>
+                    <Spinner size="small" className="mr-2" aria-hidden="true" />
+                    Saving...
+                  </>
+                ) : (
+                  'Save Changes'
+                )}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!deleteConfirmTag} onOpenChange={() => setDeleteConfirmTag(null)}>
+      <AlertDialog open={!!deleteConfirmTag} onOpenChange={(open) => { if (!open) setDeleteConfirmTag(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Tag?</AlertDialogTitle>
@@ -728,4 +772,3 @@ export default function ManageTagsPage() {
     </div>
   )
 }
-

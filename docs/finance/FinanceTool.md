@@ -29,7 +29,7 @@ The navbar has a **two-sided layout**:
 | Left | "FINANCE" branding in all-caps (tracked text) |
 | Left (account pages) | Account combobox (with "All Accounts" option) |
 | Left (account pages) | Account tabs: Transactions, Duplicates, Linker, Statements, Lots, Summary |
-| Right (`ml-auto`) | Section links: Schedule C, RSU, Payslips, Tags, Accounts |
+| Right (`ml-auto`) | Section links: Tax Preview, RSU, Payslips, Tags, Accounts |
 
 Account combobox and tabs appear only when `accountId` prop is provided.
 When `accountId === undefined` (non-account pages such as Schedule C, Tags, RSU), a standalone **Transactions** link is shown instead of the account combobox and tabs; it defaults to the All Accounts transactions view (`/finance/account/all/transactions`).
@@ -50,7 +50,7 @@ interface FinanceNavbarProps {
 
 | Link | Route |
 |------|-------|
-| Schedule C | `/finance/schedule-c` |
+| Tax Preview | `/finance/tax-preview` |
 | RSU | `/finance/rsu` |
 | Payslips | `/finance/payslips` |
 | Tags | `/finance/tags` |
@@ -614,33 +614,11 @@ PDF statements can be imported using Gemini AI for parsing. The frontend now pro
 
 ### Statement Details Schema
 
-The `fin_statement_details` table stores MTD/YTD line items:
-
-```sql
-CREATE TABLE fin_statement_details (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  statement_id INT NOT NULL,        -- FK to fin_statements
-  label VARCHAR(255) NOT NULL,      -- e.g., "Interest", "Dividends", "Fees"
-  mtd_amount DECIMAL(15,2),         -- Month-to-date value
-  ytd_amount DECIMAL(15,2),         -- Year-to-date value
-  FOREIGN KEY (statement_id) REFERENCES fin_statements(statement_id)
-);
-```
+Statement details (MTD/YTD line items) are stored in the `fin_statement_details` table. See `/database/schema/mysql-schema.sql` for the full schema.
 
 ### Statement Schema
 
-The `fin_statements` table stores account balance snapshots and statement metadata:
-
-```sql
-CREATE TABLE fin_statements (
-  statement_id INT AUTO_INCREMENT PRIMARY KEY,
-  acct_id INT NOT NULL,                  -- FK to fin_accounts
-  balance DECIMAL(15,2) NOT NULL,        -- Closing balance
-  statement_opening_date DATE,           -- Statement period start date
-  statement_closing_date DATE NOT NULL,  -- Statement period end date
-  FOREIGN KEY (acct_id) REFERENCES fin_accounts(acct_id)
-);
-```
+Statement snapshots and metadata are stored in `fin_statements`. See `/database/schema/mysql-schema.sql` for the full schema.
 
 ### Import UI Components
 
@@ -672,20 +650,7 @@ The finance module supports tracking investment positions at the lot level. This
 
 ### Database Schema (`fin_account_lots`)
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `lot_id` | BIGINT | Primary Key |
-| `acct_id` | BIGINT | Account ID |
-| `symbol` | VARCHAR(50) | Ticker symbol |
-| `quantity` | DECIMAL(18,8) | Share quantity |
-| `purchase_date` | DATE | Date acquired |
-| `cost_basis` | DECIMAL(18,4) | Total cost basis |
-| `sale_date` | DATE | Date sold (NULL for open) |
-| `proceeds` | DECIMAL(18,4) | Total sale proceeds |
-| `realized_gain_loss` | DECIMAL(18,4) | Calculated realized P/L |
-| `is_short_term` | BOOLEAN | Auto-computed holding period |
-| `lot_source` | VARCHAR(50) | `import` or `manual` |
-| `statement_id` | BIGINT | Link to the statement this lot was imported from |
+Lot data is stored in `fin_account_lots`. See `/database/schema/mysql-schema.sql` for the full schema. Key columns: `lot_id`, `acct_id`, `symbol`, `quantity`, `purchase_date`, `cost_basis`, `sale_date`, `proceeds`, `realized_gain_loss`, `is_short_term`, `lot_source`, `statement_id`.
 
 ### Lots UI Page
 
