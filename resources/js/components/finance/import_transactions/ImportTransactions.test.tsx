@@ -3,8 +3,9 @@ import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 
-import ImportTransactions from '@/components/finance/ImportTransactions';
 import { fetchWrapper } from '@/fetchWrapper';
+
+import ImportTransactions from './ImportTransactions';
 
 // Mock the child component
 jest.mock('@/components/finance/TransactionsTable', () => {
