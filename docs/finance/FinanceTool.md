@@ -23,6 +23,28 @@ php artisan db:seed
 - Realistic transactions across all three accounts (including direct deposits, stock/option trades, and wash-sale coverage scenarios)
 - Two demo tags (one Schedule C tax-characterized tag, one generic non-tax tag) and sample tag mappings
 
+### Screenshot generation workflow (avoid empty states)
+
+Before generating screenshots for finance pages:
+
+1. Seed demo data
+   ```bash
+   php artisan migrate --force
+   php artisan db:seed --force
+   ```
+2. Start the app
+   ```bash
+   composer run dev
+   ```
+3. Navigate to populated pages, for example:
+   - `/finance/account/all/transactions`
+   - `/finance/account/{id}/transactions` for one of:
+     - `Demo Checking`
+     - `Demo Savings`
+     - `Demo Brokerage`
+
+This ensures screenshots are taken against seeded, realistic data rather than empty-state views.
+
 ## Main Navigation
 
 Finance pages use a dedicated layout (`resources/views/layouts/finance.blade.php`) that **replaces** the main site navbar with the Finance-specific navigation bar. The main site navbar (`resources/js/components/navbar.tsx`) is not rendered on finance pages.
