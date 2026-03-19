@@ -163,6 +163,62 @@ class RuleConditionEvaluatorTest extends TestCase
         $this->assertFalse($evaluator->matches($tx, $condition));
     }
 
+    public function test_stock_symbol_is_symbol_matches_exact(): void
+    {
+        $evaluator = new StockSymbolConditionEvaluator;
+        $tx = $this->makeTransaction(['t_symbol' => 'AAPL']);
+        $condition = $this->makeCondition(['type' => 'stock_symbol_presence', 'operator' => 'IS_SYMBOL', 'value' => 'AAPL']);
+        $this->assertTrue($evaluator->matches($tx, $condition));
+    }
+
+    public function test_stock_symbol_is_symbol_matches_one_of_comma_list(): void
+    {
+        $evaluator = new StockSymbolConditionEvaluator;
+        $tx = $this->makeTransaction(['t_symbol' => 'TSLA']);
+        $condition = $this->makeCondition(['type' => 'stock_symbol_presence', 'operator' => 'IS_SYMBOL', 'value' => 'AAPL, TSLA, MSFT']);
+        $this->assertTrue($evaluator->matches($tx, $condition));
+    }
+
+    public function test_stock_symbol_is_symbol_does_not_match_absent_symbol(): void
+    {
+        $evaluator = new StockSymbolConditionEvaluator;
+        $tx = $this->makeTransaction(['t_symbol' => 'NVDA']);
+        $condition = $this->makeCondition(['type' => 'stock_symbol_presence', 'operator' => 'IS_SYMBOL', 'value' => 'AAPL, TSLA']);
+        $this->assertFalse($evaluator->matches($tx, $condition));
+    }
+
+    public function test_stock_symbol_is_symbol_case_insensitive(): void
+    {
+        $evaluator = new StockSymbolConditionEvaluator;
+        $tx = $this->makeTransaction(['t_symbol' => 'aapl']);
+        $condition = $this->makeCondition(['type' => 'stock_symbol_presence', 'operator' => 'IS_SYMBOL', 'value' => 'AAPL']);
+        $this->assertTrue($evaluator->matches($tx, $condition));
+    }
+
+    public function test_stock_symbol_is_symbol_trims_whitespace_in_list(): void
+    {
+        $evaluator = new StockSymbolConditionEvaluator;
+        $tx = $this->makeTransaction(['t_symbol' => 'AAPL']);
+        $condition = $this->makeCondition(['type' => 'stock_symbol_presence', 'operator' => 'IS_SYMBOL', 'value' => ' AAPL , TSLA ']);
+        $this->assertTrue($evaluator->matches($tx, $condition));
+    }
+
+    public function test_stock_symbol_is_symbol_does_not_match_null_symbol(): void
+    {
+        $evaluator = new StockSymbolConditionEvaluator;
+        $tx = $this->makeTransaction(['t_symbol' => null]);
+        $condition = $this->makeCondition(['type' => 'stock_symbol_presence', 'operator' => 'IS_SYMBOL', 'value' => 'AAPL']);
+        $this->assertFalse($evaluator->matches($tx, $condition));
+    }
+
+    public function test_stock_symbol_is_symbol_ignores_blank_entries_in_list(): void
+    {
+        $evaluator = new StockSymbolConditionEvaluator;
+        $tx = $this->makeTransaction(['t_symbol' => 'AAPL']);
+        $condition = $this->makeCondition(['type' => 'stock_symbol_presence', 'operator' => 'IS_SYMBOL', 'value' => 'AAPL,,, TSLA']);
+        $this->assertTrue($evaluator->matches($tx, $condition));
+    }
+
     // -------------------------------------------------------------------------
     // Option type evaluator
     // -------------------------------------------------------------------------

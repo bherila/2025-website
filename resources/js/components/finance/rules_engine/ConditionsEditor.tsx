@@ -1,6 +1,7 @@
 'use client'
 
 import { Plus, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,6 +11,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import type { FinRuleCondition } from './types'
 import { CONDITION_OPERATORS, CONDITION_TYPES } from './types'
 
+interface FinAccount {
+  acct_id: number
+  acct_name: string
+}
+
 interface ConditionsEditorProps {
   conditions: FinRuleCondition[]
   onChange: (conditions: FinRuleCondition[]) => void
@@ -18,6 +24,7 @@ interface ConditionsEditorProps {
 const VALUE_HIDDEN_CASES: Record<string, string[]> = {
   stock_symbol_presence: ['HAVE', 'DO_NOT_HAVE'],
   option_type: ['ANY'],
+  direction: ['INCOME', 'EXPENSE'],
 }
 
 function isValueHidden(type: string, operator: string): boolean {
@@ -25,6 +32,24 @@ function isValueHidden(type: string, operator: string): boolean {
 }
 
 export function ConditionsEditor({ conditions, onChange }: ConditionsEditorProps) {
+  const [accounts, setAccounts] = useState<FinAccount[]>([])
+
+  useEffect(() => {
+    fetch('/api/finance/accounts')
+      .then((r) => r.json())
+      .then((json) => {
+        const all: FinAccount[] = [
+          ...(json.assetAccounts ?? []),
+          ...(json.liabilityAccounts ?? []),
+          ...(json.retirementAccounts ?? []),
+        ]
+        setAccounts(all)
+      })
+      .catch(() => {
+        console.error('Failed to load accounts for condition editor')
+      })
+  }, [])
+
   const addCondition = () => {
     onChange([
       ...conditions,
@@ -101,14 +126,39 @@ export function ConditionsEditor({ conditions, onChange }: ConditionsEditorProps
             </div>
 
             {!hideValue && (
-              <div className="min-w-[120px] flex-1">
-                <Label className="text-xs text-muted-foreground">Value</Label>
-                <Input
-                  value={condition.value ?? ''}
-                  onChange={(e) => updateCondition(index, { value: e.target.value })}
-                  placeholder="Value"
-                />
-              </div>
+              condition.type === 'account_id' ? (
+                <div className="min-w-[120px] flex-1">
+                  <Label className="text-xs text-muted-foreground">Account</Label>
+                  <Select
+                    value={condition.value ?? ''}
+                    onValueChange={(v) => updateCondition(index, { value: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select account" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {accounts.map((acc) => (
+                        <SelectItem key={acc.acct_id} value={String(acc.acct_id)}>
+                          {acc.acct_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div className="min-w-[120px] flex-1">
+                  <Label className="text-xs text-muted-foreground">Value</Label>
+                  <Input
+                    value={condition.value ?? ''}
+                    onChange={(e) => updateCondition(index, { value: e.target.value })}
+                    placeholder={
+                      condition.type === 'stock_symbol_presence' && condition.operator === 'IS_SYMBOL'
+                        ? 'e.g. AAPL, TSLA'
+                        : 'Value'
+                    }
+                  />
+                </div>
+              )
             )}
 
             {showExtra && (
