@@ -60,14 +60,16 @@ Fallbacks & migration:
 **IMPORTANT**: All validations MUST pass before committing code:
 
 ### PHP Validations
-- **PHPUnit Tests**: Run `php artisan test` or `composer test` - all tests must pass
-- **PHP Type Checks**: Run `./vendor/bin/phpstan analyse` if configured, or ensure proper type hints
-- **PHP Linter**: Laravel Pint is configured - run `./vendor/bin/pint` to format code
+- **PHP Linter**: Laravel Pint is configured - run `./vendor/bin/pint --test` to check, `./vendor/bin/pint` to fix
+- **PHPUnit Tests**: Run `vendor/bin/phpunit --configuration phpunit.xml` - all tests must pass
+  - **Important**: Run `pnpm run build` before PHPUnit so the Vite manifest exists for blade view tests
+  - SQLite in-memory DB is configured automatically via `phpunit.xml` and `tests/bootstrap.php` — no extra setup needed
+  - Do NOT use `$this->withoutVite()` in tests; the real manifest should be present during testing
 
 ### Frontend Validations
-- **TypeScript Type Check**: Run `npm run type-check` - no TypeScript errors
-- **ESLint**: Run `npm run lint` - no linting errors
-- **Jest Tests**: Run `npm test` - all tests must pass
+- **TypeScript Type Check**: Run `pnpm run type-check` - no TypeScript errors
+- **ESLint**: Run `pnpm run lint` - no linting errors
+- **Jest Tests**: Run `pnpm run test` - all tests must pass
 
 ### When to Run Validations
 - Before every commit
