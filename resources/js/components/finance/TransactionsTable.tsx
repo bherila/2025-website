@@ -28,7 +28,7 @@ import { cn } from '@/lib/utils'
 
 import { ClearFilterButton } from './ClearFilterButton'
 import TransactionLotsModal from './lots/TransactionLotsModal'
-import { TagApplyButton } from './TagApplyButton'
+import { TagSelect } from './rules_engine/TagSelect'
 import TransactionDetailsModal from './TransactionDetailsModal'
 import TransactionLinkModal from './TransactionLinkModal'
 
@@ -123,6 +123,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
   const [lotsTransaction, setLotsTransaction] = useState<AccountLineItem | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [viewAll, setViewAll] = useState(false)
+  const [selectedTagId, setSelectedTagId] = useState<string | null>(null)
 
   const isDuplicate = (item: AccountLineItem) => {
     if (!duplicates || duplicates.length === 0) {
@@ -146,8 +147,9 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
     fallbackTags: tagsFromRows,
   })
 
-  const handleApplyTag = async (tagId: number, tagLabel: string) => {
-    const transactionIds = sortedData.map((r) => r.t_id).join(',')
+  const handleApplyTag = async (tagId: number) => {
+    const transactionIds = sortedData.map((r) => r.t_id).filter((id) => id != null).join(',')
+    if (!transactionIds) return
     try {
       await fetchWrapper.post('/api/finance/tags/apply', { tag_id: tagId, transaction_ids: transactionIds })
       if (typeof refreshFn === 'function') {
@@ -159,10 +161,13 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
   }
 
   const [removeTagsConfirmOpen, setRemoveTagsConfirmOpen] = useState(false)
-  const handleRemoveAllTags = async () => {
-    const transactionIds = sortedData.map((r) => r.t_id).join(',')
+  const handleRemoveAllTags = async (tagId?: number) => {
+    const transactionIds = sortedData.map((r) => r.t_id).filter((id) => id != null).join(',')
+    if (!transactionIds) return
     try {
-      await fetchWrapper.post('/api/finance/tags/remove', { transaction_ids: transactionIds })
+      const payload: Record<string, unknown> = { transaction_ids: transactionIds }
+      if (tagId != null) payload.tag_id = tagId
+      await fetchWrapper.post('/api/finance/tags/remove', payload)
       if (typeof refreshFn === 'function') {
         refreshFn()
       }
@@ -908,36 +913,52 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
               </AlertDescription>
             </Alert>
           ) : (
-            <div className="p-4 border rounded flex flex-wrap items-center gap-4">
-              <span>Apply tag to {sortedData.length} selected transactions:</span>
+            <div className="p-4 border rounded flex flex-wrap items-center gap-3">
+              <span className="text-sm">Tag {sortedData.length} transaction{sortedData.length !== 1 ? 's' : ''} in view:</span>
               {isLoadingTags ? (
                 <Spinner size="small" />
               ) : (
-                <div className="flex flex-wrap gap-2">
-                  {availableTags.map((tag) => (
-                    <TagApplyButton
-                      key={tag.tag_id}
-                      tagId={tag.tag_id}
-                      tagLabel={tag.tag_label}
-                      tagColor={tag.tag_color}
-                      disabled={sortedData.length === 0}
-                      onApplyTag={handleApplyTag}
-                    />
-                  ))}
+                <>
+                  <TagSelect
+                    value={selectedTagId}
+                    onChange={setSelectedTagId}
+                    tags={availableTags}
+                    placeholder="Select a tag…"
+                    className="w-48"
+                  />
+                  <Button
+                    size="sm"
+                    disabled={sortedData.length === 0 || !selectedTagId}
+                    onClick={() => {
+                      if (selectedTagId) void handleApplyTag(Number(selectedTagId))
+                    }}
+                  >
+                    Add Tag
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={sortedData.length === 0 || !selectedTagId}
+                    onClick={() => {
+                      if (selectedTagId) void handleRemoveAllTags(Number(selectedTagId))
+                    }}
+                  >
+                    Remove Tag
+                  </Button>
                   <Button
                     variant="destructive"
                     size="sm"
                     disabled={sortedData.length === 0}
                     onClick={() => setRemoveTagsConfirmOpen(true)}
                   >
-                    Remove all tags
+                    Remove All Tags
                   </Button>
                   <a href="/finance/tags" className="ml-auto">
                     <Button variant="secondary" size="sm">
                       Manage Tags
                     </Button>
                   </a>
-                </div>
+                </>
               )}
             </div>
           )}

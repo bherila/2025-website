@@ -107,7 +107,6 @@ export default function RulesList() {
               isFirst={index === 0}
               isLast={index === rules.length - 1}
               onEdit={() => handleEdit(rule)}
-              onDelete={() => handleDelete(rule)}
               onMoveUp={() => handleReorder(rule.id, 'up')}
               onMoveDown={() => handleReorder(rule.id, 'down')}
             />
@@ -120,6 +119,7 @@ export default function RulesList() {
         onOpenChange={setModalOpen}
         rule={editingRule}
         onSaved={fetchRules}
+        onDeleted={fetchRules}
       />
     </div>
   )

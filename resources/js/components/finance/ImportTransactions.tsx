@@ -23,54 +23,16 @@ import {
   uploadPdfFile,
 } from './importHelpers'
 import { ImportProgressDialog } from './ImportProgressDialog'
+import type { GeminiAccountBlock } from './importTypes'
 import { PdfStatementPreviewCard } from './PdfStatementPreviewCard'
 import { StatementPreviewCard } from './StatementPreviewCard'
 import TransactionsTable from './TransactionsTable'
+import { useImportTransactionDragDrop } from './useImportTransactionDragDrop'
+import { useImportTransactionPaste } from './useImportTransactionPaste'
+import { type GeminiImportResponse, useProcessPdfWithGemini } from './useProcessPdfWithGemini'
 
-/** A single account block within a Gemini response */
-export interface GeminiAccountBlock {
-  statementInfo?: {
-    brokerName?: string
-    accountNumber?: string
-    accountName?: string
-    periodStart?: string
-    periodEnd?: string
-    closingBalance?: number
-  }
-  statementDetails?: Array<{
-    section: string
-    line_item: string
-    statement_period_value: number
-    ytd_value: number
-    is_percentage: boolean
-  }>
-  transactions?: Array<{
-    date: string
-    description: string
-    amount: number
-    type?: string
-  }>
-  lots?: Array<{
-    symbol: string
-    description?: string
-    quantity: number
-    purchaseDate: string
-    costBasis: number
-    costPerUnit?: number
-    marketValue?: number
-    unrealizedGainLoss?: number
-    saleDate?: string
-    proceeds?: number
-    realizedGainLoss?: number
-  }>
-}
-
-/** Response structure from the Gemini PDF import endpoint */
-interface GeminiImportResponse extends GeminiAccountBlock {
-  /** Multi-account responses include this array; single-account responses do not */
-  accounts?: GeminiAccountBlock[]
-  error?: string
-}
+// Re-export GeminiAccountBlock for consumers that imported it from here
+export type { GeminiAccountBlock }
 
 /** Information about the dropped/pasted file */
 interface FileInfo {
@@ -97,7 +59,6 @@ export default function ImportTransactions({
   const [text, setText] = useState<string>('')
   const [fileInfo, setFileInfo] = useState<FileInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [isDragOver, setIsDragOver] = useState(false)
   const [loading, setLoading] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
   const [importProgress, setImportProgress] = useState({ processed: 0, total: 0 })
@@ -384,153 +345,35 @@ export default function ImportTransactions({
     }
   }, [])
 
+  /** Drag-and-drop and file input handlers */
+  const { isDragOver, handleFileInputChange, handleDrop, handleDragOver, handleDragLeave } =
+    useImportTransactionDragDrop({ onFileReceived: handleFileRead })
+
+  /** Paste handler (Ctrl+V) */
+  useImportTransactionPaste({
+    onFileReceived: handleFileRead,
+    onTextReceived: setText,
+    setPdfData,
+    setFileInfo,
+  })
+
+  /** Gemini PDF processing hook */
+  const { processPdfWithGemini: _processPdfWithGemini } = useProcessPdfWithGemini({
+    accountId,
+    accountsForMatching,
+    saveFileToS3,
+    setLoading,
+    setGeminiError,
+    setError,
+    setPdfData,
+    setPendingPdfFile,
+    setUploadedFileHash,
+  })
+
   /** Send the pending PDF to Gemini for AI processing */
   const processPdfWithGemini = useCallback(async () => {
-    if (!pendingPdfFile) return
-    setLoading(true)
-    setGeminiError(null)
-    setError(null)
-    const formData = new FormData()
-    formData.append('file', pendingPdfFile)
-    // Include accounts context (name + last4 only, never full numbers) so the LLM
-    // can map multi-account statements to the correct user accounts
-    const accountsCtx = accountsForMatching
-      .filter(a => a.acct_number)
-      .map(a => ({
-        name: a.acct_name,
-        last4: a.acct_number!.replace(/\D/g, '').slice(-4),
-      }))
-    if (accountsCtx.length > 0) {
-      formData.append('accounts', JSON.stringify(accountsCtx))
-    }
-    try {
-      const response = await fetchWrapper.post('/api/finance/transactions/import-gemini', formData) as GeminiImportResponse
-      if (response.error) {
-        setGeminiError(response.error)
-      } else {
-        setPdfData(response)
-        // Upload file to S3 once (for the current account); for multi-account imports
-        // the file will be attached to additional accounts at import time
-        // If accountId is 'all', we'll upload to the first matched account later
-        if (saveFileToS3 && accountId !== 'all') {
-          try {
-            const uploadForm = new FormData()
-            uploadForm.append('file', pendingPdfFile)
-            const uploadResult = await fetchWrapper.post(`/api/finance/${accountId}/files`, uploadForm) as { file_hash?: string }
-            if (uploadResult?.file_hash) {
-              setUploadedFileHash(uploadResult.file_hash)
-            }
-          } catch (uploadErr) {
-            console.error('Failed to save file to S3:', uploadErr)
-          }
-        }
-        setPendingPdfFile(null)
-      }
-    } catch (e) {
-      setGeminiError(`Error processing PDF: ${e instanceof Error ? e.message : String(e)}`)
-    } finally {
-      setLoading(false)
-    }
-  }, [pendingPdfFile, saveFileToS3, accountId, accountsForMatching])
-
-  /** Handle click-to-select file via hidden input */
-  const handleFileInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files
-    if (files && files.length > 0) {
-      handleFileRead(files[0]!)
-    }
-    // Reset so the same file can be re-selected
-    event.target.value = ''
-  }, [handleFileRead])
-
-  const handleDrop = useCallback(
-    (event: React.DragEvent<HTMLDivElement>) => {
-      event.preventDefault()
-      setIsDragOver(false)
-      const files = event.dataTransfer?.files
-      if (files && files.length > 0) {
-        handleFileRead(files[0]!)
-      }
-    },
-    [handleFileRead],
-  )
-
-  const handleDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault()
-    setIsDragOver(true)
-  }, [])
-
-  const handleDragLeave = useCallback((event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault()
-    setIsDragOver(false)
-  }, [])
-
-  const { data, statement, parseError } = useMemo((): { 
-    data: AccountLineItem[] | null
-    statement: IbStatementData | null
-    parseError: string | null 
-  } => {
-    if (!text.trim()) {
-      return { data: null, statement: null, parseError: null }
-    }
-    return parseImportData(text)
-  }, [text])
-
-  // Notify parent when statement data is parsed
-  useEffect(() => {
-    onStatementParsed?.(statement)
-  }, [statement, onStatementParsed])
-
-  // Flag duplicates as soon as the file is parsed
-  useEffect(() => {
-    if (data && data.length > 0 && existingTransactions.length > 0) {
-      const duplicates = findDuplicateTransactions(data, existingTransactions)
-      setCurrentDuplicates(duplicates)
-    } else {
-      setCurrentDuplicates([])
-    }
-  }, [data, existingTransactions])
-
-  const retryImport = () => {
-    setImportError(null);
-    const chunks = chunkArray(dataToImport, CHUNK_SIZE)
-    const failedChunkIndex = Math.floor(importProgress.processed / CHUNK_SIZE)
-    processChunks(chunks, failedChunkIndex, importedStatementId)
-  }
-
-  // Handle Ctrl+V paste on the page
-  const handlePaste = useCallback(async (event: ClipboardEvent) => {
-    // Check if there are files in the clipboard
-    const items = event.clipboardData?.items
-    if (items) {
-      for (const item of items) {
-        if (item.kind === 'file') {
-          const file = item.getAsFile()
-          if (file) {
-            event.preventDefault()
-            handleFileRead(file)
-            return
-          }
-        }
-      }
-      // If no files, check for text
-      const textData = event.clipboardData?.getData('text/plain')
-      if (textData) {
-        event.preventDefault()
-        setFileInfo({ name: 'Pasted text', type: 'text/plain', size: textData.length })
-        setPdfData(null)
-        setText(textData.trimStart())
-      }
-    }
-  }, [handleFileRead])
-
-  // Add paste event listener
-  useEffect(() => {
-    document.addEventListener('paste', handlePaste)
-    return () => {
-      document.removeEventListener('paste', handlePaste)
-    }
-  }, [handlePaste])
+    await _processPdfWithGemini(pendingPdfFile)
+  }, [_processPdfWithGemini, pendingPdfFile])
 
   // Parse PDF data to AccountLineItem format (for single-account or text-based imports)
   const pdfParsedData = useMemo((): AccountLineItem[] | null => {
