@@ -54,7 +54,8 @@ class FinAccountLineItems extends Model
 
     public function tags()
     {
-        return $this->belongsToMany(FinAccountTag::class, 'fin_account_line_item_tag_map', 't_id', 'tag_id');
+        return $this->belongsToMany(FinAccountTag::class, 'fin_account_line_item_tag_map', 't_id', 'tag_id')
+            ->wherePivotNull('when_deleted');
     }
 
     /**

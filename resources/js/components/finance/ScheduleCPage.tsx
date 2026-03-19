@@ -1,6 +1,6 @@
 'use client'
 import { ExternalLink } from 'lucide-react'
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -67,6 +67,16 @@ function formatCurrency(amount: number): string {
     currency: 'USD',
     minimumFractionDigits: 2,
   }).format(amount)
+}
+
+function sumCategories(cats: Record<string, CategoryTotal>): number {
+  return Object.values(cats).reduce((sum, c) => sum + c.total, 0)
+}
+
+interface HomeOfficeCalc {
+  allowable: number
+  disallowed: number
+  priorCarryForward: number
 }
 
 interface TransactionListModalProps {
@@ -287,20 +297,34 @@ export default function ScheduleCPage() {
     }
   })
 
-  // Update URL when year changes (without full page reload)
-  useEffect(() => {
-    try {
-      const url = new URL(window.location.href)
-      if (selectedYear === 'all') {
-        url.searchParams.delete('year')
-      } else {
-        url.searchParams.set('year', String(selectedYear))
-      }
-      window.history.replaceState(null, '', url.toString())
-    } catch {
-      // ignore
+  // Push browser history when the user changes year (so Back button works)
+  const handleYearChange = useCallback((year: number | 'all') => {
+    setSelectedYear(year)
+    const url = new URL(window.location.href)
+    const defaultYear = new Date().getFullYear()
+    if (typeof year === 'number' && year === defaultYear) {
+      url.searchParams.delete('year')
+    } else {
+      url.searchParams.set('year', String(year))
     }
-  }, [selectedYear])
+    window.history.pushState(null, '', url.toString())
+  }, [])
+
+  // Restore selected year when the user navigates with Back / Forward
+  useEffect(() => {
+    const onPopState = () => {
+      const params = new URLSearchParams(window.location.search)
+      const y = params.get('year')
+      if (y === 'all') {
+        setSelectedYear('all')
+      } else {
+        const parsed = y ? parseInt(y, 10) : NaN
+        setSelectedYear(isNaN(parsed) ? new Date().getFullYear() : parsed)
+      }
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
 
   // Load ALL years upfront — year selector only filters the display
   useEffect(() => {
@@ -328,6 +352,39 @@ export default function ScheduleCPage() {
     return allData.filter((yd) => yd.year === String(selectedYear))
   }, [allData, selectedYear])
 
+  // Compute home-office carry-forward per entity across all years
+  const homeOfficeCalcs = useMemo(() => {
+    if (!allData) return new Map<string, HomeOfficeCalc>()
+
+    const map = new Map<string, HomeOfficeCalc>()
+    const carryForwardByEntity = new Map<string, number>()
+
+    // Process chronologically (oldest first) — allData is sorted descending
+    const chronological = [...allData].reverse()
+
+    for (const yearData of chronological) {
+      for (const entity of yearData.entities) {
+        const entityKey = String(entity.entity_id ?? 'unassigned')
+        const mapKey = `${yearData.year}-${entityKey}`
+
+        const incomeTotal = sumCategories(entity.schedule_c_income ?? {})
+        const expenseTotal = sumCategories(entity.schedule_c_expense)
+        const homeOfficeTotal = sumCategories(entity.schedule_c_home_office)
+
+        const priorCF = carryForwardByEntity.get(entityKey) ?? 0
+        const netIncome = incomeTotal - expenseTotal
+        const limit = Math.max(0, netIncome)
+        const totalClaim = homeOfficeTotal + priorCF
+        const allowable = Math.min(totalClaim, limit)
+        const disallowed = totalClaim - allowable
+
+        map.set(mapKey, { allowable, disallowed, priorCarryForward: priorCF })
+        carryForwardByEntity.set(entityKey, disallowed)
+      }
+    }
+    return map
+  }, [allData])
+
   return (
     <div className="px-4 pb-8">
       <div className="flex items-center gap-4 mb-2 flex-wrap">
@@ -347,7 +404,7 @@ export default function ScheduleCPage() {
             selectedYear={selectedYear}
             availableYears={availableYears}
             isLoading={isLoading && availableYears.length === 0}
-            onYearChange={setSelectedYear}
+            onYearChange={handleYearChange}
           />
         </div>
       </div>
@@ -401,6 +458,9 @@ export default function ScheduleCPage() {
                 )
                 .map((entity, idx) => {
                   const hasHomeOffice = Object.keys(entity.schedule_c_home_office).length > 0
+                  const entityKey = String(entity.entity_id ?? 'unassigned')
+                  const calc = homeOfficeCalcs.get(`${yearData.year}-${entityKey}`)
+                  const showHomeOfficeSummary = hasHomeOffice || (calc != null && calc.priorCarryForward > 0)
                   return (
                     <div key={entity.entity_id ?? `unassigned-${idx}`} className="mb-8">
                       {(yearData.entities.length > 1 || entity.entity_name) && (
@@ -427,7 +487,7 @@ export default function ScheduleCPage() {
                           </CardContent>
                         </Card>
 
-                        {/* Column 2: Schedule C Expenses */}
+                        {/* Column 2: Schedule C Expenses + Home Office Deduction Summary */}
                         <Card>
                           <CardHeader className="pb-2">
                             <CardTitle className="text-base">Schedule C: Expenses</CardTitle>
@@ -438,6 +498,26 @@ export default function ScheduleCPage() {
                               categories={entity.schedule_c_expense}
                               showInline={showInline}
                             />
+                            {showHomeOfficeSummary && calc && (
+                              <div className="mt-4 space-y-1 border-t pt-3 text-sm">
+                                {calc.priorCarryForward > 0 && (
+                                  <div className="flex justify-between text-muted-foreground">
+                                    <span>Prior Year Home Office Carry-Forward</span>
+                                    <span className="font-mono">{formatCurrency(calc.priorCarryForward)}</span>
+                                  </div>
+                                )}
+                                <div className="flex justify-between font-medium">
+                                  <span>Allowable Home Office Expense</span>
+                                  <span className="font-mono">{formatCurrency(calc.allowable)}</span>
+                                </div>
+                                {calc.disallowed > 0 && (
+                                  <div className="flex justify-between text-amber-600 dark:text-amber-400">
+                                    <span>Disallowed Home Office (Carry-Forward)</span>
+                                    <span className="font-mono">{formatCurrency(calc.disallowed)}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </CardContent>
                         </Card>
 
