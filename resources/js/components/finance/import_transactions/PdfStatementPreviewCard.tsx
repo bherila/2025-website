@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
-import { type StatementDetail,StatementDetailsModal, type StatementInfo } from './StatementDetailsModal'
+import { type StatementDetail,StatementDetailsModal, type StatementInfo } from '../StatementDetailsModal'
 
 interface PdfStatementPreviewCardProps {
   statementInfo: StatementInfo | undefined

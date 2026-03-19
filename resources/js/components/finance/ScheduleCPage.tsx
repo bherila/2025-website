@@ -1,8 +1,9 @@
 'use client'
 import { ExternalLink } from 'lucide-react'
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -45,6 +46,8 @@ interface EntityData {
   schedule_c_income?: Record<string, CategoryTotal>
   schedule_c_expense: Record<string, CategoryTotal>
   schedule_c_home_office: Record<string, CategoryTotal>
+  ordinary_income?: Record<string, CategoryTotal>
+  w2_income?: Record<string, CategoryTotal>
 }
 
 interface YearData {
@@ -64,6 +67,16 @@ function formatCurrency(amount: number): string {
     currency: 'USD',
     minimumFractionDigits: 2,
   }).format(amount)
+}
+
+function sumCategories(cats: Record<string, CategoryTotal>): number {
+  return Object.values(cats).reduce((sum, c) => sum + c.total, 0)
+}
+
+interface HomeOfficeCalc {
+  allowable: number
+  disallowed: number
+  priorCarryForward: number
 }
 
 interface TransactionListModalProps {
@@ -211,32 +224,166 @@ function CategoryTable({ title, categories, showInline }: CategoryTableProps) {
   )
 }
 
+/** Ordinary Income section (interest, dividends, other income not tied to Schedule C) */
+function OrdinaryIncomeSection({ yearData, showInline }: { yearData: YearData; showInline: boolean }) {
+  // Collect all ordinary_income and w2_income across all entities for this year
+  const ordinaryIncome: Record<string, CategoryTotal> = {}
+  const w2Income: Record<string, CategoryTotal> = {}
+
+  for (const entity of yearData.entities) {
+    if (entity.ordinary_income) {
+      for (const [key, cat] of Object.entries(entity.ordinary_income)) {
+        if (!ordinaryIncome[key]) {
+          ordinaryIncome[key] = { label: cat.label, total: 0, transactions: [] }
+        }
+        ordinaryIncome[key]!.total += cat.total
+        ordinaryIncome[key]!.transactions = [...(ordinaryIncome[key]!.transactions ?? []), ...(cat.transactions ?? [])]
+      }
+    }
+    if (entity.w2_income) {
+      for (const [key, cat] of Object.entries(entity.w2_income)) {
+        if (!w2Income[key]) {
+          w2Income[key] = { label: cat.label, total: 0, transactions: [] }
+        }
+        w2Income[key]!.total += cat.total
+        w2Income[key]!.transactions = [...(w2Income[key]!.transactions ?? []), ...(cat.transactions ?? [])]
+      }
+    }
+  }
+
+  const hasOrdinary = Object.keys(ordinaryIncome).length > 0
+  const hasW2 = Object.keys(w2Income).length > 0
+
+  if (!hasOrdinary && !hasW2) return null
+
+  return (
+    <div className="mb-8">
+      <div className="border-l-4 border-blue-500 pl-3 mb-4">
+        <h3 className="text-lg font-semibold">Ordinary Income</h3>
+      </div>
+      <div className="flex flex-col md:flex-row gap-6">
+        {hasOrdinary && (
+          <div className="flex-1">
+            <CategoryTable title="Interest &amp; Dividends" categories={ordinaryIncome} showInline={showInline} />
+          </div>
+        )}
+        {hasW2 && (
+          <div className="flex-1">
+            <CategoryTable title="W-2 Income" categories={w2Income} showInline={showInline} />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function ScheduleCPage() {
-  const [data, setData] = useState<YearData[] | null>(null)
+  const [allData, setAllData] = useState<YearData[] | null>(null)
   const [availableYears, setAvailableYears] = useState<number[]>([])
-  const [selectedYear, setSelectedYear] = useState<number | 'all'>(() => new Date().getFullYear())
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showInline, setShowInline] = useState(false)
 
+  // Read initial year from URL query string, default to current year
+  const [selectedYear, setSelectedYear] = useState<number | 'all'>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const y = params.get('year')
+      if (y === 'all') return 'all'
+      const parsed = y ? parseInt(y, 10) : NaN
+      return isNaN(parsed) ? new Date().getFullYear() : parsed
+    } catch {
+      return new Date().getFullYear()
+    }
+  })
+
+  // Push browser history when the user changes year (so Back button works)
+  const handleYearChange = useCallback((year: number | 'all') => {
+    setSelectedYear(year)
+    const url = new URL(window.location.href)
+    const defaultYear = new Date().getFullYear()
+    if (typeof year === 'number' && year === defaultYear) {
+      url.searchParams.delete('year')
+    } else {
+      url.searchParams.set('year', String(year))
+    }
+    window.history.pushState(null, '', url.toString())
+  }, [])
+
+  // Restore selected year when the user navigates with Back / Forward
+  useEffect(() => {
+    const onPopState = () => {
+      const params = new URLSearchParams(window.location.search)
+      const y = params.get('year')
+      if (y === 'all') {
+        setSelectedYear('all')
+      } else {
+        const parsed = y ? parseInt(y, 10) : NaN
+        setSelectedYear(isNaN(parsed) ? new Date().getFullYear() : parsed)
+      }
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
+
+  // Load ALL years upfront — year selector only filters the display
   useEffect(() => {
     const load = async () => {
       try {
         setIsLoading(true)
-        const params = selectedYear !== 'all' ? `?year=${selectedYear}` : ''
-        const response = (await fetchWrapper.get(`/api/finance/schedule-c${params}`)) as ScheduleCResponse
-        setData(response.years ?? [])
+        const response = (await fetchWrapper.get('/api/finance/schedule-c')) as ScheduleCResponse
+        setAllData(response.years ?? [])
         if (response.available_years) {
           setAvailableYears(response.available_years.map(Number).filter((y) => !isNaN(y)).sort((a, b) => b - a))
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load Schedule C data')
+        setError(err instanceof Error ? err.message : 'Failed to load Tax Preview data')
       } finally {
         setIsLoading(false)
       }
     }
     void load()
-  }, [selectedYear])
+  }, []) // only load once
+
+  // Filter displayed data based on selectedYear (client-side)
+  const data = useMemo(() => {
+    if (!allData) return null
+    if (selectedYear === 'all') return allData
+    return allData.filter((yd) => yd.year === String(selectedYear))
+  }, [allData, selectedYear])
+
+  // Compute home-office carry-forward per entity across all years
+  const homeOfficeCalcs = useMemo(() => {
+    if (!allData) return new Map<string, HomeOfficeCalc>()
+
+    const map = new Map<string, HomeOfficeCalc>()
+    const carryForwardByEntity = new Map<string, number>()
+
+    // Process chronologically (oldest first) — allData is sorted descending
+    const chronological = [...allData].reverse()
+
+    for (const yearData of chronological) {
+      for (const entity of yearData.entities) {
+        const entityKey = String(entity.entity_id ?? 'unassigned')
+        const mapKey = `${yearData.year}-${entityKey}`
+
+        const incomeTotal = sumCategories(entity.schedule_c_income ?? {})
+        const expenseTotal = sumCategories(entity.schedule_c_expense)
+        const homeOfficeTotal = sumCategories(entity.schedule_c_home_office)
+
+        const priorCF = carryForwardByEntity.get(entityKey) ?? 0
+        const netIncome = incomeTotal - expenseTotal
+        const limit = Math.max(0, netIncome)
+        const totalClaim = homeOfficeTotal + priorCF
+        const allowable = Math.min(totalClaim, limit)
+        const disallowed = totalClaim - allowable
+
+        map.set(mapKey, { allowable, disallowed, priorCarryForward: priorCF })
+        carryForwardByEntity.set(entityKey, disallowed)
+      }
+    }
+    return map
+  }, [allData])
 
   return (
     <div className="px-4 pb-8">
@@ -257,12 +404,12 @@ export default function ScheduleCPage() {
             selectedYear={selectedYear}
             availableYears={availableYears}
             isLoading={isLoading && availableYears.length === 0}
-            onYearChange={setSelectedYear}
+            onYearChange={handleYearChange}
           />
         </div>
       </div>
       <p className="text-muted-foreground mb-6">
-        Totals of transactions tagged with Schedule C tax characteristics, grouped by year.
+        Totals of transactions tagged with tax characteristics, grouped by year.
         Click any row to see the individual transactions. Tag transactions with a tax characteristic on the{' '}
         <a href="/finance/tags" className="text-blue-600 hover:underline">
           Manage Tags
@@ -284,9 +431,9 @@ export default function ScheduleCPage() {
 
       {!isLoading && !error && data && data.length === 0 && (
         <div className="text-center py-12 text-muted-foreground border rounded-md">
-          <p className="mb-2 font-medium">No Schedule C data found.</p>
+          <p className="mb-2 font-medium">No tax data found{selectedYear !== 'all' ? ` for ${selectedYear}` : ''}.</p>
           <p className="text-sm">
-            Tag your transactions with Schedule C tax characteristics to see totals here.
+            Tag your transactions with tax characteristics to see totals here.
           </p>
         </div>
       )}
@@ -298,42 +445,101 @@ export default function ScheduleCPage() {
               <div className="w-full bg-muted rounded-md px-4 py-2 mb-4">
                 <h2 className="text-xl font-bold">{yearData.year}</h2>
               </div>
-              {yearData.entities.map((entity, idx) => (
-                <div key={entity.entity_id ?? `unassigned-${idx}`} className="mb-8">
-                  {(yearData.entities.length > 1 || entity.entity_name) && (
-                    <div className="border-l-4 border-primary pl-3 mb-4">
-                      <h3 className="text-lg font-semibold">
-                        {entity.entity_name ?? 'Unassigned (No Business Entity)'}
-                      </h3>
+
+              {/* Ordinary Income shown above Schedule C items */}
+              <OrdinaryIncomeSection yearData={yearData} showInline={showInline} />
+
+              {/* Schedule C entities */}
+              {yearData.entities
+                .filter((entity) =>
+                  Object.keys(entity.schedule_c_income ?? {}).length > 0 ||
+                  Object.keys(entity.schedule_c_expense).length > 0 ||
+                  Object.keys(entity.schedule_c_home_office).length > 0,
+                )
+                .map((entity, idx) => {
+                  const hasHomeOffice = Object.keys(entity.schedule_c_home_office).length > 0
+                  const entityKey = String(entity.entity_id ?? 'unassigned')
+                  const calc = homeOfficeCalcs.get(`${yearData.year}-${entityKey}`)
+                  const showHomeOfficeSummary = hasHomeOffice || (calc != null && calc.priorCarryForward > 0)
+                  return (
+                    <div key={entity.entity_id ?? `unassigned-${idx}`} className="mb-8">
+                      {(yearData.entities.length > 1 || entity.entity_name) && (
+                        <div className="border-l-4 border-primary pl-3 mb-4">
+                          <h3 className="text-lg font-semibold">
+                            {entity.entity_name ?? 'Unassigned (No Business Entity)'}
+                          </h3>
+                        </div>
+                      )}
+
+                      {/* 3-column grid: Income | Expenses | Home Office (if any) */}
+                      <div className={`grid gap-6 ${hasHomeOffice ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
+                        {/* Column 1: Schedule C Income */}
+                        <Card>
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-base">Schedule C: Income</CardTitle>
+                          </CardHeader>
+                          <CardContent className="pt-0">
+                            <CategoryTable
+                              title=""
+                              categories={entity.schedule_c_income ?? {}}
+                              showInline={showInline}
+                            />
+                          </CardContent>
+                        </Card>
+
+                        {/* Column 2: Schedule C Expenses + Home Office Deduction Summary */}
+                        <Card>
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-base">Schedule C: Expenses</CardTitle>
+                          </CardHeader>
+                          <CardContent className="pt-0">
+                            <CategoryTable
+                              title=""
+                              categories={entity.schedule_c_expense}
+                              showInline={showInline}
+                            />
+                            {showHomeOfficeSummary && calc && (
+                              <div className="mt-4 space-y-1 border-t pt-3 text-sm">
+                                {calc.priorCarryForward > 0 && (
+                                  <div className="flex justify-between text-muted-foreground">
+                                    <span>Prior Year Home Office Carry-Forward</span>
+                                    <span className="font-mono">{formatCurrency(calc.priorCarryForward)}</span>
+                                  </div>
+                                )}
+                                <div className="flex justify-between font-medium">
+                                  <span>Allowable Home Office Expense</span>
+                                  <span className="font-mono">{formatCurrency(calc.allowable)}</span>
+                                </div>
+                                {calc.disallowed > 0 && (
+                                  <div className="flex justify-between text-amber-600 dark:text-amber-400">
+                                    <span>Disallowed Home Office (Carry-Forward)</span>
+                                    <span className="font-mono">{formatCurrency(calc.disallowed)}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+
+                        {/* Column 3: Home Office (only if data exists) */}
+                        {hasHomeOffice && (
+                          <Card>
+                            <CardHeader className="pb-2">
+                              <CardTitle className="text-base">Home Office Deduction</CardTitle>
+                            </CardHeader>
+                            <CardContent className="pt-0">
+                              <CategoryTable
+                                title=""
+                                categories={entity.schedule_c_home_office}
+                                showInline={showInline}
+                              />
+                            </CardContent>
+                          </Card>
+                        )}
+                      </div>
                     </div>
-                  )}
-                  {entity.schedule_c_income && Object.keys(entity.schedule_c_income).length > 0 && (
-                    <div className="mb-6">
-                      <CategoryTable
-                        title="Schedule C: Income"
-                        categories={entity.schedule_c_income}
-                        showInline={showInline}
-                      />
-                    </div>
-                  )}
-                  <div className="flex flex-col md:flex-row gap-6">
-                    <div className="md:w-1/2">
-                      <CategoryTable
-                        title="Schedule C: Expenses"
-                        categories={entity.schedule_c_expense}
-                        showInline={showInline}
-                      />
-                    </div>
-                    <div className="md:w-1/2">
-                      <CategoryTable
-                        title="Schedule C: Home Office Deduction"
-                        categories={entity.schedule_c_home_office}
-                        showInline={showInline}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
+                  )
+                })}
             </div>
           ))}
         </div>

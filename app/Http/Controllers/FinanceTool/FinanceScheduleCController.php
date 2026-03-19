@@ -114,13 +114,22 @@ class FinanceScheduleCController extends Controller
             }
 
             $meta = FinAccountTag::TAX_CHARACTERISTICS[$taxChar] ?? null;
-            if (! $meta || ! isset($categoryKeyMap[$meta['category']])) {
-                // Non-Schedule C characteristics (interest, dividends, etc.) — skip
+            if (! $meta) {
                 continue;
             }
 
-            $key = $categoryKeyMap[$meta['category']];
-            $amount = $meta['category'] === 'sch_c_income'
+            // Map category to response key
+            if (isset($categoryKeyMap[$meta['category']])) {
+                $key = $categoryKeyMap[$meta['category']];
+            } elseif ($meta['category'] === 'other') {
+                $key = 'ordinary_income';
+            } elseif ($meta['category'] === 'w2_income') {
+                $key = 'w2_income';
+            } else {
+                // Unknown category — skip
+                continue;
+            }
+            $amount = in_array($meta['category'], ['sch_c_income', 'other', 'w2_income'])
                 ? (float) $row->t_amt
                 : abs((float) $row->t_amt);
 
@@ -141,6 +150,8 @@ class FinanceScheduleCController extends Controller
                     'schedule_c_income' => [],
                     'schedule_c_expense' => [],
                     'schedule_c_home_office' => [],
+                    'ordinary_income' => [],
+                    'w2_income' => [],
                 ];
             }
 

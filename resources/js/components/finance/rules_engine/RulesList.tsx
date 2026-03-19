@@ -45,15 +45,6 @@ export default function RulesList() {
     setModalOpen(true)
   }
 
-  const handleDelete = async (rule: FinRule) => {
-    try {
-      await fetchWrapper.delete(`/api/finance/rules/${rule.id}`, {})
-      await fetchRules()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete rule.')
-    }
-  }
-
   const handleReorder = async (ruleId: number, direction: 'up' | 'down') => {
     try {
       await fetchWrapper.post('/api/finance/rules/reorder', { rule_id: ruleId, direction })
@@ -107,7 +98,6 @@ export default function RulesList() {
               isFirst={index === 0}
               isLast={index === rules.length - 1}
               onEdit={() => handleEdit(rule)}
-              onDelete={() => handleDelete(rule)}
               onMoveUp={() => handleReorder(rule.id, 'up')}
               onMoveDown={() => handleReorder(rule.id, 'down')}
             />
@@ -120,6 +110,7 @@ export default function RulesList() {
         onOpenChange={setModalOpen}
         rule={editingRule}
         onSaved={fetchRules}
+        onDeleted={fetchRules}
       />
     </div>
   )

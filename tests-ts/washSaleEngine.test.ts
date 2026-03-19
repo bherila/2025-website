@@ -657,6 +657,17 @@ describe('washSaleEngine', () => {
       expect(results[0]!.washPurchaseAccountId).toBe(42)
     })
 
+    it('should detect cross-account replacement buys and capture replacement account id', () => {
+      const items = [
+        tx({ t_id: 1, t_date: '2024-01-15', t_type: 'Buy', t_symbol: 'XYZ', t_qty: 100, t_amt: -10000, t_price: 100, t_account: 10 }),
+        tx({ t_id: 2, t_date: '2024-02-15', t_type: 'Sell', t_symbol: 'XYZ', t_qty: 100, t_amt: 8000, t_price: 80, t_account: 10 }),
+        tx({ t_id: 3, t_date: '2024-02-20', t_type: 'Buy', t_symbol: 'XYZ', t_qty: 100, t_amt: -8500, t_price: 85, t_account: 99 }),
+      ]
+      const results = analyzeLots(items)
+      expect(results[0]!.isWashSale).toBe(true)
+      expect(results[0]!.washPurchaseAccountId).toBe(99)
+    })
+
     it('should populate washPurchaseDescription when a wash sale is detected', () => {
       const items = [
         tx({ t_id: 1, t_date: '2024-01-15', t_type: 'Buy', t_symbol: 'XYZ', t_qty: 100, t_amt: -10000, t_price: 100, t_description: 'Buy XYZ' }),

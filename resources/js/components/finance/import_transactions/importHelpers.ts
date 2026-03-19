@@ -7,7 +7,7 @@
 import { type AccountLineItem } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
 
-import type { GeminiAccountBlock } from './ImportTransactions'
+import type { GeminiAccountBlock } from './importTypes'
 
 const CHUNK_SIZE = 100
 
