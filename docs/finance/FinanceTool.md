@@ -9,6 +9,20 @@ The development environment is configured to handle large datasets efficiently.
 ### Memory Limit
 The `composer run dev` command is configured to run PHP with a **1GB memory limit** (`-d memory_limit=1G`) for both `artisan serve` and `artisan queue:listen`. This prevents out-of-memory errors when processing or viewing thousands of transactions.
 
+### Demo Seeder Data (for local testing/screenshots)
+
+To populate realistic finance data for the default test user (`test@example.com`), run:
+
+```bash
+php artisan db:seed
+```
+
+`DatabaseSeeder` calls `Database\Seeders\Finance\FinanceDemoDataSeeder`, which creates:
+- Demo accounts: checking, savings, brokerage
+- Employment entities: one W-2 employer and one Schedule C business
+- Realistic transactions across all three accounts (including direct deposits, stock/option trades, and wash-sale coverage scenarios)
+- Two demo tags (one Schedule C tax-characterized tag, one generic non-tax tag) and sample tag mappings
+
 ## Main Navigation
 
 Finance pages use a dedicated layout (`resources/views/layouts/finance.blade.php`) that **replaces** the main site navbar with the Finance-specific navigation bar. The main site navbar (`resources/js/components/navbar.tsx`) is not rendered on finance pages.

@@ -148,3 +148,15 @@ Non-entity Tags (interest, dividends, etc.)
 - [FinanceTool.md](FinanceTool.md) — Finance tool overview and navigation
 - [TransactionsTable.md](TransactionsTable.md) — Transaction display and filtering
 - `/database/schema/mysql-schema.sql` — Full database schema
+
+---
+
+## Seeder Data for Tax Preview Testing
+
+The default `DatabaseSeeder` now runs `Database\Seeders\Finance\FinanceDemoDataSeeder` for `test@example.com`.
+This includes:
+- A Schedule C employment entity (`Blue Harbor Consulting`)
+- A Schedule C tax-characterized tag (`sce_office_expenses`) linked to that entity
+- Seeded transactions + tag mappings so Tax Preview has immediately testable data
+
+This helps with local QA and screenshot generation for the Tax Preview and tags workflows.
