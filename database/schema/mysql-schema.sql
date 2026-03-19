@@ -291,9 +291,9 @@ CREATE TABLE `client_tasks` (
   KEY `client_tasks_completed_at_index` (`completed_at`),
   KEY `client_tasks_client_invoice_line_id_foreign` (`client_invoice_line_id`),
   CONSTRAINT `client_tasks_assignee_user_id_foreign` FOREIGN KEY (`assignee_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `client_tasks_client_invoice_line_id_foreign` FOREIGN KEY (`client_invoice_line_id`) REFERENCES `client_invoice_lines` (`client_invoice_line_id`) ON DELETE SET NULL,
   CONSTRAINT `client_tasks_creator_user_id_foreign` FOREIGN KEY (`creator_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `client_tasks_project_id_foreign` FOREIGN KEY (`project_id`) REFERENCES `client_projects` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `client_tasks_client_invoice_line_id_foreign` FOREIGN KEY (`client_invoice_line_id`) REFERENCES `client_invoice_lines` (`client_invoice_line_id`) ON DELETE SET NULL
+  CONSTRAINT `client_tasks_project_id_foreign` FOREIGN KEY (`project_id`) REFERENCES `client_projects` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `client_time_entries`;
@@ -614,11 +614,14 @@ CREATE TABLE `fin_account_tag` (
   `tag_userid` varchar(50) NOT NULL,
   `tag_color` varchar(20) NOT NULL,
   `tag_label` varchar(50) NOT NULL,
-  `tax_characteristic` enum('sce_advertising','sce_car_truck','sce_commissions_fees','sce_contract_labor','sce_depletion','sce_depreciation','sce_employee_benefits','sce_insurance','sce_interest_mortgage','sce_interest_other','sce_legal_professional','sce_office_expenses','sce_pension','sce_rent_vehicles','sce_rent_property','sce_repairs_maintenance','sce_supplies','sce_taxes_licenses','sce_travel','sce_meals','sce_utilities','sce_wages','sce_other','scho_rent','scho_mortgage_interest','scho_real_estate_taxes','scho_insurance','scho_utilities','scho_repairs_maintenance','scho_security','scho_depreciation','scho_cleaning','scho_hoa','scho_casualty_losses') DEFAULT NULL,
+  `tax_characteristic` enum('business_income','business_returns','sce_advertising','sce_car_truck','sce_commissions_fees','sce_contract_labor','sce_depletion','sce_depreciation','sce_employee_benefits','sce_insurance','sce_interest_mortgage','sce_interest_other','sce_legal_professional','sce_office_expenses','sce_pension','sce_rent_vehicles','sce_rent_property','sce_repairs_maintenance','sce_supplies','sce_taxes_licenses','sce_travel','sce_meals','sce_utilities','sce_wages','sce_other','scho_rent','scho_mortgage_interest','scho_real_estate_taxes','scho_insurance','scho_utilities','scho_repairs_maintenance','scho_security','scho_depreciation','scho_cleaning','scho_hoa','scho_casualty_losses','interest','ordinary_dividend','qualified_dividend','other_ordinary_income') DEFAULT NULL,
+  `employment_entity_id` bigint(20) unsigned DEFAULT NULL,
   `when_added` timestamp NOT NULL DEFAULT current_timestamp(),
   `when_deleted` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`tag_id`),
-  UNIQUE KEY `fin_account_tag_tag_userid_tag_label_unique` (`tag_userid`,`tag_label`)
+  UNIQUE KEY `fin_account_tag_tag_userid_tag_label_unique` (`tag_userid`,`tag_label`),
+  KEY `fin_account_tag_employment_entity_id_foreign` (`employment_entity_id`),
+  CONSTRAINT `fin_account_tag_employment_entity_id_foreign` FOREIGN KEY (`employment_entity_id`) REFERENCES `fin_employment_entity` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_accounts`;
@@ -628,6 +631,7 @@ CREATE TABLE `fin_accounts` (
   `acct_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `acct_owner` varchar(50) NOT NULL,
   `acct_name` varchar(50) NOT NULL,
+  `acct_number` varchar(255) DEFAULT NULL,
   `when_deleted` timestamp NULL DEFAULT NULL,
   `acct_last_balance` varchar(20) NOT NULL DEFAULT '0',
   `acct_last_balance_date` timestamp NULL DEFAULT NULL,
@@ -639,6 +643,28 @@ CREATE TABLE `fin_accounts` (
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`acct_id`),
   UNIQUE KEY `fin_accounts_acct_owner_acct_name_unique` (`acct_owner`,`acct_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_employment_entity`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_employment_entity` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(20) unsigned NOT NULL,
+  `display_name` varchar(255) NOT NULL,
+  `start_date` date NOT NULL,
+  `end_date` date DEFAULT NULL,
+  `is_current` tinyint(1) NOT NULL DEFAULT 1,
+  `ein` varchar(20) DEFAULT NULL,
+  `address` text DEFAULT NULL,
+  `type` enum('sch_c','w2','hobby') NOT NULL,
+  `sic_code` int(11) DEFAULT NULL,
+  `is_spouse` tinyint(1) NOT NULL DEFAULT 0,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `fin_employment_entity_user_id_index` (`user_id`),
+  CONSTRAINT `fin_employment_entity_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_equity_awards`;
@@ -663,6 +689,7 @@ DROP TABLE IF EXISTS `fin_payslip`;
 CREATE TABLE `fin_payslip` (
   `payslip_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `uid` int(50) NOT NULL,
+  `employment_entity_id` bigint(20) unsigned DEFAULT NULL,
   `period_start` char(10) DEFAULT NULL,
   `period_end` char(10) DEFAULT NULL,
   `pay_date` char(10) DEFAULT NULL,
@@ -699,7 +726,9 @@ CREATE TABLE `fin_payslip` (
   `updated_at` timestamp NULL DEFAULT NULL,
   `deleted_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`payslip_id`),
-  UNIQUE KEY `fin_payslip_uid_period_start_period_end_pay_date_unique` (`uid`,`period_start`,`period_end`,`pay_date`)
+  UNIQUE KEY `fin_payslip_uid_period_start_period_end_pay_date_unique` (`uid`,`period_start`,`period_end`,`pay_date`),
+  KEY `fin_payslip_employment_entity_id_foreign` (`employment_entity_id`),
+  CONSTRAINT `fin_payslip_employment_entity_id_foreign` FOREIGN KEY (`employment_entity_id`) REFERENCES `fin_employment_entity` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_payslip_uploads`;
@@ -711,6 +740,79 @@ CREATE TABLE `fin_payslip_uploads` (
   `file_hash` varchar(50) DEFAULT NULL,
   `parsed_json` longtext DEFAULT NULL,
   PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_rule_actions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_rule_actions` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `rule_id` bigint(20) unsigned NOT NULL,
+  `type` varchar(255) NOT NULL,
+  `target` varchar(255) DEFAULT NULL,
+  `payload` varchar(255) DEFAULT NULL,
+  `order` int(11) NOT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `fin_rule_actions_rule_id_index` (`rule_id`),
+  CONSTRAINT `fin_rule_actions_rule_id_foreign` FOREIGN KEY (`rule_id`) REFERENCES `fin_rules` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_rule_conditions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_rule_conditions` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `rule_id` bigint(20) unsigned NOT NULL,
+  `type` varchar(255) NOT NULL,
+  `operator` varchar(255) NOT NULL,
+  `value` varchar(255) DEFAULT NULL,
+  `value_extra` varchar(255) DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `fin_rule_conditions_rule_id_index` (`rule_id`),
+  CONSTRAINT `fin_rule_conditions_rule_id_foreign` FOREIGN KEY (`rule_id`) REFERENCES `fin_rules` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_rule_logs`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_rule_logs` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(20) unsigned NOT NULL,
+  `rule_id` bigint(20) unsigned NOT NULL,
+  `transaction_id` bigint(20) unsigned NOT NULL,
+  `is_manual_run` tinyint(1) NOT NULL DEFAULT 0,
+  `action_summary` varchar(255) DEFAULT NULL,
+  `error` text DEFAULT NULL,
+  `error_details` text DEFAULT NULL,
+  `processing_time_mtime` int(11) DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `fin_rule_logs_user_id_index` (`user_id`),
+  KEY `fin_rule_logs_rule_id_index` (`rule_id`),
+  KEY `fin_rule_logs_transaction_id_index` (`transaction_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_rules`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_rules` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(20) unsigned NOT NULL,
+  `order` int(11) NOT NULL,
+  `title` varchar(255) NOT NULL,
+  `is_disabled` tinyint(1) NOT NULL DEFAULT 0,
+  `stop_processing_if_match` tinyint(1) NOT NULL DEFAULT 0,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `deleted_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `fin_rules_user_id_index` (`user_id`),
+  CONSTRAINT `fin_rules_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_statement_cash_report`;
@@ -1091,6 +1193,7 @@ CREATE TABLE `users` (
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   `gemini_api_key` varchar(255) DEFAULT NULL,
+  `marriage_status_by_year` text DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `users_email_unique` (`email`),
   KEY `users_user_role_index` (`user_role`)
@@ -1239,3 +1342,12 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (48,'2026_03_05_000
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (49,'2026_03_05_001906_add_hash_and_statement_id_to_finance_tables',28);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (50,'2026_03_05_100000_add_transaction_ids_to_fin_account_lots',29);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (51,'2026_03_13_083906_add_tax_characteristic_to_fin_account_tag_table',30);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (52,'2026_03_14_000001_add_income_tax_characteristics_to_fin_account_tag',31);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (53,'2026_03_15_000001_add_account_number_to_fin_accounts',32);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (54,'2026_03_17_000001_add_milestone_price_and_invoice_line_to_client_tasks',33);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (55,'2026_03_18_000001_create_fin_rules_tables',34);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (56,'2026_03_19_004809_create_fin_employment_entity_table',35);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (57,'2026_03_19_004817_add_employment_entity_id_to_fin_payslip_table',35);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (58,'2026_03_19_004822_add_employment_entity_id_to_fin_account_tag_table',35);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (59,'2026_03_19_004826_add_new_tax_characteristics_to_fin_account_tag',35);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (60,'2026_03_19_004831_add_marriage_status_by_year_to_users_table',35);
