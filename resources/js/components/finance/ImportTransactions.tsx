@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
-import { filterOutDuplicates, findDuplicateTransactions } from '@/data/finance/isDuplicateTransaction'
+import { filterOutDuplicates } from '@/data/finance/isDuplicateTransaction'
 import type { IbStatementData } from '@/data/finance/parseIbCsv'
 import { parseImportData } from '@/data/finance/parseImportData'
 import { fetchWrapper } from '@/fetchWrapper'
@@ -57,6 +57,9 @@ export default function ImportTransactions({
   onStatementParsed?: (statement: IbStatementData | null) => void
 }) {
   const [text, setText] = useState<string>('')
+  const [data, setData] = useState<AccountLineItem[] | null>(null)
+  const [statement, setStatement] = useState<IbStatementData | null>(null)
+  const [parseError, setParseError] = useState<string | null>(null)
   const [fileInfo, setFileInfo] = useState<FileInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -310,6 +313,9 @@ export default function ImportTransactions({
 
   const clearData = useCallback(() => {
     setText('')
+    setData(null)
+    setStatement(null)
+    setParseError(null)
     setFileInfo(null)
     setPdfData(null)
     setPendingPdfFile(null)
@@ -356,6 +362,41 @@ export default function ImportTransactions({
     setPdfData,
     setFileInfo,
   })
+
+  // Parse text data when it changes (CSV/QIF/OFX parsing)
+  useEffect(() => {
+    if (!text) {
+      setData(null)
+      setStatement(null)
+      setParseError(null)
+      return
+    }
+
+    try {
+      const parsed = parseImportData(text)
+      if (parsed.statement) {
+        setStatement(parsed.statement)
+        setData(null)
+      } else if (parsed.data) {
+        setData(parsed.data)
+        setStatement(null)
+      }
+      setParseError(parsed.parseError)
+    } catch (e) {
+      setParseError(e instanceof Error ? e.message : 'Failed to parse text data')
+      setData(null)
+      setStatement(null)
+    }
+  }, [text])
+
+  // Retry failed import
+  const retryImport = useCallback(async () => {
+    if (dataToImport.length > 0) {
+      setImportProgress({ processed: 0, total: dataToImport.length })
+      const chunks = chunkArray(dataToImport, CHUNK_SIZE)
+      await processChunks(chunks, 0, importedStatementId)
+    }
+  }, [dataToImport, importedStatementId, processChunks])
 
   /** Gemini PDF processing hook */
   const { processPdfWithGemini: _processPdfWithGemini } = useProcessPdfWithGemini({
