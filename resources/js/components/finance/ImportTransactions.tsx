@@ -392,7 +392,7 @@ export default function ImportTransactions({
       setIsImporting(false)
       onImportFinished()
     }
-  }, [accountId, existingTransactions, processChunks, onImportFinished, pdfData, pdfAccountBlocks, accountMappings, attachAsStatement, importTransactions, saveFileToS3, uploadedFileHash])
+  }, [accountId, existingTransactions, processChunks, onImportFinished, pdfData, pdfAccountBlocks, accountMappings, attachAsStatement, importTransactions, saveFileToS3, uploadedFileHash, pendingPdfFile])
 
   const clearData = useCallback(() => {
     setText('')
