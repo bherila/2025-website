@@ -7,9 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
-import { filterOutDuplicates } from '@/data/finance/isDuplicateTransaction'
 import type { IbStatementData } from '@/data/finance/parseIbCsv'
-import { parseImportData } from '@/data/finance/parseImportData'
 import { fetchWrapper } from '@/fetchWrapper'
 import { type AccountForMatching, matchAccount } from '@/lib/finance/accountMatcher'
 
@@ -27,6 +25,7 @@ import type { GeminiAccountBlock } from './importTypes'
 import { PdfStatementPreviewCard } from './PdfStatementPreviewCard'
 import { StatementPreviewCard } from './StatementPreviewCard'
 import TransactionsTable from './TransactionsTable'
+import { useDuplicateDetection } from './useDuplicateDetection'
 import { useImportTransactionDragDrop } from './useImportTransactionDragDrop'
 import { useImportTransactionPaste } from './useImportTransactionPaste'
 import { type GeminiImportResponse, useProcessPdfWithGemini } from './useProcessPdfWithGemini'
@@ -68,8 +67,9 @@ export default function ImportTransactions({
   const [importError, setImportError] = useState<string | null>(null)
   const [dataToImport, setDataToImport] = useState<AccountLineItem[]>([])
   const [currentDuplicates, setCurrentDuplicates] = useState<AccountLineItem[]>([])
-  const [existingTransactions, setExistingTransactions] = useState<AccountLineItem[]>([])
-  const [loadingExisting, setLoadingExisting] = useState(true)
+
+  // Duplicate detection hook
+  const { existingTransactions, loadingExisting, filterDuplicates } = useDuplicateDetection({ accountId })
   const [pdfData, setPdfData] = useState<GeminiImportResponse | null>(null)
   const [importedStatementId, setImportedStatementId] = useState<number | undefined>(undefined)
   // Pending PDF file waiting for user to click "Process with AI"
@@ -134,29 +134,6 @@ export default function ImportTransactions({
     })
     setAccountMappings(mappings)
   }, [pdfData, pdfAccountBlocks, accountsForMatching])
-
-  // Load all existing transactions upfront (skip if accountId is 'all')
-  useEffect(() => {
-    if (accountId === 'all') {
-      // For "all accounts" page, we can't load existing transactions
-      // Multi-account imports will handle duplicate detection per account
-      setLoadingExisting(false)
-      return
-    }
-
-    const loadExistingTransactions = async () => {
-      try {
-        setLoadingExisting(true)
-        const transactions = await fetchWrapper.get(`/api/finance/${accountId}/line_items`)
-        setExistingTransactions(transactions)
-      } catch (e) {
-        console.error('Failed to load existing transactions:', e)
-      } finally {
-        setLoadingExisting(false)
-      }
-    }
-    loadExistingTransactions()
-  }, [accountId])
 
   const processChunks = useCallback(async (chunks: AccountLineItem[][], chunkIndex: number, statementId?: number) => {
     if (chunkIndex >= chunks.length) {
@@ -296,7 +273,7 @@ export default function ImportTransactions({
     
     // Filter out duplicates and import remaining transactions
     const transactionsToProcess = importTransactions ? data : []
-    const newTransactions = filterOutDuplicates(transactionsToProcess, existingTransactions)
+    const newTransactions = filterDuplicates(transactionsToProcess)
     
     setLoading(false)
 
@@ -309,7 +286,7 @@ export default function ImportTransactions({
       setIsImporting(false)
       onImportFinished()
     }
-  }, [accountId, existingTransactions, processChunks, onImportFinished, pdfData, pdfAccountBlocks, accountMappings, attachAsStatement, importTransactions, saveFileToS3, uploadedFileHash, pendingPdfFile])
+  }, [accountId, filterDuplicates, processChunks, onImportFinished, pdfData, pdfAccountBlocks, accountMappings, attachAsStatement, importTransactions, saveFileToS3, uploadedFileHash, pendingPdfFile])
 
   const clearData = useCallback(() => {
     setText('')
@@ -355,39 +332,25 @@ export default function ImportTransactions({
   const { isDragOver, handleFileInputChange, handleDrop, handleDragOver, handleDragLeave } =
     useImportTransactionDragDrop({ onFileReceived: handleFileRead })
 
-  /** Paste handler (Ctrl+V) */
-  useImportTransactionPaste({
+  /** Paste handler (Ctrl+V) and text parsing */
+  const handleParsedData = useCallback((parsed: { data: AccountLineItem[] | null; statement: IbStatementData | null; parseError: string | null }) => {
+    setData(parsed.data)
+    setStatement(parsed.statement)
+    setParseError(parsed.parseError)
+  }, [])
+
+  const { parseTextData } = useImportTransactionPaste({
     onFileReceived: handleFileRead,
     onTextReceived: setText,
+    onParsedData: handleParsedData,
     setPdfData,
     setFileInfo,
   })
 
-  // Parse text data when it changes (CSV/QIF/OFX parsing)
+  // Parse text when it changes
   useEffect(() => {
-    if (!text) {
-      setData(null)
-      setStatement(null)
-      setParseError(null)
-      return
-    }
-
-    try {
-      const parsed = parseImportData(text)
-      if (parsed.statement) {
-        setStatement(parsed.statement)
-        setData(null)
-      } else if (parsed.data) {
-        setData(parsed.data)
-        setStatement(null)
-      }
-      setParseError(parsed.parseError)
-    } catch (e) {
-      setParseError(e instanceof Error ? e.message : 'Failed to parse text data')
-      setData(null)
-      setStatement(null)
-    }
-  }, [text])
+    parseTextData(text)
+  }, [text, parseTextData])
 
   // Retry failed import
   const retryImport = useCallback(async () => {
