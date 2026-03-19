@@ -15,10 +15,31 @@ jest.mock('@/components/finance/useFinanceTags', () => ({
   useFinanceTags: jest.fn(),
 }))
 
+// Data with tags so the Tags column renders
 const mockData = [
-  { t_id: 1, t_description: 'Test Transaction 1', t_amt: 100, t_date: '2023-01-01', t_account_balance: 100, t_price: 0, t_commission: 0, t_fee: 0 },
-  { t_id: 2, t_description: 'Test Transaction 2', t_amt: 200, t_date: '2023-01-02', t_account_balance: 300, t_price: 0, t_commission: 0, t_fee: 0 },
-] as any[] // Using as any[] to avoid missing other optional fields if necessary, but providing the ones mentioned in error.
+  { 
+    t_id: 1, 
+    t_description: 'Test Transaction 1', 
+    t_amt: 100, 
+    t_date: '2023-01-01', 
+    t_account_balance: 100, 
+    t_price: 0, 
+    t_commission: 0, 
+    t_fee: 0,
+    tags: [{ tag_id: 1, tag_label: 'Personal', tag_color: 'green' }]
+  },
+  { 
+    t_id: 2, 
+    t_description: 'Test Transaction 2', 
+    t_amt: 200, 
+    t_date: '2023-01-02', 
+    t_account_balance: 300, 
+    t_price: 0, 
+    t_commission: 0, 
+    t_fee: 0,
+    tags: []
+  },
+] as any[]
 
 describe('TransactionsTable Tag Application', () => {
   beforeEach(() => {
@@ -37,8 +58,17 @@ describe('TransactionsTable Tag Application', () => {
       />
     )
 
-    const tagButton = screen.getByText('Work')
-    fireEvent.click(tagButton)
+    // Find the TagSelect combobox (it has role="combobox")
+    const selectTrigger = screen.getByRole('combobox')
+    fireEvent.click(selectTrigger)
+
+    // Now the dropdown options should be visible - find and click "Work"
+    const workOption = await screen.findByRole('option', { name: /work/i })
+    fireEvent.click(workOption)
+
+    // Click the "Add Tag" button to apply the tag
+    const addTagButton = screen.getByRole('button', { name: /add tag/i })
+    fireEvent.click(addTagButton)
 
     await waitFor(() => {
       expect(fetchWrapper.post).toHaveBeenCalledWith(

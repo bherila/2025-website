@@ -25,6 +25,17 @@ Object.defineProperty(window, 'scrollTo', {
   value: jest.fn(),
 });
 
+// Mock window.scrollIntoView and Element.prototype.scrollIntoView for Radix UI Select
+Object.defineProperty(window, 'scrollIntoView', {
+  writable: true,
+  value: jest.fn(),
+});
+
+// Also mock on Element.prototype since Radix may call it on elements
+if (typeof Element !== 'undefined') {
+  Element.prototype.scrollIntoView = jest.fn()
+}
+
 // Provide a minimal ResizeObserver mock for components that rely on it (Radix use-size)
 // Some tests render components which use ResizeObserver; Jest DOM doesn't provide it by default.
 class ResizeObserverMock {

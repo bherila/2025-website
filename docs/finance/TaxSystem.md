@@ -82,13 +82,22 @@ Marriage/filing status is stored per year as a JSON column (`marriage_status_by_
 ### Features
 
 - **Year selector** with navigation buttons (defaults to current year)
+  - Uses URL query string (`?year=YYYY`) so the browser Back button works correctly
+  - Pushes browser history on year change; restores from URL on back/forward navigation
 - **"List transactions in-line" toggle** — expands individual transactions under each line item
 - **Grouped by employment entity** — each `sch_c` entity gets its own Schedule C section
-- **Income table** — `business_income` and `business_returns` aggregated
-- **Schedule C Expenses** — all `sce_*` characteristics summed
-- **Home Office Deductions** — all `scho_*` characteristics summed
+- **Ordinary Income** (interest, dividends, other) shown above Schedule C items
+- **Schedule C layout**: 2-3 column grid per entity:
+  - Column 1: Schedule C Income
+  - Column 2: Schedule C Expenses (includes home office deduction summary)
+  - Column 3 (if applicable): Home Office Deduction details
+- **Home Office Deduction Summary** in the Expenses column:
+  - Prior Year Home Office Carry-Forward (if any)
+  - Allowable Home Office Expense (calculated as min of net business income limit)
+  - Disallowed Home Office (Carry-Forward to next year)
 - **W-2 income** — `w2_wages`, `w2_other_comp` grouped by W-2 entity
 - **Non-entity income** — `interest`, `ordinary_dividend`, `qualified_dividend`, `other_ordinary_income`
+- All years loaded at once; year selector filters the display client-side
 - Amounts displayed as **positive numbers** (negated from stored negative values)
 - Click any row to view contributing transactions
 

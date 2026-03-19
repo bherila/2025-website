@@ -387,14 +387,19 @@ The Schedule C view is a dedicated tax-reporting summary page. It aggregates tag
 ### What it Shows
 
 - **Year selector** (top-right) with −/+ navigation buttons to step through years; defaults to the current year. Choosing "All Years" shows all years.
+  - Uses URL query string (`?year=YYYY`) so the browser Back button works correctly
 - **"List transactions in-line" toggle** (top-right Switch) — when enabled, each Schedule C line item expands to show individual transactions (Date, Name, Amount with a "Go to" link) indented beneath it.
 - For each tax year (most recent first):
   - **Full-width year header** — e.g., "2024"
-  - **Income table** — one row per `business_*` category (shown only when there is data)
-  - **Two 50/50 side-by-side tables**:
-    - **Schedule C Expenses**: One row per `sce_*` category with a positive dollar total
-    - **Home Office Deductions**: One row per `scho_*` category with a positive dollar total
-  - **Total row** at the bottom of each table
+  - **Ordinary Income** (shown above Schedule C items) — interest, dividends, other income not tied to an employment entity
+  - **Per-entity Schedule C sections** (2-3 column grid):
+    - Column 1: **Schedule C Income** — one row per `business_*` category
+    - Column 2: **Schedule C Expenses** — one row per `sce_*` category with positive totals, plus Home Office Deduction Summary
+    - Column 3 (if applicable): **Home Office Deduction** — one row per `scho_*` category
+  - **Home Office Deduction Summary** (in Expenses column):
+    - Prior Year Home Office Carry-Forward (if any from prior year)
+    - Allowable Home Office Expense (calculated as min of net business income limit)
+    - Disallowed Home Office (Carry-Forward to next year)
   - **Click any row** to open a Transaction List Modal showing each transaction that contributes to that line, with a "Go to" link using `transactionsUrl()` from `financeRouteBuilder.ts`
 
 Amounts are stored as negatives in the database (expenses) but displayed as positive values in this view.
@@ -622,13 +627,17 @@ Statement snapshots and metadata are stored in `fin_statements`. See `/database/
 
 ### Import UI Components
 
-The import page uses extracted components for better maintainability:
+The import page uses extracted components and hooks for better maintainability:
 
-| Component | File | Purpose |
-|-----------|------|---------|
+| Component/Hook | File | Purpose |
+|----------------|------|---------|
 | `ImportProgressDialog` | `ImportProgressDialog.tsx` | Progress bar during import |
 | `StatementPreviewCard` | `StatementPreviewCard.tsx` | Preview IB statement data |
 | `IbStatementDetailModal` | `IbStatementDetailModal.tsx` | Detailed view of IB statement |
+| `useImportTransactionDragDrop` | `useImportTransactionDragDrop.ts` | File drag-and-drop and file input handlers |
+| `useImportTransactionPaste` | `useImportTransactionPaste.ts` | Ctrl+V paste handler + text parsing (CSV/QIF/OFX) |
+| `useDuplicateDetection` | `useDuplicateDetection.ts` | Load existing transactions and filter duplicates |
+| `useProcessPdfWithGemini` | `useProcessPdfWithGemini.ts` | PDF parsing via Gemini AI |
 
 ### Import Button Text
 
