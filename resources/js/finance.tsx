@@ -5,14 +5,15 @@ import AllAccountsLotsPage from '@/components/finance/AllAccountsLotsPage'
 import DuplicatesPage from '@/components/finance/DuplicatesPage'
 import FinanceAccountLotsPage from '@/components/finance/FinanceAccountLotsPage'
 import FinanceAccountsPage from '@/components/finance/FinanceAccountsPage'
+import FinanceConfigPage from '@/components/finance/FinanceConfigPage'
 import FinanceNavbar, { type FinanceSection } from '@/components/finance/FinanceNavbar'
 import ImportTransactionsClient from '@/components/finance/ImportTransactionsClient'
 import LinkerPage from '@/components/finance/LinkerPage'
 import ManageTagsPage from '@/components/finance/ManageTagsPage'
-import RulesList from '@/components/finance/rules_engine/RulesList'
 import ScheduleCPage from '@/components/finance/ScheduleCPage'
 import FinanceAccountStatementsPage from '@/components/finance/statements/FinanceAccountStatementsPage'
 import SummaryClient from '@/components/finance/SummaryClient'
+import TaxPreviewPage from '@/components/finance/TaxPreviewPage'
 import TransactionsPage from '@/components/finance/TransactionsPage'
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -135,9 +136,15 @@ document.addEventListener('DOMContentLoaded', () => {
     root.render(<ScheduleCPage />)
   }
 
+  const taxPreviewDiv = document.getElementById('TaxPreviewPage')
+  if (taxPreviewDiv) {
+    const root = createRoot(taxPreviewDiv)
+    root.render(<TaxPreviewPage />)
+  }
+
   const configPageDiv = document.getElementById('FinanceConfigPage')
   if (configPageDiv) {
     const root = createRoot(configPageDiv)
-    root.render(<RulesList />)
+    root.render(<FinanceConfigPage />)
   }
 })

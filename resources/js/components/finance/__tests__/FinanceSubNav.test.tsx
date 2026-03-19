@@ -42,7 +42,7 @@ describe('FinanceNavbar', () => {
       render(<FinanceNavbar activeSection="accounts" />)
     })
 
-    expect(document.querySelector('a[href="/finance/schedule-c"]')).toBeInTheDocument()
+    expect(document.querySelector('a[href="/finance/tax-preview"]')).toBeInTheDocument()
     expect(document.querySelector('a[href="/finance/rsu"]')).toBeInTheDocument()
     expect(document.querySelector('a[href="/finance/payslips"]')).toBeInTheDocument()
     expect(document.querySelector('a[href="/finance/tags"]')).toBeInTheDocument()
@@ -134,7 +134,7 @@ describe('FinanceNavbar', () => {
   it('does not show account combobox when accountId is undefined', async () => {
     const FinanceNavbar = (await import('@/components/finance/FinanceNavbar')).default
     await act(async () => {
-      render(<FinanceNavbar activeSection="schedule-c" />)
+      render(<FinanceNavbar activeSection="tax-preview" />)
     })
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
   })

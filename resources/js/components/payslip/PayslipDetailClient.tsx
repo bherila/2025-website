@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Loader2, Trash2 } from 'lucide-react'
-import { useEffect, useMemo,useState } from 'react'
+import { useCallback, useEffect, useMemo,useState } from 'react'
 import { type SubmitHandler,useForm } from 'react-hook-form'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -25,6 +25,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { fetchWrapper } from '@/fetchWrapper'
 import { deletePayslip,savePayslip } from '@/lib/api'
 import { parseDate } from '@/lib/DateHelper'
 
@@ -74,7 +75,7 @@ const PayslipFormSection = ({
 )
 
 interface PayslipDetailClientProps {
-  initialPayslip?: fin_payslip | undefined
+  initialPayslip?: (fin_payslip & { employment_entity_id?: number | null }) | undefined
 }
 
 export default function PayrollForm({ initialPayslip }: PayslipDetailClientProps) {
@@ -82,6 +83,31 @@ export default function PayrollForm({ initialPayslip }: PayslipDetailClientProps
   const [isDeleting, setIsDeleting] = useState(false)
   const [saveMode, setSaveMode] = useState<'edit' | 'new'>('edit')
   const [apiError, setApiError] = useState<string | null>(null)
+  const [w2Jobs, setW2Jobs] = useState<{ id: number; display_name: string }[]>([])
+  const [selectedEntityId, setSelectedEntityId] = useState<number | null>(
+    initialPayslip?.employment_entity_id ?? null,
+  )
+
+  // Fetch W-2 jobs for the dropdown
+  const fetchW2Jobs = useCallback(async () => {
+    try {
+      const data = await fetchWrapper.get('/api/finance/employment-entities') as { id: number; display_name: string; type: string; start_date: string }[]
+      const w2Only = data
+        .filter(e => e.type === 'w2')
+        .sort((a, b) => b.start_date.localeCompare(a.start_date))
+      setW2Jobs(w2Only)
+      // Pre-select newest w2 job if none is selected and we're creating
+      if (!initialPayslip && w2Only.length > 0 && !selectedEntityId) {
+        setSelectedEntityId(w2Only[0]?.id ?? null)
+      }
+    } catch {
+      // ignore - optional feature
+    }
+  }, [initialPayslip, selectedEntityId])
+
+  useEffect(() => {
+    fetchW2Jobs()
+  }, [fetchW2Jobs])
 
   const prepareInitialValues = useMemo(() => {
     if (!initialPayslip) return { ps_is_estimated: false }
@@ -128,7 +154,7 @@ export default function PayrollForm({ initialPayslip }: PayslipDetailClientProps
     setIsSubmitting(true)
     setApiError(null)
     try {
-      const payslipToSave: any = { ...data };
+      const payslipToSave: any = { ...data, employment_entity_id: selectedEntityId };
       if (saveMode === 'edit' && initialPayslip?.payslip_id) {
         payslipToSave.payslip_id = initialPayslip.payslip_id;
       }
@@ -252,6 +278,25 @@ export default function PayrollForm({ initialPayslip }: PayslipDetailClientProps
                   </FormItem>
                 )}
               />
+            </div>
+
+            {/* W-2 Job Selector */}
+            <div className="border p-4 rounded-md">
+              <h3 className="text-lg font-semibold mb-2">W-2 Job</h3>
+              <select
+                className="w-full max-w-md rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={selectedEntityId ?? ''}
+                onChange={(e) => setSelectedEntityId(e.target.value ? Number(e.target.value) : null)}
+              >
+                <option value="">No Job Associated</option>
+                {w2Jobs.map(job => (
+                  <option key={job.id} value={job.id}>{job.display_name}</option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Link this payslip to a W-2 job. Manage jobs in{' '}
+                <a href="/finance/config" className="text-blue-600 hover:underline">Settings</a>.
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

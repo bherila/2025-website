@@ -39,16 +39,23 @@ interface CategoryTotal {
   transactions?: ScheduleCTransaction[]
 }
 
-interface YearData {
-  year: string
+interface EntityData {
+  entity_id: number | null
+  entity_name: string | null
   schedule_c_income?: Record<string, CategoryTotal>
   schedule_c_expense: Record<string, CategoryTotal>
   schedule_c_home_office: Record<string, CategoryTotal>
 }
 
+interface YearData {
+  year: string
+  entities: EntityData[]
+}
+
 interface ScheduleCResponse {
   available_years: string[]
   years: YearData[]
+  entities?: { id: number; display_name: string; type: string }[]
 }
 
 function formatCurrency(amount: number): string {
@@ -234,7 +241,7 @@ export default function ScheduleCPage() {
   return (
     <div className="px-4 pb-8">
       <div className="flex items-center gap-4 mb-2 flex-wrap">
-        <h1 className="text-2xl font-bold">Schedule C View</h1>
+        <h1 className="text-2xl font-bold">Tax Preview</h1>
         <div className="ml-auto flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-2">
             <Switch
@@ -291,31 +298,42 @@ export default function ScheduleCPage() {
               <div className="w-full bg-muted rounded-md px-4 py-2 mb-4">
                 <h2 className="text-xl font-bold">{yearData.year}</h2>
               </div>
-              {yearData.schedule_c_income && Object.keys(yearData.schedule_c_income).length > 0 && (
-                <div className="mb-6">
-                  <CategoryTable
-                    title="Schedule C: Income"
-                    categories={yearData.schedule_c_income}
-                    showInline={showInline}
-                  />
+              {yearData.entities.map((entity, idx) => (
+                <div key={entity.entity_id ?? `unassigned-${idx}`} className="mb-8">
+                  {(yearData.entities.length > 1 || entity.entity_name) && (
+                    <div className="border-l-4 border-primary pl-3 mb-4">
+                      <h3 className="text-lg font-semibold">
+                        {entity.entity_name ?? 'Unassigned (No Business Entity)'}
+                      </h3>
+                    </div>
+                  )}
+                  {entity.schedule_c_income && Object.keys(entity.schedule_c_income).length > 0 && (
+                    <div className="mb-6">
+                      <CategoryTable
+                        title="Schedule C: Income"
+                        categories={entity.schedule_c_income}
+                        showInline={showInline}
+                      />
+                    </div>
+                  )}
+                  <div className="flex flex-col md:flex-row gap-6">
+                    <div className="md:w-1/2">
+                      <CategoryTable
+                        title="Schedule C: Expenses"
+                        categories={entity.schedule_c_expense}
+                        showInline={showInline}
+                      />
+                    </div>
+                    <div className="md:w-1/2">
+                      <CategoryTable
+                        title="Schedule C: Home Office Deduction"
+                        categories={entity.schedule_c_home_office}
+                        showInline={showInline}
+                      />
+                    </div>
+                  </div>
                 </div>
-              )}
-              <div className="flex flex-col md:flex-row gap-6">
-                <div className="md:w-1/2">
-                  <CategoryTable
-                    title="Schedule C: Expenses"
-                    categories={yearData.schedule_c_expense}
-                    showInline={showInline}
-                  />
-                </div>
-                <div className="md:w-1/2">
-                  <CategoryTable
-                    title="Schedule C: Home Office Deduction"
-                    categories={yearData.schedule_c_home_office}
-                    showInline={showInline}
-                  />
-                </div>
-              </div>
+              ))}
             </div>
           ))}
         </div>

@@ -86,11 +86,14 @@ export async function updatePayslipEstimatedStatus(
   }
 }
 
-export async function importPayslips(files: File[]): Promise<{ success: boolean; message?: string; error?: string }> {
+export async function importPayslips(files: File[], employmentEntityId?: number | null): Promise<{ success: boolean; message?: string; error?: string }> {
   const formData = new FormData();
   files.forEach(file => {
     formData.append('files[]', file);
   });
+  if (employmentEntityId) {
+    formData.append('employment_entity_id', String(employmentEntityId));
+  }
 
   const response = await fetch('/api/payslips/import', {
     method: 'POST',

@@ -112,15 +112,40 @@ const SCHEDULE_C_HOME_OFFICE_OPTIONS: { value: string; label: string }[] = [
   { value: 'scho_casualty_losses', label: 'Casualty losses (business-use portion)' },
 ]
 
+const OTHER_TAX_OPTIONS: { value: string; label: string }[] = [
+  { value: 'interest', label: 'Interest' },
+  { value: 'ordinary_dividend', label: 'Ordinary Dividend' },
+  { value: 'qualified_dividend', label: 'Qualified Dividend' },
+  { value: 'other_ordinary_income', label: 'Other Ordinary Income' },
+]
+
 const ALL_TAX_OPTIONS = [
   ...SCHEDULE_C_INCOME_OPTIONS,
   ...SCHEDULE_C_EXPENSE_OPTIONS,
   ...SCHEDULE_C_HOME_OFFICE_OPTIONS,
+  ...OTHER_TAX_OPTIONS,
 ]
 
 const TAX_OPTION_LABEL_MAP: Record<string, string> = Object.fromEntries(
   ALL_TAX_OPTIONS.map((o) => [o.value, o.label])
 )
+
+/** Schedule C tax characteristic values that require an employment entity */
+const SCHEDULE_C_VALUES = new Set([
+  ...SCHEDULE_C_INCOME_OPTIONS.map(o => o.value),
+  ...SCHEDULE_C_EXPENSE_OPTIONS.map(o => o.value),
+  ...SCHEDULE_C_HOME_OFFICE_OPTIONS.map(o => o.value),
+])
+
+function isScheduleCCharacteristic(value: string | null | undefined): boolean {
+  return !!value && value !== 'none' && SCHEDULE_C_VALUES.has(value)
+}
+
+interface EmploymentEntity {
+  id: number
+  display_name: string
+  type: string
+}
 
 function getTaxCharacteristicLabel(value: string | null | undefined): string {
   if (!value || value === 'none') return '—'
@@ -171,6 +196,7 @@ function TaxCharacteristicCombobox({
     { label: 'Schedule C: Income', options: SCHEDULE_C_INCOME_OPTIONS },
     { label: 'Schedule C: Expense', options: SCHEDULE_C_EXPENSE_OPTIONS },
     { label: 'Schedule C: Home Office Item', options: SCHEDULE_C_HOME_OFFICE_OPTIONS },
+    { label: 'Other Income / Investments', options: OTHER_TAX_OPTIONS },
   ]
 
   const NONE_OPTION = { value: 'none', label: 'None (no tax characteristic)' }
@@ -258,11 +284,15 @@ export default function ManageTagsPage() {
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   
+  // Employment entities for Schedule C linking
+  const [schCEntities, setSchCEntities] = useState<EmploymentEntity[]>([])
+  
   // Create dialog state
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [newTagLabel, setNewTagLabel] = useState('')
   const [newTagColor, setNewTagColor] = useState('blue')
   const [newTagTaxChar, setNewTagTaxChar] = useState<string>('none')
+  const [newTagEntityId, setNewTagEntityId] = useState<number | null>(null)
   const [isCreating, setIsCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   
@@ -271,12 +301,23 @@ export default function ManageTagsPage() {
   const [editLabel, setEditLabel] = useState('')
   const [editColor, setEditColor] = useState('')
   const [editTaxChar, setEditTaxChar] = useState<string>('none')
+  const [editEntityId, setEditEntityId] = useState<number | null>(null)
   const [isUpdating, setIsUpdating] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
   
   // Delete confirmation state
   const [deleteConfirmTag, setDeleteConfirmTag] = useState<FinanceTag | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  // Fetch Schedule C employment entities
+  useState(() => {
+    fetchWrapper.get('/api/finance/employment-entities')
+      .then((data: unknown) => {
+        const entities = data as EmploymentEntity[]
+        setSchCEntities(entities.filter(e => e.type === 'sch_c'))
+      })
+      .catch(() => { /* ignore - entities are optional */ })
+  })
 
   const handleCreateTag = async () => {
     if (!newTagLabel.trim()) {
@@ -291,11 +332,13 @@ export default function ManageTagsPage() {
         tag_label: newTagLabel.trim(),
         tag_color: newTagColor,
         tax_characteristic: newTagTaxChar === 'none' ? null : newTagTaxChar,
+        employment_entity_id: isScheduleCCharacteristic(newTagTaxChar) ? newTagEntityId : null,
       })
       setSuccessMessage('Tag created successfully')
       setNewTagLabel('')
       setNewTagColor('blue')
       setNewTagTaxChar('none')
+      setNewTagEntityId(null)
       setCreateDialogOpen(false)
       await refreshTags()
     } catch (err) {
@@ -310,6 +353,7 @@ export default function ManageTagsPage() {
     setEditLabel(tag.tag_label)
     setEditColor(tag.tag_color)
     setEditTaxChar(tag.tax_characteristic || 'none')
+    setEditEntityId((tag as FinanceTag & { employment_entity_id?: number | null }).employment_entity_id ?? null)
     setEditError(null)
   }
 
@@ -331,10 +375,12 @@ export default function ManageTagsPage() {
       setIsUpdating(true)
       setEditError(null)
       const updatedTaxChar = editTaxChar === 'none' ? null : editTaxChar
+      const updatedEntityId = isScheduleCCharacteristic(editTaxChar) ? editEntityId : null
       await fetchWrapper.put(`/api/finance/tags/${editingTag.tag_id}`, {
         tag_label: editLabel.trim(),
         tag_color: editColor,
         tax_characteristic: updatedTaxChar,
+        employment_entity_id: updatedEntityId,
       })
       // Patch the updated tag into local state to avoid page flicker from re-querying
       setTags((prev) =>
@@ -556,9 +602,25 @@ export default function ManageTagsPage() {
             <div>
               <Label htmlFor="create-tax-char">Tax Characteristic</Label>
               <div className="mt-1">
-                <TaxCharacteristicCombobox id="create-tax-char" value={newTagTaxChar} onChange={setNewTagTaxChar} />
+                <TaxCharacteristicCombobox id="create-tax-char" value={newTagTaxChar} onChange={(v) => { setNewTagTaxChar(v); if (!isScheduleCCharacteristic(v)) setNewTagEntityId(null) }} />
               </div>
             </div>
+            {isScheduleCCharacteristic(newTagTaxChar) && schCEntities.length > 0 && (
+              <div>
+                <Label htmlFor="create-entity">Schedule C Business</Label>
+                <select
+                  id="create-entity"
+                  className="mt-1 w-full max-w-sm rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={newTagEntityId ?? ''}
+                  onChange={(e) => setNewTagEntityId(e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">Select a business…</option>
+                  {schCEntities.map(e => (
+                    <option key={e.id} value={e.id}>{e.display_name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="flex items-center gap-3">
               <span className="text-sm text-muted-foreground">Preview:</span>
               <Badge 
@@ -635,9 +697,25 @@ export default function ManageTagsPage() {
             <div>
               <Label htmlFor="edit-tax-char">Tax Characteristic</Label>
               <div className="mt-1">
-                <TaxCharacteristicCombobox id="edit-tax-char" value={editTaxChar} onChange={setEditTaxChar} />
+                <TaxCharacteristicCombobox id="edit-tax-char" value={editTaxChar} onChange={(v) => { setEditTaxChar(v); if (!isScheduleCCharacteristic(v)) setEditEntityId(null) }} />
               </div>
             </div>
+            {isScheduleCCharacteristic(editTaxChar) && schCEntities.length > 0 && (
+              <div>
+                <Label htmlFor="edit-entity">Schedule C Business</Label>
+                <select
+                  id="edit-entity"
+                  className="mt-1 w-full max-w-sm rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={editEntityId ?? ''}
+                  onChange={(e) => setEditEntityId(e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">Select a business…</option>
+                  {schCEntities.map(e => (
+                    <option key={e.id} value={e.id}>{e.display_name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="flex items-center gap-3">
               <span className="text-sm text-muted-foreground">Preview:</span>
               <Badge 

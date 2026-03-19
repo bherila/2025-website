@@ -1,13 +1,14 @@
 'use client'
 
 import { FileText, Loader2,Upload, XCircle } from 'lucide-react'
-import React, { useRef,useState } from 'react'
+import React, { useCallback, useEffect, useRef,useState } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { fetchWrapper } from '@/fetchWrapper'
 import { importPayslips } from '@/lib/api'
 
 interface PayslipImportModalProps {
@@ -20,6 +21,21 @@ export function PayslipImportModal({ onImportSuccess }: PayslipImportModalProps)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 })
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [w2Jobs, setW2Jobs] = useState<{ id: number; display_name: string }[]>([])
+  const [selectedEntityId, setSelectedEntityId] = useState<number | null>(null)
+
+  const fetchW2Jobs = useCallback(async () => {
+    try {
+      const data = await fetchWrapper.get('/api/finance/employment-entities') as { id: number; display_name: string; type: string; start_date: string }[]
+      const w2Only = data
+        .filter(e => e.type === 'w2')
+        .sort((a, b) => b.start_date.localeCompare(a.start_date))
+      setW2Jobs(w2Only)
+      if (w2Only.length > 0) setSelectedEntityId(w2Only[0]?.id ?? null)
+    } catch { /* ignore */ }
+  }, [])
+
+  useEffect(() => { fetchW2Jobs() }, [fetchW2Jobs])
 
   const getTotalSize = (fileList: File[]) => {
     return fileList.reduce((acc, file) => acc + file.size, 0)
@@ -93,7 +109,7 @@ export function PayslipImportModal({ onImportSuccess }: PayslipImportModalProps)
         setUploadProgress({ current: i + 1, total: chunks.length });
         
         try {
-            const result = await importPayslips(chunk);
+            const result = await importPayslips(chunk, selectedEntityId);
             if (result.success) {
                 // The API result message says "Successfully imported X payslip(s)"
                 // We'll rely on the API success message mostly, but for now just count processed files
@@ -143,6 +159,23 @@ export function PayslipImportModal({ onImportSuccess }: PayslipImportModalProps)
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
+          {w2Jobs.length > 0 && (
+            <div className="grid w-full max-w-sm items-center gap-1.5">
+              <Label htmlFor="import-w2-job">W-2 Job</Label>
+              <select
+                id="import-w2-job"
+                className="rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={selectedEntityId ?? ''}
+                onChange={(e) => setSelectedEntityId(e.target.value ? Number(e.target.value) : null)}
+                disabled={isUploading}
+              >
+                <option value="">No Job Associated</option>
+                {w2Jobs.map(job => (
+                  <option key={job.id} value={job.id}>{job.display_name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="grid w-full max-w-sm items-center gap-1.5">
             <Label htmlFor="payslip-files">Payslip Files</Label>
             <Input
