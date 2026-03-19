@@ -45,15 +45,6 @@ export default function RulesList() {
     setModalOpen(true)
   }
 
-  const handleDelete = async (rule: FinRule) => {
-    try {
-      await fetchWrapper.delete(`/api/finance/rules/${rule.id}`, {})
-      await fetchRules()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete rule.')
-    }
-  }
-
   const handleReorder = async (ruleId: number, direction: 'up' | 'down') => {
     try {
       await fetchWrapper.post('/api/finance/rules/reorder', { rule_id: ruleId, direction })
