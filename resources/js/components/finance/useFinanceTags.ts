@@ -11,6 +11,7 @@ export interface FinanceTag {
   tag_label: string
   tag_color: string
   tax_characteristic?: string | null
+  employment_entity_id?: number | null
   transaction_count?: number
   totals?: TagTotal
 }

@@ -16,7 +16,8 @@ Tags are stored in the `fin_account_tag` table:
 | `tag_userid` | VARCHAR(50) | Owner (user ID) |
 | `tag_label` | VARCHAR(50) | Display name (unique per user) |
 | `tag_color` | VARCHAR(20) | Display color (e.g., `blue`, `red`) |
-| `tax_characteristic` | ENUM / TEXT | Optional Schedule C category code (see below) |
+| `tax_characteristic` | ENUM / TEXT | Optional tax category code (see below) |
+| `employment_entity_id` | BIGINT NULL | FK to `fin_employment_entity` for Schedule C tags |
 | `when_added` | TIMESTAMP | Creation timestamp |
 | `when_deleted` | TIMESTAMP NULL | Soft-delete timestamp |
 
@@ -81,6 +82,33 @@ A tag's `tax_characteristic` classifies it as a particular IRS Schedule C line i
 | `scho_cleaning` | Cleaning services |
 | `scho_hoa` | HOA fees |
 | `scho_casualty_losses` | Casualty losses (business-use portion) |
+
+### Non-Schedule C Income
+
+These characteristics do **not** require an employment entity link.
+
+| Value | Description |
+|-------|-------------|
+| `interest` | Interest income (1099-INT) |
+| `ordinary_dividend` | Ordinary dividends (1099-DIV) |
+| `qualified_dividend` | Qualified dividends (1099-DIV) |
+| `other_ordinary_income` | Other ordinary income |
+
+---
+
+## Employment Entity Linking
+
+Tags with Schedule C tax characteristics (`business_income`, `business_returns`, `sce_*`, `scho_*`) can be linked to an employment entity via the `employment_entity_id` column. This groups expenses/income by business for tax reporting.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `employment_entity_id` | BIGINT NULL | FK to `fin_employment_entity` (required for Schedule C characteristics) |
+
+**Helper**: `FinAccountTag::isScheduleCCharacteristic($value)` returns `true` if the value requires an entity link.
+
+**Canonical list**: `FinAccountTag::TAX_CHARACTERISTIC_VALUES` (all values) and `FinAccountTag::SCHEDULE_C_CHARACTERISTICS` (Schedule C only).
+
+See [TaxSystem.md](TaxSystem.md) for full employment entity documentation.
 
 ---
 
@@ -167,7 +195,8 @@ The All Transactions page (`/finance/account/all/transactions`) supports filteri
       "tag_id": 1,
       "tag_label": "Office Supplies",
       "tag_color": "blue",
-      "tax_characteristic": "sce_office_expenses"
+      "tax_characteristic": "sce_office_expenses",
+      "employment_entity_id": 5
     }
   ]
 }

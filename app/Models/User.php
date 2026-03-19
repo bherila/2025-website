@@ -27,6 +27,7 @@ class User extends Authenticatable
         'gemini_api_key',
         'user_role',
         'last_login_date',
+        'marriage_status_by_year',
     ];
 
     /**
@@ -73,6 +74,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'last_login_date' => 'datetime',
+            'marriage_status_by_year' => 'array',
         ];
     }
 

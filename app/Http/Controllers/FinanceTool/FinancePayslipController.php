@@ -114,6 +114,7 @@ class FinancePayslipController extends Controller
             'ps_pretax_dental' => 'numeric|nullable',
             'ps_pretax_vision' => 'numeric|nullable',
             'other' => 'nullable', // Will be handled manually
+            'employment_entity_id' => 'nullable|integer|exists:fin_employment_entity,id',
         ]);
 
         if ($validator->fails()) {

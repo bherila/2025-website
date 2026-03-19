@@ -34,13 +34,13 @@ export type FinanceSection =
   | 'rsu'
   | 'payslips'
   | 'all-transactions'
-  | 'schedule-c'
+  | 'tax-preview'
   | 'tags'
   | 'config'
 
 /** Right-side nav items */
 const RIGHT_SECTIONS: { value: FinanceSection; label: string; href: string }[] = [
-  { value: 'schedule-c', label: 'Schedule C', href: '/finance/schedule-c' },
+  { value: 'tax-preview', label: 'Tax Preview', href: '/finance/tax-preview' },
   { value: 'rsu', label: 'RSU', href: '/finance/rsu' },
   { value: 'payslips', label: 'Payslips', href: '/finance/payslips' },
   { value: 'tags', label: 'Tags', href: '/finance/tags' },

@@ -21,6 +21,7 @@ class FinancePayslipImportController extends Controller
         $validator = Validator::make($request->all(), [
             'files' => 'required|array|max:100',
             'files.*' => 'required|file',
+            'employment_entity_id' => 'nullable|integer|exists:fin_employment_entity,id',
         ]);
 
         if ($validator->fails()) {
@@ -98,6 +99,9 @@ class FinancePayslipImportController extends Controller
                     foreach ($payslips as $payslipData) {
                         $payslipData['uid'] = $user->id;
                         $payslipData['ps_is_estimated'] = true;
+                        if ($request->filled('employment_entity_id')) {
+                            $payslipData['employment_entity_id'] = $request->input('employment_entity_id');
+                        }
 
                         // Remove null values to rely on database defaults
                         $payslipData = array_filter($payslipData, function ($value) {

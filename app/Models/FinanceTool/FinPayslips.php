@@ -19,6 +19,7 @@ class FinPayslips extends Model
         'period_start',
         'period_end',
         'pay_date',
+        'employment_entity_id',
         'earnings_gross',
         'earnings_bonus',
         'earnings_net_pay',
@@ -80,6 +81,11 @@ class FinPayslips extends Model
             'ps_pretax_dental' => 'decimal:4',
             'ps_pretax_vision' => 'decimal:4',
         ];
+    }
+
+    public function employmentEntity()
+    {
+        return $this->belongsTo(FinEmploymentEntity::class, 'employment_entity_id');
     }
 
     protected static function boot()

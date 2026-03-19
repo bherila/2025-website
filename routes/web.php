@@ -43,9 +43,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/finance/accounts', [FinanceAccountsController::class, 'index']);
     Route::get('/finance/payslips', [FinancePayslipController::class, 'index']);
     Route::get('/finance/payslips/entry', [FinancePayslipController::class, 'entry']);
-    Route::get('/finance/schedule-c', function () {
-        return view('finance.schedule-c');
+    Route::get('/finance/tax-preview', function () {
+        return view('finance.tax-preview');
     });
+    // Backward compat redirect for old Schedule C URL
+    Route::redirect('/finance/schedule-c', '/finance/tax-preview', 301);
     Route::get('/finance/tags', function () {
         return view('finance.tags');
     });

@@ -51,6 +51,13 @@ import {
 } from '@/components/ui/tooltip'
 import { fetchWrapper } from '@/fetchWrapper'
 import { getTagColorDark, getTagColorHex, getTagColorLight } from '@/lib/finance/tagColorUtils'
+import {
+  CATEGORY_LABELS,
+  CATEGORY_ORDER,
+  getLabel,
+  isScheduleCCharacteristic,
+  optionsByCategory,
+} from '@/lib/finance/taxCharacteristics'
 import { accountsUrl } from '@/lib/financeRouteBuilder'
 import { cn } from '@/lib/utils'
 
@@ -67,64 +74,15 @@ const TAG_COLORS = [
   'pink',
 ]
 
-const SCHEDULE_C_INCOME_OPTIONS: { value: string; label: string }[] = [
-  { value: 'business_income', label: 'Gross receipts or sales (Business Income)' },
-  { value: 'business_returns', label: 'Returns and allowances' },
-]
-
-const SCHEDULE_C_EXPENSE_OPTIONS: { value: string; label: string }[] = [
-  { value: 'sce_advertising', label: 'Advertising' },
-  { value: 'sce_car_truck', label: 'Car and truck expenses' },
-  { value: 'sce_commissions_fees', label: 'Commissions and fees' },
-  { value: 'sce_contract_labor', label: 'Contract labor' },
-  { value: 'sce_depletion', label: 'Depletion' },
-  { value: 'sce_depreciation', label: 'Depreciation and Section 179 expense' },
-  { value: 'sce_employee_benefits', label: 'Employee benefit programs' },
-  { value: 'sce_insurance', label: 'Insurance (other than health)' },
-  { value: 'sce_interest_mortgage', label: 'Interest (mortgage)' },
-  { value: 'sce_interest_other', label: 'Interest (other)' },
-  { value: 'sce_legal_professional', label: 'Legal and professional services' },
-  { value: 'sce_office_expenses', label: 'Office expenses' },
-  { value: 'sce_pension', label: 'Pension and profit-sharing plans' },
-  { value: 'sce_rent_vehicles', label: 'Rent or lease (vehicles, machinery, equipment)' },
-  { value: 'sce_rent_property', label: 'Rent or lease (other business property)' },
-  { value: 'sce_repairs_maintenance', label: 'Repairs and maintenance' },
-  { value: 'sce_supplies', label: 'Supplies' },
-  { value: 'sce_taxes_licenses', label: 'Taxes and licenses' },
-  { value: 'sce_travel', label: 'Travel' },
-  { value: 'sce_meals', label: 'Meals' },
-  { value: 'sce_utilities', label: 'Utilities' },
-  { value: 'sce_wages', label: 'Wages' },
-  { value: 'sce_other', label: 'Other expenses' },
-]
-
-const SCHEDULE_C_HOME_OFFICE_OPTIONS: { value: string; label: string }[] = [
-  { value: 'scho_rent', label: 'Rent' },
-  { value: 'scho_mortgage_interest', label: 'Mortgage interest (business-use portion)' },
-  { value: 'scho_real_estate_taxes', label: 'Real estate taxes' },
-  { value: 'scho_insurance', label: 'Homeowners or renters insurance' },
-  { value: 'scho_utilities', label: 'Utilities' },
-  { value: 'scho_repairs_maintenance', label: 'Repairs and maintenance' },
-  { value: 'scho_security', label: 'Security system costs' },
-  { value: 'scho_depreciation', label: 'Depreciation' },
-  { value: 'scho_cleaning', label: 'Cleaning services' },
-  { value: 'scho_hoa', label: 'HOA fees' },
-  { value: 'scho_casualty_losses', label: 'Casualty losses (business-use portion)' },
-]
-
-const ALL_TAX_OPTIONS = [
-  ...SCHEDULE_C_INCOME_OPTIONS,
-  ...SCHEDULE_C_EXPENSE_OPTIONS,
-  ...SCHEDULE_C_HOME_OFFICE_OPTIONS,
-]
-
-const TAX_OPTION_LABEL_MAP: Record<string, string> = Object.fromEntries(
-  ALL_TAX_OPTIONS.map((o) => [o.value, o.label])
-)
+interface EmploymentEntity {
+  id: number
+  display_name: string
+  type: string
+}
 
 function getTaxCharacteristicLabel(value: string | null | undefined): string {
   if (!value || value === 'none') return '—'
-  return TAX_OPTION_LABEL_MAP[value] ?? value
+  return getLabel(value)
 }
 
 function ColorPicker({ 
@@ -167,11 +125,10 @@ function TaxCharacteristicCombobox({
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
 
-  const GROUPED_OPTIONS = [
-    { label: 'Schedule C: Income', options: SCHEDULE_C_INCOME_OPTIONS },
-    { label: 'Schedule C: Expense', options: SCHEDULE_C_EXPENSE_OPTIONS },
-    { label: 'Schedule C: Home Office Item', options: SCHEDULE_C_HOME_OFFICE_OPTIONS },
-  ]
+  const GROUPED_OPTIONS = CATEGORY_ORDER.map((cat) => ({
+    label: CATEGORY_LABELS[cat],
+    options: optionsByCategory(cat),
+  }))
 
   const NONE_OPTION = { value: 'none', label: 'None (no tax characteristic)' }
 
@@ -185,7 +142,7 @@ function TaxCharacteristicCombobox({
   const selectedLabel =
     value === 'none' || !value
       ? NONE_OPTION.label
-      : (ALL_TAX_OPTIONS.find((o) => o.value === value)?.label ?? value)
+      : getLabel(value)
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -258,11 +215,15 @@ export default function ManageTagsPage() {
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   
+  // Employment entities for Schedule C linking
+  const [schCEntities, setSchCEntities] = useState<EmploymentEntity[]>([])
+  
   // Create dialog state
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [newTagLabel, setNewTagLabel] = useState('')
   const [newTagColor, setNewTagColor] = useState('blue')
   const [newTagTaxChar, setNewTagTaxChar] = useState<string>('none')
+  const [newTagEntityId, setNewTagEntityId] = useState<number | null>(null)
   const [isCreating, setIsCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   
@@ -271,12 +232,23 @@ export default function ManageTagsPage() {
   const [editLabel, setEditLabel] = useState('')
   const [editColor, setEditColor] = useState('')
   const [editTaxChar, setEditTaxChar] = useState<string>('none')
+  const [editEntityId, setEditEntityId] = useState<number | null>(null)
   const [isUpdating, setIsUpdating] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
   
   // Delete confirmation state
   const [deleteConfirmTag, setDeleteConfirmTag] = useState<FinanceTag | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  // Fetch Schedule C employment entities
+  useState(() => {
+    fetchWrapper.get('/api/finance/employment-entities')
+      .then((data: unknown) => {
+        const entities = data as EmploymentEntity[]
+        setSchCEntities(entities.filter(e => e.type === 'sch_c'))
+      })
+      .catch(() => { /* ignore - entities are optional */ })
+  })
 
   const handleCreateTag = async () => {
     if (!newTagLabel.trim()) {
@@ -291,11 +263,13 @@ export default function ManageTagsPage() {
         tag_label: newTagLabel.trim(),
         tag_color: newTagColor,
         tax_characteristic: newTagTaxChar === 'none' ? null : newTagTaxChar,
+        employment_entity_id: isScheduleCCharacteristic(newTagTaxChar) ? newTagEntityId : null,
       })
       setSuccessMessage('Tag created successfully')
       setNewTagLabel('')
       setNewTagColor('blue')
       setNewTagTaxChar('none')
+      setNewTagEntityId(null)
       setCreateDialogOpen(false)
       await refreshTags()
     } catch (err) {
@@ -310,6 +284,7 @@ export default function ManageTagsPage() {
     setEditLabel(tag.tag_label)
     setEditColor(tag.tag_color)
     setEditTaxChar(tag.tax_characteristic || 'none')
+    setEditEntityId((tag as FinanceTag & { employment_entity_id?: number | null }).employment_entity_id ?? null)
     setEditError(null)
   }
 
@@ -331,10 +306,12 @@ export default function ManageTagsPage() {
       setIsUpdating(true)
       setEditError(null)
       const updatedTaxChar = editTaxChar === 'none' ? null : editTaxChar
+      const updatedEntityId = isScheduleCCharacteristic(editTaxChar) ? editEntityId : null
       await fetchWrapper.put(`/api/finance/tags/${editingTag.tag_id}`, {
         tag_label: editLabel.trim(),
         tag_color: editColor,
         tax_characteristic: updatedTaxChar,
+        employment_entity_id: updatedEntityId,
       })
       // Patch the updated tag into local state to avoid page flicker from re-querying
       setTags((prev) =>
@@ -556,9 +533,25 @@ export default function ManageTagsPage() {
             <div>
               <Label htmlFor="create-tax-char">Tax Characteristic</Label>
               <div className="mt-1">
-                <TaxCharacteristicCombobox id="create-tax-char" value={newTagTaxChar} onChange={setNewTagTaxChar} />
+                <TaxCharacteristicCombobox id="create-tax-char" value={newTagTaxChar} onChange={(v) => { setNewTagTaxChar(v); if (!isScheduleCCharacteristic(v)) setNewTagEntityId(null) }} />
               </div>
             </div>
+            {isScheduleCCharacteristic(newTagTaxChar) && schCEntities.length > 0 && (
+              <div>
+                <Label htmlFor="create-entity">Schedule C Business</Label>
+                <select
+                  id="create-entity"
+                  className="mt-1 w-full max-w-sm rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={newTagEntityId ?? ''}
+                  onChange={(e) => setNewTagEntityId(e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">Select a business…</option>
+                  {schCEntities.map(e => (
+                    <option key={e.id} value={e.id}>{e.display_name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="flex items-center gap-3">
               <span className="text-sm text-muted-foreground">Preview:</span>
               <Badge 
@@ -635,9 +628,25 @@ export default function ManageTagsPage() {
             <div>
               <Label htmlFor="edit-tax-char">Tax Characteristic</Label>
               <div className="mt-1">
-                <TaxCharacteristicCombobox id="edit-tax-char" value={editTaxChar} onChange={setEditTaxChar} />
+                <TaxCharacteristicCombobox id="edit-tax-char" value={editTaxChar} onChange={(v) => { setEditTaxChar(v); if (!isScheduleCCharacteristic(v)) setEditEntityId(null) }} />
               </div>
             </div>
+            {isScheduleCCharacteristic(editTaxChar) && schCEntities.length > 0 && (
+              <div>
+                <Label htmlFor="edit-entity">Schedule C Business</Label>
+                <select
+                  id="edit-entity"
+                  className="mt-1 w-full max-w-sm rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={editEntityId ?? ''}
+                  onChange={(e) => setEditEntityId(e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">Select a business…</option>
+                  {schCEntities.map(e => (
+                    <option key={e.id} value={e.id}>{e.display_name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="flex items-center gap-3">
               <span className="text-sm text-muted-foreground">Preview:</span>
               <Badge 

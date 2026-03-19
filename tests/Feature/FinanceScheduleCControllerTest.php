@@ -101,14 +101,14 @@ class FinanceScheduleCControllerTest extends TestCase
         $this->assertEquals('2024', $years[0]['year']);
         $this->assertEquals('2023', $years[1]['year']);
 
-        // 2024 has one expense entry
-        $expense2024 = $years[0]['schedule_c_expense'];
+        // 2024 has one expense entry (inside entities array)
+        $expense2024 = $years[0]['entities'][0]['schedule_c_expense'];
         $this->assertArrayHasKey('sce_office_expenses', $expense2024);
         $this->assertEqualsWithDelta(200.00, $expense2024['sce_office_expenses']['total'], 0.001);
         $this->assertEquals('Office expenses', $expense2024['sce_office_expenses']['label']);
 
         // 2023 has one expense entry
-        $expense2023 = $years[1]['schedule_c_expense'];
+        $expense2023 = $years[1]['entities'][0]['schedule_c_expense'];
         $this->assertArrayHasKey('sce_office_expenses', $expense2023);
         $this->assertEqualsWithDelta(150.00, $expense2023['sce_office_expenses']['total'], 0.001);
     }
@@ -130,13 +130,13 @@ class FinanceScheduleCControllerTest extends TestCase
         $years = $response->json('years');
         $this->assertCount(1, $years);
 
-        $homeOffice = $years[0]['schedule_c_home_office'];
+        $homeOffice = $years[0]['entities'][0]['schedule_c_home_office'];
         $this->assertArrayHasKey('scho_rent', $homeOffice);
         $this->assertEqualsWithDelta(1200.00, $homeOffice['scho_rent']['total'], 0.001);
         $this->assertEquals('Rent', $homeOffice['scho_rent']['label']);
 
         // No expense entries
-        $this->assertEmpty($years[0]['schedule_c_expense']);
+        $this->assertEmpty($years[0]['entities'][0]['schedule_c_expense']);
     }
 
     public function test_aggregates_multiple_tags_same_category(): void
@@ -162,7 +162,7 @@ class FinanceScheduleCControllerTest extends TestCase
         $years = $response->json('years');
         $this->assertCount(1, $years);
 
-        $meals = $years[0]['schedule_c_expense']['sce_meals'] ?? null;
+        $meals = $years[0]['entities'][0]['schedule_c_expense']['sce_meals'] ?? null;
         $this->assertNotNull($meals);
         $this->assertEqualsWithDelta(90.00, $meals['total'], 0.001);
     }
@@ -193,7 +193,7 @@ class FinanceScheduleCControllerTest extends TestCase
         $years = $response->json('years');
         $this->assertCount(1, $years);
 
-        $travel = $years[0]['schedule_c_expense']['sce_travel'] ?? null;
+        $travel = $years[0]['entities'][0]['schedule_c_expense']['sce_travel'] ?? null;
         $this->assertNotNull($travel);
         // Only $500 flight should be counted (not the deleted $100 train)
         $this->assertEqualsWithDelta(500.00, $travel['total'], 0.001);
@@ -313,8 +313,14 @@ class FinanceScheduleCControllerTest extends TestCase
                 'years' => [
                     [
                         'year',
-                        'schedule_c_expense',
-                        'schedule_c_home_office',
+                        'entities' => [
+                            [
+                                'entity_id',
+                                'entity_name',
+                                'schedule_c_expense',
+                                'schedule_c_home_office',
+                            ],
+                        ],
                     ],
                 ],
             ]);
@@ -323,7 +329,7 @@ class FinanceScheduleCControllerTest extends TestCase
         $this->assertContains('2024', $response->json('available_years'));
 
         // Verify transaction sub-array is included
-        $expense = $response->json('years.0.schedule_c_expense.sce_advertising');
+        $expense = $response->json('years.0.entities.0.schedule_c_expense.sce_advertising');
         $this->assertArrayHasKey('transactions', $expense);
         $this->assertCount(1, $expense['transactions']);
         $this->assertEquals($t->t_id, $expense['transactions'][0]['t_id']);
@@ -345,7 +351,7 @@ class FinanceScheduleCControllerTest extends TestCase
 
         $response->assertOk();
         $years = $response->json('years');
-        $total = $years[0]['schedule_c_expense']['sce_utilities']['total'] ?? null;
+        $total = $years[0]['entities'][0]['schedule_c_expense']['sce_utilities']['total'] ?? null;
 
         // Should be POSITIVE (expenses shown as positive on Schedule C)
         $this->assertGreaterThan(0, $total);

@@ -9,6 +9,7 @@ use App\Http\Controllers\ClientManagement\ClientPortalAgreementApiController;
 use App\Http\Controllers\ClientManagement\ClientPortalApiController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\FinanceTool\FinanceApiController;
+use App\Http\Controllers\FinanceTool\FinanceEmploymentEntityController;
 use App\Http\Controllers\FinanceTool\FinanceGeminiImportController;
 use App\Http\Controllers\FinanceTool\FinanceLotsController;
 use App\Http\Controllers\FinanceTool\FinancePayslipController;
@@ -65,6 +66,17 @@ Route::middleware(['web', 'auth'])->post('/finance/rules/{id}/run', [FinanceRule
 Route::middleware(['web', 'auth'])->post('/finance/rules/preview-matches', [FinanceRulesApiController::class, 'previewMatches']);
 
 Route::middleware(['web', 'auth'])->get('/finance/schedule-c', [FinanceScheduleCController::class, 'getSummary']);
+
+// Employment Entity routes
+Route::middleware(['web', 'auth'])->get('/finance/employment-entities', [FinanceEmploymentEntityController::class, 'index']);
+Route::middleware(['web', 'auth'])->post('/finance/employment-entities', [FinanceEmploymentEntityController::class, 'store']);
+Route::middleware(['web', 'auth'])->put('/finance/employment-entities/{id}', [FinanceEmploymentEntityController::class, 'update']);
+Route::middleware(['web', 'auth'])->delete('/finance/employment-entities/{id}', [FinanceEmploymentEntityController::class, 'destroy']);
+
+// Marriage status routes
+Route::middleware(['web', 'auth'])->get('/finance/marriage-status', [FinanceEmploymentEntityController::class, 'getMarriageStatus']);
+Route::middleware(['web', 'auth'])->post('/finance/marriage-status', [FinanceEmploymentEntityController::class, 'updateMarriageStatus']);
+
 Route::middleware(['web', 'auth'])->post('/finance/transactions/{transaction_id}/update', [FinanceTransactionsApiController::class, 'updateTransaction']);
 Route::middleware(['web', 'auth'])->get('/finance/transactions/{transaction_id}/links', [FinanceTransactionLinkingApiController::class, 'getTransactionLinks']);
 Route::middleware(['web', 'auth'])->get('/finance/transactions/{transaction_id}/linkable', [FinanceTransactionLinkingApiController::class, 'findLinkableTransactions']);
