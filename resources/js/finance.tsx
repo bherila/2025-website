@@ -10,7 +10,6 @@ import FinanceNavbar, { type FinanceSection } from '@/components/finance/Finance
 import ImportTransactionsClient from '@/components/finance/import_transactions/ImportTransactionsClient'
 import LinkerPage from '@/components/finance/LinkerPage'
 import ManageTagsPage from '@/components/finance/ManageTagsPage'
-import ScheduleCPage from '@/components/finance/ScheduleCPage'
 import FinanceAccountStatementsPage from '@/components/finance/statements/FinanceAccountStatementsPage'
 import SummaryClient from '@/components/finance/SummaryClient'
 import TaxPreviewPage from '@/components/finance/TaxPreviewPage'
@@ -133,7 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const scheduleCDiv = document.getElementById('ScheduleCPage')
   if (scheduleCDiv) {
     const root = createRoot(scheduleCDiv)
-    root.render(<ScheduleCPage />)
+    root.render(<TaxPreviewPage />)
   }
 
   const taxPreviewDiv = document.getElementById('TaxPreviewPage')
