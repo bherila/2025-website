@@ -3,18 +3,12 @@
 import { Heart, Loader2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
-import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { fetchWrapper } from '@/fetchWrapper'
+
+import MarriageStatusErrorDialog from './config/MarriageStatusErrorDialog'
 
 /** Generate a contiguous range of years from startYear to currentYear (inclusive) */
 function generateYearRange(startYear: number, endYear: number): string[] {
@@ -140,17 +134,11 @@ function MarriageStatusSection() {
         </div>
       </div>
 
-      <Dialog open={errorDialogOpen} onOpenChange={setErrorDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Unable to Update Status</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">{errorMessage}</p>
-          <DialogFooter>
-            <Button onClick={() => setErrorDialogOpen(false)}>OK</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <MarriageStatusErrorDialog
+        open={errorDialogOpen}
+        errorMessage={errorMessage}
+        onClose={() => setErrorDialogOpen(false)}
+      />
     </>
   )
 }

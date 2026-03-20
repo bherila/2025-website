@@ -1,6 +1,6 @@
 'use client'
 import { ExternalLink } from 'lucide-react'
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -23,8 +23,6 @@ import {
 } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
 import { transactionsUrl } from '@/lib/financeRouteBuilder'
-
-import { YearSelectorWithNav } from './YearSelectorWithNav'
 
 interface ScheduleCTransaction {
   t_id: number
@@ -277,73 +275,41 @@ function OrdinaryIncomeSection({ yearData, showInline }: { yearData: YearData; s
   )
 }
 
-export default function ScheduleCPage() {
+/** Props for ScheduleCPage — year selection is managed by the parent TaxPreviewPage. */
+interface ScheduleCPageProps {
+  /** The currently selected tax year to display, or 'all' to show every year. */
+  selectedYear: number | 'all'
+  /** Callback to notify the parent of available years and loading state after data is fetched. */
+  onAvailableYearsChange: (years: number[], isLoading: boolean) => void
+}
+
+export default function ScheduleCPage({ selectedYear, onAvailableYearsChange }: ScheduleCPageProps) {
   const [allData, setAllData] = useState<YearData[] | null>(null)
-  const [availableYears, setAvailableYears] = useState<number[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showInline, setShowInline] = useState(false)
-
-  // Read initial year from URL query string, default to current year
-  const [selectedYear, setSelectedYear] = useState<number | 'all'>(() => {
-    try {
-      const params = new URLSearchParams(window.location.search)
-      const y = params.get('year')
-      if (y === 'all') return 'all'
-      const parsed = y ? parseInt(y, 10) : NaN
-      return isNaN(parsed) ? new Date().getFullYear() : parsed
-    } catch {
-      return new Date().getFullYear()
-    }
-  })
-
-  // Push browser history when the user changes year (so Back button works)
-  const handleYearChange = useCallback((year: number | 'all') => {
-    setSelectedYear(year)
-    const url = new URL(window.location.href)
-    const defaultYear = new Date().getFullYear()
-    if (typeof year === 'number' && year === defaultYear) {
-      url.searchParams.delete('year')
-    } else {
-      url.searchParams.set('year', String(year))
-    }
-    window.history.pushState(null, '', url.toString())
-  }, [])
-
-  // Restore selected year when the user navigates with Back / Forward
-  useEffect(() => {
-    const onPopState = () => {
-      const params = new URLSearchParams(window.location.search)
-      const y = params.get('year')
-      if (y === 'all') {
-        setSelectedYear('all')
-      } else {
-        const parsed = y ? parseInt(y, 10) : NaN
-        setSelectedYear(isNaN(parsed) ? new Date().getFullYear() : parsed)
-      }
-    }
-    window.addEventListener('popstate', onPopState)
-    return () => window.removeEventListener('popstate', onPopState)
-  }, [])
 
   // Load ALL years upfront — year selector only filters the display
   useEffect(() => {
     const load = async () => {
       try {
         setIsLoading(true)
+        onAvailableYearsChange([], true)
         const response = (await fetchWrapper.get('/api/finance/schedule-c')) as ScheduleCResponse
         setAllData(response.years ?? [])
         if (response.available_years) {
-          setAvailableYears(response.available_years.map(Number).filter((y) => !isNaN(y)).sort((a, b) => b - a))
+          const years = response.available_years.map(Number).filter((y) => !isNaN(y)).sort((a, b) => b - a)
+          onAvailableYearsChange(years, false)
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load Tax Preview data')
+        onAvailableYearsChange([], false)
       } finally {
         setIsLoading(false)
       }
     }
     void load()
-  }, []) // only load once
+  }, [onAvailableYearsChange]) // only load once; onAvailableYearsChange is stable (useCallback in parent)
 
   // Filter displayed data based on selectedYear (client-side)
   const data = useMemo(() => {
@@ -387,25 +353,16 @@ export default function ScheduleCPage() {
 
   return (
     <div className="px-4 pb-8">
-      <div className="flex items-center gap-4 mb-2 flex-wrap">
-        <h1 className="text-2xl font-bold">Tax Preview</h1>
-        <div className="ml-auto flex items-center gap-4 flex-wrap">
-          <div className="flex items-center gap-2">
-            <Switch
-              id="show-inline"
-              checked={showInline}
-              onCheckedChange={setShowInline}
-            />
-            <Label htmlFor="show-inline" className="text-sm cursor-pointer">
-              List transactions in-line
-            </Label>
-          </div>
-          <YearSelectorWithNav
-            selectedYear={selectedYear}
-            availableYears={availableYears}
-            isLoading={isLoading && availableYears.length === 0}
-            onYearChange={handleYearChange}
+      <div className="flex justify-end mb-2">
+        <div className="flex items-center gap-2">
+          <Switch
+            id="show-inline"
+            checked={showInline}
+            onCheckedChange={setShowInline}
           />
+          <Label htmlFor="show-inline" className="text-sm cursor-pointer">
+            List transactions in-line
+          </Label>
         </div>
       </div>
       <p className="text-muted-foreground mb-6">
