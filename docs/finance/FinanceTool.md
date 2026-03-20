@@ -706,6 +706,74 @@ The Lots tab (`/finance/{id}/lots`) provides:
 - **Detailed Table**: Complete list of lots with symbol, quantity, dates, performance, and source.
 - **Statement Link**: For imported lots, a clickable link to the original statement detail view. Shows "Statement Deleted" if the statement was removed but the lot was preserved.
 
+## Account Performance (Cost Basis Tracking)
+
+The Statements page includes **Account Performance** tracking via a cost basis series.
+
+### Overview
+
+Each statement record has two new fields:
+- `cost_basis` — decimal, NOT NULL, default 0
+- `is_cost_basis_override` — boolean, NOT NULL, default false
+
+### Cost Basis Algorithm
+
+The `GET /api/finance/{account_id}/balance-timeseries` endpoint computes the cost basis for each statement dynamically:
+
+1. Start from the beginning of time with an initial cost basis of **0**.
+2. Fetch all **Deposit**, **Withdrawal**, and **Transfer** transactions for the account in ascending `t_date` order.
+3. For each transaction:
+   - **Deposit** → add `abs(amount)`
+   - **Withdrawal** → subtract `abs(amount)`
+   - **Transfer** → add the signed amount (positive = deposit, negative = withdrawal)
+4. For each statement date, the cost basis is the cumulative sum of all transactions up to that date.
+5. If a statement has `is_cost_basis_override = true`:
+   - Use the stored `cost_basis` value for that statement.
+   - Reset the running total to that value.
+   - Continue adding subsequent transactions from that new baseline.
+6. Multiple overrides each independently reset the running total from that point forward.
+
+### Examples
+
+#### Example 1 — Basic override behavior
+
+Transactions:
+| Date  | Type       | Amount | Effect on Cost Basis |
+|-------|------------|--------|----------------------|
+| Jan 1 | Deposit    | 100    | +100 → 100 |
+| Jan 5 | Withdrawal | 20     | -20 → 80 |
+| Jan 15 | Deposit   | 50     | +50 → 250 (after override) |
+
+Statements:
+- Jan 1 → 100
+- Jan 5 → 80
+- Jan 10 → **200 (override)**
+- Jan 15 → 250
+
+#### Example 2 — Multiple overrides + transfers
+
+Transactions:
+| Date   | Type       | Amount | Effect |
+|--------|------------|--------|--------|
+| Feb 1  | Deposit    | 500    | +500 → 500 |
+| Feb 3  | Transfer   | -100   | -100 → 400 |
+| Feb 7  | Transfer   | 200    | +200 → 1200 (after first override) |
+| Feb 12 | Withdrawal | 50     | -50 → 250 (after second override) |
+
+Statements:
+- Feb 1 → 500
+- Feb 3 → 400
+- Feb 5 → **1000 (override)**
+- Feb 7 → 1200
+- Feb 10 → **300 (override)**
+- Feb 12 → 250
+
+### UI Features
+
+- **Chart**: The account balance chart displays two series: **Account Value** (blue) and **Cost Basis** (orange dashed).
+- **Table**: A "Cost Basis" column shows the computed value. A ⚠️ icon (using `AlertTriangle` from lucide-react) with a tooltip "Cost basis overridden" appears next to overridden values.
+- **Edit Dialog**: A "Override cost basis?" Switch controls whether a numeric cost basis override is stored. Negative values are not allowed.
+
 ## Data Persistence & Cleanup
 When a statement is deleted:
 - Associated **Lots** are un-linked (their `statement_id` is set to NULL) but the data remains.

@@ -104,10 +104,10 @@ jest.mock('../AllStatementsView', () => {
 // --- Helpers ---------------------------------------------------------------
 
 const SAMPLE_STATEMENTS = [
-  { statement_id: 1, statement_opening_date: null, statement_closing_date: '2025-01-31', balance: '100000.00', lineItemCount: 0 },
-  { statement_id: 2, statement_opening_date: null, statement_closing_date: '2025-02-28', balance: '110000.00', lineItemCount: 3 },
+  { statement_id: 1, statement_opening_date: null, statement_closing_date: '2025-01-31', balance: '100000.00', cost_basis: 90000, is_cost_basis_override: false, lineItemCount: 0 },
+  { statement_id: 2, statement_opening_date: null, statement_closing_date: '2025-02-28', balance: '110000.00', cost_basis: 95000, is_cost_basis_override: false, lineItemCount: 3 },
   // entry with missing closing date - should display '-' instead of date
-  { statement_id: 3, statement_opening_date: null, statement_closing_date: null, balance: '120000.00', lineItemCount: 1 },
+  { statement_id: 3, statement_opening_date: null, statement_closing_date: null, balance: '120000.00', cost_basis: 100000, is_cost_basis_override: true, lineItemCount: 1 },
 ];
 
 // --- Tests -----------------------------------------------------------------
@@ -207,7 +207,7 @@ describe('FinanceAccountStatementsPage', () => {
     });
 
     // Click the switch to show chart
-    fireEvent.click(screen.getByRole('switch'));
+    fireEvent.click(screen.getByRole('switch', { name: /show chart/i }));
 
     await waitFor(() => {
       expect(screen.getByTestId('chart')).toBeInTheDocument();

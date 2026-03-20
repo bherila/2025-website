@@ -82,4 +82,5 @@ export const ACTION_TYPES = [
   { value: 'set_description', label: 'Set Description' },
   { value: 'set_memo', label: 'Set Memo' },
   { value: 'negate_amount', label: 'Negate Amount' },
+  { value: 'set_transaction_type', label: 'Set Transaction Type' },
 ] as const

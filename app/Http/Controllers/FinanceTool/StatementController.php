@@ -68,6 +68,8 @@ class StatementController extends Controller
 
         $request->validate([
             'balance' => 'required|string',
+            'cost_basis' => 'nullable|numeric|min:0',
+            'is_cost_basis_override' => 'nullable|boolean',
         ]);
 
         $statement = DB::table('fin_statements')
@@ -87,10 +89,15 @@ class StatementController extends Controller
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
+        $isCostBasisOverride = (bool) ($request->input('is_cost_basis_override', false));
+        $costBasis = $isCostBasisOverride ? (float) $request->input('cost_basis', 0) : 0;
+
         DB::table('fin_statements')
             ->where('statement_id', $statement_id)
             ->update([
                 'balance' => $request->balance,
+                'cost_basis' => $costBasis,
+                'is_cost_basis_override' => $isCostBasisOverride,
             ]);
 
         return response()->json(['success' => true]);

@@ -1,4 +1,4 @@
-import { Download, Paperclip, Pencil, TableProperties, Trash2 as Delete } from 'lucide-react'
+import { AlertTriangle, Download, Paperclip, Pencil, TableProperties, Trash2 as Delete } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { DeleteFileModal, FileList, FileUploadButton, useFileManagement } from '@/components/shared/FileManager'
@@ -18,6 +18,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
@@ -32,6 +33,8 @@ export interface StatementSnapshot {
   statement_opening_date: string | null
   statement_closing_date: string
   balance: string
+  cost_basis: number
+  is_cost_basis_override: boolean
   lineItemCount: number
   hasPdf?: boolean
 }
@@ -63,6 +66,9 @@ export default function StatementsListView({
   const [selectedStatement, setSelectedStatement] = useState<StatementSnapshot | null>(null)
   const [currentBalance, setCurrentBalance] = useState('')
   const [currentDate, setCurrentDate] = useState('')
+  const [overrideCostBasis, setOverrideCostBasis] = useState(false)
+  const [costBasisAmount, setCostBasisAmount] = useState('')
+  const [costBasisError, setCostBasisError] = useState('')
 
   // Memoize file management options to prevent object identity changes each render
   const fileManagerOptions = useMemo(() => ({
@@ -82,10 +88,11 @@ export default function StatementsListView({
 
   // Memoize chart data
   const balanceHistory = useMemo(() =>
-    statements.map((s) => [
-      new Date(s.statement_closing_date).valueOf(),
-      parseFloat(s.balance),
-    ] as [number, number]),
+    statements.map((s) => ({
+      date: new Date(s.statement_closing_date).valueOf(),
+      balance: parseFloat(s.balance),
+      costBasis: s.cost_basis,
+    })),
     [statements]
   )
 
@@ -104,6 +111,8 @@ export default function StatementsListView({
         date,
         balance: bal,
         originalBalance: statement.balance,
+        cost_basis: statement.cost_basis,
+        is_cost_basis_override: statement.is_cost_basis_override,
         change,
         percentChange,
         lineItemCount: statement.lineItemCount,
@@ -119,10 +128,15 @@ export default function StatementsListView({
     if (statement) {
       setCurrentBalance(statement.balance)
       setCurrentDate(statement.statement_closing_date.split(' ')[0] ?? '')
+      setOverrideCostBasis(statement.is_cost_basis_override)
+      setCostBasisAmount(statement.is_cost_basis_override ? String(statement.cost_basis) : '')
     } else {
       setCurrentBalance('')
       setCurrentDate('')
+      setOverrideCostBasis(false)
+      setCostBasisAmount('')
     }
+    setCostBasisError('')
     setModalOpen(true)
   }
 
@@ -137,14 +151,32 @@ export default function StatementsListView({
 
   const handleFormSubmit = async () => {
     if (!currentDate || !currentBalance || isSubmitting) return
+
+    // Validate cost basis
+    if (overrideCostBasis) {
+      const val = parseFloat(costBasisAmount)
+      if (isNaN(val) || val < 0) {
+        setCostBasisError('Cost basis must be a non-negative number.')
+        return
+      }
+    }
+    setCostBasisError('')
+
     setIsSubmitting(true)
     const url = selectedStatement
       ? `/api/finance/balance-timeseries/${selectedStatement.statement_id}`
       : `/api/finance/${accountId}/balance-timeseries`
     const method = selectedStatement ? 'put' : 'post'
 
+    const payload: Record<string, unknown> = {
+      balance: currentBalance,
+      statement_closing_date: currentDate,
+      is_cost_basis_override: overrideCostBasis,
+      cost_basis: overrideCostBasis ? parseFloat(costBasisAmount) : 0,
+    }
+
     try {
-      await fetchWrapper[method](url, { balance: currentBalance, statement_closing_date: currentDate })
+      await fetchWrapper[method](url, payload)
       onRefresh()
       setModalOpen(false)
     } catch (error) {
@@ -155,7 +187,7 @@ export default function StatementsListView({
   }
 
   const handleDownloadCSV = useCallback(() => {
-    const csvContent = 'Date,Balance\n' + statementHistory.map(row => `${row.date?.toISOString().split('T')[0] ?? ''},${row.balance}`).join('\n')
+    const csvContent = 'Date,Balance,Cost Basis\n' + statementHistory.map(row => `${row.date?.toISOString().split('T')[0] ?? ''},${row.balance},${row.cost_basis}`).join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -198,6 +230,7 @@ export default function StatementsListView({
               <TableRow>
                 <TableCell className="text-right">Date</TableCell>
                 <TableCell className="text-right">Balance</TableCell>
+                <TableCell className="text-right">Cost Basis</TableCell>
                 <TableCell className="text-right">Change</TableCell>
                 <TableCell className="text-right">% Change</TableCell>
                 <TableCell className="text-center">Actions</TableCell>
@@ -214,6 +247,21 @@ export default function StatementsListView({
                     }) : '-'}
                   </TableCell>
                   <TableCell className="text-right">{row.balance.toFixed(2)}</TableCell>
+                  <TableCell className="text-right">
+                    <span className="inline-flex items-center gap-1 justify-end">
+                      {row.cost_basis.toFixed(2)}
+                      {row.is_cost_basis_override && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <AlertTriangle className="h-4 w-4 text-amber-500" />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Cost basis overridden</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </span>
+                  </TableCell>
                   <TableCell className="text-right" style={{ color: row.change < 0 ? 'red' : undefined }}>
                     {row.change.toFixed(2)}
                   </TableCell>
@@ -288,7 +336,7 @@ export default function StatementsListView({
                 </TableRow>
               ))}
               <TableRow>
-                <TableCell colSpan={4} className="text-center font-semibold">
+                <TableCell colSpan={5} className="text-center font-semibold">
                   Add New Snapshot
                 </TableCell>
                 <TableCell className="text-center">
@@ -331,6 +379,43 @@ export default function StatementsListView({
                     required
                   />
                 </div>
+                <div className="flex items-center gap-3">
+                  <Switch
+                    id="override-cost-basis"
+                    checked={overrideCostBasis}
+                    onCheckedChange={(checked) => {
+                      setOverrideCostBasis(checked)
+                      if (!checked) {
+                        setCostBasisAmount('')
+                        setCostBasisError('')
+                      }
+                    }}
+                  />
+                  <Label htmlFor="override-cost-basis" className="cursor-pointer">Override cost basis?</Label>
+                </div>
+                {overrideCostBasis && (
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-4">
+                      <label htmlFor="cost-basis-amount" className="w-16">Cost Basis:</label>
+                      <Input
+                        id="cost-basis-amount"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={costBasisAmount}
+                        onChange={(e) => {
+                          setCostBasisAmount(e.target.value)
+                          setCostBasisError('')
+                        }}
+                        placeholder="Cost basis amount"
+                        className="flex-1"
+                      />
+                    </div>
+                    {costBasisError && (
+                      <p className="text-sm text-destructive ml-20">{costBasisError}</p>
+                    )}
+                  </div>
+                )}
                 <div className="flex justify-end">
                   <Button
                     onClick={handleFormSubmit}

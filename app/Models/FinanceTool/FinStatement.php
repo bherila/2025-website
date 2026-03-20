@@ -19,6 +19,8 @@ class FinStatement extends Model
         'balance',
         'statement_opening_date',
         'statement_closing_date',
+        'cost_basis',
+        'is_cost_basis_override',
     ];
 
     protected function casts(): array
@@ -26,6 +28,8 @@ class FinStatement extends Model
         return [
             'statement_opening_date' => 'date',
             'statement_closing_date' => 'date',
+            'cost_basis' => 'decimal:4',
+            'is_cost_basis_override' => 'boolean',
         ];
     }
 

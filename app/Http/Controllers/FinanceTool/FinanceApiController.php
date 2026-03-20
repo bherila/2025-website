@@ -163,14 +163,68 @@ class FinanceApiController extends Controller
                 'fs.statement_opening_date',
                 'fs.statement_closing_date',
                 'fs.balance',
+                'fs.cost_basis',
+                'fs.is_cost_basis_override',
                 DB::raw('count(DISTINCT fsd.id) as lineItemCount'),
                 DB::raw('count(DISTINCT ffa.id) > 0 as hasPdf')
             )
-            ->groupBy('fs.statement_id', 'fs.statement_opening_date', 'fs.statement_closing_date', 'fs.balance')
+            ->groupBy('fs.statement_id', 'fs.statement_opening_date', 'fs.statement_closing_date', 'fs.balance', 'fs.cost_basis', 'fs.is_cost_basis_override')
             ->orderBy('fs.statement_closing_date', 'asc')
             ->get();
 
-        return response()->json($balances);
+        // Fetch all relevant transactions in ascending date order
+        $transactions = DB::table('fin_account_line_items')
+            ->where('t_account', $account->acct_id)
+            ->whereNull('when_deleted')
+            ->whereIn('t_type', ['Deposit', 'Withdrawal', 'Transfer'])
+            ->orderBy('t_date', 'asc')
+            ->orderBy('t_id', 'asc')
+            ->select('t_date', 't_type', 't_amt')
+            ->get();
+
+        // Compute cost basis for each statement using the algorithm
+        $runningTotal = 0.0;
+        $txIndex = 0;
+        $txCount = $transactions->count();
+
+        $result = $balances->map(function ($statement) use ($transactions, &$runningTotal, &$txIndex, $txCount) {
+            $stmtDate = $statement->statement_closing_date;
+
+            // Apply all transactions up to and including this statement date
+            while ($txIndex < $txCount) {
+                $tx = $transactions[$txIndex];
+                if ($tx->t_date > $stmtDate) {
+                    break;
+                }
+                $amount = (float) $tx->t_amt;
+                if ($tx->t_type === 'Deposit') {
+                    $runningTotal += abs($amount);
+                } elseif ($tx->t_type === 'Withdrawal') {
+                    $runningTotal -= abs($amount);
+                } elseif ($tx->t_type === 'Transfer') {
+                    $runningTotal += $amount;
+                }
+                $txIndex++;
+            }
+
+            // If this statement has an override, use override value and reset running total
+            if ($statement->is_cost_basis_override) {
+                $runningTotal = (float) $statement->cost_basis;
+            }
+
+            return [
+                'statement_id' => $statement->statement_id,
+                'statement_opening_date' => $statement->statement_opening_date,
+                'statement_closing_date' => $statement->statement_closing_date,
+                'balance' => $statement->balance,
+                'cost_basis' => $statement->is_cost_basis_override ? (float) $statement->cost_basis : $runningTotal,
+                'is_cost_basis_override' => (bool) $statement->is_cost_basis_override,
+                'lineItemCount' => (int) $statement->lineItemCount,
+                'hasPdf' => (bool) $statement->hasPdf,
+            ];
+        });
+
+        return response()->json($result);
     }
 
     public function getSummary(Request $request, $account_id)

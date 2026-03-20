@@ -1,16 +1,22 @@
 'use client'
 import { format } from 'date-fns'
-import { CartesianGrid, Line, LineChart, ResponsiveContainer,Tooltip, XAxis, YAxis } from 'recharts'
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
-export default function AccountStatementsChart({ balanceHistory }: { balanceHistory: [number, number][] }) {
-  const data = balanceHistory.map(([date, balance]) => ({
-    date: date,
-    balance: balance,
+export interface ChartDataPoint {
+  date: number
+  balance: number
+  costBasis: number
+}
+
+export default function AccountStatementsChart({ balanceHistory }: { balanceHistory: ChartDataPoint[] }) {
+  const data = balanceHistory.map(({ date, balance, costBasis }) => ({
+    date,
+    balance,
+    costBasis,
   }))
 
   return (
     <>
-      {/* <pre>{JSON.stringify(balanceHistory)}</pre> */}
       <ResponsiveContainer width="100%" height={400}>
         <LineChart
           data={data}
@@ -22,7 +28,7 @@ export default function AccountStatementsChart({ balanceHistory }: { balanceHist
           }}
         >
           <CartesianGrid strokeDasharray="3 3" stroke="#666666" />
-          <XAxis dataKey="date" tickFormatter={(date: Date) => format(new Date(date), 'MMM ’yy')} />
+          <XAxis dataKey="date" tickFormatter={(date: Date) => format(new Date(date), "MMM ''yy")} />
           <YAxis />
           <Tooltip
             contentStyle={{
@@ -32,9 +38,11 @@ export default function AccountStatementsChart({ balanceHistory }: { balanceHist
               color: '#ffffff',
             }}
             formatter={(value) => value !== undefined ? (value as number).toFixed(2) : ''}
-            labelFormatter={(date: React.ReactNode) => format(new Date(Number(date ?? 0)), "MMM 'yy")}
+            labelFormatter={(date: React.ReactNode) => format(new Date(Number(date ?? 0)), "MMM ''yy")}
           />
-          <Line type="monotone" dataKey="balance" stroke="#1976D2" dot={false} />
+          <Legend />
+          <Line type="monotone" dataKey="balance" name="Account Value" stroke="#1976D2" dot={false} />
+          <Line type="monotone" dataKey="costBasis" name="Cost Basis" stroke="#E65100" dot={false} strokeDasharray="5 5" />
         </LineChart>
       </ResponsiveContainer>
     </>

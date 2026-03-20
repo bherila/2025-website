@@ -25,8 +25,31 @@ interface ActionFieldConfig {
   showTarget: boolean
   showPayload: boolean
   useTagSelect?: boolean
+  useTransactionTypeSelect?: boolean
   stackFields?: boolean
 }
+
+// Transaction types with Deposit, Withdrawal, Transfer at the top
+const TRANSACTION_TYPE_OPTIONS = [
+  'Deposit',
+  'Withdrawal',
+  'Transfer',
+  'Buy',
+  'Sell',
+  'Buy (Covered)',
+  'Buy (Opening)',
+  'Sell (Covered)',
+  'Sell (Opening)',
+  'Dividend',
+  'Interest',
+  'Fee',
+  'Option Assignment',
+  'Option Exercise',
+  'Option Expiration',
+  'Stock Split',
+  'Reinvestment',
+  'Other',
+]
 
 function getFieldConfig(type: string): ActionFieldConfig {
   switch (type) {
@@ -50,6 +73,8 @@ function getFieldConfig(type: string): ActionFieldConfig {
     case 'remove_all_tags':
     case 'negate_amount':
       return { showTarget: false, showPayload: false }
+    case 'set_transaction_type':
+      return { showTarget: true, showPayload: false, useTransactionTypeSelect: true, targetLabel: 'Type' }
     default:
       return { targetLabel: 'Target', targetPlaceholder: 'Target', showTarget: true, showPayload: false }
   }
@@ -118,6 +143,25 @@ export function ActionsEditor({ actions, onChange }: ActionsEditorProps) {
                         tags={tags}
                         placeholder="Select tag..."
                       />
+                    </>
+                  ) : config.useTransactionTypeSelect ? (
+                    <>
+                      <Label className="text-xs text-muted-foreground">{config.targetLabel}</Label>
+                      <Select
+                        value={action.target ?? ''}
+                        onValueChange={(v) => updateAction(index, { target: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select type..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {TRANSACTION_TYPE_OPTIONS.map((t) => (
+                            <SelectItem key={t} value={t}>
+                              {t}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </>
                   ) : (
                     <>

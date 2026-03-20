@@ -18,6 +18,7 @@ class ActionHandlerRegistry
         $this->register('set_description', new SetDescriptionActionHandler);
         $this->register('set_memo', new SetMemoActionHandler);
         $this->register('negate_amount', new NegateAmountActionHandler);
+        $this->register('set_transaction_type', new SetTransactionTypeActionHandler);
     }
 
     public function register(string $type, RuleActionHandlerInterface $handler): void

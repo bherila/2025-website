@@ -82,8 +82,19 @@ Actions are executed in their defined order. They mutate the in-memory transacti
 | `set_description` | New description | — | Sets the transaction description |
 | `set_memo` | New memo | — | Sets the transaction memo/comment |
 | `negate_amount` | — | — | Multiplies the amount by -1 |
+| `set_transaction_type` | Transaction type | — | Sets the transaction type (`t_type`) to the specified value |
 
 **Note:** The `stop_processing_if_match` action has been removed. Use the rule-level `stop_processing_if_match` flag instead.
+
+### set_transaction_type Dropdown
+
+When the `set_transaction_type` action is selected in the UI, the VALUE field is replaced by a dropdown containing all available `t_type` values. The following three values appear at the top of the list:
+
+1. Deposit
+2. Withdrawal
+3. Transfer
+
+Followed by all other transaction type values.
 
 ## Processing Logic
 
@@ -215,7 +226,7 @@ The rules management UI is accessible from the **Config** page (`/finance/config
 ### PHP Tests (`tests/Feature/FinanceRulesEngine/`)
 
 - `RuleConditionEvaluatorTest` — All 6 condition evaluators with query-level optimization support
-- `RuleActionHandlerTest` — All 7 action handlers (stop_processing action removed)
+- `RuleActionHandlerTest` — All 8 action handlers (including `set_transaction_type`)
 - `TransactionRuleProcessorTest` — End-to-end processing, ordering, stop-processing flag, batch, query optimization
 - `TransactionRuleLoaderTest` — Loading, ordering, user isolation
 - `FinRuleLogTest` — Audit logging, error recording, timing
