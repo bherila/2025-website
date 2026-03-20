@@ -28,7 +28,7 @@ export default function AccountStatementsChart({ balanceHistory }: { balanceHist
           }}
         >
           <CartesianGrid strokeDasharray="3 3" stroke="#666666" />
-          <XAxis dataKey="date" tickFormatter={(date: Date) => format(new Date(date), "MMM ''yy")} />
+          <XAxis dataKey="date" tickFormatter={(date: number) => format(new Date(date), "MMM ''yy")} />
           <YAxis />
           <Tooltip
             contentStyle={{
@@ -38,7 +38,7 @@ export default function AccountStatementsChart({ balanceHistory }: { balanceHist
               color: '#ffffff',
             }}
             formatter={(value) => value !== undefined ? (value as number).toFixed(2) : ''}
-            labelFormatter={(date: React.ReactNode) => format(new Date(Number(date ?? 0)), "MMM ''yy")}
+            labelFormatter={(label: React.ReactNode) => format(new Date(Number(label ?? 0)), "MMM ''yy")}
           />
           <Legend />
           <Line type="monotone" dataKey="balance" name="Account Value" stroke="#1976D2" dot={false} />

@@ -31,7 +31,7 @@ import StatementPdfButton from './StatementPdfButton'
 export interface StatementSnapshot {
   statement_id: number
   statement_opening_date: string | null
-  statement_closing_date: string
+  statement_closing_date: string | null
   balance: string
   cost_basis: number
   is_cost_basis_override: boolean
@@ -87,12 +87,23 @@ export default function StatementsListView({
   }, [])
 
   // Memoize chart data
-  const balanceHistory = useMemo(() =>
-    statements.map((s) => ({
-      date: new Date(s.statement_closing_date).valueOf(),
-      balance: parseFloat(s.balance),
-      costBasis: s.cost_basis,
-    })),
+  const balanceHistory = useMemo(
+    () =>
+      statements
+        .filter((s) => !!s.statement_closing_date)
+        .map((s) => {
+          const parsedDate = new Date(s.statement_closing_date as string)
+          if (isNaN(parsedDate.getTime())) {
+            return null
+          }
+
+          return {
+            date: parsedDate.valueOf(),
+            balance: parseFloat(s.balance),
+            costBasis: s.cost_basis,
+          }
+        })
+        .filter((item): item is { date: number; balance: number; costBasis: number } => item !== null),
     [statements]
   )
 
@@ -127,7 +138,10 @@ export default function StatementsListView({
     setSelectedStatement(statement)
     if (statement) {
       setCurrentBalance(statement.balance)
-      setCurrentDate(statement.statement_closing_date.split(' ')[0] ?? '')
+      const closingDate = statement.statement_closing_date
+        ? statement.statement_closing_date.split(/[ T]/)[0] ?? ''
+        : ''
+      setCurrentDate(closingDate)
       setOverrideCostBasis(statement.is_cost_basis_override)
       setCostBasisAmount(statement.is_cost_basis_override ? String(statement.cost_basis) : '')
     } else {

@@ -68,7 +68,7 @@ class StatementController extends Controller
 
         $request->validate([
             'balance' => 'required|string',
-            'cost_basis' => 'nullable|numeric|min:0',
+            'cost_basis' => 'required_if:is_cost_basis_override,true|numeric|min:0',
             'is_cost_basis_override' => 'nullable|boolean',
         ]);
 

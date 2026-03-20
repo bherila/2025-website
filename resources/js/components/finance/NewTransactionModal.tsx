@@ -9,28 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { fetchWrapper } from '@/fetchWrapper'
-
-// Common transaction types
-const TRANSACTION_TYPES = [
-  'Buy',
-  'Sell',
-  'Buy (Covered)',
-  'Buy (Opening)',
-  'Sell (Covered)',
-  'Sell (Opening)',
-  'Dividend',
-  'Interest',
-  'Fee',
-  'Transfer',
-  'Deposit',
-  'Withdrawal',
-  'Option Assignment',
-  'Option Exercise',
-  'Option Expiration',
-  'Stock Split',
-  'Reinvestment',
-  'Other',
-]
+import { TRANSACTION_TYPES } from '@/lib/finance/transactionTypes'
 
 interface NewTransactionModalProps {
   accountId: number

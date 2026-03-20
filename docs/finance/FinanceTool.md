@@ -742,6 +742,7 @@ Transactions:
 |-------|------------|--------|----------------------|
 | Jan 1 | Deposit    | 100    | +100 → 100 |
 | Jan 5 | Withdrawal | 20     | -20 → 80 |
+| Jan 10 | Override (statement-level) | 200 | Override → 200 |
 | Jan 15 | Deposit   | 50     | +50 → 250 (after override) |
 
 Statements:
@@ -757,7 +758,9 @@ Transactions:
 |--------|------------|--------|--------|
 | Feb 1  | Deposit    | 500    | +500 → 500 |
 | Feb 3  | Transfer   | -100   | -100 → 400 |
+| Feb 5  | Override (statement-level) | 1000 | Override → 1000 |
 | Feb 7  | Transfer   | 200    | +200 → 1200 (after first override) |
+| Feb 10 | Override (statement-level) | 300 | Override → 300 |
 | Feb 12 | Withdrawal | 50     | -50 → 250 (after second override) |
 
 Statements:
@@ -771,7 +774,7 @@ Statements:
 ### UI Features
 
 - **Chart**: The account balance chart displays two series: **Account Value** (blue) and **Cost Basis** (orange dashed).
-- **Table**: A "Cost Basis" column shows the computed value. A ⚠️ icon (using `AlertTriangle` from lucide-react) with a tooltip "Cost basis overridden" appears next to overridden values.
+- **Table**: A "Cost Basis" column shows the computed value. An `AlertTriangle` icon (from lucide-react) with a tooltip "Cost basis overridden" appears next to overridden values.
 - **Edit Dialog**: A "Override cost basis?" Switch controls whether a numeric cost basis override is stored. Negative values are not allowed.
 
 ## Data Persistence & Cleanup

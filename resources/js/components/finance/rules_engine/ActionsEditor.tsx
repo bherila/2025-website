@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { transactionTypesWithPinnedTop } from '@/lib/finance/transactionTypes'
 
 import { TagSelect } from './TagSelect'
 import type { FinRuleAction } from './types'
@@ -29,27 +30,8 @@ interface ActionFieldConfig {
   stackFields?: boolean
 }
 
-// Transaction types with Deposit, Withdrawal, Transfer at the top
-const TRANSACTION_TYPE_OPTIONS = [
-  'Deposit',
-  'Withdrawal',
-  'Transfer',
-  'Buy',
-  'Sell',
-  'Buy (Covered)',
-  'Buy (Opening)',
-  'Sell (Covered)',
-  'Sell (Opening)',
-  'Dividend',
-  'Interest',
-  'Fee',
-  'Option Assignment',
-  'Option Exercise',
-  'Option Expiration',
-  'Stock Split',
-  'Reinvestment',
-  'Other',
-]
+const TRANSACTION_TYPE_OPTIONS = transactionTypesWithPinnedTop()
+
 
 function getFieldConfig(type: string): ActionFieldConfig {
   switch (type) {

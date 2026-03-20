@@ -208,6 +208,21 @@ class FinanceApiController extends Controller
         foreach ($balances as $statement) {
             $stmtDate = $statement->statement_closing_date;
 
+            if (! $stmtDate) {
+                $result[] = [
+                    'statement_id' => $statement->statement_id,
+                    'statement_opening_date' => $statement->statement_opening_date,
+                    'statement_closing_date' => $statement->statement_closing_date,
+                    'balance' => $statement->balance,
+                    'cost_basis' => $runningTotal,
+                    'is_cost_basis_override' => (bool) $statement->is_cost_basis_override,
+                    'lineItemCount' => (int) $statement->lineItemCount,
+                    'hasPdf' => (bool) $statement->hasPdf,
+                ];
+
+                continue;
+            }
+
             // Apply all transactions up to and including this statement date
             while ($txIndex < $txCount) {
                 $tx = $txList[$txIndex];
