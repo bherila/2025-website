@@ -12,6 +12,8 @@ import { YearSelectorWithNav } from './YearSelectorWithNav'
  * Will be extended with additional tax forms in the future.
  */
 export default function TaxPreviewPage() {
+  const [hadExplicitYearParamOnLoad, setHadExplicitYearParamOnLoad] = useState(false)
+  const [hadInvalidYearParamOnLoad, setHadInvalidYearParamOnLoad] = useState(false)
   const [availableYears, setAvailableYears] = useState<number[]>([])
   const [isYearsLoading, setIsYearsLoading] = useState(true)
 
@@ -28,9 +30,7 @@ export default function TaxPreviewPage() {
     }
   })
 
-  // Push browser history when the user changes year (so Back button works)
-  const handleYearChange = useCallback((year: number | 'all') => {
-    setSelectedYear(year)
+  const setYearInUrl = useCallback((year: number | 'all', mode: 'push' | 'replace' = 'push') => {
     const url = new URL(window.location.href)
     const defaultYear = new Date().getFullYear()
     if (typeof year === 'number' && year === defaultYear) {
@@ -38,8 +38,30 @@ export default function TaxPreviewPage() {
     } else {
       url.searchParams.set('year', String(year))
     }
+    if (mode === 'replace') {
+      window.history.replaceState(null, '', url.toString())
+      return
+    }
     window.history.pushState(null, '', url.toString())
   }, [])
+
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const y = params.get('year')
+      setHadExplicitYearParamOnLoad(y !== null)
+      setHadInvalidYearParamOnLoad(y !== null && y !== 'all' && Number.isNaN(parseInt(y, 10)))
+    } catch {
+      setHadExplicitYearParamOnLoad(false)
+      setHadInvalidYearParamOnLoad(false)
+    }
+  }, [])
+
+  // Push browser history when the user changes year (so Back button works)
+  const handleYearChange = useCallback((year: number | 'all') => {
+    setSelectedYear(year)
+    setYearInUrl(year, 'push')
+  }, [setYearInUrl])
 
   // Restore selected year when the user navigates with Back / Forward
   useEffect(() => {
@@ -61,6 +83,23 @@ export default function TaxPreviewPage() {
     setAvailableYears(years)
     setIsYearsLoading(isLoading)
   }, [])
+
+  // Normalize invalid year query values so URL always matches the selected state.
+  useEffect(() => {
+    if (!hadInvalidYearParamOnLoad) return
+    setYearInUrl(selectedYear, 'replace')
+  }, [hadInvalidYearParamOnLoad, selectedYear, setYearInUrl])
+
+  // If year wasn't explicitly set in URL, default to newest available year when current year has no data.
+  useEffect(() => {
+    if ((hadExplicitYearParamOnLoad && !hadInvalidYearParamOnLoad) || isYearsLoading || availableYears.length === 0) return
+    if (typeof selectedYear !== 'number') return
+    if (availableYears.includes(selectedYear)) return
+    const newestYear = availableYears[0]
+    if (newestYear === undefined) return
+    setSelectedYear(newestYear)
+    setYearInUrl(newestYear, 'replace')
+  }, [availableYears, hadExplicitYearParamOnLoad, hadInvalidYearParamOnLoad, isYearsLoading, selectedYear, setYearInUrl])
 
   return (
     <div>
