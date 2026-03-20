@@ -41,6 +41,10 @@ composer test
 
 Tests use an in-memory SQLite database to ensure they never accidentally touch MySQL databases. See [docs/TESTING.md](docs/TESTING.md) for detailed testing documentation.
 
+### SQLite Version Requirement
+
+Development and test environments require SQLite **3.35+** (for modern `ALTER TABLE ... DROP COLUMN` support used by migrations).
+
 ## Deployment Instructions
 
 These instructions are for deploying to a cPanel-hosted Apache server with the document root set to `~/public_html`.

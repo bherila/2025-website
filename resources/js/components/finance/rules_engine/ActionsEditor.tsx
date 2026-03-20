@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { transactionTypesWithPinnedTop } from '@/lib/finance/transactionTypes'
 
 import { TagSelect } from './TagSelect'
 import type { FinRuleAction } from './types'
@@ -25,8 +26,12 @@ interface ActionFieldConfig {
   showTarget: boolean
   showPayload: boolean
   useTagSelect?: boolean
+  useTransactionTypeSelect?: boolean
   stackFields?: boolean
 }
+
+const TRANSACTION_TYPE_OPTIONS = transactionTypesWithPinnedTop()
+
 
 function getFieldConfig(type: string): ActionFieldConfig {
   switch (type) {
@@ -50,6 +55,8 @@ function getFieldConfig(type: string): ActionFieldConfig {
     case 'remove_all_tags':
     case 'negate_amount':
       return { showTarget: false, showPayload: false }
+    case 'set_transaction_type':
+      return { showTarget: true, showPayload: false, useTransactionTypeSelect: true, targetLabel: 'Type' }
     default:
       return { targetLabel: 'Target', targetPlaceholder: 'Target', showTarget: true, showPayload: false }
   }
@@ -118,6 +125,25 @@ export function ActionsEditor({ actions, onChange }: ActionsEditorProps) {
                         tags={tags}
                         placeholder="Select tag..."
                       />
+                    </>
+                  ) : config.useTransactionTypeSelect ? (
+                    <>
+                      <Label className="text-xs text-muted-foreground">{config.targetLabel}</Label>
+                      <Select
+                        value={action.target ?? ''}
+                        onValueChange={(v) => updateAction(index, { target: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select type..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {TRANSACTION_TYPE_OPTIONS.map((t) => (
+                            <SelectItem key={t} value={t}>
+                              {t}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </>
                   ) : (
                     <>

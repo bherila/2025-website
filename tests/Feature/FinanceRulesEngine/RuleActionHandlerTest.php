@@ -9,6 +9,7 @@ use App\Finance\RulesEngine\Actions\RemoveAllTagsActionHandler;
 use App\Finance\RulesEngine\Actions\RemoveTagActionHandler;
 use App\Finance\RulesEngine\Actions\SetDescriptionActionHandler;
 use App\Finance\RulesEngine\Actions\SetMemoActionHandler;
+use App\Finance\RulesEngine\Actions\SetTransactionTypeActionHandler;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLineItemTagMap;
 use App\Models\FinanceTool\FinAccounts;
@@ -328,5 +329,22 @@ class RuleActionHandlerTest extends TestCase
 
         $tx->refresh();
         $this->assertEquals(75.50, (float) $tx->t_amt, '', 0.01);
+    }
+
+    // -------------------------------------------------------------------------
+    // SetTransactionTypeActionHandler
+    // -------------------------------------------------------------------------
+
+    public function test_set_transaction_type(): void
+    {
+        $tx = $this->createTransaction(['t_type' => 'Buy']);
+        $action = $this->makeAction(['type' => 'set_transaction_type', 'target' => 'Deposit']);
+
+        $handler = new SetTransactionTypeActionHandler;
+        $result = $handler->apply($tx, $action, $this->user);
+
+        $this->assertTrue($result->applied);
+        $tx->refresh();
+        $this->assertEquals('Deposit', $tx->t_type);
     }
 }

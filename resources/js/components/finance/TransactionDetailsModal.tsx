@@ -13,28 +13,7 @@ import { Textarea } from '@/components/ui/textarea'
 import type { AccountLineItem, AccountLineItemTag } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
 import { getTagColorDark, getTagColorLight } from '@/lib/finance/tagColorUtils'
-
-// Common transaction types
-const TRANSACTION_TYPES = [
-  'Buy',
-  'Sell',
-  'Buy (Covered)',
-  'Buy (Opening)',
-  'Sell (Covered)',
-  'Sell (Opening)',
-  'Dividend',
-  'Interest',
-  'Fee',
-  'Transfer',
-  'Deposit',
-  'Withdrawal',
-  'Option Assignment',
-  'Option Exercise',
-  'Option Expiration',
-  'Stock Split',
-  'Reinvestment',
-  'Other',
-]
+import { TRANSACTION_TYPES } from '@/lib/finance/transactionTypes'
 
 interface TransactionDetailsModalProps {
   transaction: AccountLineItem

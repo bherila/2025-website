@@ -10,6 +10,144 @@ class FinanceStatementControllerTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_cost_basis_algorithm_example1_basic_override(): void
+    {
+        $user = $this->createUser();
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Test Account',
+            'acct_last_balance' => '0',
+        ]);
+
+        // Transactions in ascending date order
+        DB::table('fin_account_line_items')->insert([
+            ['t_account' => $acctId, 't_date' => '2024-01-01', 't_type' => 'Deposit', 't_amt' => 100, 't_description' => 'D1'],
+            ['t_account' => $acctId, 't_date' => '2024-01-05', 't_type' => 'Withdrawal', 't_amt' => 20, 't_description' => 'W1'],
+            ['t_account' => $acctId, 't_date' => '2024-01-15', 't_type' => 'Deposit', 't_amt' => 50, 't_description' => 'D2'],
+        ]);
+
+        // Statements: Jan 1, Jan 5, Jan 10 (override=200), Jan 15
+        DB::table('fin_statements')->insert([
+            ['acct_id' => $acctId, 'balance' => '100', 'statement_closing_date' => '2024-01-01', 'cost_basis' => 0, 'is_cost_basis_override' => 0],
+            ['acct_id' => $acctId, 'balance' => '80', 'statement_closing_date' => '2024-01-05', 'cost_basis' => 0, 'is_cost_basis_override' => 0],
+            ['acct_id' => $acctId, 'balance' => '200', 'statement_closing_date' => '2024-01-10', 'cost_basis' => 200, 'is_cost_basis_override' => 1],
+            ['acct_id' => $acctId, 'balance' => '250', 'statement_closing_date' => '2024-01-15', 'cost_basis' => 0, 'is_cost_basis_override' => 0],
+        ]);
+
+        $response = $this->actingAs($user)->getJson("/api/finance/{$acctId}/balance-timeseries");
+        $response->assertOk();
+
+        $data = $response->json();
+        $this->assertCount(4, $data);
+
+        $this->assertEquals(100.0, $data[0]['cost_basis']);  // Jan 1: Deposit 100 -> 100
+        $this->assertEquals(80.0, $data[1]['cost_basis']);   // Jan 5: Withdrawal 20 -> 80
+        $this->assertEquals(200.0, $data[2]['cost_basis']);  // Jan 10: Override -> 200
+        $this->assertEquals(250.0, $data[3]['cost_basis']);  // Jan 15: Deposit 50 -> 200+50=250
+    }
+
+    public function test_cost_basis_algorithm_example2_multiple_overrides_and_transfers(): void
+    {
+        $user = $this->createUser();
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Test Account 2',
+            'acct_last_balance' => '0',
+        ]);
+
+        // Transactions: Feb 1 Deposit 500, Feb 3 Transfer -100, Feb 7 Transfer 200, Feb 12 Withdrawal 50
+        DB::table('fin_account_line_items')->insert([
+            ['t_account' => $acctId, 't_date' => '2024-02-01', 't_type' => 'Deposit', 't_amt' => 500, 't_description' => 'D1'],
+            ['t_account' => $acctId, 't_date' => '2024-02-03', 't_type' => 'Transfer', 't_amt' => -100, 't_description' => 'T1'],
+            ['t_account' => $acctId, 't_date' => '2024-02-07', 't_type' => 'Transfer', 't_amt' => 200, 't_description' => 'T2'],
+            ['t_account' => $acctId, 't_date' => '2024-02-12', 't_type' => 'Withdrawal', 't_amt' => 50, 't_description' => 'W1'],
+        ]);
+
+        // Statements: Feb 1, Feb 3, Feb 5 (override=1000), Feb 7, Feb 10 (override=300), Feb 12
+        DB::table('fin_statements')->insert([
+            ['acct_id' => $acctId, 'balance' => '500', 'statement_closing_date' => '2024-02-01', 'cost_basis' => 0, 'is_cost_basis_override' => 0],
+            ['acct_id' => $acctId, 'balance' => '400', 'statement_closing_date' => '2024-02-03', 'cost_basis' => 0, 'is_cost_basis_override' => 0],
+            ['acct_id' => $acctId, 'balance' => '1000', 'statement_closing_date' => '2024-02-05', 'cost_basis' => 1000, 'is_cost_basis_override' => 1],
+            ['acct_id' => $acctId, 'balance' => '1200', 'statement_closing_date' => '2024-02-07', 'cost_basis' => 0, 'is_cost_basis_override' => 0],
+            ['acct_id' => $acctId, 'balance' => '300', 'statement_closing_date' => '2024-02-10', 'cost_basis' => 300, 'is_cost_basis_override' => 1],
+            ['acct_id' => $acctId, 'balance' => '250', 'statement_closing_date' => '2024-02-12', 'cost_basis' => 0, 'is_cost_basis_override' => 0],
+        ]);
+
+        $response = $this->actingAs($user)->getJson("/api/finance/{$acctId}/balance-timeseries");
+        $response->assertOk();
+
+        $data = $response->json();
+        $this->assertCount(6, $data);
+
+        $this->assertEquals(500.0, $data[0]['cost_basis']);   // Feb 1: Deposit 500 -> 500
+        $this->assertEquals(400.0, $data[1]['cost_basis']);   // Feb 3: Transfer -100 -> 400
+        $this->assertEquals(1000.0, $data[2]['cost_basis']);  // Feb 5: Override -> 1000
+        $this->assertEquals(1200.0, $data[3]['cost_basis']);  // Feb 7: Transfer 200 -> 1200
+        $this->assertEquals(300.0, $data[4]['cost_basis']);   // Feb 10: Override -> 300
+        $this->assertEquals(250.0, $data[5]['cost_basis']);   // Feb 12: Withdrawal 50 -> 250
+    }
+
+    public function test_update_statement_persists_cost_basis_override(): void
+    {
+        $user = $this->createUser();
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Test Account',
+            'acct_last_balance' => '0',
+        ]);
+
+        $stmtId = DB::table('fin_statements')->insertGetId([
+            'acct_id' => $acctId,
+            'balance' => '1000',
+            'statement_closing_date' => '2024-01-31',
+            'cost_basis' => 0,
+            'is_cost_basis_override' => 0,
+        ]);
+
+        $response = $this->actingAs($user)->putJson("/api/finance/balance-timeseries/{$stmtId}", [
+            'balance' => '1000',
+            'is_cost_basis_override' => true,
+            'cost_basis' => 900,
+        ]);
+
+        $response->assertOk();
+        $this->assertDatabaseHas('fin_statements', [
+            'statement_id' => $stmtId,
+            'cost_basis' => 900,
+            'is_cost_basis_override' => 1,
+        ]);
+    }
+
+    public function test_update_statement_clears_cost_basis_when_override_disabled(): void
+    {
+        $user = $this->createUser();
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Test Account',
+            'acct_last_balance' => '0',
+        ]);
+
+        $stmtId = DB::table('fin_statements')->insertGetId([
+            'acct_id' => $acctId,
+            'balance' => '1000',
+            'statement_closing_date' => '2024-01-31',
+            'cost_basis' => 900,
+            'is_cost_basis_override' => 1,
+        ]);
+
+        $response = $this->actingAs($user)->putJson("/api/finance/balance-timeseries/{$stmtId}", [
+            'balance' => '1000',
+            'is_cost_basis_override' => false,
+        ]);
+
+        $response->assertOk();
+        $this->assertDatabaseHas('fin_statements', [
+            'statement_id' => $stmtId,
+            'cost_basis' => 0,
+            'is_cost_basis_override' => 0,
+        ]);
+    }
+
     public function test_import_pdf_statement_truncates_dates(): void
     {
         $user = $this->createAdminUser(['gemini_api_key' => 'test-key']);

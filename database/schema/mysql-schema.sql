@@ -951,6 +951,8 @@ CREATE TABLE `fin_statements` (
   `statement_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `acct_id` bigint(20) unsigned NOT NULL,
   `balance` varchar(20) NOT NULL,
+  `cost_basis` decimal(15,4) NOT NULL DEFAULT 0,
+  `is_cost_basis_override` tinyint(1) NOT NULL DEFAULT 0,
   `statement_opening_date` date DEFAULT NULL,
   `statement_closing_date` date DEFAULT NULL,
   PRIMARY KEY (`statement_id`),

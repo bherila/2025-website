@@ -163,14 +163,101 @@ class FinanceApiController extends Controller
                 'fs.statement_opening_date',
                 'fs.statement_closing_date',
                 'fs.balance',
+                'fs.cost_basis',
+                'fs.is_cost_basis_override',
                 DB::raw('count(DISTINCT fsd.id) as lineItemCount'),
                 DB::raw('count(DISTINCT ffa.id) > 0 as hasPdf')
             )
-            ->groupBy('fs.statement_id', 'fs.statement_opening_date', 'fs.statement_closing_date', 'fs.balance')
+            ->groupBy('fs.statement_id', 'fs.statement_opening_date', 'fs.statement_closing_date', 'fs.balance', 'fs.cost_basis', 'fs.is_cost_basis_override')
             ->orderBy('fs.statement_closing_date', 'asc')
             ->get();
 
-        return response()->json($balances);
+        // Fetch all relevant transactions in ascending date order
+        $transactions = DB::table('fin_account_line_items')
+            ->where('t_account', $account->acct_id)
+            ->whereNull('when_deleted')
+            ->whereIn('t_type', ['Deposit', 'Withdrawal', 'Transfer'])
+            ->orderBy('t_date', 'asc')
+            ->orderBy('t_id', 'asc')
+            ->select('t_date', 't_type', 't_amt')
+            ->get();
+
+        $result = $this->computeCostBasisForStatements($balances, $transactions);
+
+        return response()->json($result);
+    }
+
+    /**
+     * Compute the cost basis for each statement using the account performance algorithm.
+     *
+     * Algorithm:
+     * 1. Start with running total = 0.
+     * 2. Process transactions in ascending date order.
+     * 3. For each statement date, accumulate all transactions up to and including that date.
+     * 4. Deposits add abs(amount), withdrawals subtract abs(amount), transfers add signed amount.
+     * 5. If a statement has is_cost_basis_override=true, use the stored cost_basis and reset running total.
+     */
+    private function computeCostBasisForStatements($balances, $transactions): array
+    {
+        $txList = $transactions->values()->all();
+        $txCount = count($txList);
+        $txIndex = 0;
+        $runningTotal = 0.0;
+        $result = [];
+
+        foreach ($balances as $statement) {
+            $stmtDate = $statement->statement_closing_date;
+
+            if (! $stmtDate) {
+                $result[] = [
+                    'statement_id' => $statement->statement_id,
+                    'statement_opening_date' => $statement->statement_opening_date,
+                    'statement_closing_date' => $statement->statement_closing_date,
+                    'balance' => $statement->balance,
+                    'cost_basis' => $runningTotal,
+                    'is_cost_basis_override' => (bool) $statement->is_cost_basis_override,
+                    'lineItemCount' => (int) $statement->lineItemCount,
+                    'hasPdf' => (bool) $statement->hasPdf,
+                ];
+
+                continue;
+            }
+
+            // Apply all transactions up to and including this statement date
+            while ($txIndex < $txCount) {
+                $tx = $txList[$txIndex];
+                if ($tx->t_date > $stmtDate) {
+                    break;
+                }
+                $amount = (float) $tx->t_amt;
+                if ($tx->t_type === 'Deposit') {
+                    $runningTotal += abs($amount);
+                } elseif ($tx->t_type === 'Withdrawal') {
+                    $runningTotal -= abs($amount);
+                } elseif ($tx->t_type === 'Transfer') {
+                    $runningTotal += $amount;
+                }
+                $txIndex++;
+            }
+
+            // If this statement has an override, use override value and reset running total
+            if ($statement->is_cost_basis_override) {
+                $runningTotal = (float) $statement->cost_basis;
+            }
+
+            $result[] = [
+                'statement_id' => $statement->statement_id,
+                'statement_opening_date' => $statement->statement_opening_date,
+                'statement_closing_date' => $statement->statement_closing_date,
+                'balance' => $statement->balance,
+                'cost_basis' => $runningTotal,
+                'is_cost_basis_override' => (bool) $statement->is_cost_basis_override,
+                'lineItemCount' => (int) $statement->lineItemCount,
+                'hasPdf' => (bool) $statement->hasPdf,
+            ];
+        }
+
+        return $result;
     }
 
     public function getSummary(Request $request, $account_id)
