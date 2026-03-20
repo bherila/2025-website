@@ -48,40 +48,41 @@ export default defineConfig({
     rollupOptions: {
       external: (id) => /\.test\.[tj]sx?$/.test(id) || id.includes('/__tests__/') || id === 'pdfjs-dist',
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom'],
-          'ui-core': ['@radix-ui/react-slot', 'class-variance-authority', 'clsx', 'tailwind-merge'],
-          'ui-components': [
-            '@radix-ui/react-dialog',
-            '@radix-ui/react-alert-dialog',
-            '@radix-ui/react-popover',
-            '@radix-ui/react-tabs',
-            '@radix-ui/react-label',
-            '@radix-ui/react-checkbox',
-            '@/components/ui/alert-dialog',
-            '@/components/ui/alert',
-            '@/components/ui/badge',
-            '@/components/ui/breadcrumb',
-            '@/components/ui/button',
-            '@/components/ui/calendar',
-            '@/components/ui/card',
-            '@/components/ui/checkbox',
-            '@/components/ui/dialog',
-            '@/components/ui/form',
-            '@/components/ui/input',
-            '@/components/ui/label',
-            '@/components/ui/masonry',
-            '@/components/ui/popover',
-            '@/components/ui/skeleton',
-            '@/components/ui/spinner',
-            '@/components/ui/table',
-            '@/components/ui/tabs',
-            '@/components/ui/textarea',
-            '@/components/ui/tooltip'
-          ],
-          utils: ['lucide-react', 'date-fns', 'currency.js', 'zod'],
-          charts: ['recharts'],
-          markdown: ['react-markdown']
+        manualChunks: (id) => {
+          if (id.includes('node_modules')) {
+            if (id.includes('react/') || id.includes('react-dom/')) {
+              return 'vendor';
+            }
+            if (
+              id.includes('@radix-ui/react-slot') ||
+              id.includes('class-variance-authority') ||
+              id.includes('clsx') ||
+              id.includes('tailwind-merge')
+            ) {
+              return 'ui-core';
+            }
+            if (id.includes('@radix-ui/react-')) {
+              return 'ui-components';
+            }
+            if (
+              id.includes('lucide-react') ||
+              id.includes('date-fns') ||
+              id.includes('currency.js') ||
+              id.includes('zod')
+            ) {
+              return 'utils';
+            }
+            if (id.includes('recharts')) {
+              return 'charts';
+            }
+            if (id.includes('react-markdown')) {
+              return 'markdown';
+            }
+          }
+
+          if (id.includes('resources/js/components/ui/')) {
+            return 'ui-components';
+          }
         }
       }
     }
