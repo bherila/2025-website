@@ -209,20 +209,29 @@ export default function TaxPreviewPage() {
     return () => { cancelled = true }
   }, [selectedYear])
 
-  // Build quarterly payslip series (same logic as PayslipClient)
+  // Build quarterly payslip series in a single pass (same logic as PayslipClient)
   const year = typeof selectedYear === 'number' ? selectedYear : null
-  const data = year ? payslips.filter(
-    (r) => r.pay_date! > `${year}-01-01` && r.pay_date! < `${year + 1}-01-01`,
-  ) : []
-  const dataThroughQ1 = year ? payslips.filter(
-    (r) => r.pay_date! > `${year}-01-01` && r.pay_date! < `${year}-04-01`,
-  ) : []
-  const dataThroughQ2 = year ? payslips.filter(
-    (r) => r.pay_date! > `${year}-01-01` && r.pay_date! < `${year}-07-01`,
-  ) : []
-  const dataThroughQ3 = year ? payslips.filter(
-    (r) => r.pay_date! > `${year}-01-01` && r.pay_date! < `${year}-10-01`,
-  ) : []
+  const { data, dataThroughQ1, dataThroughQ2, dataThroughQ3 } = (() => {
+    if (!year) return { data: [], dataThroughQ1: [], dataThroughQ2: [], dataThroughQ3: [] }
+    const start = `${year}-01-01`
+    const end = `${year + 1}-01-01`
+    const q1end = `${year}-04-01`
+    const q2end = `${year}-07-01`
+    const q3end = `${year}-10-01`
+    const data: fin_payslip[] = []
+    const dataThroughQ1: fin_payslip[] = []
+    const dataThroughQ2: fin_payslip[] = []
+    const dataThroughQ3: fin_payslip[] = []
+    for (const r of payslips) {
+      const pd = r.pay_date!
+      if (pd <= start || pd >= end) continue
+      data.push(r)
+      if (pd < q1end) dataThroughQ1.push(r)
+      if (pd < q2end) dataThroughQ2.push(r)
+      if (pd < q3end) dataThroughQ3.push(r)
+    }
+    return { data, dataThroughQ1, dataThroughQ2, dataThroughQ3 }
+  })()
 
   const dataSeries = year ? [
     ['Q1', dataThroughQ1],
