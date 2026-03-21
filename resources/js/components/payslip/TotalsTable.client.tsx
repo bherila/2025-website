@@ -53,10 +53,11 @@ export default function TotalsTable({
     standardDeduction: number
   }
   /** Additional income (e.g. Schedule C net profit/loss) added on top of payslip income. */
-  extraIncome?: number
+  extraIncome?: number | Record<string, number>
 }) {
-  const calculateTotals = (data: fin_payslip[]) => {
-    const income = totalTaxableIncomeBeforeSubtractions(data).add(extraIncome)
+  const calculateTotals = (label: string, data: fin_payslip[]) => {
+    const seriesExtraIncome = typeof extraIncome === 'number' ? extraIncome : (extraIncome[label] ?? 0)
+    const income = totalTaxableIncomeBeforeSubtractions(data).add(seriesExtraIncome)
     const fedWH = totalFedWH(data)
     const stateWH = taxConfig.state ? totalStateWH(data) : currency(0)
     const estTaxIncome = income.subtract(taxConfig.standardDeduction)
@@ -159,7 +160,7 @@ export default function TotalsTable({
           <TableRow key={index}>
             <TableCell style={{ width: '240px' }}>{row.description}</TableCell>
             {series.map(([label, data], seriesIndex) => {
-              const t = calculateTotals(data)
+              const t = calculateTotals(label, data)
               return (
                 <TableCell style={{ width: '320px' }} key={label}>
                   {row.getValue(t)}

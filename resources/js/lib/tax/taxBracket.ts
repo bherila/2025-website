@@ -1,4 +1,5 @@
 import currency from 'currency.js'
+
 import { splitDelimitedText } from '../splitDelimitedText'
 
 /******* WARNING ***************************

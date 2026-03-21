@@ -115,7 +115,15 @@ export default function TaxPreviewPage() {
   const [payslipsLoading, setPayslipsLoading] = useState(false)
 
   // Net Schedule C income for the selected year (emitted by ScheduleCPreview)
-  const [scheduleCNetIncome, setScheduleCNetIncome] = useState(0)
+  const [scheduleCNetIncome, setScheduleCNetIncome] = useState({
+    total: 0,
+    byQuarter: {
+      q1: 0,
+      q2: 0,
+      q3: 0,
+      q4: 0,
+    },
+  })
 
   const setYearInUrl = useCallback((year: number | 'all', mode: 'push' | 'replace' = 'push') => {
     const url = new URL(window.location.href)
@@ -171,7 +179,15 @@ export default function TaxPreviewPage() {
     setIsYearsLoading(isLoading)
   }, [])
 
-  const handleScheduleCNetIncomeChange = useCallback((netIncome: number) => {
+  const handleScheduleCNetIncomeChange = useCallback((netIncome: {
+    total: number
+    byQuarter: {
+      q1: number
+      q2: number
+      q3: number
+      q4: number
+    }
+  }) => {
     setScheduleCNetIncome(netIncome)
   }, [])
 
@@ -240,6 +256,13 @@ export default function TaxPreviewPage() {
     data.length > dataThroughQ3.length ? ['Q4 (Full Year)', data] : undefined,
   ].filter(Boolean) as [string, fin_payslip[]][] : []
 
+  const scheduleCIncomeBySeries = {
+    Q1: scheduleCNetIncome.byQuarter.q1,
+    Q2: scheduleCNetIncome.byQuarter.q2,
+    Q3: scheduleCNetIncome.byQuarter.q3,
+    'Q4 (Full Year)': scheduleCNetIncome.byQuarter.q4,
+  }
+
   const showTaxTables = typeof selectedYear === 'number' && !payslipsLoading && data.length > 0
 
   return (
@@ -269,7 +292,7 @@ export default function TaxPreviewPage() {
                 filingStatus: 'Single',
                 standardDeduction: 13850,
               }}
-              extraIncome={scheduleCNetIncome}
+              extraIncome={scheduleCIncomeBySeries}
             />
             <h2 className="text-lg font-semibold mt-6 mb-2">California State Taxes</h2>
             <TotalsTable
@@ -280,7 +303,7 @@ export default function TaxPreviewPage() {
                 filingStatus: 'Single',
                 standardDeduction: 13850,
               }}
-              extraIncome={scheduleCNetIncome}
+              extraIncome={scheduleCIncomeBySeries}
             />
           </div>
         </>
