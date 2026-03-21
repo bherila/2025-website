@@ -49,7 +49,7 @@ interface EntityData {
 }
 
 interface YearData {
-  year: string
+  year: number
   entities: EntityData[]
 }
 
@@ -275,15 +275,15 @@ function OrdinaryIncomeSection({ yearData, showInline }: { yearData: YearData; s
   )
 }
 
-/** Props for ScheduleCPage — year selection is managed by the parent TaxPreviewPage. */
-interface ScheduleCPageProps {
+/** Props for ScheduleCPreview — year selection is managed by the parent TaxPreviewPage. */
+interface ScheduleCPreviewProps {
   /** The currently selected tax year to display, or 'all' to show every year. */
   selectedYear: number | 'all'
   /** Callback to notify the parent of available years and loading state after data is fetched. */
   onAvailableYearsChange: (years: number[], isLoading: boolean) => void
 }
 
-export default function ScheduleCPage({ selectedYear, onAvailableYearsChange }: ScheduleCPageProps) {
+export default function ScheduleCPreview({ selectedYear, onAvailableYearsChange }: ScheduleCPreviewProps) {
   const [allData, setAllData] = useState<YearData[] | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -315,7 +315,7 @@ export default function ScheduleCPage({ selectedYear, onAvailableYearsChange }: 
   const data = useMemo(() => {
     if (!allData) return null
     if (selectedYear === 'all') return allData
-    return allData.filter((yd) => yd.year === String(selectedYear))
+    return allData.filter((yd) => Number(yd.year) === selectedYear)
   }, [allData, selectedYear])
 
   // Compute home-office carry-forward per entity across all years

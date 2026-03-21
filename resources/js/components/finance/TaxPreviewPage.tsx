@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 
-import ScheduleCPage from '@/components/finance/ScheduleCPage'
+import ScheduleCPreview from '@/components/finance/ScheduleCPreview'
 
 import { YearSelectorWithNav } from './YearSelectorWithNav'
 
@@ -114,7 +114,7 @@ export default function TaxPreviewPage() {
           />
         </div>
       </div>
-      <ScheduleCPage
+      <ScheduleCPreview
         selectedYear={selectedYear}
         onAvailableYearsChange={handleAvailableYearsChange}
       />

@@ -175,7 +175,7 @@ class FinanceScheduleCController extends Controller
         $result = [];
         foreach ($byYear as $year => $entitiesData) {
             $yearEntry = [
-                'year' => $year,
+                'year' => (int) $year,
                 'entities' => array_values($entitiesData),
             ];
             $result[] = $yearEntry;

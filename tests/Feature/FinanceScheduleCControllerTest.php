@@ -376,6 +376,49 @@ class FinanceScheduleCControllerTest extends TestCase
         $response->assertOk()->assertJson(['years' => []]);
     }
 
+    public function test_year_is_returned_as_integer(): void
+    {
+        $user = $this->createUser();
+        $this->actingAs($user);
+
+        $acct = $this->createAccount($user->id);
+        $tag = $this->createTagWithChar($user->id, 'Office Supplies', 'sce_office_expenses');
+        $t = $this->createTransaction($acct->acct_id, '2024-03-15', -200.00, 'Desk lamp');
+        $this->applyTag($t->t_id, $tag->tag_id);
+
+        $response = $this->actingAs($user)->getJson('/api/finance/schedule-c');
+
+        $response->assertOk();
+        $years = $response->json('years');
+        $this->assertCount(1, $years);
+        $this->assertIsInt($years[0]['year']);
+        $this->assertSame(2024, $years[0]['year']);
+    }
+
+    public function test_entities_with_only_home_office_data_are_included(): void
+    {
+        $user = $this->createUser();
+        $this->actingAs($user);
+
+        $acct = $this->createAccount($user->id, 'Home');
+        $tag = $this->createTagWithChar($user->id, 'Home Rent', 'scho_rent');
+        $t = $this->createTransaction($acct->acct_id, '2026-02-02', -3600.00, 'Monthly rent');
+        $this->applyTag($t->t_id, $tag->tag_id);
+
+        $response = $this->actingAs($user)->getJson('/api/finance/schedule-c');
+
+        $response->assertOk();
+        $years = $response->json('years');
+        $this->assertCount(1, $years);
+        $this->assertSame(2026, $years[0]['year']);
+
+        $entity = $years[0]['entities'][0];
+        $this->assertEmpty($entity['schedule_c_income']);
+        $this->assertEmpty($entity['schedule_c_expense']);
+        $this->assertArrayHasKey('scho_rent', $entity['schedule_c_home_office']);
+        $this->assertEqualsWithDelta(3600.00, $entity['schedule_c_home_office']['scho_rent']['total'], 0.001);
+    }
+
     public function test_sqlite_check_constraint_rejects_invalid_tax_characteristic(): void
     {
         // The CHECK constraint on SQLite (and ENUM on MySQL) should reject invalid values.
