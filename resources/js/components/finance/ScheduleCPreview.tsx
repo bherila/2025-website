@@ -396,15 +396,15 @@ export default function ScheduleCPreview({ selectedYear, onAvailableYearsChange,
         if (!categories) return
         for (const cat of Object.values(categories)) {
           for (const tx of cat.transactions ?? []) {
-            const m = Number((tx.t_date ?? '').slice(5, 7))
-            if (!m || Number.isNaN(m)) continue
-            const q = m < 4 ? 'q1' : m < 7 ? 'q2' : m < 10 ? 'q3' : 'q4'
+            const month = Number((tx.t_date ?? '').slice(5, 7))
+            if (!month || Number.isNaN(month)) continue
+            const quarter = month < 4 ? 'q1' : month < 7 ? 'q2' : month < 10 ? 'q3' : 'q4'
             // For expense categories, API stores original t_amt (usually negative),
             // so add absolute value as an expense amount.
             if (kind === 'income') {
-              quarterSums[q].income += Number(tx.t_amt ?? 0)
+              quarterSums[quarter].income += Number(tx.t_amt ?? 0)
             } else {
-              quarterSums[q].expense += Math.abs(Number(tx.t_amt ?? 0))
+              quarterSums[quarter].expense += Math.abs(Number(tx.t_amt ?? 0))
             }
           }
         }
@@ -420,9 +420,12 @@ export default function ScheduleCPreview({ selectedYear, onAvailableYearsChange,
       const preHomeOfficeNet = quarterSums.q1.income + quarterSums.q2.income + quarterSums.q3.income + quarterSums.q4.income
         - (quarterSums.q1.expense + quarterSums.q2.expense + quarterSums.q3.expense + quarterSums.q4.expense)
       const homeOfficeScale = preHomeOfficeNet !== 0 ? entityAllowableHO / preHomeOfficeNet : 0
-      const q1Net = quarterSums.q1.income - quarterSums.q1.expense - (quarterSums.q1.income - quarterSums.q1.expense) * homeOfficeScale
-      const q2Net = quarterSums.q2.income - quarterSums.q2.expense - (quarterSums.q2.income - quarterSums.q2.expense) * homeOfficeScale
-      const q3Net = quarterSums.q3.income - quarterSums.q3.expense - (quarterSums.q3.income - quarterSums.q3.expense) * homeOfficeScale
+      const q1GrossNet = quarterSums.q1.income - quarterSums.q1.expense
+      const q2GrossNet = quarterSums.q2.income - quarterSums.q2.expense
+      const q3GrossNet = quarterSums.q3.income - quarterSums.q3.expense
+      const q1Net = q1GrossNet - q1GrossNet * homeOfficeScale
+      const q2Net = q2GrossNet - q2GrossNet * homeOfficeScale
+      const q3Net = q3GrossNet - q3GrossNet * homeOfficeScale
       const q4Net = entityTotalNet - q1Net - q2Net - q3Net
 
       perQuarter.q1 += q1Net
