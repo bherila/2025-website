@@ -415,20 +415,23 @@ The following state is persisted in the URL so the browser back button works:
 ## Tax Preview View
 
 **Route**: `GET /finance/tax-preview` (`/finance/schedule-c` redirects here)  
-**Component**: `resources/js/components/finance/ScheduleCPage.tsx`  
-**API**: `GET /api/finance/schedule-c` → `FinanceScheduleCController@getSummary`
+**Component**: `resources/js/components/finance/TaxPreviewPage.tsx` (orchestrator) + `ScheduleCPreview.tsx` (Schedule C section)  
+**API**: `GET /api/finance/schedule-c` → `FinanceScheduleCController@getSummary`; also `GET /api/payslips?year=YYYY`
 
-The Tax Preview view is a dedicated tax-reporting summary page. It aggregates tagged transactions into IRS Schedule C (Profit or Loss from Business) line-item totals grouped by tax year.
+The Tax Preview view is a comprehensive tax-reporting and planning page. It combines payslip-derived W-2 income with transaction-tagged Schedule C data to produce quarterly federal and state tax estimates.
 
 ### What it Shows
 
 - **Year selector** (top-right) with −/+ navigation buttons to step through years; defaults to the current year. Choosing "All Years" shows all years.
   - Uses URL query string (`?year=YYYY`) so the browser Back button works correctly
-- **"List transactions in-line" toggle** (top-right Switch) — when enabled, each Schedule C line item expands to show individual transactions (Date, Name, Amount with a "Go to" link) indented beneath it.
-- For each tax year (most recent first):
+- **W-2 Income Summary** — when a specific year is selected and payslips exist, shows a table of key W-2 line items derived from payslip data: wages/salary, bonus, RSU vesting, imputed income, federal income tax withheld, state income tax withheld, OASDI, and Medicare.
+- **Federal Taxes** — quarterly cumulative tax estimate table (Q1 / Q2 / Q3 / Q4 (Full Year)). Income = W-2 payslip income + Schedule C net income (income − expenses − allowable home office deduction). Reuses the `TotalsTable` component from the Payslips page.
+- **California State Taxes** — same structure as Federal Taxes, using CA state brackets.
+- **"List transactions in-line" toggle** (inside ScheduleCPreview) — when enabled, each Schedule C line item expands to show individual transactions beneath it; in this mode, Schedule C cards expand to full container width (single column) for readability. Cards are always single-column on mobile/small screens.
+- For each tax year (most recent first) in the Schedule C section:
   - **Full-width year header** — e.g., "2024"
   - **Ordinary Income** (shown above Schedule C items) — interest, dividends, other income not tied to an employment entity
-  - **Per-entity Schedule C sections** (2-3 column grid):
+  - **Per-entity Schedule C sections** (2–3 column grid on desktop when inline mode is off):
     - Column 1: **Schedule C Income** — one row per `business_*` category
     - Column 2: **Schedule C Expenses** — one row per `sce_*` category with positive totals, plus Home Office Deduction Summary
     - Column 3 (if applicable): **Home Office Deduction** — one row per `scho_*` category
@@ -792,5 +795,13 @@ For full documentation, see [TransactionRulesEngine.md](TransactionRulesEngine.m
 ## Tax System
 
 The tax system tracks employment entities (Schedule C businesses, W-2 employers, hobbies), links them to transaction tags and payslips, and provides tax-year summaries. Tags carry tax characteristics (Schedule C expenses, home office deductions, and non-Schedule C items like interest and dividends). Marriage/filing status is tracked per year.
+
+### Employment Entity `is_hidden` Flag
+
+Each employment entity has an `is_hidden` boolean. When set:
+- The entity is excluded from all selection dropdowns (payslip import, payslip detail form, tag editor).
+- The entity still appears in the Settings page (so it can be managed/un-hidden).
+- The edit modal includes an `is_hidden` Switch toggle.
+- The delete button has been moved from the table row into the edit modal footer (since deletion is uncommon).
 
 For full documentation, see [TaxSystem.md](TaxSystem.md).

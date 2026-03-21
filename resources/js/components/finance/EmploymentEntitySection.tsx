@@ -1,6 +1,6 @@
 'use client'
 
-import { Building2, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Building2, Loader2, Pencil, Plus } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import {
@@ -91,6 +91,7 @@ export default function EmploymentEntitySection() {
       address: entity.address ?? '',
       sic_code: entity.sic_code != null ? String(entity.sic_code) : '',
       is_spouse: entity.is_spouse,
+      is_hidden: entity.is_hidden,
     })
     setFormError(null)
     setFormOpen(true)
@@ -129,6 +130,7 @@ export default function EmploymentEntitySection() {
       address: form.address.trim() || null,
       sic_code: form.type === 'sch_c' && form.sic_code ? Number(form.sic_code) : null,
       is_spouse: form.is_spouse,
+      is_hidden: form.is_hidden,
     }
 
     try {
@@ -202,13 +204,20 @@ export default function EmploymentEntitySection() {
                 {entities.some(e => e.is_spouse) && (
                   <TableHead className="hidden md:table-cell">Spouse</TableHead>
                 )}
-                <TableHead className="w-[100px] text-right">Actions</TableHead>
+                <TableHead className="w-[56px] text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {entities.map((entity) => (
                 <TableRow key={entity.id}>
-                  <TableCell className="font-medium">{entity.display_name}</TableCell>
+                  <TableCell className="font-medium">
+                    <span className={entity.is_hidden ? 'text-muted-foreground' : ''}>
+                      {entity.display_name}
+                    </span>
+                    {entity.is_hidden && (
+                      <Badge variant="outline" className="ml-2 text-xs text-muted-foreground">Hidden</Badge>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <Badge variant="outline">{TYPE_LABELS[entity.type]}</Badge>
                   </TableCell>
@@ -230,24 +239,14 @@ export default function EmploymentEntitySection() {
                     </TableCell>
                   )}
                   <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openEdit(entity)}
-                        aria-label={`Edit ${entity.display_name}`}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setDeleteTarget(entity)}
-                        aria-label={`Delete ${entity.display_name}`}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => openEdit(entity)}
+                      aria-label={`Edit ${entity.display_name}`}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -266,6 +265,9 @@ export default function EmploymentEntitySection() {
         onClose={closeForm}
         onFormChange={setForm}
         onSave={handleSave}
+        {...(editingEntity
+          ? { onDeleteRequest: () => { closeForm(); setDeleteTarget(editingEntity) } }
+          : {})}
       />
 
       {/* Delete Confirmation */}

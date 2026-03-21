@@ -43,6 +43,7 @@ function totalStateWH(data: fin_payslip[]) {
 export default function TotalsTable({
   series,
   taxConfig,
+  extraIncome = 0,
 }: {
   series: [string, fin_payslip[]][]
   taxConfig: {
@@ -51,9 +52,11 @@ export default function TotalsTable({
     filingStatus: 'Single' | 'Married' | 'Married Filing Separately' | 'Head of Household'
     standardDeduction: number
   }
+  /** Additional income (e.g. Schedule C net profit/loss) added on top of payslip income. */
+  extraIncome?: number
 }) {
   const calculateTotals = (data: fin_payslip[]) => {
-    const income = totalTaxableIncomeBeforeSubtractions(data)
+    const income = totalTaxableIncomeBeforeSubtractions(data).add(extraIncome)
     const fedWH = totalFedWH(data)
     const stateWH = taxConfig.state ? totalStateWH(data) : currency(0)
     const estTaxIncome = income.subtract(taxConfig.standardDeduction)

@@ -1,6 +1,6 @@
 'use client'
 
-import { Loader2 } from 'lucide-react'
+import { Loader2, Trash2 } from 'lucide-react'
 import React, { useRef } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -34,6 +34,7 @@ export interface EmploymentEntity {
   type: 'sch_c' | 'w2' | 'hobby'
   sic_code: number | null
   is_spouse: boolean
+  is_hidden: boolean
   created_at: string
   updated_at: string
 }
@@ -48,6 +49,7 @@ export interface EmploymentEntityFormData {
   address: string
   sic_code: string
   is_spouse: boolean
+  is_hidden: boolean
 }
 
 export const emptyEmploymentEntityForm: EmploymentEntityFormData = {
@@ -60,6 +62,7 @@ export const emptyEmploymentEntityForm: EmploymentEntityFormData = {
   address: '',
   sic_code: '',
   is_spouse: false,
+  is_hidden: false,
 }
 
 interface EmploymentEntityEditDialogProps {
@@ -71,6 +74,8 @@ interface EmploymentEntityEditDialogProps {
   onClose: () => void
   onFormChange: React.Dispatch<React.SetStateAction<EmploymentEntityFormData>>
   onSave: () => void
+  /** When provided and editing an existing entity, a Delete button will appear in the footer. */
+  onDeleteRequest?: () => void
 }
 
 export default function EmploymentEntityEditDialog({
@@ -82,6 +87,7 @@ export default function EmploymentEntityEditDialog({
   onClose,
   onFormChange,
   onSave,
+  onDeleteRequest,
 }: EmploymentEntityEditDialogProps) {
   const formRef = useRef<HTMLFormElement>(null)
 
@@ -229,9 +235,31 @@ export default function EmploymentEntityEditDialog({
             />
             <Label htmlFor="ee-is-spouse">Spouse</Label>
           </div>
+
+          <div className="flex items-center gap-2">
+            <Switch
+              id="ee-is-hidden"
+              checked={form.is_hidden}
+              onCheckedChange={(checked) => onFormChange((f) => ({ ...f, is_hidden: checked }))}
+            />
+            <Label htmlFor="ee-is-hidden">Hidden (exclude from dropdowns and lookups)</Label>
+          </div>
         </form>
 
-        <DialogFooter>
+        <DialogFooter className="flex-row items-center gap-2">
+          {editingEntity && onDeleteRequest && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mr-auto text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={onDeleteRequest}
+              disabled={saving}
+              type="button"
+            >
+              <Trash2 className="mr-1 h-4 w-4" />
+              Delete
+            </Button>
+          )}
           <Button variant="outline" onClick={onClose} disabled={saving}>
             Cancel
           </Button>

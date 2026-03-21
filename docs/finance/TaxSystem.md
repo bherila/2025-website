@@ -26,6 +26,32 @@ Employment entities represent income sources and are stored in `fin_employment_e
 | `w2` | W-2 employer | Payslips; tags with W-2 tax characteristics |
 | `hobby` | Hobby income (not subject to SE tax) | Tags (optional) |
 
+### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `display_name` | string | Human-readable name shown in the UI |
+| `type` | enum | `sch_c`, `w2`, or `hobby`; immutable after creation |
+| `start_date` | date | When the employment/business started |
+| `end_date` | date\|null | When it ended (null if current) |
+| `is_current` | boolean | Whether the entity is still active |
+| `ein` | string\|null | Employer Identification Number |
+| `address` | text\|null | Mailing address |
+| `sic_code` | integer\|null | SIC code (Schedule C only) |
+| `is_spouse` | boolean | Whether this entity belongs to the spouse |
+| `is_hidden` | boolean | When `true`, the entity is excluded from all selection dropdowns but remains manageable in Settings |
+
+### `is_hidden` Behaviour
+
+When `is_hidden` is `true` for an entity:
+- The entity **is excluded** from: payslip import dropdown, payslip detail form, tag editor entity selector, and any other picker that uses `?visible_only=true`.
+- The entity **remains visible** in the Settings → Employment and Self-Employment table so it can be managed (edited or un-hidden).
+- Hidden entities still appear on the Tax Preview page if they have tagged transactions or payslips.
+
+API usage:
+- Default (`GET /api/finance/employment-entities`) — returns **all** entities including hidden; used by the Settings page.
+- With `?visible_only=true` — returns only non-hidden entities; used by payslip/tag dropdowns.
+
 ### Relationships
 
 - `hasMany` → `FinAccountTag` (via `employment_entity_id`) — tags with entity-specific characteristics
@@ -76,36 +102,32 @@ Marriage/filing status is stored per year as a JSON column (`marriage_status_by_
 ## Tax Preview Page
 
 **Routes**: `GET /finance/tax-preview` (canonical), `GET /finance/schedule-c` (301 redirect)
-**Component**: `resources/js/components/finance/ScheduleCPage.tsx` (wrapped by `TaxPreviewPage.tsx`)
+**Component**: `resources/js/components/finance/TaxPreviewPage.tsx` (orchestrator) + `ScheduleCPreview.tsx` (Schedule C section)
 **Controller**: `app/Http/Controllers/FinanceTool/FinanceScheduleCController.php`
 
-### Features
+### Sections (top to bottom)
 
-- **Year selector** with navigation buttons (defaults to current year)
-  - Uses URL query string (`?year=YYYY`) so the browser Back button works correctly
-  - Pushes browser history on year change; restores from URL on back/forward navigation
-- **"List transactions in-line" toggle** — expands individual transactions under each line item
-- **Grouped by employment entity** — each `sch_c` entity gets its own Schedule C section
-- **Ordinary Income** (interest, dividends, other) shown above Schedule C items
-- **Schedule C layout**: 2-3 column grid per entity:
-  - Column 1: Schedule C Income
-  - Column 2: Schedule C Expenses (includes home office deduction summary)
-  - Column 3 (if applicable): Home Office Deduction details
-- **Home Office Deduction Summary** in the Expenses column:
-  - Prior Year Home Office Carry-Forward (if any)
-  - Allowable Home Office Expense (calculated as min of net business income limit)
-  - Disallowed Home Office (Carry-Forward to next year)
-- **W-2 income** — `w2_wages`, `w2_other_comp` grouped by W-2 entity
-- **Non-entity income** — `interest`, `ordinary_dividend`, `qualified_dividend`, `other_ordinary_income`
-- All years loaded at once; year selector filters the display client-side
-- Amounts displayed as **positive numbers** (negated from stored negative values)
-- Click any row to view contributing transactions
+1. **W-2 Income Summary** — Shown when a specific year is selected and payslips exist. Derives key W-2 line items (wages, bonus, RSU vesting, imputed income, federal/state tax withheld, OASDI, Medicare) from payslip records for the year. Populated from `/api/payslips?year=YYYY`.
+
+2. **Federal Taxes** — Quarterly cumulative tax estimate table (Q1/Q2/Q3/Q4). Income = W-2 payslip income + Schedule C net income (income − expenses − allowable home office). Reuses the `TotalsTable` component from the Payslips page via the `extraIncome` prop.
+
+3. **California State Taxes** — Same as Federal Taxes but for CA state brackets.
+
+4. **Schedule C Preview** (`ScheduleCPreview` component) — Transaction-tag-based Schedule C summary:
+   - Ordinary Income (interest, dividends, other)
+   - W-2 income tagged via transaction tags
+   - Schedule C sections per entity (income / expenses / home office)
+   - **"List transactions in-line" toggle** — when enabled, Schedule C cards expand to full container width (single column) so inline transaction rows are readable
+   - Cards are always single-column on mobile/small screens (< md breakpoint)
+   - All years loaded at once; year selector filters display client-side
+   - `onScheduleCNetIncomeChange` callback emits net Schedule C income to the parent for tax table calculations
 
 ### API
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/api/finance/schedule-c` | Tax data grouped by characteristic and year (all years returned; UI filters client-side) |
+| `GET` | `/api/finance/schedule-c` | Tax data grouped by characteristic and year |
+| `GET` | `/api/payslips?year=YYYY` | Payslip records for the year (W-2 summary and tax tables) |
 
 ---
 
@@ -113,12 +135,21 @@ Marriage/filing status is stored per year as a JSON column (`marriage_status_by_
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/api/finance/employment-entities` | List all entities for the authenticated user |
-| `POST` | `/api/finance/employment-entities` | Create a new entity |
-| `PUT` | `/api/finance/employment-entities/{id}` | Update an entity |
+| `GET` | `/api/finance/employment-entities` | List all entities (including hidden) — used by Settings page |
+| `GET` | `/api/finance/employment-entities?visible_only=true` | List only non-hidden entities — used by payslip/tag dropdowns |
+| `POST` | `/api/finance/employment-entities` | Create a new entity (`is_hidden` supported) |
+| `PUT` | `/api/finance/employment-entities/{id}` | Update an entity (`is_hidden` supported) |
 | `DELETE` | `/api/finance/employment-entities/{id}` | Delete an entity |
 
 **Controller**: `app/Http/Controllers/FinanceTool/FinanceEmploymentEntityController.php`
+
+### Settings Page UX
+
+- The Employment and Self-Employment table shows all entities including hidden ones.
+- Hidden entities are visually dimmed and display a **Hidden** badge.
+- Each row has only an **Edit** (pencil) icon — no delete icon on the row.
+- The **Edit** modal includes an `is_hidden` toggle switch.
+- The **Delete** button is inside the Edit modal footer (not on the table row) since deletion is uncommon. Clicking it closes the modal and opens a confirmation dialog.
 
 ---
 
@@ -130,8 +161,8 @@ Employment Entity (sch_c)
         └── Tagged Transactions → Schedule C tax preview
 
 Employment Entity (w2)
-  ├── Payslips → W-2 reconciliation
-  └── Tags (with w2_* tax_characteristic) → W-2 income summary
+  ├── Payslips → W-2 income summary + Federal/State quarterly tax estimates
+  └── Tags (with w2_* tax_characteristic) → W-2 income summary (transaction-based)
 
 Marriage Status (per year on users table)
   └── Filing status for tax year calculations

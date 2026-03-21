@@ -26,7 +26,7 @@ export function PayslipImportModal({ onImportSuccess }: PayslipImportModalProps)
 
   const fetchW2Jobs = useCallback(async () => {
     try {
-      const data = await fetchWrapper.get('/api/finance/employment-entities') as { id: number; display_name: string; type: string; start_date: string }[]
+      const data = await fetchWrapper.get('/api/finance/employment-entities?visible_only=true') as { id: number; display_name: string; type: string; start_date: string }[]
       const w2Only = data
         .filter(e => e.type === 'w2')
         .sort((a, b) => b.start_date.localeCompare(a.start_date))

@@ -347,4 +347,126 @@ class FinanceEmploymentEntityControllerTest extends TestCase
         $response = $this->actingAs($user)->get('/finance/schedule-c');
         $response->assertRedirect('/finance/tax-preview');
     }
+
+    // -------------------------------------------------------------------------
+    // is_hidden Feature
+    // -------------------------------------------------------------------------
+
+    public function test_store_creates_entity_with_is_hidden_false_by_default(): void
+    {
+        $user = $this->createUser();
+
+        $response = $this->actingAs($user)->postJson('/api/finance/employment-entities', [
+            'display_name' => 'Visible Corp',
+            'start_date' => '2024-01-01',
+            'type' => 'w2',
+            'is_current' => true,
+        ]);
+
+        $response->assertStatus(201)
+            ->assertJsonFragment(['is_hidden' => false]);
+    }
+
+    public function test_store_creates_hidden_entity(): void
+    {
+        $user = $this->createUser();
+
+        $response = $this->actingAs($user)->postJson('/api/finance/employment-entities', [
+            'display_name' => 'Hidden Old Job',
+            'start_date' => '2020-01-01',
+            'end_date' => '2021-12-31',
+            'is_current' => false,
+            'type' => 'w2',
+            'is_hidden' => true,
+        ]);
+
+        $response->assertStatus(201)
+            ->assertJsonFragment(['is_hidden' => true]);
+
+        $this->assertDatabaseHas('fin_employment_entity', [
+            'user_id' => $user->id,
+            'display_name' => 'Hidden Old Job',
+            'is_hidden' => true,
+        ]);
+    }
+
+    public function test_update_can_toggle_is_hidden(): void
+    {
+        $user = $this->createUser();
+
+        $createResponse = $this->actingAs($user)->postJson('/api/finance/employment-entities', [
+            'display_name' => 'Becoming Hidden',
+            'start_date' => '2024-01-01',
+            'type' => 'w2',
+            'is_current' => true,
+            'is_hidden' => false,
+        ]);
+
+        $entityId = $createResponse->json('id');
+
+        $response = $this->actingAs($user)->putJson("/api/finance/employment-entities/{$entityId}", [
+            'display_name' => 'Becoming Hidden',
+            'start_date' => '2024-01-01',
+            'type' => 'w2',
+            'is_current' => true,
+            'is_hidden' => true,
+        ]);
+
+        $response->assertOk()
+            ->assertJsonFragment(['is_hidden' => true]);
+    }
+
+    public function test_index_returns_all_entities_including_hidden_by_default(): void
+    {
+        $user = $this->createUser();
+
+        $this->actingAs($user)->postJson('/api/finance/employment-entities', [
+            'display_name' => 'Visible Job',
+            'start_date' => '2024-01-01',
+            'type' => 'w2',
+            'is_current' => true,
+            'is_hidden' => false,
+        ]);
+
+        $this->actingAs($user)->postJson('/api/finance/employment-entities', [
+            'display_name' => 'Hidden Old Job',
+            'start_date' => '2020-01-01',
+            'type' => 'w2',
+            'is_current' => false,
+            'is_hidden' => true,
+        ]);
+
+        // Default: returns all entities including hidden
+        $response = $this->actingAs($user)->getJson('/api/finance/employment-entities');
+        $response->assertOk();
+        $this->assertCount(2, $response->json());
+    }
+
+    public function test_index_with_visible_only_excludes_hidden_entities(): void
+    {
+        $user = $this->createUser();
+
+        $this->actingAs($user)->postJson('/api/finance/employment-entities', [
+            'display_name' => 'Visible Job',
+            'start_date' => '2024-01-01',
+            'type' => 'w2',
+            'is_current' => true,
+            'is_hidden' => false,
+        ]);
+
+        $this->actingAs($user)->postJson('/api/finance/employment-entities', [
+            'display_name' => 'Hidden Old Job',
+            'start_date' => '2020-01-01',
+            'type' => 'w2',
+            'is_current' => false,
+            'is_hidden' => true,
+        ]);
+
+        // With visible_only=true: only non-hidden entities returned
+        $response = $this->actingAs($user)->getJson('/api/finance/employment-entities?visible_only=true');
+        $response->assertOk();
+        $entities = $response->json();
+        $this->assertCount(1, $entities);
+        $this->assertEquals('Visible Job', $entities[0]['display_name']);
+    }
 }

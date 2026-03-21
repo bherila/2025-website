@@ -22,6 +22,7 @@ class FinanceEmploymentEntityController extends Controller
             'type' => 'required|in:sch_c,w2,hobby',
             'sic_code' => 'nullable|integer',
             'is_spouse' => 'boolean',
+            'is_hidden' => 'boolean',
         ];
     }
 
@@ -37,13 +38,19 @@ class FinanceEmploymentEntityController extends Controller
         return $data;
     }
 
-    public function index()
+    public function index(Request $request)
     {
-        return response()->json(
-            FinEmploymentEntity::where('user_id', Auth::id())
-                ->orderBy('start_date', 'desc')
-                ->get()
-        );
+        $query = FinEmploymentEntity::where('user_id', Auth::id())
+            ->orderBy('start_date', 'desc');
+
+        // By default return all entities (including hidden) so the Settings page
+        // can manage them. Pass ?visible_only=true to exclude hidden entities
+        // (used by dropdowns in payslip forms, tag editor, etc.).
+        if ($request->boolean('visible_only')) {
+            $query->where('is_hidden', false);
+        }
+
+        return response()->json($query->get());
     }
 
     public function store(Request $request)

@@ -281,9 +281,15 @@ interface ScheduleCPreviewProps {
   selectedYear: number | 'all'
   /** Callback to notify the parent of available years and loading state after data is fetched. */
   onAvailableYearsChange: (years: number[], isLoading: boolean) => void
+  /**
+   * Callback emitting the net Schedule C income for the currently selected year.
+   * Net income = sum of all sch_c entity (income - expenses - allowable home office).
+   * Emitted after data loads and when the selected year changes.
+   */
+  onScheduleCNetIncomeChange?: (netIncome: number) => void
 }
 
-export default function ScheduleCPreview({ selectedYear, onAvailableYearsChange }: ScheduleCPreviewProps) {
+export default function ScheduleCPreview({ selectedYear, onAvailableYearsChange, onScheduleCNetIncomeChange }: ScheduleCPreviewProps) {
   const [allData, setAllData] = useState<YearData[] | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -350,6 +356,31 @@ export default function ScheduleCPreview({ selectedYear, onAvailableYearsChange 
     }
     return map
   }, [allData])
+
+  // Compute and emit Schedule C net income for the selected year
+  useEffect(() => {
+    if (!onScheduleCNetIncomeChange) return
+    if (!data || selectedYear === 'all') {
+      onScheduleCNetIncomeChange(0)
+      return
+    }
+    const yearData = data[0]
+    if (!yearData) {
+      onScheduleCNetIncomeChange(0)
+      return
+    }
+    let netTotal = 0
+    for (const entity of yearData.entities) {
+      const entityKey = String(entity.entity_id ?? 'unassigned')
+      const mapKey = `${yearData.year}-${entityKey}`
+      const calc = homeOfficeCalcs.get(mapKey)
+      const income = sumCategories(entity.schedule_c_income ?? {})
+      const expense = sumCategories(entity.schedule_c_expense)
+      const allowableHO = calc?.allowable ?? 0
+      netTotal += income - expense - allowableHO
+    }
+    onScheduleCNetIncomeChange(netTotal)
+  }, [data, homeOfficeCalcs, selectedYear, onScheduleCNetIncomeChange])
 
   return (
     <div className="px-4 pb-8">
@@ -428,8 +459,8 @@ export default function ScheduleCPreview({ selectedYear, onAvailableYearsChange 
                         </div>
                       )}
 
-                      {/* 3-column grid: Income | Expenses | Home Office (if any) */}
-                      <div className={`grid gap-6 ${hasHomeOffice ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
+                      {/* Cards: full-width when showing inline transactions or on small screens; otherwise 2–3 column grid */}
+                      <div className={`grid gap-6 ${showInline ? 'grid-cols-1' : (hasHomeOffice ? 'md:grid-cols-3' : 'md:grid-cols-2')}`}>
                         {/* Column 1: Schedule C Income */}
                         <Card>
                           <CardHeader className="pb-2">
