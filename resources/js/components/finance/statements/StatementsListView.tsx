@@ -1,3 +1,4 @@
+import currency from 'currency.js'
 import { AlertTriangle, Download, Paperclip, Pencil, TableProperties, Trash2 as Delete } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
@@ -164,11 +165,12 @@ export default function StatementsListView({
   }
 
   const handleFormSubmit = async () => {
-    if (!currentDate || !currentBalance || isSubmitting) return
+    const parsedBalance = currency(currentBalance)
+    if (!currentDate || !currentBalance || isNaN(parsedBalance.value) || isSubmitting) return
 
     // Validate cost basis
     if (overrideCostBasis) {
-      const val = parseFloat(costBasisAmount)
+      const val = currency(costBasisAmount).value
       if (isNaN(val) || val < 0) {
         setCostBasisError('Cost basis must be a non-negative number.')
         return
@@ -183,10 +185,10 @@ export default function StatementsListView({
     const method = selectedStatement ? 'put' : 'post'
 
     const payload: Record<string, unknown> = {
-      balance: currentBalance,
+      balance: parsedBalance.value,
       statement_closing_date: currentDate,
       is_cost_basis_override: overrideCostBasis,
-      cost_basis: overrideCostBasis ? parseFloat(costBasisAmount) : 0,
+      cost_basis: overrideCostBasis ? currency(costBasisAmount).value : 0,
     }
 
     try {
@@ -384,8 +386,8 @@ export default function StatementsListView({
                   <label htmlFor="balance-amount" className="w-16">Balance:</label>
                   <input
                     id="balance-amount"
-                    type="number"
-                    step="0.01"
+                    type="text"
+                    inputMode="decimal"
                     value={currentBalance}
                     onChange={(e) => setCurrentBalance(e.target.value)}
                     placeholder="Balance"
@@ -413,9 +415,8 @@ export default function StatementsListView({
                       <label htmlFor="cost-basis-amount" className="w-16">Cost Basis:</label>
                       <Input
                         id="cost-basis-amount"
-                        type="number"
-                        step="0.01"
-                        min="0"
+                        type="text"
+                        inputMode="decimal"
                         value={costBasisAmount}
                         onChange={(e) => {
                           setCostBasisAmount(e.target.value)
@@ -433,7 +434,7 @@ export default function StatementsListView({
                 <div className="flex justify-end">
                   <Button
                     onClick={handleFormSubmit}
-                    disabled={!currentDate || !currentBalance || isSubmitting}
+                    disabled={!currentDate || !currentBalance || isNaN(currency(currentBalance).value) || isSubmitting}
                   >
                     {isSubmitting ? 'Submitting...' : (selectedStatement ? 'Update Snapshot' : 'Add Snapshot')}
                   </Button>

@@ -50,13 +50,20 @@ class StatementController extends Controller
             'balance' => 'required|string',
             'statement_closing_date' => 'required|date',
             'statement_opening_date' => 'nullable|date',
+            'cost_basis' => 'required_if:is_cost_basis_override,true|numeric|min:0',
+            'is_cost_basis_override' => 'nullable|boolean',
         ]);
+
+        $isCostBasisOverride = (bool) ($request->input('is_cost_basis_override', false));
+        $costBasis = $isCostBasisOverride ? (float) $request->input('cost_basis', 0) : 0;
 
         DB::table('fin_statements')->insert([
             'acct_id' => $account->acct_id,
             'balance' => $request->balance,
             'statement_opening_date' => $request->statement_opening_date,
             'statement_closing_date' => $request->statement_closing_date,
+            'is_cost_basis_override' => $isCostBasisOverride,
+            'cost_basis' => $costBasis,
         ]);
 
         return response()->json(['success' => true]);
