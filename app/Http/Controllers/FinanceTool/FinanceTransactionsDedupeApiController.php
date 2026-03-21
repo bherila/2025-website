@@ -359,28 +359,49 @@ class FinanceTransactionsDedupeApiController extends Controller
             }
 
             if (! empty($parentReassignments)) {
-                // We update the links table, NOT the line items table
-                // Any link where a deleted transaction was the parent should now point to the kept transaction
-                $parentCaseSql = 'CASE ';
-                foreach ($parentReassignments as $delId => $keepId) {
-                    $parentCaseSql .= "WHEN parent_t_id = {$delId} THEN {$keepId} ";
+                // Re-map links involving deleted transactions to the kept transactions.
+                // We fetch all affected links, compute the new (parent, child) pairs, then
+                // delete the old links and insert the new ones using insertOrIgnore to avoid
+                // UNIQUE constraint violations when multiple deleted transactions shared a link
+                // or when the kept transaction already had an equivalent link.
+                $deletedIds = array_keys($parentReassignments);
+
+                $affectedLinks = DB::table('fin_account_line_item_links')
+                    ->where(function ($q) use ($deletedIds) {
+                        $q->whereIn('parent_t_id', $deletedIds)
+                            ->orWhereIn('child_t_id', $deletedIds);
+                    })
+                    ->get();
+
+                $newLinks = [];
+                foreach ($affectedLinks as $link) {
+                    $newParent = $parentReassignments[$link->parent_t_id] ?? $link->parent_t_id;
+                    $newChild = $parentReassignments[$link->child_t_id] ?? $link->child_t_id;
+                    // Skip self-referential links that arise when both sides map to the same keeper
+                    if ($newParent === $newChild) {
+                        continue;
+                    }
+                    $newLinks[] = [
+                        'parent_t_id' => $newParent,
+                        'child_t_id' => $newChild,
+                    ];
                 }
-                $parentCaseSql .= 'ELSE parent_t_id END';
 
+                // Remove the old links first, then insert the de-duplicated replacements
                 DB::table('fin_account_line_item_links')
-                    ->whereIn('parent_t_id', array_keys($parentReassignments))
-                    ->update(['parent_t_id' => DB::raw($parentCaseSql)]);
+                    ->where(function ($q) use ($deletedIds) {
+                        $q->whereIn('parent_t_id', $deletedIds)
+                            ->orWhereIn('child_t_id', $deletedIds);
+                    })
+                    ->delete();
 
-                // Also handle cases where a deleted transaction was the child in a link
-                $childCaseSql = 'CASE ';
-                foreach ($parentReassignments as $delId => $keepId) {
-                    $childCaseSql .= "WHEN child_t_id = {$delId} THEN {$keepId} ";
+                if (! empty($newLinks)) {
+                    // Deduplicate in PHP before inserting (multiple old links can collapse to the same pair)
+                    $uniqueLinks = collect($newLinks)
+                        ->unique(fn ($l) => $l['parent_t_id'].'-'.$l['child_t_id'])
+                        ->toArray();
+                    DB::table('fin_account_line_item_links')->insertOrIgnore($uniqueLinks);
                 }
-                $childCaseSql .= 'ELSE child_t_id END';
-
-                DB::table('fin_account_line_item_links')
-                    ->whereIn('child_t_id', array_keys($parentReassignments))
-                    ->update(['child_t_id' => DB::raw($childCaseSql)]);
             }
 
             if (! empty($actualDeleteIds)) {

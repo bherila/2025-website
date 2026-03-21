@@ -338,7 +338,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
   return (
     <>
       {paginationControls}
-      <Table style={{ fontSize: '90%' }}>
+      <Table className="finance-transactions-table">
         <thead>
           <tr>
             <th className="clickable dateCol" onClick={() => handleSort('t_date')}>
