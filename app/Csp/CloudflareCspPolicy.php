@@ -26,6 +26,7 @@ class CloudflareCspPolicy implements Preset
                 Keyword::SELF,
                 'https://static.cloudflareinsights.com',
                 'https://cloudflareinsights.com',
+                'https://o933149.ingest.us.sentry.io',
             ])
             ->add(Directive::IMG, [
                 Keyword::SELF,

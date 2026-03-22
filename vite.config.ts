@@ -9,6 +9,7 @@ export default defineConfig({
     laravel({
       input: [
         'resources/css/app.css',
+        'resources/js/instrument.ts',
         'resources/js/app.jsx',
         'resources/js/navbar.tsx',
         'resources/js/back-to-top.tsx',

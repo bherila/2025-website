@@ -35,7 +35,7 @@
         } catch (e) { /* no-op */ }
       })();
     </script>
-    @vite(['resources/css/app.css', 'resources/js/navbar.tsx', 'resources/js/back-to-top.tsx'])
+    @vite(['resources/css/app.css', 'resources/js/instrument.ts', 'resources/js/navbar.tsx', 'resources/js/back-to-top.tsx'])
     @stack('head')
     <script>(_=>{let a})()</script>
   </head>

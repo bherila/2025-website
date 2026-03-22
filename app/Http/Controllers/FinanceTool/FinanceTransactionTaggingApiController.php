@@ -163,6 +163,7 @@ class FinanceTransactionTaggingApiController extends Controller
         if (is_string($rawIds)) {
             $transaction_ids = array_values(array_filter(array_map(function ($v) {
                 $v = trim($v);
+
                 return ctype_digit($v) ? (int) $v : null;
             }, explode(',', $rawIds))));
         } elseif (is_array($rawIds)) {
@@ -219,6 +220,7 @@ class FinanceTransactionTaggingApiController extends Controller
         if (is_string($rawIds)) {
             $transaction_ids = array_values(array_filter(array_map(function ($v) {
                 $v = trim($v);
+
                 return ctype_digit($v) ? (int) $v : null;
             }, explode(',', $rawIds))));
         } elseif (is_array($rawIds)) {
