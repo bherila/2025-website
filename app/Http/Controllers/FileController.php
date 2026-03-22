@@ -582,7 +582,7 @@ class FileController extends Controller
         });
 
         $storedFilename = FileForFinAccount::generateStoredFilename($originalFilename);
-        $s3Path = FileForFinAccount::generateS3Path($account->acct_id, $storedFilename);
+        $s3Path = FileForFinAccount::generateS3Path($userId, $storedFilename);
 
         $fileModel = new FileForFinAccount([
             'acct_id' => $account->acct_id,

@@ -6,7 +6,6 @@ import type { IbStatementData } from '@/data/finance/parseIbCsv'
 import { fetchWrapper } from '@/fetchWrapper'
 
 import {
-  attachFileToAccounts,
   buildImportBackUrl,
   buildMultiImportPayload,
   CHUNK_SIZE,
@@ -142,72 +141,40 @@ export function useImportExecution({
         }
       }
 
-      // Multi-account PDF import
-      const isMultiAccount = pdfData && pdfAccountBlocks.length > 1
-      if (isMultiAccount) {
+      // PDF import (single or multi account) — always use multi-import-pdf endpoint
+      if (pdfData) {
         const payload = buildMultiImportPayload(pdfAccountBlocks, accountMappings, accountId, {
           importTransactions,
           attachAsStatement,
         })
-        const hasAnyContent = payload.some(
-          (p) => p.transactions.length > 0 || p.statementDetails.length > 0 || p.lots.length > 0,
-        )
+        const hasAnyContent =
+          attachAsStatement ||
+          payload.some((p) => p.transactions.length > 0 || p.statementDetails.length > 0 || p.lots.length > 0)
 
         if (hasAnyContent) {
           try {
+            // Upload the PDF file if needed (when accountId is 'all', upload to first resolved account)
+            let fileHash = uploadedFileHash
+            if (saveFileToS3 && pendingPdfFile && !fileHash) {
+              const firstAccountId = payload[0]?.acct_id
+              if (typeof firstAccountId === 'number') {
+                fileHash = await uploadPdfFile(firstAccountId, pendingPdfFile)
+                if (fileHash) setUploadedFileHash(fileHash)
+              }
+            }
+
             const response = (await fetchWrapper.post('/api/finance/multi-import-pdf', {
               accounts: payload,
+              ...(fileHash ? { file_hash: fileHash } : {}),
             })) as { accounts: Array<{ acct_id: number; statement_id: number }> }
 
             if (response.accounts?.length > 0) {
               statementId = response.accounts[0]!.statement_id
               setImportedStatementId(statementId)
             }
-
-            // Upload PDF once and attach to all accounts
-            if (saveFileToS3 && pendingPdfFile && response.accounts?.length > 0) {
-              const firstAccountId = response.accounts[0]!.acct_id
-              const fileHash = uploadedFileHash ?? (await uploadPdfFile(firstAccountId, pendingPdfFile))
-              if (fileHash) {
-                setUploadedFileHash(fileHash)
-                await attachFileToAccounts(fileHash, response.accounts.slice(1))
-              }
-            } else if (saveFileToS3 && uploadedFileHash && response.accounts?.length > 1) {
-              await attachFileToAccounts(uploadedFileHash, response.accounts.slice(1))
-            }
           } catch (e) {
             const errorMessage = e instanceof Error ? e.message : String(e)
-            setImportError(`Failed to import multi-account statement: ${errorMessage}`)
-            setIsImporting(false)
-            setLoading(false)
-            return
-          }
-        }
-      } else if (pdfData) {
-        // Single-account legacy flow
-        if (accountId === 'all') {
-          setImportError(
-            'Single-account PDF import requires a specific account. The multi-account import should have been used instead.',
-          )
-          setIsImporting(false)
-          setLoading(false)
-          return
-        }
-
-        const hasDetails = (pdfData.statementDetails?.length ?? 0) > 0
-        const hasLots = (pdfData.lots?.length ?? 0) > 0
-        if ((attachAsStatement || hasLots) && (hasDetails || hasLots)) {
-          try {
-            const response = (await fetchWrapper.post(`/api/finance/${accountId}/import-pdf-statement`, {
-              statementInfo: pdfData.statementInfo,
-              statementDetails: attachAsStatement ? pdfData.statementDetails : [],
-              lots: pdfData.lots,
-            })) as { statement_id: number }
-            statementId = response.statement_id
-            setImportedStatementId(statementId)
-          } catch (e) {
-            const errorMessage = e instanceof Error ? e.message : String(e)
-            setImportError(`Failed to import statement details: ${errorMessage}`)
+            setImportError(`Failed to import PDF statement: ${errorMessage}`)
             setIsImporting(false)
             setLoading(false)
             return
@@ -215,8 +182,10 @@ export function useImportExecution({
         }
       }
 
-      // Filter out duplicates and import remaining transactions
-      const transactionsToProcess = importTransactions ? importData : []
+      // Filter out duplicates and import remaining transactions.
+      // For PDF imports, transactions are already submitted via multi-import-pdf, so skip here.
+      const isPdfImport = !!pdfData
+      const transactionsToProcess = (importTransactions && !isPdfImport) ? importData : []
       const newTransactions = filterDuplicates(transactionsToProcess)
 
       setLoading(false)

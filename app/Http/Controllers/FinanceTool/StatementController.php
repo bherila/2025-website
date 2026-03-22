@@ -490,8 +490,9 @@ class StatementController extends Controller
         ]);
 
         $results = [];
+        $fileHash = $request->input('file_hash');
 
-        DB::transaction(function () use ($request, $uid, &$results) {
+        DB::transaction(function () use ($request, $uid, $fileHash, &$results) {
             foreach ($request->input('accounts') as $accountData) {
                 $account = FinAccounts::where('acct_id', $accountData['acct_id'])
                     ->where('acct_owner', $uid)
@@ -512,6 +513,51 @@ class StatementController extends Controller
                     'statement_opening_date' => $periodStart,
                     'statement_closing_date' => $periodEnd,
                 ]);
+
+                // Link the uploaded file (by hash) to the created statement
+                if ($fileHash) {
+                    // Try to find an existing file record for this specific account
+                    $fileRecord = DB::table('files_for_fin_accounts')
+                        ->whereNull('deleted_at')
+                        ->where('acct_id', $account->acct_id)
+                        ->where('file_hash', $fileHash)
+                        ->first();
+
+                    if ($fileRecord) {
+                        // Update statement_id if not yet set
+                        if (! $fileRecord->statement_id) {
+                            DB::table('files_for_fin_accounts')
+                                ->where('id', $fileRecord->id)
+                                ->update(['statement_id' => $statementId, 'updated_at' => now()]);
+                        }
+                    } else {
+                        // Find the source file from any of the user's accounts
+                        $sourceFile = DB::table('files_for_fin_accounts')
+                            ->whereNull('deleted_at')
+                            ->where('file_hash', $fileHash)
+                            ->whereIn('acct_id', function ($q) use ($uid) {
+                                $q->select('acct_id')->from('fin_accounts')->where('acct_owner', $uid);
+                            })
+                            ->first();
+
+                        if ($sourceFile) {
+                            // Clone the file record for this account
+                            DB::table('files_for_fin_accounts')->insert([
+                                'acct_id' => $account->acct_id,
+                                'statement_id' => $statementId,
+                                'file_hash' => $sourceFile->file_hash,
+                                'original_filename' => $sourceFile->original_filename,
+                                'stored_filename' => $sourceFile->stored_filename,
+                                's3_path' => $sourceFile->s3_path,
+                                'mime_type' => $sourceFile->mime_type,
+                                'file_size_bytes' => $sourceFile->file_size_bytes,
+                                'uploaded_by_user_id' => $sourceFile->uploaded_by_user_id,
+                                'created_at' => now(),
+                                'updated_at' => now(),
+                            ]);
+                        }
+                    }
+                }
 
                 if (! empty($statementDetails)) {
                     $detailRows = array_map(function ($row) use ($statementId) {

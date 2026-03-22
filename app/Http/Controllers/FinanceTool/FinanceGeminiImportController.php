@@ -394,7 +394,12 @@ Return the data as JSON with this structure for a **single-account** statement:
       "date": "YYYY-MM-DD",
       "description": "Transaction description",
       "amount": 100.00,
-      "type": "deposit"
+      "type": "deposit",
+      "symbol": "AAPL",
+      "quantity": 100,
+      "price": 150.00,
+      "commission": 0,
+      "fee": 0
     }
   ],
   "lots": [
@@ -423,7 +428,7 @@ For a **multi-account** statement (e.g. a bank summary with multiple sub-account
     {
       "statementInfo": { "brokerName": "Bank", "accountNumber": "xxxx1234", "accountName": "Savings", "periodStart": "YYYY-MM-DD", "periodEnd": "YYYY-MM-DD", "closingBalance": 5000.00 },
       "statementDetails": [],
-      "transactions": [{ "date": "YYYY-MM-DD", "description": "Deposit", "amount": 100.00, "type": "deposit" }],
+      "transactions": [{ "date": "YYYY-MM-DD", "description": "Deposit", "amount": 100.00, "type": "deposit", "symbol": null, "quantity": null, "price": null, "commission": 0, "fee": 0 }],
       "lots": []
     },
     {
@@ -440,11 +445,12 @@ For a **multi-account** statement (e.g. a bank summary with multiple sub-account
 1. Return ONLY valid JSON with no other text.
 2. All dates should be in YYYY-MM-DD format.
 3. **IMPORTANT: Only extract PARTNER-LEVEL or INVESTOR-LEVEL data.** Do NOT extract data from fund-level sections such as "Fund Level Capital Account", "Fund Level Summary", "Statement of Operations", "Statement of changes in partners' capital", "Statement of assets, liabilities, and partners' capital", "Statement of cash flows", or any section that describes the overall fund rather than the individual partner/investor.
-4. **Statement Details**: Extract ALL line items from PARTNER/INVESTOR-level sections with columns like "MTD" and "YTD", "Statement Period" and "YTD", or similar period-based columns. These include:
+4. **Statement Details**: Extract ALL line items from sections with period-based columns (MTD/YTD, Statement Period/YTD, or similar). This includes both hedge fund/partnership sections and retail brokerage/robo-advisor summary sections such as:
    - Statement Summary (\$ and %)
    - Investor Capital Account
    - Tax and Pre-Tax Return Detail
-   - Any similar partner/investor-level summary/performance sections
+   - Account Value, Net Contributions, Time-Weighted Return, Positions
+   - Any similar investor/account-level summary or performance sections
 5. For statement details:
    - `section`: The section header (e.g., "Statement Summary (\$)", "Investor Capital Account")
    - `line_item`: The row label (e.g., "Pre-Tax Return", "Total Beginning Capital")
@@ -465,7 +471,12 @@ For a **multi-account** statement (e.g. a bank summary with multiple sub-account
    - "Management Fee", "Incentive Allocation", "Total Fees"
    - "Realized Gain/Loss", "Unrealized Gain/Loss", "Change in Unrealized"
    If the document uses a variant (e.g. "Pre - Tax Return", "Mgt Fee"), normalize to the canonical name.
-8. **Transactions**: Extract individual dated transactions (deposits, withdrawals, trades, etc.) if present.
+8. **Transactions**: Extract individual dated transactions (deposits, withdrawals, trades, etc.) if present. For brokerage/investment transactions, include optional fields:
+   - `symbol`: Ticker symbol (e.g., "AAPL") — omit or set null if not applicable
+   - `quantity`: Number of shares/units — omit or set null if not applicable
+   - `price`: Per-share/unit price — omit or set null if not applicable
+   - `commission`: Commission paid — omit or set 0 if none
+   - `fee`: Additional fee — omit or set 0 if none
 9. **Lots**: Extract lot-level position data if present.
    - `purchaseDate`: The acquisition/investment date (may be labeled "Invt. Date", "Acquisition Date", "Purchase Date", or similar).
    - For **open lots** (positions still held with unrealized gain/loss), include `marketValue` and `unrealizedGainLoss`. Omit `saleDate`, `proceeds`, and `realizedGainLoss`.

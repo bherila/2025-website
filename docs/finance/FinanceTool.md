@@ -642,7 +642,7 @@ PDF statements can be imported using Gemini AI for parsing. The frontend now pro
    **Date handling:** any dates extracted from the PDF (e.g. transaction dates or statement period dates) are truncated to the `YYYY-MM-DD` string form on the server before being returned. This avoids timezone conversions and ensures the database stores plain date strings without time or zone components.
    **Fund-Level Filtering:** The import process automatically filters out fund-level information. The Gemini prompt instructs the AI to ignore sections like "Fund Level Capital Account," and a server-side filter provides a safety net by skipping any parsed rows where the section name contains "Fund Level."
 4. Gemini returns a structured JSON object containing any combination of statement information, statement detail rows, transaction entries, and investment lots. The front end renders preview cards showing the parsed output and highlights duplicates.
-5. After reviewing the data, the user confirms by clicking the import button. The existing import logic remains unchanged: transactions are POSTed in chunks and, if statement details or lots exist, the page calls `/api/finance/{id}/import-pdf-statement` to save them (the server‑side controller is `StatementController`).
+5. After reviewing the data, the user confirms by clicking the import button. All PDF imports (single-account and multi-account) are now submitted via `POST /api/finance/multi-import-pdf`. The `file_hash` of the uploaded PDF is passed in the payload so the backend can atomically link the stored file to every created statement. Non-PDF text imports (CSV/QIF/OFX) continue to post transactions in chunks to `/api/finance/{account_id}/line_items`.
 
 ### API Endpoints
 
@@ -651,7 +651,7 @@ PDF statements can be imported using Gemini AI for parsing. The frontend now pro
 | `GET /api/finance/all/line_items` | `FinanceTransactionsApiController@getLineItems` | Get all transactions across all accounts (supports streaming, year/filter/tag params) |
 | `GET /api/finance/{account_id}/line_items` | `FinanceTransactionsApiController@getLineItems` | Get transactions for a single account |
 | `POST /api/finance/transactions/import-gemini` | `FinanceGeminiImportController@parseDocument` | Parse PDF or other file with Gemini (cached by file hash) |
-| `POST /api/finance/{id}/import-pdf-statement` | `StatementController` | Save parsed statement data (details and lots) |
+| `POST /api/finance/multi-import-pdf` | `StatementController@importMultiAccountPdf` | Import parsed PDF data for one or more accounts; accepts optional `file_hash` to link the stored PDF to all created statements |
 | `GET /api/finance/{id}/lots` | `FinanceLotsController@index` | Fetch open/closed lots for an account |
 | `POST /api/finance/{id}/lots` | `FinanceLotsController@store` | Manually add a lot to an account |
 

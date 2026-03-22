@@ -40,7 +40,9 @@ export function useImportSummary({
   const effectiveData = data ?? pdfParsedData
 
   // Check if we have statement details or lots from PDF (aggregated across all blocks)
-  const hasStatementDetails = pdfAccountBlocks.some((b) => (b.statementDetails?.length ?? 0) > 0)
+  // hasStatementDetails is true whenever there are PDF account blocks, so that users
+  // can save the PDF as an empty statement even if no detail lines were extracted.
+  const hasStatementDetails = pdfAccountBlocks.length > 0
   const hasLots = pdfAccountBlocks.some((b) => (b.lots?.length ?? 0) > 0)
   const transactionCount = effectiveData?.length ?? 0
 
@@ -97,7 +99,7 @@ export function useImportSummary({
       ? pdfAccountBlocks.some(
           (b) =>
             (importTransactions && (b.transactions?.length ?? 0) > 0) ||
-            (attachAsStatement && (b.statementDetails?.length ?? 0) > 0) ||
+            (attachAsStatement && pdfAccountBlocks.length > 0) ||
             (b.lots?.length ?? 0) > 0,
         )
       : (importTransactions && transactionCount > 0) ||
