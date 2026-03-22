@@ -66,14 +66,16 @@ trait HasFileStorage
     }
 
     /**
-     * Get the stored filename with date prefix.
-     * Format: "yyyy.mm.dd original_filename"
+     * Get the stored filename with date prefix and a random token to prevent collisions.
+     * Format: "yyyy.mm.dd abcde original_filename"
+     * where "abcde" is a random 5-character lowercase alphanumeric string.
      */
     public static function generateStoredFilename(string $originalFilename): string
     {
         $datePart = now()->format('Y.m.d');
+        $randomPart = strtolower(substr(bin2hex(random_bytes(4)), 0, 5));
 
-        return $datePart.' '.$originalFilename;
+        return $datePart.' '.$randomPart.' '.$originalFilename;
     }
 
     /**

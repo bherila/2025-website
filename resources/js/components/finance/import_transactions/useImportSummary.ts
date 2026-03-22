@@ -60,9 +60,7 @@ export function useImportSummary({
       if (importTransactions && multiAccountTransactionCount > 0) {
         parts.push(`${multiAccountTransactionCount} Transaction${multiAccountTransactionCount !== 1 ? 's' : ''}`)
       }
-      const statementCount = pdfAccountBlocks.filter(
-        (b) => attachAsStatement && (b.statementDetails?.length ?? 0) > 0,
-      ).length
+      const statementCount = attachAsStatement ? pdfAccountBlocks.length : 0
       if (statementCount > 0) parts.push(`${statementCount} Statement${statementCount !== 1 ? 's' : ''}`)
       const lotsCount = pdfAccountBlocks.reduce((s, b) => s + (b.lots?.length ?? 0), 0)
       if (lotsCount > 0) parts.push(`${lotsCount} Lot${lotsCount !== 1 ? 's' : ''}`)

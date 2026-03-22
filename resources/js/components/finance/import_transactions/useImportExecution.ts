@@ -147,6 +147,20 @@ export function useImportExecution({
           importTransactions,
           attachAsStatement,
         })
+
+        // Guard: all account IDs in the payload must be resolved to numbers.
+        // If any block still has 'all' as its account ID the backend will reject the request
+        // with a 422 (expects integer). Ask the user to select a specific account.
+        const unresolvedBlock = payload.find((p) => p.acct_id === 'all')
+        if (unresolvedBlock) {
+          setImportError(
+            'One or more PDF account blocks could not be matched to a specific account. Please select an account for each block before importing.',
+          )
+          setIsImporting(false)
+          setLoading(false)
+          return
+        }
+
         const hasAnyContent =
           attachAsStatement ||
           payload.some((p) => p.transactions.length > 0 || p.statementDetails.length > 0 || p.lots.length > 0)
