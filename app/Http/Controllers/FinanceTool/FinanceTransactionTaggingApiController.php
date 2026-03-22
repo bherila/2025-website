@@ -158,7 +158,20 @@ class FinanceTransactionTaggingApiController extends Controller
             'tag_id' => 'nullable|integer',
         ]);
 
-        $transaction_ids = explode(',', $request->transaction_ids);
+        // Normalize `transaction_ids`: accept a comma-separated string or an array, cast to ints
+        $rawIds = $request->input('transaction_ids');
+        if (is_string($rawIds)) {
+            $transaction_ids = array_values(array_filter(array_map(function ($v) {
+                $v = trim($v);
+                return ctype_digit($v) ? (int) $v : null;
+            }, explode(',', $rawIds))));
+        } elseif (is_array($rawIds)) {
+            $transaction_ids = array_values(array_filter(array_map(function ($v) {
+                return is_numeric($v) ? (int) $v : null;
+            }, $rawIds)));
+        } else {
+            $transaction_ids = [];
+        }
 
         // Only remove tags that belong to this user (via fin_account_tag)
         $userTagIds = FinAccountTag::where('tag_userid', $uid)
@@ -201,7 +214,24 @@ class FinanceTransactionTaggingApiController extends Controller
             return response()->json(['error' => 'Tag not found'], 404);
         }
 
-        $transaction_ids = explode(',', $request->transaction_ids);
+        // Normalize `transaction_ids`: accept a comma-separated string or an array, cast to ints
+        $rawIds = $request->input('transaction_ids');
+        if (is_string($rawIds)) {
+            $transaction_ids = array_values(array_filter(array_map(function ($v) {
+                $v = trim($v);
+                return ctype_digit($v) ? (int) $v : null;
+            }, explode(',', $rawIds))));
+        } elseif (is_array($rawIds)) {
+            $transaction_ids = array_values(array_filter(array_map(function ($v) {
+                return is_numeric($v) ? (int) $v : null;
+            }, $rawIds)));
+        } else {
+            $transaction_ids = [];
+        }
+
+        if (empty($transaction_ids)) {
+            return response()->json(['error' => 'No valid transaction_ids provided'], 400);
+        }
 
         foreach ($transaction_ids as $transaction_id) {
             FinAccountLineItemTagMap::updateOrCreate(
