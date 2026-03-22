@@ -954,6 +954,15 @@ CREATE TABLE `vxcv_links`(
   `url` TEXT NOT NULL
 );
 
+CREATE TABLE `fin_transaction_non_duplicate_pairs`(
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `t_id_1` INTEGER NOT NULL,
+  `t_id_2` INTEGER NOT NULL,
+  `created_at` TEXT,
+  UNIQUE(`t_id_1`, `t_id_2`),
+  FOREIGN KEY(`t_id_1`) REFERENCES `fin_account_line_items`(`t_id`) ON DELETE CASCADE,
+  FOREIGN KEY(`t_id_2`) REFERENCES `fin_account_line_items`(`t_id`) ON DELETE CASCADE
+);
 INSERT INTO migrations VALUES(1,'0001_01_01_000000_create_schema_baseline',1);
 INSERT INTO migrations VALUES(2,'2026_03_05_000000_create_fin_account_lots_table',2);
 INSERT INTO migrations VALUES(3,'2026_03_05_001906_add_hash_and_statement_id_to_finance_tables',2);
@@ -963,3 +972,4 @@ INSERT INTO migrations VALUES(6,'2026_01_29_031451_change_quantity_column_to_var
 INSERT INTO migrations VALUES(7,'2026_02_05_062520_add_catch_up_threshold_hours_to_client_agreements_table',3);
 INSERT INTO migrations VALUES(8,'2026_02_07_000000_add_starting_balances_to_client_invoices',3);
 INSERT INTO migrations VALUES(9,'2026_03_13_083906_add_tax_characteristic_to_fin_account_tag_table',3);
+INSERT INTO migrations VALUES(10,'2026_03_22_063625_create_fin_transaction_non_duplicate_pairs_table',4);

@@ -44,7 +44,6 @@ export default function DuplicatesPage({ id }: { id: number }) {
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [selectedYear, setSelectedYear] = useState<YearSelection | null>(null)
   const [isReanalyzing, setIsReanalyzing] = useState(false)
-  const [markedAsNonDuplicate, setMarkedAsNonDuplicate] = useState(0)
   const [previouslyMarkedCount, setPreviouslyMarkedCount] = useState(0)
 
   // Get year from URL/sessionStorage on mount and listen for changes
@@ -84,7 +83,6 @@ export default function DuplicatesPage({ id }: { id: number }) {
       const query = params.toString() ? `?${params.toString()}` : ''
       const data = await fetchWrapper.get(`/api/finance/${id}/duplicates${query}`)
       setDuplicateGroups(data.groups || [])
-      setMarkedAsNonDuplicate(data.markedAsNonDuplicate || 0)
       setPreviouslyMarkedCount(data.previouslyMarkedCount || 0)
 
       // Pre-select all suggested deletions
@@ -123,8 +121,8 @@ export default function DuplicatesPage({ id }: { id: number }) {
   const handleMerge = async () => {
     // Build merge requests - group by which transactions to keep
     const mergeRequests: { keepId: number; deleteIds: number[] }[] = []
-    // Track groups that are entirely unchecked (to mark as non-duplicates)
-    const markAsNotDuplicateIds: number[] = []
+    // Track pairs from groups that are entirely unchecked (to mark as not duplicates)
+    const markAsNotDuplicatePairs: { t_id_1: number; t_id_2: number }[] = []
 
     for (const group of duplicateGroups) {
       const deleteIds = group.transactions
@@ -145,14 +143,23 @@ export default function DuplicatesPage({ id }: { id: number }) {
           mergeRequests.push({ keepId, deleteIds })
         }
       } else {
-        // Group is entirely unchecked - mark all as non-duplicates
-        for (const tx of group.transactions) {
-          markAsNotDuplicateIds.push(tx.t_id)
+        // Group is entirely unchecked - register all pairs as confirmed non-duplicates.
+        // For a group of n transactions, this generates n*(n-1)/2 pairs (O(n²)),
+        // which is acceptable since duplicate groups are typically small (2-3 transactions).
+        const txIds = group.transactions.map(t => t.t_id)
+        for (let i = 0; i < txIds.length; i++) {
+          for (let j = i + 1; j < txIds.length; j++) {
+            const id1 = txIds[i]
+            const id2 = txIds[j]
+            if (id1 !== undefined && id2 !== undefined) {
+              markAsNotDuplicatePairs.push({ t_id_1: id1, t_id_2: id2 })
+            }
+          }
         }
       }
     }
 
-    if (mergeRequests.length === 0 && markAsNotDuplicateIds.length === 0) {
+    if (mergeRequests.length === 0 && markAsNotDuplicatePairs.length === 0) {
       setError('No operations to perform')
       return
     }
@@ -164,14 +171,14 @@ export default function DuplicatesPage({ id }: { id: number }) {
     try {
       const result = await fetchWrapper.post(`/api/finance/${id}/merge-duplicates`, {
         merges: mergeRequests,
-        markAsNotDuplicateIds: markAsNotDuplicateIds
+        markAsNotDuplicatePairs: markAsNotDuplicatePairs
       })
       const messages: string[] = []
       if (result.mergedCount > 0) {
         messages.push(`merged ${result.mergedCount} duplicate transaction(s)`)
       }
       if (result.markedAsNotDuplicate > 0) {
-        messages.push(`marked ${result.markedAsNotDuplicate} as not duplicates`)
+        messages.push(`marked ${result.markedAsNotDuplicate} pair${result.markedAsNotDuplicate !== 1 ? 's' : ''} as not duplicates`)
       }
       setSuccessMessage(`Successfully ${messages.join(' and ')}`)
       // Refresh the list
@@ -184,21 +191,21 @@ export default function DuplicatesPage({ id }: { id: number }) {
   }
 
   // Compute counts for button text
-  const { deleteCount, markAsNonDuplicateCount } = useMemo(() => {
+  const { deleteCount, markAsNonDuplicateGroupCount } = useMemo(() => {
     let deleteCount = 0
-    let markAsNonDuplicateCount = 0
+    let markAsNonDuplicateGroupCount = 0
 
     for (const group of duplicateGroups) {
       const selectedInGroup = group.transactions.filter(t => selectedForDeletion.has(t.t_id)).length
       if (selectedInGroup > 0) {
         deleteCount += selectedInGroup
       } else {
-        // Group is entirely unchecked - all will be marked as non-duplicates
-        markAsNonDuplicateCount += group.transactions.length
+        // Group is entirely unchecked - will be marked as confirmed non-duplicate pairs
+        markAsNonDuplicateGroupCount += 1
       }
     }
 
-    return { deleteCount, markAsNonDuplicateCount }
+    return { deleteCount, markAsNonDuplicateGroupCount }
   }, [duplicateGroups, selectedForDeletion])
 
   const selectAll = () => {
@@ -254,12 +261,7 @@ export default function DuplicatesPage({ id }: { id: number }) {
           <p>No duplicate transactions found for this account.</p>
           {previouslyMarkedCount > 0 && (
             <p className="text-sm text-blue-600 dark:text-blue-400">
-              {previouslyMarkedCount} transaction{previouslyMarkedCount !== 1 ? 's' : ''} previously marked as non-duplicate.
-            </p>
-          )}
-          {markedAsNonDuplicate > 0 && (
-            <p className="text-sm text-green-600 dark:text-green-400">
-              {markedAsNonDuplicate} transaction{markedAsNonDuplicate !== 1 ? 's' : ''} just marked as verified non-duplicates.
+              {previouslyMarkedCount} confirmed non-duplicate pair{previouslyMarkedCount !== 1 ? 's' : ''} registered for this account.
             </p>
           )}
         </div>
@@ -277,7 +279,7 @@ export default function DuplicatesPage({ id }: { id: number }) {
             </Button>
             <Button
               onClick={handleMerge}
-              disabled={isMerging || (deleteCount === 0 && markAsNonDuplicateCount === 0)}
+              disabled={isMerging || (deleteCount === 0 && markAsNonDuplicateGroupCount === 0)}
               className="ml-auto"
             >
               {isMerging ? (
@@ -288,9 +290,9 @@ export default function DuplicatesPage({ id }: { id: number }) {
               ) : (
                 <>
                   {deleteCount > 0 && `Merge & Delete ${deleteCount}`}
-                  {deleteCount > 0 && markAsNonDuplicateCount > 0 && ', '}
-                  {markAsNonDuplicateCount > 0 && `Mark ${markAsNonDuplicateCount} as Not Duplicates`}
-                  {deleteCount === 0 && markAsNonDuplicateCount === 0 && 'No Changes'}
+                  {deleteCount > 0 && markAsNonDuplicateGroupCount > 0 && ', '}
+                  {markAsNonDuplicateGroupCount > 0 && `Mark ${markAsNonDuplicateGroupCount} Group${markAsNonDuplicateGroupCount !== 1 ? 's' : ''} as Not Duplicates`}
+                  {deleteCount === 0 && markAsNonDuplicateGroupCount === 0 && 'No Changes'}
                 </>
               )}
             </Button>
