@@ -14,14 +14,13 @@ class FinanceTransactionsDedupeApiController extends Controller
 {
     /**
      * Find duplicate transactions in an account
-     * Duplicates are detected by: same date + qty + amount + symbol + balance
+     * Duplicates are detected by: same date + qty + amount + symbol
      * Also checks if description/memo are identical or swapped
      *
-     * Transactions marked as t_is_not_duplicate=1 are excluded from duplicate detection.
-     * At the end, transactions that had no duplicates are marked as t_is_not_duplicate=1.
+     * Transaction pairs registered in fin_transaction_non_duplicate_pairs are excluded.
      *
-     * Note: We keep the NEWER t_id (highest) and delete older ones because when re-importing
-     * CSV data, the newer import may have more complete/updated data.
+     * Note: We prefer to keep the transaction with the most information (non-null fields).
+     * If equally detailed, we prefer the newer t_id (highest).
      */
     public function findDuplicates(Request $request, $account_id)
     {
@@ -37,13 +36,11 @@ class FinanceTransactionsDedupeApiController extends Controller
             $year = intval($request->year);
         }
 
-        // Count how many transactions were already marked as non-duplicate (for UI info)
-        $previouslyMarkedQuery = FinAccountLineItems::where('t_account', $account->acct_id)
-            ->where('t_is_not_duplicate', true);
-        if ($year) {
-            $previouslyMarkedQuery->whereYear('t_date', $year);
-        }
-        $previouslyMarkedCount = $previouslyMarkedQuery->count();
+        // Count how many transaction pairs were already confirmed as non-duplicates (for UI info)
+        $previouslyMarkedCount = DB::table('fin_transaction_non_duplicate_pairs')
+            ->join('fin_account_line_items as t1', 'fin_transaction_non_duplicate_pairs.t_id_1', '=', 't1.t_id')
+            ->where('t1.t_account', $account->acct_id)
+            ->count();
 
         // Step 1: Identify candidate duplicate groups using SQL GROUP BY
         // We omit t_account_balance to catch duplicates imported with different running balances
@@ -53,10 +50,6 @@ class FinanceTransactionsDedupeApiController extends Controller
             ->groupBy('t_date', 't_qty', 't_amt', 't_symbol')
             ->havingRaw('COUNT(*) > 1');
 
-        if (! $reanalyze) {
-            $candidateQuery->where('t_is_not_duplicate', false);
-        }
-
         if ($year) {
             $candidateQuery->whereYear('t_date', $year);
         }
@@ -64,18 +57,9 @@ class FinanceTransactionsDedupeApiController extends Controller
         $candidates = $candidateQuery->get();
 
         if ($candidates->isEmpty()) {
-            // No duplicates found, mark ALL remaining as non-duplicate if not filtered too much
-            $markedAsNonDuplicate = FinAccountLineItems::where('t_account', $account->acct_id)
-                ->where('t_is_not_duplicate', false);
-            if ($year) {
-                $markedAsNonDuplicate->whereYear('t_date', $year);
-            }
-            $count = $markedAsNonDuplicate->update(['t_is_not_duplicate' => true]);
-
             return response()->json([
                 'groups' => [],
                 'total' => 0,
-                'markedAsNonDuplicate' => $count,
                 'previouslyMarkedCount' => $previouslyMarkedCount,
             ]);
         }
@@ -84,10 +68,6 @@ class FinanceTransactionsDedupeApiController extends Controller
         $query = FinAccountLineItems::where('t_account', $account->acct_id)
             ->whereNull('when_deleted')
             ->with(['tags', 'parentTransactions:t_id']);
-
-        if (! $reanalyze) {
-            $query->where('t_is_not_duplicate', false);
-        }
 
         if ($year) {
             $query->whereYear('t_date', $year);
@@ -109,6 +89,22 @@ class FinanceTransactionsDedupeApiController extends Controller
             ->orderBy('t_id', 'asc')
             ->get();
 
+        // Load all confirmed non-duplicate pairs for these transactions so we can filter in PHP
+        $transactionIds = $transactions->pluck('t_id')->toArray();
+        $knownNonDuplicatePairs = [];
+        if (! empty($transactionIds)) {
+            $pairs = DB::table('fin_transaction_non_duplicate_pairs')
+                ->where(function ($q) use ($transactionIds) {
+                    $q->whereIn('t_id_1', $transactionIds)
+                        ->orWhereIn('t_id_2', $transactionIds);
+                })
+                ->get();
+            foreach ($pairs as $pair) {
+                $key = min($pair->t_id_1, $pair->t_id_2).'_'.max($pair->t_id_1, $pair->t_id_2);
+                $knownNonDuplicatePairs[$key] = true;
+            }
+        }
+
         // Step 3: Group transactions by their identifying fields in PHP
         $initialGroups = [];
         foreach ($transactions as $t) {
@@ -123,7 +119,6 @@ class FinanceTransactionsDedupeApiController extends Controller
 
         // Step 4: Refine groups by checking description/memo (swapped or identical)
         $groups = [];
-        $idsInDuplicateGroups = [];
         $limitReached = false;
 
         foreach ($initialGroups as $key => $groupTransactions) {
@@ -179,28 +174,30 @@ class FinanceTransactionsDedupeApiController extends Controller
                 }
 
                 $allInGroup = collect($allInGroup);
-                foreach ($allInGroup as $t) {
-                    $idsInDuplicateGroups[] = $t->t_id;
+
+                // Filter out pairs that are already confirmed as non-duplicates
+                $filteredGroup = $this->filterKnownNonDuplicates($allInGroup, $knownNonDuplicatePairs);
+                if ($filteredGroup->count() < 2) {
+                    continue;
                 }
 
-                $keepTransaction = $allInGroup->sort(function ($a, $b) {
-                    // Prioritize those already marked as not duplicate
-                    if ($a->t_is_not_duplicate && ! $b->t_is_not_duplicate) {
-                        return 1;
-                    }
-                    if (! $a->t_is_not_duplicate && $b->t_is_not_duplicate) {
-                        return -1;
+                $keepTransaction = $filteredGroup->sort(function ($a, $b) {
+                    // Prefer transaction with more information
+                    $scoreA = $this->informationScore($a);
+                    $scoreB = $this->informationScore($b);
+                    if ($scoreA !== $scoreB) {
+                        return $scoreA <=> $scoreB;
                     }
 
                     // Fallback to ID (prefer newer)
                     return $a->t_id <=> $b->t_id;
                 })->last();
 
-                $deleteIds = $allInGroup->filter(fn ($t) => $t->t_id !== $keepTransaction->t_id)->pluck('t_id')->toArray();
+                $deleteIds = $filteredGroup->filter(fn ($t) => $t->t_id !== $keepTransaction->t_id)->pluck('t_id')->toArray();
 
                 $groups[] = [
                     'key' => $key,
-                    'transactions' => $allInGroup->map(function ($t) {
+                    'transactions' => $filteredGroup->map(function ($t) {
                         return [
                             't_id' => $t->t_id,
                             't_date' => $t->t_date,
@@ -225,28 +222,9 @@ class FinanceTransactionsDedupeApiController extends Controller
             }
         }
 
-        // Mark transactions that had no duplicates as verified non-duplicates
-        // Only do this if we scanned all potential candidates (not limited by group count)
-        $markedAsNonDuplicate = 0;
-        if (! $limitReached) {
-            $nonDuplicateQuery = FinAccountLineItems::where('t_account', $account->acct_id)
-                ->where('t_is_not_duplicate', false);
-
-            if ($year) {
-                $nonDuplicateQuery->whereYear('t_date', $year);
-            }
-
-            if (! empty($idsInDuplicateGroups)) {
-                $nonDuplicateQuery->whereNotIn('t_id', $idsInDuplicateGroups);
-            }
-
-            $markedAsNonDuplicate = $nonDuplicateQuery->update(['t_is_not_duplicate' => true]);
-        }
-
         return response()->json([
             'groups' => $groups,
             'total' => count($groups),
-            'markedAsNonDuplicate' => $markedAsNonDuplicate,
             'previouslyMarkedCount' => $previouslyMarkedCount,
         ]);
     }
@@ -256,7 +234,7 @@ class FinanceTransactionsDedupeApiController extends Controller
      * - Combines tags from all transactions onto the kept transaction
      * - Reassigns parent_t_id from deleted transactions to kept transaction
      * - Deletes the specified transactions
-     * - Marks unchecked groups as non-duplicates (t_is_not_duplicate = 1)
+     * - Records confirmed non-duplicate pairs in fin_transaction_non_duplicate_pairs
      */
     public function mergeDuplicates(Request $request, $account_id)
     {
@@ -268,23 +246,58 @@ class FinanceTransactionsDedupeApiController extends Controller
             'merges.*.keepId' => 'required|integer',
             'merges.*.deleteIds' => 'required|array|min:1',
             'merges.*.deleteIds.*' => 'integer',
-            'markAsNotDuplicateIds' => 'sometimes|array',
-            'markAsNotDuplicateIds.*' => 'integer',
+            'markAsNotDuplicatePairs' => 'sometimes|array',
+            'markAsNotDuplicatePairs.*' => 'array',
+            'markAsNotDuplicatePairs.*.t_id_1' => 'required|integer',
+            'markAsNotDuplicatePairs.*.t_id_2' => 'required|integer',
         ]);
 
         $merges = $request->merges ?? [];
-        $markAsNotDuplicateIds = $request->markAsNotDuplicateIds ?? [];
+        $markAsNotDuplicatePairs = $request->markAsNotDuplicatePairs ?? [];
         $totalDeleted = 0;
         $totalTagsAdded = 0;
         $totalMarkedAsNotDuplicate = 0;
 
         DB::beginTransaction();
         try {
-            // Mark unchecked groups as non-duplicates
-            if (! empty($markAsNotDuplicateIds)) {
-                $totalMarkedAsNotDuplicate = FinAccountLineItems::whereIn('t_id', $markAsNotDuplicateIds)
+            // Record confirmed non-duplicate pairs
+            if (! empty($markAsNotDuplicatePairs)) {
+                // Verify all transaction IDs belong to this account
+                $allPairIds = [];
+                foreach ($markAsNotDuplicatePairs as $pair) {
+                    $allPairIds[] = $pair['t_id_1'];
+                    $allPairIds[] = $pair['t_id_2'];
+                }
+                $allPairIds = array_unique($allPairIds);
+
+                $validIds = FinAccountLineItems::whereIn('t_id', $allPairIds)
                     ->where('t_account', $account->acct_id)
-                    ->update(['t_is_not_duplicate' => true]);
+                    ->pluck('t_id')
+                    ->toArray();
+                $validIdsSet = array_flip($validIds);
+
+                $pairsToInsert = [];
+                foreach ($markAsNotDuplicatePairs as $pair) {
+                    $id1 = $pair['t_id_1'];
+                    $id2 = $pair['t_id_2'];
+                    if (isset($validIdsSet[$id1]) && isset($validIdsSet[$id2]) && $id1 !== $id2) {
+                        // Always store with smaller ID first for consistent lookup
+                        $pairsToInsert[] = [
+                            't_id_1' => min($id1, $id2),
+                            't_id_2' => max($id1, $id2),
+                            'created_at' => now(),
+                        ];
+                    }
+                }
+
+                if (! empty($pairsToInsert)) {
+                    // Deduplicate before inserting
+                    $pairsToInsert = collect($pairsToInsert)
+                        ->unique(fn ($p) => $p['t_id_1'].'-'.$p['t_id_2'])
+                        ->toArray();
+                    DB::table('fin_transaction_non_duplicate_pairs')->insertOrIgnore($pairsToInsert);
+                    $totalMarkedAsNotDuplicate = count($pairsToInsert);
+                }
             }
 
             if (empty($merges)) {
@@ -435,6 +448,55 @@ class FinanceTransactionsDedupeApiController extends Controller
 
             return response()->json(['error' => 'Failed to merge transactions: '.$e->getMessage()], 500);
         }
+    }
+
+    /**
+     * Count the number of non-null, non-empty information fields in a transaction.
+     * Used to prefer keeping the transaction with more data when deduplicating.
+     * Tags and other JOIN-requiring fields are excluded.
+     */
+    private function informationScore($transaction): int
+    {
+        $score = 0;
+        $fields = ['t_type', 't_description', 't_symbol', 't_qty', 't_price', 't_comment'];
+        foreach ($fields as $field) {
+            $val = $transaction->$field;
+            if ($val !== null && $val !== '' && $val !== 0 && $val !== '0' && $val !== 0.0) {
+                $score++;
+            }
+        }
+
+        return $score;
+    }
+
+    /**
+     * Filter a group of transactions by removing transactions whose all pairwise
+     * combinations are already in the confirmed non-duplicate pairs set.
+     * Returns the transactions that still form potential duplicate pairs.
+     */
+    private function filterKnownNonDuplicates($group, array $knownNonDuplicatePairs)
+    {
+        $ids = $group->pluck('t_id')->toArray();
+        $count = count($ids);
+
+        if ($count < 2) {
+            return $group;
+        }
+
+        // Find transactions that still have at least one unconfirmed pair
+        $keepInGroup = [];
+        for ($i = 0; $i < $count; $i++) {
+            for ($j = $i + 1; $j < $count; $j++) {
+                $pairKey = min($ids[$i], $ids[$j]).'_'.max($ids[$i], $ids[$j]);
+                if (! isset($knownNonDuplicatePairs[$pairKey])) {
+                    // This pair is not confirmed as non-duplicate - keep both
+                    $keepInGroup[$ids[$i]] = true;
+                    $keepInGroup[$ids[$j]] = true;
+                }
+            }
+        }
+
+        return $group->filter(fn ($t) => isset($keepInGroup[$t->t_id]))->values();
     }
 
     /**

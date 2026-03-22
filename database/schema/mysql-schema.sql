@@ -606,6 +606,21 @@ CREATE TABLE `fin_account_lots` (
   CONSTRAINT `fin_account_lots_statement_id_foreign` FOREIGN KEY (`statement_id`) REFERENCES `fin_statements` (`statement_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_transaction_non_duplicate_pairs`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_transaction_non_duplicate_pairs` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `t_id_1` bigint(20) unsigned NOT NULL,
+  `t_id_2` bigint(20) unsigned NOT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `fin_transaction_non_duplicate_pairs_t_id_1_t_id_2_unique` (`t_id_1`,`t_id_2`),
+  KEY `fin_transaction_non_duplicate_pairs_t_id_2_index` (`t_id_2`),
+  CONSTRAINT `fin_transaction_non_duplicate_pairs_t_id_1_foreign` FOREIGN KEY (`t_id_1`) REFERENCES `fin_account_line_items` (`t_id`) ON DELETE CASCADE,
+  CONSTRAINT `fin_transaction_non_duplicate_pairs_t_id_2_foreign` FOREIGN KEY (`t_id_2`) REFERENCES `fin_account_line_items` (`t_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_account_tag`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
