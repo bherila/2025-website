@@ -27,12 +27,14 @@ function applyTheme(mode: ThemeMode) {
 export default function Navbar({ authenticated, isAdmin, clientCompanies, currentUser }: NavbarProps) {
   const [financeOpen, setFinanceOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const initials = currentUser && currentUser.name 
     ? currentUser.name.trim().split(/\s+/).map(p => p[0]).filter(Boolean).slice(0,2).join('').toUpperCase() 
     : '';
 
   const financeRef = useRef<HTMLLIElement | null>(null);
   const toolsRef = useRef<HTMLLIElement | null>(null);
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
   
   const [clientsOpen, setClientsOpen] = useState(false);
   const clientsRef = useRef<HTMLLIElement | null>(null);
@@ -44,6 +46,8 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
   const mobileMenuRef = useRef<HTMLDivElement | null>(null);
 
   const [theme, setTheme] = useState<ThemeMode>(() => (localStorage.getItem('theme') as ThemeMode) || 'system');
+
+  const logoutFormRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     applyTheme(theme);
@@ -61,6 +65,9 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
       if (clientsRef.current && !clientsRef.current.contains(e.target as Node)) {
         setClientsOpen(false);
       }
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
       if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target as Node)) {
         setMobileMenuOpen(false);
         setMobileFinanceOpen(false);
@@ -71,6 +78,13 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  const handleLogout = (e: React.MouseEvent) => {
+    e.preventDefault();
+    logoutFormRef.current?.submit();
+  };
+
+  const csrfToken = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content;
 
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
@@ -343,6 +357,30 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
                 )}
               </div>
             )}
+
+            {/* Account section in mobile menu */}
+            {authenticated && (
+              <div className='pt-2 border-t border-gray-100 dark:border-[#3E3E3A]'>
+                <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base' href='/dashboard'>
+                  User Settings
+                </a>
+                <a 
+                  className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base text-red-600 dark:text-red-400' 
+                  href='/logout'
+                  onClick={handleLogout}
+                >
+                  Sign out
+                </a>
+              </div>
+            )}
+            
+            {!authenticated && (
+              <div className='pt-2 border-t border-gray-100 dark:border-[#3E3E3A]'>
+                <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base' href='/login'>
+                  Sign in
+                </a>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -393,12 +431,53 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
         </a>
 
         {authenticated ? (
-          <a href='/dashboard' className='inline-flex items-center gap-2 px-3 py-1.5 rounded border border-gray-200 dark:border-[#3E3E3A] hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm'>
-            <div className='h-6 w-6 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-medium' aria-hidden='true'>
-              {initials || 'U'}
-            </div>
-            <span className='hidden sm:inline'>{currentUser?.name ?? 'My Account'}</span>
-          </a>
+          <div className='relative' ref={userMenuRef}>
+            <button
+              type='button'
+              onClick={() => setUserMenuOpen((v) => !v)}
+              className='inline-flex items-center gap-2 px-3 py-1.5 rounded border border-gray-200 dark:border-[#3E3E3A] hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm'
+              aria-expanded={userMenuOpen}
+              aria-haspopup='menu'
+            >
+              <div className='h-6 w-6 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-medium' aria-hidden='true'>
+                {initials || 'U'}
+              </div>
+              <span className='hidden sm:inline'>{currentUser?.name ?? 'My Account'}</span>
+              <ChevronDown className={`w-4 h-4 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} aria-hidden='true' />
+            </button>
+            
+            {userMenuOpen && (
+              <div
+                role='menu'
+                className='absolute right-0 z-50 mt-2 w-48 rounded-md border border-gray-200 dark:border-[#3E3E3A] bg-white dark:bg-[#161615] shadow-[0_10px_30px_rgba(0,0,0,0.08)] p-2'
+              >
+                <a
+                  role='menuitem'
+                  className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm'
+                  href='/dashboard'
+                >
+                  User Settings
+                </a>
+                <div className='my-1 border-t border-gray-100 dark:border-[#3E3E3A]' />
+                <a
+                  role='menuitem'
+                  className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm text-red-600 dark:text-red-400'
+                  href='/logout'
+                  onClick={handleLogout}
+                >
+                  Sign out
+                </a>
+                <form
+                  ref={logoutFormRef}
+                  action='/logout'
+                  method='POST'
+                  className='hidden'
+                >
+                  <input type='hidden' name='_token' value={csrfToken} />
+                </form>
+              </div>
+            )}
+          </div>
         ) : (
           <a href='/login' className='px-3 py-1.5 rounded border border-gray-200 dark:border-[#3E3E3A] hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm'>Sign in</a>
         )}

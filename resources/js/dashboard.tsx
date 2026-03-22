@@ -57,16 +57,18 @@ const MyAccount: React.FC = () => {
         </Alert>
       )}
 
-      <UpdateEmailSection
-        currentEmail={user?.email || ''}
-        onSuccess={setSuccess}
-        onError={(field, message) => setErrors({ [field]: message })}
-      />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <UpdateEmailSection
+          currentEmail={user?.email || ''}
+          onSuccess={setSuccess}
+          onError={(field, message) => setErrors({ [field]: message })}
+        />
 
-      <UpdatePasswordSection
-        onSuccess={setSuccess}
-        onError={(field, message) => setErrors({ [field]: message })}
-      />
+        <UpdatePasswordSection
+          onSuccess={setSuccess}
+          onError={(field, message) => setErrors({ [field]: message })}
+        />
+      </div>
 
       <PasskeySection
         onSuccess={setSuccess}
