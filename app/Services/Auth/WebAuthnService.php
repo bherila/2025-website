@@ -102,7 +102,7 @@ class WebAuthnService
         $response = $credential->response;
 
         $host = $this->getRpId($request);
-        $validator = $this->createAttestationValidator();
+        $validator = $this->createAttestationValidator($request);
         $source = $validator->check($response, $options, $host);
 
         // Store credential
@@ -194,7 +194,7 @@ class WebAuthnService
         $response = $credential->response;
 
         $host = $this->getRpId($request);
-        $validator = $this->createAssertionValidator();
+        $validator = $this->createAssertionValidator($request);
         $updatedSource = $validator->check(
             $source,
             $response,
@@ -211,7 +211,14 @@ class WebAuthnService
 
     private function getRpId(Request $request): string
     {
-        $appUrl = config('app.url', $request->getSchemeAndHttpHost());
+        $appUrl = config('app.url');
+
+        // If app.url is not set or is a default localhost value, use the current host from the request
+        if (! $appUrl || str_contains($appUrl, 'localhost')) {
+            $host = parse_url($request->getSchemeAndHttpHost(), PHP_URL_HOST);
+
+            return $host ?? $request->getHost();
+        }
 
         return parse_url($appUrl, PHP_URL_HOST) ?? $request->getHost();
     }
@@ -230,20 +237,32 @@ class WebAuthnService
         return (new WebauthnSerializerFactory($attestationManager))->create();
     }
 
-    private function createAttestationValidator(): AuthenticatorAttestationResponseValidator
+    private function createAttestationValidator(Request $request): AuthenticatorAttestationResponseValidator
     {
         $factory = new CeremonyStepManagerFactory;
-        $appUrl = config('app.url', self::DEFAULT_APP_URL);
-        $factory->setAllowedOrigins([$appUrl]);
+        $allowedOrigins = [$request->getSchemeAndHttpHost()];
+
+        $appUrl = config('app.url');
+        if ($appUrl && ! str_contains($appUrl, 'localhost')) {
+            $allowedOrigins[] = $appUrl;
+        }
+
+        $factory->setAllowedOrigins($allowedOrigins);
 
         return AuthenticatorAttestationResponseValidator::create($factory->creationCeremony());
     }
 
-    private function createAssertionValidator(): AuthenticatorAssertionResponseValidator
+    private function createAssertionValidator(Request $request): AuthenticatorAssertionResponseValidator
     {
         $factory = new CeremonyStepManagerFactory;
-        $appUrl = config('app.url', self::DEFAULT_APP_URL);
-        $factory->setAllowedOrigins([$appUrl]);
+        $allowedOrigins = [$request->getSchemeAndHttpHost()];
+
+        $appUrl = config('app.url');
+        if ($appUrl && ! str_contains($appUrl, 'localhost')) {
+            $allowedOrigins[] = $appUrl;
+        }
+
+        $factory->setAllowedOrigins($allowedOrigins);
 
         return AuthenticatorAssertionResponseValidator::create($factory->requestCeremony());
     }
