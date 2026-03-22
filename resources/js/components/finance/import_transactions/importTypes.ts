@@ -26,6 +26,11 @@ export interface GeminiAccountBlock {
     description: string
     amount: number
     type?: string
+    symbol?: string
+    quantity?: number
+    price?: number
+    commission?: number
+    fee?: number
   }>
   lots?: Array<{
     symbol: string

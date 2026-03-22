@@ -84,7 +84,17 @@ export interface MultiImportPayloadAccount {
   acct_id: number | 'all'
   statementInfo?: GeminiAccountBlock['statementInfo']
   statementDetails: NonNullable<GeminiAccountBlock['statementDetails']>
-  transactions: Array<{ t_date: string; t_amt: number; t_description: string; t_type?: string }>
+  transactions: Array<{
+    t_date: string
+    t_amt: number
+    t_description: string
+    t_type?: string
+    t_symbol?: string
+    t_qty?: number
+    t_price?: number
+    t_commission?: number
+    t_fee?: number
+  }>
   lots: NonNullable<GeminiAccountBlock['lots']>
 }
 
@@ -102,14 +112,39 @@ export function buildMultiImportPayload(
     const statementDetails: NonNullable<GeminiAccountBlock['statementDetails']> = opts.attachAsStatement
       ? (block.statementDetails ?? [])
       : []
-    const transactions: Array<{ t_date: string; t_amt: number; t_description: string; t_type?: string }> = opts.importTransactions
+    const transactions: Array<{
+      t_date: string
+      t_amt: number
+      t_description: string
+      t_type?: string
+      t_symbol?: string
+      t_qty?: number
+      t_price?: number
+      t_commission?: number
+      t_fee?: number
+    }> = opts.importTransactions
       ? (block.transactions?.map((tx) => {
-          const item: { t_date: string; t_amt: number; t_description: string; t_type?: string } = {
+          const item: {
+            t_date: string
+            t_amt: number
+            t_description: string
+            t_type?: string
+            t_symbol?: string
+            t_qty?: number
+            t_price?: number
+            t_commission?: number
+            t_fee?: number
+          } = {
             t_date: tx.date,
             t_amt: tx.amount,
             t_description: tx.description,
           }
           if (tx.type !== undefined) item.t_type = tx.type
+          if (tx.symbol !== undefined) item.t_symbol = tx.symbol
+          if (tx.quantity !== undefined) item.t_qty = tx.quantity
+          if (tx.price !== undefined) item.t_price = tx.price
+          if (tx.commission !== undefined) item.t_commission = tx.commission
+          if (tx.fee !== undefined) item.t_fee = tx.fee
           return item
         }) ?? [])
       : []

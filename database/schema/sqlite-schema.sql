@@ -370,6 +370,7 @@ CREATE INDEX `files_for_client_companies_client_company_id_index` ON `files_for_
 CREATE TABLE `files_for_fin_accounts`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `acct_id` INTEGER NOT NULL,
+  `file_hash` TEXT,
   `statement_id` INTEGER,
   `original_filename` TEXT NOT NULL,
   `stored_filename` TEXT NOT NULL,
@@ -388,6 +389,9 @@ CREATE INDEX `files_for_fin_accounts_acct_id_index` ON `files_for_fin_accounts`(
 );
 CREATE INDEX `files_for_fin_accounts_statement_id_index` ON `files_for_fin_accounts`(
   `statement_id`
+);
+CREATE INDEX `files_for_fin_accounts_file_hash_index` ON `files_for_fin_accounts`(
+  `file_hash`
 );
 CREATE TABLE `files_for_projects`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,

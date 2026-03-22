@@ -343,4 +343,158 @@ class FinanceStatementControllerTest extends TestCase
         $this->assertNotEmpty($assetAccounts);
         $this->assertEquals('123456789012', $assetAccounts[0]['acct_number']);
     }
+
+    public function test_import_multi_account_pdf_updates_file_record_statement_id_when_file_exists(): void
+    {
+        $user = $this->createAdminUser();
+
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Savings',
+            'acct_last_balance' => '0',
+        ]);
+
+        $fileHash = 'abc123def456';
+
+        // Create a pre-existing file record for this account (statement_id not yet set)
+        $fileId = DB::table('files_for_fin_accounts')->insertGetId([
+            'acct_id' => $acctId,
+            'file_hash' => $fileHash,
+            'original_filename' => 'statement.pdf',
+            'stored_filename' => '2025.01.01 abcde statement.pdf',
+            's3_path' => "fin_acct/{$user->id}/2025.01.01 abcde statement.pdf",
+            'mime_type' => 'application/pdf',
+            'file_size_bytes' => 1024,
+            'uploaded_by_user_id' => $user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $payload = [
+            'file_hash' => $fileHash,
+            'accounts' => [
+                [
+                    'acct_id' => $acctId,
+                    'statementInfo' => ['periodStart' => '2025-01-01', 'periodEnd' => '2025-01-31', 'closingBalance' => 5000],
+                    'statementDetails' => [],
+                    'transactions' => [],
+                    'lots' => [],
+                ],
+            ],
+        ];
+
+        $response = $this->actingAs($user)->postJson('/api/finance/multi-import-pdf', $payload);
+        $response->assertOk();
+
+        $json = $response->json();
+        $statementId = $json['accounts'][0]['statement_id'];
+
+        // The file record for this account should now have statement_id set
+        $this->assertDatabaseHas('files_for_fin_accounts', [
+            'id' => $fileId,
+            'acct_id' => $acctId,
+            'file_hash' => $fileHash,
+            'statement_id' => $statementId,
+        ]);
+    }
+
+    public function test_import_multi_account_pdf_clones_file_record_for_additional_accounts(): void
+    {
+        $user = $this->createAdminUser();
+
+        $acctId1 = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Savings',
+            'acct_last_balance' => '0',
+        ]);
+        $acctId2 = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Checking',
+            'acct_last_balance' => '0',
+        ]);
+
+        $fileHash = 'sha256deadbeef';
+
+        // File exists only for acctId1 (the primary account)
+        DB::table('files_for_fin_accounts')->insert([
+            'acct_id' => $acctId1,
+            'file_hash' => $fileHash,
+            'original_filename' => 'multi.pdf',
+            'stored_filename' => '2025.01.01 xyzab multi.pdf',
+            's3_path' => "fin_acct/{$user->id}/2025.01.01 xyzab multi.pdf",
+            'mime_type' => 'application/pdf',
+            'file_size_bytes' => 2048,
+            'uploaded_by_user_id' => $user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $payload = [
+            'file_hash' => $fileHash,
+            'accounts' => [
+                [
+                    'acct_id' => $acctId1,
+                    'statementInfo' => ['periodEnd' => '2025-01-31', 'closingBalance' => 1000],
+                    'statementDetails' => [],
+                    'transactions' => [],
+                    'lots' => [],
+                ],
+                [
+                    'acct_id' => $acctId2,
+                    'statementInfo' => ['periodEnd' => '2025-01-31', 'closingBalance' => 2000],
+                    'statementDetails' => [],
+                    'transactions' => [],
+                    'lots' => [],
+                ],
+            ],
+        ];
+
+        $response = $this->actingAs($user)->postJson('/api/finance/multi-import-pdf', $payload);
+        $response->assertOk();
+
+        $json = $response->json();
+        $statementId2 = $json['accounts'][1]['statement_id'];
+
+        // A cloned file record should now exist for acctId2 with the correct statement_id
+        $this->assertDatabaseHas('files_for_fin_accounts', [
+            'acct_id' => $acctId2,
+            'file_hash' => $fileHash,
+            'statement_id' => $statementId2,
+        ]);
+
+        // Total: 2 file records for this file_hash (one per account)
+        $count = DB::table('files_for_fin_accounts')
+            ->where('file_hash', $fileHash)
+            ->whereNull('deleted_at')
+            ->count();
+        $this->assertEquals(2, $count);
+    }
+
+    public function test_import_multi_account_pdf_no_file_hash_does_not_create_file_records(): void
+    {
+        $user = $this->createAdminUser();
+
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Savings',
+            'acct_last_balance' => '0',
+        ]);
+
+        $payload = [
+            'accounts' => [
+                [
+                    'acct_id' => $acctId,
+                    'statementInfo' => ['periodEnd' => '2025-01-31', 'closingBalance' => 1000],
+                    'statementDetails' => [],
+                    'transactions' => [],
+                    'lots' => [],
+                ],
+            ],
+        ];
+
+        $response = $this->actingAs($user)->postJson('/api/finance/multi-import-pdf', $payload);
+        $response->assertOk();
+
+        $this->assertDatabaseCount('files_for_fin_accounts', 0);
+    }
 }

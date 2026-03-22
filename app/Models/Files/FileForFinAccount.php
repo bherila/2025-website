@@ -46,9 +46,11 @@ class FileForFinAccount extends Model
 
     /**
      * Generate the S3 path for a financial account file.
+     * Uses the user ID as the path prefix (not the account ID) so that files are
+     * stored per-user and can be shared/linked across multiple accounts.
      */
-    public static function generateS3Path(int $acctId, string $storedFilename): string
+    public static function generateS3Path(int $userId, string $storedFilename): string
     {
-        return "fin_acct/{$acctId}/{$storedFilename}";
+        return "fin_acct/{$userId}/{$storedFilename}";
     }
 }
