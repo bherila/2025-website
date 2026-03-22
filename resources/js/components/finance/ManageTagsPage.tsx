@@ -272,9 +272,9 @@ export default function ManageTagsPage() {
   const [deleteConfirmTag, setDeleteConfirmTag] = useState<FinanceTag | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
-  // Fetch all employment entities
+  // Fetch all visible employment entities (hidden ones excluded from dropdowns)
   useEffect(() => {
-    fetchWrapper.get('/api/finance/employment-entities')
+    fetchWrapper.get('/api/finance/employment-entities?visible_only=true')
       .then((data: unknown) => {
         const entities = data as EmploymentEntity[]
         setAllEntities(Array.isArray(entities) ? entities : [])

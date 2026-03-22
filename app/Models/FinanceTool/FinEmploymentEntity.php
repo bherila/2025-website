@@ -11,6 +11,10 @@ class FinEmploymentEntity extends Model
 
     public const VALID_TYPES = ['sch_c', 'w2', 'hobby'];
 
+    protected $attributes = [
+        'is_hidden' => false,
+    ];
+
     protected $fillable = [
         'user_id',
         'display_name',
@@ -22,6 +26,7 @@ class FinEmploymentEntity extends Model
         'type',
         'sic_code',
         'is_spouse',
+        'is_hidden',
     ];
 
     protected function casts(): array
@@ -31,6 +36,7 @@ class FinEmploymentEntity extends Model
             'end_date' => 'date:Y-m-d',
             'is_current' => 'boolean',
             'is_spouse' => 'boolean',
+            'is_hidden' => 'boolean',
             'sic_code' => 'integer',
         ];
     }
