@@ -32,7 +32,8 @@ export default defineConfig({
         'resources/js/client-management.tsx',
         'resources/js/client-portal.tsx',
         'resources/js/user-management.tsx',
-        'resources/js/utility-bill-tracker.tsx'
+        'resources/js/utility-bill-tracker.tsx',
+        'resources/js/login-passkey.tsx',
       ],
       refresh: true,
     }),

@@ -4,6 +4,8 @@ import { createRoot } from 'react-dom/client';
 import { Alert, AlertDescription } from './components/ui/alert';
 import { Spinner } from './components/ui/spinner';
 import { ApiKeySection } from './user/api-key';
+import { LoginAuditSection } from './user/login-audit-section';
+import { PasskeySection } from './user/passkey-section';
 import { UpdateEmailSection } from './user/update-email';
 import { UpdatePasswordSection } from './user/update-password';
 
@@ -66,11 +68,20 @@ const MyAccount: React.FC = () => {
         onError={(field, message) => setErrors({ [field]: message })}
       />
 
+      <PasskeySection
+        onSuccess={setSuccess}
+        onError={(field, message) => setErrors({ [field]: message })}
+      />
+
       <ApiKeySection
         user={user}
         onSuccess={setSuccess}
         onError={(field, message) => setErrors({ [field]: message })}
         onUserUpdate={fetchUserData}
+      />
+
+      <LoginAuditSection
+        onError={(field, message) => setErrors({ [field]: message })}
       />
     </div>
   );
