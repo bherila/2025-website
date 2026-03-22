@@ -101,6 +101,9 @@ class PasskeyController extends Controller
             'credential' => 'required|array',
         ]);
 
+        // Capture the credential ID early for audit logging on failure
+        $credentialId = $request->input('credential.id', '');
+
         try {
             $user = $this->webAuthnService->verifyAuthenticationResponse(
                 $request,
@@ -114,7 +117,8 @@ class PasskeyController extends Controller
 
             return response()->json(['success' => true, 'redirect' => '/']);
         } catch (\Throwable $e) {
-            $this->webAuthnService->logAuditEvent($request, null, '', false, 'passkey');
+            // Log with the credential ID as the email field to aid debugging
+            $this->webAuthnService->logAuditEvent($request, null, $credentialId, false, 'passkey');
 
             return response()->json(['error' => 'Authentication failed: '.$e->getMessage()], 422);
         }

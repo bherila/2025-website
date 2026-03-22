@@ -138,6 +138,9 @@ export const PasskeySection: React.FC<PasskeySectionProps> = ({ onSuccess, onErr
       const message = err instanceof Error ? err.message : 'Passkey registration failed';
       if (message !== 'The operation either timed out or was not allowed.') {
         onError('passkeys', message);
+      } else {
+        // User cancelled or timed out — not an error worth showing
+        console.debug('[PasskeySection] Registration cancelled or timed out:', message);
       }
     } finally {
       setRegistering(false);

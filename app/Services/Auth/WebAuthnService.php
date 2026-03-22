@@ -34,6 +34,8 @@ class WebAuthnService
 
     private const SESSION_LOGIN_OPTIONS = 'webauthn_login_options';
 
+    private const DEFAULT_APP_URL = 'https://localhost';
+
     /**
      * Generate registration options for a user.
      */
@@ -231,7 +233,7 @@ class WebAuthnService
     private function createAttestationValidator(): AuthenticatorAttestationResponseValidator
     {
         $factory = new CeremonyStepManagerFactory;
-        $appUrl = config('app.url', 'https://localhost');
+        $appUrl = config('app.url', self::DEFAULT_APP_URL);
         $factory->setAllowedOrigins([$appUrl]);
 
         return AuthenticatorAttestationResponseValidator::create($factory->creationCeremony());
@@ -240,7 +242,7 @@ class WebAuthnService
     private function createAssertionValidator(): AuthenticatorAssertionResponseValidator
     {
         $factory = new CeremonyStepManagerFactory;
-        $appUrl = config('app.url', 'https://localhost');
+        $appUrl = config('app.url', self::DEFAULT_APP_URL);
         $factory->setAllowedOrigins([$appUrl]);
 
         return AuthenticatorAssertionResponseValidator::create($factory->requestCeremony());
