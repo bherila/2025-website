@@ -963,6 +963,35 @@ CREATE TABLE `fin_transaction_non_duplicate_pairs`(
   FOREIGN KEY(`t_id_1`) REFERENCES `fin_account_line_items`(`t_id`) ON DELETE CASCADE,
   FOREIGN KEY(`t_id_2`) REFERENCES `fin_account_line_items`(`t_id`) ON DELETE CASCADE
 );
+CREATE TABLE `webauthn_credentials`(
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `user_id` INTEGER NOT NULL,
+  `credential_id` TEXT NOT NULL,
+  `public_key` TEXT NOT NULL,
+  `counter` INTEGER NOT NULL DEFAULT 0,
+  `aaguid` TEXT,
+  `name` TEXT NOT NULL DEFAULT 'Passkey',
+  `transports` TEXT,
+  `created_at` TEXT,
+  `updated_at` TEXT,
+  FOREIGN KEY(`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
+);
+CREATE INDEX `webauthn_credentials_user_id_index` ON `webauthn_credentials`(`user_id`);
+CREATE TABLE `login_audit_log`(
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `user_id` INTEGER,
+  `email` TEXT,
+  `ip_address` TEXT,
+  `user_agent` TEXT,
+  `success` INTEGER NOT NULL DEFAULT 0,
+  `method` TEXT NOT NULL DEFAULT 'password',
+  `is_suspicious` INTEGER NOT NULL DEFAULT 0,
+  `created_at` TEXT,
+  `updated_at` TEXT,
+  FOREIGN KEY(`user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
+);
+CREATE INDEX `login_audit_log_user_id_index` ON `login_audit_log`(`user_id`);
+CREATE INDEX `login_audit_log_created_at_index` ON `login_audit_log`(`created_at`);
 INSERT INTO migrations VALUES(1,'0001_01_01_000000_create_schema_baseline',1);
 INSERT INTO migrations VALUES(2,'2026_03_05_000000_create_fin_account_lots_table',2);
 INSERT INTO migrations VALUES(3,'2026_03_05_001906_add_hash_and_statement_id_to_finance_tables',2);
@@ -973,3 +1002,4 @@ INSERT INTO migrations VALUES(7,'2026_02_05_062520_add_catch_up_threshold_hours_
 INSERT INTO migrations VALUES(8,'2026_02_07_000000_add_starting_balances_to_client_invoices',3);
 INSERT INTO migrations VALUES(9,'2026_03_13_083906_add_tax_characteristic_to_fin_account_tag_table',3);
 INSERT INTO migrations VALUES(10,'2026_03_22_063625_create_fin_transaction_non_duplicate_pairs_table',4);
+INSERT INTO migrations VALUES(11,'2026_03_22_100000_create_webauthn_and_audit_tables',5);

@@ -976,6 +976,45 @@ CREATE TABLE `fin_transaction_non_duplicate_pairs` (
   CONSTRAINT `fin_transaction_non_duplicate_pairs_t_id_2_foreign` FOREIGN KEY (`t_id_2`) REFERENCES `fin_account_line_items` (`t_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `webauthn_credentials`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `webauthn_credentials` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(20) unsigned NOT NULL,
+  `credential_id` varchar(2048) NOT NULL,
+  `public_key` text NOT NULL,
+  `counter` bigint(20) unsigned NOT NULL DEFAULT 0,
+  `aaguid` varchar(64) DEFAULT NULL,
+  `name` varchar(255) NOT NULL DEFAULT 'Passkey',
+  `transports` json DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `webauthn_credentials_user_id_index` (`user_id`),
+  CONSTRAINT `webauthn_credentials_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `login_audit_log`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `login_audit_log` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(20) unsigned DEFAULT NULL,
+  `email` varchar(255) DEFAULT NULL,
+  `ip_address` varchar(45) DEFAULT NULL,
+  `user_agent` text DEFAULT NULL,
+  `success` tinyint(1) NOT NULL DEFAULT 0,
+  `method` varchar(255) NOT NULL DEFAULT 'password',
+  `is_suspicious` tinyint(1) NOT NULL DEFAULT 0,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `login_audit_log_user_id_index` (`user_id`),
+  KEY `login_audit_log_created_at_index` (`created_at`),
+  CONSTRAINT `login_audit_log_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `graduated_tax`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -1373,3 +1412,4 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (61,'2026_03_19_100
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (62,'2026_03_20_074224_add_cost_basis_to_fin_statements_table',37);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (63,'2026_03_21_000001_add_is_hidden_to_fin_employment_entity_table',38);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (64,'2026_03_22_063625_create_fin_transaction_non_duplicate_pairs_table',39);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (65,'2026_03_22_100000_create_webauthn_and_audit_tables',40);

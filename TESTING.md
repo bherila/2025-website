@@ -16,6 +16,7 @@ Before running any backend tests, you MUST run `pnpm run build` to build Vite ma
 
 - All PHP tests run against an **in-memory SQLite database**. This ensures speed and safety, preventing any accidental modifications to your local or production MySQL database.
 - **PHP Linter**: Laravel Pint is configured — run `./vendor/bin/pint --test` to check, `./vendor/bin/pint` to fix
+  - If Pint reports any PHP lint/style issues, you MUST fix them before moving on.
 - **PHPUnit Tests**: Run `composer test` — all tests must pass
   - SQLite in-memory DB is configured automatically via `phpunit.xml` and `tests/bootstrap.php` — no extra setup needed
   - Do NOT use `$this->withoutVite()` in tests; the real manifest should be present during testing

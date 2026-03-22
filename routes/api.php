@@ -23,6 +23,8 @@ use App\Http\Controllers\FinanceTool\FinanceTransactionsDedupeApiController;
 use App\Http\Controllers\FinanceTool\FinanceTransactionTaggingApiController;
 use App\Http\Controllers\FinanceTool\StatementController;
 use App\Http\Controllers\LicenseKeyController;
+use App\Http\Controllers\LoginAuditController;
+use App\Http\Controllers\PasskeyController;
 use App\Http\Controllers\UserApiController;
 use App\Http\Controllers\UserManagementApiController;
 use App\Http\Controllers\UtilityBillTracker\UtilityAccountApiController;
@@ -131,6 +133,20 @@ Route::middleware(['web', 'auth'])->post('/finance/lots/search-opening', [Financ
 Route::middleware(['web', 'auth'])->post('/finance/lots/save-assignment', [FinanceLotsController::class, 'saveLotAssignment']);
 
 Route::middleware(['web', 'auth'])->post('/user/update-api-key', [UserApiController::class, 'updateApiKey']);
+
+// Passkey (WebAuthn) routes
+Route::middleware(['web', 'auth'])->get('/passkeys', [PasskeyController::class, 'index']);
+Route::middleware(['web', 'auth'])->post('/passkeys/register/options', [PasskeyController::class, 'registrationOptions']);
+Route::middleware(['web', 'auth'])->post('/passkeys/register', [PasskeyController::class, 'register']);
+Route::middleware(['web', 'auth'])->delete('/passkeys/{id}', [PasskeyController::class, 'destroy']);
+
+// Passkey login (unauthenticated)
+Route::middleware(['web'])->post('/passkeys/auth/options', [PasskeyController::class, 'authOptions']);
+Route::middleware(['web'])->post('/passkeys/auth', [PasskeyController::class, 'authenticate']);
+
+// Login audit log routes
+Route::middleware(['web', 'auth'])->get('/login-audit', [LoginAuditController::class, 'index']);
+Route::middleware(['web', 'auth'])->post('/login-audit/{id}/suspicious', [LoginAuditController::class, 'markSuspicious']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/duplicates', [FinanceTransactionsDedupeApiController::class, 'findDuplicates']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/merge-duplicates', [FinanceTransactionsDedupeApiController::class, 'mergeDuplicates']);
 

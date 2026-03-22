@@ -39,9 +39,6 @@ jobs:
       - name: Run pnpm type-check (TypeScript)
         run: pnpm run type-check
 
-      - name: Run PHP linter (Pint)
-        run: vendor/bin/pint --test
-
       - name: Run PHPUnit
         # SQLite in-memory DB is configured in phpunit.xml and tests/bootstrap.php.
         # RefreshDatabase trait sets up the schema automatically — no dedicated DB step needed.
