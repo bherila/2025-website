@@ -606,21 +606,6 @@ CREATE TABLE `fin_account_lots` (
   CONSTRAINT `fin_account_lots_statement_id_foreign` FOREIGN KEY (`statement_id`) REFERENCES `fin_statements` (`statement_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `fin_transaction_non_duplicate_pairs`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `fin_transaction_non_duplicate_pairs` (
-  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `t_id_1` bigint(20) unsigned NOT NULL,
-  `t_id_2` bigint(20) unsigned NOT NULL,
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `fin_transaction_non_duplicate_pairs_t_id_1_t_id_2_unique` (`t_id_1`,`t_id_2`),
-  KEY `fin_transaction_non_duplicate_pairs_t_id_2_index` (`t_id_2`),
-  CONSTRAINT `fin_transaction_non_duplicate_pairs_t_id_1_foreign` FOREIGN KEY (`t_id_1`) REFERENCES `fin_account_line_items` (`t_id`) ON DELETE CASCADE,
-  CONSTRAINT `fin_transaction_non_duplicate_pairs_t_id_2_foreign` FOREIGN KEY (`t_id_2`) REFERENCES `fin_account_line_items` (`t_id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_account_tag`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -967,13 +952,28 @@ CREATE TABLE `fin_statements` (
   `statement_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `acct_id` bigint(20) unsigned NOT NULL,
   `balance` varchar(20) NOT NULL,
-  `cost_basis` decimal(15,4) NOT NULL DEFAULT 0,
+  `cost_basis` decimal(15,4) NOT NULL DEFAULT 0.0000,
   `is_cost_basis_override` tinyint(1) NOT NULL DEFAULT 0,
   `statement_opening_date` date DEFAULT NULL,
   `statement_closing_date` date DEFAULT NULL,
   PRIMARY KEY (`statement_id`),
   KEY `fin_account_balance_snapshot_acct_id_index` (`acct_id`),
   CONSTRAINT `fin_account_balance_snapshot_acct_id_foreign` FOREIGN KEY (`acct_id`) REFERENCES `fin_accounts` (`acct_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_transaction_non_duplicate_pairs`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_transaction_non_duplicate_pairs` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `t_id_1` bigint(20) unsigned NOT NULL,
+  `t_id_2` bigint(20) unsigned NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `fin_transaction_non_duplicate_pairs_t_id_1_t_id_2_unique` (`t_id_1`,`t_id_2`),
+  KEY `fin_transaction_non_duplicate_pairs_t_id_2_foreign` (`t_id_2`),
+  CONSTRAINT `fin_transaction_non_duplicate_pairs_t_id_1_foreign` FOREIGN KEY (`t_id_1`) REFERENCES `fin_account_line_items` (`t_id`) ON DELETE CASCADE,
+  CONSTRAINT `fin_transaction_non_duplicate_pairs_t_id_2_foreign` FOREIGN KEY (`t_id_2`) REFERENCES `fin_account_line_items` (`t_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `graduated_tax`;
@@ -1369,3 +1369,7 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (57,'2026_03_19_004
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (58,'2026_03_19_004822_add_employment_entity_id_to_fin_account_tag_table',35);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (59,'2026_03_19_004826_add_new_tax_characteristics_to_fin_account_tag',35);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (60,'2026_03_19_004831_add_marriage_status_by_year_to_users_table',35);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (61,'2026_03_19_100000_add_w2_tax_characteristics_to_fin_account_tag',36);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (62,'2026_03_20_074224_add_cost_basis_to_fin_statements_table',37);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (63,'2026_03_21_000001_add_is_hidden_to_fin_employment_entity_table',38);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (64,'2026_03_22_063625_create_fin_transaction_non_duplicate_pairs_table',39);
