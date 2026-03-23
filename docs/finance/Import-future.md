@@ -1,10 +1,10 @@
-# Finance & AI Import — Future Architecture Specification
+# GenAI Async Import — Architecture Specification
 
 ## Overview
 
-This document specifies a planned upgrade to all AI-powered import flows across the site. Today there are **three controllers** that call the Gemini API synchronously inside an HTTP request:
+This document specifies a planned upgrade to all AI-powered import flows across the site. Today three controllers call the Gemini API synchronously inside an HTTP request:
 
-| Controller | Tool | PDF type parsed |
+| Controller | Tool | Document type |
 |---|---|---|
 | `FinanceGeminiImportController` | Finance (statements, transactions, lots) | Brokerage/bank PDFs |
 | `FinancePayslipImportController` | Finance (payslips) | Pay stub PDFs |
@@ -12,46 +12,119 @@ This document specifies a planned upgrade to all AI-powered import flows across 
 
 All three share the same fundamental problems:
 
-1. **HTTP timeout risk** — Gemini API calls take 30–90 seconds for large PDFs; a server timeout causes the user to see an error and retry from scratch.
-2. **No resumability** — If the browser tab is closed mid-import, all progress is lost.
-3. **No daily quota enforcement** — There is no site-wide check preventing runaway Gemini API spend.
-4. **Code duplication** — Authentication, file handling, Gemini HTTP invocation, error handling, and retry logic are copy-pasted across all three controllers.
+1. **HTTP timeout risk** — Gemini API calls take 30–90 seconds for large PDFs; a server timeout means a lost upload and a retry from scratch.
+2. **No resumability** — closing the browser tab loses all progress.
+3. **No daily quota enforcement** — no site-wide guard against runaway Gemini API spend.
+4. **Code duplication** — authentication, file handling, Gemini HTTP invocation, error handling, and retry logic are copy-pasted across controllers.
 
-The upgraded system introduces a **shared background job queue** for all AI-based file parsing. Each tool continues to present its own dedicated user-interface experience. The queue is the integration point; the UI surfaces are independent.
+The upgraded system introduces a **shared background job queue** for all AI-based file parsing. Each tool continues to present its own dedicated UI. The queue is the integration point; the UI surfaces are independent.
 
 ---
 
-## Import Modes (unchanged for text formats)
+## Directory Conventions
+
+Shared, tool-agnostic code lives under a dedicated namespace so it is not buried inside any one feature module:
+
+- **Backend (PHP):** `app/GenAiProcessor/` — models, jobs, services, controllers, and artisan commands
+- **Frontend (TypeScript/React):** `resources/js/genai-processor/` — shared hooks and upload utilities
+
+Finance-specific code remains under its existing locations (`app/Http/Controllers/FinanceTool/`, `resources/js/components/finance/`). Payslip-specific code remains in its module. Utility-bill-specific code remains in its module.
+
+---
+
+## Import Modes
 
 ### Mode 1 — Immediate parse (CSV / QIF / OFX / HAR / JSON)
 
-Text-based formats are parsed synchronously in the browser using the existing client-side parsers (`parseIbCsv`, `parseQfx`, etc.). This mode is unchanged.
+Text-based formats are parsed synchronously in the browser via the existing client-side parsers (`parseIbCsv`, `parseQfx`, etc.). This mode is unchanged.
 
 ```
 User drops file → Browser parses → Preview shown → User confirms → POST /api/finance/{id}/line_items
 ```
 
-### Mode 2 — Background AI parse (PDF and other binary formats)
-
-Any file that cannot be parsed in the browser is uploaded to S3 immediately and a `fin_import_job` record is created. The Laravel queue worker picks up the job, calls the Gemini API, and stores the parsed result. The originating page polls for job completion and shows the parsed preview when ready.
+### Mode 2 — Async AI parse (PDF and other binary formats)
 
 ```
-User drops file
-  → POST /api/import/upload  (tool-specific metadata via query param or form field)
-      → SHA-256 de-dupe check
-      → Store file in S3
-      → Create fin_import_job (status: pending)
-      → Check daily quota; if exceeded → status: queued_tomorrow
-      → Dispatch ParseImportFileJob (or schedule for next day)
+User selects file
+  → Frontend requests signed S3 upload URL (POST /api/genai/import/request-upload)
+  → Frontend uploads file directly to S3 using the signed URL (file bytes bypass app server)
+  → Frontend registers the job (POST /api/genai/import/jobs)
+      → Server creates genai_import_jobs record (status: pending)
+      → Server checks daily quota; if exceeded → status: queued_tomorrow, email user
+      → Otherwise → dispatch ParseImportJob to the database queue
       → Return { job_id, status }
-  → UI polls GET /api/import/jobs/{job_id}
-  → Queue worker runs → calls Gemini API
-  → Worker stores parsed JSON (status: parsed)
-  → UI shows tool-specific preview
-  → User confirms → tool-specific confirm endpoint
-      → Persist data to DB
-      → Mark fin_import_job status: imported
+  → Frontend polls GET /api/genai/import/jobs/{job_id}
+  → Worker wakes up (via cron), runs quota check, streams file from S3,
+    uploads to Gemini File API, calls generateContent, stores results
+  → genai_import_jobs status → parsed; genai_import_results rows created
+  → Frontend shows tool-specific "Review Results" UI
+  → User reviews and confirms each result → tool-specific persist endpoint
+      → Writes data to DB, marks result as imported
 ```
+
+---
+
+## Data Model
+
+All shared tables use the `genai_` prefix. The `fin_` prefix is reserved for the finance tool.
+
+### `GenAiImportJob` model → `genai_import_jobs` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | auto-increment PK | |
+| `user_id` | FK → users | owner; cascade-delete |
+| `acct_id` | nullable FK → fin_accounts | set for finance imports; NULL for payslip/utility |
+| `job_type` | string(64) | `finance_transactions`, `finance_payslip`, `utility_bill` |
+| `file_hash` | string(64) | SHA-256 of the uploaded file (for de-dupe) |
+| `original_filename` | string | |
+| `s3_path` | string | path within the bucket (e.g. `genai-import/{user_id}/...`) |
+| `mime_type` | nullable string | |
+| `file_size_bytes` | unsigned bigint | |
+| `context_json` | nullable text | JSON blob of tool-specific parameters (accounts list for finance, account_type for utility, employment_entity_id for payslip) |
+| `status` | enum | `pending`, `processing`, `parsed`, `imported`, `failed`, `queued_tomorrow` |
+| `error_message` | nullable text | populated on failure |
+| `retry_count` | unsigned tinyint | incremented on each failure; max 3 |
+| `scheduled_for` | nullable date | set when `queued_tomorrow` |
+| `parsed_at` | nullable timestamp | |
+| `created_at` / `updated_at` | timestamps | |
+
+Eloquent relationships: `belongsTo(User)`, `belongsTo(FinAccount, 'acct_id')->nullable()`, `hasMany(GenAiImportResult)`.
+
+**Status transitions:**
+
+| From | To | When |
+|------|----|------|
+| `pending` | `processing` | Worker picks up the job |
+| `processing` | `parsed` | Gemini returns; `genai_import_results` rows created |
+| `processing` | `failed` | Gemini error or timeout |
+| `failed` | `pending` | User retries (max 3 per `retry_count`) |
+| `pending` | `queued_tomorrow` | Daily quota exhausted at dispatch time |
+| `queued_tomorrow` | `pending` | Scheduler promotes on a new day when quota resets |
+| `parsed` | `imported` | All results confirmed or skipped |
+
+### `GenAiImportResult` model → `genai_import_results` table
+
+A single job can produce **multiple results** — for example, a concatenated PDF containing three payslips produces three result rows.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | auto-increment PK | |
+| `job_id` | FK → genai_import_jobs | cascade-delete |
+| `result_index` | unsigned int | ordering within the job |
+| `result_json` | longtext | raw parsed output from Gemini; validated before commit |
+| `status` | enum | `pending_review`, `imported`, `skipped` |
+| `imported_at` | nullable timestamp | |
+
+Eloquent relationships: `belongsTo(GenAiImportJob)`.
+
+### `GenAiDailyQuota` model → `genai_daily_quota` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `usage_date` | date (PK) | UTC calendar date |
+| `request_count` | unsigned int | Gemini API calls made today (site-wide) |
+| `updated_at` | timestamp | |
 
 ---
 
@@ -61,548 +134,388 @@ User drops file
 
 ### Milestone 1 — Shared Infrastructure
 
-**Why first:** Everything else depends on the database table, the job class, and the queue configuration. This milestone has no user-facing changes and can be merged independently.
+**Why first:** All other milestones depend on the shared data model, job class, service, and API endpoints. No user-facing changes; can be merged independently.
 
-**Requirements:**
+#### 1a. Database migrations
 
-#### 1a. Database migration — `fin_import_jobs` table
+Create three migrations using `php artisan make:migration`:
+- `create_genai_import_jobs_table` — model above. Index on `(user_id, status)`, `(file_hash)`, `(scheduled_for, status)`.
+- `create_genai_import_results_table` — model above. Index on `(job_id, result_index)`.
+- `create_genai_daily_quota_table` — model above.
 
-Run with `php artisan make:migration create_fin_import_jobs_table`.
+Follow the existing repository pattern for SQLite compatibility (omit foreign-key constraints for SQLite; branch on `DB::getDriverName()` in the migration). Update `database/schema/sqlite-schema.sql` accordingly.
 
-```sql
-CREATE TABLE fin_import_jobs (
-  id                BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
-  user_id           BIGINT UNSIGNED NOT NULL,
-  /*
-   * NULL for payslips (user-level, not account-level).
-   * NULL for utility bills: the utility account_id is passed via context_json instead,
-   * because utility accounts live in a separate table (utility_accounts) and do not
-   * reference fin_accounts.
-   */
-  acct_id           BIGINT UNSIGNED NULL,
-  /* Identifies which worker/prompt to use: 'finance_transactions', 'finance_payslip', 'utility_bill' */
-  job_type          VARCHAR(64) NOT NULL,
-  file_hash         VARCHAR(64) NOT NULL,       -- SHA-256 of the uploaded file
-  original_filename VARCHAR(255) NOT NULL,
-  s3_path           VARCHAR(255) NOT NULL,
-  mime_type         VARCHAR(127) NULL,
-  file_size_bytes   BIGINT UNSIGNED NOT NULL,
-  /* Serialised JSON carrying job-type-specific inputs (e.g. accounts context for finance, account_type for utility) */
-  context_json      TEXT NULL,
+#### 1b. `ParseImportJob` — queue worker
 
-  status            ENUM('pending','processing','parsed','imported','failed','queued_tomorrow')
-                      NOT NULL DEFAULT 'pending',
-  error_message     TEXT NULL,
-  parsed_json       LONGTEXT NULL,              -- Raw Gemini response; validated before use
-  retry_count       TINYINT UNSIGNED NOT NULL DEFAULT 0,
-  parsed_at         TIMESTAMP NULL,
-  imported_at       TIMESTAMP NULL,
-  scheduled_for     DATE NULL,                 -- Set when status = queued_tomorrow
+Location: `app/GenAiProcessor/Jobs/ParseImportJob.php`
 
-  created_at        TIMESTAMP NULL,
-  updated_at        TIMESTAMP NULL,
+The job holds a `job_id`. When it runs:
 
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-  FOREIGN KEY (acct_id) REFERENCES fin_accounts(acct_id) ON DELETE SET NULL,
-  INDEX idx_import_jobs_user_status (user_id, status),
-  INDEX idx_import_jobs_file_hash (file_hash),
-  INDEX idx_import_jobs_scheduled (scheduled_for, status)
-);
+1. Load the `GenAiImportJob`. If status is not `pending`, exit silently (stale dispatch).
+2. Call `GenAiJobDispatcherService::claimQuota($userId)`. If quota is exhausted, set `queued_tomorrow` + email user, exit.
+3. Set status to `processing`.
+4. Generate a short-lived signed read URL for the S3 object.
+5. Stream the file from S3 and upload it to the Gemini File API (resumable upload). Receive a `file_uri`.
+6. Call `generateContent` using `file_data: { mime_type, file_uri }` with model `gemini-3-flash-preview`. Prompt built by `GenAiJobDispatcherService::buildPrompt()`.
+7. Parse the response. Create one `GenAiImportResult` row per logical record detected (a concatenated PDF may yield multiple).
+8. On success: set job `status = parsed`, set `parsed_at`.
+9. On Gemini error or timeout: set `status = failed`, store `error_message`, increment `retry_count`. Email user.
+10. Delete the file from Gemini File API (files auto-expire in 48 h, but explicit deletion is good practice).
+
+Laravel queue settings: `$timeout = 300`, `$tries = 1` (automatic queue retries disabled; retries are user-initiated via API).
+
+#### 1c. `GenAiJobDispatcherService`
+
+Location: `app/GenAiProcessor/Services/GenAiJobDispatcherService.php`
+
+- `claimQuota(int $userId): bool` — atomically increments `genai_daily_quota.request_count` for today (UTC). Returns `false` if the site-wide limit (`GEMINI_DAILY_REQUEST_LIMIT`, default `15`) is reached. If `GEMINI_USER_DAILY_REQUEST_LIMIT` ≥ 0 (default `-1` = disabled), also checks a per-user count stored in the same table or a companion model. Site-wide check takes precedence.
+- `buildPrompt(string $jobType, array $context): string` — returns the Gemini prompt for the given job type. Extracts prompt-building logic from the existing three controllers.
+
+Supported `job_type` values and their prompt sources:
+- `finance_transactions` — `FinanceGeminiImportController::getTransactionPrompt()` + `normalizeMultiAccountResponse()`
+- `finance_payslip` — `FinancePayslipImportController::getPrompt()`
+- `utility_bill` — `UtilityBillImportController::getPrompt()` with `account_type` from context
+
+All job types use model `gemini-3-flash-preview`.
+
+#### 1d. API routes
+
+Add to `routes/api.php` under `['web', 'auth']` middleware, controller `app/GenAiProcessor/Http/Controllers/GenAiImportController.php`:
+
+```
+POST   /api/genai/import/request-upload      requestUpload
+POST   /api/genai/import/jobs                createJob
+GET    /api/genai/import/jobs                index
+GET    /api/genai/import/jobs/{job_id}       show
+POST   /api/genai/import/jobs/{job_id}/retry retry
+DELETE /api/genai/import/jobs/{job_id}       destroy
 ```
 
-Also add to `database/schema/sqlite-schema.sql`. Because SQLite does not support `ALTER TABLE ADD CONSTRAINT` and has known issues with `FOREIGN KEY` declarations in the presence of existing unique constraints, follow the existing repository pattern: use `DB::statement()` inside a `DB::getDriverName() === 'sqlite'` branch in the migration file to create the table with a compatible DDL (omit `FOREIGN KEY` clauses entirely for SQLite; the test suite relies on the SQLite schema). Consider extracting this branching logic into a reusable migration helper trait if multiple migrations need it.
+All endpoints enforce ownership (403 if the authenticated user does not own the job).
 
-**Status transitions:**
+**`requestUpload`:** Generates and returns a short-lived S3 pre-signed PUT URL plus the intended S3 key. File bytes never pass through the application server.
 
-| From | To | When |
-|------|----|------|
-| `pending` | `processing` | Worker picks up the job |
-| `processing` | `parsed` | Gemini API returns successfully |
-| `processing` | `failed` | Gemini API error or timeout |
-| `parsed` | `imported` | User confirms import |
-| `failed` | `pending` | User retries (up to max retries) |
-| `pending` | `queued_tomorrow` | Daily quota exceeded at dispatch time |
-| `queued_tomorrow` | `pending` | Nightly scheduler re-queues for next day |
+**`createJob`:** Accepts `{ s3_key, original_filename, file_size_bytes, mime_type, job_type, context?, acct_id? }`. Computes SHA-256 by streaming the file from S3. Checks for an existing `(file_hash, user_id, job_type)` job with status `parsed` or `imported` and returns it immediately (de-dupe). Otherwise creates the job, checks quota, and dispatches.
 
-#### 1b. Daily quota tracking — `fin_gemini_daily_usage` table
+**`retry`:** Resets status to `pending` and re-dispatches. Returns 422 if `retry_count >= 3`.
 
-Run with `php artisan make:migration create_fin_gemini_daily_usage_table`.
-
-```sql
-CREATE TABLE fin_gemini_daily_usage (
-  usage_date   DATE NOT NULL PRIMARY KEY,
-  request_count INT UNSIGNED NOT NULL DEFAULT 0,
-  updated_at   TIMESTAMP NULL
-);
-```
-
-The `GEMINI_DAILY_REQUEST_LIMIT` environment variable (default: `500`) defines the global maximum Gemini API calls per calendar day (UTC). This is checked atomically before dispatching any job. Jobs submitted when the quota is exhausted receive `status = queued_tomorrow`.
-
-#### 1c. `ParseImportFileJob` — Shared queue worker
-
-Location: `app/Jobs/ParseImportFileJob.php`
-
-```php
-class ParseImportFileJob implements ShouldQueue
-{
-    public int $timeout = 300;  // 5 minutes
-    // Automatic queue retries are disabled ($tries = 1). On failure, the error is
-    // recorded in fin_import_jobs.error_message and the user can manually retry via
-    // POST /api/import/jobs/{id}/retry (up to retry_count max).
-    public int $tries   = 1;
-
-    public function __construct(public readonly int $importJobId) {}
-
-    public function handle(GeminiJobDispatcherService $dispatcher): void
-    {
-        $job = FinImportJob::findOrFail($this->importJobId);
-
-        if ($job->status !== 'pending') {
-            return; // stale dispatch, skip silently
-        }
-
-        // Atomic quota check-and-increment
-        if (! $dispatcher->claimQuota()) {
-            $job->update(['status' => 'queued_tomorrow', 'scheduled_for' => now()->addDay()->toDateString()]);
-            return;
-        }
-
-        $job->update(['status' => 'processing']);
-
-        try {
-            $fileContent = Storage::get($job->s3_path);
-            $context     = json_decode($job->context_json ?? '{}', true);
-
-            $parsed = $dispatcher->runPrompt($job->job_type, $fileContent, $context, $job->user_id);
-
-            $job->update([
-                'status'      => 'parsed',
-                'parsed_json' => json_encode($parsed),
-                'parsed_at'   => now(),
-            ]);
-        } catch (GeminiRateLimitException) {
-            $job->update(['status' => 'queued_tomorrow', 'scheduled_for' => now()->addDay()->toDateString()]);
-        } catch (Throwable $e) {
-            $job->update([
-                'status'        => 'failed',
-                'error_message' => $e->getMessage(),
-                'retry_count'   => DB::raw('retry_count + 1'),
-            ]);
-        }
-    }
-}
-```
-
-#### 1d. `GeminiJobDispatcherService`
-
-Location: `app/Services/GeminiJobDispatcherService.php`
-
-Responsibilities:
-- `claimQuota(): bool` — Atomically increments `fin_gemini_daily_usage.request_count` for today (UTC) and returns `false` if the new value exceeds `GEMINI_DAILY_REQUEST_LIMIT`. Implemented using `INSERT ... ON DUPLICATE KEY UPDATE` (see the "Atomic quota increment" section below for the canonical SQL). Returns `true` only if the post-increment count is ≤ the limit. No surrounding transaction is needed for MySQL because the single statement is already atomic.
-- `runPrompt(string $jobType, string $fileContent, array $context, int $userId): array` — Routes to the correct prompt builder and Gemini invocation based on `$jobType`. Extracts shared logic (HTTP call, JSON decode, retry with exponential backoff) from the three existing controllers.
-
-Supported `$jobType` values:
-- `finance_transactions` — uses `FinanceGeminiImportController::getTransactionPrompt()` + `normalizeMultiAccountResponse()`
-- `finance_payslip` — uses `FinancePayslipImportController::getPrompt()`
-- `utility_bill` — uses `UtilityBillImportController::getPrompt()` with `account_type` from context
+**`destroy`:** Deletes the `GenAiImportJob` and all `GenAiImportResult` rows, then deletes the file from S3. This is the user-facing "delete job history" action.
 
 #### 1e. Queue configuration
 
-In `config/queue.php`, add an `imports` connection/queue. The existing database or redis driver can be used; the `imports` queue is processed by a dedicated worker so it does not starve other jobs.
-
-#### 1f. Shared API routes
-
-Add to `routes/api.php` under `['web', 'auth']` middleware:
-
-```
-POST   /api/import/upload                  → ImportJobController@upload
-GET    /api/import/jobs/{job_id}           → ImportJobController@show
-GET    /api/import/jobs                    → ImportJobController@index
-POST   /api/import/jobs/{job_id}/retry     → ImportJobController@retry
-POST   /api/import/jobs/{job_id}/cancel    → ImportJobController@cancel
-```
-
-`ImportJobController` enforces ownership (user may only access their own jobs, 403 otherwise).
-
-**Upload endpoint details:**
-
-```
-POST /api/import/upload
-```
-
-Form fields:
-- `file` (required) — the PDF or other binary file
-- `job_type` (required) — one of `finance_transactions`, `finance_payslip`, `utility_bill`
-- `acct_id` (optional) — finance account ID; NULL for payslips and utility bills where irrelevant
-- `context` (optional JSON string) — arbitrary key/value context passed through to the prompt builder (e.g., `accounts` array for finance, `account_type` for utility)
-
-Behavior:
-1. Compute SHA-256 of the uploaded file.
-2. Check for an existing `fin_import_job` for `(file_hash, user_id, job_type)`. If `status` is `parsed` or `imported`, return immediately (cache hit).
-3. Store file in S3 at `fin_import/{user_id}/{date} {random5} {original_filename}` (mirrors `HasFileStorage::generateStoredFilename()`).
-4. Check daily quota. If exceeded, create job with `status = queued_tomorrow`.
-5. Otherwise, create job with `status = pending` and dispatch `ParseImportFileJob`.
-6. Return `{ job_id, status }`.
-
-**Retry endpoint:**
-
-- Maximum retries: 3 (controlled by `retry_count`). After 3 failed attempts the endpoint returns 422.
-- Resets `status = pending` and re-dispatches.
+Use the `database` queue driver (`QUEUE_CONNECTION=database`). Name the queue `genai-imports` to keep it separate from the default queue. Configure in `config/queue.php`.
 
 ---
 
 ### Milestone 2 — Scheduled Processing & Cron Setup
 
-**Why second:** The daily quota system is only useful once the scheduler can drain the `queued_tomorrow` backlog and reset the day's counter.
-
-**Requirements:**
+**Why second:** The quota system is only useful once the scheduler drives queue processing. The hosting environment does not support persistent worker processes, so the scheduler replaces `queue:work` as a daemon.
 
 #### 2a. Artisan commands
 
-```
-php artisan import:process-scheduled       # Promote queued_tomorrow → pending for today's date
-php artisan import:requeue-stale           # Reset processing > 10 min → pending (worker crash recovery)
-php artisan import:reset-daily-quota       # Optionally reset quota counter (for testing; prod uses date change)
-```
+Location: `app/GenAiProcessor/Console/Commands/`
 
-#### 2b. Laravel scheduler registration
+- `genai:run-queue` — runs `queue:work --queue=genai-imports --once` to process a batch of ready jobs. Called every minute by the scheduler.
+- `genai:process-scheduled` — promotes `queued_tomorrow` jobs whose `scheduled_for` ≤ today to `pending` and dispatches them (re-checking quota per job; stops if quota exhausted).
+- `genai:requeue-stale` — resets `processing` jobs older than 10 minutes to `pending` (crash recovery).
 
-In `routes/console.php` (Laravel 12 uses this file for schedule definitions):
+#### 2b. Scheduler registration (`routes/console.php`)
 
 ```php
-// Run every minute: promote jobs whose scheduled_for date has arrived
-Schedule::command('import:process-scheduled')->everyMinute();
-
-// Run every 5 minutes: recover stale processing jobs from crashed workers
-Schedule::command('import:requeue-stale')->everyFiveMinutes();
+Schedule::command('genai:run-queue')->everyMinute()->withoutOverlapping(10);
+Schedule::command('genai:process-scheduled')->everyMinute()->withoutOverlapping(5);
+Schedule::command('genai:requeue-stale')->everyFiveMinutes()->withoutOverlapping(5);
 ```
 
-#### 2c. Cron entry on the server
+`withoutOverlapping()` uses an atomic cache lock to prevent concurrent runs. This is the only concurrency-safety mechanism needed since there is no persistent worker process.
 
-Add a single cron entry that delegates everything to Laravel's scheduler:
+#### 2c. Cron entry
 
-```cron
-* * * * * cd /var/www/html && php artisan schedule:run >> /dev/null 2>&1
+```
+* * * * * cd /path/to/app && php artisan schedule:run >> /dev/null 2>&1
 ```
 
-This is the standard Laravel cron pattern. The `schedule:run` command checks the schedule on every minute tick and dispatches only the commands that are due.
+#### 2d. Email notifications
 
-**Tip:** On production, use a process manager (Supervisor, systemd) to keep at least one queue worker running on the `imports` queue:
+- **Deferred:** When a job is set to `queued_tomorrow`, send `GenAiJobDeferredMail` to the user explaining the deferral.
+- **Complete:** When a deferred job eventually finishes (success or failure), send `GenAiJobCompleteMail`.
 
-```ini
-[program:laravel-imports-worker]
-command=php /var/www/html/artisan queue:work --queue=imports --sleep=3 --tries=1 --timeout=300
-autostart=true
-autorestart=true
-```
-
-#### 2d. `import:process-scheduled` implementation
-
-```php
-// Fetch all jobs where scheduled_for <= today AND status = queued_tomorrow
-FinImportJob::where('status', 'queued_tomorrow')
-    ->whereDate('scheduled_for', '<=', now()->toDateString())
-    ->orderBy('created_at')
-    ->chunk(50, function ($jobs) {
-        foreach ($jobs as $job) {
-            // Re-check daily quota before re-dispatching each job
-            if (app(GeminiJobDispatcherService::class)->claimQuota()) {
-                $job->update(['status' => 'pending', 'scheduled_for' => null]);
-                ParseImportFileJob::dispatch($job->id)->onQueue('imports');
-            } else {
-                // Quota full for today; push to next day
-                $job->update(['scheduled_for' => now()->addDay()->toDateString()]);
-                break; // No point continuing; quota is exhausted for the day
-            }
-        }
-    });
-```
+Mail classes live in `app/GenAiProcessor/Mail/`. In development/test, `MAIL_MAILER=log` routes all mail to the log for verification.
 
 ---
 
-### Milestone 3 — Finance Transactions & Statements Import UI
+### Milestone 3 — Direct S3 Upload & Gemini File API Integration
 
-**Why:** This is the highest-traffic import path. It affects `ImportTransactions.tsx`, `useProcessPdfWithGemini.ts`, and the existing `POST /api/finance/transactions/import-gemini` route.
+**Why a dedicated milestone:** The file upload path fundamentally changes for all three tools (browser → S3 directly; Gemini receives a File API URI instead of inline base64). Implementing this once as shared infrastructure avoids duplication.
 
-**Why separate from Milestone 1:** The shared infrastructure can be tested independently before hooking up the first UI.
+#### 3a. S3 signed upload flow
 
-**Requirements:**
+The frontend requests a signed PUT URL, uploads directly, then notifies the backend:
 
-#### 3a. Backend
-
-- Deprecate the direct Gemini call in `FinanceGeminiImportController::parseDocument()`. Keep the method for backward compatibility but add a feature flag: if `GEMINI_USE_QUEUE=true` (default `false` during transition, then `true` once stable), redirect to the new upload endpoint instead.
-- `StatementController::importMultiAccountPdf()` — after persisting data, update the matching `fin_import_job` to `status = imported`.
-
-#### 3b. Frontend hook migration — `useProcessPdfWithGemini.ts`
-
-Replace the direct `POST /api/finance/transactions/import-gemini` call with:
-
-```typescript
-// 1. Upload file and receive job_id
-const { job_id } = await fetchWrapper.post('/api/import/upload', formData)
-// formData includes: file, job_type='finance_transactions', acct_id, context=JSON(accountsCtx)
-
-// 2. Poll until parsed
-// → delegates to useJobPolling(job_id)
+```
+Frontend                                Backend                   S3
+  |-- POST /api/genai/import/request-upload -->                   |
+  |<-- { signed_url, s3_key, expires_in } ------                  |
+  |-- PUT {signed_url} (file bytes) ----------------------->      |
+  |<-- 200 OK -------------------------------------------------   |
+  |-- POST /api/genai/import/jobs { s3_key, ... } -->             |
+  |<-- { job_id, status } ------                                  |
 ```
 
-#### 3c. `useJobPolling` hook
+The S3 key format mirrors the existing convention (`HasFileStorage::generateStoredFilename()`):
 
-Location: `resources/js/hooks/useJobPolling.ts`
+```
+genai-import/{user_id}/{YYYY.MM.DD} {random5} {sanitized_filename}
+```
+
+`{random5}` = `substr(bin2hex(random_bytes(4)), 0, 5)`.
+
+#### 3b. Gemini File API integration
+
+Gemini's `inline_data` (base64 in the request body) has a 20 MB limit and adds overhead for large PDFs. The worker uses the Gemini Files API instead:
+
+1. Worker generates a short-lived signed **read** URL for the S3 object.
+2. Worker streams the file from S3 and uploads it to the Gemini File API (resumable upload). The response contains a `file_uri` (e.g. `files/abc123`).
+3. The `generateContent` call uses `file_data: { mime_type, file_uri }` — no base64, no size limit from inline data.
+4. After `generateContent` returns, the worker explicitly deletes the file from Gemini File API.
+
+See [Gemini File API documentation](https://ai.google.dev/gemini-api/docs/files) for the resumable upload protocol and `file_data` usage.
+
+#### 3c. Shared TypeScript upload utility
+
+Location: `resources/js/genai-processor/useGenAiFileUpload.ts`
+
+Encapsulates the two-step upload (request signed URL → PUT to S3 → register job):
 
 ```typescript
-export type ImportJobStatus = 'pending' | 'processing' | 'parsed' | 'imported' | 'failed' | 'queued_tomorrow'
+export type GenAiJobType = 'finance_transactions' | 'finance_payslip' | 'utility_bill'
 
-export interface UseJobPollingResult {
-  status: ImportJobStatus | null
-  parsedData: unknown | null
-  error: string | null
-  estimatedWait?: string  // e.g. "processing tomorrow" when queued_tomorrow
+export interface GenAiUploadOptions {
+  jobType: GenAiJobType
+  acctId?: number
+  context?: Record<string, unknown>
 }
 
-export function useJobPolling(jobId: number | null): UseJobPollingResult
+export function useGenAiFileUpload(options: GenAiUploadOptions): {
+  upload: (file: File) => Promise<{ jobId: number; status: GenAiJobStatus }>
+  uploading: boolean
+  error: string | null
+}
 ```
 
-- Polls `GET /api/import/jobs/{job_id}` every **3 seconds** while `status` is `pending` or `processing`.
-- Stops polling when `status` is `parsed`, `imported`, or `failed`.
-- When `status` is `queued_tomorrow`, stops polling (no point polling; the job will not advance until the scheduler runs) and sets `estimatedWait` in the `UseJobPollingResult` to a human-readable message (e.g., `"processing tomorrow"`) that the calling component can display.
-- Applies exponential backoff (3 s → 6 s → 12 s → max 30 s) on consecutive 5xx responses.
+All three tool-specific upload UIs import this hook and handle the post-upload polling themselves.
 
-#### 3d. `ImportTransactions.tsx` UI states
+#### 3d. Shared polling hook
 
-| State | UI shown |
-|-------|----------|
-| `idle` | Drop zone / file picker |
-| `uploading` | Spinner: "Uploading file…" |
-| `queued` (`pending`/`processing`) | Animated progress bar: "Processing with AI… (job #42)" |
-| `queued_tomorrow` | Info banner: "Daily AI processing limit reached. Your file is queued and will be processed tomorrow." |
-| `parsed` | Existing preview cards (account blocks, transactions, lots) |
-| `error` (`failed`) | Error banner with Retry button (up to 3 times) |
+Location: `resources/js/genai-processor/useGenAiJobPolling.ts`
 
-The Retry button calls `POST /api/import/jobs/{job_id}/retry`.
+```typescript
+export type GenAiJobStatus =
+  'pending' | 'processing' | 'parsed' | 'imported' | 'failed' | 'queued_tomorrow'
+
+export function useGenAiJobPolling(jobId: number | null): {
+  status: GenAiJobStatus | null
+  results: GenAiImportResultData[]   // one entry per parsed record
+  error: string | null
+  estimatedWait?: string             // set when queued_tomorrow
+}
+```
+
+- Polls `GET /api/genai/import/jobs/{job_id}` every 3 seconds while `pending` or `processing`.
+- Stops on `parsed`, `imported`, `failed`, or `queued_tomorrow`.
+- Exponential backoff on consecutive 5xx (3 s → 6 s → 12 s → max 30 s).
+
+Shared types live in `resources/js/genai-processor/types.ts`.
 
 ---
 
-### Milestone 4 — Payslip Import UI
+### Milestone 4 — Finance Transactions & Statements UI
 
-**Why:** Payslip import (`FinancePayslipImportController`) is a simpler flow (no preview step — data is written directly). The async pattern adds resilience but the confirmation UX differs from finance transactions.
-
-**Files affected:** `resources/js/components/payslip/` (the payslip upload component), `FinancePayslipImportController`.
-
-**Requirements:**
+**Why:** Highest-traffic import path. Migrates `useProcessPdfWithGemini.ts` and `ImportTransactions.tsx` to the new async flow.
 
 #### 4a. Backend
 
-- `FinancePayslipImportController::import()` currently writes directly to the DB after Gemini returns. In the async model:
-  - Upload creates a `fin_import_job` with `job_type = finance_payslip`.
-  - The worker parses and stores the result (`status = parsed`).
-  - A new **confirm endpoint** `POST /api/import/jobs/{job_id}/confirm-payslip` writes the parsed payslips to `fin_payslips` and marks the job `imported`.
-  - This gives the user a chance to review the parsed data before it is committed — consistent with the finance transactions flow.
+- Deprecate the direct Gemini call in `FinanceGeminiImportController::parseDocument()`. Guard with feature flag `GEMINI_USE_QUEUE` (default `false`; flip to `true` once stable). When true, the method returns a 410 directing callers to the new endpoints.
+- `StatementController::importMultiAccountPdf()` — after persisting data, mark the corresponding `GenAiImportResult` rows `imported`.
 
 #### 4b. Frontend
 
-- Replace the direct upload call with `POST /api/import/upload` (job_type=`finance_payslip`).
-- Add `useJobPolling` to the payslip import component.
-- Add a review screen: display parsed payslip fields in a table; user clicks "Import" to call the confirm endpoint.
-- UI states mirror Milestone 3 (idle → uploading → queued/queued_tomorrow → preview → imported).
+Replace `useProcessPdfWithGemini.ts` with `useGenAiFileUpload(job_type='finance_transactions')` + `useGenAiJobPolling`. `ImportTransactions.tsx` gains these states:
 
-#### 4c. Employment entity context
-
-Pass `employment_entity_id` (if set by the user) in `context_json` so the worker can include it in the parsed record.
+| State | UI |
+|-------|----|
+| `idle` | Drop zone / file picker |
+| `uploading` | "Uploading file…" progress indicator |
+| `queued` (pending/processing) | "Processing with AI… (job #42)" animated indicator |
+| `queued_tomorrow` | "Daily AI limit reached. Your file will be processed tomorrow." |
+| `parsed` | Existing account-block preview cards (unchanged) |
+| `error` (failed) | Error message + Retry button (max 3 retries) |
 
 ---
 
-### Milestone 5 — Utility Bill Import UI
+### Milestone 5 — Payslip Import UI
 
-**Why:** `UtilityBillImportController` currently writes directly to the DB (same pattern as payslips). Migrating it follows the same pattern as Milestone 4 but affects a different module (`UtilityBillTracker`).
-
-**Files affected:** `resources/js/components/utility-bill/` (utility bill upload component), `UtilityBillImportController`.
-
-**Requirements:**
+**Why:** `FinancePayslipImportController` currently writes directly to the DB without a review step. This milestone migrates it to the async flow and introduces a review step for consistency with the finance transactions flow.
 
 #### 5a. Backend
 
-- `UtilityBillImportController::import()` is replaced by the shared upload endpoint.
-- Pass `account_type` (e.g., `Electricity`) and `account_id` in `context_json` so `GeminiJobDispatcherService::runPrompt()` can build the correct electricity-specific prompt.
-- A new confirm endpoint `POST /api/import/jobs/{job_id}/confirm-utility-bill` creates `UtilityBill` records and marks the job `imported`.
+Replace the synchronous Gemini call with `GenAiJobDispatcherService::buildPrompt()`. The parsed result contains one `GenAiImportResult` per payslip found (a single PDF may contain multiple payslips).
+
+Add `POST /api/finance/payslips/from-result/{result_id}`: creates a `FinPayslip` record from a `GenAiImportResult` and marks it `imported`. `employment_entity_id` (passed via `context_json`) is applied at this step.
 
 #### 5b. Frontend
 
-- Replace the direct `fetch` call in the utility bill import component with the shared `POST /api/import/upload` flow.
-- Add `useJobPolling` and a review table for extracted bill fields.
-- UI states: idle → uploading → queued/queued_tomorrow → preview → imported.
+- Replace the direct upload call with `useGenAiFileUpload(job_type='finance_payslip')`.
+- After `status === 'parsed'`, show a list of detected payslips. Each has a "Review & Import" button.
+- UI states: idle → uploading → queued / queued_tomorrow → results list → imported.
 
 ---
 
-### Milestone 6 — Cleanup & Documentation
+### Milestone 6 — Utility Bill Import UI
 
-**Why last:** Only remove the old synchronous paths after all UIs have been migrated and the feature flag has been flipped to `GEMINI_USE_QUEUE=true` in production.
+**Why:** Same pattern as Milestone 5 for `UtilityBillImportController`.
 
-**Requirements:**
+#### 6a. Backend
 
-- Remove `GEMINI_USE_QUEUE` feature flag and the synchronous code paths.
-- Remove or archive `FinanceGeminiImportController::parseDocument()` (superseded by job dispatch).
-- Remove the raw Gemini call from `FinancePayslipImportController` and `UtilityBillImportController`.
-- Update `docs/finance/FinanceTool.md`, `STATEMENTS_AND_IMPORT.md`, and this file to reflect the final architecture.
-- Ensure PHP test coverage for:
-  - `ImportJobController` upload, show, index, retry, cancel
-  - `ParseImportFileJob` (mock `GeminiJobDispatcherService`)
-  - `import:process-scheduled` command
-  - Daily quota enforcement (happy path + quota-exceeded path)
-- Ensure TypeScript/Jest coverage for `useJobPolling`.
+Replace the synchronous Gemini call. Pass `account_type` and `utility_account_id` in `context_json`. Add `POST /api/utility-bills/from-result/{result_id}` to create a `UtilityBill` and mark the result `imported`.
+
+#### 6b. Frontend
+
+- Replace the direct upload call with `useGenAiFileUpload(job_type='utility_bill')`.
+- After parsing, show detected bills with "Review & Import" buttons.
+- UI states mirror Milestone 5.
 
 ---
 
-## Shared Job Queue Architecture
+### Milestone 7 — Review and Insert Results
+
+**Why a dedicated milestone:** The review UX is the critical user-facing experience for each tool. It can be designed and built incrementally once the async pipeline is in place.
+
+**Core concept:** Once a job reaches `parsed` status, the user sees one review card per `GenAiImportResult`. Each card shows extracted data, a "View Source PDF" link (short-lived signed S3 read URL), and Accept / Skip actions. Accepting commits the result to the DB and marks it `imported`. Skipping marks it `skipped`. The parent job becomes `imported` once all results are `imported` or `skipped`.
+
+#### 7a. Finance (Statements & Transactions)
+
+The existing account-block preview flow already provides a review step. Updates needed:
+- Read from `GenAiImportResult.result_json` instead of in-memory state.
+- Include "View Source PDF" link on each block.
+- After all blocks confirmed, mark job and results `imported`.
+
+#### 7b. Payslip Review
+
+When the user clicks "Review & Import" for a payslip result:
+- Navigate to (or open a modal using) the **New/Add Payslip** page with all fields pre-populated from `result_json`.
+- Include a **"View Source PDF"** link that opens the original PDF in a new tab via a signed S3 URL.
+- All fields are editable before saving. Saving calls `POST /api/finance/payslips/from-result/{result_id}`, marks the result `imported`, and returns to the job results list.
+
+#### 7c. Utility Bill Review
+
+When the user clicks "Review & Import" for a utility bill result:
+- Navigate to (or open a modal using) the **New/Add Utility Bill** form with fields pre-populated from `result_json`.
+- Include a **"View Source PDF"** link.
+- Saving calls `POST /api/utility-bills/from-result/{result_id}` and marks the result `imported`.
+
+#### 7d. Job History Page
+
+A new page lists the user's `GenAiImportJob` records in reverse chronological order. Accessible from each tool's navigation. Each row shows: filename, job type, status, creation date, result count. Actions:
+- Click a job to resume reviewing incomplete results.
+- Delete a job (with confirmation). Deletion removes the DB record, all result rows, and the S3 file.
+
+Job history is retained indefinitely (no automatic purge). Users manage their own history via the delete action.
+
+---
+
+### Milestone 8 — Cleanup & Documentation
+
+**Why last:** Remove old synchronous paths only after all UIs are migrated and the feature flag is flipped in production.
+
+- Remove `GEMINI_USE_QUEUE` feature flag and synchronous code paths in all three controllers.
+- Update `docs/finance/FinanceTool.md` and `STATEMENTS_AND_IMPORT.md`.
+- PHP feature test coverage: `GenAiImportController` (all endpoints), `ParseImportJob` (mocked dispatcher), `genai:process-scheduled` command, quota enforcement (happy path + quota-exceeded).
+- TypeScript/Jest coverage: `useGenAiFileUpload`, `useGenAiJobPolling`.
+
+---
+
+## Architecture Diagram
 
 ```
-┌──────────────────────────────────────────────────────┐
-│                  User (browser)                       │
-│  Finance Import │ Payslip Import │ Utility Bill Import │
-└────────┬────────┴───────┬────────┴──────────┬─────────┘
-         │                │                   │
-         └────────────────┼───────────────────┘
-                          │  POST /api/import/upload
-                          ▼
-              ┌─────────────────────┐
-              │  ImportJobController │
-              │  • SHA-256 de-dupe  │
-              │  • S3 upload        │
-              │  • Quota check      │
-              │  • fin_import_jobs  │
-              └──────────┬──────────┘
-                         │  Dispatch
-                         ▼
-              ┌─────────────────────┐
-              │   imports queue      │
-              └──────────┬──────────┘
-                         │
-                         ▼
-              ┌─────────────────────┐
-              │  ParseImportFileJob  │
-              │  • Quota check (2nd) │
-              │  • S3 download       │
-              │  • Route by job_type │
-              └──────────┬──────────┘
-                         │
-                         ▼
-          ┌──────────────────────────────┐
-          │  GeminiJobDispatcherService   │
-          │  • finance_transactions       │
-          │  • finance_payslip            │
-          │  • utility_bill               │
-          └──────────────┬───────────────┘
-                         │  Gemini API call
-                         ▼
-              ┌─────────────────────┐
-              │  fin_import_jobs     │
-              │  status = parsed     │
-              │  parsed_json = ...   │
-              └──────────┬──────────┘
-                         │  UI polls
-                         ▼
-              Tool-specific preview UI
-                         │  User confirms
-                         ▼
-              Tool-specific confirm endpoint
-              (writes to DB, marks imported)
+┌─────────────────────────────────────────────────────────┐
+│                    Browser                               │
+│  Finance Import │ Payslip Import │ Utility Bill Import   │
+│          ↓ useGenAiFileUpload (shared)                  │
+└──────────┬──────────────────────────────────┬───────────┘
+           │ 1. POST request-upload            │ 3. POST /jobs
+           ▼                                   ▼
+  ┌──────────────────┐             ┌──────────────────────────┐
+  │ GenAiImportCtrl  │             │   GenAiImportController   │
+  │ returns signed   │             │   creates job record,     │
+  │ S3 PUT URL       │             │   dispatches to queue     │
+  └──────────────────┘             └────────────┬─────────────┘
+           │                                    │
+           │ 2. PUT file directly to S3         │ dispatches
+           ▼                                    ▼
+      ┌─────────┐                  ┌────────────────────────┐
+      │   S3    │                  │  genai-imports queue    │
+      └────┬────┘                  │  (database driver)      │
+           │                       └───────────┬────────────┘
+           │                                   │ cron every minute
+           │                                   ▼
+           │                       ┌───────────────────────┐
+           │                       │    ParseImportJob      │
+           │                       │  • claimQuota()        │
+           │ signed read URL       │  • stream from S3 ─────│──→ Gemini File API
+           └──────────────────────→│  • upload to Gemini    │       ↓ file_uri
+                                   │  • generateContent     │
+                                   │  • delete from Gemini  │
+                                   │  • create results      │
+                                   └───────────┬────────────┘
+                                               │
+                                               ▼
+                                  genai_import_results (1..N rows)
+                                               │
+                                               │ UI polls
+                                               ▼
+                                  Tool-specific Review UI
+                                               │ user confirms each result
+                                               ▼
+                                  Tool-specific persist endpoint
+                                  (marks result imported)
 ```
 
 ---
 
 ## Global Daily API Quota
 
-### Configuration
-
 ```dotenv
-GEMINI_DAILY_REQUEST_LIMIT=500   # Maximum Gemini API calls per UTC calendar day
+GEMINI_DAILY_REQUEST_LIMIT=15          # Site-wide max Gemini calls per UTC calendar day
+GEMINI_USER_DAILY_REQUEST_LIMIT=-1     # Per-user limit; -1 = disabled (default)
 ```
 
-Adjust based on your Google Cloud project quota and budget alerts.
-
-### Enforcement flow
-
-1. `ImportJobController::upload()` calls `GeminiJobDispatcherService::claimQuota()` before dispatching.
-2. `ParseImportFileJob::handle()` calls `claimQuota()` again inside the worker (race-safe, handles the case where the quota was consumed between upload and worker pickup).
-3. If `claimQuota()` returns `false` at either check point, the job status becomes `queued_tomorrow` with `scheduled_for = UTC today + 1 day`.
-4. The `import:process-scheduled` command (runs every minute via Laravel scheduler) promotes `queued_tomorrow` jobs to `pending` as quota becomes available each new day.
-
-### Atomic quota increment (SQL)
-
-The canonical implementation uses `INSERT ... ON DUPLICATE KEY UPDATE` which is a single atomic statement in MySQL. No surrounding transaction is needed for MySQL. For test environments running SQLite, use `updateOrInsert` + a subsequent `SELECT` inside a `DB::transaction()` block.
-
-```sql
--- MySQL (production): single atomic statement
-INSERT INTO fin_gemini_daily_usage (usage_date, request_count, updated_at)
-VALUES (CURDATE(), 1, NOW())
-ON DUPLICATE KEY UPDATE
-  request_count = IF(request_count < @limit, request_count + 1, request_count),
-  updated_at    = NOW();
-
--- After the INSERT, SELECT request_count for today to determine if the increment succeeded:
--- if the returned count <= limit, the quota was claimed; otherwise it was not.
-SELECT request_count FROM fin_gemini_daily_usage WHERE usage_date = CURDATE();
-```
-
-Return `true` only if the post-increment count is ≤ the configured limit.
+`GenAiJobDispatcherService::claimQuota()` atomically increments `genai_daily_quota.request_count` for today. Jobs that cannot be dispatched receive `status = queued_tomorrow` and the user is emailed. The `genai:process-scheduled` command (runs every minute) promotes eligible deferred jobs when quota resets at midnight UTC.
 
 ---
 
 ## Security Considerations
 
-- All S3 paths are under `fin_import/{user_id}/`; ownership is enforced server-side.
-- `parsed_json` is stored as raw text and validated against the tool-specific schema before being committed to the DB via the confirm endpoint. Use the existing `buildMultiImportPayload` validation pipeline for finance transactions.
-- `ParseImportFileJob` never receives raw file content as a constructor argument — it downloads from S3 at runtime, keeping the queue payload small.
-- Rate limiting: the upload endpoint is rate-limited per user (10 uploads per minute) to prevent queue flooding.
-- The `job_type` field is validated against an allowlist before dispatch; unknown types are rejected with 422.
-- `context_json` is deserialized only inside the trusted server process; it is never echoed back to the browser without sanitization.
+- S3 objects are stored under `genai-import/{user_id}/`; pre-signed URLs are scoped to the specific key and have short TTLs (15 minutes for upload, configurable for read).
+- After a file is uploaded to S3, the server validates MIME type and size before creating the job.
+- `result_json` is stored as raw text. Each tool's persist endpoint validates and maps only the expected fields — raw JSON is never passed through blindly.
+- `job_type` is validated against a fixed allowlist before dispatch (422 for unknown types).
+- `context_json` is only consumed inside trusted server-side job processing; it is never returned to the browser as-is.
+- The Gemini API key is read from `user->getGeminiApiKey()` at job runtime, never stored in the queue payload.
+- Rate limit: 20 `request-upload` calls per minute per user to prevent queue flooding.
 
 ---
 
-## File Naming
-
-All files stored via this flow use:
+## File Naming Convention
 
 ```
-fin_import/{user_id}/{date} {random5} {originalFilename}
+genai-import/{user_id}/{YYYY.MM.DD} {random5} {sanitized_filename}
 ```
 
-- `{date}`: `YYYY.MM.DD` format (UTC)
-- `{random5}`: 5-character cryptographically random lowercase hex string generated by `substr(bin2hex(random_bytes(4)), 0, 5)` (4 bytes → 8 hex chars → first 5 taken), preventing S3 key collisions. This matches the actual implementation in `HasFileStorage::generateStoredFilename()`.
-- `{originalFilename}`: the client-supplied filename (sanitized)
-
-This mirrors `HasFileStorage::generateStoredFilename()`.
+`{random5}` = `substr(bin2hex(random_bytes(4)), 0, 5)` — matching `HasFileStorage::generateStoredFilename()`.
 
 ---
 
 ## Caching
 
-The existing per-request cache (keyed by `file_hash + accounts_context_hash`, TTL 1 hour) continues to work as a first layer before queuing. The `fin_import_job` record is a persistent second layer that survives cache eviction and is resumable across browser sessions.
-
----
-
-## Open Questions
-
-The following questions should be resolved before or during implementation. They are listed here so they can be addressed together.
-
-1. **Queue driver selection** — Should the `imports` queue use the `database` driver (simple, no new infrastructure) or `redis` (better throughput, supports delayed jobs natively)? The database driver is sufficient for the expected load but redis would be preferred if the app already has redis available.
-
-2. **Per-user daily quota** — Should there also be a per-user daily Gemini request limit (e.g., 50 per user) in addition to the site-wide limit? This would prevent one user from consuming the entire day's quota.
-
-3. **Payslip review screen design** — The current payslip import writes directly to the DB with no review step. Should the async flow introduce a review step (recommended for consistency) or should it write directly upon completion (faster UX, less code)? If a review step is added, which payslip fields need to be editable before commit?
-
-4. **Utility bill review screen design** — Same question as above for utility bills. The fields are simpler (dates, amounts), but user correction of OCR errors may be valuable.
-
-5. **Gemini model versioning** — The three controllers currently use different Gemini model versions (`gemini-2.5-flash`, `gemini-2.0-flash-exp`, `gemini-3-flash-preview`). Should `GeminiJobDispatcherService` standardize on a single model, or should each `job_type` specify its preferred model in a configuration file?
-
-6. **Job history retention** — How long should `fin_import_jobs` rows be kept after `status = imported`? Options: forever (for audit trail), 90 days (rolling purge via scheduled command), or configurable via `IMPORT_JOB_RETENTION_DAYS`.
-
-7. **Multi-file batching** — The payslip and utility bill controllers accept multiple files in a single request. In the async model, should each file become its own `fin_import_job` (simpler, independent retry per file) or should a batch be one job (fewer rows, but a failure affects all files in the batch)?
-
-8. **Supervisor / worker process management** — The codebase does not currently have Supervisor config files checked in. Should `supervisor.d/` configuration be added to the repository as documentation, or is this considered infrastructure-as-code outside the repo?
-
-9. **`queued_tomorrow` UX** — When a user's job is deferred, should they receive an email/notification when it completes the next day? This would require a notification system that does not currently exist.
-
-10. **Feature flag rollout order** — Should the feature flag `GEMINI_USE_QUEUE` be flipped per-tool (finance first, then payslip, then utility) or globally? Per-tool gives more controlled rollout but requires more flag management.
-
-11. **Quota monitoring & alerting** — Should there be an admin dashboard page or a Laravel Telescope panel showing `fin_gemini_daily_usage` over time? Who receives an alert when usage approaches the daily limit?
+The existing per-request Laravel cache (keyed by `file_hash + context_hash`, TTL 1 hour) continues to work as a fast-path de-dupe before a job is dispatched. The `genai_import_jobs` / `genai_import_results` records provide a persistent layer that survives cache eviction and is resumable across browser sessions.
