@@ -2,6 +2,8 @@
 
 namespace App\GenAiProcessor\Jobs;
 
+use App\GenAiProcessor\Mail\GenAiJobCompleteMail;
+use App\GenAiProcessor\Mail\GenAiJobDeferredMail;
 use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Models\GenAiImportResult;
 use App\GenAiProcessor\Services\GenAiJobDispatcherService;
@@ -12,6 +14,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 
 class ParseImportJob implements ShouldQueue
@@ -52,16 +55,6 @@ class ParseImportJob implements ShouldQueue
             return;
         }
 
-        // Check quota
-        if (! $dispatcher->claimQuota($user->id)) {
-            $job->markQueuedTomorrow();
-            Log::info('ParseImportJob: quota exhausted, deferred', ['job_id' => $job->id]);
-
-            return;
-        }
-
-        $job->markProcessing();
-
         $apiKey = $user->getGeminiApiKey();
         if (! $apiKey) {
             $job->markFailed('Gemini API key is not set.');
@@ -72,16 +65,22 @@ class ParseImportJob implements ShouldQueue
         $geminiFileUri = null;
 
         try {
-            // Stream file from S3
-            $fileContent = Storage::disk('s3')->get($job->s3_path);
-            if (! $fileContent) {
+            // Stream file from S3 to avoid buffering large uploads fully into memory
+            $fileStream = Storage::disk('s3')->readStream($job->s3_path);
+            if (! $fileStream) {
                 $job->markFailed('File not found in S3');
 
                 return;
             }
 
-            // Upload to Gemini File API
-            $geminiFileUri = $this->uploadToGeminiFileApi($apiKey, $fileContent, $job->mime_type ?? 'application/pdf');
+            // Upload to Gemini File API using stream
+            try {
+                $geminiFileUri = $this->uploadToGeminiFileApi($apiKey, $fileStream, $job->mime_type ?? 'application/pdf');
+            } finally {
+                if (is_resource($fileStream)) {
+                    fclose($fileStream);
+                }
+            }
 
             if (! $geminiFileUri) {
                 $job->markFailed('Failed to upload file to Gemini File API');
@@ -92,6 +91,23 @@ class ParseImportJob implements ShouldQueue
             // Build prompt
             $context = $job->getContextArray();
             $prompt = $dispatcher->buildPrompt($job->job_type, $context);
+
+            // Claim quota right before the Gemini API call to avoid double-counting
+            if (! $dispatcher->claimQuota($user->id, $user)) {
+                $job->markQueuedTomorrow();
+                Log::info('ParseImportJob: quota exhausted, deferred', ['job_id' => $job->id]);
+
+                // Notify user their job has been deferred
+                try {
+                    Mail::to($user->email)->send(new GenAiJobDeferredMail($job));
+                } catch (\Throwable $mailEx) {
+                    Log::warning('Failed to send deferred mail', ['job_id' => $job->id, 'error' => $mailEx->getMessage()]);
+                }
+
+                return;
+            }
+
+            $job->markProcessing();
 
             // Call generateContent with file_uri
             $data = $this->callGeminiGenerateContent($apiKey, $geminiFileUri, $job->mime_type ?? 'application/pdf', $prompt);
@@ -111,8 +127,21 @@ class ParseImportJob implements ShouldQueue
                 'job_id' => $job->id,
                 'result_count' => $job->results()->count(),
             ]);
+
+            // Notify user their import is ready for review
+            try {
+                Mail::to($user->email)->send(new GenAiJobCompleteMail($job));
+            } catch (\Throwable $mailEx) {
+                Log::warning('Failed to send completion mail', ['job_id' => $job->id, 'error' => $mailEx->getMessage()]);
+            }
         } catch (GeminiRateLimitException $e) {
             $job->markFailed('API rate limit exceeded. Please wait and try again.');
+
+            try {
+                Mail::to($user->email)->send(new GenAiJobCompleteMail($job));
+            } catch (\Throwable $mailEx) {
+                Log::warning('Failed to send failure mail', ['job_id' => $job->id]);
+            }
         } catch (GeminiFatalException $e) {
             // Fatal errors (400 Bad Request, etc.) - mark as failed immediately with max retries
             $job->update([
@@ -120,12 +149,24 @@ class ParseImportJob implements ShouldQueue
                 'error_message' => $e->getMessage(),
                 'retry_count' => GenAiImportJob::MAX_RETRIES,
             ]);
+
+            try {
+                Mail::to($user->email)->send(new GenAiJobCompleteMail($job));
+            } catch (\Throwable $mailEx) {
+                Log::warning('Failed to send failure mail', ['job_id' => $job->id]);
+            }
         } catch (\Throwable $e) {
             Log::error('ParseImportJob: unexpected error', [
                 'job_id' => $job->id,
                 'error' => $e->getMessage(),
             ]);
             $job->markFailed('An unexpected error occurred: '.$e->getMessage());
+
+            try {
+                Mail::to($user->email)->send(new GenAiJobCompleteMail($job));
+            } catch (\Throwable $mailEx) {
+                Log::warning('Failed to send failure mail', ['job_id' => $job->id]);
+            }
         } finally {
             // Always try to clean up Gemini file
             if ($geminiFileUri) {
@@ -135,11 +176,19 @@ class ParseImportJob implements ShouldQueue
     }
 
     /**
-     * Upload file content to the Gemini File API.
+     * Upload a file stream to the Gemini File API.
      * Returns the file URI (e.g., "files/abc123") or null on failure.
+     *
+     * @param  resource  $fileStream
      */
-    private function uploadToGeminiFileApi(string $apiKey, string $fileContent, string $mimeType): ?string
+    private function uploadToGeminiFileApi(string $apiKey, $fileStream, string $mimeType): ?string
     {
+        // Read the stream content for multipart upload
+        $fileContent = stream_get_contents($fileStream);
+        if ($fileContent === false) {
+            return null;
+        }
+
         $response = Http::withHeaders([
             'x-goog-api-key' => $apiKey,
         ])->attach(

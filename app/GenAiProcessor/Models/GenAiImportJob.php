@@ -108,7 +108,7 @@ class GenAiImportJob extends Model
     {
         $this->update([
             'status' => 'queued_tomorrow',
-            'scheduled_for' => now()->addDay()->startOfDay(),
+            'scheduled_for' => now()->utc()->addDay()->startOfDay(),
         ]);
     }
 

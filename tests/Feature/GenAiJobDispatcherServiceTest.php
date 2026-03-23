@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\GenAiProcessor\Models\GenAiDailyQuota;
+use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Services\GenAiJobDispatcherService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -20,7 +21,7 @@ class GenAiJobDispatcherServiceTest extends TestCase
         $user = $this->createUser();
         $service = new GenAiJobDispatcherService;
 
-        // Default limit is 15
+        // Default limit is 500
         $result = $service->claimQuota($user->id);
         $this->assertTrue($result);
 
@@ -38,13 +39,45 @@ class GenAiJobDispatcherServiceTest extends TestCase
 
         $today = now()->utc()->toDateString();
 
-        // Set quota to the limit
+        // Set quota to the site-wide limit (500)
         GenAiDailyQuota::create([
             'usage_date' => $today,
-            'request_count' => 15,
+            'request_count' => 500,
         ]);
 
         $result = $service->claimQuota($user->id);
+        $this->assertFalse($result);
+    }
+
+    public function test_claim_quota_fails_when_per_user_limit_reached(): void
+    {
+        // Set a per-user limit of 2
+        $user = $this->createUser(['genai_daily_quota_limit' => 2]);
+        $service = new GenAiJobDispatcherService;
+
+        $today = now()->utc()->toDateString();
+
+        // Simulate 2 completed jobs today for this user
+        GenAiImportJob::create([
+            'user_id' => $user->id,
+            'job_type' => 'finance_transactions',
+            'file_hash' => 'abc123',
+            'original_filename' => 'test.pdf',
+            's3_path' => 'genai-import/1/test.pdf',
+            'file_size_bytes' => 1000,
+            'status' => 'parsed',
+        ]);
+        GenAiImportJob::create([
+            'user_id' => $user->id,
+            'job_type' => 'finance_transactions',
+            'file_hash' => 'def456',
+            'original_filename' => 'test2.pdf',
+            's3_path' => 'genai-import/1/test2.pdf',
+            'file_size_bytes' => 1000,
+            'status' => 'parsed',
+        ]);
+
+        $result = $service->claimQuota($user->id, $user);
         $this->assertFalse($result);
     }
 
@@ -82,7 +115,7 @@ class GenAiJobDispatcherServiceTest extends TestCase
         $service = new GenAiJobDispatcherService;
 
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('Unexpected context keys');
+        $this->expectExceptionMessageMatches('/Unexpected context keys/');
         $service->validateContext('finance_transactions', ['malicious_key' => 'value']);
     }
 
@@ -103,7 +136,7 @@ class GenAiJobDispatcherServiceTest extends TestCase
         $service = new GenAiJobDispatcherService;
 
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('last4 must be at most 4 characters');
+        $this->expectExceptionMessage('Account last4 must be at most 4 characters');
         $service->validateContext('finance_transactions', [
             'accounts' => [
                 ['name' => 'Savings', 'last4' => '12345'],

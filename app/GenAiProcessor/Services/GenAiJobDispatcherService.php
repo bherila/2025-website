@@ -4,6 +4,7 @@ namespace App\GenAiProcessor\Services;
 
 use App\GenAiProcessor\Models\GenAiDailyQuota;
 use App\GenAiProcessor\Models\GenAiImportJob;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -12,14 +13,16 @@ class GenAiJobDispatcherService
     /**
      * Atomically claim a quota slot for today (UTC).
      * Returns false if the site-wide or per-user limit is reached.
+     *
+     * @param  int  $userId  The user ID to check per-user quota against
+     * @param  User|null  $user  Optional user model for per-user settings
      */
-    public function claimQuota(int $userId): bool
+    public function claimQuota(int $userId, ?User $user = null): bool
     {
-        $siteLimit = (int) env('GEMINI_DAILY_REQUEST_LIMIT', 15);
-        $userLimit = (int) env('GEMINI_USER_DAILY_REQUEST_LIMIT', -1);
+        $siteLimit = (int) env('GEMINI_DAILY_REQUEST_LIMIT', 500);
         $today = now()->utc()->toDateString();
 
-        return DB::transaction(function () use ($today, $siteLimit, $userLimit, $userId) {
+        return DB::transaction(function () use ($today, $siteLimit, $userId, $user) {
             // Get or create today's quota row atomically
             $quota = GenAiDailyQuota::firstOrCreate(
                 ['usage_date' => $today],
@@ -39,7 +42,9 @@ class GenAiJobDispatcherService
                 return false;
             }
 
-            // Per-user quota check (if enabled)
+            // Per-user quota check (user's configured limit, or env fallback, -1 = disabled)
+            $userModel = $user ?? User::find($userId);
+            $userLimit = $userModel?->genai_daily_quota_limit ?? (int) env('GEMINI_USER_DAILY_REQUEST_LIMIT', -1);
             if ($userLimit >= 0) {
                 $userCount = GenAiImportJob::where('user_id', $userId)
                     ->whereDate('created_at', $today)

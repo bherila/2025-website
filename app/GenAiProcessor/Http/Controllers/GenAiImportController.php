@@ -108,15 +108,18 @@ class GenAiImportController extends Controller
 
         $s3Key = $request->input('s3_key');
 
-        // Compute file hash by streaming from S3
+        // Validate s3_key belongs to the authenticated user's prefix to prevent cross-user access
+        $expectedPrefix = "genai-import/{$user->id}/";
+        if (! str_starts_with($s3Key, $expectedPrefix)) {
+            return response()->json(['error' => 'Invalid file reference.'], 403);
+        }
+
+        // Use S3 ETag as the file hash — avoids downloading the full file just to hash it.
+        // For single-part PUT uploads (which is what pre-signed URLs use), ETag is the MD5 of the content.
         try {
-            $fileContent = Storage::disk('s3')->get($s3Key);
-            if (! $fileContent) {
-                return response()->json(['error' => 'File not found in storage.'], 404);
-            }
-            $fileHash = hash('sha256', $fileContent);
+            $fileHash = Storage::disk('s3')->checksum($s3Key);
         } catch (\Throwable $e) {
-            Log::error('Failed to read file from S3 for hash', ['s3_key' => $s3Key, 'error' => $e->getMessage()]);
+            Log::error('Failed to get file checksum from S3', ['s3_key' => $s3Key, 'error' => $e->getMessage()]);
 
             return response()->json(['error' => 'Failed to read uploaded file.'], 500);
         }
@@ -149,18 +152,7 @@ class GenAiImportController extends Controller
             'status' => 'pending',
         ]);
 
-        // Check quota before dispatching
-        if (! $this->dispatcher->claimQuota($user->id)) {
-            $job->markQueuedTomorrow();
-
-            return response()->json([
-                'job_id' => $job->id,
-                'status' => 'queued_tomorrow',
-                'message' => 'Daily AI limit reached. Your file will be processed tomorrow.',
-            ]);
-        }
-
-        // Dispatch to queue
+        // Dispatch to queue; quota is claimed inside the worker to avoid double-counting
         ParseImportJob::dispatch($job->id);
 
         return response()->json([

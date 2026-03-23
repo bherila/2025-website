@@ -105,6 +105,38 @@ class GenAiImportControllerTest extends TestCase
         $response->assertJsonFragment(['error' => 'Unexpected context keys for finance_transactions: malicious_acct_id']);
     }
 
+    public function test_create_job_rejects_s3_key_from_other_user(): void
+    {
+        $user = $this->createUser();
+        $otherUser = $this->createUser();
+
+        // Try to reference a file that belongs to another user's prefix
+        $response = $this->actingAs($user)->postJson('/api/genai/import/jobs', [
+            's3_key' => "genai-import/{$otherUser->id}/test.pdf",
+            'original_filename' => 'test.pdf',
+            'file_size_bytes' => 1024,
+            'job_type' => 'finance_transactions',
+        ]);
+        $response->assertStatus(403);
+        $response->assertJsonFragment(['error' => 'Invalid file reference.']);
+    }
+
+    public function test_create_job_accepts_own_s3_key_prefix(): void
+    {
+        $user = $this->createUser();
+
+        // Use the correct user prefix — S3 checksum will fail since no real S3 is connected
+        // but we verify validation passes and returns 500 (not 403)
+        $response = $this->actingAs($user)->postJson('/api/genai/import/jobs', [
+            's3_key' => "genai-import/{$user->id}/test.pdf",
+            'original_filename' => 'test.pdf',
+            'file_size_bytes' => 1024,
+            'job_type' => 'finance_transactions',
+        ]);
+        // Should fail at S3 checksum, not at prefix validation
+        $this->assertNotEquals(403, $response->status());
+    }
+
     public function test_create_job_prevents_acct_id_injection(): void
     {
         $user = $this->createUser();

@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { Alert, AlertDescription } from './components/ui/alert';
 import { Spinner } from './components/ui/spinner';
 import { ApiKeySection } from './user/api-key';
+import { GenAiQuotaSection } from './user/genai-quota';
 import { LoginAuditSection } from './user/login-audit-section';
 import { PasskeySection } from './user/passkey-section';
 import { UpdateEmailSection } from './user/update-email';
@@ -14,6 +15,7 @@ interface User {
   name: string;
   email: string;
   gemini_api_key: string | null;
+  genai_daily_quota_limit: number | null;
 }
 
 const MyAccount: React.FC = () => {
@@ -77,6 +79,13 @@ const MyAccount: React.FC = () => {
 
       <ApiKeySection
         user={user}
+        onSuccess={setSuccess}
+        onError={(field, message) => setErrors({ [field]: message })}
+        onUserUpdate={fetchUserData}
+      />
+
+      <GenAiQuotaSection
+        currentLimit={user?.genai_daily_quota_limit ?? null}
         onSuccess={setSuccess}
         onError={(field, message) => setErrors({ [field]: message })}
         onUserUpdate={fetchUserData}

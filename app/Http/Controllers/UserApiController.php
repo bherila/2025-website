@@ -72,4 +72,21 @@ class UserApiController extends Controller
 
         return response()->json(['message' => $request->gemini_api_key ? 'API key updated successfully' : 'API key cleared successfully']);
     }
+
+    public function updateGenAiQuota(Request $request)
+    {
+        $request->validate([
+            'genai_daily_quota_limit' => 'nullable|integer|min:1|max:10000',
+        ]);
+
+        $user = Auth::user();
+        $user->update(['genai_daily_quota_limit' => $request->genai_daily_quota_limit]);
+        Cache::forget("user_data_{$user->id}");
+
+        $limit = $request->genai_daily_quota_limit;
+
+        return response()->json([
+            'message' => $limit ? "Daily quota limit set to {$limit}" : 'Daily quota limit reset to system default',
+        ]);
+    }
 }

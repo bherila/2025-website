@@ -1250,6 +1250,7 @@ CREATE TABLE `users` (
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   `gemini_api_key` varchar(255) DEFAULT NULL,
+  `genai_daily_quota_limit` int(10) unsigned DEFAULT NULL COMMENT 'Per-user GenAI daily quota limit. NULL = use system default.',
   `marriage_status_by_year` text DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `users_email_unique` (`email`),

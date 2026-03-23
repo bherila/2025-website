@@ -51,7 +51,8 @@ CREATE TABLE `users`(
   `last_login_date` TEXT,
   `created_at` TEXT,
   `updated_at` TEXT,
-  `gemini_api_key` TEXT
+  `gemini_api_key` TEXT,
+  `genai_daily_quota_limit` INTEGER DEFAULT NULL
 );
 CREATE INDEX `users_user_role_index` ON `users`(`user_role`);
 CREATE TABLE `client_companies`(
