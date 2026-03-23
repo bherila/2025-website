@@ -85,7 +85,6 @@ export const PasskeySection: React.FC<PasskeySectionProps> = ({ onSuccess, onErr
   };
 
   const registerPasskey = async () => {
-    setShowNameDialog(false);
     setRegistering(true);
     try {
       // Step 1: Get registration options
@@ -162,6 +161,7 @@ export const PasskeySection: React.FC<PasskeySectionProps> = ({ onSuccess, onErr
         console.debug('[PasskeySection] Registration cancelled or timed out:', message);
       }
     } finally {
+      setShowNameDialog(false);
       setRegistering(false);
     }
   };
