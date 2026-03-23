@@ -24,6 +24,13 @@ class FinanceGeminiImportController extends Controller
      */
     public function parseDocument(Request $request)
     {
+        // Feature flag: redirect to new async flow when enabled
+        if (env('GEMINI_USE_QUEUE', false)) {
+            return response()->json([
+                'error' => 'Direct PDF parsing is deprecated. Please use the new async import flow via /api/genai/import/jobs.',
+            ], 410);
+        }
+
         set_time_limit(300);
 
         $validator = Validator::make($request->all(), [

@@ -20,15 +20,14 @@ class GenAiJobDispatcherService
         $today = now()->utc()->toDateString();
 
         return DB::transaction(function () use ($today, $siteLimit, $userLimit, $userId) {
-            // Site-wide quota check
-            $quota = GenAiDailyQuota::lockForUpdate()->find($today);
+            // Get or create today's quota row atomically
+            $quota = GenAiDailyQuota::firstOrCreate(
+                ['usage_date' => $today],
+                ['request_count' => 0]
+            );
 
-            if (! $quota) {
-                $quota = GenAiDailyQuota::create([
-                    'usage_date' => $today,
-                    'request_count' => 0,
-                ]);
-            }
+            // Reload with lock for update (no-op on SQLite but works on MySQL)
+            $quota = GenAiDailyQuota::where('usage_date', $today)->lockForUpdate()->first();
 
             if ($quota->request_count >= $siteLimit) {
                 Log::info('GenAI daily site-wide quota exhausted', [

@@ -23,7 +23,6 @@ class GenAiDailyQuota extends Model
     ];
 
     protected $casts = [
-        'usage_date' => 'date',
         'request_count' => 'integer',
     ];
 }
