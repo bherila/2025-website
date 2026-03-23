@@ -294,6 +294,36 @@ Because the cron-based queue has up to 60 seconds latency, the UI should:
 
 ---
 
+## Quota Management
+
+### System-Wide Quota
+The `GEMINI_DAILY_REQUEST_LIMIT` environment variable (default: **500**) caps the total number of Gemini API calls per UTC day across all users. When exhausted, new jobs are deferred to the next day.
+
+### Per-User Quota
+Each user can configure a personal daily limit in **User Settings → GenAI Daily Quota** (`/dashboard`). The setting is stored in `users.genai_daily_quota_limit`:
+- `NULL` (default) — user is subject only to the system-wide limit
+- A positive integer — user cannot exceed that many AI import jobs per UTC day
+
+This setting is configurable only by the user themselves and cannot be set via environment variables.
+
+---
+
+## Admin Panel
+
+Administrators can monitor all GenAI jobs across all users at `/admin/genai-jobs`. The panel:
+- Lists all jobs, most recent first, with pagination
+- Shows user, file name, type, status, retry count, and creation date
+- Provides a **Details** button per row that opens a modal with full job information:
+  - User information
+  - File metadata (size, S3 path, hash)
+  - Context JSON (the prompt input)
+  - Raw Gemini response (result JSON, expandable per result)
+  - Error message if failed
+
+The admin panel requires the `admin` gate (user must have the `admin` role). The "Admin: GenAI Jobs" link appears in the top-right user menu for admin users only.
+
+---
+
 ## Security Considerations
 
 - S3 objects are stored under `genai-import/{user_id}/`; pre-signed URLs are scoped to the specific key with 15-minute TTL.
@@ -316,7 +346,8 @@ app/GenAiProcessor/
 │   ├── ScanOrphanedFiles.php          # orphans:scan
 │   └── DeleteOrphanedFiles.php        # orphans:delete
 ├── Http/Controllers/
-│   └── GenAiImportController.php      # API endpoints
+│   ├── GenAiImportController.php      # User-facing API endpoints
+│   └── AdminGenAiJobsController.php   # Admin API endpoints
 ├── Jobs/
 │   └── ParseImportJob.php             # Queue worker
 ├── Mail/
@@ -336,6 +367,9 @@ resources/js/genai-processor/
 └── __tests__/
     ├── useGenAiFileUpload.test.ts
     └── useGenAiJobPolling.test.ts
+
+resources/js/components/admin/
+└── AdminGenAiJobsPage.tsx             # Admin jobs management UI
 ```
 
 ---

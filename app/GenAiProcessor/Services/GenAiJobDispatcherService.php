@@ -42,9 +42,9 @@ class GenAiJobDispatcherService
                 return false;
             }
 
-            // Per-user quota check (user's configured limit, or env fallback, -1 = disabled)
+            // Per-user quota check (user's configured limit; -1 = unlimited)
             $userModel = $user ?? User::find($userId);
-            $userLimit = $userModel?->genai_daily_quota_limit ?? (int) env('GEMINI_USER_DAILY_REQUEST_LIMIT', -1);
+            $userLimit = $userModel?->genai_daily_quota_limit ?? -1;
             if ($userLimit >= 0) {
                 $userCount = GenAiImportJob::where('user_id', $userId)
                     ->whereDate('created_at', $today)

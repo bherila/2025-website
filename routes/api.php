@@ -1,5 +1,6 @@
 <?php
 
+use App\GenAiProcessor\Http\Controllers\AdminGenAiJobsController;
 use App\GenAiProcessor\Http\Controllers\GenAiImportController;
 use App\Http\Controllers\ClientManagement\ClientAgreementApiController;
 use App\Http\Controllers\ClientManagement\ClientCompanyApiController;
@@ -228,6 +229,10 @@ Route::middleware(['web', 'auth'])->post('/admin/users/{id}/roles', [UserManagem
 Route::middleware(['web', 'auth'])->delete('/admin/users/{id}/roles/{role}', [UserManagementApiController::class, 'removeRole']);
 Route::middleware(['web', 'auth'])->post('/admin/users/{id}/password', [UserManagementApiController::class, 'setPassword']);
 Route::middleware(['web', 'auth'])->post('/admin/users/{id}/email', [UserManagementApiController::class, 'updateEmail']);
+
+// Admin GenAI Jobs API
+Route::middleware(['web', 'auth'])->get('/admin/genai-jobs', [AdminGenAiJobsController::class, 'index']);
+Route::middleware(['web', 'auth'])->get('/admin/genai-jobs/{id}', [AdminGenAiJobsController::class, 'show']);
 
 // File Management API routes
 
