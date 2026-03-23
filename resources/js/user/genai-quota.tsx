@@ -76,7 +76,7 @@ export const GenAiQuotaSection: React.FC<GenAiQuotaSectionProps> = ({
               max={10000}
               value={limitValue}
               onChange={(e) => setLimitValue(e.target.value)}
-              placeholder={`Leave blank to use system default${currentLimit != null ? ` (currently ${currentLimit})` : ''}`}
+              placeholder="Enter a number, or leave blank for system default"
             />
           </div>
           <Button type="submit">{limitValue.trim() ? 'Update Limit' : 'Reset to Default'}</Button>

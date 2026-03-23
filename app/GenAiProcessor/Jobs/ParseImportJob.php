@@ -183,16 +183,12 @@ class ParseImportJob implements ShouldQueue
      */
     private function uploadToGeminiFileApi(string $apiKey, $fileStream, string $mimeType): ?string
     {
-        // Read the stream content for multipart upload
-        $fileContent = stream_get_contents($fileStream);
-        if ($fileContent === false) {
-            return null;
-        }
-
+        // Pass the stream resource directly to Guzzle's multipart builder.
+        // Guzzle accepts a PHP resource for streaming uploads, avoiding full in-memory buffering.
         $response = Http::withHeaders([
             'x-goog-api-key' => $apiKey,
         ])->attach(
-            'file', $fileContent, 'upload.pdf', ['Content-Type' => $mimeType]
+            'file', $fileStream, 'upload.pdf', ['Content-Type' => $mimeType]
         )->post('https://generativelanguage.googleapis.com/upload/v1beta/files', [
             'file' => ['display_name' => 'genai-import-'.time()],
         ]);
