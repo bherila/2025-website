@@ -289,13 +289,13 @@ class WebAuthnService
     private function optionsToArray(PublicKeyCredentialCreationOptions $options): array
     {
         return [
-            'challenge' => base64_encode($options->challenge),
+            'challenge' => $this->encodeCredentialId($options->challenge),
             'rp' => [
                 'name' => $options->rp->name,
                 'id' => $options->rp->id,
             ],
             'user' => [
-                'id' => base64_encode($options->user->id),
+                'id' => $this->encodeCredentialId($options->user->id),
                 'name' => $options->user->name,
                 'displayName' => $options->user->displayName,
             ],
@@ -306,7 +306,7 @@ class WebAuthnService
             'timeout' => $options->timeout,
             'excludeCredentials' => array_map(fn ($c) => [
                 'type' => $c->type,
-                'id' => base64_encode($c->id),
+                'id' => $this->encodeCredentialId($c->id),
             ], $options->excludeCredentials),
             'authenticatorSelection' => [
                 'residentKey' => 'preferred',
@@ -320,11 +320,11 @@ class WebAuthnService
     private function requestOptionsToArray(PublicKeyCredentialRequestOptions $options): array
     {
         return [
-            'challenge' => base64_encode($options->challenge),
+            'challenge' => $this->encodeCredentialId($options->challenge),
             'rpId' => $options->rpId,
             'allowCredentials' => array_map(fn ($c) => [
                 'type' => $c->type,
-                'id' => base64_encode($c->id),
+                'id' => $this->encodeCredentialId($c->id),
             ], $options->allowCredentials),
             'userVerification' => $options->userVerification ?? 'preferred',
             'timeout' => $options->timeout,
