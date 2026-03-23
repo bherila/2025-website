@@ -1,0 +1,119 @@
+<?php
+
+namespace App\GenAiProcessor\Models;
+
+use App\Models\FinanceTool\FinAccounts;
+use App\Models\User;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class GenAiImportJob extends Model
+{
+    protected $table = 'genai_import_jobs';
+
+    public const VALID_JOB_TYPES = [
+        'finance_transactions',
+        'finance_payslip',
+        'utility_bill',
+    ];
+
+    public const VALID_STATUSES = [
+        'pending',
+        'processing',
+        'parsed',
+        'imported',
+        'failed',
+        'queued_tomorrow',
+    ];
+
+    public const MAX_RETRIES = 3;
+
+    protected $fillable = [
+        'user_id',
+        'acct_id',
+        'job_type',
+        'file_hash',
+        'original_filename',
+        's3_path',
+        'mime_type',
+        'file_size_bytes',
+        'context_json',
+        'status',
+        'error_message',
+        'retry_count',
+        'scheduled_for',
+        'parsed_at',
+    ];
+
+    protected $casts = [
+        'file_size_bytes' => 'integer',
+        'retry_count' => 'integer',
+        'scheduled_for' => 'date',
+        'parsed_at' => 'datetime',
+    ];
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function account(): BelongsTo
+    {
+        return $this->belongsTo(FinAccounts::class, 'acct_id', 'acct_id');
+    }
+
+    public function results(): HasMany
+    {
+        return $this->hasMany(GenAiImportResult::class, 'job_id');
+    }
+
+    public function getContextArray(): array
+    {
+        if (empty($this->context_json)) {
+            return [];
+        }
+
+        return json_decode($this->context_json, true) ?? [];
+    }
+
+    public function canRetry(): bool
+    {
+        return $this->retry_count < self::MAX_RETRIES && $this->status === 'failed';
+    }
+
+    public function markProcessing(): void
+    {
+        $this->update(['status' => 'processing']);
+    }
+
+    public function markParsed(): void
+    {
+        $this->update([
+            'status' => 'parsed',
+            'parsed_at' => now(),
+        ]);
+    }
+
+    public function markFailed(string $errorMessage): void
+    {
+        $this->update([
+            'status' => 'failed',
+            'error_message' => $errorMessage,
+            'retry_count' => $this->retry_count + 1,
+        ]);
+    }
+
+    public function markQueuedTomorrow(): void
+    {
+        $this->update([
+            'status' => 'queued_tomorrow',
+            'scheduled_for' => now()->utc()->addDay()->startOfDay(),
+        ]);
+    }
+
+    public function markImported(): void
+    {
+        $this->update(['status' => 'imported']);
+    }
+}

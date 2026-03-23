@@ -227,63 +227,36 @@ The transaction import process is as follows:
 5.  The frontend displays the imported transactions in a table, highlighting any duplicates.
 6.  The user can then choose to import the new transactions.
 
-### PDF Import Enhancements
+### PDF Import (GenAI)
 
-PDF statements now offer a two-stage experience with explicit options:
+> **Full documentation:** See [GenAI Import](../GenAI-Import.md) for the complete architecture, API reference, and security details.
 
-**Stage 1 (Pre-Gemini):** After selecting/dropping a PDF, one checkbox is shown:
+PDF statements are parsed using the GenAI Import system. The frontend uploads files directly to S3 via pre-signed URLs, then creates an import job that is processed asynchronously by the queue worker.
+
+**Two-stage UX:**
+
+**Stage 1 (Pre-AI):** After selecting/dropping a PDF, one checkbox is shown:
 - **Save File to Storage** – upload the original PDF to S3 for later reference
 
-**Stage 2 (Post-Gemini):** After AI parsing completes, additional checkboxes appear before the Import button:
+**Stage 2 (Post-AI):** After AI parsing completes, additional checkboxes appear before the Import button:
 - **Import Transactions** – import parsed transaction line items (shown only when transactions are detected)
 - **Attach as Statement** – create a statement/statement-details record (shown only when statement details are detected)
 
 Checkbox states are persisted globally in `localStorage` (`pdf_import_transactions`,
-`pdf_attach_statement`, `pdf_save_file_s3`) so users don’t need to reconfigure each
-session or per account.
-
-When the storage option is selected the file is immediately uploaded to
-`/api/finance/{accountId}/files` after Gemini processing completes; the resulting
-record will surface in the **Statement Files** card on the Statements page even
-if no transactions or details were imported.
-
-The backend endpoint for AI parsing (`FinanceGeminiImportController@parseDocument`)
-caches responses by SHA-256 file hash **and** accounts context hash for one hour. A companion endpoint
-(`/api/finance/statement/{statement_id}/pdf`) returns signed URLs for
-viewing/downloading any PDF tied to a statement.
+`pdf_attach_statement`, `pdf_save_file_s3`).
 
 ### Multi-Account PDF Import
 
-When a bank summary statement (e.g. Ally Bank combined statement) contains transactions for multiple accounts, the system supports automatic distribution. This feature works from **both** the specific account import page and the "All Accounts" import page (`/finance/account/all/import`):
+When a bank summary statement contains transactions for multiple accounts, the system supports automatic distribution via the `accounts` context in the import job. See [GenAI Import — Job Types & Context Schema](../GenAI-Import.md#job-types--context-schema).
 
-1. **AI Context**: The import page sends the user’s account names and last-4 digits of account
-   numbers to the Gemini API along with the PDF. The full account number is **never** sent to the AI.
-2. **Grouped Response**: Gemini returns an `accounts[]` array grouping transactions by account.
-   Single-account PDFs also return this format (array of one element) for consistency.
-3. **Suffix Matching**: The frontend (`accountMatcher.ts`) automatically matches each parsed
-   account block to the user’s accounts using:
-   - Exact account number match
-   - Last-4-digit suffix match
-   - Word-overlap name disambiguation when multiple accounts share the same suffix
-4. **Per-Account Preview**: Each account group is shown as a separate card before import,
-   with a dropdown for manual account assignment override.
-5. **Import**: Clicking "Import" calls `POST /api/finance/multi-import-pdf` which creates
-   statement records and inserts transactions for each account in a single DB transaction.
-6. **Store PDF Once**: The PDF file is uploaded to S3 once (for the primary account).
-   For additional accounts, `POST /api/finance/{accountId}/files/attach` creates a
-   `files_for_fin_accounts` record pointing to the same S3 path by file hash.
-
-#### Account Mapping Override
-
-The per-account dropdowns in the import preview default to auto-detected accounts.
-The current page’s account (from the URL) is used as the fallback for unmatched blocks.
-Users can change any mapping before clicking import.
+The frontend (`accountMatcher.ts`) automatically matches each parsed account block to the user's accounts using suffix matching and name disambiguation.
 
 #### Backend API
 
 | Endpoint | Description |
 |----------|-------------|
-| `POST /api/finance/transactions/import-gemini` | Parse PDF with Gemini; accepts optional `accounts[]` context (name + last4 only) |
+| `POST /api/genai/import/jobs` | New async import job (see [GenAI Import](../GenAI-Import.md)) |
+| `POST /api/finance/transactions/import-gemini` | Legacy synchronous parse (deprecated when `GEMINI_USE_QUEUE=true`) |
 | `POST /api/finance/multi-import-pdf` | Import data for multiple accounts in one transaction |
 | `POST /api/finance/{accountId}/files/attach` | Attach an already-stored file (by hash) to an account |
 
@@ -292,11 +265,7 @@ To save storage and processing time, the file management system uses SHA-256 has
 - When a file is uploaded, its hash is stored in `files_for_fin_accounts.file_hash`.
 - If a file with the same hash already exists for the account, the existing record is reused.
 - If the file was already uploaded but not yet linked to a statement, it is updated with the new `statement_id`.
-
-### Gemini Cache Management
-Gemini API responses are cached by file hash + accounts context hash. To allow re-processing a file:
-- Deleting a statement from the **Statements** tab will automatically clear the Gemini cache for all associated files.
-- This allows the user to re-upload the same file and have Gemini parse it again (useful if the prompt or parsing logic changed).
+- The GenAI import system also de-duplicates by file hash: re-uploading the same file returns the existing job's results.
 
 ## Account Settings
 
@@ -631,18 +600,19 @@ The parser tries each format in order until one succeeds:
 
 ## PDF Statement Import
 
-PDF statements can be imported using Gemini AI for parsing. The frontend now provides a two‑step experience with explicit options and server‑side caching.
+> **Full documentation:** See [GenAI Import](../GenAI-Import.md) for the complete architecture of the asynchronous AI parsing pipeline.
+
+PDF statements are parsed using the GenAI Import system, which provides asynchronous AI processing with quota management and retry logic.
 
 ### Import Flow
 
 1. User drops or pastes a file on the import page, or chooses one via the file picker.
-2. If the file is text (CSV/QFX/HAR/etc.) it is parsed immediately in the browser. If it is a PDF the file is held in state and a summary card appears with a **Save File to Storage** checkbox.
-3. When the user clicks **Process with AI**, the PDF is POSTed to `/api/finance/transactions/import-gemini`.
-   The backend endpoint is now `FinanceGeminiImportController@parseDocument`; responses (successful JSON payloads) are cached by SHA‑256 hash of the file contents for one hour to avoid repeat API calls. Errors are **not** cached so retries always re‑contact Gemini.
-   **Date handling:** any dates extracted from the PDF (e.g. transaction dates or statement period dates) are truncated to the `YYYY-MM-DD` string form on the server before being returned. This avoids timezone conversions and ensures the database stores plain date strings without time or zone components.
-   **Fund-Level Filtering:** The import process automatically filters out fund-level information. The Gemini prompt instructs the AI to ignore sections like "Fund Level Capital Account," and a server-side filter provides a safety net by skipping any parsed rows where the section name contains "Fund Level."
-4. Gemini returns a structured JSON object containing any combination of statement information, statement detail rows, transaction entries, and investment lots. The front end renders preview cards showing the parsed output and highlights duplicates.
-5. After reviewing the data, the user confirms by clicking the import button. All PDF imports (single-account and multi-account) are now submitted via `POST /api/finance/multi-import-pdf`. The `file_hash` of the uploaded PDF is passed in the payload so the backend can atomically link the stored file to every created statement. Non-PDF text imports (CSV/QIF/OFX) continue to post transactions in chunks to `/api/finance/{account_id}/line_items`.
+2. If the file is text (CSV/QFX/HAR/etc.) it is parsed immediately in the browser. If it is a PDF, the file is uploaded directly to S3 via a pre-signed URL and an import job is created.
+3. The job is processed asynchronously by the `ParseImportJob` queue worker, which uploads the file to the Gemini File API, calls `generateContent`, and stores the results.
+   **Date handling:** Any dates extracted from the PDF are truncated to `YYYY-MM-DD` on the server before being stored.
+   **Fund-Level Filtering:** The import process automatically filters out fund-level information. The AI prompt instructs the model to ignore sections like "Fund Level Capital Account."
+4. The frontend polls the job status and displays results when parsing completes. The user reviews preview cards showing the parsed output with duplicate highlighting.
+5. After reviewing the data, the user confirms by clicking the import button. All PDF imports (single-account and multi-account) are submitted via `POST /api/finance/multi-import-pdf`.
 
 ### API Endpoints
 
@@ -650,7 +620,7 @@ PDF statements can be imported using Gemini AI for parsing. The frontend now pro
 |----------|------------|---------|
 | `GET /api/finance/all/line_items` | `FinanceTransactionsApiController@getLineItems` | Get all transactions across all accounts (supports streaming, year/filter/tag params) |
 | `GET /api/finance/{account_id}/line_items` | `FinanceTransactionsApiController@getLineItems` | Get transactions for a single account |
-| `POST /api/finance/transactions/import-gemini` | `FinanceGeminiImportController@parseDocument` | Parse PDF or other file with Gemini (cached by file hash) |
+| `POST /api/finance/transactions/import-gemini` | `FinanceGeminiImportController@parseDocument` | Legacy synchronous PDF parse (deprecated when `GEMINI_USE_QUEUE=true`; see [GenAI Import](../GenAI-Import.md)) |
 | `POST /api/finance/multi-import-pdf` | `StatementController@importMultiAccountPdf` | Import parsed PDF data for one or more accounts; accepts optional `file_hash` to link the stored PDF to all created statements |
 | `GET /api/finance/{id}/lots` | `FinanceLotsController@index` | Fetch open/closed lots for an account |
 | `POST /api/finance/{id}/lots` | `FinanceLotsController@store` | Manually add a lot to an account |
@@ -676,7 +646,9 @@ The import page uses extracted components and hooks for better maintainability:
 | `useImportTransactionDragDrop` | `useImportTransactionDragDrop.ts` | File drag-and-drop and file input handlers |
 | `useImportTransactionPaste` | `useImportTransactionPaste.ts` | Ctrl+V paste handler + text parsing (CSV/QIF/OFX) |
 | `useDuplicateDetection` | `useDuplicateDetection.ts` | Load existing transactions and filter duplicates |
-| `useProcessPdfWithGemini` | `useProcessPdfWithGemini.ts` | PDF parsing via Gemini AI |
+| `useProcessPdfWithGemini` | `useProcessPdfWithGemini.ts` | Legacy synchronous PDF parsing (see [GenAI Import](../GenAI-Import.md) for new async hooks) |
+| `useGenAiFileUpload` | `genai-processor/useGenAiFileUpload.ts` | Shared async file upload hook (S3 → job creation) |
+| `useGenAiJobPolling` | `genai-processor/useGenAiJobPolling.ts` | Shared job status polling hook |
 
 ### Import Button Text
 

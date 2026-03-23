@@ -11,6 +11,9 @@
   - See [docs/RSU.md](docs/RSU.md) for details
 - **Account Management**: Track financial accounts and transactions
 - **Statement Processing**: Import and process bank/brokerage statements (PDFs are parsed via Google Gemini AI with a two‑step preview UI; server results are cached by file hash to reduce API calls). Fund-level information is automatically excluded. Dates from PDFs are normalized to plain `YYYY-MM-DD` strings with no timezone.
+- **Async GenAI Import Pipeline**: Queue-based AI document processing with direct-to-S3 uploads, daily quota management, and de-duplication. See [docs/GenAI-Import.md](docs/GenAI-Import.md) for details.
+  - Configurable per-user daily quota in User Settings
+  - Admin panel at `/admin/genai-jobs` for monitoring all jobs (raw Gemini request/response visible)
 - **Position & Lot Tracking**: Track investment positions and lots (open/closed) with automatic Short-Term/Long-Term classification and realized gain/loss calculation. Includes a dedicated "Lots" dashboard.
 - **Payslip Management**: Manage and track payslips
 

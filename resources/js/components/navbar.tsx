@@ -364,6 +364,11 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
                 <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base' href='/dashboard'>
                   User Settings
                 </a>
+                {isAdmin && (
+                  <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base' href='/admin/genai-jobs'>
+                    Admin: GenAI Jobs
+                  </a>
+                )}
                 <a 
                   className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base text-red-600 dark:text-red-400' 
                   href='/logout'
@@ -458,6 +463,15 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
                 >
                   User Settings
                 </a>
+                {isAdmin && (
+                  <a
+                    role='menuitem'
+                    className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm'
+                    href='/admin/genai-jobs'
+                  >
+                    Admin: GenAI Jobs
+                  </a>
+                )}
                 <div className='my-1 border-t border-gray-100 dark:border-[#3E3E3A]' />
                 <a
                   role='menuitem'

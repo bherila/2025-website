@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AdminGenAiJobsWebController;
 use App\Http\Controllers\BingoController;
 use App\Http\Controllers\ClientManagement\ClientAgreementController;
 use App\Http\Controllers\ClientManagement\ClientCompanyController;
@@ -85,6 +86,9 @@ Route::middleware('auth')->group(function () {
 
     // User Management Routes (Admin only)
     Route::get('/admin/users', [UserManagementController::class, 'index'])->name('admin.users');
+
+    // Admin GenAI Jobs (Admin only)
+    Route::get('/admin/genai-jobs', [AdminGenAiJobsWebController::class, 'index'])->name('admin.genai-jobs');
 
     // Client Management Routes
     Route::get('/client/mgmt', [ClientCompanyController::class, 'index'])->name('client-management.index');

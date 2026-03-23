@@ -51,7 +51,8 @@ CREATE TABLE `users`(
   `last_login_date` TEXT,
   `created_at` TEXT,
   `updated_at` TEXT,
-  `gemini_api_key` TEXT
+  `gemini_api_key` TEXT,
+  `genai_daily_quota_limit` INTEGER DEFAULT NULL
 );
 CREATE INDEX `users_user_role_index` ON `users`(`user_role`);
 CREATE TABLE `client_companies`(
@@ -1003,3 +1004,47 @@ INSERT INTO migrations VALUES(8,'2026_02_07_000000_add_starting_balances_to_clie
 INSERT INTO migrations VALUES(9,'2026_03_13_083906_add_tax_characteristic_to_fin_account_tag_table',3);
 INSERT INTO migrations VALUES(10,'2026_03_22_063625_create_fin_transaction_non_duplicate_pairs_table',4);
 INSERT INTO migrations VALUES(11,'2026_03_22_100000_create_webauthn_and_audit_tables',5);
+INSERT INTO migrations VALUES(12,'2026_03_23_000001_create_genai_import_jobs_table',6);
+INSERT INTO migrations VALUES(13,'2026_03_23_000002_create_genai_import_results_table',6);
+INSERT INTO migrations VALUES(14,'2026_03_23_000003_create_genai_daily_quota_table',6);
+CREATE TABLE `genai_import_jobs`(
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `user_id` INTEGER NOT NULL,
+  `acct_id` INTEGER,
+  `job_type` TEXT NOT NULL,
+  `file_hash` TEXT NOT NULL,
+  `original_filename` TEXT NOT NULL,
+  `s3_path` TEXT NOT NULL,
+  `mime_type` TEXT,
+  `file_size_bytes` INTEGER NOT NULL,
+  `context_json` TEXT,
+  `status` TEXT NOT NULL DEFAULT 'pending',
+  `error_message` TEXT,
+  `retry_count` INTEGER NOT NULL DEFAULT 0,
+  `scheduled_for` TEXT,
+  `parsed_at` TEXT,
+  `created_at` TEXT,
+  `updated_at` TEXT,
+  FOREIGN KEY(`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY(`acct_id`) REFERENCES `fin_accounts`(`acct_id`) ON DELETE SET NULL
+);
+CREATE INDEX `genai_import_jobs_user_id_status_index` ON `genai_import_jobs`(`user_id`, `status`);
+CREATE INDEX `genai_import_jobs_file_hash_index` ON `genai_import_jobs`(`file_hash`);
+CREATE INDEX `genai_import_jobs_scheduled_for_status_index` ON `genai_import_jobs`(`scheduled_for`, `status`);
+CREATE TABLE `genai_import_results`(
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `job_id` INTEGER NOT NULL,
+  `result_index` INTEGER NOT NULL,
+  `result_json` TEXT NOT NULL,
+  `status` TEXT NOT NULL DEFAULT 'pending_review',
+  `imported_at` TEXT,
+  `created_at` TEXT,
+  `updated_at` TEXT,
+  FOREIGN KEY(`job_id`) REFERENCES `genai_import_jobs`(`id`) ON DELETE CASCADE
+);
+CREATE INDEX `genai_import_results_job_id_result_index_index` ON `genai_import_results`(`job_id`, `result_index`);
+CREATE TABLE `genai_daily_quota`(
+  `usage_date` TEXT PRIMARY KEY NOT NULL,
+  `request_count` INTEGER NOT NULL DEFAULT 0,
+  `updated_at` TEXT
+);

@@ -1,5 +1,7 @@
 <?php
 
+use App\GenAiProcessor\Http\Controllers\AdminGenAiJobsController;
+use App\GenAiProcessor\Http\Controllers\GenAiImportController;
 use App\Http\Controllers\ClientManagement\ClientAgreementApiController;
 use App\Http\Controllers\ClientManagement\ClientCompanyApiController;
 use App\Http\Controllers\ClientManagement\ClientCompanyUserController;
@@ -133,6 +135,7 @@ Route::middleware(['web', 'auth'])->post('/finance/lots/search-opening', [Financ
 Route::middleware(['web', 'auth'])->post('/finance/lots/save-assignment', [FinanceLotsController::class, 'saveLotAssignment']);
 
 Route::middleware(['web', 'auth'])->post('/user/update-api-key', [UserApiController::class, 'updateApiKey']);
+Route::middleware(['web', 'auth'])->post('/user/update-genai-quota', [UserApiController::class, 'updateGenAiQuota']);
 
 // Passkey (WebAuthn) routes
 Route::middleware(['web', 'auth'])->get('/passkeys', [PasskeyController::class, 'index']);
@@ -227,6 +230,10 @@ Route::middleware(['web', 'auth'])->delete('/admin/users/{id}/roles/{role}', [Us
 Route::middleware(['web', 'auth'])->post('/admin/users/{id}/password', [UserManagementApiController::class, 'setPassword']);
 Route::middleware(['web', 'auth'])->post('/admin/users/{id}/email', [UserManagementApiController::class, 'updateEmail']);
 
+// Admin GenAI Jobs API
+Route::middleware(['web', 'auth'])->get('/admin/genai-jobs', [AdminGenAiJobsController::class, 'index']);
+Route::middleware(['web', 'auth'])->get('/admin/genai-jobs/{id}', [AdminGenAiJobsController::class, 'show']);
+
 // File Management API routes
 
 // Project files
@@ -285,3 +292,11 @@ Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accoun
 Route::middleware(['web', 'auth'])->get('/utility-bill-tracker/accounts/{accountId}/bills/{billId}/linkable', [UtilityBillLinkingController::class, 'findLinkableTransactions']);
 Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accountId}/bills/{billId}/link', [UtilityBillLinkingController::class, 'linkTransaction']);
 Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accountId}/bills/{billId}/unlink', [UtilityBillLinkingController::class, 'unlinkTransaction']);
+
+// GenAI Import routes
+Route::middleware(['web', 'auth'])->post('/genai/import/request-upload', [GenAiImportController::class, 'requestUpload']);
+Route::middleware(['web', 'auth'])->post('/genai/import/jobs', [GenAiImportController::class, 'createJob']);
+Route::middleware(['web', 'auth'])->get('/genai/import/jobs', [GenAiImportController::class, 'index']);
+Route::middleware(['web', 'auth'])->get('/genai/import/jobs/{job_id}', [GenAiImportController::class, 'show']);
+Route::middleware(['web', 'auth'])->post('/genai/import/jobs/{job_id}/retry', [GenAiImportController::class, 'retry']);
+Route::middleware(['web', 'auth'])->delete('/genai/import/jobs/{job_id}', [GenAiImportController::class, 'destroy']);

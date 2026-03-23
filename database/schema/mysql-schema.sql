@@ -1250,6 +1250,7 @@ CREATE TABLE `users` (
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   `gemini_api_key` varchar(255) DEFAULT NULL,
+  `genai_daily_quota_limit` int(10) unsigned DEFAULT NULL COMMENT 'Per-user GenAI daily quota limit. NULL = use system default.',
   `marriage_status_by_year` text DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `users_email_unique` (`email`),
@@ -1413,3 +1414,54 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (62,'2026_03_20_074
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (63,'2026_03_21_000001_add_is_hidden_to_fin_employment_entity_table',38);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (64,'2026_03_22_063625_create_fin_transaction_non_duplicate_pairs_table',39);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (65,'2026_03_22_100000_create_webauthn_and_audit_tables',40);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (66,'2026_03_23_000001_create_genai_import_jobs_table',41);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (67,'2026_03_23_000002_create_genai_import_results_table',41);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (68,'2026_03_23_000003_create_genai_daily_quota_table',41);
+
+CREATE TABLE `genai_import_jobs` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint unsigned NOT NULL,
+  `acct_id` bigint unsigned DEFAULT NULL,
+  `job_type` varchar(64) NOT NULL,
+  `file_hash` varchar(64) NOT NULL,
+  `original_filename` varchar(255) NOT NULL,
+  `s3_path` varchar(255) NOT NULL,
+  `mime_type` varchar(255) DEFAULT NULL,
+  `file_size_bytes` bigint unsigned NOT NULL,
+  `context_json` text,
+  `status` varchar(32) NOT NULL DEFAULT 'pending',
+  `error_message` text,
+  `retry_count` tinyint unsigned NOT NULL DEFAULT '0',
+  `scheduled_for` date DEFAULT NULL,
+  `parsed_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `genai_import_jobs_user_id_status_index` (`user_id`,`status`),
+  KEY `genai_import_jobs_file_hash_index` (`file_hash`),
+  KEY `genai_import_jobs_scheduled_for_status_index` (`scheduled_for`,`status`),
+  KEY `genai_import_jobs_acct_id_foreign` (`acct_id`),
+  CONSTRAINT `genai_import_jobs_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `genai_import_jobs_acct_id_foreign` FOREIGN KEY (`acct_id`) REFERENCES `fin_accounts` (`acct_id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `genai_import_results` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `job_id` bigint unsigned NOT NULL,
+  `result_index` int unsigned NOT NULL,
+  `result_json` longtext NOT NULL,
+  `status` varchar(32) NOT NULL DEFAULT 'pending_review',
+  `imported_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `genai_import_results_job_id_result_index_index` (`job_id`,`result_index`),
+  CONSTRAINT `genai_import_results_job_id_foreign` FOREIGN KEY (`job_id`) REFERENCES `genai_import_jobs` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `genai_daily_quota` (
+  `usage_date` date NOT NULL,
+  `request_count` int unsigned NOT NULL DEFAULT '0',
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`usage_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
