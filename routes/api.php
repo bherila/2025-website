@@ -1,5 +1,6 @@
 <?php
 
+use App\GenAiProcessor\Http\Controllers\GenAiImportController;
 use App\Http\Controllers\ClientManagement\ClientAgreementApiController;
 use App\Http\Controllers\ClientManagement\ClientCompanyApiController;
 use App\Http\Controllers\ClientManagement\ClientCompanyUserController;
@@ -285,3 +286,11 @@ Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accoun
 Route::middleware(['web', 'auth'])->get('/utility-bill-tracker/accounts/{accountId}/bills/{billId}/linkable', [UtilityBillLinkingController::class, 'findLinkableTransactions']);
 Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accountId}/bills/{billId}/link', [UtilityBillLinkingController::class, 'linkTransaction']);
 Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accountId}/bills/{billId}/unlink', [UtilityBillLinkingController::class, 'unlinkTransaction']);
+
+// GenAI Import routes
+Route::middleware(['web', 'auth'])->post('/genai/import/request-upload', [GenAiImportController::class, 'requestUpload']);
+Route::middleware(['web', 'auth'])->post('/genai/import/jobs', [GenAiImportController::class, 'createJob']);
+Route::middleware(['web', 'auth'])->get('/genai/import/jobs', [GenAiImportController::class, 'index']);
+Route::middleware(['web', 'auth'])->get('/genai/import/jobs/{job_id}', [GenAiImportController::class, 'show']);
+Route::middleware(['web', 'auth'])->post('/genai/import/jobs/{job_id}/retry', [GenAiImportController::class, 'retry']);
+Route::middleware(['web', 'auth'])->delete('/genai/import/jobs/{job_id}', [GenAiImportController::class, 'destroy']);

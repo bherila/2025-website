@@ -13,7 +13,7 @@ class PasskeyRpIdTest extends TestCase
     public function test_rp_id_falls_back_to_request_host_when_app_url_is_localhost(): void
     {
         $user = User::factory()->create();
-        
+
         // Ensure config is default
         config(['app.url' => 'http://localhost']);
 
@@ -23,7 +23,7 @@ class PasskeyRpIdTest extends TestCase
 
         $response->assertStatus(200);
         $data = $response->json();
-        
+
         // Should be 'production-app.com', NOT 'localhost'
         $this->assertEquals('production-app.com', $data['rp']['id']);
     }
@@ -31,7 +31,7 @@ class PasskeyRpIdTest extends TestCase
     public function test_rp_id_uses_app_url_when_it_is_configured_correctly(): void
     {
         $user = User::factory()->create();
-        
+
         config(['app.url' => 'https://my-actual-domain.com']);
 
         // Even if request host is different (e.g. proxy), it should prefer APP_URL
@@ -40,7 +40,7 @@ class PasskeyRpIdTest extends TestCase
 
         $response->assertStatus(200);
         $data = $response->json();
-        
+
         $this->assertEquals('my-actual-domain.com', $data['rp']['id']);
     }
 
@@ -52,7 +52,7 @@ class PasskeyRpIdTest extends TestCase
 
         $response->assertStatus(200);
         $data = $response->json();
-        
+
         $this->assertEquals('production-app.com', $data['rpId']);
     }
 }
