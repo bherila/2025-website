@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Models\GenAiImportResult;
+use App\Services\FileStorageService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
@@ -54,6 +55,47 @@ class GenAiImportControllerTest extends TestCase
         ]);
         $response->assertStatus(422);
         $response->assertJsonValidationErrors('file_size');
+    }
+
+    public function test_request_upload_returns_signed_url_on_success(): void
+    {
+        $user = $this->createUser();
+
+        $mock = $this->mock(FileStorageService::class);
+        $mock->shouldReceive('getSignedUploadUrl')
+            ->once()
+            ->andReturn('https://s3.example.com/signed-url');
+
+        $response = $this->actingAs($user)->postJson('/api/genai/import/request-upload', [
+            'filename' => 'statement.pdf',
+            'content_type' => 'application/pdf',
+            'file_size' => 101851,
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonStructure(['signed_url', 's3_key', 'expires_in']);
+        $this->assertEquals('https://s3.example.com/signed-url', $response->json('signed_url'));
+        $this->assertStringStartsWith("genai-import/{$user->id}/", $response->json('s3_key'));
+        $this->assertEquals(900, $response->json('expires_in'));
+    }
+
+    public function test_request_upload_returns_503_when_storage_not_configured(): void
+    {
+        $user = $this->createUser();
+
+        $mock = $this->mock(FileStorageService::class);
+        $mock->shouldReceive('getSignedUploadUrl')
+            ->once()
+            ->andThrow(new \RuntimeException('S3 Bucket is not configured'));
+
+        $response = $this->actingAs($user)->postJson('/api/genai/import/request-upload', [
+            'filename' => 'statement.pdf',
+            'content_type' => 'application/pdf',
+            'file_size' => 1024,
+        ]);
+
+        $response->assertStatus(503);
+        $response->assertJsonFragment(['error' => 'Storage is not configured.']);
     }
 
     // ================================================================

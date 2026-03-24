@@ -75,8 +75,7 @@ class FileStorageService
             throw new \RuntimeException('S3 Bucket is not configured in filesystems.disks.s3.bucket');
         }
 
-        // temporaryUploadUrl() returns [url, headers]; extract the URL string.
-        [$url] = $this->storage()->temporaryUploadUrl(
+        $result = $this->storage()->temporaryUploadUrl(
             $s3Path,
             now()->addMinutes($expiration),
             [
@@ -85,7 +84,11 @@ class FileStorageService
             ]
         );
 
-        return $url;
+        if (! is_array($result) || ! isset($result['url'])) {
+            throw new \RuntimeException('Unexpected response from temporaryUploadUrl: missing url key');
+        }
+
+        return $result['url'];
     }
 
     /**
