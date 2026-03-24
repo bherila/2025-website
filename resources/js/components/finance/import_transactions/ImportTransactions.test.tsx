@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 
 import { fetchWrapper } from '@/fetchWrapper';
+import type { GenAiImportJobData, GenAiImportResultData } from '@/genai-processor/types';
 
 import ImportTransactions from './ImportTransactions';
 
@@ -23,7 +24,7 @@ jest.mock('@/components/ui/spinner', () => ({
 }));
 
 jest.mock('@/components/ui/checkbox', () => ({
-    Checkbox: ({ id, checked, onCheckedChange, ...props }: any) => (
+    Checkbox: ({ id, checked, onCheckedChange, ...props }: { id?: string; checked?: boolean; onCheckedChange?: (checked: boolean) => void; [key: string]: unknown }) => (
         <input
             type="checkbox"
             id={id}
@@ -64,9 +65,9 @@ const mockRefetch = jest.fn();
 
 const mockJobPollingState = {
   status: null as string | null,
-  results: [] as any[],
+  results: [] as GenAiImportResultData[],
   error: null as string | null,
-  job: null as any,
+  job: null as GenAiImportJobData | null,
   estimatedWait: undefined as string | undefined,
   refetch: mockRefetch,
 };
@@ -276,6 +277,92 @@ describe('ImportTransactions', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Upload failed/)).toBeInTheDocument();
+    });
+  });
+
+  it('shows error when result_json is malformed', async () => {
+    mockUpload.mockResolvedValueOnce({ jobId: 42, status: 'pending' });
+
+    Object.assign(mockJobPollingState, {
+      status: 'parsed',
+      results: [{ id: 1, job_id: 42, result_index: 0, result_json: 'not valid json{{{', status: 'pending_review', imported_at: null, created_at: '', updated_at: '' }],
+      error: null,
+      job: null,
+      estimatedWait: undefined,
+    });
+
+    render(<ImportTransactions accountId={1} onImportFinished={jest.fn()} />);
+
+    const input = screen.getByTestId('file-input') as HTMLInputElement;
+    const file = new File(['pdf content'], 'test.pdf', { type: 'application/pdf' });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('process-with-ai')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('process-with-ai'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Failed to parse AI result/)).toBeInTheDocument();
+    });
+  });
+
+  it('shows deferred message for queued_tomorrow status', async () => {
+    mockUpload.mockResolvedValueOnce({ jobId: 42, status: 'pending' });
+
+    Object.assign(mockJobPollingState, {
+      status: 'queued_tomorrow',
+      results: [],
+      error: null,
+      job: null,
+      estimatedWait: 'Your file will be processed on 2025-07-01',
+    });
+
+    render(<ImportTransactions accountId={1} onImportFinished={jest.fn()} />);
+
+    const input = screen.getByTestId('file-input') as HTMLInputElement;
+    const file = new File(['pdf content'], 'test.pdf', { type: 'application/pdf' });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('process-with-ai')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('process-with-ai'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Processing deferred/)).toBeInTheDocument();
+      expect(screen.getByText(/2025-07-01/)).toBeInTheDocument();
+    });
+  });
+
+  it('shows failed state with clear button when job fails', async () => {
+    mockUpload.mockResolvedValueOnce({ jobId: 42, status: 'pending' });
+
+    Object.assign(mockJobPollingState, {
+      status: 'failed',
+      results: [],
+      error: null,
+      job: null,
+      estimatedWait: undefined,
+    });
+
+    render(<ImportTransactions accountId={1} onImportFinished={jest.fn()} />);
+
+    const input = screen.getByTestId('file-input') as HTMLInputElement;
+    const file = new File(['pdf content'], 'test.pdf', { type: 'application/pdf' });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('process-with-ai')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('process-with-ai'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/AI processing failed/)).toBeInTheDocument();
+      expect(screen.getByText('Clear')).toBeInTheDocument();
     });
   });
 

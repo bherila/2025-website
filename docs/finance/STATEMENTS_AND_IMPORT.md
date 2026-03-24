@@ -1,37 +1,18 @@
-# Transaction Import & Statement Features
+# Statement Features & Import Enhancements
 
-This document describes recent enhancements to the transaction import workflow and
-statement viewing experience.
+This document covers the statement viewing experience and related backend enhancements.
 
-## Import Transactions Page
+For the full transaction import workflow (supported formats, checkboxes, UI components), see [FinanceTool.md § Transaction Import](FinanceTool.md#transaction-import).  
+For the GenAI asynchronous import pipeline (architecture, API, quota), see [GenAI Import](../GenAI-Import.md).
 
-The import UI now offers finer control when processing PDF files:
-
-- **Three options when a PDF is dropped or pasted**:
-  * **Import Transactions** – bring parsed transactions into the account
-  * **Attach as Statement** – insert a statement record and/or statement details
-  * **Save File to Storage** – upload the original file to S3 for later reference
-
-- Checkboxes are persisted in `localStorage` under the keys
-  `pdf_import_transactions`, `pdf_attach_statement`, and `pdf_save_file_s3`, which
-  ensures the settings carry across accounts and page reloads.
-
-- The **"Process with AI"** button is disabled unless **at least one** option is
-  selected. State is restored on mount so users don’t accidentally re-upload with
-  all options off.
-
-- When the user opts to save the file, the PDF is uploaded immediately after the
-  AI parsing completes. The file record is created via the existing
-  `/api/finance/{accountId}/files` endpoint and will appear on the
-  **Statement Files** list under the account regardless of whether the document
-  produced transactions or statement details.
+---
 
 ## Statements Page & Statement Detail
 
 Statement management has been refactored for a more natural navigation
 experience:
 
-- The **Statement Details** button now opens a **full–screen view** instead of a
+- The **Statement Details** button now opens a **full-screen view** instead of a
   modal. The page URL reflects the current statement via a query parameter,
   e.g. `/finance/32/statements?statement_id=12345&year=2025`.
 
@@ -42,7 +23,7 @@ experience:
   use preloaded information when possible and only fetch details if necessary.
   This avoids unnecessary network requests when switching between statements.
 
-- The **Statement Files** card is hidden when viewing a statement detail; it’s
+- The **Statement Files** card is hidden when viewing a statement detail; it's
   only shown on the list page.
 
 - A new API endpoint (`GET /finance/{accountId}/statements/{statementId}/pdf`)
@@ -53,34 +34,31 @@ experience:
 - Browser back/forward buttons work seamlessly due to `pushState`/`popstate`
   handling, and the detail view logic is entirely client-side.
 
+---
+
 ## API & Backend Changes
 
-- Introduced `getSignedViewUrl` to the `FileStorageService` for inline viewing
-  of files (used by the detail view).
+- `FileStorageService::getSignedViewUrl` generates inline-viewing signed URLs
+  (used by the statement detail view to show the original PDF).
 
-- Added the `viewStatementPdf` method on `FileController` with a matching route.
-  This method requires the file to be associated with the requested statement.
+- `FileController::viewStatementPdf` returns signed view/download URLs and
+  requires the file to be associated with the requested statement.
 
-- **Duplicate File Prevention**: The `FileController` now uses SHA-256 hashes to prevent re-saving the same file multiple times for an account.
+- **Duplicate File Prevention**: `FileController` uses SHA-256 hashes to prevent
+  re-saving the same file multiple times for an account. The hash is stored in
+  `files_for_fin_accounts.file_hash`.
 
-- **Automated Cache Cleanup**: Deleting a statement now triggers a cleanup of any cached Gemini AI responses associated with the statement's files.
+- **Automated Cache Cleanup**: Deleting a statement triggers cleanup of any
+  cached Gemini AI responses associated with the statement's files.
 
-## Testing & Quality Assurance
-
-- New unit tests cover the checkbox persistence and disabling behavior in the
-  import dialog.
-- Statement page tests were updated to accommodate the refactor and still
-  validate key functionality like chart toggling and file list presence.
+---
 
 ## Notes
 
-- The `files_for_fin_accounts` table now includes a `file_hash` column for duplicate detection.
-- The `fin_account_line_items` table now includes a `statement_id` column to link transactions back to their source.
-- When a statement is deleted, associated lots and transactions are **un-linked** rather than deleted, ensuring data integrity.
-- The `FinAccountBalanceSnapshot` model was renamed to `FinStatement` to align with the table name.
-- All TypeScript and PHP tests currently pass after these changes. Linting
-  and type-checking were also updated to accommodate new imports and
-  dependencies.
-
-This documentation file can be updated further as new features search or user
-feedback arrives.
+- The `fin_account_line_items` table includes a `statement_id` column to link
+  transactions back to their source statement.
+- When a statement is deleted, associated lots and transactions are **un-linked**
+  (their `statement_id` is set to `NULL`) rather than deleted, ensuring data
+  integrity.
+- The `FinAccountBalanceSnapshot` model was renamed to `FinStatement` to align
+  with the table name.

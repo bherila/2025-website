@@ -50,7 +50,12 @@ export function useGenAiFileUpload(options: GenAiUploadOptions): {
           )
         }
 
-        const { signed_url, s3_key } = await uploadRes.json()
+        const uploadData = await uploadRes.json()
+        const { signed_url, s3_key } = uploadData
+
+        if (typeof signed_url !== 'string' || typeof s3_key !== 'string') {
+          throw new Error('Invalid upload response: missing signed_url or s3_key')
+        }
 
         // Step 2: Upload file directly to S3 using the pre-signed URL
         const s3Res = await fetch(signed_url, {
@@ -85,6 +90,11 @@ export function useGenAiFileUpload(options: GenAiUploadOptions): {
         }
 
         const result = await jobRes.json()
+
+        if (typeof result.job_id !== 'number') {
+          throw new Error('Invalid job response: missing or invalid job_id')
+        }
+
         return {
           jobId: result.job_id,
           status: result.status as GenAiJobStatus,

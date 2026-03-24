@@ -243,7 +243,11 @@ PDF statements are parsed using the GenAI Import system. The frontend uploads fi
 - **Attach as Statement** – create a statement/statement-details record (shown only when statement details are detected)
 
 Checkbox states are persisted globally in `localStorage` (`pdf_import_transactions`,
-`pdf_attach_statement`, `pdf_save_file_s3`).
+`pdf_attach_statement`, `pdf_save_file_s3`). The **"Process with AI"** button is disabled unless at least one option is selected.
+
+**Processing notes:**
+- **Date handling:** Dates extracted from PDFs are truncated to `YYYY-MM-DD` on the server before being stored.
+- **Fund-Level Filtering:** The AI prompt instructs the model to ignore fund-level sections (e.g., "Fund Level Capital Account").
 
 ### Multi-Account PDF Import
 
@@ -266,6 +270,38 @@ To save storage and processing time, the file management system uses SHA-256 has
 - If a file with the same hash already exists for the account, the existing record is reused.
 - If the file was already uploaded but not yet linked to a statement, it is updated with the new `statement_id`.
 - The GenAI import system also de-duplicates by file hash: re-uploading the same file returns the existing job's results.
+
+### Statement Schema
+
+Statement snapshots and metadata are stored in `fin_statements`. Statement details (MTD/YTD line items) are stored in `fin_statement_details`. See `/database/schema/mysql-schema.sql` for full schemas.
+
+### Import UI Components
+
+The import page uses extracted components and hooks for better maintainability:
+
+| Component/Hook | File | Purpose |
+|----------------|------|---------|
+| `ImportTransactions` | `ImportTransactions.tsx` | Main import page component |
+| `ImportProgressDialog` | `ImportProgressDialog.tsx` | Progress bar during import |
+| `StatementPreviewCard` | `StatementPreviewCard.tsx` | Preview IB statement data |
+| `PdfStatementPreviewCard` | `PdfStatementPreviewCard.tsx` | Preview PDF statement details and info |
+| `useImportTransactionDragDrop` | `useImportTransactionDragDrop.ts` | File drag-and-drop and file input handlers |
+| `useImportTransactionPaste` | `useImportTransactionPaste.ts` | Ctrl+V paste handler + text parsing (CSV/QIF/OFX) |
+| `useDuplicateDetection` | `useDuplicateDetection.ts` | Load existing transactions and filter duplicates |
+| `useImportExecution` | `useImportExecution.ts` | Manages import execution lifecycle (chunking, retry) |
+| `useImportSummary` | `useImportSummary.ts` | Computes import summary counts and button text |
+| `usePdfAccountMapping` | `usePdfAccountMapping.ts` | Auto-maps PDF account blocks to user accounts |
+| `usePdfImportOptions` | `usePdfImportOptions.ts` | Manages PDF import checkboxes (localStorage-persisted) |
+| `useGenAiFileUpload` | `genai-processor/useGenAiFileUpload.ts` | Shared async file upload hook (S3 → job creation) |
+| `useGenAiJobPolling` | `genai-processor/useGenAiJobPolling.ts` | Shared job status polling hook |
+
+### Import Button Text
+
+The import button shows contextual text based on what will be imported:
+- "Import 11 Transactions" — transactions only
+- "Import Statement" — statement only
+- "Import 11 Transactions and 1 Statement" — transactions + statement
+- "Import 11 Transactions and 1 Statement and 5 Lots" — all three types
 
 ## Account Settings
 
@@ -597,66 +633,6 @@ The parser tries each format in order until one succeeds:
 4. Fidelity CSV
 5. Interactive Brokers CSV (with statement data)
 6. Generic CSV fallback
-
-## PDF Statement Import
-
-> **Full documentation:** See [GenAI Import](../GenAI-Import.md) for the complete architecture of the asynchronous AI parsing pipeline.
-
-PDF statements are parsed using the GenAI Import system, which provides asynchronous AI processing with quota management and retry logic.
-
-### Import Flow
-
-1. User drops or pastes a file on the import page, or chooses one via the file picker.
-2. If the file is text (CSV/QFX/HAR/etc.) it is parsed immediately in the browser. If it is a PDF, the file is uploaded directly to S3 via a pre-signed URL and an import job is created.
-3. The job is processed asynchronously by the `ParseImportJob` queue worker, which uploads the file to the Gemini File API, calls `generateContent`, and stores the results.
-   **Date handling:** Any dates extracted from the PDF are truncated to `YYYY-MM-DD` on the server before being stored.
-   **Fund-Level Filtering:** The import process automatically filters out fund-level information. The AI prompt instructs the model to ignore sections like "Fund Level Capital Account."
-4. The frontend polls the job status and displays results when parsing completes. The user reviews preview cards showing the parsed output with duplicate highlighting.
-5. After reviewing the data, the user confirms by clicking the import button. All PDF imports (single-account and multi-account) are submitted via `POST /api/finance/multi-import-pdf`.
-
-### API Endpoints
-
-| Endpoint | Controller | Purpose |
-|----------|------------|---------|
-| `GET /api/finance/all/line_items` | `FinanceTransactionsApiController@getLineItems` | Get all transactions across all accounts (supports streaming, year/filter/tag params) |
-| `GET /api/finance/{account_id}/line_items` | `FinanceTransactionsApiController@getLineItems` | Get transactions for a single account |
-| `POST /api/finance/transactions/import-gemini` | `FinanceGeminiImportController@parseDocument` | Legacy synchronous PDF parse (deprecated when `GEMINI_USE_QUEUE=true`; see [GenAI Import](../GenAI-Import.md)) |
-| `POST /api/finance/multi-import-pdf` | `StatementController@importMultiAccountPdf` | Import parsed PDF data for one or more accounts; accepts optional `file_hash` to link the stored PDF to all created statements |
-| `GET /api/finance/{id}/lots` | `FinanceLotsController@index` | Fetch open/closed lots for an account |
-| `POST /api/finance/{id}/lots` | `FinanceLotsController@store` | Manually add a lot to an account |
-
-
-### Statement Details Schema
-
-Statement details (MTD/YTD line items) are stored in the `fin_statement_details` table. See `/database/schema/mysql-schema.sql` for the full schema.
-
-### Statement Schema
-
-Statement snapshots and metadata are stored in `fin_statements`. See `/database/schema/mysql-schema.sql` for the full schema.
-
-### Import UI Components
-
-The import page uses extracted components and hooks for better maintainability:
-
-| Component/Hook | File | Purpose |
-|----------------|------|---------|
-| `ImportProgressDialog` | `ImportProgressDialog.tsx` | Progress bar during import |
-| `StatementPreviewCard` | `StatementPreviewCard.tsx` | Preview IB statement data |
-| `IbStatementDetailModal` | `IbStatementDetailModal.tsx` | Detailed view of IB statement |
-| `useImportTransactionDragDrop` | `useImportTransactionDragDrop.ts` | File drag-and-drop and file input handlers |
-| `useImportTransactionPaste` | `useImportTransactionPaste.ts` | Ctrl+V paste handler + text parsing (CSV/QIF/OFX) |
-| `useDuplicateDetection` | `useDuplicateDetection.ts` | Load existing transactions and filter duplicates |
-| `useProcessPdfWithGemini` | `useProcessPdfWithGemini.ts` | Legacy synchronous PDF parsing (see [GenAI Import](../GenAI-Import.md) for new async hooks) |
-| `useGenAiFileUpload` | `genai-processor/useGenAiFileUpload.ts` | Shared async file upload hook (S3 → job creation) |
-| `useGenAiJobPolling` | `genai-processor/useGenAiJobPolling.ts` | Shared job status polling hook |
-
-### Import Button Text
-
-The import button shows contextual text based on what will be imported:
-- "Import 11 Transactions" - transactions only
-- "Import Statement" - statement only
-- "Import 11 Transactions and 1 Statement" - transactions + statement
-- "Import 11 Transactions and 1 Statement and 5 Lots" - all three types
 
 ## Position and Lot Tracking
 

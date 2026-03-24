@@ -138,11 +138,17 @@ export default function ImportTransactions({
     [accountsForMatching],
   )
 
+  // Memoize context object to avoid recreating the upload callback on every render
+  const uploadContext = useMemo(
+    () => (accountsContext.length > 0 ? { accounts: accountsContext } : undefined),
+    [accountsContext],
+  )
+
   // GenAI queue upload hook
   const { upload: uploadToQueue, uploading: queueUploading, error: uploadHookError } = useGenAiFileUpload({
     jobType: 'finance_transactions',
     ...(typeof accountId === 'number' ? { acctId: accountId } : {}),
-    ...(accountsContext.length > 0 ? { context: { accounts: accountsContext } } : {}),
+    ...(uploadContext ? { context: uploadContext } : {}),
   })
 
   // GenAI job polling hook
@@ -151,8 +157,13 @@ export default function ImportTransactions({
   // When the job finishes parsing, extract the result and set pdfData
   useEffect(() => {
     if (jobId && jobStatus === 'parsed' && jobResults.length > 0) {
+      const firstResult = jobResults[0]
+      if (!firstResult?.result_json) {
+        setError('AI result is empty. Please try again.')
+        return
+      }
       try {
-        const parsed = JSON.parse(jobResults[0]!.result_json) as GeminiImportResponse
+        const parsed = JSON.parse(firstResult.result_json) as GeminiImportResponse
         setPdfData(parsed)
       } catch {
         setError('Failed to parse AI result. Please try again.')
