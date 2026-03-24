@@ -7,11 +7,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Spinner } from '@/components/ui/spinner'
 import type { AccountLineItem } from '@/data/finance/AccountLineItem'
 import type { IbStatementData } from '@/data/finance/parseIbCsv'
+import { useGenAiFileUpload } from '@/genai-processor/useGenAiFileUpload'
+import { useGenAiJobPolling } from '@/genai-processor/useGenAiJobPolling'
 import type { AccountForMatching } from '@/lib/finance/accountMatcher'
 
 import { useFinanceAccounts } from '../AccountNavigation'
 import TransactionsTable from '../TransactionsTable'
 import { ImportProgressDialog } from './ImportProgressDialog'
+import type { GeminiImportResponse } from './importTypes'
 import { PdfStatementPreviewCard } from './PdfStatementPreviewCard'
 import { StatementPreviewCard } from './StatementPreviewCard'
 import { useDuplicateDetection } from './useDuplicateDetection'
@@ -21,7 +24,6 @@ import { useImportTransactionDragDrop } from './useImportTransactionDragDrop'
 import { useImportTransactionPaste } from './useImportTransactionPaste'
 import { usePdfAccountMapping } from './usePdfAccountMapping'
 import { usePdfImportOptions } from './usePdfImportOptions'
-import { type GeminiImportResponse, useProcessPdfWithGemini } from './useProcessPdfWithGemini'
 
 /** Information about the dropped/pasted file */
 interface FileInfo {
@@ -54,8 +56,11 @@ export default function ImportTransactions({
   const [loading, setLoading] = useState(false)
   const [pdfData, setPdfData] = useState<GeminiImportResponse | null>(null)
   const [pendingPdfFile, setPendingPdfFile] = useState<File | null>(null)
-  const [uploadedFileHash, setUploadedFileHash] = useState<string | null>(null)
-  const [geminiError, setGeminiError] = useState<string | null>(null)
+
+  // GenAI queue state
+  const [jobId, setJobId] = useState<number | null>(null)
+  const [queueUploadError, setQueueUploadError] = useState<string | null>(null)
+
   const dropZoneRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -86,8 +91,6 @@ export default function ImportTransactions({
     setImportTransactions,
     attachAsStatement,
     setAttachAsStatement,
-    saveFileToS3,
-    setSaveFileToS3,
   } = usePdfImportOptions()
 
   const { pdfAccountBlocks, pdfParsedData, accountMappings, setAccountMappings } = usePdfAccountMapping({
@@ -104,11 +107,6 @@ export default function ImportTransactions({
     accountMappings,
     importTransactions,
     attachAsStatement,
-    saveFileToS3,
-    pendingPdfFile,
-    uploadedFileHash,
-    setLoading,
-    setUploadedFileHash,
   })
 
   const {
@@ -128,6 +126,27 @@ export default function ImportTransactions({
     attachAsStatement,
   })
 
+  // GenAI queue upload hook
+  const { upload: uploadToQueue, uploading: queueUploading, error: uploadHookError } = useGenAiFileUpload({
+    jobType: 'finance_transactions',
+    ...(typeof accountId === 'number' ? { acctId: accountId } : {}),
+  })
+
+  // GenAI job polling hook
+  const { status: jobStatus, results: jobResults, error: jobPollingError, estimatedWait } = useGenAiJobPolling(jobId)
+
+  // When the job finishes parsing, extract the result and set pdfData
+  useEffect(() => {
+    if (jobId && jobStatus === 'parsed' && jobResults.length > 0) {
+      try {
+        const parsed = JSON.parse(jobResults[0]!.result_json) as GeminiImportResponse
+        setPdfData(parsed)
+      } catch {
+        setError('Failed to parse AI result. Please try again.')
+      }
+    }
+  }, [jobId, jobStatus, jobResults])
+
   const clearData = useCallback(() => {
     setText('')
     setData(null)
@@ -136,13 +155,13 @@ export default function ImportTransactions({
     setFileInfo(null)
     setPdfData(null)
     setPendingPdfFile(null)
-    setGeminiError(null)
+    setQueueUploadError(null)
     setError(null)
-    setUploadedFileHash(null)
+    setJobId(null)
     setAccountMappings([])
   }, [setAccountMappings])
 
-  /** Accept a file but do NOT auto-submit PDFs to Gemini */
+  /** Accept a file but do NOT auto-submit PDFs */
   const handleFileRead = useCallback(async (file: File) => {
     setFileInfo({
       name: file.name,
@@ -150,9 +169,10 @@ export default function ImportTransactions({
       size: file.size,
     })
     setError(null)
-    setGeminiError(null)
+    setQueueUploadError(null)
     setPdfData(null)
     setPendingPdfFile(null)
+    setJobId(null)
     setText('')
 
     try {
@@ -194,23 +214,29 @@ export default function ImportTransactions({
     parseTextData(text)
   }, [text, parseTextData])
 
-  /** Gemini PDF processing hook */
-  const { processPdfWithGemini: processPdfRaw } = useProcessPdfWithGemini({
-    accountId,
-    accountsForMatching,
-    saveFileToS3,
-    setLoading,
-    setGeminiError,
-    setError,
-    setPdfData,
-    setPendingPdfFile,
-    setUploadedFileHash,
-  })
+  /** Upload the pending PDF to the GenAI queue for async processing */
+  const processWithQueue = useCallback(async () => {
+    if (!pendingPdfFile) return
+    setQueueUploadError(null)
+    setLoading(true)
+    try {
+      const result = await uploadToQueue(pendingPdfFile)
+      setJobId(result.jobId)
+      setPendingPdfFile(null)
+    } catch (err) {
+      setQueueUploadError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setLoading(false)
+    }
+  }, [pendingPdfFile, uploadToQueue])
 
-  /** Send the pending PDF to Gemini for AI processing */
-  const processPdfWithGemini = useCallback(async () => {
-    await processPdfRaw(pendingPdfFile)
-  }, [processPdfRaw, pendingPdfFile])
+  // Determine job state
+  const isJobActive = jobStatus === 'pending' || jobStatus === 'processing'
+  const isJobFailed = jobStatus === 'failed'
+  const isJobDeferred = jobStatus === 'queued_tomorrow'
+  const isJobParsed = jobStatus === 'parsed'
+
+  const activeQueueError = queueUploadError ?? uploadHookError ?? jobPollingError
 
   return (
     <div
@@ -241,10 +267,10 @@ export default function ImportTransactions({
       {error && <div className="text-red-500 mb-2">{error}</div>}
       {parseError && <div className="text-red-500 mb-2">{parseError}</div>}
 
-      {loading ? (
+      {loading || queueUploading ? (
         <div className="flex justify-center items-center h-40">
           <Spinner />
-          <p className="ml-2">Processing with AI...</p>
+          <p className="ml-2">Uploading for AI processing...</p>
         </div>
       ) : fileInfo ? (
         <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
@@ -279,14 +305,16 @@ export default function ImportTransactions({
         </div>
       )}
 
-      {/* Gemini error with retry */}
-      {geminiError && (
+      {/* Queue upload / polling error */}
+      {activeQueueError && !isJobParsed && (
         <div className="my-3 p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-left">
-          <p className="text-red-600 dark:text-red-400 mb-2">{geminiError}</p>
+          <p className="text-red-600 dark:text-red-400 mb-2">{activeQueueError}</p>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={processPdfWithGemini}>
-              Retry
-            </Button>
+            {pendingPdfFile && (
+              <Button variant="outline" size="sm" onClick={processWithQueue}>
+                Retry
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={clearData}>
               Clear
             </Button>
@@ -294,21 +322,48 @@ export default function ImportTransactions({
         </div>
       )}
 
-      {/* PDF pending: show "Save to Storage" option and "Process with AI" button */}
-      {pendingPdfFile && !loading && !pdfData && !geminiError && (
+      {/* PDF pending: show "Process with AI" button */}
+      {pendingPdfFile && !loading && !queueUploading && !jobId && !activeQueueError && (
         <div className="my-3">
-          <div className="flex items-center gap-4 mb-3 justify-center">
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="save-file-s3"
-                checked={saveFileToS3}
-                onCheckedChange={(checked) => setSaveFileToS3(checked === true)}
-              />
-              <Label htmlFor="save-file-s3">Save File to Storage</Label>
-            </div>
-          </div>
-          <Button onClick={processPdfWithGemini}>Process with AI</Button>
+          <Button onClick={processWithQueue} data-testid="process-with-ai">Process with AI</Button>
           <Button variant="outline" className="ml-2" onClick={clearData}>
+            Clear
+          </Button>
+        </div>
+      )}
+
+      {/* Job is queued or processing — show status message */}
+      {jobId && isJobActive && (
+        <div className="my-3 p-4 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg text-left">
+          <div className="flex items-center gap-2 mb-2">
+            <Spinner />
+            <span className="font-medium text-blue-700 dark:text-blue-300">
+              {jobStatus === 'processing' ? 'Processing with AI…' : 'Queued for AI processing…'}
+            </span>
+          </div>
+          <p className="text-sm text-blue-600 dark:text-blue-400">
+            Your file is in the queue and will be processed shortly. You can leave this page and come back.
+          </p>
+        </div>
+      )}
+
+      {/* Job deferred to tomorrow */}
+      {jobId && isJobDeferred && (
+        <div className="my-3 p-4 bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 rounded-lg text-left">
+          <p className="font-medium text-yellow-700 dark:text-yellow-300">Processing deferred</p>
+          <p className="text-sm text-yellow-600 dark:text-yellow-400 mt-1">
+            {estimatedWait ?? 'Your file will be processed when quota resets.'}
+          </p>
+        </div>
+      )}
+
+      {/* Job failed */}
+      {jobId && isJobFailed && (
+        <div className="my-3 p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-left">
+          <p className="text-red-600 dark:text-red-400 mb-2">
+            {jobPollingError ?? 'AI processing failed. Please try again.'}
+          </p>
+          <Button variant="outline" size="sm" onClick={clearData}>
             Clear
           </Button>
         </div>
@@ -398,7 +453,7 @@ export default function ImportTransactions({
       {/* Show import button if we have data, statement details, or lots */}
       {(effectiveData && effectiveData.length > 0) || hasStatementDetails || hasLots || pdfAccountBlocks.length > 1 ? (
         <div style={{ textAlign: 'left' }}>
-          {/* Post-Gemini import options for PDF data */}
+          {/* Post-AI import options for PDF data */}
           {pdfData && (transactionCount > 0 || multiAccountTransactionCount > 0 || hasStatementDetails) && (
             <div className="flex items-center gap-4 my-3">
               {(transactionCount > 0 || multiAccountTransactionCount > 0) && (
@@ -446,10 +501,11 @@ export default function ImportTransactions({
         !effectiveData &&
         !loading &&
         !pendingPdfFile &&
+        !jobId &&
         !hasStatementDetails &&
         !hasLots &&
         pdfAccountBlocks.length === 0 &&
-        !geminiError && (
+        !activeQueueError && (
           <div className="mt-4">
             <Button variant="outline" onClick={clearData}>
               Clear
@@ -459,3 +515,4 @@ export default function ImportTransactions({
     </div>
   )
 }
+

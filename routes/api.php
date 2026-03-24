@@ -12,7 +12,6 @@ use App\Http\Controllers\ClientManagement\ClientPortalApiController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\FinanceTool\FinanceApiController;
 use App\Http\Controllers\FinanceTool\FinanceEmploymentEntityController;
-use App\Http\Controllers\FinanceTool\FinanceGeminiImportController;
 use App\Http\Controllers\FinanceTool\FinanceLotsController;
 use App\Http\Controllers\FinanceTool\FinancePayslipController;
 use App\Http\Controllers\FinanceTool\FinancePayslipImportController;
@@ -114,13 +113,11 @@ Route::middleware(['web', 'auth'])->post('/license-keys', [LicenseKeyController:
 Route::middleware(['web', 'auth'])->post('/license-keys/import', [LicenseKeyController::class, 'import']);
 Route::middleware(['web', 'auth'])->post('/user/update-email', [UserApiController::class, 'updateEmail']);
 Route::middleware(['web', 'auth'])->post('/user/update-password', [UserApiController::class, 'updatePassword']);
-Route::middleware(['web', 'auth'])->post('/finance/transactions/import-gemini', [FinanceGeminiImportController::class, 'parseDocument']);
 Route::middleware(['web', 'auth'])->post('/finance/multi-import-pdf', [StatementController::class, 'importMultiAccountPdf']);
 Route::middleware(['web', 'auth'])->get('/finance/statement/{statement_id}/details', [StatementController::class, 'getDetails']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/all-statement-details', [StatementController::class, 'getFinStatementDetails']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/import-ib-statement', [StatementController::class, 'importIbStatement']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/import-pdf-statement', [StatementController::class, 'importPdfStatement']);
-Route::middleware(['web', 'auth'])->post('/finance/statement/{statement_id}/import-gemini', [FinanceGeminiImportController::class, 'importStatementDetails']);
 
 // Lots API routes
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/lots', [FinanceLotsController::class, 'index']);

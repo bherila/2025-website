@@ -296,6 +296,20 @@ export default function TransactionsPage({ accountId, initialAvailableYears = []
           {isAllAccounts && <TooltipContent>{disabledTooltip}</TooltipContent>}
         </Tooltip>
 
+        {/* Export button — next to Import */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" disabled={!data || data.length === 0}>
+              <Download className="h-4 w-4 mr-1" />
+              Export
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <DropdownMenuItem onClick={exportToCSV}>Export as CSV</DropdownMenuItem>
+            <DropdownMenuItem onClick={exportToJSON}>Export as JSON</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         {/* Maintenance button */}
         <Tooltip>
           <TooltipTrigger asChild>
@@ -340,20 +354,6 @@ export default function TransactionsPage({ accountId, initialAvailableYears = []
           </TooltipTrigger>
           {isAllAccounts && <TooltipContent>{disabledTooltip}</TooltipContent>}
         </Tooltip>
-
-        {/* Export button */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" disabled={!data || data.length === 0}>
-              <Download className="h-4 w-4 mr-1" />
-              Export
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem onClick={exportToCSV}>Export as CSV</DropdownMenuItem>
-            <DropdownMenuItem onClick={exportToJSON}>Export as JSON</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
     </div>
   )
