@@ -85,6 +85,9 @@ export const PasskeySection: React.FC<PasskeySectionProps> = ({ onSuccess, onErr
   };
 
   const registerPasskey = async () => {
+    // Close the name dialog immediately so the browser's native passkey UI is
+    // not blocked by a React focus-trap (Radix Dialog traps focus while open).
+    setShowNameDialog(false);
     setRegistering(true);
     try {
       // Step 1: Get registration options
@@ -154,14 +157,16 @@ export const PasskeySection: React.FC<PasskeySectionProps> = ({ onSuccess, onErr
       fetchPasskeys();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Passkey registration failed';
-      if (message !== 'The operation either timed out or was not allowed.') {
-        onError('passkeys', message);
+      const name = err instanceof Error ? (err as DOMException).name : '';
+      // Only suppress true user-initiated cancellations (AbortError); all other
+      // failures (including SecurityError / NotAllowedError from RP-ID mismatches)
+      // must be surfaced so the user knows something went wrong.
+      if (name === 'AbortError') {
+        console.debug('[PasskeySection] Registration cancelled by user:', message);
       } else {
-        // User cancelled or timed out — not an error worth showing
-        console.debug('[PasskeySection] Registration cancelled or timed out:', message);
+        onError('passkeys', message);
       }
     } finally {
-      setShowNameDialog(false);
       setRegistering(false);
     }
   };

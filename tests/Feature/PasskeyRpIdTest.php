@@ -28,20 +28,24 @@ class PasskeyRpIdTest extends TestCase
         $this->assertEquals('production-app.com', $data['rp']['id']);
     }
 
-    public function test_rp_id_uses_app_url_when_it_is_configured_correctly(): void
+    public function test_rp_id_always_uses_request_host(): void
     {
         $user = User::factory()->create();
 
+        // Even when APP_URL is set, the RP ID must come from the request host.
+        // Using APP_URL would cause a mismatch when users access the site without
+        // the "www." prefix (or vice-versa), making WebAuthn throw a silent
+        // SecurityError in the browser.
         config(['app.url' => 'https://my-actual-domain.com']);
 
-        // Even if request host is different (e.g. proxy), it should prefer APP_URL
         $response = $this->actingAs($user)
             ->post('https://some-other-host.com/api/passkeys/register/options');
 
         $response->assertStatus(200);
         $data = $response->json();
 
-        $this->assertEquals('my-actual-domain.com', $data['rp']['id']);
+        // RP ID must equal the request's host so the browser origin check passes.
+        $this->assertEquals('some-other-host.com', $data['rp']['id']);
     }
 
     public function test_auth_rp_id_also_falls_back(): void

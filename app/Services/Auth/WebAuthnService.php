@@ -211,16 +211,11 @@ class WebAuthnService
 
     private function getRpId(Request $request): string
     {
-        $appUrl = config('app.url');
-
-        // If app.url is not set or is a default localhost value, use the current host from the request
-        if (! $appUrl || str_contains($appUrl, 'localhost')) {
-            $host = parse_url($request->getSchemeAndHttpHost(), PHP_URL_HOST);
-
-            return $host ?? $request->getHost();
-        }
-
-        return parse_url($appUrl, PHP_URL_HOST) ?? $request->getHost();
+        // Always use the request's actual host so that the RP ID always matches
+        // the effective domain of the origin. Using APP_URL caused a mismatch when
+        // APP_URL contained "www." but the user accessed the site without it (or
+        // vice-versa), which made the browser throw a silent SecurityError.
+        return $request->getHost();
     }
 
     private function encodeCredentialId(string $rawId): string

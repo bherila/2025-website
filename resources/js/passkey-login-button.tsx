@@ -80,8 +80,9 @@ export const PasskeyLoginButton: React.FC<PasskeyLoginButtonProps> = ({ onSucces
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Passkey login failed';
-      // Ignore user-cancelled errors
-      if (message.includes('timed out') || message.includes('not allowed') || message.includes('cancelled')) {
+      const name = err instanceof Error ? (err as DOMException).name : '';
+      // Only ignore true user-initiated cancellations (AbortError).
+      if (name === 'AbortError') {
         setLoading(false);
         return;
       }
