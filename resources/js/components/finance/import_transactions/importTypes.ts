@@ -5,8 +5,7 @@ export interface AccountMapping {
 }
 
 /**
- * Top-level response from the Gemini PDF import endpoint (synchronous legacy)
- * or from a parsed GenAI queue result's result_json (async queue).
+ * Top-level parsed result from the GenAI import queue (result_json payload).
  * Extends GeminiAccountBlock for single-account PDFs; includes an `accounts`
  * array for multi-account PDFs.
  */

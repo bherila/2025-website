@@ -9,7 +9,7 @@ import type { AccountLineItem } from '@/data/finance/AccountLineItem'
 import type { IbStatementData } from '@/data/finance/parseIbCsv'
 import { useGenAiFileUpload } from '@/genai-processor/useGenAiFileUpload'
 import { useGenAiJobPolling } from '@/genai-processor/useGenAiJobPolling'
-import type { AccountForMatching } from '@/lib/finance/accountMatcher'
+import { type AccountForMatching,getAccountSuffix } from '@/lib/finance/accountMatcher'
 
 import { useFinanceAccounts } from '../AccountNavigation'
 import TransactionsTable from '../TransactionsTable'
@@ -126,10 +126,23 @@ export default function ImportTransactions({
     attachAsStatement,
   })
 
+  // Build accounts context for the AI prompt (name + last4 only — never full numbers)
+  const accountsContext = useMemo(
+    () =>
+      accountsForMatching
+        .filter((a) => a.acct_number)
+        .map((a) => ({
+          name: a.acct_name,
+          last4: getAccountSuffix(a.acct_number!, 4),
+        })),
+    [accountsForMatching],
+  )
+
   // GenAI queue upload hook
   const { upload: uploadToQueue, uploading: queueUploading, error: uploadHookError } = useGenAiFileUpload({
     jobType: 'finance_transactions',
     ...(typeof accountId === 'number' ? { acctId: accountId } : {}),
+    ...(accountsContext.length > 0 ? { context: { accounts: accountsContext } } : {}),
   })
 
   // GenAI job polling hook
@@ -306,7 +319,7 @@ export default function ImportTransactions({
       )}
 
       {/* Queue upload / polling error */}
-      {activeQueueError && !isJobParsed && (
+      {activeQueueError && !isJobParsed && (jobId !== null || pendingPdfFile !== null) && (
         <div className="my-3 p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-left">
           <p className="text-red-600 dark:text-red-400 mb-2">{activeQueueError}</p>
           <div className="flex gap-2">

@@ -61,6 +61,7 @@ Fallbacks & migration:
 
 ### PHP Validations
 - **PHP Linter**: Laravel Pint is configured - run `./vendor/bin/pint --test` to check, `./vendor/bin/pint` to fix
+- **PHP Type Annotations**: All PHP methods MUST have explicit return type annotations. Properties should have type declarations where possible. This is required for all changes.
 - **PHPUnit Tests**: Run `vendor/bin/phpunit --configuration phpunit.xml` - all tests must pass
   - **Important**: Run `pnpm run build` before PHPUnit so the Vite manifest exists for blade view tests
   - SQLite in-memory DB is configured automatically via `phpunit.xml` and `tests/bootstrap.php` — no extra setup needed

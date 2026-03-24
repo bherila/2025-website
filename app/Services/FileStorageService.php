@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -26,7 +27,7 @@ class FileStorageService
     /**
      * Get the S3 disk instance.
      */
-    protected function storage()
+    protected function storage(): Filesystem
     {
         return Storage::disk($this->disk);
     }
@@ -74,7 +75,8 @@ class FileStorageService
             throw new \RuntimeException('S3 Bucket is not configured in filesystems.disks.s3.bucket');
         }
 
-        return $this->storage()->temporaryUploadUrl(
+        // temporaryUploadUrl() returns [url, headers]; extract the URL string.
+        [$url] = $this->storage()->temporaryUploadUrl(
             $s3Path,
             now()->addMinutes($expiration),
             [
@@ -82,6 +84,8 @@ class FileStorageService
                 'ContentType' => $contentType,
             ]
         );
+
+        return $url;
     }
 
     /**
