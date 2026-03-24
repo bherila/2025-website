@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\GenAiProcessor\Models\GenAiImportJob;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class AdminGenAiJobsControllerTest extends TestCase
@@ -74,7 +75,7 @@ class AdminGenAiJobsControllerTest extends TestCase
         $admin = $this->createAdminUser();
 
         // Older job - use DB directly to bypass Eloquent timestamp handling
-        $olderId = \Illuminate\Support\Facades\DB::table('genai_import_jobs')->insertGetId([
+        $olderId = DB::table('genai_import_jobs')->insertGetId([
             'user_id' => $admin->id,
             'job_type' => 'finance_transactions',
             'file_hash' => 'hash_older',
@@ -88,7 +89,7 @@ class AdminGenAiJobsControllerTest extends TestCase
         ]);
 
         // Newer job
-        $newerId = \Illuminate\Support\Facades\DB::table('genai_import_jobs')->insertGetId([
+        $newerId = DB::table('genai_import_jobs')->insertGetId([
             'user_id' => $admin->id,
             'job_type' => 'utility_bill',
             'file_hash' => 'hash_newer',
