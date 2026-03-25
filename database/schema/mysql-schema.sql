@@ -954,11 +954,14 @@ CREATE TABLE `fin_statements` (
   `balance` varchar(20) NOT NULL,
   `cost_basis` decimal(15,4) NOT NULL DEFAULT 0.0000,
   `is_cost_basis_override` tinyint(1) NOT NULL DEFAULT 0,
+  `genai_job_id` bigint(20) unsigned DEFAULT NULL,
   `statement_opening_date` date DEFAULT NULL,
   `statement_closing_date` date DEFAULT NULL,
   PRIMARY KEY (`statement_id`),
   KEY `fin_account_balance_snapshot_acct_id_index` (`acct_id`),
-  CONSTRAINT `fin_account_balance_snapshot_acct_id_foreign` FOREIGN KEY (`acct_id`) REFERENCES `fin_accounts` (`acct_id`)
+  KEY `fin_statements_genai_job_id_index` (`genai_job_id`),
+  CONSTRAINT `fin_account_balance_snapshot_acct_id_foreign` FOREIGN KEY (`acct_id`) REFERENCES `fin_accounts` (`acct_id`),
+  CONSTRAINT `fin_statements_genai_job_id_foreign` FOREIGN KEY (`genai_job_id`) REFERENCES `genai_import_jobs` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_transaction_non_duplicate_pairs`;

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\GenAiProcessor\Models\GenAiImportJob;
 use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientProject;
@@ -12,6 +13,7 @@ use App\Models\Files\FileForFinAccount;
 use App\Models\Files\FileForProject;
 use App\Models\Files\FileForTask;
 use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\FinStatement;
 use App\Services\FileStorageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -654,25 +656,57 @@ class FileController extends Controller
             ->where('acct_owner', $userId)
             ->firstOrFail();
 
+        // First try: file attached directly to statement
         $file = FileForFinAccount::where('acct_id', $account->acct_id)
             ->where('statement_id', $statementId)
-            ->firstOrFail();
+            ->first();
 
-        $viewUrl = $this->fileService->getSignedViewUrl(
-            $file->s3_path,
-            $file->mime_type ?? 'application/pdf'
-        );
+        if ($file) {
+            $viewUrl = $this->fileService->getSignedViewUrl(
+                $file->s3_path,
+                $file->mime_type ?? 'application/pdf'
+            );
+            $downloadUrl = $this->fileService->getSignedDownloadUrl(
+                $file->s3_path,
+                $file->original_filename
+            );
 
-        $downloadUrl = $this->fileService->getSignedDownloadUrl(
-            $file->s3_path,
-            $file->original_filename
-        );
+            return response()->json([
+                'view_url' => $viewUrl,
+                'download_url' => $downloadUrl,
+                'filename' => $file->original_filename,
+            ]);
+        }
 
-        return response()->json([
-            'view_url' => $viewUrl,
-            'download_url' => $downloadUrl,
-            'filename' => $file->original_filename,
-        ]);
+        // Second try: statement linked to a GenAI job
+        $statement = FinStatement::where('statement_id', $statementId)
+            ->where('acct_id', $account->acct_id)
+            ->first();
+
+        if ($statement && $statement->genai_job_id) {
+            $genaiJob = GenAiImportJob::where('id', $statement->genai_job_id)
+                ->where('user_id', $userId)
+                ->first();
+
+            if ($genaiJob) {
+                $viewUrl = $this->fileService->getSignedViewUrl(
+                    $genaiJob->s3_path,
+                    $genaiJob->mime_type ?? 'application/pdf'
+                );
+                $downloadUrl = $this->fileService->getSignedDownloadUrl(
+                    $genaiJob->s3_path,
+                    $genaiJob->original_filename
+                );
+
+                return response()->json([
+                    'view_url' => $viewUrl,
+                    'download_url' => $downloadUrl,
+                    'filename' => $genaiJob->original_filename,
+                ]);
+            }
+        }
+
+        return response()->json(['error' => 'No file found for this statement.'], 404);
     }
 
     /**

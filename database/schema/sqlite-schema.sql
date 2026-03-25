@@ -590,6 +590,7 @@ CREATE TABLE `fin_statements`(
   `balance` TEXT NOT NULL,
   `cost_basis` DECIMAL(15,4) NOT NULL DEFAULT 0,
   `is_cost_basis_override` BOOLEAN NOT NULL DEFAULT 0,
+  `genai_job_id` INTEGER NULL,
   `statement_opening_date` TEXT,
   `statement_closing_date` TEXT,
   FOREIGN KEY(`acct_id`) REFERENCES `fin_accounts`(`acct_id`)

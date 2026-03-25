@@ -13,6 +13,7 @@ import { type AccountForMatching,getAccountSuffix } from '@/lib/finance/accountM
 
 import { useFinanceAccounts } from '../AccountNavigation'
 import TransactionsTable from '../TransactionsTable'
+import GenAiJobsList from './GenAiJobsList'
 import { ImportProgressDialog } from './ImportProgressDialog'
 import type { GeminiImportResponse } from './importTypes'
 import { PdfStatementPreviewCard } from './PdfStatementPreviewCard'
@@ -262,13 +263,19 @@ export default function ImportTransactions({
 
   const activeQueueError = queueUploadError ?? uploadHookError ?? jobPollingError
 
+  const handleSelectJob = useCallback((selectedJobId: number) => {
+    setJobId(selectedJobId)
+  }, [])
+
   return (
-    <div
-      ref={dropZoneRef}
-      onDrop={handleDrop}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      className={`border-2 p-5 text-center transition-colors ${isDragOver ? 'border-blue-500 bg-blue-50 dark:bg-blue-950' : 'border-gray-300 dark:border-gray-600'}`}
+    <>
+      <GenAiJobsList accountId={accountId} onSelectJob={handleSelectJob} />
+      <div
+        ref={dropZoneRef}
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        className={`border-2 p-5 text-center transition-colors ${isDragOver ? 'border-blue-500 bg-blue-50 dark:bg-blue-950' : 'border-gray-300 dark:border-gray-600'}`}
     >
       {/* Hidden file input for click-to-select */}
       <input
@@ -537,6 +544,7 @@ export default function ImportTransactions({
           </div>
         )}
     </div>
+    </>
   )
 }
 

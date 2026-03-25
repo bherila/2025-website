@@ -2,6 +2,7 @@
 
 namespace App\Models\FinanceTool;
 
+use App\GenAiProcessor\Models\GenAiImportJob;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -21,6 +22,7 @@ class FinStatement extends Model
         'statement_closing_date',
         'cost_basis',
         'is_cost_basis_override',
+        'genai_job_id',
     ];
 
     protected function casts(): array
@@ -30,12 +32,18 @@ class FinStatement extends Model
             'statement_closing_date' => 'date',
             'cost_basis' => 'decimal:4',
             'is_cost_basis_override' => 'boolean',
+            'genai_job_id' => 'integer',
         ];
     }
 
     public function account(): BelongsTo
     {
         return $this->belongsTo(FinAccounts::class, 'acct_id', 'acct_id');
+    }
+
+    public function genaiJob(): BelongsTo
+    {
+        return $this->belongsTo(GenAiImportJob::class, 'genai_job_id');
     }
 
     public function details(): HasMany
