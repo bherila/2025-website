@@ -156,9 +156,9 @@ export default function ImportTransactions({
   // GenAI job polling hook
   const { status: jobStatus, results: jobResults, error: jobPollingError, estimatedWait } = useGenAiJobPolling(jobId)
 
-  // When the job finishes parsing, extract the result and set pdfData
+  // When the job finishes parsing (or has been imported), extract the result and set pdfData
   useEffect(() => {
-    if (jobId && jobStatus === 'parsed' && jobResults.length > 0) {
+    if (jobId && jobResults.length > 0 && (jobStatus === 'parsed' || jobStatus === 'imported')) {
       const firstResult = jobResults[0]
       if (!firstResult?.result_json) {
         setError('AI result is empty. Please try again.')
