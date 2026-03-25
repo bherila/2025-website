@@ -233,17 +233,16 @@ The transaction import process is as follows:
 
 PDF statements are parsed using the GenAI Import system. The frontend uploads files directly to S3 via pre-signed URLs, then creates an import job that is processed asynchronously by the queue worker.
 
-**Two-stage UX:**
+**Async queue UX:**
 
-**Stage 1 (Pre-AI):** After selecting/dropping a PDF, one checkbox is shown:
-- **Save File to Storage** – upload the original PDF to S3 for later reference
+After selecting/dropping a PDF, the file is uploaded directly to S3 and an import job is dispatched to the GenAI queue. The import page shows a **"Recent AI Import Jobs"** panel above the drop zone that tracks job status in real time (auto-polling every 5 seconds while any job is active). When parsing completes (and the user receives an email notification), they can return to the import page and click **Select** on the completed job to load the parsed results into the review UI.
 
-**Stage 2 (Post-AI):** After AI parsing completes, additional checkboxes appear before the Import button:
+**After AI parsing completes,** two checkboxes appear before the Import button:
 - **Import Transactions** – import parsed transaction line items (shown only when transactions are detected)
 - **Attach as Statement** – create a statement/statement-details record (shown only when statement details are detected)
 
 Checkbox states are persisted globally in `localStorage` (`pdf_import_transactions`,
-`pdf_attach_statement`, `pdf_save_file_s3`). The **"Process with AI"** button is disabled unless at least one option is selected.
+`pdf_attach_statement`). The file is always stored by the GenAI queue system in the `genai-import/{user_id}/` S3 prefix.
 
 **Processing notes:**
 - **Date handling:** Dates extracted from PDFs are truncated to `YYYY-MM-DD` on the server before being stored.
@@ -259,10 +258,10 @@ The frontend (`accountMatcher.ts`) automatically matches each parsed account blo
 
 | Endpoint | Description |
 |----------|-------------|
-| `POST /api/genai/import/jobs` | New async import job (see [GenAI Import](../GenAI-Import.md)) |
-| `POST /api/finance/transactions/import-gemini` | Legacy synchronous parse (deprecated when `GEMINI_USE_QUEUE=true`) |
+| `POST /api/genai/import/request-upload` | Get a pre-signed S3 URL for uploading a PDF |
+| `POST /api/genai/import/jobs` | Create a new async import job after S3 upload |
+| `GET /api/genai/import/jobs` | List recent import jobs (supports `job_type` and `acct_id` filters) |
 | `POST /api/finance/multi-import-pdf` | Import data for multiple accounts in one transaction |
-| `POST /api/finance/{accountId}/files/attach` | Attach an already-stored file (by hash) to an account |
 
 ### Duplicate File Prevention
 To save storage and processing time, the file management system uses SHA-256 hashing:

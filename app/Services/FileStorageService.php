@@ -2,8 +2,8 @@
 
 namespace App\Services;
 
-use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
@@ -27,7 +27,7 @@ class FileStorageService
     /**
      * Get the S3 disk instance.
      */
-    protected function storage(): Filesystem
+    protected function storage(): FilesystemAdapter
     {
         return Storage::disk($this->disk);
     }

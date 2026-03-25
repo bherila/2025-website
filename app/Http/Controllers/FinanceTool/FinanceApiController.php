@@ -157,7 +157,6 @@ class FinanceApiController extends Controller
         $balances = DB::table('fin_statements as fs')
             ->leftJoin('fin_statement_details as fsd', 'fs.statement_id', '=', 'fsd.statement_id')
             ->leftJoin('files_for_fin_accounts as ffa', 'fs.statement_id', '=', 'ffa.statement_id')
-            ->leftJoin('genai_import_jobs as gij', 'fs.genai_job_id', '=', 'gij.id')
             ->where('fs.acct_id', $account->acct_id)
             ->select(
                 'fs.statement_id',

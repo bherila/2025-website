@@ -87,7 +87,21 @@ export function useGenAiJobPolling(jobId: number | null): {
   useEffect(() => {
     if (!jobId) return
 
+    // Reset stale state from any previous job before starting a new fetch
+    setStatus(null)
+    setResults([])
+    setError(null)
+    setJob(null)
+    setEstimatedWait(undefined)
     statusRef.current = null
+    backoffRef.current = POLL_INTERVAL_MS
+    consecutiveErrorsRef.current = 0
+
+    // Clear any in-flight interval from the previous job
+    if (intervalRef.current) {
+      clearTimeout(intervalRef.current)
+      intervalRef.current = null
+    }
 
     fetchJob()
 
