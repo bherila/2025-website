@@ -17,6 +17,10 @@ use Illuminate\Support\Facades\Validator;
 
 class GenAiImportController extends Controller
 {
+    private const FILTERED_JOB_LIMIT = 50;
+
+    private const DEFAULT_JOB_LIMIT = 20;
+
     public function __construct(
         private FileStorageService $fileService,
         private GenAiJobDispatcherService $dispatcher,
@@ -192,7 +196,7 @@ class GenAiImportController extends Controller
             $query->where('acct_id', (int) $acctId);
         }
 
-        $limit = $jobType ? 50 : 20;
+        $limit = $jobType ? self::FILTERED_JOB_LIMIT : self::DEFAULT_JOB_LIMIT;
         $jobs = $query->limit($limit)->get();
 
         return response()->json(['data' => $jobs]);

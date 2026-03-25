@@ -12,6 +12,7 @@ return new class extends Migration
         if (DB::getDriverName() === 'sqlite') {
             if (! Schema::hasColumn('fin_statements', 'genai_job_id')) {
                 DB::statement('ALTER TABLE fin_statements ADD COLUMN genai_job_id INTEGER NULL');
+                DB::statement('CREATE INDEX IF NOT EXISTS fin_statements_genai_job_id_index ON fin_statements (genai_job_id)');
             }
         } else {
             Schema::table('fin_statements', function (Blueprint $table) {

@@ -16,6 +16,8 @@ const STATUS_BADGE: Record<string, string> = {
 
 const ACTIVE_STATUSES = new Set(['pending', 'processing'])
 
+const POLLING_INTERVAL_MS = 5_000
+
 function relativeTime(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime()
   const mins = Math.floor(diff / 60_000)
@@ -75,7 +77,7 @@ export default function GenAiJobsList({ accountId, onSelectJob }: Props) {
     if (!hasActive) return
     const id = setInterval(() => {
       void fetchJobs()
-    }, 5_000)
+    }, POLLING_INTERVAL_MS)
     return () => clearInterval(id)
   }, [jobs, fetchJobs])
 

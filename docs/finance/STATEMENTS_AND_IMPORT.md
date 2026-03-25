@@ -41,15 +41,46 @@ experience:
 - `FileStorageService::getSignedViewUrl` generates inline-viewing signed URLs
   (used by the statement detail view to show the original PDF).
 
-- `FileController::viewStatementPdf` returns signed view/download URLs and
-  requires the file to be associated with the requested statement.
+- `FileController::viewStatementPdf` returns signed view/download URLs. It now
+  supports two file sources (in priority order):
+  1. A file in `files_for_fin_accounts` linked to the statement via `statement_id`.
+  2. A GenAI import job linked to the statement via `genai_job_id` (see below).
+  If neither is present, the endpoint returns 404.
 
 - **Duplicate File Prevention**: `FileController` uses SHA-256 hashes to prevent
   re-saving the same file multiple times for an account. The hash is stored in
   `files_for_fin_accounts.file_hash`.
 
+- **Statement ↔ GenAI Job Link**: `fin_statements` now has an optional
+  `genai_job_id` (nullable FK → `genai_import_jobs.id`). This avoids copying
+  file metadata between the GenAI system and the statement system when a PDF
+  was imported via the GenAI queue. The import workflow can set `genai_job_id`
+  on the created statement to record the source job. The file is served directly
+  from the GenAI job's S3 path; no duplication required.
+
 - **Automated Cache Cleanup**: Deleting a statement triggers cleanup of any
   cached Gemini AI responses associated with the statement's files.
+
+---
+
+## Import Page: GenAI Job Queue Panel
+
+The **Import** tab on the finance transactions page now shows a **Recent AI Import Jobs** panel above the file drop zone. This panel:
+
+- Lists all `finance_transactions` GenAI import jobs for the current account (or all accounts when viewing the global import page), most recent first.
+- Shows each job's filename, status badge, and relative timestamp.
+- **Auto-polls every 5 seconds** while any job is in `pending` or `processing` state.
+- For jobs in `parsed` or `imported` state, shows a **Select** button. Clicking it loads the parsed AI result directly into the review UI — the same preview workflow that occurs after uploading a new file.
+- After uploading a new PDF via the drop zone, the panel immediately shows the new pending job and updates as it progresses through the queue.
+- When the user receives the job-complete email notification and returns to the page, the panel will show the completed job with a **Select** button to start the review/import workflow.
+
+### Filtering
+
+The `GET /api/genai/import/jobs` endpoint now accepts optional query parameters:
+- `job_type` — filter by job type (e.g. `finance_transactions`). Required to use the 50-job limit; without it the default is 20.
+- `acct_id` — filter to jobs for a specific account (ownership is validated).
+
+The response shape changed from paginated (`data`, `meta`, `links`) to `{ data: GenAiImportJob[] }` when these filters are active. The panel uses the filtered form.
 
 ---
 
