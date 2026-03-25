@@ -265,6 +265,10 @@ export default function ImportTransactions({
   const activeQueueError = queueUploadError ?? uploadHookError ?? jobPollingError
 
   const handleSelectJob = useCallback((selectedJobId: number) => {
+    // Clear previous job results and errors so the UI reflects the newly selected job
+    setPdfData(null)
+    setError(null)
+    setQueueUploadError(null)
     setJobId(selectedJobId)
   }, [])
 
