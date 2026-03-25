@@ -80,7 +80,7 @@ The `GET /api/genai/import/jobs` endpoint now accepts optional query parameters:
 - `job_type` — filter by job type (e.g. `finance_transactions`). Required to use the 50-job limit; without it the default is 20.
 - `acct_id` — filter to jobs for a specific account (ownership is validated).
 
-The response shape changed from paginated (`data`, `meta`, `links`) to `{ data: GenAiImportJob[] }` when these filters are active. The panel uses the filtered form.
+The response shape has changed from paginated (`data`, `meta`, `links`) to a non-paginated object of the form `{ data: GenAiImportJob[] }` for all requests (regardless of filters). The panel consumes this `{ data: ... }` response shape.
 
 ---
 
