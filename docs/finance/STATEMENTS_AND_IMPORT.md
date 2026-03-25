@@ -70,7 +70,7 @@ The **Import** tab on the finance transactions page now shows a **Recent AI Impo
 - Lists all `finance_transactions` GenAI import jobs for the current account (or all accounts when viewing the global import page), most recent first.
 - Shows each job's filename, status badge, and relative timestamp.
 - **Auto-polls every 5 seconds** while any job is in `pending` or `processing` state.
-- For jobs in `parsed` or `imported` state, shows a **Select** button. Clicking it loads the parsed AI result directly into the review UI — the same preview workflow that occurs after uploading a new file.
+- For jobs in `parsed` state, shows a **Select** button. Clicking it loads the parsed AI result directly into the review UI — the same preview workflow that occurs after uploading a new file.
 - After uploading a new PDF via the drop zone, the panel immediately shows the new pending job and updates as it progresses through the queue.
 - When the user receives the job-complete email notification and returns to the page, the panel will show the completed job with a **Select** button to start the review/import workflow.
 
