@@ -6,4 +6,6 @@
     <div id="AdminGenAiJobsPage"></div>
 @endsection
 
-@vite(['resources/js/admin-genai-jobs.tsx'])
+@push('head')
+    @vite(['resources/js/admin-genai-jobs.tsx'])
+@endpush
