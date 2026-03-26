@@ -9,6 +9,6 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 // GenAI import queue processing
-Schedule::command('genai:run-queue')->everyMinute()->withoutOverlapping(10);
+Schedule::command('genai:run-queue')->everyMinute()->withoutOverlapping(30);
 Schedule::command('genai:process-scheduled')->everyMinute()->withoutOverlapping(5);
 Schedule::command('genai:requeue-stale')->everyFiveMinutes()->withoutOverlapping(5);

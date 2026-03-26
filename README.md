@@ -48,6 +48,26 @@ Tests use an in-memory SQLite database to ensure they never accidentally touch M
 
 Development and test environments require SQLite **3.35+** (for modern `ALTER TABLE ... DROP COLUMN` support used by migrations).
 
+## Cron / Queue Configuration
+
+The application uses Laravel's scheduler to process GenAI import jobs and other background tasks. Add the following cron entry to run the scheduler every minute:
+
+```bash
+* * * * * cd /path-to-project && php artisan schedule:run >> /dev/null 2>&1
+```
+
+The scheduler automatically manages these GenAI queue commands (defined in `routes/console.php`):
+
+| Command                       | Frequency       | Purpose                                                     |
+|-------------------------------|-----------------|-------------------------------------------------------------|
+| `genai:run-queue`             | Every minute    | Self-heals orphaned pending jobs, then processes the `genai-imports` queue (timeout: 300s, max 10 jobs) |
+| `genai:process-scheduled`     | Every minute    | Promotes `queued_tomorrow` jobs whose scheduled date has arrived |
+| `genai:requeue-stale`         | Every 5 minutes | Resets jobs stuck in `processing` for more than 10 minutes  |
+
+All scheduled commands use `withoutOverlapping()` to prevent concurrent execution, so frequent cron invocations will not cause processes to pile up.
+
+> **Note:** The database queue `retry_after` is set to 600 seconds (in `config/queue.php`) to accommodate GenAI jobs that may take up to 5 minutes to complete. Do not lower this below the `ParseImportJob` timeout of 300 seconds.
+
 ## Deployment Instructions
 
 These instructions are for deploying to a cPanel-hosted Apache server with the document root set to `~/public_html`.
