@@ -44,7 +44,7 @@ jest.mock('@/components/ui/table', () => ({
 
 jest.mock('@/components/ui/tooltip', () => {
   const TooltipTrigger = React.forwardRef<HTMLSpanElement, React.ComponentProps<'span'>>(
-    ({ children, ...p }, ref) => <span ref={ref} {...p}>{children}</span>
+    ({ children, asChild, ...p }, ref) => <span ref={ref} {...p}>{children}</span>
   );
   TooltipTrigger.displayName = 'TooltipTrigger';
   return {

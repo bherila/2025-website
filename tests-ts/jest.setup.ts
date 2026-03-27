@@ -4,6 +4,21 @@ import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 dayjs.extend(customParseFormat);
 
+// Suppress React act() warnings for async useEffect state updates in tests.
+// These warnings occur because async data fetching triggers state updates outside
+// the direct control of tests, even when using waitFor. The tests are functionally correct.
+const originalConsoleError = console.error;
+console.error = (...args: any[]) => {
+  const firstArg = args[0];
+  if (
+    typeof firstArg === 'string' &&
+    firstArg.includes('inside a test was not wrapped in act')
+  ) {
+    return;
+  }
+  originalConsoleError.call(console, ...args);
+};
+
 // Mock window.matchMedia
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
@@ -34,6 +49,17 @@ Object.defineProperty(window, 'scrollIntoView', {
 // Also mock on Element.prototype since Radix may call it on elements
 if (typeof Element !== 'undefined') {
   Element.prototype.scrollIntoView = jest.fn()
+}
+
+// Mock global fetch for tests
+if (!global.fetch) {
+  global.fetch = jest.fn(() =>
+    Promise.resolve({
+      ok: true,
+      text: () => Promise.resolve(JSON.stringify([])),
+      json: () => Promise.resolve([]),
+    })
+  ) as jest.Mock
 }
 
 // Provide a minimal ResizeObserver mock for components that rely on it (Radix use-size)

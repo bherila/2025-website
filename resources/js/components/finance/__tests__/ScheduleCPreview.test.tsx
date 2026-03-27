@@ -44,7 +44,9 @@ jest.mock('@/components/ui/button', () => ({
 }))
 
 jest.mock('@/components/ui/switch', () => ({
-  Switch: (props: React.ComponentProps<'button'>) => <button role="switch" {...props} />,
+  Switch: ({ onCheckedChange, ...props }: React.ComponentProps<'button'> & { onCheckedChange?: (checked: boolean) => void }) => (
+    <button role="switch" {...props} onChange={(e) => onCheckedChange?.(e.target.checked)} />
+  ),
 }))
 
 jest.mock('@/components/ui/label', () => ({
