@@ -52,8 +52,8 @@ if (typeof Element !== 'undefined') {
 }
 
 // Mock global fetch for tests
-if (!global.fetch) {
-  global.fetch = jest.fn(() =>
+if (!(globalThis as any).fetch) {
+  (globalThis as any).fetch = jest.fn(() =>
     Promise.resolve({
       ok: true,
       text: () => Promise.resolve(JSON.stringify([])),
