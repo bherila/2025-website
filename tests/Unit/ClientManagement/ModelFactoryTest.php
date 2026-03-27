@@ -7,13 +7,10 @@ use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientProject;
 use App\Models\ClientManagement\ClientTimeEntry;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class ModelFactoryTest extends TestCase
 {
-    use RefreshDatabase;
-
     public function test_client_company_factory()
     {
         $company = ClientCompany::factory()->create();

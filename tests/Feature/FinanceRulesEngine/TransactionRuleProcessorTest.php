@@ -14,13 +14,10 @@ use App\Models\FinanceTool\FinRuleAction;
 use App\Models\FinanceTool\FinRuleCondition;
 use App\Models\FinanceTool\FinRuleLog;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class TransactionRuleProcessorTest extends TestCase
 {
-    use RefreshDatabase;
-
     private User $user;
 
     private FinAccounts $account;

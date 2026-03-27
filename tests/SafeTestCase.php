@@ -2,6 +2,7 @@
 
 namespace Tests;
 
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -12,9 +13,13 @@ use RuntimeException;
  * This class is an additional safety layer on top of the bootstrap.php and phpunit.xml
  * configuration. It verifies the active database connection at setUp time rather than
  * relying solely on config values, ensuring no test can accidentally hit MySQL.
+ *
+ * Includes RefreshDatabase trait to run migrations before each test.
  */
 abstract class SafeTestCase extends BaseTestCase
 {
+    use RefreshDatabase;
+
     protected function setUpTraits(): array
     {
         $this->assertDatabaseIsSafeSqlite();

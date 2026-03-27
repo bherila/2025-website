@@ -3,14 +3,11 @@
 namespace Tests\Feature;
 
 use App\Models\FinanceTool\FinAccountLot;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class FinanceLotsControllerTest extends TestCase
 {
-    use RefreshDatabase;
-
     private function createAccountWithLots(int $userId): int
     {
         $acctId = DB::table('fin_accounts')->insertGetId([

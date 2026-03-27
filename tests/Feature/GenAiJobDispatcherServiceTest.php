@@ -5,13 +5,10 @@ namespace Tests\Feature;
 use App\GenAiProcessor\Models\GenAiDailyQuota;
 use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Services\GenAiJobDispatcherService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class GenAiJobDispatcherServiceTest extends TestCase
 {
-    use RefreshDatabase;
-
     // ================================================================
     // claimQuota tests
     // ================================================================

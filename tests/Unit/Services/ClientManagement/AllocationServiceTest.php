@@ -8,13 +8,10 @@ use App\Models\ClientManagement\ClientInvoiceLine;
 use App\Models\ClientManagement\ClientProject;
 use App\Models\ClientManagement\ClientTimeEntry;
 use App\Services\ClientManagement\AllocationService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class AllocationServiceTest extends TestCase
 {
-    use RefreshDatabase;
-
     protected AllocationService $service;
 
     protected function setUp(): void

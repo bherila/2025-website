@@ -7,13 +7,10 @@ use App\Models\FinanceTool\FinAccountLineItemTagMap;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinAccountTag;
 use Illuminate\Database\QueryException;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class FinanceScheduleCControllerTest extends TestCase
 {
-    use RefreshDatabase;
-
     // -------------------------------------------------------------------------
     // Helper: create an account owned by the authenticated user
     // -------------------------------------------------------------------------

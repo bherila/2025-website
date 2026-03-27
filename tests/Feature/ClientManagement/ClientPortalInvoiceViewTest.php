@@ -10,13 +10,10 @@ use App\Models\ClientManagement\ClientProject;
 use App\Models\ClientManagement\ClientTimeEntry;
 use App\Models\User;
 use Carbon\Carbon;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class ClientPortalInvoiceViewTest extends TestCase
 {
-    use RefreshDatabase;
-
     public function test_invoice_page_hydrates_hourly_summary_fields()
     {
         $admin = User::factory()->create(['user_role' => 'admin']);

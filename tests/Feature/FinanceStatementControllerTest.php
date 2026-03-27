@@ -2,14 +2,11 @@
 
 namespace Tests\Feature;
 
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class FinanceStatementControllerTest extends TestCase
 {
-    use RefreshDatabase;
-
     public function test_cost_basis_algorithm_example1_basic_override(): void
     {
         $user = $this->createUser();

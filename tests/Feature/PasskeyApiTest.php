@@ -3,13 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\WebAuthnCredential;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class PasskeyApiTest extends TestCase
 {
-    use RefreshDatabase;
-
     public function test_authenticated_user_can_list_passkeys(): void
     {
         $user = $this->createUser();

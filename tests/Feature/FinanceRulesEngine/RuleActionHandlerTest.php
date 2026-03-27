@@ -16,14 +16,11 @@ use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinAccountTag;
 use App\Models\FinanceTool\FinRuleAction;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class RuleActionHandlerTest extends TestCase
 {
-    use RefreshDatabase;
-
     private User $user;
 
     private FinAccounts $account;

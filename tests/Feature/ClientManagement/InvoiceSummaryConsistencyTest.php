@@ -7,13 +7,10 @@ use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientInvoice;
 use App\Models\User;
 use Carbon\Carbon;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class InvoiceSummaryConsistencyTest extends TestCase
 {
-    use RefreshDatabase;
-
     public function test_to_detailed_array_includes_all_summary_fields()
     {
         $company = ClientCompany::factory()->create();

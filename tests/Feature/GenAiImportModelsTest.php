@@ -4,13 +4,10 @@ namespace Tests\Feature;
 
 use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Models\GenAiImportResult;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class GenAiImportModelsTest extends TestCase
 {
-    use RefreshDatabase;
-
     private function createTestJob(array $attributes = []): GenAiImportJob
     {
         $user = $this->createUser();
