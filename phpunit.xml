@@ -27,8 +27,9 @@
         
         <!-- Database: ALWAYS use SQLite in-memory for tests -->
         <!-- This is critical to prevent tests from touching MySQL databases -->
-        <env name="DB_CONNECTION" value="sqlite"/>
-        <env name="DB_DATABASE" value=":memory:"/>
+        <!-- force="true" ensures these values override any shell-exported DB_* variables -->
+        <env name="DB_CONNECTION" value="sqlite" force="true"/>
+        <env name="DB_DATABASE" value=":memory:" force="true"/>
         
         <!-- Disable external services -->
         <env name="BROADCAST_CONNECTION" value="null"/>
