@@ -165,10 +165,11 @@ class FinanceApiController extends Controller
                 'fs.balance',
                 'fs.cost_basis',
                 'fs.is_cost_basis_override',
+                'fs.genai_job_id',
                 DB::raw('count(DISTINCT fsd.id) as lineItemCount'),
-                DB::raw('count(DISTINCT ffa.id) > 0 as hasPdf')
+                DB::raw('(count(DISTINCT ffa.id) > 0 OR fs.genai_job_id IS NOT NULL) as hasPdf')
             )
-            ->groupBy('fs.statement_id', 'fs.statement_opening_date', 'fs.statement_closing_date', 'fs.balance', 'fs.cost_basis', 'fs.is_cost_basis_override')
+            ->groupBy('fs.statement_id', 'fs.statement_opening_date', 'fs.statement_closing_date', 'fs.balance', 'fs.cost_basis', 'fs.is_cost_basis_override', 'fs.genai_job_id')
             ->orderBy('fs.statement_closing_date', 'asc')
             ->get();
 

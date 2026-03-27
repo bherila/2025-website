@@ -4,6 +4,17 @@ export interface AccountMapping {
   targetAccountId: number | null
 }
 
+/**
+ * Top-level parsed result from the GenAI import queue (result_json payload).
+ * Extends GeminiAccountBlock for single-account PDFs; includes an `accounts`
+ * array for multi-account PDFs.
+ */
+export interface GeminiImportResponse extends GeminiAccountBlock {
+  /** Multi-account mode: response is split into per-account blocks */
+  accounts?: GeminiAccountBlock[]
+  error?: string
+}
+
 /** A single account block within a Gemini response */
 export interface GeminiAccountBlock {
   statementInfo?: {

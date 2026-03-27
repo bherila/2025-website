@@ -58,7 +58,7 @@ The GenAI Import system provides a unified, asynchronous pipeline for extracting
 
 - **Direct-to-S3 Uploads**: Files are uploaded directly to S3 via pre-signed URLs, bypassing the PHP server to avoid memory bloat and HTTP timeouts.
 - **Database Queue Driver**: The `database` queue driver with cron-based processing (`* * * * *` via `genai:run-queue`) is used since the environment doesn't support Redis or long-running daemon workers.
-- **De-duplication**: Files are hashed (SHA-256) to detect re-uploads of the same file, avoiding duplicate API calls.
+- **De-duplication**: Files are hashed via S3 ETag (MD5 for single-part uploads) to detect re-uploads of the same file, avoiding duplicate API calls.
 - **Quota Protection**: A global daily quota (`genai_daily_quota` table) prevents runaway LLM costs.
 
 ---
@@ -229,8 +229,8 @@ php artisan orphans:delete
 
 ### Shared Hooks
 
-- **`useGenAiFileUpload`** — Handles the 3-step upload flow (request signed URL → PUT to S3 → create job)
-- **`useGenAiJobPolling`** — Polls a job's status with exponential backoff; stops when terminal status is reached
+- **`useGenAiFileUpload`** — Handles the 3-step upload flow (request signed URL → PUT to S3 → create job). Validates that each API response contains the expected fields (`signed_url`, `s3_key`, `job_id`) before proceeding, throwing descriptive errors on malformed responses.
+- **`useGenAiJobPolling`** — Polls a job's status using a ref-based approach (avoids duplicate fetches on status transitions). Stops automatically when a terminal status is reached. Uses exponential backoff on server errors.
 
 ### TypeScript Types
 
@@ -244,6 +244,10 @@ Because the cron-based queue has up to 60 seconds latency, the UI should:
 - Show a message like "Your file is in the queue and will be processed shortly. You can leave this page."
 - Use the polling hook to update status automatically
 - Display results for review when status transitions to `parsed`
+- Show a deferred notice when status is `queued_tomorrow`
+- Show an error state with a Clear button when status is `failed`
+
+For finance-specific import UI details (components, checkboxes, button text), see [FinanceTool.md § Transaction Import](finance/FinanceTool.md#transaction-import).
 
 ---
 

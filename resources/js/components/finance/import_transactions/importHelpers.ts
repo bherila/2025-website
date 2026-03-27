@@ -48,38 +48,6 @@ export async function postTransactionChunks(
   }
 }
 
-/** Upload a PDF file to S3 and return its hash */
-export async function uploadPdfFile(accountId: number, file: File): Promise<string | null> {
-  try {
-    const form = new FormData()
-    form.append('file', file)
-    const result = (await fetchWrapper.post(`/api/finance/${accountId}/files`, form)) as {
-      file_hash?: string
-    }
-    return result?.file_hash ?? null
-  } catch (err) {
-    console.error('Failed to upload PDF:', err)
-    return null
-  }
-}
-
-/** Attach an already-uploaded file (by hash) to additional accounts */
-export async function attachFileToAccounts(
-  fileHash: string,
-  accountResults: Array<{ acct_id: number; statement_id: number }>,
-): Promise<void> {
-  for (const acct of accountResults) {
-    try {
-      await fetchWrapper.post(`/api/finance/${acct.acct_id}/files/attach`, {
-        file_hash: fileHash,
-        statement_id: acct.statement_id,
-      })
-    } catch (err) {
-      console.error(`Failed to attach file to account ${acct.acct_id}:`, err)
-    }
-  }
-}
-
 export interface MultiImportPayloadAccount {
   acct_id: number | 'all'
   statementInfo?: GeminiAccountBlock['statementInfo']

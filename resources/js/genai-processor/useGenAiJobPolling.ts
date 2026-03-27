@@ -27,6 +27,7 @@ export function useGenAiJobPolling(jobId: number | null): {
   const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const backoffRef = useRef(POLL_INTERVAL_MS)
   const consecutiveErrorsRef = useRef(0)
+  const statusRef = useRef<GenAiJobStatus | null>(null)
 
   const fetchJob = useCallback(async () => {
     if (!jobId) return
@@ -56,6 +57,7 @@ export function useGenAiJobPolling(jobId: number | null): {
       const data: GenAiImportJobData = await res.json()
       setJob(data)
       setStatus(data.status)
+      statusRef.current = data.status
       setResults(data.results ?? [])
       setError(data.error_message ?? null)
 
@@ -67,12 +69,10 @@ export function useGenAiJobPolling(jobId: number | null): {
         setEstimatedWait(undefined)
       }
 
-      // Stop polling if we've reached a terminal status
-      if (!ACTIVE_STATUSES.includes(data.status)) {
-        if (intervalRef.current) {
-          clearTimeout(intervalRef.current)
-          intervalRef.current = null
-        }
+      // Stop polling immediately if we've reached a terminal status
+      if (!ACTIVE_STATUSES.includes(data.status) && intervalRef.current) {
+        clearTimeout(intervalRef.current)
+        intervalRef.current = null
       }
     } catch (err) {
       consecutiveErrorsRef.current++
@@ -87,14 +87,28 @@ export function useGenAiJobPolling(jobId: number | null): {
   useEffect(() => {
     if (!jobId) return
 
-    // Initial fetch
+    // Reset stale state from any previous job before starting a new fetch
+    setStatus(null)
+    setResults([])
+    setError(null)
+    setJob(null)
+    setEstimatedWait(undefined)
+    statusRef.current = null
+    backoffRef.current = POLL_INTERVAL_MS
+    consecutiveErrorsRef.current = 0
+
+    // Clear any in-flight interval from the previous job
+    if (intervalRef.current) {
+      clearTimeout(intervalRef.current)
+      intervalRef.current = null
+    }
+
     fetchJob()
 
     const poll = () => {
       intervalRef.current = setTimeout(async () => {
         await fetchJob()
-        // Continue polling only if we should
-        if (status === null || ACTIVE_STATUSES.includes(status)) {
+        if (statusRef.current === null || ACTIVE_STATUSES.includes(statusRef.current)) {
           poll()
         }
       }, backoffRef.current)
@@ -108,7 +122,7 @@ export function useGenAiJobPolling(jobId: number | null): {
         intervalRef.current = null
       }
     }
-  }, [jobId, fetchJob, status])
+  }, [jobId, fetchJob])
 
   return { status, results, error, job, estimatedWait, refetch: fetchJob }
 }

@@ -590,11 +590,13 @@ CREATE TABLE `fin_statements`(
   `balance` TEXT NOT NULL,
   `cost_basis` DECIMAL(15,4) NOT NULL DEFAULT 0,
   `is_cost_basis_override` BOOLEAN NOT NULL DEFAULT 0,
+  `genai_job_id` INTEGER NULL,
   `statement_opening_date` TEXT,
   `statement_closing_date` TEXT,
   FOREIGN KEY(`acct_id`) REFERENCES `fin_accounts`(`acct_id`)
 );
 CREATE INDEX `fin_statements_acct_id_index` ON `fin_statements`(`acct_id`);
+CREATE INDEX `fin_statements_genai_job_id_index` ON `fin_statements`(`genai_job_id`);
 CREATE TABLE `fin_statement_cash_report`(
   `cash_id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `statement_id` INTEGER NOT NULL,

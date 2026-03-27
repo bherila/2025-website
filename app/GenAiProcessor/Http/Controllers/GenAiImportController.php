@@ -17,6 +17,10 @@ use Illuminate\Support\Facades\Validator;
 
 class GenAiImportController extends Controller
 {
+    private const FILTERED_JOB_LIMIT = 50;
+
+    private const DEFAULT_JOB_LIMIT = 20;
+
     public function __construct(
         private FileStorageService $fileService,
         private GenAiJobDispatcherService $dispatcher,
@@ -169,12 +173,33 @@ class GenAiImportController extends Controller
     {
         $user = Auth::user();
 
-        $jobs = GenAiImportJob::where('user_id', $user->id)
+        $query = GenAiImportJob::where('user_id', $user->id)
             ->orderBy('created_at', 'desc')
-            ->with('results')
-            ->paginate(20);
+            ->with('results');
 
-        return response()->json($jobs);
+        $jobType = $request->query('job_type');
+        if ($jobType) {
+            if (! in_array($jobType, GenAiImportJob::VALID_JOB_TYPES, true)) {
+                return response()->json(['error' => 'Invalid job_type.'], 422);
+            }
+            $query->where('job_type', $jobType);
+        }
+
+        $acctId = $request->query('acct_id');
+        if ($acctId) {
+            $ownsAccount = FinAccounts::where('acct_id', (int) $acctId)
+                ->where('acct_owner', $user->id)
+                ->exists();
+            if (! $ownsAccount) {
+                return response()->json(['error' => 'Account not found or access denied.'], 403);
+            }
+            $query->where('acct_id', (int) $acctId);
+        }
+
+        $limit = $jobType ? self::FILTERED_JOB_LIMIT : self::DEFAULT_JOB_LIMIT;
+        $jobs = $query->limit($limit)->get();
+
+        return response()->json(['data' => $jobs]);
     }
 
     /**

@@ -10,10 +10,8 @@ import {
   buildMultiImportPayload,
   CHUNK_SIZE,
   chunkArray,
-  uploadPdfFile,
 } from './importHelpers'
-import type { AccountMapping, GeminiAccountBlock } from './importTypes'
-import type { GeminiImportResponse } from './useProcessPdfWithGemini'
+import type { AccountMapping, GeminiAccountBlock, GeminiImportResponse } from './importTypes'
 
 interface UseImportExecutionOptions {
   accountId: number | 'all'
@@ -24,11 +22,6 @@ interface UseImportExecutionOptions {
   accountMappings: AccountMapping[]
   importTransactions: boolean
   attachAsStatement: boolean
-  saveFileToS3: boolean
-  pendingPdfFile: File | null
-  uploadedFileHash: string | null
-  setLoading: (v: boolean) => void
-  setUploadedFileHash: (v: string | null) => void
 }
 
 interface UseImportExecutionResult {
@@ -58,11 +51,6 @@ export function useImportExecution({
   accountMappings,
   importTransactions,
   attachAsStatement,
-  saveFileToS3,
-  pendingPdfFile,
-  uploadedFileHash,
-  setLoading,
-  setUploadedFileHash,
 }: UseImportExecutionOptions): UseImportExecutionResult {
   const [isImporting, setIsImporting] = useState(false)
   const [importProgress, setImportProgress] = useState({ processed: 0, total: 0 })
@@ -109,7 +97,6 @@ export function useImportExecution({
       if (importData.length > 0) {
         z.array(AccountLineItemSchema).parse(importData)
       }
-      setLoading(true)
       setIsImporting(true)
       setImportError(null)
 
@@ -122,7 +109,6 @@ export function useImportExecution({
             'IB statement import requires a specific account. Please navigate to a specific account to import IB statements.',
           )
           setIsImporting(false)
-          setLoading(false)
           return
         }
 
@@ -136,7 +122,6 @@ export function useImportExecution({
           const errorMessage = e instanceof Error ? e.message : String(e)
           setImportError(`Failed to import statement: ${errorMessage}`)
           setIsImporting(false)
-          setLoading(false)
           return
         }
       }
@@ -149,15 +134,12 @@ export function useImportExecution({
         })
 
         // Guard: all account IDs in the payload must be resolved to numbers.
-        // If any block still has 'all' as its account ID the backend will reject the request
-        // with a 422 (expects integer). Ask the user to select a specific account.
         const unresolvedBlock = payload.find((p) => p.acct_id === 'all')
         if (unresolvedBlock) {
           setImportError(
             'One or more PDF account blocks could not be matched to a specific account. Please select an account for each block before importing.',
           )
           setIsImporting(false)
-          setLoading(false)
           return
         }
 
@@ -167,19 +149,8 @@ export function useImportExecution({
 
         if (hasAnyContent) {
           try {
-            // Upload the PDF file if needed (when accountId is 'all', upload to first resolved account)
-            let fileHash = uploadedFileHash
-            if (saveFileToS3 && pendingPdfFile && !fileHash) {
-              const firstAccountId = payload[0]?.acct_id
-              if (typeof firstAccountId === 'number') {
-                fileHash = await uploadPdfFile(firstAccountId, pendingPdfFile)
-                if (fileHash) setUploadedFileHash(fileHash)
-              }
-            }
-
             const response = (await fetchWrapper.post('/api/finance/multi-import-pdf', {
               accounts: payload,
-              ...(fileHash ? { file_hash: fileHash } : {}),
             })) as { accounts: Array<{ acct_id: number; statement_id: number }> }
 
             if (response.accounts?.length > 0) {
@@ -190,7 +161,6 @@ export function useImportExecution({
             const errorMessage = e instanceof Error ? e.message : String(e)
             setImportError(`Failed to import PDF statement: ${errorMessage}`)
             setIsImporting(false)
-            setLoading(false)
             return
           }
         }
@@ -199,10 +169,8 @@ export function useImportExecution({
       // Filter out duplicates and import remaining transactions.
       // For PDF imports, transactions are already submitted via multi-import-pdf, so skip here.
       const isPdfImport = !!pdfData
-      const transactionsToProcess = (importTransactions && !isPdfImport) ? importData : []
+      const transactionsToProcess = importTransactions && !isPdfImport ? importData : []
       const newTransactions = filterDuplicates(transactionsToProcess)
-
-      setLoading(false)
 
       if (newTransactions.length > 0) {
         setDataToImport(newTransactions)
@@ -224,11 +192,6 @@ export function useImportExecution({
       accountMappings,
       attachAsStatement,
       importTransactions,
-      saveFileToS3,
-      uploadedFileHash,
-      pendingPdfFile,
-      setLoading,
-      setUploadedFileHash,
     ],
   )
 

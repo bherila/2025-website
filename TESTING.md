@@ -18,6 +18,9 @@ Before running any backend tests, you MUST run `pnpm run build` to build Vite ma
 - **PHP Linter (required in all cases)**: Laravel Pint MUST pass before every commit — run `./vendor/bin/pint --test` to check, `./vendor/bin/pint` to fix
   - This is mandatory for every change, including minor fixes and refactors.
   - If Pint reports any PHP lint/style issues, you MUST fix them before moving on.
+- **PHP Type Annotations (required)**: All PHP methods and functions MUST have explicit return type annotations. Properties should have type declarations where possible. This helps catch bugs at compile time and makes the codebase more maintainable.
+  - Example: `public function getSignedUploadUrl(string $s3Path, string $contentType, int $expiration = 60): string`
+  - Avoid untyped return values — if a method returns `void`, declare it; if mixed, prefer narrowing to the actual type.
 - **PHPUnit Tests**: Run `composer test` — all tests must pass
   - SQLite in-memory DB is configured automatically via `phpunit.xml` and `tests/bootstrap.php` — no extra setup needed
   - Do NOT use `$this->withoutVite()` in tests; the real manifest should be present during testing

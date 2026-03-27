@@ -3,8 +3,7 @@ import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { type AccountForMatching, matchAccount } from '@/lib/finance/accountMatcher'
 
-import type { AccountMapping, GeminiAccountBlock } from './importTypes'
-import type { GeminiImportResponse } from './useProcessPdfWithGemini'
+import type { AccountMapping, GeminiAccountBlock, GeminiImportResponse } from './importTypes'
 
 interface UsePdfAccountMappingOptions {
   pdfData: GeminiImportResponse | null

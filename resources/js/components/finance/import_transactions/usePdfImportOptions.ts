@@ -30,26 +30,20 @@ export interface PdfImportOptions {
   setImportTransactions: (v: boolean) => void
   attachAsStatement: boolean
   setAttachAsStatement: (v: boolean) => void
-  saveFileToS3: boolean
-  setSaveFileToS3: (v: boolean) => void
 }
 
 /**
- * Manages the three PDF import option checkboxes with localStorage persistence.
- * - "Import Transactions" and "Attach as Statement" shown after Gemini parsing
- * - "Save File to Storage" shown at the upload stage
+ * Manages the PDF import option checkboxes with localStorage persistence.
+ * - "Import Transactions" and "Attach as Statement" shown after AI parsing
  */
 export function usePdfImportOptions(): PdfImportOptions {
   const [importTransactions, setImportTransactions] = useLocalStorageBool('pdf_import_transactions', true)
   const [attachAsStatement, setAttachAsStatement] = useLocalStorageBool('pdf_attach_statement', true)
-  const [saveFileToS3, setSaveFileToS3] = useLocalStorageBool('pdf_save_file_s3', true)
 
   return {
     importTransactions,
     setImportTransactions,
     attachAsStatement,
     setAttachAsStatement,
-    saveFileToS3,
-    setSaveFileToS3,
   }
 }

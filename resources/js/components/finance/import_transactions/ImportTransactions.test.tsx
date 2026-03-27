@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 
 import { fetchWrapper } from '@/fetchWrapper';
+import type { GenAiImportJobData, GenAiImportResultData } from '@/genai-processor/types';
 
 import ImportTransactions from './ImportTransactions';
 
@@ -23,7 +24,7 @@ jest.mock('@/components/ui/spinner', () => ({
 }));
 
 jest.mock('@/components/ui/checkbox', () => ({
-    Checkbox: ({ id, checked, onCheckedChange, ...props }: any) => (
+    Checkbox: ({ id, checked, onCheckedChange, ...props }: { id?: string; checked?: boolean; onCheckedChange?: (checked: boolean) => void; [key: string]: unknown }) => (
         <input
             type="checkbox"
             id={id}
@@ -58,11 +59,45 @@ jest.mock('@/fetchWrapper', () => ({
     }
 }));
 
+// Mock the GenAI hooks
+const mockUpload = jest.fn();
+const mockRefetch = jest.fn();
+
+const mockJobPollingState = {
+  status: null as string | null,
+  results: [] as GenAiImportResultData[],
+  error: null as string | null,
+  job: null as GenAiImportJobData | null,
+  estimatedWait: undefined as string | undefined,
+  refetch: mockRefetch,
+};
+
+jest.mock('@/genai-processor/useGenAiFileUpload', () => ({
+    useGenAiFileUpload: () => ({
+        upload: mockUpload,
+        uploading: false,
+        error: null,
+    }),
+}));
+
+jest.mock('@/genai-processor/useGenAiJobPolling', () => ({
+    useGenAiJobPolling: () => mockJobPollingState,
+}));
+
 describe('ImportTransactions', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     localStorage.clear();
     (fetchWrapper.get as jest.Mock).mockResolvedValue([]);
+    mockUpload.mockReset();
+    // Reset polling state
+    Object.assign(mockJobPollingState, {
+      status: null,
+      results: [],
+      error: null,
+      job: null,
+      estimatedWait: undefined,
+    });
     // Mock window.fetch used by useFinanceAccounts
     ;(window as any).fetch = jest.fn().mockResolvedValue({
       ok: true,
@@ -129,53 +164,44 @@ describe('ImportTransactions', () => {
     // Should show file info and Process with AI, not auto-submit
     await waitFor(() => {
       expect(screen.getByText('test.pdf')).toBeInTheDocument();
-      expect(screen.getByText('Process with AI')).toBeInTheDocument();
+      expect(screen.getByTestId('process-with-ai')).toBeInTheDocument();
     });
 
-    // Should NOT have called the API
-    expect(fetchWrapper.post).not.toHaveBeenCalledWith(
-      '/api/finance/transactions/import-gemini',
-      expect.anything()
-    );
+    // Should NOT have called the upload hook
+    expect(mockUpload).not.toHaveBeenCalled();
   });
 
-  it('shows save-file-s3 checkbox for PDF files (other checkboxes appear after Gemini)', async () => {
-    render(<ImportTransactions accountId={1} onImportFinished={jest.fn()} />);
+  it('shows import-transactions and attach-statement checkboxes after AI parsing', async () => {
+    const parsedResult = {
+      accounts: [{
+        statementInfo: { brokerName: 'Test' },
+        statementDetails: [{ section: 'S', line_item: 'L', statement_period_value: 1, ytd_value: 2, is_percentage: false }],
+        transactions: [{ date: '2025-01-01', description: 'Test', amount: 100, type: 'deposit' }],
+      }],
+    };
 
-    const input = screen.getByTestId('file-input') as HTMLInputElement;
-    const file = new File(['pdf content'], 'test.pdf', { type: 'application/pdf' });
+    mockUpload.mockResolvedValueOnce({ jobId: 42, status: 'pending' });
 
-    fireEvent.change(input, { target: { files: [file] } });
-
-    await waitFor(() => {
-      expect(screen.getByTestId('save-file-s3')).toBeInTheDocument();
-      expect(screen.getByText('Save File to Storage')).toBeInTheDocument();
-    });
-
-    // Import Transactions and Attach as Statement should NOT be visible yet
-    expect(screen.queryByTestId('import-transactions')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('attach-statement')).not.toBeInTheDocument();
-  });
-
-  it('shows import-transactions and attach-statement checkboxes after Gemini parsing', async () => {
-    (fetchWrapper.post as jest.Mock).mockResolvedValue({
-      statementInfo: { brokerName: 'Test' },
-      statementDetails: [{ section: 'S', line_item: 'L', statement_period_value: 1, ytd_value: 2, is_percentage: false }],
-      transactions: [{ date: '2025-01-01', description: 'Test', amount: 100, type: 'deposit' }],
+    // Set polling state to 'parsed' with results (will apply once jobId is set)
+    Object.assign(mockJobPollingState, {
+      status: 'parsed',
+      results: [{ id: 1, job_id: 42, result_index: 0, result_json: JSON.stringify(parsedResult), status: 'pending_review', imported_at: null, created_at: '', updated_at: '' }],
+      error: null,
+      job: null,
+      estimatedWait: undefined,
     });
 
     render(<ImportTransactions accountId={1} onImportFinished={jest.fn()} />);
 
     const input = screen.getByTestId('file-input') as HTMLInputElement;
     const file = new File(['pdf content'], 'test.pdf', { type: 'application/pdf' });
-
     fireEvent.change(input, { target: { files: [file] } });
 
     await waitFor(() => {
-      expect(screen.getByText('Process with AI')).toBeInTheDocument();
+      expect(screen.getByTestId('process-with-ai')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText('Process with AI'));
+    fireEvent.click(screen.getByTestId('process-with-ai'));
 
     await waitFor(() => {
       expect(screen.getByTestId('import-transactions')).toBeInTheDocument();
@@ -183,31 +209,8 @@ describe('ImportTransactions', () => {
     });
   });
 
-  it('Process with AI button is always enabled regardless of save-file-s3 state', async () => {
-    render(<ImportTransactions accountId={1} onImportFinished={jest.fn()} />);
-
-    const input = screen.getByTestId('file-input') as HTMLInputElement;
-    const file = new File(['pdf content'], 'test.pdf', { type: 'application/pdf' });
-
-    fireEvent.change(input, { target: { files: [file] } });
-
-    await waitFor(() => {
-      expect(screen.getByText('Process with AI')).toBeInTheDocument();
-    });
-
-    // Uncheck save-file-s3
-    fireEvent.click(screen.getByTestId('save-file-s3'));
-
-    // Process with AI button should still be enabled
-    expect(screen.getByText('Process with AI')).not.toBeDisabled();
-  });
-
-  it('calls Gemini API when Process with AI is clicked', async () => {
-    (fetchWrapper.post as jest.Mock).mockResolvedValue({
-      statementInfo: { brokerName: 'Test' },
-      statementDetails: [],
-      transactions: [{ date: '2025-01-01', description: 'Test', amount: 100, type: 'deposit' }],
-    });
+  it('calls upload hook when Process with AI is clicked', async () => {
+    mockUpload.mockResolvedValueOnce({ jobId: 42, status: 'pending' });
 
     render(<ImportTransactions accountId={1} onImportFinished={jest.fn()} />);
 
@@ -217,21 +220,47 @@ describe('ImportTransactions', () => {
     fireEvent.change(input, { target: { files: [file] } });
 
     await waitFor(() => {
-      expect(screen.getByText('Process with AI')).toBeInTheDocument();
+      expect(screen.getByTestId('process-with-ai')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText('Process with AI'));
+    fireEvent.click(screen.getByTestId('process-with-ai'));
 
     await waitFor(() => {
-      expect(fetchWrapper.post).toHaveBeenCalledWith(
-        '/api/finance/transactions/import-gemini',
-        expect.any(FormData)
-      );
+      expect(mockUpload).toHaveBeenCalledWith(file);
     });
   });
 
-  it('shows Gemini error with retry button', async () => {
-    (fetchWrapper.post as jest.Mock).mockRejectedValue(new Error('API error'));
+  it('shows queue status message after upload', async () => {
+    mockUpload.mockResolvedValueOnce({ jobId: 42, status: 'pending' });
+
+    Object.assign(mockJobPollingState, {
+      status: 'pending',
+      results: [],
+      error: null,
+      job: null,
+      estimatedWait: undefined,
+    });
+
+    render(<ImportTransactions accountId={1} onImportFinished={jest.fn()} />);
+
+    const input = screen.getByTestId('file-input') as HTMLInputElement;
+    const file = new File(['pdf content'], 'test.pdf', { type: 'application/pdf' });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('process-with-ai')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('process-with-ai'));
+
+    await waitFor(() => {
+      // Match the specific status heading which contains "Queued"
+      expect(screen.getAllByText(/queue/i).length).toBeGreaterThan(0);
+    });
+  });
+
+  it('shows upload error with retry button', async () => {
+    mockUpload.mockRejectedValueOnce(new Error('Upload failed'));
 
     render(<ImportTransactions accountId={1} onImportFinished={jest.fn()} />);
 
@@ -241,38 +270,103 @@ describe('ImportTransactions', () => {
     fireEvent.change(input, { target: { files: [file] } });
 
     await waitFor(() => {
-      expect(screen.getByText('Process with AI')).toBeInTheDocument();
+      expect(screen.getByTestId('process-with-ai')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText('Process with AI'));
+    fireEvent.click(screen.getByTestId('process-with-ai'));
 
     await waitFor(() => {
-      expect(screen.getByText(/API error/)).toBeInTheDocument();
-      expect(screen.getByText('Retry')).toBeInTheDocument();
+      expect(screen.getByText(/Upload failed/)).toBeInTheDocument();
     });
   });
 
-  it('handles null closingBalance without crashing', async () => {
-    (fetchWrapper.post as jest.Mock).mockResolvedValue({
-      statementInfo: { brokerName: 'Bank', closingBalance: null },
-      statementDetails: [],
-      transactions: [],
+  it('shows error when result_json is malformed', async () => {
+    mockUpload.mockResolvedValueOnce({ jobId: 42, status: 'pending' });
+
+    Object.assign(mockJobPollingState, {
+      status: 'parsed',
+      results: [{ id: 1, job_id: 42, result_index: 0, result_json: 'not valid json{{{', status: 'pending_review', imported_at: null, created_at: '', updated_at: '' }],
+      error: null,
+      job: null,
+      estimatedWait: undefined,
     });
 
     render(<ImportTransactions accountId={1} onImportFinished={jest.fn()} />);
 
     const input = screen.getByTestId('file-input') as HTMLInputElement;
-    const file = new File(['dummy'], 'test.pdf', { type: 'application/pdf' });
+    const file = new File(['pdf content'], 'test.pdf', { type: 'application/pdf' });
     fireEvent.change(input, { target: { files: [file] } });
-    await waitFor(() => expect(screen.getByText('Process with AI')).toBeInTheDocument());
-    fireEvent.click(screen.getByText('Process with AI'));
-    // no error message should appear and the file name remains visible
+
     await waitFor(() => {
-      expect(screen.getByText('test.pdf')).toBeInTheDocument();
+      expect(screen.getByTestId('process-with-ai')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('process-with-ai'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Failed to parse AI result/)).toBeInTheDocument();
     });
   });
 
-  it('reads text files directly without Gemini', async () => {
+  it('shows deferred message for queued_tomorrow status', async () => {
+    mockUpload.mockResolvedValueOnce({ jobId: 42, status: 'pending' });
+
+    Object.assign(mockJobPollingState, {
+      status: 'queued_tomorrow',
+      results: [],
+      error: null,
+      job: null,
+      estimatedWait: 'Your file will be processed on 2025-07-01',
+    });
+
+    render(<ImportTransactions accountId={1} onImportFinished={jest.fn()} />);
+
+    const input = screen.getByTestId('file-input') as HTMLInputElement;
+    const file = new File(['pdf content'], 'test.pdf', { type: 'application/pdf' });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('process-with-ai')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('process-with-ai'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Processing deferred/)).toBeInTheDocument();
+      expect(screen.getByText(/2025-07-01/)).toBeInTheDocument();
+    });
+  });
+
+  it('shows failed state with clear button when job fails', async () => {
+    mockUpload.mockResolvedValueOnce({ jobId: 42, status: 'pending' });
+
+    Object.assign(mockJobPollingState, {
+      status: 'failed',
+      results: [],
+      error: null,
+      job: null,
+      estimatedWait: undefined,
+    });
+
+    render(<ImportTransactions accountId={1} onImportFinished={jest.fn()} />);
+
+    const input = screen.getByTestId('file-input') as HTMLInputElement;
+    const file = new File(['pdf content'], 'test.pdf', { type: 'application/pdf' });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('process-with-ai')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('process-with-ai'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/AI processing failed/)).toBeInTheDocument();
+      expect(screen.getByText('Clear')).toBeInTheDocument();
+    });
+  });
+
+  it('reads text files directly without AI processing', async () => {
     render(<ImportTransactions accountId={1} onImportFinished={jest.fn()} />);
 
     const csvContent = `date,time,description,amount,type
@@ -297,8 +391,9 @@ describe('ImportTransactions', () => {
       expect(screen.getByText('Import 1 Transaction')).toBeInTheDocument();
     });
 
-    // Should NOT have called Gemini API
-    expect(fetchWrapper.post).not.toHaveBeenCalled();
+    // Should NOT have called upload hook
+    expect(mockUpload).not.toHaveBeenCalled();
   });
 });
+
 
