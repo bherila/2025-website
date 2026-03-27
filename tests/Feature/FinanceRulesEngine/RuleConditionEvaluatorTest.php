@@ -10,13 +10,10 @@ use App\Finance\RulesEngine\Conditions\OptionTypeConditionEvaluator;
 use App\Finance\RulesEngine\Conditions\StockSymbolConditionEvaluator;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinRuleCondition;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class RuleConditionEvaluatorTest extends TestCase
 {
-    use RefreshDatabase;
-
     private function makeCondition(array $attrs): FinRuleCondition
     {
         $condition = new FinRuleCondition;

@@ -3,49 +3,16 @@
 namespace Tests;
 
 use App\Models\User;
-use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 
 /**
  * Base test case for all tests.
  *
- * This class ensures tests run safely with SQLite and never touch
- * production/development MySQL databases.
+ * Extends SafeTestCase which verifies at runtime that every test uses
+ * an in-memory SQLite connection, preventing accidental use of MySQL.
  */
-abstract class TestCase extends BaseTestCase
+abstract class TestCase extends SafeTestCase
 {
     use CreatesApplication;
-
-    /**
-     * Setup the test environment.
-     */
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        // Safety check: Ensure we're using SQLite, not MySQL
-        // This prevents accidentally running tests against production data
-        $this->assertDatabaseIsSqlite();
-    }
-
-    /**
-     * Assert that the database connection is SQLite.
-     *
-     * This is a critical safety check to prevent tests from accidentally
-     * running against MySQL databases (which might contain production data).
-     */
-    protected function assertDatabaseIsSqlite(): void
-    {
-        $connection = config('database.default');
-        $driver = config("database.connections.{$connection}.driver");
-
-        if ($driver !== 'sqlite') {
-            $this->fail(
-                "SAFETY ERROR: Tests must use SQLite database, not '{$driver}'. ".
-                'Check that phpunit.xml sets DB_CONNECTION=sqlite and DB_DATABASE=:memory:. '.
-                'This prevents tests from accidentally modifying MySQL databases.'
-            );
-        }
-    }
 
     /**
      * Create a user with admin role for testing.

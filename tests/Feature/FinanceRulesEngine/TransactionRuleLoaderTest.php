@@ -7,13 +7,10 @@ use App\Models\FinanceTool\FinRule;
 use App\Models\FinanceTool\FinRuleAction;
 use App\Models\FinanceTool\FinRuleCondition;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class TransactionRuleLoaderTest extends TestCase
 {
-    use RefreshDatabase;
-
     private TransactionRuleLoader $loader;
 
     private User $user;

@@ -3,13 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\FinanceTool\FinEmploymentEntity;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class FinanceEmploymentEntityControllerTest extends TestCase
 {
-    use RefreshDatabase;
-
     // -------------------------------------------------------------------------
     // CRUD Operations
     // -------------------------------------------------------------------------

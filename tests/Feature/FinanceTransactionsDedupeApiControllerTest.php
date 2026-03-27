@@ -2,14 +2,11 @@
 
 namespace Tests\Feature;
 
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class FinanceTransactionsDedupeApiControllerTest extends TestCase
 {
-    use RefreshDatabase;
-
     private function createAccount(int $userId): int
     {
         return DB::table('fin_accounts')->insertGetId([

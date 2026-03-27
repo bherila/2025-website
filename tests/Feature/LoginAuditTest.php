@@ -4,13 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\LoginAuditLog;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class LoginAuditTest extends TestCase
 {
-    use RefreshDatabase;
-
     public function test_login_success_is_logged(): void
     {
         $user = User::factory()->create([

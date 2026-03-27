@@ -9,7 +9,6 @@ use App\Models\ClientManagement\ClientTimeEntry;
 use App\Models\User;
 use App\Services\ClientManagement\ClientInvoicingService;
 use Carbon\Carbon;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
@@ -24,8 +23,6 @@ use Tests\TestCase;
  */
 class TimeEntryDraftInvoiceTest extends TestCase
 {
-    use RefreshDatabase;
-
     private User $admin;
 
     private ClientCompany $company;

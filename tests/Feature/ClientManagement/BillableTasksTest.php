@@ -9,7 +9,6 @@ use App\Models\ClientManagement\ClientTask;
 use App\Models\User;
 use App\Services\ClientManagement\ClientInvoicingService;
 use Carbon\Carbon;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
@@ -23,8 +22,6 @@ use Tests\TestCase;
  */
 class BillableTasksTest extends TestCase
 {
-    use RefreshDatabase;
-
     private ClientInvoicingService $invoicingService;
 
     private User $user;

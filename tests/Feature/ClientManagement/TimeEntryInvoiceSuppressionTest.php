@@ -8,13 +8,10 @@ use App\Models\ClientManagement\ClientInvoice;
 use App\Models\ClientManagement\ClientProject;
 use App\Models\User;
 use Carbon\Carbon;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class TimeEntryInvoiceSuppressionTest extends TestCase
 {
-    use RefreshDatabase;
-
     private User $admin;
 
     private ClientCompany $company;

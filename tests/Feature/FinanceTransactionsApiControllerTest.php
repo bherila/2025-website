@@ -5,13 +5,10 @@ namespace Tests\Feature;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class FinanceTransactionsApiControllerTest extends TestCase
 {
-    use RefreshDatabase;
-
     // -------------------------------------------------------------------------
     // Helper: create an account and some transactions for a user
     // -------------------------------------------------------------------------

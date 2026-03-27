@@ -7,14 +7,11 @@ use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientInvoice;
 use App\Models\User;
 use Carbon\Carbon;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
 
 class ClientPortalInvoicesTest extends TestCase
 {
-    use RefreshDatabase;
-
     private User $admin;
 
     private User $client;

@@ -3,13 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class PasskeyRpIdTest extends TestCase
 {
-    use RefreshDatabase;
-
     public function test_rp_id_falls_back_to_request_host_when_app_url_is_localhost(): void
     {
         $user = User::factory()->create();

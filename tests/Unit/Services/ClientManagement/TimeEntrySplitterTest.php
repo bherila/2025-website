@@ -6,14 +6,11 @@ use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientProject;
 use App\Models\ClientManagement\ClientTimeEntry;
 use App\Services\ClientManagement\TimeEntrySplitter;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Collection;
 use Tests\TestCase;
 
 class TimeEntrySplitterTest extends TestCase
 {
-    use RefreshDatabase;
-
     protected TimeEntrySplitter $splitter;
 
     protected function setUp(): void

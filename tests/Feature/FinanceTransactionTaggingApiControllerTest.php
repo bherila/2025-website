@@ -6,13 +6,10 @@ use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLineItemTagMap;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinAccountTag;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class FinanceTransactionTaggingApiControllerTest extends TestCase
 {
-    use RefreshDatabase;
-
     public function test_get_user_tags_returns_data_envelope(): void
     {
         $user = $this->createUser();
