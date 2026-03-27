@@ -44,9 +44,29 @@ jest.mock('@/components/ui/button', () => ({
 }))
 
 jest.mock('@/components/ui/switch', () => ({
-  Switch: ({ onCheckedChange, ...props }: React.ComponentProps<'button'> & { onCheckedChange?: (checked: boolean) => void }) => (
-    <button role="switch" {...props} onChange={(e) => onCheckedChange?.((e.target as HTMLInputElement).checked)} />
-  ),
+  Switch: ({
+    onCheckedChange,
+    ...props
+  }: React.ComponentProps<'button'> & { onCheckedChange?: (checked: boolean) => void }) => {
+    const [checked, setChecked] = React.useState(false)
+    const { onClick, ...rest } = props as React.ComponentProps<'button'> & { onClick?: React.MouseEventHandler<HTMLButtonElement> }
+
+    const handleClick: React.MouseEventHandler<HTMLButtonElement> = (event) => {
+      const nextChecked = !checked
+      setChecked(nextChecked)
+      onCheckedChange?.(nextChecked)
+      onClick?.(event)
+    }
+
+    return (
+      <button
+        role="switch"
+        aria-checked={checked}
+        {...rest}
+        onClick={handleClick}
+      />
+    )
+  },
 }))
 
 jest.mock('@/components/ui/label', () => ({
