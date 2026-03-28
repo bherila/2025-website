@@ -7,6 +7,7 @@ use App\GenAiProcessor\Models\GenAiImportResult;
 use App\Services\FileStorageService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class GenAiImportControllerTest extends TestCase
@@ -64,7 +65,7 @@ class GenAiImportControllerTest extends TestCase
             ->andReturn('https://s3.example.com/signed-url');
 
         $response = $this->actingAs($user)->postJson('/api/genai/import/request-upload', [
-            'filename' => 'statement.pdf',
+            'filename' => 'my statement.pdf',
             'content_type' => 'application/pdf',
             'file_size' => 101851,
         ]);
@@ -72,7 +73,22 @@ class GenAiImportControllerTest extends TestCase
         $response->assertOk();
         $response->assertJsonStructure(['signed_url', 's3_key', 'expires_in']);
         $this->assertEquals('https://s3.example.com/signed-url', $response->json('signed_url'));
-        $this->assertStringStartsWith("genai-import/{$user->id}/", $response->json('s3_key'));
+        $s3Key = $response->json('s3_key');
+        // Key must start with user prefix
+        $this->assertStringStartsWith("genai-import/{$user->id}/", $s3Key);
+        // Key must use UUID subdirectory format: genai-import/{user_id}/{uuid}/{filename}
+        $parts = explode('/', $s3Key);
+        $this->assertCount(4, $parts, 'S3 key should have 4 parts: genai-import/{user_id}/{uuid}/{filename}');
+        $this->assertEquals('genai-import', $parts[0]);
+        $this->assertEquals((string) $user->id, $parts[1]);
+        // uuid segment should be a valid UUID v4 format
+        $this->assertMatchesRegularExpression(
+            '/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/',
+            $parts[2],
+            'Third segment should be a UUID'
+        );
+        // Filename should be sanitized (spaces replaced with underscores)
+        $this->assertEquals('my_statement.pdf', $parts[3]);
         $this->assertEquals(900, $response->json('expires_in'));
     }
 
@@ -236,6 +252,36 @@ class GenAiImportControllerTest extends TestCase
         $response->assertOk();
         $this->assertCount(1, $response->json('data'));
         $this->assertEquals('test1.pdf', $response->json('data.0.original_filename'));
+    }
+
+    public function test_index_excludes_imported_jobs(): void
+    {
+        $user = $this->createUser();
+
+        GenAiImportJob::create([
+            'user_id' => $user->id,
+            'job_type' => 'finance_transactions',
+            'file_hash' => 'hash1',
+            'original_filename' => 'pending.pdf',
+            's3_path' => 'genai-import/1/pending.pdf',
+            'file_size_bytes' => 1024,
+            'status' => 'pending',
+        ]);
+
+        GenAiImportJob::create([
+            'user_id' => $user->id,
+            'job_type' => 'finance_transactions',
+            'file_hash' => 'hash2',
+            'original_filename' => 'imported.pdf',
+            's3_path' => 'genai-import/1/imported.pdf',
+            'file_size_bytes' => 1024,
+            'status' => 'imported',
+        ]);
+
+        $response = $this->actingAs($user)->getJson('/api/genai/import/jobs');
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+        $this->assertEquals('pending.pdf', $response->json('data.0.original_filename'));
     }
 
     // ================================================================
@@ -409,6 +455,35 @@ class GenAiImportControllerTest extends TestCase
 
         $this->assertDatabaseMissing('genai_import_jobs', ['id' => $job->id]);
         $this->assertDatabaseMissing('genai_import_results', ['job_id' => $job->id]);
+    }
+
+    public function test_destroy_triggers_s3_cleanup_via_model_event(): void
+    {
+        $user = $this->createUser();
+        $s3Path = 'genai-import/1/uuid-123/statement.pdf';
+
+        // Fake S3 disk before creating the job so we can put a file and assert deletion
+        Storage::fake('s3');
+        Storage::disk('s3')->put($s3Path, 'fake-pdf-content');
+
+        $job = GenAiImportJob::create([
+            'user_id' => $user->id,
+            'job_type' => 'finance_transactions',
+            'file_hash' => 'hash_s3_cleanup',
+            'original_filename' => 'statement.pdf',
+            's3_path' => $s3Path,
+            'file_size_bytes' => 2048,
+            'status' => 'parsed',
+        ]);
+
+        Storage::disk('s3')->assertExists($s3Path);
+
+        $response = $this->actingAs($user)->deleteJson("/api/genai/import/jobs/{$job->id}");
+        $response->assertOk();
+
+        $this->assertDatabaseMissing('genai_import_jobs', ['id' => $job->id]);
+        // The model boot() deleting hook must have deleted the S3 file
+        Storage::disk('s3')->assertMissing($s3Path);
     }
 
     public function test_destroy_returns_404_for_other_users_job(): void

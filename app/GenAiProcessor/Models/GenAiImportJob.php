@@ -7,6 +7,8 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class GenAiImportJob extends Model
 {
@@ -52,6 +54,26 @@ class GenAiImportJob extends Model
         'scheduled_for' => 'date',
         'parsed_at' => 'datetime',
     ];
+
+    protected static function boot(): void
+    {
+        parent::boot();
+
+        // Always clean up the S3 file when a job record is deleted.
+        static::deleting(function (self $job): void {
+            if (! empty($job->s3_path)) {
+                try {
+                    Storage::disk('s3')->delete($job->s3_path);
+                } catch (\Throwable $e) {
+                    Log::warning('Failed to delete S3 file for GenAI job during model delete', [
+                        'job_id' => $job->id,
+                        's3_path' => $job->s3_path,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+        });
+    }
 
     public function user(): BelongsTo
     {

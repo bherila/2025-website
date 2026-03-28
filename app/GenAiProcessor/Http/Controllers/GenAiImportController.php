@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 class GenAiImportController extends Controller
 {
@@ -46,11 +47,11 @@ class GenAiImportController extends Controller
         $filename = $request->input('filename');
         $contentType = $request->input('content_type');
 
-        // Generate S3 key using convention: genai-import/{user_id}/{date} {random} {filename}
+        // Generate a clean S3 key: genai-import/{user_id}/{uuid}/{sanitized_filename}
+        // This produces a nicer download filename and avoids random-looking prefixes.
         $sanitizedFilename = preg_replace('/[^\w.\-]/', '_', $filename);
-        $date = now()->format('Y.m.d');
-        $random = substr(bin2hex(random_bytes(4)), 0, 5);
-        $s3Key = "genai-import/{$user->id}/{$date} {$random} {$sanitizedFilename}";
+        $uuid = (string) Str::uuid();
+        $s3Key = "genai-import/{$user->id}/{$uuid}/{$sanitizedFilename}";
 
         try {
             $signedUrl = $this->fileService->getSignedUploadUrl($s3Key, $contentType, 15);
@@ -174,6 +175,7 @@ class GenAiImportController extends Controller
         $user = Auth::user();
 
         $query = GenAiImportJob::where('user_id', $user->id)
+            ->where('status', '!=', 'imported')
             ->orderBy('created_at', 'desc')
             ->with('results');
 
@@ -268,18 +270,7 @@ class GenAiImportController extends Controller
             return response()->json(['error' => 'Job not found.'], 404);
         }
 
-        // Delete S3 file
-        try {
-            $this->fileService->deleteFile($job->s3_path);
-        } catch (\Throwable $e) {
-            Log::warning('Failed to delete S3 file for GenAI job', [
-                'job_id' => $job->id,
-                's3_path' => $job->s3_path,
-                'error' => $e->getMessage(),
-            ]);
-        }
-
-        // Delete job (cascade deletes results)
+        // Delete job (cascade deletes results; model boot deletes S3 file)
         $job->delete();
 
         return response()->json(['success' => true]);

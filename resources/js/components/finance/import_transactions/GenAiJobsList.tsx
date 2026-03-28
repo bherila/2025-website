@@ -1,5 +1,15 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
@@ -43,6 +53,8 @@ export default function GenAiJobsList({ accountId, onSelectJob }: Props) {
   const [jobs, setJobs] = useState<GenAiImportJobData[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [deleteJobId, setDeleteJobId] = useState<number | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const fetchJobs = useCallback(async () => {
     setLoading(true)
@@ -67,6 +79,28 @@ export default function GenAiJobsList({ accountId, onSelectJob }: Props) {
     }
   }, [accountId])
 
+  const handleDeleteConfirm = useCallback(async () => {
+    if (deleteJobId === null) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/genai/import/jobs/${deleteJobId}`, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      })
+      if (res.ok) {
+        setJobs((prev) => prev.filter((j) => j.id !== deleteJobId))
+      } else {
+        const body = (await res.json().catch(() => ({}))) as { error?: string }
+        setError(body.error ?? 'Failed to delete job.')
+      }
+    } catch {
+      setError('Network error deleting job.')
+    } finally {
+      setDeleting(false)
+      setDeleteJobId(null)
+    }
+  }, [deleteJobId])
+
   // Initial fetch + polling when any job is active
   useEffect(() => {
     void fetchJobs()
@@ -81,51 +115,87 @@ export default function GenAiJobsList({ accountId, onSelectJob }: Props) {
     return () => clearInterval(id)
   }, [jobs, fetchJobs])
 
+  const jobToDelete = useMemo(() => jobs.find((j) => j.id === deleteJobId), [jobs, deleteJobId])
+
   if (!loading && jobs.length === 0 && !error) {
     return null
   }
 
   return (
-    <div className="mb-4 border rounded-lg overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-800 border-b">
-        <span className="text-sm font-medium">Recent AI Import Jobs</span>
-        <Button variant="ghost" size="sm" onClick={() => void fetchJobs()} disabled={loading}>
-          {loading ? <Spinner className="h-3 w-3" /> : 'Refresh'}
-        </Button>
+    <>
+      <AlertDialog open={deleteJobId !== null} onOpenChange={(open) => !open && setDeleteJobId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete AI Import Job?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the import job
+              {jobToDelete ? ` "${truncateFilename(jobToDelete.original_filename, 60)}"` : ''} and remove its file from
+              storage. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => void handleDeleteConfirm()}
+              disabled={deleting}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+            >
+              {deleting ? <Spinner className="h-4 w-4 mr-1" /> : null}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <div className="mb-4 border rounded-lg overflow-hidden">
+        <div className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-800 border-b">
+          <span className="text-sm font-medium">Recent AI Import Jobs</span>
+          <Button variant="ghost" size="sm" onClick={() => void fetchJobs()} disabled={loading}>
+            {loading ? <Spinner className="h-3 w-3" /> : 'Refresh'}
+          </Button>
+        </div>
+
+        {error && <div className="px-3 py-2 text-sm text-red-500">{error}</div>}
+
+        {jobs.length === 0 && !error ? (
+          <div className="px-3 py-3 text-sm text-gray-500">No import jobs yet.</div>
+        ) : (
+          <table className="w-full text-sm">
+            <tbody>
+              {jobs.map((job) => (
+                <tr key={job.id} className="border-t first:border-t-0 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                  <td className="px-3 py-2 font-mono text-xs text-gray-600 dark:text-gray-400 max-w-[180px] truncate">
+                    {truncateFilename(job.original_filename)}
+                  </td>
+                  <td className="px-3 py-2">
+                    <Badge className={`${STATUS_BADGE[job.status] ?? 'bg-gray-100 text-gray-800'} text-xs capitalize`}>
+                      {job.status.replace('_', ' ')}
+                    </Badge>
+                  </td>
+                  <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{relativeTime(job.created_at)}</td>
+                  <td className="px-3 py-2 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      {job.status === 'parsed' && (
+                        <Button size="sm" variant="outline" onClick={() => onSelectJob(job.id)}>
+                          Select
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+                        onClick={() => setDeleteJobId(job.id)}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
-
-      {error && <div className="px-3 py-2 text-sm text-red-500">{error}</div>}
-
-      {jobs.length === 0 && !error ? (
-        <div className="px-3 py-3 text-sm text-gray-500">No import jobs yet.</div>
-      ) : (
-        <table className="w-full text-sm">
-          <tbody>
-            {jobs.map((job) => (
-              <tr key={job.id} className="border-t first:border-t-0 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                <td className="px-3 py-2 font-mono text-xs text-gray-600 dark:text-gray-400 max-w-[180px] truncate">
-                  {truncateFilename(job.original_filename)}
-                </td>
-                <td className="px-3 py-2">
-                  <Badge className={`${STATUS_BADGE[job.status] ?? 'bg-gray-100 text-gray-800'} text-xs capitalize`}>
-                    {job.status.replace('_', ' ')}
-                  </Badge>
-                </td>
-                <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">
-                  {relativeTime(job.created_at)}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  {(job.status === 'parsed' || job.status === 'imported') && (
-                    <Button size="sm" variant="outline" onClick={() => onSelectJob(job.id)}>
-                      Select
-                    </Button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </div>
+    </>
   )
 }
