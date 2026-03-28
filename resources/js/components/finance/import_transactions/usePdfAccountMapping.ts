@@ -19,8 +19,8 @@ interface UsePdfAccountMappingResult {
 
 /**
  * Normalizes Gemini PDF data into account blocks, auto-detects account mappings
- * by matching parsed account numbers to user accounts, and parses single-account
- * PDF transactions into AccountLineItem format.
+ * by matching parsed account numbers to user accounts, and parses unified
+ * single-account responses into AccountLineItem format.
  */
 export function usePdfAccountMapping({
   pdfData,
@@ -31,14 +31,7 @@ export function usePdfAccountMapping({
   // Normalize the pdfData into a list of account blocks
   const pdfAccountBlocks = useMemo((): GeminiAccountBlock[] => {
     if (!pdfData) return []
-    if (pdfData.accounts && pdfData.accounts.length > 0) return pdfData.accounts
-    // Single-account: wrap in array, omitting undefined properties
-    const block: GeminiAccountBlock = {}
-    if (pdfData.statementInfo !== undefined) block.statementInfo = pdfData.statementInfo
-    if (pdfData.statementDetails !== undefined) block.statementDetails = pdfData.statementDetails
-    if (pdfData.transactions !== undefined) block.transactions = pdfData.transactions
-    if (pdfData.lots !== undefined) block.lots = pdfData.lots
-    return [block]
+    return pdfData.accounts
   }, [pdfData])
 
   // Auto-detect account mappings when pdfData changes
@@ -60,7 +53,7 @@ export function usePdfAccountMapping({
   const pdfParsedData = useMemo((): AccountLineItem[] | null => {
     // For multi-account PDFs we show per-block previews, not a flat list
     if (pdfAccountBlocks.length > 1) return null
-    const transactions = pdfAccountBlocks[0]?.transactions ?? pdfData?.transactions
+    const transactions = pdfAccountBlocks[0]?.transactions
     if (!transactions || transactions.length === 0) return null
     return transactions.map((tx) => {
       const dateStr = tx.date ? tx.date.split(/[ T]/)[0] : ''
@@ -71,7 +64,7 @@ export function usePdfAccountMapping({
         t_type: tx.type,
       })
     })
-  }, [pdfData, pdfAccountBlocks])
+  }, [pdfAccountBlocks])
 
   return { pdfAccountBlocks, pdfParsedData, accountMappings, setAccountMappings }
 }

@@ -238,6 +238,8 @@ All types are defined in `resources/js/genai-processor/types.ts`:
 - `GenAiJobType`, `GenAiJobStatus`, `GenAiResultStatus`
 - `GenAiImportJobData`, `GenAiImportResultData`
 
+For `finance_transactions`, the stored `result_json` is a single normalized object with an `accounts` array, even when the PDF contains only one account.
+
 ### UX Pattern
 
 Because the cron-based queue has up to 60 seconds latency, the UI should:

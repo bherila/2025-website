@@ -17,6 +17,7 @@ import TransactionsTable from '../TransactionsTable'
 import GenAiJobsList from './GenAiJobsList'
 import { ImportProgressDialog } from './ImportProgressDialog'
 import type { GeminiImportResponse } from './importTypes'
+import { normalizeGeminiImportResponse } from './importTypes'
 import { PdfStatementPreviewCard } from './PdfStatementPreviewCard'
 import { StatementPreviewCard } from './StatementPreviewCard'
 import { useDuplicateDetection } from './useDuplicateDetection'
@@ -165,7 +166,10 @@ export default function ImportTransactions({
         return
       }
       try {
-        const parsed = JSON.parse(firstResult.result_json) as GeminiImportResponse
+        const parsed = normalizeGeminiImportResponse(JSON.parse(firstResult.result_json))
+        if (!parsed) {
+          throw new Error('Invalid AI result shape')
+        }
         setPdfData(parsed)
       } catch {
         setError('Failed to parse AI result. Please try again.')
@@ -552,4 +556,3 @@ export default function ImportTransactions({
     </>
   )
 }
-
