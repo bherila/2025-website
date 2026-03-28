@@ -269,7 +269,10 @@ For a **multi-account** statement (e.g. a bank summary with multiple sub-account
    - "Realized Gain/Loss", "Unrealized Gain/Loss", "Change in Unrealized"
    If the document uses a variant (e.g. "Pre - Tax Return", "Mgt Fee"), normalize to the canonical name.
 8. **Transactions**: Extract individual dated transactions (deposits, withdrawals, trades, etc.) if present. For brokerage/investment transactions, include optional fields:
-   - `symbol`: Ticker symbol (e.g., "AAPL") — omit or set null if not applicable
+   - `symbol`: Ticker symbol (e.g., "AAPL") — **Always populate for stock-related transactions.**
+     - Use the ticker/symbol shown in the statement when available.
+     - When the description clearly identifies a publicly-traded company but no ticker is listed (e.g., "Dividend JPMORGAN CHASE & CO. COM", "Interest APPLE INC", "Dividend MICROSOFT CORPORATION"), use your knowledge to provide the well-known ticker (e.g., "JPM", "AAPL", "MSFT").
+     - For non-stock transactions (cash deposits, wire transfers, bank fees, etc.) omit or set null.
    - `quantity`: Number of shares/units — omit or set null if not applicable
    - `price`: Per-share/unit price — omit or set null if not applicable
    - `commission`: Commission paid — omit or set 0 if none
