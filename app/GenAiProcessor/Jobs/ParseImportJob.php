@@ -364,23 +364,36 @@ class ParseImportJob implements ShouldQueue
      */
     private function normalizeMultiAccountResponse(array $data): array
     {
-        if (isset($data['accounts']) && is_array($data['accounts'])) {
-            foreach ($data['accounts'] as &$account) {
-                $account = $this->normalizeSingleAccountDates($account);
-            }
-        } else {
-            $data = $this->normalizeSingleAccountDates($data);
-            $data['accounts'] = [
-                [
-                    'statementInfo' => $data['statementInfo'] ?? null,
-                    'statementDetails' => $data['statementDetails'] ?? [],
-                    'transactions' => $data['transactions'] ?? [],
-                    'lots' => $data['lots'] ?? [],
-                ],
-            ];
-        }
+        $accounts = isset($data['accounts']) && is_array($data['accounts'])
+            ? array_values(array_filter($data['accounts'], 'is_array'))
+            : [[
+                'statementInfo' => $data['statementInfo'] ?? null,
+                'statementDetails' => $data['statementDetails'] ?? [],
+                'transactions' => $data['transactions'] ?? [],
+                'lots' => $data['lots'] ?? [],
+            ]];
 
-        return $data;
+        return [
+            'accounts' => array_values(array_map($this->normalizeAccountData(...), $accounts)),
+        ];
+    }
+
+    private function normalizeAccountData(array $accountData): array
+    {
+        return $this->normalizeSingleAccountDates([
+            'statementInfo' => isset($accountData['statementInfo']) && is_array($accountData['statementInfo'])
+                ? $accountData['statementInfo']
+                : null,
+            'statementDetails' => isset($accountData['statementDetails']) && is_array($accountData['statementDetails'])
+                ? $accountData['statementDetails']
+                : [],
+            'transactions' => isset($accountData['transactions']) && is_array($accountData['transactions'])
+                ? $accountData['transactions']
+                : [],
+            'lots' => isset($accountData['lots']) && is_array($accountData['lots'])
+                ? $accountData['lots']
+                : [],
+        ]);
     }
 
     private function normalizeSingleAccountDates(array $data): array

@@ -36,8 +36,7 @@ interface UseImportExecutionResult {
 /**
  * Manages the entire import execution lifecycle:
  * - IB statement import
- * - Multi-account PDF import via Gemini
- * - Single-account PDF import (legacy)
+ * - PDF import via Gemini using the unified accounts-array response
  * - Transaction chunking and sequential upload
  * - Duplicate filtering
  * - Retry on failure
@@ -126,7 +125,7 @@ export function useImportExecution({
         }
       }
 
-      // PDF import (single or multi account) — always use multi-import-pdf endpoint
+      // PDF import — always use the unified multi-import-pdf endpoint
       if (pdfData) {
         const payload = buildMultiImportPayload(pdfAccountBlocks, accountMappings, accountId, {
           importTransactions,

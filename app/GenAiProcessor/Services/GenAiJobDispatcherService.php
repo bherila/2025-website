@@ -154,139 +154,100 @@ class GenAiJobDispatcherService
             $accountsSection = "\n\nKnown user accounts (use these to assign transactions to the correct account):\n".implode("\n", $lines);
         }
 
-        $multiAccountNote = ! empty($accountsContext)
-            ? "\n16. **Multi-account statements**: If the document contains transactions for multiple accounts (e.g. a bank summary statement), group the data by account and return an `accounts` array instead of flat top-level fields. Each element of `accounts` must have the same structure as the single-account format (`statementInfo`, `statementDetails`, `transactions`, `lots`). Match each account's number to the known accounts above using the last 4 digits, and set `statementInfo.accountName` to the matched account name when possible."
-            : '';
-
         return <<<PROMPT
-Analyze the provided bank or brokerage statement PDF and extract:
-1. Statement summary information
-2. Statement detail line items (sections with MTD/YTD or period columns showing performance, capital, taxes, etc.)
-3. Transaction entries (individual transactions with dates)
-4. Lot-level position data (open and closed lots with purchase/sale details){$accountsSection}
+Analyze the provided bank or brokerage statement PDF and extract investor-level account data only.
 
-Return the data as JSON with this structure for a **single-account** statement:
-
-```json
-{
-  "statementInfo": {
-    "brokerName": "Bank/Institution Name",
-    "accountNumber": "Account number if visible",
-    "accountName": "Account holder name if visible",
-    "periodStart": "YYYY-MM-DD",
-    "periodEnd": "YYYY-MM-DD",
-    "closingBalance": 12345.67
-  },
-  "statementDetails": [
-    {
-      "section": "Statement Summary (\$)",
-      "line_item": "Pre-Tax Return",
-      "statement_period_value": -23355.87,
-      "ytd_value": 12312.59,
-      "is_percentage": false
-    }
-  ],
-  "transactions": [
-    {
-      "date": "YYYY-MM-DD",
-      "description": "Transaction description",
-      "amount": 100.00,
-      "type": "deposit",
-      "symbol": "AAPL",
-      "quantity": 100,
-      "price": 150.00,
-      "commission": 0,
-      "fee": 0
-    }
-  ],
-  "lots": [
-    {
-      "symbol": "AAPL",
-      "description": "Apple Inc.",
-      "quantity": 100,
-      "purchaseDate": "YYYY-MM-DD",
-      "costBasis": 15000.00,
-      "costPerUnit": 150.00,
-      "marketValue": 17000.00,
-      "unrealizedGainLoss": 2000.00,
-      "saleDate": "YYYY-MM-DD",
-      "proceeds": 17000.00,
-      "realizedGainLoss": 2000.00
-    }
-  ]
-}
-```
-
-For a **multi-account** statement (e.g. a bank summary with multiple sub-accounts), return:
+Return ONLY valid JSON in this structure:
 
 ```json
 {
   "accounts": [
     {
-      "statementInfo": { "brokerName": "Bank", "accountNumber": "xxxx1234", "accountName": "Savings", "periodStart": "YYYY-MM-DD", "periodEnd": "YYYY-MM-DD", "closingBalance": 5000.00 },
-      "statementDetails": [],
-      "transactions": [{ "date": "YYYY-MM-DD", "description": "Deposit", "amount": 100.00, "type": "deposit", "symbol": null, "quantity": null, "price": null, "commission": 0, "fee": 0 }],
-      "lots": []
-    },
-    {
-      "statementInfo": { "brokerName": "Bank", "accountNumber": "xxxx5678", "accountName": "Checking", "periodStart": "YYYY-MM-DD", "periodEnd": "YYYY-MM-DD", "closingBalance": 1200.00 },
-      "statementDetails": [],
-      "transactions": [],
-      "lots": []
+      "statementInfo": {
+        "brokerName": "",
+        "accountNumber": "",
+        "accountName": "",
+        "periodStart": "YYYY-MM-DD",
+        "periodEnd": "YYYY-MM-DD",
+        "closingBalance": 0
+      },
+      "statementDetails": [
+        {
+          "section": "",
+          "line_item": "",
+          "statement_period_value": 0,
+          "ytd_value": 0,
+          "is_percentage": false
+        }
+      ],
+      "transactions": [
+        {
+          "date": "YYYY-MM-DD",
+          "description": "",
+          "amount": 0,
+          "type": "",
+          "symbol": null,
+          "quantity": null,
+          "price": null,
+          "commission": 0,
+          "fee": 0
+        }
+      ],
+      "lots": [
+        {
+          "symbol": "",
+          "description": "",
+          "quantity": 0,
+          "purchaseDate": "YYYY-MM-DD",
+          "costBasis": 0,
+          "costPerUnit": 0,
+          "marketValue": 0,
+          "unrealizedGainLoss": 0,
+          "saleDate": "YYYY-MM-DD",
+          "proceeds": 0,
+          "realizedGainLoss": 0
+        }
+      ]
     }
   ]
 }
 ```
+{$accountsSection}
 
-**Instructions:**
-1. Return ONLY valid JSON with no other text.
-2. All dates should be in YYYY-MM-DD format.
-3. **IMPORTANT: Only extract PARTNER-LEVEL or INVESTOR-LEVEL data.** Do NOT extract data from fund-level sections such as "Fund Level Capital Account", "Fund Level Summary", "Statement of Operations", "Statement of changes in partners' capital", "Statement of assets, liabilities, and partners' capital", "Statement of cash flows", or any section that describes the overall fund rather than the individual partner/investor.
-4. **Statement Details**: Extract ALL line items from sections with period-based columns (MTD/YTD, Statement Period/YTD, or similar). This includes both hedge fund/partnership sections and retail brokerage/robo-advisor summary sections such as:
-   - Statement Summary (\$ and %)
-   - Investor Capital Account
-   - Tax and Pre-Tax Return Detail
-   - Account Value, Net Contributions, Time-Weighted Return, Positions
-   - Any similar investor/account-level summary or performance sections
-5. For statement details:
-   - `section`: The section header (e.g., "Statement Summary (\$)", "Investor Capital Account")
-   - `line_item`: The row label (e.g., "Pre-Tax Return", "Total Beginning Capital")
-   - `statement_period_value`: The MTD/Statement Period value as a number
-   - `ytd_value`: The YTD value as a number
-   - `is_percentage`: true if the values are percentages, false if currency amounts
-6. **CRITICAL for consistency**: Use these exact canonical section names when they match the content:
-   - "Statement Summary (\$)" for dollar-value summary items
-   - "Statement Summary (%)" for percentage summary items
-   - "Investor Capital Account" for capital account items
-   - "Tax and Pre-Tax Return Detail (\$)" for dollar tax detail
-   - "Tax and Pre-Tax Return Detail (%)" for percentage tax detail
-   If the document uses a similar but slightly different section name (e.g. "Statement Summary (Dollars)"), map it to the canonical name above. Only create new section names for genuinely different sections not covered above.
-7. **CRITICAL for consistency**: Use these exact canonical line item names when they match the content:
+Rules:
+1. Always return an `accounts` array, even if the statement contains only one account.
+2. Extract only partner-level or investor-level data. Exclude fund-level sections such as "Fund Level Capital Account", "Statement of Operations", "Statement of Cash Flows", "Statement of Assets & Liabilities", "Statement of Changes in Partners' Capital", and similar whole-fund summaries.
+3. If a section is missing, return an empty array for that section.
+4. All dates must be in YYYY-MM-DD format.
+
+Statement details:
+5. Extract investor-level summary sections with period-based columns (MTD/YTD, Statement Period/YTD, or similar).
+6. Normalize section names to these canonical names when applicable:
+   - "Statement Summary (\$)"
+   - "Statement Summary (%)"
+   - "Investor Capital Account"
+   - "Tax and Pre-Tax Return Detail (\$)"
+   - "Tax and Pre-Tax Return Detail (%)"
+7. Normalize line item names to these canonical names when applicable:
    - "Pre-Tax Return", "Post-Tax Return", "Net Return"
    - "Total Beginning Capital", "Total Ending Capital"
    - "Contributions", "Withdrawals", "Net Contributions/Withdrawals"
    - "Management Fee", "Incentive Allocation", "Total Fees"
    - "Realized Gain/Loss", "Unrealized Gain/Loss", "Change in Unrealized"
-   If the document uses a variant (e.g. "Pre - Tax Return", "Mgt Fee"), normalize to the canonical name.
-8. **Transactions**: Extract individual dated transactions (deposits, withdrawals, trades, etc.) if present. For brokerage/investment transactions, include optional fields:
-   - `symbol`: Ticker symbol (e.g., "AAPL") — **Always populate for stock-related transactions.**
-     - Use the ticker/symbol shown in the statement when available.
-     - When the description clearly identifies a publicly-traded company but no ticker is listed (e.g., "Dividend JPMORGAN CHASE & CO. COM", "Interest APPLE INC", "Dividend MICROSOFT CORPORATION"), use your knowledge to provide the well-known ticker (e.g., "JPM", "AAPL", "MSFT").
-     - For non-stock transactions (cash deposits, wire transfers, bank fees, etc.) omit or set null.
-   - `quantity`: Number of shares/units — omit or set null if not applicable
-   - `price`: Per-share/unit price — omit or set null if not applicable
-   - `commission`: Commission paid — omit or set 0 if none
-   - `fee`: Additional fee — omit or set 0 if none
-9. **Lots**: Extract lot-level position data if present.
-   - `purchaseDate`: The acquisition/investment date (may be labeled "Invt. Date", "Acquisition Date", "Purchase Date", or similar).
-   - For **open lots** (positions still held with unrealized gain/loss), include `marketValue` and `unrealizedGainLoss`. Omit `saleDate`, `proceeds`, and `realizedGainLoss`.
-   - For **closed lots** (sold positions with realized gain/loss), include `saleDate`, `proceeds`, and `realizedGainLoss`. Omit `marketValue` and `unrealizedGainLoss`.
-10. Parse negative amounts correctly - numbers in parentheses like (23,355.87) should be -23355.87.
-11. Strip footnote superscripts from line items (e.g., "Total Pre-Tax Fees³" → "Total Pre-Tax Fees").
-12. Condense spacing (e.g., "Pre - Tax Return" → "Pre-Tax Return").
-13. If PDF has no transactions, return an empty transactions array.
-14. If PDF has no statement details, return an empty statementDetails array.
-15. If PDF has no lot data, return an empty lots array.{$multiAccountNote}
+
+Transactions:
+8. Extract dated transactions such as deposits, withdrawals, trades, dividends, and interest.
+9. Populate `symbol` for stock-related transactions. If a public company is named without a ticker, infer the well-known ticker. Use null for non-applicable fields.
+
+Lots:
+10. For open lots, include `marketValue` and `unrealizedGainLoss`, and omit sale fields.
+11. For closed lots, include `saleDate`, `proceeds`, and `realizedGainLoss`, and omit unrealized fields.
+12. Normalize purchase date labels such as Purchase Date, Acquisition Date, and Invt. Date to `purchaseDate`.
+
+Normalization:
+13. Convert parentheses to negative numbers.
+14. Remove footnote superscripts.
+15. Normalize spacing such as "Pre - Tax" to "Pre-Tax".
 PROMPT;
     }
 

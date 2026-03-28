@@ -181,9 +181,11 @@ class GenAiJobDispatcherServiceTest extends TestCase
         $service = new GenAiJobDispatcherService;
 
         $prompt = $service->buildPrompt('finance_transactions', []);
-        $this->assertStringContainsString('statementInfo', $prompt);
+        $this->assertStringContainsString('"accounts"', $prompt);
+        $this->assertStringContainsString('Always return an `accounts` array', $prompt);
         $this->assertStringContainsString('transactions', $prompt);
         $this->assertStringContainsString('lots', $prompt);
+        $this->assertStringNotContainsString('single-account', $prompt);
     }
 
     public function test_build_prompt_for_finance_transactions_with_accounts(): void
@@ -195,8 +197,9 @@ class GenAiJobDispatcherServiceTest extends TestCase
                 ['name' => 'My Savings', 'last4' => '1234'],
             ],
         ]);
+        $this->assertStringContainsString('Known user accounts', $prompt);
         $this->assertStringContainsString('My Savings: last 4 digits 1234', $prompt);
-        $this->assertStringContainsString('Multi-account', $prompt);
+        $this->assertStringContainsString('Always return an `accounts` array', $prompt);
     }
 
     public function test_build_prompt_for_payslip(): void
