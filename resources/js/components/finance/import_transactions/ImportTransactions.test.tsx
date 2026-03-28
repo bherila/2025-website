@@ -85,6 +85,20 @@ jest.mock('@/genai-processor/useGenAiJobPolling', () => ({
 }));
 
 describe('ImportTransactions', () => {
+  let consoleErrorSpy: jest.SpyInstance
+  beforeAll(() => {
+    const originalConsoleError = console.error.bind(console)
+    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation((...args) => {
+      if (typeof args[0] === 'string' && args[0].includes('inside a test was not wrapped in act')) {
+        return
+      }
+      originalConsoleError(...args)
+    })
+  })
+  afterAll(() => {
+    consoleErrorSpy.mockRestore()
+  })
+
   beforeEach(() => {
     jest.clearAllMocks();
     localStorage.clear();

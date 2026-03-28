@@ -36,6 +36,15 @@ if (typeof Element !== 'undefined') {
   Element.prototype.scrollIntoView = jest.fn()
 }
 
+// Mock global fetch for tests (always override to keep tests deterministic)
+;(globalThis as any).fetch = jest.fn(() =>
+  Promise.resolve({
+    ok: true,
+    text: () => Promise.resolve(JSON.stringify([])),
+    json: () => Promise.resolve([]),
+  })
+) as jest.Mock
+
 // Provide a minimal ResizeObserver mock for components that rely on it (Radix use-size)
 // Some tests render components which use ResizeObserver; Jest DOM doesn't provide it by default.
 class ResizeObserverMock {

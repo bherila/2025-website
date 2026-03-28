@@ -55,6 +55,20 @@ jest.mock('@/components/ui/select', () => ({
 }))
 
 describe('ActionsEditor', () => {
+  let consoleErrorSpy: jest.SpyInstance
+  beforeAll(() => {
+    const originalConsoleError = console.error.bind(console)
+    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation((...args) => {
+      if (typeof args[0] === 'string' && args[0].includes('inside a test was not wrapped in act')) {
+        return
+      }
+      originalConsoleError(...args)
+    })
+  })
+  afterAll(() => {
+    consoleErrorSpy.mockRestore()
+  })
+
   it('renders empty state with "Add Action" button', () => {
     render(<ActionsEditor actions={[]} onChange={jest.fn()} />)
     expect(screen.getByText('No actions configured.')).toBeInTheDocument()
