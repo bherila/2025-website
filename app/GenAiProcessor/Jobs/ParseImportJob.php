@@ -110,7 +110,14 @@ class ParseImportJob implements ShouldQueue
             $job->markProcessing();
 
             // Call generateContent with file_uri
-            $data = $this->callGeminiGenerateContent($apiKey, $geminiFileUri, $job->mime_type ?? 'application/pdf', $prompt);
+            $data = $this->callGeminiGenerateContent(
+                $dispatcher,
+                $job->job_type,
+                $apiKey,
+                $geminiFileUri,
+                $job->mime_type ?? 'application/pdf',
+                $prompt
+            );
 
             if ($data === null) {
                 $job->markFailed('Failed to parse response from AI.');
@@ -212,31 +219,23 @@ class ParseImportJob implements ShouldQueue
     /**
      * Call Gemini generateContent with a file_uri reference.
      */
-    private function callGeminiGenerateContent(string $apiKey, string $fileUri, string $mimeType, string $prompt): ?array
-    {
+    private function callGeminiGenerateContent(
+        GenAiJobDispatcherService $dispatcher,
+        string $jobType,
+        string $apiKey,
+        string $fileUri,
+        string $mimeType,
+        string $prompt
+    ): ?array {
         $response = Http::withHeaders([
             'x-goog-api-key' => $apiKey,
             'Content-Type' => 'application/json',
         ])->withOptions([
             'timeout' => 240,
-        ])->post('https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent', [
-            'contents' => [
-                [
-                    'parts' => [
-                        ['text' => $prompt],
-                        [
-                            'file_data' => [
-                                'mime_type' => $mimeType,
-                                'file_uri' => $fileUri,
-                            ],
-                        ],
-                    ],
-                ],
-            ],
-            'generationConfig' => [
-                'response_mime_type' => 'application/json',
-            ],
-        ]);
+        ])->post(
+            'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent',
+            $dispatcher->buildGenerateContentPayload($jobType, $fileUri, $mimeType, $prompt)
+        );
 
         if (! $response->successful()) {
             Log::error('Gemini generateContent failed', [
@@ -255,16 +254,13 @@ class ParseImportJob implements ShouldQueue
             return null;
         }
 
-        $jsonText = $response->json()['candidates'][0]['content']['parts'][0]['text'] ?? '';
-        $jsonText = preg_replace('/^```json\s*|\s*```$/s', '', trim($jsonText));
-        $data = json_decode($jsonText, true);
+        $body = $response->json();
+        $data = $dispatcher->extractGenerateContentData($jobType, is_array($body) ? $body : []);
 
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            Log::error('Failed to decode JSON from Gemini API', [
-                'response' => $jsonText,
+        if ($data === null) {
+            Log::error('Failed to decode structured response from Gemini API', [
+                'response' => $response->body(),
             ]);
-
-            return null;
         }
 
         return $data;
@@ -316,10 +312,6 @@ class ParseImportJob implements ShouldQueue
 
     private function createFinanceResults(GenAiImportJob $job, array $data): void
     {
-        // Normalize to multi-account format
-        $data = $this->normalizeMultiAccountResponse($data);
-
-        // Store the entire normalized response as a single result
         GenAiImportResult::create([
             'job_id' => $job->id,
             'result_index' => 0,
@@ -356,75 +348,6 @@ class ParseImportJob implements ShouldQueue
                 'status' => 'pending_review',
             ]);
         }
-    }
-
-    /**
-     * Normalize Gemini response to always include an `accounts` array.
-     * Ported from FinanceGeminiImportController::normalizeMultiAccountResponse.
-     */
-    private function normalizeMultiAccountResponse(array $data): array
-    {
-        $accounts = isset($data['accounts']) && is_array($data['accounts'])
-            ? array_values(array_filter($data['accounts'], 'is_array'))
-            : [[
-                'statementInfo' => $data['statementInfo'] ?? null,
-                'statementDetails' => $data['statementDetails'] ?? [],
-                'transactions' => $data['transactions'] ?? [],
-                'lots' => $data['lots'] ?? [],
-            ]];
-
-        return [
-            'accounts' => array_values(array_map($this->normalizeAccountData(...), $accounts)),
-        ];
-    }
-
-    private function normalizeAccountData(array $accountData): array
-    {
-        return $this->normalizeSingleAccountDates([
-            'statementInfo' => isset($accountData['statementInfo']) && is_array($accountData['statementInfo'])
-                ? $accountData['statementInfo']
-                : null,
-            'statementDetails' => isset($accountData['statementDetails']) && is_array($accountData['statementDetails'])
-                ? $accountData['statementDetails']
-                : [],
-            'transactions' => isset($accountData['transactions']) && is_array($accountData['transactions'])
-                ? $accountData['transactions']
-                : [],
-            'lots' => isset($accountData['lots']) && is_array($accountData['lots'])
-                ? $accountData['lots']
-                : [],
-        ]);
-    }
-
-    private function normalizeSingleAccountDates(array $data): array
-    {
-        if (isset($data['statementInfo']) && is_array($data['statementInfo'])) {
-            foreach (['periodStart', 'periodEnd'] as $key) {
-                if (! empty($data['statementInfo'][$key]) && is_string($data['statementInfo'][$key])) {
-                    $data['statementInfo'][$key] = substr($data['statementInfo'][$key], 0, 10);
-                }
-            }
-        }
-
-        if (isset($data['transactions']) && is_array($data['transactions'])) {
-            foreach ($data['transactions'] as &$tx) {
-                if (! empty($tx['date']) && is_string($tx['date'])) {
-                    $tx['date'] = substr($tx['date'], 0, 10);
-                }
-            }
-        }
-
-        if (isset($data['lots']) && is_array($data['lots'])) {
-            foreach ($data['lots'] as &$lot) {
-                foreach (['purchaseDate', 'saleDate'] as $dateKey) {
-                    if (! empty($lot[$dateKey]) && is_string($lot[$dateKey])) {
-                        $lot[$dateKey] = substr($lot[$dateKey], 0, 10);
-                    }
-                }
-            }
-        }
-
-        return $data;
     }
 }
 

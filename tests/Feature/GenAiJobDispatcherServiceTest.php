@@ -181,11 +181,13 @@ class GenAiJobDispatcherServiceTest extends TestCase
         $service = new GenAiJobDispatcherService;
 
         $prompt = $service->buildPrompt('finance_transactions', []);
-        $this->assertStringContainsString('"accounts"', $prompt);
-        $this->assertStringContainsString('Always return an `accounts` array', $prompt);
+        $this->assertStringContainsString('addFinanceAccount', $prompt);
+        $this->assertStringContainsString('{"accounts":[ACCOUNT,...]}', $prompt);
+        $this->assertStringContainsString('Statement detail section mappings', $prompt);
         $this->assertStringContainsString('transactions', $prompt);
         $this->assertStringContainsString('lots', $prompt);
         $this->assertStringNotContainsString('single-account', $prompt);
+        $this->assertStringNotContainsString('```json', $prompt);
     }
 
     public function test_build_prompt_for_finance_transactions_with_accounts(): void
@@ -199,7 +201,28 @@ class GenAiJobDispatcherServiceTest extends TestCase
         ]);
         $this->assertStringContainsString('Known user accounts', $prompt);
         $this->assertStringContainsString('My Savings: last 4 digits 1234', $prompt);
-        $this->assertStringContainsString('Always return an `accounts` array', $prompt);
+        $this->assertStringContainsString('{"accounts":[ACCOUNT,...]}', $prompt);
+    }
+
+    public function test_build_generate_content_payload_uses_tool_calling_for_finance_transactions(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $payload = $service->buildGenerateContentPayload(
+            'finance_transactions',
+            'files/abc123',
+            'application/pdf',
+            'Prompt'
+        );
+
+        $this->assertArrayHasKey('tools', $payload);
+        $this->assertArrayHasKey('toolConfig', $payload);
+        $this->assertSame(
+            GenAiJobDispatcherService::FINANCE_ACCOUNT_TOOL_NAME,
+            $payload['tools'][0]['function_declarations'][0]['name']
+        );
+        $this->assertSame('ANY', $payload['toolConfig']['functionCallingConfig']['mode']);
+        $this->assertArrayNotHasKey('generationConfig', $payload);
     }
 
     public function test_build_prompt_for_payslip(): void
