@@ -127,10 +127,10 @@ export default function GenAiJobsList({ accountId, onSelectJob }: Props) {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete AI Import Job?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete the import job
-              {jobToDelete ? ` "${truncateFilename(jobToDelete.original_filename, 60)}"` : ''} and remove its file from
-              storage. This action cannot be undone.
+            <AlertDialogDescription className="break-words text-left leading-relaxed">
+              This will permanently delete the import job{' '}
+              {jobToDelete ? <span className="font-mono break-all">"{jobToDelete.original_filename}"</span> : null}{' '}
+              and remove its file from storage. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -138,7 +138,7 @@ export default function GenAiJobsList({ accountId, onSelectJob }: Props) {
             <AlertDialogAction
               onClick={() => void handleDeleteConfirm()}
               disabled={deleting}
-              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deleting ? <Spinner className="h-4 w-4 mr-1" /> : null}
               Delete
