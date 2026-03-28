@@ -579,7 +579,7 @@ PROMPT;
 
         $trimmed = trim($value);
 
-        return $trimmed === '' ? null : preg_split('/[ T]/', $trimmed)[0] ?? null;
+        return $trimmed === '' ? null : preg_split('/[ T]/', $trimmed)[0];
     }
 
     private function normalizeNumber(mixed $value): ?float

@@ -117,8 +117,11 @@ function normalizeBoolean(value: unknown): boolean | undefined {
 
 function normalizeDate(value: unknown): string | undefined {
   const normalized = normalizeString(value)
+  if (!normalized) {
+    return undefined
+  }
 
-  return normalized ? normalized.split(/[ T]/)[0] : undefined
+  return normalized.split(/[ T]/)[0]
 }
 
 function normalizeStatementInfo(value: unknown): GeminiStatementInfo | undefined {
