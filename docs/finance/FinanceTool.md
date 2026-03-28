@@ -247,6 +247,7 @@ Checkbox states are persisted globally in `localStorage` (`pdf_import_transactio
 **Processing notes:**
 - **Date handling:** Dates extracted from PDFs are truncated to `YYYY-MM-DD` on the server before being stored.
 - **Fund-Level Filtering:** The AI prompt instructs the model to ignore fund-level sections (e.g., "Fund Level Capital Account").
+- **Tool-call ingestion:** Gemini emits one `addFinanceAccount` tool call per parsed account. Legacy JSON results are still normalized for older cached jobs.
 
 ### Multi-Account PDF Import
 

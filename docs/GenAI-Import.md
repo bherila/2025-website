@@ -238,7 +238,37 @@ All types are defined in `resources/js/genai-processor/types.ts`:
 - `GenAiJobType`, `GenAiJobStatus`, `GenAiResultStatus`
 - `GenAiImportJobData`, `GenAiImportResultData`
 
-For `finance_transactions`, the stored `result_json` is a single normalized object with an `accounts` array, even when the PDF contains only one account.
+For `finance_transactions`, Gemini now emits one `addFinanceAccount` tool call per account. The stored `result_json` uses `{ "toolCalls": [...] }` as the canonical shape, and the frontend still normalizes legacy JSON (`{accounts:[...]}` or top-level single-account objects) for backward compatibility.
+
+### Finance Transactions Tool Payload
+
+- **Tool name:** `addFinanceAccount`
+- **One call per account**
+- **Payload fields:** `statementInfo` (object), `statementDetails` (array), `transactions` (array), `lots` (array)
+- **Normalization:** dates are truncated to `YYYY-MM-DD`; numeric strings and parenthesized negatives are converted to numbers before review/import
+
+Example:
+
+```json
+{
+  "toolCalls": [
+    {
+      "toolName": "addFinanceAccount",
+      "payload": {
+        "statementInfo": {
+          "brokerName": "Broker",
+          "accountNumber": "1234",
+          "periodStart": "2025-01-01",
+          "periodEnd": "2025-01-31"
+        },
+        "statementDetails": [],
+        "transactions": [],
+        "lots": []
+      }
+    }
+  ]
+}
+```
 
 ### UX Pattern
 

@@ -10,6 +10,8 @@ use Illuminate\Support\Facades\Log;
 
 class GenAiJobDispatcherService
 {
+    public const FINANCE_ACCOUNT_TOOL_NAME = 'addFinanceAccount';
+
     /**
      * Atomically claim a quota slot for today (UTC).
      * Returns false if the site-wide or per-user limit is reached.
@@ -86,6 +88,67 @@ class GenAiJobDispatcherService
     }
 
     /**
+     * Build the Gemini generateContent payload for the given job type.
+     */
+    public function buildGenerateContentPayload(string $jobType, string $fileUri, string $mimeType, string $prompt): array
+    {
+        $payload = [
+            'contents' => [
+                [
+                    'parts' => [
+                        ['text' => $prompt],
+                        [
+                            'file_data' => [
+                                'mime_type' => $mimeType,
+                                'file_uri' => $fileUri,
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        if ($jobType === 'finance_transactions') {
+            $payload['tools'] = [[
+                'function_declarations' => [$this->buildFinanceAccountToolDefinition()],
+            ]];
+            $payload['toolConfig'] = [
+                'functionCallingConfig' => [
+                    'mode' => 'ANY',
+                    'allowedFunctionNames' => [self::FINANCE_ACCOUNT_TOOL_NAME],
+                ],
+            ];
+
+            return $payload;
+        }
+
+        $payload['generationConfig'] = [
+            'response_mime_type' => 'application/json',
+        ];
+
+        return $payload;
+    }
+
+    /**
+     * Extract typed structured data from a Gemini generateContent response.
+     */
+    public function extractGenerateContentData(string $jobType, array $responseBody): ?array
+    {
+        if ($jobType === 'finance_transactions') {
+            return $this->extractFinanceGenerateContentData($responseBody);
+        }
+
+        $jsonText = $this->extractTextParts($responseBody);
+        if ($jsonText === '') {
+            return null;
+        }
+
+        $data = json_decode($jsonText, true);
+
+        return json_last_error() === JSON_ERROR_NONE ? $data : null;
+    }
+
+    /**
      * Validate context_json against the expected schema for the given job_type.
      * Returns true if valid, throws on invalid.
      *
@@ -155,100 +218,412 @@ class GenAiJobDispatcherService
         }
 
         return <<<PROMPT
-Analyze the provided bank or brokerage statement PDF and extract investor-level account data only.
+Analyze the provided bank or brokerage statement PDF and extract investor-level account data only. Use the `addFinanceAccount` tool once per account. If tool use is unavailable, return ONLY valid JSON as `{"accounts":[ACCOUNT,...]}` where each `ACCOUNT` matches the tool payload below.{$accountsSection}
 
-Return ONLY valid JSON in this structure:
-
-```json
-{
-  "accounts": [
-    {
-      "statementInfo": {
-        "brokerName": "",
-        "accountNumber": "",
-        "accountName": "",
-        "periodStart": "YYYY-MM-DD",
-        "periodEnd": "YYYY-MM-DD",
-        "closingBalance": 0
-      },
-      "statementDetails": [
-        {
-          "section": "",
-          "line_item": "",
-          "statement_period_value": 0,
-          "ytd_value": 0,
-          "is_percentage": false
-        }
-      ],
-      "transactions": [
-        {
-          "date": "YYYY-MM-DD",
-          "description": "",
-          "amount": 0,
-          "type": "",
-          "symbol": null,
-          "quantity": null,
-          "price": null,
-          "commission": 0,
-          "fee": 0
-        }
-      ],
-      "lots": [
-        {
-          "symbol": "",
-          "description": "",
-          "quantity": 0,
-          "purchaseDate": "YYYY-MM-DD",
-          "costBasis": 0,
-          "costPerUnit": 0,
-          "marketValue": 0,
-          "unrealizedGainLoss": 0,
-          "saleDate": "YYYY-MM-DD",
-          "proceeds": 0,
-          "realizedGainLoss": 0
-        }
-      ]
-    }
-  ]
-}
-```
-{$accountsSection}
+ACCOUNT schema:
+- `statementInfo`: object with optional `brokerName`, `accountNumber`, `accountName`, `periodStart`, `periodEnd`, `closingBalance`
+- `statementDetails[]`: `{ "section": string, "line_item": string, "statement_period_value": number, "ytd_value": number, "is_percentage": boolean }`
+- `transactions[]`: `{ "date": "YYYY-MM-DD", "description": string, "amount": number, "type"?: string, "symbol"?: string|null, "quantity"?: number|null, "price"?: number|null, "commission"?: number, "fee"?: number }`
+- `lots[]`: `{ "symbol": string, "description"?: string, "quantity": number, "purchaseDate": "YYYY-MM-DD", "costBasis": number, "costPerUnit"?: number, "marketValue"?: number, "unrealizedGainLoss"?: number, "saleDate"?: "YYYY-MM-DD", "proceeds"?: number, "realizedGainLoss"?: number }`
 
 Rules:
-1. Always return an `accounts` array, even if the statement contains only one account.
-2. Extract only partner-level or investor-level data. Exclude fund-level sections such as "Fund Level Capital Account", "Statement of Operations", "Statement of Cash Flows", "Statement of Assets & Liabilities", "Statement of Changes in Partners' Capital", and similar whole-fund summaries.
-3. If a section is missing, return an empty array for that section.
-4. All dates must be in YYYY-MM-DD format.
-
-Statement details:
-5. Extract investor-level summary sections with period-based columns (MTD/YTD, Statement Period/YTD, or similar).
-6. Normalize section names to these canonical names when applicable:
-   - "Statement Summary (\$)"
-   - "Statement Summary (%)"
-   - "Investor Capital Account"
-   - "Tax and Pre-Tax Return Detail (\$)"
-   - "Tax and Pre-Tax Return Detail (%)"
-7. Normalize line item names to these canonical names when applicable:
-   - "Pre-Tax Return", "Post-Tax Return", "Net Return"
-   - "Total Beginning Capital", "Total Ending Capital"
-   - "Contributions", "Withdrawals", "Net Contributions/Withdrawals"
-   - "Management Fee", "Incentive Allocation", "Total Fees"
-   - "Realized Gain/Loss", "Unrealized Gain/Loss", "Change in Unrealized"
-
-Transactions:
-8. Extract dated transactions such as deposits, withdrawals, trades, dividends, and interest.
-9. Populate `symbol` for stock-related transactions. If a public company is named without a ticker, infer the well-known ticker. Use null for non-applicable fields.
-
-Lots:
-10. For open lots, include `marketValue` and `unrealizedGainLoss`, and omit sale fields.
-11. For closed lots, include `saleDate`, `proceeds`, and `realizedGainLoss`, and omit unrealized fields.
-12. Normalize purchase date labels such as Purchase Date, Acquisition Date, and Invt. Date to `purchaseDate`.
-
-Normalization:
-13. Convert parentheses to negative numbers.
-14. Remove footnote superscripts.
-15. Normalize spacing such as "Pre - Tax" to "Pre-Tax".
+1. Extract only partner-level or investor-level data. Exclude fund-level sections such as "Fund Level Capital Account", "Fund Level Summary", "Statement of Operations", "Statement of Cash Flows", "Statement of Assets & Liabilities", and "Statement of Changes in Partners' Capital".
+2. Always use the unified multi-account shape: `{ "accounts": [ACCOUNT, ...] }`. If a section is missing, return an empty array for that section.
+3. Statement detail section mappings: "Statement Summary (Dollars)" → "Statement Summary (\$)", "Statement Summary (Percent)" → "Statement Summary (%)", "Investor Capital Account Detail" → "Investor Capital Account", "Tax and Pre Tax Return Detail (Dollars)" → "Tax and Pre-Tax Return Detail (\$)", "Tax and Pre Tax Return Detail (Percent)" → "Tax and Pre-Tax Return Detail (%)".
+4. Statement detail line-item mappings: "Pre - Tax Return" → "Pre-Tax Return", "Post - Tax Return" → "Post-Tax Return", "Net Contributions / Withdrawals" → "Net Contributions/Withdrawals", "Mgt Fee" → "Management Fee", "Incentive Fee" → "Incentive Allocation", "Total Pre-Tax Fees" → "Total Fees", "Realized Gain (Loss)" → "Realized Gain/Loss", "Unrealized Gain (Loss)" → "Unrealized Gain/Loss", "Change In Unrealized" → "Change in Unrealized".
+5. Extract dated transactions such as deposits, withdrawals, trades, dividends, and interest. Populate `symbol` for stock-related transactions; infer the well-known ticker when the company name is clear and no ticker is shown.
+6. Extract lot-level data for both open and closed positions. Open lots include `marketValue` and `unrealizedGainLoss`; closed lots include `saleDate`, `proceeds`, and `realizedGainLoss`. Normalize Purchase Date, Acquisition Date, and Invt. Date to `purchaseDate`.
+7. Return only valid JSON / tool arguments. Normalize all dates to `YYYY-MM-DD`, convert parentheses to negative numbers, strip footnote superscripts, normalize spacing, and output numeric fields as numbers.
 PROMPT;
+    }
+
+    private function buildFinanceAccountToolDefinition(): array
+    {
+        return [
+            'name' => self::FINANCE_ACCOUNT_TOOL_NAME,
+            'description' => 'Add one parsed finance account from a bank or brokerage statement.',
+            'parameters' => [
+                'type' => 'OBJECT',
+                'properties' => [
+                    'statementInfo' => [
+                        'type' => 'OBJECT',
+                        'properties' => [
+                            'brokerName' => ['type' => 'STRING'],
+                            'accountNumber' => ['type' => 'STRING'],
+                            'accountName' => ['type' => 'STRING'],
+                            'periodStart' => ['type' => 'STRING'],
+                            'periodEnd' => ['type' => 'STRING'],
+                            'closingBalance' => ['type' => 'NUMBER'],
+                        ],
+                    ],
+                    'statementDetails' => [
+                        'type' => 'ARRAY',
+                        'items' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'section' => ['type' => 'STRING'],
+                                'line_item' => ['type' => 'STRING'],
+                                'statement_period_value' => ['type' => 'NUMBER'],
+                                'ytd_value' => ['type' => 'NUMBER'],
+                                'is_percentage' => ['type' => 'BOOLEAN'],
+                            ],
+                            'required' => ['section', 'line_item', 'statement_period_value', 'ytd_value', 'is_percentage'],
+                        ],
+                    ],
+                    'transactions' => [
+                        'type' => 'ARRAY',
+                        'items' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'date' => ['type' => 'STRING'],
+                                'description' => ['type' => 'STRING'],
+                                'amount' => ['type' => 'NUMBER'],
+                                'type' => ['type' => 'STRING'],
+                                'symbol' => ['type' => 'STRING'],
+                                'quantity' => ['type' => 'NUMBER'],
+                                'price' => ['type' => 'NUMBER'],
+                                'commission' => ['type' => 'NUMBER'],
+                                'fee' => ['type' => 'NUMBER'],
+                            ],
+                            'required' => ['date', 'description', 'amount'],
+                        ],
+                    ],
+                    'lots' => [
+                        'type' => 'ARRAY',
+                        'items' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'symbol' => ['type' => 'STRING'],
+                                'description' => ['type' => 'STRING'],
+                                'quantity' => ['type' => 'NUMBER'],
+                                'purchaseDate' => ['type' => 'STRING'],
+                                'costBasis' => ['type' => 'NUMBER'],
+                                'costPerUnit' => ['type' => 'NUMBER'],
+                                'marketValue' => ['type' => 'NUMBER'],
+                                'unrealizedGainLoss' => ['type' => 'NUMBER'],
+                                'saleDate' => ['type' => 'STRING'],
+                                'proceeds' => ['type' => 'NUMBER'],
+                                'realizedGainLoss' => ['type' => 'NUMBER'],
+                            ],
+                            'required' => ['symbol', 'quantity', 'purchaseDate', 'costBasis'],
+                        ],
+                    ],
+                ],
+                'required' => ['statementInfo', 'statementDetails', 'transactions', 'lots'],
+            ],
+        ];
+    }
+
+    private function extractFinanceGenerateContentData(array $responseBody): ?array
+    {
+        $toolCalls = [];
+
+        $parts = $responseBody['candidates'][0]['content']['parts'] ?? [];
+        if (is_array($parts)) {
+            foreach ($parts as $part) {
+                if (! is_array($part)) {
+                    continue;
+                }
+
+                $functionCall = $part['functionCall'] ?? null;
+                if (! is_array($functionCall) || ($functionCall['name'] ?? null) !== self::FINANCE_ACCOUNT_TOOL_NAME) {
+                    continue;
+                }
+
+                $args = $functionCall['args'] ?? [];
+                if (! is_array($args)) {
+                    continue;
+                }
+
+                $toolCalls[] = [
+                    'toolName' => self::FINANCE_ACCOUNT_TOOL_NAME,
+                    'payload' => $this->normalizeFinanceAccountPayload($args),
+                ];
+            }
+        }
+
+        if ($toolCalls !== []) {
+            return ['toolCalls' => $toolCalls];
+        }
+
+        $jsonText = $this->extractTextParts($responseBody);
+        if ($jsonText === '') {
+            return null;
+        }
+
+        $data = json_decode($jsonText, true);
+        if (json_last_error() !== JSON_ERROR_NONE || ! is_array($data)) {
+            return null;
+        }
+
+        return $this->normalizeFinanceJsonResponse($data);
+    }
+
+    private function extractTextParts(array $responseBody): string
+    {
+        $parts = $responseBody['candidates'][0]['content']['parts'] ?? [];
+        if (! is_array($parts)) {
+            return '';
+        }
+
+        $text = '';
+        foreach ($parts as $part) {
+            if (! is_array($part) || ! isset($part['text']) || ! is_string($part['text'])) {
+                continue;
+            }
+
+            $text .= $part['text'];
+        }
+
+        return preg_replace('/^```json\s*|\s*```$/s', '', trim($text)) ?? '';
+    }
+
+    private function normalizeFinanceJsonResponse(array $data): ?array
+    {
+        if (isset($data['toolCalls']) && is_array($data['toolCalls'])) {
+            $toolCalls = [];
+
+            foreach ($data['toolCalls'] as $toolCall) {
+                if (! is_array($toolCall)) {
+                    continue;
+                }
+
+                $toolName = $toolCall['toolName'] ?? $toolCall['name'] ?? null;
+                if ($toolName !== self::FINANCE_ACCOUNT_TOOL_NAME) {
+                    continue;
+                }
+
+                $payload = $toolCall['payload'] ?? $toolCall['args'] ?? [];
+                if (! is_array($payload)) {
+                    continue;
+                }
+
+                $toolCalls[] = [
+                    'toolName' => self::FINANCE_ACCOUNT_TOOL_NAME,
+                    'payload' => $this->normalizeFinanceAccountPayload($payload),
+                ];
+            }
+
+            return ['toolCalls' => $toolCalls];
+        }
+
+        $accounts = [];
+
+        if (isset($data['accounts']) && is_array($data['accounts'])) {
+            foreach ($data['accounts'] as $account) {
+                if (is_array($account)) {
+                    $accounts[] = $account;
+                }
+            }
+        } elseif (array_intersect(['statementInfo', 'statementDetails', 'transactions', 'lots'], array_keys($data)) !== []) {
+            $accounts[] = [
+                'statementInfo' => $data['statementInfo'] ?? [],
+                'statementDetails' => $data['statementDetails'] ?? [],
+                'transactions' => $data['transactions'] ?? [],
+                'lots' => $data['lots'] ?? [],
+            ];
+        }
+
+        if ($accounts === []) {
+            return null;
+        }
+
+        return [
+            'toolCalls' => array_map(fn (array $account): array => [
+                'toolName' => self::FINANCE_ACCOUNT_TOOL_NAME,
+                'payload' => $this->normalizeFinanceAccountPayload($account),
+            ], $accounts),
+        ];
+    }
+
+    private function normalizeFinanceAccountPayload(array $payload): array
+    {
+        $statementInfo = isset($payload['statementInfo']) && is_array($payload['statementInfo'])
+            ? $payload['statementInfo']
+            : [];
+
+        $normalizedStatementInfo = [];
+        foreach (['brokerName', 'accountNumber', 'accountName'] as $stringKey) {
+            if (isset($statementInfo[$stringKey]) && is_string($statementInfo[$stringKey]) && trim($statementInfo[$stringKey]) !== '') {
+                $normalizedStatementInfo[$stringKey] = trim($statementInfo[$stringKey]);
+            }
+        }
+
+        foreach (['periodStart', 'periodEnd'] as $dateKey) {
+            $date = $this->normalizeDateString($statementInfo[$dateKey] ?? null);
+            if ($date !== null) {
+                $normalizedStatementInfo[$dateKey] = $date;
+            }
+        }
+
+        $closingBalance = $this->normalizeNumber($statementInfo['closingBalance'] ?? null);
+        if ($closingBalance !== null) {
+            $normalizedStatementInfo['closingBalance'] = $closingBalance;
+        }
+
+        return [
+            'statementInfo' => $normalizedStatementInfo,
+            'statementDetails' => $this->normalizeStatementDetails($payload['statementDetails'] ?? []),
+            'transactions' => $this->normalizeTransactions($payload['transactions'] ?? []),
+            'lots' => $this->normalizeLots($payload['lots'] ?? []),
+        ];
+    }
+
+    private function normalizeStatementDetails(mixed $details): array
+    {
+        if (! is_array($details)) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ($details as $detail) {
+            if (! is_array($detail)) {
+                continue;
+            }
+
+            $normalized[] = [
+                'section' => is_string($detail['section'] ?? null) ? trim($detail['section']) : '',
+                'line_item' => is_string($detail['line_item'] ?? null) ? trim($detail['line_item']) : '',
+                'statement_period_value' => $this->normalizeNumber($detail['statement_period_value'] ?? null) ?? 0.0,
+                'ytd_value' => $this->normalizeNumber($detail['ytd_value'] ?? null) ?? 0.0,
+                'is_percentage' => $this->normalizeBoolean($detail['is_percentage'] ?? null) ?? false,
+            ];
+        }
+
+        return $normalized;
+    }
+
+    private function normalizeTransactions(mixed $transactions): array
+    {
+        if (! is_array($transactions)) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ($transactions as $transaction) {
+            if (! is_array($transaction)) {
+                continue;
+            }
+
+            $item = [
+                'date' => $this->normalizeDateString($transaction['date'] ?? null) ?? '',
+                'description' => is_string($transaction['description'] ?? null) ? trim($transaction['description']) : '',
+                'amount' => $this->normalizeNumber($transaction['amount'] ?? null) ?? 0.0,
+            ];
+
+            foreach (['type', 'symbol'] as $stringKey) {
+                if (isset($transaction[$stringKey]) && is_string($transaction[$stringKey]) && trim($transaction[$stringKey]) !== '') {
+                    $item[$stringKey] = trim($transaction[$stringKey]);
+                }
+            }
+
+            foreach (['quantity', 'price', 'commission', 'fee'] as $numberKey) {
+                $number = $this->normalizeNumber($transaction[$numberKey] ?? null);
+                if ($number !== null) {
+                    $item[$numberKey] = $number;
+                }
+            }
+
+            $normalized[] = $item;
+        }
+
+        return $normalized;
+    }
+
+    private function normalizeLots(mixed $lots): array
+    {
+        if (! is_array($lots)) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ($lots as $lot) {
+            if (! is_array($lot)) {
+                continue;
+            }
+
+            $item = [
+                'symbol' => is_string($lot['symbol'] ?? null) ? trim($lot['symbol']) : '',
+                'quantity' => $this->normalizeNumber($lot['quantity'] ?? null) ?? 0.0,
+                'purchaseDate' => $this->normalizeDateString($lot['purchaseDate'] ?? null) ?? '',
+                'costBasis' => $this->normalizeNumber($lot['costBasis'] ?? null) ?? 0.0,
+            ];
+
+            if (isset($lot['description']) && is_string($lot['description']) && trim($lot['description']) !== '') {
+                $item['description'] = trim($lot['description']);
+            }
+
+            foreach (['costPerUnit', 'marketValue', 'unrealizedGainLoss', 'proceeds', 'realizedGainLoss'] as $numberKey) {
+                $number = $this->normalizeNumber($lot[$numberKey] ?? null);
+                if ($number !== null) {
+                    $item[$numberKey] = $number;
+                }
+            }
+
+            $saleDate = $this->normalizeDateString($lot['saleDate'] ?? null);
+            if ($saleDate !== null) {
+                $item['saleDate'] = $saleDate;
+            }
+
+            $normalized[] = $item;
+        }
+
+        return $normalized;
+    }
+
+    private function normalizeDateString(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $trimmed = trim($value);
+
+        return $trimmed === '' ? null : preg_split('/[ T]/', $trimmed)[0] ?? null;
+    }
+
+    private function normalizeNumber(mixed $value): ?float
+    {
+        if (is_int($value) || is_float($value)) {
+            return is_finite((float) $value) ? (float) $value : null;
+        }
+
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $trimmed = trim($value);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        $isNegative = preg_match('/^\(.*\)$/', $trimmed) === 1;
+        $normalized = str_replace([',', '%', '(', ')', ' '], '', $trimmed);
+
+        if (! is_numeric($normalized)) {
+            return null;
+        }
+
+        $number = (float) $normalized;
+
+        return $isNegative ? -$number : $number;
+    }
+
+    private function normalizeBoolean(mixed $value): ?bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_string($value)) {
+            return match (strtolower(trim($value))) {
+                'true' => true,
+                'false' => false,
+                default => null,
+            };
+        }
+
+        return null;
     }
 
     private function buildPayslipPrompt(array $context): string

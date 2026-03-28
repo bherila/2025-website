@@ -187,10 +187,14 @@ describe('ImportTransactions', () => {
 
   it('shows import-transactions and attach-statement checkboxes after AI parsing', async () => {
     const parsedResult = {
-      accounts: [{
-        statementInfo: { brokerName: 'Test' },
-        statementDetails: [{ section: 'S', line_item: 'L', statement_period_value: 1, ytd_value: 2, is_percentage: false }],
-        transactions: [{ date: '2025-01-01', description: 'Test', amount: 100, type: 'deposit' }],
+      toolCalls: [{
+        toolName: 'addFinanceAccount',
+        payload: {
+          statementInfo: { brokerName: 'Test' },
+          statementDetails: [{ section: 'S', line_item: 'L', statement_period_value: 1, ytd_value: 2, is_percentage: false }],
+          transactions: [{ date: '2025-01-01', description: 'Test', amount: 100, type: 'deposit' }],
+          lots: [],
+        },
       }],
     };
 
@@ -409,5 +413,4 @@ describe('ImportTransactions', () => {
     expect(mockUpload).not.toHaveBeenCalled();
   });
 });
-
 
