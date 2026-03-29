@@ -505,10 +505,18 @@ PROMPT;
                 continue;
             }
 
+            $date = $this->normalizeDateString($transaction['date'] ?? null);
+            $amount = $this->normalizeNumber($transaction['amount'] ?? null);
+
+            if ($date === null || $amount === null) {
+                // Drop transactions missing a valid date or amount instead of using placeholders.
+                continue;
+            }
+
             $item = [
-                'date' => $this->normalizeDateString($transaction['date'] ?? null) ?? '',
+                'date' => $date,
                 'description' => is_string($transaction['description'] ?? null) ? trim($transaction['description']) : '',
-                'amount' => $this->normalizeNumber($transaction['amount'] ?? null) ?? 0.0,
+                'amount' => $amount,
             ];
 
             foreach (['type', 'symbol'] as $stringKey) {
