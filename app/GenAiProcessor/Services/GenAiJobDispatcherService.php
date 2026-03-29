@@ -542,11 +542,29 @@ PROMPT;
                 continue;
             }
 
+            $symbolRaw = $lot['symbol'] ?? null;
+            $symbol = is_string($symbolRaw) ? trim($symbolRaw) : '';
+            if ($symbol === '') {
+                continue;
+            }
+
+            $purchaseDate = $this->normalizeDateString($lot['purchaseDate'] ?? null);
+            $costBasis = $this->normalizeNumber($lot['costBasis'] ?? null);
+
+            if ($purchaseDate === null || $costBasis === null) {
+                continue;
+            }
+
+            $quantity = $this->normalizeNumber($lot['quantity'] ?? null);
+            if ($quantity === null) {
+                $quantity = 0.0;
+            }
+
             $item = [
-                'symbol' => is_string($lot['symbol'] ?? null) ? trim($lot['symbol']) : '',
-                'quantity' => $this->normalizeNumber($lot['quantity'] ?? null) ?? 0.0,
-                'purchaseDate' => $this->normalizeDateString($lot['purchaseDate'] ?? null) ?? '',
-                'costBasis' => $this->normalizeNumber($lot['costBasis'] ?? null) ?? 0.0,
+                'symbol' => $symbol,
+                'quantity' => $quantity,
+                'purchaseDate' => $purchaseDate,
+                'costBasis' => $costBasis,
             ];
 
             if (isset($lot['description']) && is_string($lot['description']) && trim($lot['description']) !== '') {
