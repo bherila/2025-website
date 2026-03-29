@@ -172,26 +172,22 @@ function normalizeGeminiAccountBlock(value: unknown): GeminiAccountBlock {
           const ytd_value = normalizeNumber(detail.ytd_value)
           const is_percentage = normalizeBoolean(detail.is_percentage) ?? false
 
-          // Skip rows missing required identifiers to avoid invalid-but-present entries
-          if (!section || !line_item) {
+          if (
+            !section ||
+            !line_item ||
+            statement_period_value === undefined ||
+            ytd_value === undefined
+          ) {
             return undefined
           }
 
-          const normalized: GeminiStatementDetail = {
+          return {
             section,
             line_item,
+            statement_period_value,
+            ytd_value,
             is_percentage,
           }
-
-          if (statement_period_value !== undefined) {
-            normalized.statement_period_value = statement_period_value
-          }
-
-          if (ytd_value !== undefined) {
-            normalized.ytd_value = ytd_value
-          }
-
-          return normalized
         })
         .filter((detail): detail is GeminiStatementDetail => detail !== undefined)
     : []
@@ -199,11 +195,19 @@ function normalizeGeminiAccountBlock(value: unknown): GeminiAccountBlock {
   const transactions: GeminiTransaction[] = Array.isArray(block.transactions)
     ? block.transactions
         .filter(isRecord)
-        .map((transaction): GeminiTransaction => {
+        .map((transaction): GeminiTransaction | undefined => {
+          const date = normalizeDate(transaction.date)
+          const description = normalizeString(transaction.description)
+          const amount = normalizeNumber(transaction.amount)
+
+          if (!date || !description || amount === undefined) {
+            return undefined
+          }
+
           const normalized: GeminiTransaction = {
-            date: normalizeDate(transaction.date) ?? '',
-            description: normalizeString(transaction.description) ?? '',
-            amount: normalizeNumber(transaction.amount) ?? 0,
+            date,
+            description,
+            amount,
           }
 
           const type = normalizeString(transaction.type)
@@ -226,17 +230,27 @@ function normalizeGeminiAccountBlock(value: unknown): GeminiAccountBlock {
 
           return normalized
         })
+        .filter((transaction): transaction is GeminiTransaction => transaction !== undefined)
     : []
 
   const lots: GeminiLot[] = Array.isArray(block.lots)
     ? block.lots
         .filter(isRecord)
-        .map((lot): GeminiLot => {
+        .map((lot): GeminiLot | undefined => {
+          const symbol = normalizeString(lot.symbol)
+          const quantity = normalizeNumber(lot.quantity)
+          const purchaseDate = normalizeDate(lot.purchaseDate)
+          const costBasis = normalizeNumber(lot.costBasis)
+
+          if (!symbol || quantity === undefined || !purchaseDate || costBasis === undefined) {
+            return undefined
+          }
+
           const normalized: GeminiLot = {
-            symbol: normalizeString(lot.symbol) ?? '',
-            quantity: normalizeNumber(lot.quantity) ?? 0,
-            purchaseDate: normalizeDate(lot.purchaseDate) ?? '',
-            costBasis: normalizeNumber(lot.costBasis) ?? 0,
+            symbol,
+            quantity,
+            purchaseDate,
+            costBasis,
           }
 
           const description = normalizeString(lot.description)
@@ -262,6 +276,7 @@ function normalizeGeminiAccountBlock(value: unknown): GeminiAccountBlock {
 
           return normalized
         })
+        .filter((lot): lot is GeminiLot => lot !== undefined)
     : []
 
   return {

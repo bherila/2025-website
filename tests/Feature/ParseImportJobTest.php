@@ -101,4 +101,99 @@ class ParseImportJobTest extends TestCase
         $this->assertSame('Broker A', $result['toolCalls'][0]['payload']['statementInfo']['brokerName']);
         $this->assertSame('2025-02-01', $result['toolCalls'][1]['payload']['statementInfo']['periodStart']);
     }
+
+    public function test_extract_generate_content_data_drops_invalid_finance_rows_during_normalization(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $result = $service->extractGenerateContentData('finance_transactions', [
+            'candidates' => [[
+                'content' => [
+                    'parts' => [[
+                        'functionCall' => [
+                            'name' => GenAiJobDispatcherService::FINANCE_ACCOUNT_TOOL_NAME,
+                            'args' => [
+                                'statementInfo' => [
+                                    'brokerName' => 'Broker',
+                                ],
+                                'statementDetails' => [
+                                    [
+                                        'section' => 'Statement Summary ($)',
+                                        'line_item' => 'Net Return',
+                                        'statement_period_value' => '10.5',
+                                        'ytd_value' => '20.5',
+                                        'is_percentage' => 'TRUE',
+                                    ],
+                                    [
+                                        'section' => '',
+                                        'line_item' => 'Invalid',
+                                        'statement_period_value' => '1',
+                                        'ytd_value' => '2',
+                                        'is_percentage' => false,
+                                    ],
+                                ],
+                                'transactions' => [
+                                    [
+                                        'date' => '2025-01-15 09:30:00',
+                                        'description' => 'Deposit',
+                                        'amount' => '100.75',
+                                    ],
+                                    [
+                                        'date' => '2025-01-16',
+                                        'amount' => '55.00',
+                                    ],
+                                ],
+                                'lots' => [
+                                    [
+                                        'symbol' => 'AAPL',
+                                        'quantity' => '1',
+                                        'purchaseDate' => '2024-01-10T10:00:00Z',
+                                        'costBasis' => '50.10',
+                                    ],
+                                    [
+                                        'symbol' => '',
+                                        'quantity' => '2',
+                                        'purchaseDate' => '2024-01-11',
+                                        'costBasis' => '20.10',
+                                    ],
+                                    [
+                                        'symbol' => 'MSFT',
+                                        'purchaseDate' => '2024-01-12',
+                                        'costBasis' => '30.10',
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ]],
+                ],
+            ]],
+        ]);
+
+        $payload = $result['toolCalls'][0]['payload'];
+
+        $this->assertSame([
+            [
+                'section' => 'Statement Summary ($)',
+                'line_item' => 'Net Return',
+                'statement_period_value' => 10.5,
+                'ytd_value' => 20.5,
+                'is_percentage' => true,
+            ],
+        ], $payload['statementDetails']);
+        $this->assertSame([
+            [
+                'date' => '2025-01-15',
+                'description' => 'Deposit',
+                'amount' => 100.75,
+            ],
+        ], $payload['transactions']);
+        $this->assertSame([
+            [
+                'symbol' => 'AAPL',
+                'quantity' => 1.0,
+                'purchaseDate' => '2024-01-10',
+                'costBasis' => 50.1,
+            ],
+        ], $payload['lots']);
+    }
 }

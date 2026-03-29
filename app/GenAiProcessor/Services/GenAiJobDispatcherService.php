@@ -481,11 +481,20 @@ PROMPT;
                 continue;
             }
 
+            $section = is_string($detail['section'] ?? null) ? trim($detail['section']) : '';
+            $lineItem = is_string($detail['line_item'] ?? null) ? trim($detail['line_item']) : '';
+            $statementPeriodValue = $this->normalizeNumber($detail['statement_period_value'] ?? null);
+            $ytdValue = $this->normalizeNumber($detail['ytd_value'] ?? null);
+
+            if ($section === '' || $lineItem === '' || $statementPeriodValue === null || $ytdValue === null) {
+                continue;
+            }
+
             $normalized[] = [
-                'section' => is_string($detail['section'] ?? null) ? trim($detail['section']) : '',
-                'line_item' => is_string($detail['line_item'] ?? null) ? trim($detail['line_item']) : '',
-                'statement_period_value' => $this->normalizeNumber($detail['statement_period_value'] ?? null) ?? 0.0,
-                'ytd_value' => $this->normalizeNumber($detail['ytd_value'] ?? null) ?? 0.0,
+                'section' => $section,
+                'line_item' => $lineItem,
+                'statement_period_value' => $statementPeriodValue,
+                'ytd_value' => $ytdValue,
                 'is_percentage' => $this->normalizeBoolean($detail['is_percentage'] ?? null) ?? false,
             ];
         }
@@ -506,16 +515,16 @@ PROMPT;
             }
 
             $date = $this->normalizeDateString($transaction['date'] ?? null);
+            $description = is_string($transaction['description'] ?? null) ? trim($transaction['description']) : '';
             $amount = $this->normalizeNumber($transaction['amount'] ?? null);
 
-            if ($date === null || $amount === null) {
-                // Drop transactions missing a valid date or amount instead of using placeholders.
+            if ($date === null || $description === '' || $amount === null) {
                 continue;
             }
 
             $item = [
                 'date' => $date,
-                'description' => is_string($transaction['description'] ?? null) ? trim($transaction['description']) : '',
+                'description' => $description,
                 'amount' => $amount,
             ];
 
@@ -558,14 +567,10 @@ PROMPT;
 
             $purchaseDate = $this->normalizeDateString($lot['purchaseDate'] ?? null);
             $costBasis = $this->normalizeNumber($lot['costBasis'] ?? null);
-
-            if ($purchaseDate === null || $costBasis === null) {
-                continue;
-            }
-
             $quantity = $this->normalizeNumber($lot['quantity'] ?? null);
-            if ($quantity === null) {
-                $quantity = 0.0;
+
+            if ($purchaseDate === null || $costBasis === null || $quantity === null) {
+                continue;
             }
 
             $item = [
