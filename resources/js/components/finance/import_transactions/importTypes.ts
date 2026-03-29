@@ -165,13 +165,35 @@ function normalizeGeminiAccountBlock(value: unknown): GeminiAccountBlock {
   const statementDetails: GeminiStatementDetail[] = Array.isArray(block.statementDetails)
     ? block.statementDetails
         .filter(isRecord)
-        .map((detail): GeminiStatementDetail => ({
-          section: normalizeString(detail.section) ?? '',
-          line_item: normalizeString(detail.line_item) ?? '',
-          statement_period_value: normalizeNumber(detail.statement_period_value) ?? 0,
-          ytd_value: normalizeNumber(detail.ytd_value) ?? 0,
-          is_percentage: normalizeBoolean(detail.is_percentage) ?? false,
-        }))
+        .map((detail): GeminiStatementDetail | undefined => {
+          const section = normalizeString(detail.section)
+          const line_item = normalizeString(detail.line_item)
+          const statement_period_value = normalizeNumber(detail.statement_period_value)
+          const ytd_value = normalizeNumber(detail.ytd_value)
+          const is_percentage = normalizeBoolean(detail.is_percentage) ?? false
+
+          // Skip rows missing required identifiers to avoid invalid-but-present entries
+          if (!section || !line_item) {
+            return undefined
+          }
+
+          const normalized: GeminiStatementDetail = {
+            section,
+            line_item,
+            is_percentage,
+          }
+
+          if (statement_period_value !== undefined) {
+            normalized.statement_period_value = statement_period_value
+          }
+
+          if (ytd_value !== undefined) {
+            normalized.ytd_value = ytd_value
+          }
+
+          return normalized
+        })
+        .filter((detail): detail is GeminiStatementDetail => detail !== undefined)
     : []
 
   const transactions: GeminiTransaction[] = Array.isArray(block.transactions)
