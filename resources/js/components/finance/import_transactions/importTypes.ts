@@ -108,8 +108,14 @@ function normalizeBoolean(value: unknown): boolean | undefined {
   }
 
   if (typeof value === 'string') {
-    if (value === 'true') return true
-    if (value === 'false') return false
+    const trimmed = value.trim()
+    if (trimmed === '') {
+      return undefined
+    }
+
+    const lowered = trimmed.toLowerCase()
+    if (lowered === 'true') return true
+    if (lowered === 'false') return false
   }
 
   return undefined
