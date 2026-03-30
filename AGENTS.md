@@ -1,3 +1,136 @@
+# AGENTS.md
+
+**For AI Coding Agents working in the BWH PHP Laravel + React codebase**
+
+---
+
+## Architecture Overview
+
+**Stack**: Laravel 12 (PHP 8.3+) + React 19 / TypeScript via Vite hybrid:
+- Blade templates mount React components via script tags containing JSON data
+- All dynamic data fetching goes through JSON API endpoints (`/api/` prefix)
+- Vite handles bundling
+- `@/*` path alias resolves to `resources/js/*`
+
+---
+
+## Build & Dev Commands
+
+```bash
+# Setup
+composer install && pnpm install
+cp .env.example .env && php artisan key:generate && php artisan migrate
+
+# Development (preferred — runs all services concurrently)
+composer dev
+
+# Individual services
+php artisan serve          # Laravel :8000
+pnpm dev                   # Vite :5173
+```
+
+## Testing & Validation
+
+**IMPORTANT**: All validations below MUST pass before committing code.
+
+```bash
+# Frontend (all mandatory)
+pnpm run type-check                                                    # TypeScript - must pass
+pnpm run lint                                                          # ESLint - must pass
+pnpm run test                                                          # Jest - all tests must pass
+
+# Backend
+pnpm run build                                                         # Build Vite first (required for PHPUnit)
+./vendor/bin/pint --test                                               # Laravel Pint - must pass
+composer test                                                          # PHPUnit - all tests must pass
+
+# PHP syntax check (for modified files only)
+php -l path/to/file.php
+```
+
+## Linting & Formatting
+
+```bash
+# Frontend
+pnpm run lint                      # ESLint - must pass before committing
+pnpm run type-check                # TypeScript strict check (no build)
+
+# Backend
+./vendor/bin/pint                  # Format all PHP (Laravel Pint)
+./vendor/bin/pint app/Models       # Format specific directory
+php -l path/to/file.php            # Syntax-check a single PHP file
+```
+
+---
+
+## PHP / Laravel Standards
+
+### Models (`app/Models/`)
+- Always use `SerializesDatesAsLocal` trait on models with date fields
+- Use typed `$fillable` and `$casts`; always type relationship return values
+- All PHP methods MUST have explicit return type annotations.
+
+```php
+use App\Traits\SerializesDatesAsLocal;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class FinAccount extends Model
+{
+    use SerializesDatesAsLocal;
+
+    protected $fillable = ['user_id', 'name'];
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+}
+```
+
+### Controllers (`app/Http/Controllers/`)
+- Resource naming: `index / show / store / update / destroy`
+- All API methods should have explicit return types (e.g., `JsonResponse`, `View`).
+
+### PHP Tests (`tests/Feature/` & `tests/Unit/`)
+- Extend `Tests\TestCase`, always use `RefreshDatabase` (safe — SQLite in-memory)
+- Factory pattern: `User::factory()->create(['key' => 'value'])`
+- Test naming: `test_can_perform_action()` snake_case
+- Auth: `$this->actingAs($this->user)->getJson('/api/...')`
+- **Important**: Tests use SQLite in-memory database, never MySQL.
+
+---
+
+## TypeScript / React Standards
+
+### Components
+- **`interface`** for props (never `type`)
+- **Function declarations** over arrow functions for components
+- File naming: `PascalCase.tsx` for components, `camelCase.ts` for utilities
+
+### API Calls — ALWAYS use `fetchWrapper`
+```tsx
+// fetchWrapper auto-injects CSRF token — never use fetch/axios directly
+try {
+  const result = await fetchWrapper.post("/api/finance/accounts", payload);
+  // ...
+} catch (error) {
+  console.error("Failed:", error);
+}
+```
+
+---
+
+## Critical Rules (Never Violate)
+
+1. **CSRF**: Use `fetchWrapper` for every API call — never raw `fetch` or `axios`
+2. **Dates**: Apply `SerializesDatesAsLocal` to all models with date columns
+3. **DB in tests**: Tests use SQLite in-memory (`DB_DATABASE=:memory:`) — `RefreshDatabase` is safe
+4. **Validation**: All tests, linting, and type-checks in [TESTING.md](TESTING.md) must pass.
+5. **Types**: PHP methods must have return types; TypeScript must have no `any` (where possible).
+
+---
+
 <laravel-boost-guidelines>
 === foundation rules ===
 
@@ -211,7 +344,7 @@ protected function isAccessible(User $user, ?string $path = null): bool
 - Middleware are configured declaratively in `bootstrap/app.php` using `Application::configure()->withMiddleware()`.
 - `bootstrap/app.php` is the file to register middleware, exceptions, and routing files.
 - `bootstrap/providers.php` contains application specific service providers.
-- The `app/Console/Kernel.php` file no longer exists; use `bootstrap/app.php` or `routes/console.php` for console configuration.
+- The `app/Console/Kernel.php` file no longer exists; use `bootstrap/app.php` or `routes/console/php` for console configuration.
 - Console commands in `app/Console/Commands/` are automatically available and do not require manual registration.
 
 ## Database

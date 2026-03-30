@@ -1,8 +1,29 @@
-# BWH PHP — Claude Instructions
+# CLAUDE.md
 
-See `.github/copilot-instructions.md` for the full architecture overview, conventions, and patterns.
+This file is a Claude Code compatibility entrypoint for this repository.
 
-See './TESTING.md' for test guidelines.
+## Source of Truth
+
+All agent-operational rules, coding standards, workflow commands, and architecture guidance are centralized in:
+
+- `AGENTS.md`
+- `.github/copilot-instructions.md`
+
+**IMPORTANT**: All testing requirements in [TESTING.md](TESTING.md) must pass before committing — this includes TypeScript (`pnpm run type-check`), ESLint (`pnpm run lint`), Jest, Laravel Pint, and PHPUnit tests.
+
+## How Claude Should Use Repo Guidance
+
+Claude Code should use both files together:
+
+1. `AGENTS.md`
+   - Primary, agent-focused guidance
+   - Autonomous operations and workflow rules
+
+2. `.github/copilot-instructions.md`
+   - Developer-focused guidance for interactive coding consistency
+   - Broad repository standards for implementation patterns
+
+---
 
 <laravel-boost-guidelines>
 === foundation rules ===
@@ -217,7 +238,7 @@ protected function isAccessible(User $user, ?string $path = null): bool
 - Middleware are configured declaratively in `bootstrap/app.php` using `Application::configure()->withMiddleware()`.
 - `bootstrap/app.php` is the file to register middleware, exceptions, and routing files.
 - `bootstrap/providers.php` contains application specific service providers.
-- The `app/Console/Kernel.php` file no longer exists; use `bootstrap/app.php` or `routes/console.php` for console configuration.
+- The `app/Console/Kernel.php` file no longer exists; use `bootstrap/app.php` or `routes/console/php` for console configuration.
 - Console commands in `app/Console/Commands/` are automatically available and do not require manual registration.
 
 ## Database
