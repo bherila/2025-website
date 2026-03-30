@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\IpAddressCast;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -22,6 +23,7 @@ class LoginAuditLog extends Model
     protected $casts = [
         'success' => 'boolean',
         'is_suspicious' => 'boolean',
+        'ip_address' => IpAddressCast::class,
     ];
 
     public function user(): BelongsTo

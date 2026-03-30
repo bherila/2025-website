@@ -75,9 +75,31 @@ When running on localhost, two developer-friendly features are available:
 
 This feature is **only available on localhost** for development/testing.
 
-## Database Schema
+## Login Audit Log
 
-### Users Table
+All login attempts (successful and failed) are recorded in the `login_audit_log` table. The `ip_address` column is stored as **binary** (`VARBINARY(16)` in MySQL, `BLOB` in SQLite) for storage efficiency and to support both IPv4 (4 bytes) and IPv6 (16 bytes).
+
+### IP address handling
+
+Conversion between human-readable strings and binary is done entirely in PHP using `inet_pton()` / `inet_ntop()` via the `App\Casts\IpAddressCast` Eloquent cast applied to `LoginAuditLog::$casts`. This means:
+
+- **Writing**: pass a normal IP string (e.g. `$request->ip()`); the cast converts it to binary automatically.
+- **Reading / API responses**: the cast converts binary back to a human-readable string, so callers and the frontend always see a plain string like `"127.0.0.1"`.
+- **Compatibility**: the same PHP-level conversion works on both MySQL/MariaDB and SQLite (test DB), avoiding any need to fork logic by database driver.
+
+### Database migration (MySQL)
+
+When applying the migration on MySQL, existing string IP addresses are converted in-place:
+
+```sql
+UPDATE login_audit_log
+SET ip_address = INET6_ATON(ip_address)
+WHERE ip_address IS NOT NULL;
+
+ALTER TABLE login_audit_log MODIFY ip_address VARBINARY(16) NULL;
+```
+
+Run `php artisan migrate` on MySQL to apply this automatically.
 ```sql
 users:
   - id: bigint (primary key)
