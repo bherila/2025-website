@@ -959,7 +959,7 @@ CREATE TABLE `fin_statements` (
   `statement_closing_date` date DEFAULT NULL,
   PRIMARY KEY (`statement_id`),
   KEY `fin_account_balance_snapshot_acct_id_index` (`acct_id`),
-  KEY `fin_statements_genai_job_id_index` (`genai_job_id`),
+  KEY `fin_statements_genai_job_id_foreign` (`genai_job_id`),
   CONSTRAINT `fin_account_balance_snapshot_acct_id_foreign` FOREIGN KEY (`acct_id`) REFERENCES `fin_accounts` (`acct_id`),
   CONSTRAINT `fin_statements_genai_job_id_foreign` FOREIGN KEY (`genai_job_id`) REFERENCES `genai_import_jobs` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -979,43 +979,61 @@ CREATE TABLE `fin_transaction_non_duplicate_pairs` (
   CONSTRAINT `fin_transaction_non_duplicate_pairs_t_id_2_foreign` FOREIGN KEY (`t_id_2`) REFERENCES `fin_account_line_items` (`t_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `webauthn_credentials`;
+DROP TABLE IF EXISTS `genai_daily_quota`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `webauthn_credentials` (
-  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `user_id` bigint(20) unsigned NOT NULL,
-  `credential_id` varchar(2048) NOT NULL,
-  `public_key` text NOT NULL,
-  `counter` bigint(20) unsigned NOT NULL DEFAULT 0,
-  `aaguid` varchar(64) DEFAULT NULL,
-  `name` varchar(255) NOT NULL DEFAULT 'Passkey',
-  `transports` json DEFAULT NULL,
-  `created_at` timestamp NULL DEFAULT NULL,
+CREATE TABLE `genai_daily_quota` (
+  `usage_date` date NOT NULL,
+  `request_count` int(10) unsigned NOT NULL DEFAULT 0,
   `updated_at` timestamp NULL DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `webauthn_credentials_user_id_index` (`user_id`),
-  CONSTRAINT `webauthn_credentials_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+  PRIMARY KEY (`usage_date`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `login_audit_log`;
+DROP TABLE IF EXISTS `genai_import_jobs`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `login_audit_log` (
+CREATE TABLE `genai_import_jobs` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `user_id` bigint(20) unsigned DEFAULT NULL,
-  `email` varchar(255) DEFAULT NULL,
-  `ip_address` varchar(45) DEFAULT NULL,
-  `user_agent` text DEFAULT NULL,
-  `success` tinyint(1) NOT NULL DEFAULT 0,
-  `method` varchar(255) NOT NULL DEFAULT 'password',
-  `is_suspicious` tinyint(1) NOT NULL DEFAULT 0,
+  `user_id` bigint(20) unsigned NOT NULL,
+  `acct_id` bigint(20) unsigned DEFAULT NULL,
+  `job_type` varchar(64) NOT NULL,
+  `file_hash` varchar(64) NOT NULL,
+  `original_filename` varchar(255) NOT NULL,
+  `s3_path` varchar(255) NOT NULL,
+  `mime_type` varchar(255) DEFAULT NULL,
+  `file_size_bytes` bigint(20) unsigned NOT NULL,
+  `context_json` text DEFAULT NULL,
+  `status` varchar(32) NOT NULL DEFAULT 'pending',
+  `error_message` text DEFAULT NULL,
+  `retry_count` tinyint(3) unsigned NOT NULL DEFAULT 0,
+  `scheduled_for` date DEFAULT NULL,
+  `parsed_at` timestamp NULL DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
-  KEY `login_audit_log_user_id_index` (`user_id`),
-  KEY `login_audit_log_created_at_index` (`created_at`),
-  CONSTRAINT `login_audit_log_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+  KEY `genai_import_jobs_acct_id_foreign` (`acct_id`),
+  KEY `genai_import_jobs_user_id_status_index` (`user_id`,`status`),
+  KEY `genai_import_jobs_file_hash_index` (`file_hash`),
+  KEY `genai_import_jobs_scheduled_for_status_index` (`scheduled_for`,`status`),
+  CONSTRAINT `genai_import_jobs_acct_id_foreign` FOREIGN KEY (`acct_id`) REFERENCES `fin_accounts` (`acct_id`) ON DELETE SET NULL,
+  CONSTRAINT `genai_import_jobs_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `genai_import_results`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `genai_import_results` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `job_id` bigint(20) unsigned NOT NULL,
+  `result_index` int(10) unsigned NOT NULL,
+  `result_json` longtext NOT NULL,
+  `status` varchar(32) NOT NULL DEFAULT 'pending_review',
+  `imported_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `genai_import_results_job_id_result_index_index` (`job_id`,`result_index`),
+  CONSTRAINT `genai_import_results_job_id_foreign` FOREIGN KEY (`job_id`) REFERENCES `genai_import_jobs` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `graduated_tax`;
@@ -1061,6 +1079,26 @@ CREATE TABLE `jobs` (
   `created_at` int(10) unsigned NOT NULL,
   PRIMARY KEY (`id`),
   KEY `jobs_queue_index` (`queue`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `login_audit_log`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `login_audit_log` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(20) unsigned DEFAULT NULL,
+  `email` varchar(255) DEFAULT NULL,
+  `ip_address` varchar(45) DEFAULT NULL,
+  `user_agent` text DEFAULT NULL,
+  `success` tinyint(1) NOT NULL DEFAULT 0,
+  `method` varchar(255) NOT NULL DEFAULT 'password',
+  `is_suspicious` tinyint(1) NOT NULL DEFAULT 0,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `login_audit_log_user_id_index` (`user_id`),
+  KEY `login_audit_log_created_at_index` (`created_at`),
+  CONSTRAINT `login_audit_log_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `migrations`;
@@ -1137,6 +1175,80 @@ CREATE TABLE `product_keys` (
   `key_retrieval_note` mediumtext DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `product_keys_product_key_unique` (`product_key`) USING HASH
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `queue_monitor_controls`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `queue_monitor_controls` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `connection` varchar(255) NOT NULL,
+  `queue` varchar(255) NOT NULL,
+  `type` varchar(255) NOT NULL,
+  `data` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`data`)),
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `queue_monitor_controls_connection_queue_type_unique` (`connection`,`queue`,`type`),
+  KEY `queue_monitor_controls_connection_index` (`connection`),
+  KEY `queue_monitor_controls_queue_index` (`queue`),
+  KEY `queue_monitor_controls_type_index` (`type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `queue_monitor_jobs`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `queue_monitor_jobs` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `job_id` varchar(255) NOT NULL,
+  `uuid` varchar(255) DEFAULT NULL,
+  `connection` varchar(255) NOT NULL,
+  `queue` varchar(255) NOT NULL,
+  `name` varchar(255) NOT NULL,
+  `status` varchar(255) NOT NULL,
+  `attempts` int(11) NOT NULL DEFAULT 0,
+  `payload` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`payload`)),
+  `exception` text DEFAULT NULL,
+  `runtime_ms` int(11) DEFAULT NULL,
+  `started_at` timestamp NULL DEFAULT NULL,
+  `finished_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `queue_monitor_jobs_connection_queue_status_index` (`connection`,`queue`,`status`),
+  KEY `queue_monitor_jobs_created_at_status_index` (`created_at`,`status`),
+  KEY `queue_monitor_jobs_job_id_index` (`job_id`),
+  KEY `queue_monitor_jobs_uuid_index` (`uuid`),
+  KEY `queue_monitor_jobs_connection_index` (`connection`),
+  KEY `queue_monitor_jobs_queue_index` (`queue`),
+  KEY `queue_monitor_jobs_status_index` (`status`),
+  KEY `queue_monitor_jobs_started_at_index` (`started_at`),
+  KEY `queue_monitor_jobs_finished_at_index` (`finished_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `queue_monitor_metrics`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `queue_monitor_metrics` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `connection` varchar(255) NOT NULL,
+  `queue` varchar(255) NOT NULL,
+  `period_type` varchar(255) NOT NULL,
+  `period` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `total_jobs` int(11) NOT NULL DEFAULT 0,
+  `processed` int(11) NOT NULL DEFAULT 0,
+  `failed` int(11) NOT NULL DEFAULT 0,
+  `avg_runtime` decimal(10,2) DEFAULT NULL,
+  `max_runtime` int(11) DEFAULT NULL,
+  `min_runtime` int(11) DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `queue_metrics_unique` (`connection`,`queue`,`period`,`period_type`),
+  KEY `queue_monitor_metrics_connection_index` (`connection`),
+  KEY `queue_monitor_metrics_queue_index` (`queue`),
+  KEY `queue_monitor_metrics_period_type_index` (`period_type`),
+  KEY `queue_monitor_metrics_period_index` (`period`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `session`;
@@ -1348,6 +1460,25 @@ CREATE TABLE `vxcv_links` (
   PRIMARY KEY (`uniqueid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `webauthn_credentials`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `webauthn_credentials` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(20) unsigned NOT NULL,
+  `credential_id` varchar(2048) NOT NULL,
+  `public_key` text NOT NULL,
+  `counter` bigint(20) unsigned NOT NULL DEFAULT 0,
+  `aaguid` varchar(64) DEFAULT NULL,
+  `name` varchar(255) NOT NULL DEFAULT 'Passkey',
+  `transports` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`transports`)),
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `webauthn_credentials_user_id_index` (`user_id`),
+  CONSTRAINT `webauthn_credentials_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 --
 -- WARNING: can't read the INFORMATION_SCHEMA.libraries table. It's most probably an old server 5.5.5-10.6.25-MariaDB.
 --
@@ -1420,116 +1551,8 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (65,'2026_03_22_100
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (66,'2026_03_23_000001_create_genai_import_jobs_table',41);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (67,'2026_03_23_000002_create_genai_import_results_table',41);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (68,'2026_03_23_000003_create_genai_daily_quota_table',41);
-
-CREATE TABLE `genai_import_jobs` (
-  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `user_id` bigint unsigned NOT NULL,
-  `acct_id` bigint unsigned DEFAULT NULL,
-  `job_type` varchar(64) NOT NULL,
-  `file_hash` varchar(64) NOT NULL,
-  `original_filename` varchar(255) NOT NULL,
-  `s3_path` varchar(255) NOT NULL,
-  `mime_type` varchar(255) DEFAULT NULL,
-  `file_size_bytes` bigint unsigned NOT NULL,
-  `context_json` text,
-  `status` varchar(32) NOT NULL DEFAULT 'pending',
-  `error_message` text,
-  `retry_count` tinyint unsigned NOT NULL DEFAULT '0',
-  `scheduled_for` date DEFAULT NULL,
-  `parsed_at` timestamp NULL DEFAULT NULL,
-  `created_at` timestamp NULL DEFAULT NULL,
-  `updated_at` timestamp NULL DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `genai_import_jobs_user_id_status_index` (`user_id`,`status`),
-  KEY `genai_import_jobs_file_hash_index` (`file_hash`),
-  KEY `genai_import_jobs_scheduled_for_status_index` (`scheduled_for`,`status`),
-  KEY `genai_import_jobs_acct_id_foreign` (`acct_id`),
-  CONSTRAINT `genai_import_jobs_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `genai_import_jobs_acct_id_foreign` FOREIGN KEY (`acct_id`) REFERENCES `fin_accounts` (`acct_id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE `genai_import_results` (
-  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `job_id` bigint unsigned NOT NULL,
-  `result_index` int unsigned NOT NULL,
-  `result_json` longtext NOT NULL,
-  `status` varchar(32) NOT NULL DEFAULT 'pending_review',
-  `imported_at` timestamp NULL DEFAULT NULL,
-  `created_at` timestamp NULL DEFAULT NULL,
-  `updated_at` timestamp NULL DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `genai_import_results_job_id_result_index_index` (`job_id`,`result_index`),
-  CONSTRAINT `genai_import_results_job_id_foreign` FOREIGN KEY (`job_id`) REFERENCES `genai_import_jobs` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE `genai_daily_quota` (
-  `usage_date` date NOT NULL,
-  `request_count` int unsigned NOT NULL DEFAULT '0',
-  `updated_at` timestamp NULL DEFAULT NULL,
-  PRIMARY KEY (`usage_date`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE `queue_monitor_jobs` (
-  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `job_id` varchar(255) NOT NULL,
-  `uuid` varchar(255) DEFAULT NULL,
-  `connection` varchar(255) NOT NULL,
-  `queue` varchar(255) NOT NULL,
-  `name` varchar(255) NOT NULL,
-  `status` varchar(255) NOT NULL,
-  `attempts` int NOT NULL DEFAULT '0',
-  `payload` json DEFAULT NULL,
-  `exception` text,
-  `runtime_ms` int DEFAULT NULL,
-  `started_at` timestamp NULL DEFAULT NULL,
-  `finished_at` timestamp NULL DEFAULT NULL,
-  `created_at` timestamp NULL DEFAULT NULL,
-  `updated_at` timestamp NULL DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `queue_monitor_jobs_job_id_index` (`job_id`),
-  KEY `queue_monitor_jobs_uuid_index` (`uuid`),
-  KEY `queue_monitor_jobs_connection_index` (`connection`),
-  KEY `queue_monitor_jobs_queue_index` (`queue`),
-  KEY `queue_monitor_jobs_status_index` (`status`),
-  KEY `queue_monitor_jobs_started_at_index` (`started_at`),
-  KEY `queue_monitor_jobs_finished_at_index` (`finished_at`),
-  KEY `queue_monitor_jobs_connection_queue_status_index` (`connection`,`queue`,`status`),
-  KEY `queue_monitor_jobs_created_at_status_index` (`created_at`,`status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE `queue_monitor_controls` (
-  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `connection` varchar(255) NOT NULL,
-  `queue` varchar(255) NOT NULL,
-  `type` varchar(255) NOT NULL,
-  `data` json DEFAULT NULL,
-  `created_at` timestamp NULL DEFAULT NULL,
-  `updated_at` timestamp NULL DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `queue_monitor_controls_connection_queue_type_unique` (`connection`,`queue`,`type`),
-  KEY `queue_monitor_controls_connection_index` (`connection`),
-  KEY `queue_monitor_controls_queue_index` (`queue`),
-  KEY `queue_monitor_controls_type_index` (`type`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE `queue_monitor_metrics` (
-  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `connection` varchar(255) NOT NULL,
-  `queue` varchar(255) NOT NULL,
-  `period_type` varchar(255) NOT NULL,
-  `period` timestamp NOT NULL,
-  `total_jobs` int NOT NULL DEFAULT '0',
-  `processed` int NOT NULL DEFAULT '0',
-  `failed` int NOT NULL DEFAULT '0',
-  `avg_runtime` decimal(10,2) DEFAULT NULL,
-  `max_runtime` int DEFAULT NULL,
-  `min_runtime` int DEFAULT NULL,
-  `created_at` timestamp NULL DEFAULT NULL,
-  `updated_at` timestamp NULL DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `queue_metrics_unique` (`connection`,`queue`,`period`,`period_type`),
-  KEY `queue_monitor_metrics_connection_index` (`connection`),
-  KEY `queue_monitor_metrics_queue_index` (`queue`),
-  KEY `queue_monitor_metrics_period_type_index` (`period_type`),
-  KEY `queue_monitor_metrics_period_index` (`period`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (69,'2026_03_23_000004_add_genai_daily_quota_limit_to_users_table',41);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (70,'2026_03_25_000001_add_genai_job_id_to_fin_statements',42);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (71,'2024_01_01_000001_create_queue_monitor_jobs_table',43);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (72,'2024_01_01_000002_create_queue_monitor_controls_table',43);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (73,'2024_01_01_000003_create_queue_monitor_metrics_table',43);
