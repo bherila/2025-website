@@ -3,7 +3,10 @@
     "name": "laravel/laravel",
     "type": "project",
     "description": "The skeleton application for the Laravel framework.",
-    "keywords": ["laravel", "framework"],
+    "keywords": [
+        "laravel",
+        "framework"
+    ],
     "license": "MIT",
     "require": {
         "php": "^8.3",
@@ -14,7 +17,8 @@
         "sentry/sentry-laravel": "^4.23",
         "spatie/laravel-csp": "^3.23",
         "symfony/yaml": "^7.3",
-        "web-auth/webauthn-lib": "^5.2"
+        "web-auth/webauthn-lib": "^5.2",
+        "willypelz/queue-monitor": "@dev"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
@@ -91,6 +95,16 @@
             "php-http/discovery": true
         }
     },
-    "minimum-stability": "stable",
-    "prefer-stable": true
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "repositories": [
+        {
+            "type": "path",
+            "url": "packages/willypelz/queue-monitor",
+            "options": {
+                "symlink": false
+            },
+            "canonical": false
+        }
+    ]
 }

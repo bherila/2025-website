@@ -1009,6 +1009,9 @@ INSERT INTO migrations VALUES(11,'2026_03_22_100000_create_webauthn_and_audit_ta
 INSERT INTO migrations VALUES(12,'2026_03_23_000001_create_genai_import_jobs_table',6);
 INSERT INTO migrations VALUES(13,'2026_03_23_000002_create_genai_import_results_table',6);
 INSERT INTO migrations VALUES(14,'2026_03_23_000003_create_genai_daily_quota_table',6);
+INSERT INTO migrations VALUES(15,'2024_01_01_000001_create_queue_monitor_jobs_table',7);
+INSERT INTO migrations VALUES(16,'2024_01_01_000002_create_queue_monitor_controls_table',7);
+INSERT INTO migrations VALUES(17,'2024_01_01_000003_create_queue_monitor_metrics_table',7);
 CREATE TABLE `genai_import_jobs`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `user_id` INTEGER NOT NULL,
@@ -1050,3 +1053,62 @@ CREATE TABLE `genai_daily_quota`(
   `request_count` INTEGER NOT NULL DEFAULT 0,
   `updated_at` TEXT
 );
+CREATE TABLE `queue_monitor_jobs`(
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `job_id` TEXT NOT NULL,
+  `uuid` TEXT,
+  `connection` TEXT NOT NULL,
+  `queue` TEXT NOT NULL,
+  `name` TEXT NOT NULL,
+  `status` TEXT NOT NULL,
+  `attempts` INTEGER NOT NULL DEFAULT 0,
+  `payload` TEXT,
+  `exception` TEXT,
+  `runtime_ms` INTEGER,
+  `started_at` TEXT,
+  `finished_at` TEXT,
+  `created_at` TEXT,
+  `updated_at` TEXT
+);
+CREATE INDEX `queue_monitor_jobs_job_id_index` ON `queue_monitor_jobs`(`job_id`);
+CREATE INDEX `queue_monitor_jobs_uuid_index` ON `queue_monitor_jobs`(`uuid`);
+CREATE INDEX `queue_monitor_jobs_connection_index` ON `queue_monitor_jobs`(`connection`);
+CREATE INDEX `queue_monitor_jobs_queue_index` ON `queue_monitor_jobs`(`queue`);
+CREATE INDEX `queue_monitor_jobs_status_index` ON `queue_monitor_jobs`(`status`);
+CREATE INDEX `queue_monitor_jobs_started_at_index` ON `queue_monitor_jobs`(`started_at`);
+CREATE INDEX `queue_monitor_jobs_finished_at_index` ON `queue_monitor_jobs`(`finished_at`);
+CREATE INDEX `queue_monitor_jobs_connection_queue_status_index` ON `queue_monitor_jobs`(`connection`, `queue`, `status`);
+CREATE INDEX `queue_monitor_jobs_created_at_status_index` ON `queue_monitor_jobs`(`created_at`, `status`);
+CREATE TABLE `queue_monitor_controls`(
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `connection` TEXT NOT NULL,
+  `queue` TEXT NOT NULL,
+  `type` TEXT NOT NULL,
+  `data` TEXT,
+  `created_at` TEXT,
+  `updated_at` TEXT
+);
+CREATE UNIQUE INDEX `queue_monitor_controls_connection_queue_type_unique` ON `queue_monitor_controls`(`connection`, `queue`, `type`);
+CREATE INDEX `queue_monitor_controls_connection_index` ON `queue_monitor_controls`(`connection`);
+CREATE INDEX `queue_monitor_controls_queue_index` ON `queue_monitor_controls`(`queue`);
+CREATE INDEX `queue_monitor_controls_type_index` ON `queue_monitor_controls`(`type`);
+CREATE TABLE `queue_monitor_metrics`(
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `connection` TEXT NOT NULL,
+  `queue` TEXT NOT NULL,
+  `period_type` TEXT NOT NULL,
+  `period` TEXT NOT NULL,
+  `total_jobs` INTEGER NOT NULL DEFAULT 0,
+  `processed` INTEGER NOT NULL DEFAULT 0,
+  `failed` INTEGER NOT NULL DEFAULT 0,
+  `avg_runtime` NUMERIC,
+  `max_runtime` INTEGER,
+  `min_runtime` INTEGER,
+  `created_at` TEXT,
+  `updated_at` TEXT
+);
+CREATE UNIQUE INDEX `queue_metrics_unique` ON `queue_monitor_metrics`(`connection`, `queue`, `period`, `period_type`);
+CREATE INDEX `queue_monitor_metrics_connection_index` ON `queue_monitor_metrics`(`connection`);
+CREATE INDEX `queue_monitor_metrics_queue_index` ON `queue_monitor_metrics`(`queue`);
+CREATE INDEX `queue_monitor_metrics_period_type_index` ON `queue_monitor_metrics`(`period_type`);
+CREATE INDEX `queue_monitor_metrics_period_index` ON `queue_monitor_metrics`(`period`);
