@@ -93,7 +93,7 @@ The base `TestCase` class provides helper methods:
 
 When you add new migrations to production:
 1. Run migrations on MySQL: `php artisan migrate`
-2. Dump the new schema: `php artisan schema:dump`
+2. Dump the new schema: `php artisan schema:dump` (**NEVER** use the `--prune` flag, as we must keep all migrations)
 3. Update `database/schema/sqlite-schema.sql` with equivalent SQLite syntax if needed.
 
 ## Troubleshooting

@@ -130,7 +130,7 @@ class MyTest extends TestCase
 - `database/schema/mysql-schema.sql` - Production MySQL schema
 - `database/schema/sqlite-schema.sql` - SQLite schema for tests (RefreshDatabase uses this)
 
-When adding new tables/columns to production, update both schema files.
+When adding new tables/columns to production, update both schema files using `php artisan schema:dump` (**NEVER** use the `--prune` flag).
 
 See [TESTING.md](TESTING.md) for comprehensive testing documentation.
 

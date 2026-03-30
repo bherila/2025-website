@@ -291,6 +291,7 @@ protected function isAccessible(User $user, ?string $path = null): bool
 - Avoid `DB::`; prefer `Model::query()`. Generate code that leverages Laravel's ORM capabilities rather than bypassing them.
 - Generate code that prevents N+1 query problems by using eager loading.
 - Use Laravel's query builder for very complex database operations.
+- Update the schema dump via `php artisan schema:dump` after migrations and do **NOT** use the `--prune` flag.
 
 ### Model Creation
 
@@ -382,3 +383,4 @@ protected function isAccessible(User $user, ?string $path = null): bool
 - To filter on a particular test name: `php artisan test --compact --filter=testName` (recommended after making a change to a related file).
 
 </laravel-boost-guidelines>
+>
