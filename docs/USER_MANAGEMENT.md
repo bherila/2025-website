@@ -93,7 +93,7 @@ When applying the migration on MySQL, existing string IP addresses are converted
 
 ```sql
 UPDATE login_audit_log
-SET ip_address = IF(IS_IPV6(ip_address), INET6_ATON(ip_address), INET_ATON(ip_address))
+SET ip_address = INET6_ATON(ip_address)
 WHERE ip_address IS NOT NULL;
 
 ALTER TABLE login_audit_log MODIFY ip_address VARBINARY(16) NULL;
