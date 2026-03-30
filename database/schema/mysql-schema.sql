@@ -1468,3 +1468,68 @@ CREATE TABLE `genai_daily_quota` (
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`usage_date`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `queue_monitor_jobs` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `job_id` varchar(255) NOT NULL,
+  `uuid` varchar(255) DEFAULT NULL,
+  `connection` varchar(255) NOT NULL,
+  `queue` varchar(255) NOT NULL,
+  `name` varchar(255) NOT NULL,
+  `status` varchar(255) NOT NULL,
+  `attempts` int NOT NULL DEFAULT '0',
+  `payload` json DEFAULT NULL,
+  `exception` text,
+  `runtime_ms` int DEFAULT NULL,
+  `started_at` timestamp NULL DEFAULT NULL,
+  `finished_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `queue_monitor_jobs_job_id_index` (`job_id`),
+  KEY `queue_monitor_jobs_uuid_index` (`uuid`),
+  KEY `queue_monitor_jobs_connection_index` (`connection`),
+  KEY `queue_monitor_jobs_queue_index` (`queue`),
+  KEY `queue_monitor_jobs_status_index` (`status`),
+  KEY `queue_monitor_jobs_started_at_index` (`started_at`),
+  KEY `queue_monitor_jobs_finished_at_index` (`finished_at`),
+  KEY `queue_monitor_jobs_connection_queue_status_index` (`connection`,`queue`,`status`),
+  KEY `queue_monitor_jobs_created_at_status_index` (`created_at`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `queue_monitor_controls` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `connection` varchar(255) NOT NULL,
+  `queue` varchar(255) NOT NULL,
+  `type` varchar(255) NOT NULL,
+  `data` json DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `queue_monitor_controls_connection_queue_type_unique` (`connection`,`queue`,`type`),
+  KEY `queue_monitor_controls_connection_index` (`connection`),
+  KEY `queue_monitor_controls_queue_index` (`queue`),
+  KEY `queue_monitor_controls_type_index` (`type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `queue_monitor_metrics` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `connection` varchar(255) NOT NULL,
+  `queue` varchar(255) NOT NULL,
+  `period_type` varchar(255) NOT NULL,
+  `period` timestamp NOT NULL,
+  `total_jobs` int NOT NULL DEFAULT '0',
+  `processed` int NOT NULL DEFAULT '0',
+  `failed` int NOT NULL DEFAULT '0',
+  `avg_runtime` decimal(10,2) DEFAULT NULL,
+  `max_runtime` int DEFAULT NULL,
+  `min_runtime` int DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `queue_metrics_unique` (`connection`,`queue`,`period`,`period_type`),
+  KEY `queue_monitor_metrics_connection_index` (`connection`),
+  KEY `queue_monitor_metrics_queue_index` (`queue`),
+  KEY `queue_monitor_metrics_period_type_index` (`period_type`),
+  KEY `queue_monitor_metrics_period_index` (`period`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
