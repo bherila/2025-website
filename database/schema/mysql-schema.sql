@@ -1088,7 +1088,7 @@ CREATE TABLE `login_audit_log` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `user_id` bigint(20) unsigned DEFAULT NULL,
   `email` varchar(255) DEFAULT NULL,
-  `ip_address` varchar(45) DEFAULT NULL,
+  `ip_address` varbinary(16) DEFAULT NULL,
   `user_agent` text DEFAULT NULL,
   `success` tinyint(1) NOT NULL DEFAULT 0,
   `method` varchar(255) NOT NULL DEFAULT 'password',
