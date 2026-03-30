@@ -50,10 +50,16 @@ Fallbacks & migration:
 - Use `id` values on the `<script>` tags that are unique per page/payload for easy access.
 
 ## Development Workflow
-- **Setup**: Run `composer run setup` (installs deps, generates key, migrates DB, builds assets)
-- **Dev Server**: Use `composer run dev` for concurrent Laravel server, queue worker, logs, and Vite dev server
-- **Testing**: `composer test` for PHPUnit; `npm test` for Jest (React components)
-- **Build**: `npm run build` for production assets
+
+### Verification Steps (Mandatory)
+All validations in [TESTING.md](TESTING.md) must pass before committing:
+1. **TypeScript**: `pnpm run type-check` — must pass with no errors
+2. **ESLint**: `pnpm run lint` — must pass with no errors
+3. **Jest**: `pnpm run test` — all tests must pass
+4. **PHP Linter**: `./vendor/bin/pint --test` — must pass
+5. **PHPUnit**: `composer test` — all tests must pass
+6. **Vite Build**: `pnpm run build` — required for blade view tests (run before PHPUnit)
+7. **PHP Syntax**: `php -l [modified_file.php]` (Must be valid).
 
 ## Validation Requirements
 
@@ -124,9 +130,9 @@ class MyTest extends TestCase
 - `database/schema/mysql-schema.sql` - Production MySQL schema
 - `database/schema/sqlite-schema.sql` - SQLite schema for tests (RefreshDatabase uses this)
 
-When adding new tables/columns to production, update both schema files.
+When adding new tables/columns to production, update both schema files using `php artisan schema:dump` (**NEVER** use the `--prune` flag).
 
-See [docs/TESTING.md](docs/TESTING.md) for comprehensive testing documentation.
+See [TESTING.md](TESTING.md) for comprehensive testing documentation.
 
 ## Key Conventions
 - **Models**: Use Eloquent relationships (e.g., `FinAccountLineItems` belongs to `FinAccounts`); organize domain-specific models in subdirectories (e.g., `app/Models/ClientManagement/`)
