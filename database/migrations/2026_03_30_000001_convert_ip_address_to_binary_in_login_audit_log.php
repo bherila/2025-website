@@ -12,7 +12,7 @@ return new class extends Migration
      *
      * Converts login_audit_log.ip_address from VARCHAR(45) to binary storage:
      * - SQLite (test DB): drop and recreate column as BLOB (no data migration needed)
-     * - MySQL: convert existing string IPs via INET6_ATON, then ALTER to VARBINARY(16)
+     * - MySQL: ALTER column to VARBINARY(16) first, then convert any remaining text IPs
      *
      * After this migration, application code uses PHP inet_pton()/inet_ntop() (via IpAddressCast)
      * to convert between human-readable strings and binary, ensuring compatibility with both drivers.
@@ -32,8 +32,19 @@ return new class extends Migration
                 $table->binary('ip_address')->nullable()->after('email');
             });
         } else {
-            // MySQL / MariaDB: convert existing string IP addresses to binary in place,
-            // then change the column type to VARBINARY(16).
+            // MySQL / MariaDB:
+            //
+            // Step 1: Change column type to VARBINARY(16) first so that binary output from
+            // INET6_ATON() can be stored. If the UPDATE ran while the column was VARCHAR,
+            // MySQL would reject the binary bytes as "Incorrect string value".
+            //
+            // VARBINARY(16): variable length, up to 16 bytes.
+            // IPv4 uses 4 bytes; IPv6 uses 16 bytes — both handled by INET6_ATON().
+            DB::statement('ALTER TABLE login_audit_log MODIFY ip_address VARBINARY(16) NULL');
+
+            // Step 2: Convert any rows that still contain human-readable text IP addresses.
+            // Rows that were already written by IpAddressCast (binary format) will cause
+            // INET6_ATON() to return NULL, so they are safely skipped by the IS NOT NULL guard.
             //
             // INET6_ATON() handles both plain dotted-quad IPv4 (stores 4 bytes) and any
             // address written in IPv6 form, including IPv4-mapped IPv6 like ::ffff:127.0.0.1
@@ -42,11 +53,8 @@ return new class extends Migration
                 UPDATE login_audit_log
                 SET ip_address = INET6_ATON(ip_address)
                 WHERE ip_address IS NOT NULL
+                  AND INET6_ATON(ip_address) IS NOT NULL
             SQL);
-
-            // VARBINARY(16): variable length, up to 16 bytes.
-            // IPv4 uses 4 bytes; IPv6 uses 16 bytes — both handled by INET6_ATON().
-            DB::statement('ALTER TABLE login_audit_log MODIFY ip_address VARBINARY(16) NULL');
         }
     }
 
