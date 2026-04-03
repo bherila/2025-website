@@ -23,6 +23,7 @@ use App\Http\Controllers\FinanceTool\FinanceTransactionsApiController;
 use App\Http\Controllers\FinanceTool\FinanceTransactionsDedupeApiController;
 use App\Http\Controllers\FinanceTool\FinanceTransactionTaggingApiController;
 use App\Http\Controllers\FinanceTool\StatementController;
+use App\Http\Controllers\FinanceTool\TaxDocumentController;
 use App\Http\Controllers\LicenseKeyController;
 use App\Http\Controllers\LoginAuditController;
 use App\Http\Controllers\PasskeyController;
@@ -289,6 +290,14 @@ Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accoun
 Route::middleware(['web', 'auth'])->get('/utility-bill-tracker/accounts/{accountId}/bills/{billId}/linkable', [UtilityBillLinkingController::class, 'findLinkableTransactions']);
 Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accountId}/bills/{billId}/link', [UtilityBillLinkingController::class, 'linkTransaction']);
 Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accountId}/bills/{billId}/unlink', [UtilityBillLinkingController::class, 'unlinkTransaction']);
+
+// Tax documents (W-2, 1099-INT, 1099-DIV)
+Route::middleware(['web', 'auth'])->get('/finance/tax-documents', [TaxDocumentController::class, 'index']);
+Route::middleware(['web', 'auth'])->post('/finance/tax-documents/request-upload', [TaxDocumentController::class, 'requestUpload']);
+Route::middleware(['web', 'auth'])->post('/finance/tax-documents', [TaxDocumentController::class, 'store']);
+Route::middleware(['web', 'auth'])->get('/finance/tax-documents/{id}/download', [TaxDocumentController::class, 'download']);
+Route::middleware(['web', 'auth'])->delete('/finance/tax-documents/{id}', [TaxDocumentController::class, 'destroy']);
+Route::middleware(['web', 'auth'])->put('/finance/tax-documents/{id}/reconciled', [TaxDocumentController::class, 'updateReconciled']);
 
 // GenAI Import routes
 Route::middleware(['web', 'auth'])->post('/genai/import/request-upload', [GenAiImportController::class, 'requestUpload']);

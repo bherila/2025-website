@@ -191,3 +191,67 @@ This includes:
 - Seeded transactions + tag mappings so Tax Preview has immediately testable data
 
 This helps with local QA and screenshot generation for the Tax Preview and tags workflows.
+
+---
+
+## Tax Documents (`fin_tax_documents`)
+
+### Overview
+
+The `fin_tax_documents` table stores uploaded tax form PDFs (W-2, W-2c, 1099-INT, 1099-INT-C, 1099-DIV, 1099-DIV-C) for each user. Documents are stored in S3 and referenced by their path.
+
+### Table Schema
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | PK | Auto-increment |
+| `user_id` | FK → users | Owner of the document |
+| `tax_year` | integer | Tax year (e.g., 2024) |
+| `form_type` | enum | `w2`, `w2c`, `1099_int`, `1099_int_c`, `1099_div`, `1099_div_c` |
+| `employment_entity_id` | FK → fin_employment_entity (nullable) | Set for W-2 form types |
+| `account_id` | FK → fin_accounts.acct_id (nullable) | Set for 1099 form types |
+| `original_filename` | string | User's original filename |
+| `stored_filename` | string | S3-stored filename with date prefix |
+| `s3_path` | string | Full S3 key (`tax_docs/{userId}/{storedFilename}`) |
+| `mime_type` | string | Default: `application/pdf` |
+| `file_size_bytes` | integer | File size |
+| `file_hash` | string | SHA-256 hash for deduplication |
+| `uploaded_by_user_id` | integer (nullable) | Who uploaded it |
+| `notes` | text (nullable) | Optional notes |
+| `is_reconciled` | boolean | Whether document has been reconciled |
+| `download_history` | json | Track who downloaded and when |
+| `deleted_at` | timestamp | Soft delete timestamp |
+
+### Model: `App\Models\Files\FileForTaxDocument`
+
+Uses `HasFileStorage`, `SerializesDatesAsLocal`, and `SoftDeletes` traits.
+
+Form type constants:
+- `FORM_TYPES` — all valid form type strings
+- `W2_FORM_TYPES` — `['w2', 'w2c']` (require `employment_entity_id`)
+- `ACCOUNT_FORM_TYPES` — `['1099_int', '1099_int_c', '1099_div', '1099_div_c']` (require `account_id`)
+
+### Controller: `App\Http\Controllers\FinanceTool\TaxDocumentController`
+
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/finance/tax-documents` | List documents. Optional filters: `year`, `form_type` (comma-sep), `employment_entity_id`, `account_id` |
+| POST | `/api/finance/tax-documents/request-upload` | Get presigned S3 upload URL. Returns `{ upload_url, s3_key, expires_in }` |
+| POST | `/api/finance/tax-documents` | Confirm upload, create DB record. Returns 201. |
+| GET | `/api/finance/tax-documents/{id}/download` | Get signed download URLs. Returns `{ view_url, download_url, filename }` |
+| DELETE | `/api/finance/tax-documents/{id}` | Soft-delete document and remove from S3 |
+| PUT | `/api/finance/tax-documents/{id}/reconciled` | Update `is_reconciled` boolean |
+
+### Upload Flow
+
+1. POST `/api/finance/tax-documents/request-upload` with `{ filename, content_type, file_size }` → get `{ upload_url, s3_key }`
+2. PUT file bytes directly to `upload_url` (S3 presigned URL)
+3. Compute SHA-256 of file using Web Crypto API
+4. POST `/api/finance/tax-documents` with `{ s3_key, original_filename, form_type, tax_year, file_size_bytes, file_hash, employment_entity_id | account_id }` → 201
+
+### Frontend Components
+
+- **`TaxDocumentsSection`** (`resources/js/components/finance/TaxDocumentsSection.tsx`) — Shows W-2/W-2c documents grouped by employment entity, used in TaxPreviewPage.
+- **`AccountTaxDocumentsSection`** (`resources/js/components/finance/AccountTaxDocumentsSection.tsx`) — Shows 1099 documents for a specific finance account, used in FinanceAccountMaintenancePage.

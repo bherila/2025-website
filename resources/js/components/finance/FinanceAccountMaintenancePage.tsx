@@ -1,5 +1,6 @@
 'use client'
 import AccountMaintenanceClient from '@/components/finance/AccountMaintenanceClient'
+import AccountTaxDocumentsSection from '@/components/finance/AccountTaxDocumentsSection'
 import { DeleteAccountSection } from '@/components/finance/DeleteAccountSection'
 import { EditAccountFlags } from '@/components/finance/EditAccountFlags'
 import MainTitle from '@/components/MainTitle'
@@ -46,6 +47,9 @@ export default function FinanceAccountMaintenancePage({
           <h2 className="text-2xl font-bold mb-4">Danger Zone</h2>
           <DeleteAccountSection accountId={accountId} />
         </div>
+      </div>
+      <div className="mt-8">
+        <AccountTaxDocumentsSection accountId={accountId} />
       </div>
     </div>
   )

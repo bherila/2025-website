@@ -1207,6 +1207,33 @@ CREATE INDEX "idx_vantage_job_tags_tag_created" on "vantage_job_tags"(
 );
 CREATE INDEX "idx_vantage_job_tags_job_id" on "vantage_job_tags"("job_id");
 CREATE INDEX "vantage_job_tags_tag_index" on "vantage_job_tags"("tag");
+CREATE TABLE `fin_tax_documents`(
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `user_id` INTEGER NOT NULL,
+  `tax_year` INTEGER NOT NULL,
+  `form_type` TEXT NOT NULL CHECK(`form_type` IN('w2', 'w2c', '1099_int', '1099_int_c', '1099_div', '1099_div_c')),
+  `employment_entity_id` INTEGER NULL REFERENCES fin_employment_entity(id) ON DELETE SET NULL,
+  `account_id` INTEGER NULL REFERENCES fin_accounts(acct_id) ON DELETE SET NULL,
+  `original_filename` TEXT NOT NULL,
+  `stored_filename` TEXT NOT NULL,
+  `s3_path` TEXT NOT NULL,
+  `mime_type` TEXT NOT NULL DEFAULT 'application/pdf',
+  `file_size_bytes` INTEGER NOT NULL,
+  `file_hash` TEXT NOT NULL,
+  `uploaded_by_user_id` INTEGER NULL,
+  `notes` TEXT NULL,
+  `is_reconciled` INTEGER NOT NULL DEFAULT 0,
+  `download_history` TEXT NULL,
+  `created_at` TEXT,
+  `updated_at` TEXT,
+  `deleted_at` TEXT,
+  FOREIGN KEY(`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
+);
+CREATE INDEX `fin_tax_documents_user_id_index` ON `fin_tax_documents`(`user_id`);
+CREATE INDEX `fin_tax_documents_tax_year_index` ON `fin_tax_documents`(`tax_year`);
+CREATE INDEX `fin_tax_documents_employment_entity_id_index` ON `fin_tax_documents`(`employment_entity_id`);
+CREATE INDEX `fin_tax_documents_account_id_index` ON `fin_tax_documents`(`account_id`);
+CREATE INDEX `fin_tax_documents_form_type_index` ON `fin_tax_documents`(`form_type`);
 
 INSERT INTO migrations VALUES(1,'0001_01_01_000000_create_schema_baseline',1);
 INSERT INTO migrations VALUES(2,'2026_03_05_000000_create_fin_account_lots_table',2);
@@ -1246,3 +1273,4 @@ INSERT INTO migrations VALUES(35,'2025_11_30_000002_rename_queue_job_runs_to_van
 INSERT INTO migrations VALUES(36,'2025_11_30_000003_add_performance_indexes_to_vantage_jobs',9);
 INSERT INTO migrations VALUES(37,'2025_12_12_000004_create_vantage_job_tags_table',9);
 INSERT INTO migrations VALUES(38,'2026_04_03_020007_drop_queue_monitor_tables',9);
+INSERT INTO migrations VALUES(39,'2026_04_03_100000_create_fin_tax_documents_table',10);

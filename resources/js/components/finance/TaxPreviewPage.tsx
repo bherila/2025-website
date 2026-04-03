@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import ScheduleCPreview from '@/components/finance/ScheduleCPreview'
+import TaxDocumentsSection from '@/components/finance/TaxDocumentsSection'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import TotalsTable from '@/components/payslip/TotalsTable.client'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -314,6 +315,10 @@ export default function TaxPreviewPage() {
         onAvailableYearsChange={handleAvailableYearsChange}
         onScheduleCNetIncomeChange={handleScheduleCNetIncomeChange}
       />
+
+      {typeof selectedYear === 'number' && (
+        <TaxDocumentsSection selectedYear={selectedYear} />
+      )}
     </div>
   )
 }
