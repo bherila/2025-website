@@ -4,13 +4,13 @@ use App\Csp\CloudflareCspPolicy;
 use Spatie\Csp\Nonce\RandomString;
 
 return [
-    'presets' => [
-        CloudflareCspPolicy::class,
-    ],
+    'presets' => [],
 
     'directives' => [],
 
-    'report_only_presets' => [],
+    'report_only_presets' => [
+        CloudflareCspPolicy::class,
+    ],
 
     'report_only_directives' => [],
 
