@@ -94,18 +94,16 @@ class TaxDocumentController extends Controller
 
         if (in_array($formType, FileForTaxDocument::W2_FORM_TYPES)) {
             $request->validate(['employment_entity_id' => 'required|integer']);
-            $entityId = $request->employment_entity_id;
-            $entity = FinEmploymentEntity::withoutGlobalScopes()
-                ->where('id', $entityId)
+            FinEmploymentEntity::withoutGlobalScopes()
+                ->where('id', $request->employment_entity_id)
                 ->where('user_id', $userId)
                 ->firstOrFail();
         }
 
         if (in_array($formType, FileForTaxDocument::ACCOUNT_FORM_TYPES)) {
             $request->validate(['account_id' => 'required|integer']);
-            $accountId = $request->account_id;
-            $account = FinAccounts::withoutGlobalScopes()
-                ->where('acct_id', $accountId)
+            FinAccounts::withoutGlobalScopes()
+                ->where('acct_id', $request->account_id)
                 ->where('acct_owner', $userId)
                 ->firstOrFail();
         }

@@ -66,14 +66,7 @@ export default function TaxDocumentsSection({ selectedYear }: TaxDocumentsSectio
   const fetchEntities = useCallback(async () => {
     try {
       const data = await fetchWrapper.get('/api/finance/employment-entities?visible_only=false')
-      const entityList = (data as { employment_entities?: EmploymentEntity[]; data?: EmploymentEntity[] } | EmploymentEntity[])
-      if (Array.isArray(entityList)) {
-        setEntities(entityList)
-      } else if ('employment_entities' in entityList && Array.isArray(entityList.employment_entities)) {
-        setEntities(entityList.employment_entities)
-      } else if ('data' in entityList && Array.isArray(entityList.data)) {
-        setEntities(entityList.data)
-      }
+      setEntities(Array.isArray(data) ? (data as EmploymentEntity[]) : [])
     } catch {
       // non-fatal: employment entities may just be empty
     }
