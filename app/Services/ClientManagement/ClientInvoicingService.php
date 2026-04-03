@@ -53,20 +53,28 @@ class ClientInvoicingService
      */
     public function generateAllMonthlyInvoices(ClientCompany $company): array
     {
-        $agreement = $company->activeAgreement();
+        // Use active agreement if available; otherwise fall back to the most recently
+        // terminated agreement so we can still issue post-termination invoices.
+        $agreement = $company->activeAgreement() ?? $company->mostRecentAgreement();
         if (! $agreement) {
-            throw new \Exception('No active agreement found for this client company.');
+            throw new \Exception('No agreement found for this client company.');
         }
 
         $generated = [];
         $updated = [];
         $skipped = [];
 
-        // Start from the agreement's active date
-        $currentDate = Carbon::parse($agreement->active_date)->startOfMonth();
-        $endDate = $agreement->termination_date
+        // Determine termination date (if any)
+        $terminationDate = $agreement->termination_date
             ? Carbon::parse($agreement->termination_date)
-            : now()->startOfMonth()->addMonth();
+            : null;
+
+        // Start from the agreement's active date.
+        // Always run the loop up to one month ahead of now so that:
+        //   - the "upcoming draft" invoice for the current month is created, and
+        //   - post-termination periods with unbilled work/expenses are covered.
+        $currentDate = Carbon::parse($agreement->active_date)->startOfMonth();
+        $endDate = now()->startOfMonth()->addMonth();
 
         // Generate invoices for each calendar month
         while ($currentDate->lte($endDate)) {
@@ -76,26 +84,71 @@ class ClientInvoicingService
             $periodStart = $priorMonth->copy()->startOfMonth();
             $periodEnd = $priorMonth->copy()->endOfMonth();
 
+            // Determine whether this period is entirely after the termination date.
+            // A period is "post-termination" when its START is after the termination date,
+            // meaning the entire work period falls beyond the agreement end.
+            // We use periodStart (not periodEnd) to avoid time-of-day comparison issues
+            // (endOfMonth returns 23:59:59 while termination_date is stored at 00:00:00).
+            $isPostTermination = $terminationDate !== null && $periodStart->gt($terminationDate);
+
             // Check if invoice already exists for this period
             $existingInvoice = ClientInvoice::where('client_company_id', $company->id)
                 ->where('period_start', $periodStart)
                 ->where('period_end', $periodEnd)
                 ->first();
 
-            if ($existingInvoice) {
-                // Skip if invoice is issued, paid, or voided
-                if (in_array($existingInvoice->status, ['issued', 'paid', 'void'])) {
-                    $skipped[] = [
-                        'period' => $periodStart->format('Y-m'),
-                        'invoice_id' => $existingInvoice->client_invoice_id,
-                        'status' => $existingInvoice->status,
-                        'reason' => 'Invoice already exists with status: '.$existingInvoice->status,
-                    ];
+            // For post-termination periods with no existing invoice, only create a new
+            // one when there is actually something to bill (unbilled hours or expenses).
+            $skipPostTermination = false;
+            if ($isPostTermination && ! $existingInvoice) {
+                $hasUnbilledWork = ClientTimeEntry::where('client_company_id', $company->id)
+                    ->where('is_billable', true)
+                    ->whereNull('client_invoice_line_id')
+                    ->whereBetween('date_worked', [$periodStart, $periodEnd])
+                    ->exists();
+
+                $hasUnbilledExpenses = ClientExpense::where('client_company_id', $company->id)
+                    ->where('is_reimbursable', true)
+                    ->whereNull('client_invoice_line_id')
+                    ->whereBetween('expense_date', [$periodStart, $periodEnd])
+                    ->exists();
+
+                if (! $hasUnbilledWork && ! $hasUnbilledExpenses) {
+                    $skipPostTermination = true;
+                }
+            }
+
+            if (! $skipPostTermination) {
+                if ($existingInvoice) {
+                    // Skip if invoice is issued, paid, or voided
+                    if (in_array($existingInvoice->status, ['issued', 'paid', 'void'])) {
+                        $skipped[] = [
+                            'period' => $periodStart->format('Y-m'),
+                            'invoice_id' => $existingInvoice->client_invoice_id,
+                            'status' => $existingInvoice->status,
+                            'reason' => 'Invoice already exists with status: '.$existingInvoice->status,
+                        ];
+                    } else {
+                        // Re-generate if draft
+                        try {
+                            $invoice = $this->generateInvoice($company, $periodStart, $periodEnd, $agreement);
+                            $updated[] = [
+                                'period' => $periodStart->format('Y-m'),
+                                'invoice_id' => $invoice->client_invoice_id,
+                                'invoice_number' => $invoice->invoice_number,
+                            ];
+                        } catch (\Exception $e) {
+                            $skipped[] = [
+                                'period' => $periodStart->format('Y-m'),
+                                'error' => $e->getMessage(),
+                            ];
+                        }
+                    }
                 } else {
-                    // Re-generate if draft
+                    // Generate new invoice
                     try {
                         $invoice = $this->generateInvoice($company, $periodStart, $periodEnd, $agreement);
-                        $updated[] = [
+                        $generated[] = [
                             'period' => $periodStart->format('Y-m'),
                             'invoice_id' => $invoice->client_invoice_id,
                             'invoice_number' => $invoice->invoice_number,
@@ -106,21 +159,6 @@ class ClientInvoicingService
                             'error' => $e->getMessage(),
                         ];
                     }
-                }
-            } else {
-                // Generate new invoice
-                try {
-                    $invoice = $this->generateInvoice($company, $periodStart, $periodEnd, $agreement);
-                    $generated[] = [
-                        'period' => $periodStart->format('Y-m'),
-                        'invoice_id' => $invoice->client_invoice_id,
-                        'invoice_number' => $invoice->invoice_number,
-                    ];
-                } catch (\Exception $e) {
-                    $skipped[] = [
-                        'period' => $periodStart->format('Y-m'),
-                        'error' => $e->getMessage(),
-                    ];
                 }
             }
 
@@ -208,6 +246,18 @@ class ClientInvoicingService
             // Get all months from agreement start OR earliest time entry to current period end
             $agreementStart = Carbon::parse($agreement->active_date)->startOfMonth();
 
+            // Determine termination info for post-termination handling
+            $terminationDate = $agreement->termination_date
+                ? Carbon::parse($agreement->termination_date)
+                : null;
+            $terminationMonthKey = $terminationDate ? $terminationDate->format('Y-m') : null;
+
+            // The retainer month (M) is the month after the work period.
+            // If it falls after the termination date, no retainer fee is charged.
+            $retainerMonthStart = $periodEnd->copy()->addDay()->startOfMonth(); // First of M
+            $isRetainerMonthPostTermination = $terminationDate !== null
+                && $retainerMonthStart->gt($terminationDate);
+
             $earliestEntryDate = ClientTimeEntry::where('client_company_id', $company->id)
                 ->where('is_billable', true)
                 ->min('date_worked');
@@ -216,7 +266,6 @@ class ClientInvoicingService
                 ? min($agreementStart, Carbon::parse($earliestEntryDate)->startOfMonth())
                 : $agreementStart;
 
-            $retainerMonthStart = $periodEnd->copy()->addDay()->startOfMonth(); // First of M
             $calculationEnd = $retainerMonthStart->copy();
 
             // Collect all billable minutes by month
@@ -227,6 +276,7 @@ class ClientInvoicingService
                 ->groupBy(fn ($e) => Carbon::parse($e->date_worked)->format('Y-m'));
 
             $months = [];
+            $firstPostTerminationSeen = false;
             $currentCalculationDate = $calculationStart->copy();
             while ($currentCalculationDate->lte($calculationEnd)) {
                 $monthKey = $currentCalculationDate->format('Y-m');
@@ -235,10 +285,25 @@ class ClientInvoicingService
 
                 $isPreAgreement = $monthKey < $agreementStart->format('Y-m');
 
+                // Months after the termination month receive zero retainer hours.
+                // The termination month itself still carries its full retainer.
+                $isPostTerminationMonth = $terminationMonthKey !== null
+                    && $monthKey > $terminationMonthKey;
+
+                // Flag the very first post-termination month so RolloverCalculator
+                // can clear the rollover history (unused hours are forfeited).
+                $resetRollover = $isPostTerminationMonth && ! $firstPostTerminationSeen;
+                if ($resetRollover) {
+                    $firstPostTerminationSeen = true;
+                }
+
                 $months[] = [
                     'year_month' => $monthKey,
-                    'retainer_hours' => $isPreAgreement ? 0.0 : (float) $agreement->monthly_retainer_hours,
+                    'retainer_hours' => ($isPreAgreement || $isPostTerminationMonth)
+                        ? 0.0
+                        : (float) $agreement->monthly_retainer_hours,
                     'hours_worked' => $minutesWorked / 60,
+                    'reset_rollover' => $resetRollover,
                 ];
                 $currentCalculationDate->addMonth();
             }
@@ -358,12 +423,18 @@ class ClientInvoicingService
             }
 
             // Prepare invoice data
+            // For post-termination work periods, the retainer_hours_included is 0
+            // because no new retainer is being charged for that month.
+            $invoiceRetainerHours = $isRetainerMonthPostTermination
+                ? 0.0
+                : (float) $agreement->monthly_retainer_hours;
+
             $invoiceData = [
                 'client_company_id' => $company->id,
                 'client_agreement_id' => $agreement->id,
                 'period_start' => $periodStart,
                 'period_end' => $periodEnd,
-                'retainer_hours_included' => (float) $agreement->monthly_retainer_hours,
+                'retainer_hours_included' => $invoiceRetainerHours,
                 'hours_worked' => $priorMonthEntries->sum('minutes_worked') / 60,
                 'rollover_hours_used' => $workMonthBalance ? $workMonthBalance->closing->hoursUsedFromRollover : 0,
                 'unused_hours_balance' => $netWorkPeriodUnused,
@@ -435,9 +506,16 @@ class ClientInvoicingService
             // Calculate capacities:
             // 1. Prior Month Capacity: What Jan has itself (including Jan's rollover from Dec)
             // 2. Current Month Capacity: What Feb has available to cover Jan's overage (M retainer)
+            // For post-termination invoices, the current month capacity is 0 since no retainer
+            // is being charged for the retainer month.
             $priorMonthCapacity = $priorMonthBalance ? $priorMonthBalance->opening->totalAvailable : 0;
-            $currentMonthCapacity = (float) $agreement->monthly_retainer_hours;
-            $catchUpThreshold = (float) ($agreement->catch_up_threshold_hours ?? 1.0);
+            $currentMonthCapacity = $isRetainerMonthPostTermination
+                ? 0.0
+                : (float) $agreement->monthly_retainer_hours;
+            // For post-termination invoices, there is no minimum availability to maintain.
+            $catchUpThreshold = $isRetainerMonthPostTermination
+                ? 0.0
+                : (float) ($agreement->catch_up_threshold_hours ?? 1.0);
 
             // Use TimeEntrySplitter to allocate time entries
             $splitter = new TimeEntrySplitter;
@@ -552,21 +630,24 @@ class ClientInvoicingService
             // Now process all fragments and link them to lines, handling splits correctly
             $this->linkAllFragmentsToLines($fragmentsToLines, $splitter);
 
-            // Monthly retainer fee for month M (the month after the work period)
-            $retainerMonthEnd = $retainerMonthStart->copy()->endOfMonth();
-            ClientInvoiceLine::create([
-                'client_invoice_id' => $invoice->client_invoice_id,
-                'client_agreement_id' => $agreement->id,
-                'description' => "Monthly Retainer ({$agreement->monthly_retainer_hours} hours) - ".
-                                $retainerMonthStart->format('M j, Y').' through '.$retainerMonthEnd->format('M j, Y'),
-                'quantity' => '1',
-                'unit_price' => $agreement->monthly_retainer_fee,
-                'line_total' => $agreement->monthly_retainer_fee,
-                'line_type' => 'retainer',
-                'hours' => (float) $agreement->monthly_retainer_hours,
-                'line_date' => $retainerMonthStart,
-                'sort_order' => $sortOrder++,
-            ]);
+            // Monthly retainer fee for month M (the month after the work period).
+            // Not charged when the agreement was terminated before the retainer month.
+            if (! $isRetainerMonthPostTermination) {
+                $retainerMonthEnd = $retainerMonthStart->copy()->endOfMonth();
+                ClientInvoiceLine::create([
+                    'client_invoice_id' => $invoice->client_invoice_id,
+                    'client_agreement_id' => $agreement->id,
+                    'description' => "Monthly Retainer ({$agreement->monthly_retainer_hours} hours) - ".
+                                    $retainerMonthStart->format('M j, Y').' through '.$retainerMonthEnd->format('M j, Y'),
+                    'quantity' => '1',
+                    'unit_price' => $agreement->monthly_retainer_fee,
+                    'line_total' => $agreement->monthly_retainer_fee,
+                    'line_type' => 'retainer',
+                    'hours' => (float) $agreement->monthly_retainer_hours,
+                    'line_date' => $retainerMonthStart,
+                    'sort_order' => $sortOrder++,
+                ]);
+            }
 
             $this->addReimbursableExpenses($company, $invoice, $periodEnd, $sortOrder);
             $this->addBillableMilestoneTasks($company, $invoice, $periodEnd, $sortOrder);

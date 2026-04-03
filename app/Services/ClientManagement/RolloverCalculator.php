@@ -201,6 +201,14 @@ class RolloverCalculator
             $hoursWorked = $month['hours_worked'] ?? 0.0;
             $yearMonth = $month['year_month'] ?? '';
 
+            // If this month marks the post-termination boundary, clear rollover history.
+            // Unused hours from before termination are forfeited and do not carry forward.
+            // Note: the negative balance (overage) is intentionally preserved so that
+            // any unbilled overage from the termination period is still collected.
+            if ($month['reset_rollover'] ?? false) {
+                $unusedByMonth = [];
+            }
+
             // Build previous months unused array (indexed by months ago)
             $previousMonthsUnused = [];
             $monthKeys = array_keys($unusedByMonth);
