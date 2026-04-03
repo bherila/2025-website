@@ -72,7 +72,7 @@ class ClientCompany extends Model
     /**
      * Get the currently active agreement.
      */
-    public function activeAgreement()
+    public function activeAgreement(): ?ClientAgreement
     {
         $now = now();
 
@@ -82,6 +82,18 @@ class ClientCompany extends Model
                 $query->whereNull('termination_date')
                     ->orWhere('termination_date', '>', $now);
             })
+            ->orderBy('active_date', 'desc')
+            ->first();
+    }
+
+    /**
+     * Get the most recent agreement regardless of active/terminated status.
+     * Used for post-termination invoicing.
+     */
+    public function mostRecentAgreement(): ?ClientAgreement
+    {
+        return $this->agreements()
+            ->where('active_date', '<=', now())
             ->orderBy('active_date', 'desc')
             ->first();
     }

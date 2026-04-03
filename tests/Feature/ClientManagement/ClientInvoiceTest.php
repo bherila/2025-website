@@ -1366,17 +1366,257 @@ class ClientInvoiceTest extends TestCase
 
     public function test_generate_all_respects_termination_date(): void
     {
-        // Set termination date to 3 months ago - agreement is terminated so no active agreement
+        // Freeze time so the loop is deterministic
         Carbon::setTestNow(Carbon::parse('2025-06-15'));
-        $terminationDate = Carbon::parse('2025-03-31'); // 3 months ago
-        $this->agreement->update(['termination_date' => $terminationDate]);
+
+        // Move the agreement active date closer to limit invoice count during the test,
+        // then set a past termination date (3 months ago).
+        $this->agreement->update([
+            'active_date' => Carbon::parse('2025-01-01'),
+            'termination_date' => Carbon::parse('2025-03-31'),
+        ]);
+
+        // Should NOT throw – terminated agreements can still be invoiced
+        $results = $this->invoicingService->generateAllMonthlyInvoices($this->company);
+
         Carbon::setTestNow(); // Reset
 
-        // The service should throw when no active agreement is found
-        $this->expectException(\Exception::class);
-        $this->expectExceptionMessage('No active agreement found for this client company.');
+        $allPeriods = array_merge(
+            array_column($results['generated'], 'period'),
+            array_column($results['updated'], 'period'),
+            array_column($results['skipped'], 'period')
+        );
 
-        $this->invoicingService->generateAllMonthlyInvoices($this->company);
+        // The termination month work period (March 2025) must be invoiced
+        $this->assertContains('2025-03', $allPeriods, 'Should generate invoice for termination month work period');
+
+        // Post-termination periods with no work/expenses must NOT generate new invoices
+        $this->assertNotContains('2025-04', $allPeriods, 'Should not generate empty post-termination invoice');
+        $this->assertNotContains('2025-05', $allPeriods, 'Should not generate empty post-termination invoice');
+    }
+
+    public function test_post_termination_invoice_has_no_retainer_fee(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2025-06-15'));
+
+        $this->agreement->update([
+            'active_date' => Carbon::parse('2025-04-01'),
+            'termination_date' => Carbon::parse('2025-04-30'),
+        ]);
+
+        // Add work in May (post-termination)
+        ClientTimeEntry::create([
+            'client_company_id' => $this->company->id,
+            'user_id' => $this->admin->id,
+            'project_id' => $this->project->id,
+            'date_worked' => '2025-05-15',
+            'minutes_worked' => 120, // 2 hours
+            'name' => 'Post-termination work',
+            'is_billable' => true,
+        ]);
+
+        $periodStart = Carbon::parse('2025-05-01');
+        $periodEnd = Carbon::parse('2025-05-31');
+
+        $invoice = $this->invoicingService->generateInvoice($this->company, $periodStart, $periodEnd, $this->agreement);
+
+        Carbon::setTestNow();
+
+        $invoice->refresh();
+
+        // No retainer fee line should exist
+        $retainerLine = $invoice->lineItems->firstWhere('line_type', 'retainer');
+        $this->assertNull($retainerLine, 'Post-termination invoice must not have a retainer fee line');
+
+        // All hours should be billed at the hourly rate
+        $additionalLine = $invoice->lineItems->firstWhere('line_type', 'additional_hours');
+        $this->assertNotNull($additionalLine, 'Post-termination hours must be billed at hourly rate');
+        $this->assertEquals(2.0, (float) $additionalLine->hours, 'All 2 post-termination hours should be billed');
+        $this->assertEquals(150.00, (float) $additionalLine->unit_price, 'Hourly rate must match agreement');
+    }
+
+    public function test_post_termination_invoice_has_no_rollover_from_pre_termination(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2025-06-15'));
+
+        // Agreement: 10h/month retainer, terminated April 30
+        // April work: 2h (leaves 8h unused in April pool)
+        // May work (post-termination): 5h should be billed fully, NOT offset by April rollover
+        $this->agreement->update([
+            'active_date' => Carbon::parse('2025-04-01'),
+            'termination_date' => Carbon::parse('2025-04-30'),
+            'rollover_months' => 3,
+        ]);
+
+        // April work (2 hours)
+        ClientTimeEntry::create([
+            'client_company_id' => $this->company->id,
+            'user_id' => $this->admin->id,
+            'project_id' => $this->project->id,
+            'date_worked' => '2025-04-15',
+            'minutes_worked' => 120, // 2 hours
+            'name' => 'April work',
+            'is_billable' => true,
+        ]);
+
+        // First, generate the April invoice (final retainer period)
+        $aprilInvoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::parse('2025-04-01'),
+            Carbon::parse('2025-04-30'),
+            $this->agreement
+        );
+
+        // May work (5 hours – post-termination)
+        ClientTimeEntry::create([
+            'client_company_id' => $this->company->id,
+            'user_id' => $this->admin->id,
+            'project_id' => $this->project->id,
+            'date_worked' => '2025-05-15',
+            'minutes_worked' => 300, // 5 hours
+            'name' => 'May post-termination work',
+            'is_billable' => true,
+        ]);
+
+        $mayInvoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::parse('2025-05-01'),
+            Carbon::parse('2025-05-31'),
+            $this->agreement
+        );
+
+        Carbon::setTestNow();
+
+        $mayInvoice->refresh();
+
+        // No retainer fee
+        $retainerLine = $mayInvoice->lineItems->firstWhere('line_type', 'retainer');
+        $this->assertNull($retainerLine, 'Post-termination invoice must not have a retainer fee line');
+
+        // No rollover used from April (unused April hours are forfeited)
+        $this->assertEquals(0.0, (float) $mayInvoice->rollover_hours_used,
+            'Post-termination invoice must not use rollover hours from pre-termination');
+
+        // All 5 May hours billed at hourly rate
+        $additionalLine = $mayInvoice->lineItems->firstWhere('line_type', 'additional_hours');
+        $this->assertNotNull($additionalLine, 'Post-termination hours must be billed at hourly rate');
+        $this->assertEquals(5.0, (float) $additionalLine->hours, 'All 5 post-termination hours should be billed');
+    }
+
+    public function test_final_retainer_month_invoice_has_no_retainer_fee(): void
+    {
+        // The invoice covering work done IN the termination month should NOT include a
+        // retainer fee for the following (post-termination) month.
+        Carbon::setTestNow(Carbon::parse('2025-06-15'));
+
+        $this->agreement->update([
+            'active_date' => Carbon::parse('2025-04-01'),
+            'termination_date' => Carbon::parse('2025-04-30'),
+        ]);
+
+        // April work (5 hours)
+        ClientTimeEntry::create([
+            'client_company_id' => $this->company->id,
+            'user_id' => $this->admin->id,
+            'project_id' => $this->project->id,
+            'date_worked' => '2025-04-15',
+            'minutes_worked' => 300, // 5 hours
+            'name' => 'April work',
+            'is_billable' => true,
+        ]);
+
+        $invoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::parse('2025-04-01'),
+            Carbon::parse('2025-04-30'),
+            $this->agreement
+        );
+
+        Carbon::setTestNow();
+
+        $invoice->refresh();
+
+        // The April work IS covered by the April retainer pool
+        $retainerWorkLine = $invoice->lineItems->firstWhere('line_type', 'prior_month_retainer');
+        $this->assertNotNull($retainerWorkLine, 'April work should be applied against the retainer pool');
+
+        // But NO May retainer fee should be billed
+        $retainerFeeLine = $invoice->lineItems->firstWhere('line_type', 'retainer');
+        $this->assertNull($retainerFeeLine, 'No retainer fee should be charged after termination');
+    }
+
+    public function test_generate_all_with_post_termination_work_creates_invoice(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2025-06-15'));
+
+        $this->agreement->update([
+            'active_date' => Carbon::parse('2025-04-01'),
+            'termination_date' => Carbon::parse('2025-04-30'),
+        ]);
+
+        // Work done in May (post-termination)
+        ClientTimeEntry::create([
+            'client_company_id' => $this->company->id,
+            'user_id' => $this->admin->id,
+            'project_id' => $this->project->id,
+            'date_worked' => '2025-05-10',
+            'minutes_worked' => 60, // 1 hour
+            'name' => 'May post-termination work',
+            'is_billable' => true,
+        ]);
+
+        $results = $this->invoicingService->generateAllMonthlyInvoices($this->company);
+
+        Carbon::setTestNow();
+
+        $allPeriods = array_merge(
+            array_column($results['generated'], 'period'),
+            array_column($results['updated'], 'period')
+        );
+
+        // May 2025 (post-termination) must be invoiced because there is billable work
+        $this->assertContains('2025-05', $allPeriods,
+            'generateAllMonthlyInvoices must create a post-termination invoice for months with work');
+
+        // Verify the May invoice has no retainer fee line
+        $mayInvoice = ClientInvoice::where('client_company_id', $this->company->id)
+            ->whereDate('period_start', '2025-05-01')
+            ->first();
+        $this->assertNotNull($mayInvoice, 'May post-termination invoice must exist');
+        $mayInvoice->load('lineItems');
+        $retainerLine = $mayInvoice->lineItems->firstWhere('line_type', 'retainer');
+        $this->assertNull($retainerLine, 'Post-termination invoice must not have a retainer fee');
+    }
+
+    public function test_generate_all_with_post_termination_expenses_creates_invoice(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2025-06-15'));
+
+        $this->agreement->update([
+            'active_date' => Carbon::parse('2025-04-01'),
+            'termination_date' => Carbon::parse('2025-04-30'),
+        ]);
+
+        // Reimbursable expense in May (post-termination)
+        ClientExpense::create([
+            'client_company_id' => $this->company->id,
+            'description' => 'Post-termination expense',
+            'amount' => 75.00,
+            'expense_date' => '2025-05-20',
+            'is_reimbursable' => true,
+        ]);
+
+        $results = $this->invoicingService->generateAllMonthlyInvoices($this->company);
+
+        Carbon::setTestNow();
+
+        $allPeriods = array_merge(
+            array_column($results['generated'], 'period'),
+            array_column($results['updated'], 'period')
+        );
+
+        $this->assertContains('2025-05', $allPeriods,
+            'generateAllMonthlyInvoices must create a post-termination invoice when there are reimbursable expenses');
     }
 
     public function test_generate_all_with_future_termination_excludes_post_termination_periods(): void

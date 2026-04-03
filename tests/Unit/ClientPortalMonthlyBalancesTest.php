@@ -22,7 +22,7 @@ class ClientPortalMonthlyBalancesTest extends TestCase
         {
             public ClientAgreement $agreement;
 
-            public function activeAgreement()
+            public function activeAgreement(): ?ClientAgreement
             {
                 return $this->agreement;
             }

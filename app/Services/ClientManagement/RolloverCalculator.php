@@ -186,7 +186,15 @@ class RolloverCalculator
     /**
      * Calculate hour balances for multiple months in sequence.
      *
-     * @param  array  $months  Array of months with retainer_hours, hours_worked, year_month keys
+     * @param  array  $months  Array of month descriptors. Each entry supports:
+     *                         - `year_month` (string): 'YYYY-MM' identifier
+     *                         - `retainer_hours` (float): hours included in this month's retainer
+     *                         - `hours_worked` (float): hours worked during this month
+     *                         - `reset_rollover` (bool, optional): when true, clears the accumulated
+     *                         rollover history before processing this month. Use this at the first
+     *                         post-termination month so unused pre-termination hours are forfeited
+     *                         rather than carried forward. The negative balance (unbilled overage)
+     *                         is intentionally preserved across a reset.
      * @param  int  $rollover_months  Number of months hours can roll over
      * @param  bool  $billExcessImmediately  Whether to bill excess hours immediately or carry them forward as negative balance
      * @return array<MonthSummary> Array of month summaries
@@ -200,6 +208,14 @@ class RolloverCalculator
             $retainerHours = $month['retainer_hours'] ?? 0.0;
             $hoursWorked = $month['hours_worked'] ?? 0.0;
             $yearMonth = $month['year_month'] ?? '';
+
+            // If this month marks the post-termination boundary, clear rollover history.
+            // Unused hours from before termination are forfeited and do not carry forward.
+            // Note: the negative balance (overage) is intentionally preserved so that
+            // any unbilled overage from the termination period is still collected.
+            if ($month['reset_rollover'] ?? false) {
+                $unusedByMonth = [];
+            }
 
             // Build previous months unused array (indexed by months ago)
             $previousMonthsUnused = [];
