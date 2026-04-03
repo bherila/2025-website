@@ -76,6 +76,10 @@ class ClientInvoicingService
         $currentDate = Carbon::parse($agreement->active_date)->startOfMonth();
         $endDate = now()->startOfMonth()->addMonth();
 
+        // Precompute all post-termination Y-m periods with any unbilled work or expenses
+        // once, to avoid per-month DB queries inside the loop for long-terminated agreements.
+        $monthsWithUnbilledPostTermination = null;
+
         // Generate invoices for each calendar month
         while ($currentDate->lte($endDate)) {
             // Invoice period covers the PRIOR month's work (M-1)
@@ -91,29 +95,47 @@ class ClientInvoicingService
             // (endOfMonth returns 23:59:59 while termination_date is stored at 00:00:00).
             $isPostTermination = $terminationDate !== null && $periodStart->gt($terminationDate);
 
-            // Check if invoice already exists for this period
+            // Check if invoice already exists for this period.
+            // Use whereDate() since period_start/period_end are DATE columns in MySQL and
+            // Carbon's endOfMonth() returns 23:59:59 which won't match a DATE value.
             $existingInvoice = ClientInvoice::where('client_company_id', $company->id)
-                ->where('period_start', $periodStart)
-                ->where('period_end', $periodEnd)
+                ->whereDate('period_start', $periodStart->toDateString())
+                ->whereDate('period_end', $periodEnd->toDateString())
                 ->first();
 
             // For post-termination periods with no existing invoice, only create a new
             // one when there is actually something to bill (unbilled hours or expenses).
+            // The set of billable post-termination months is computed once (lazy) and reused.
             $skipPostTermination = false;
             if ($isPostTermination && ! $existingInvoice) {
-                $hasUnbilledWork = ClientTimeEntry::where('client_company_id', $company->id)
-                    ->where('is_billable', true)
-                    ->whereNull('client_invoice_line_id')
-                    ->whereBetween('date_worked', [$periodStart, $periodEnd])
-                    ->exists();
+                if ($monthsWithUnbilledPostTermination === null) {
+                    $monthsWithUnbilledPostTermination = [];
 
-                $hasUnbilledExpenses = ClientExpense::where('client_company_id', $company->id)
-                    ->where('is_reimbursable', true)
-                    ->whereNull('client_invoice_line_id')
-                    ->whereBetween('expense_date', [$periodStart, $periodEnd])
-                    ->exists();
+                    if ($terminationDate !== null) {
+                        $workMonths = ClientTimeEntry::where('client_company_id', $company->id)
+                            ->where('is_billable', true)
+                            ->whereNull('client_invoice_line_id')
+                            ->where('date_worked', '>', $terminationDate->toDateString())
+                            ->pluck('date_worked')
+                            ->map(fn ($date): string => substr((string) $date, 0, 7))
+                            ->all();
 
-                if (! $hasUnbilledWork && ! $hasUnbilledExpenses) {
+                        $expenseMonths = ClientExpense::where('client_company_id', $company->id)
+                            ->where('is_reimbursable', true)
+                            ->whereNull('client_invoice_line_id')
+                            ->where('expense_date', '>', $terminationDate->toDateString())
+                            ->pluck('expense_date')
+                            ->map(fn ($date): string => substr((string) $date, 0, 7))
+                            ->all();
+
+                        $monthsWithUnbilledPostTermination = array_fill_keys(
+                            array_unique(array_merge($workMonths, $expenseMonths)),
+                            true
+                        );
+                    }
+                }
+
+                if (! isset($monthsWithUnbilledPostTermination[$periodStart->format('Y-m')])) {
                     $skipPostTermination = true;
                 }
             }
