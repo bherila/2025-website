@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "95ede3a69adea01ac2f804469eafb257",
+    "content-hash": "d90e979d98720463c9b3b2c29c955c5a",
     "packages": [
         {
             "name": "aws/aws-crt-php",
@@ -4611,6 +4611,82 @@
             "time": "2025-12-20T12:57:40+00:00"
         },
         {
+            "name": "storviaio/vantage",
+            "version": "v0.1.24",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/storviaio/vantage.git",
+                "reference": "bb8996ae4b810a2fc9cdeb7de62ce50efd2759b1"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/storviaio/vantage/zipball/bb8996ae4b810a2fc9cdeb7de62ce50efd2759b1",
+                "reference": "bb8996ae4b810a2fc9cdeb7de62ce50efd2759b1",
+                "shasum": ""
+            },
+            "require": {
+                "illuminate/events": "^10.0|^11.0|^12.0|^13.0",
+                "illuminate/notifications": "^10.0|^11.0|^12.0|^13.0",
+                "illuminate/queue": "^10.0|^11.0|^12.0|^13.0",
+                "illuminate/support": "^10.0|^11.0|^12.0|^13.0",
+                "php": "^8.2|^8.3|^8.4"
+            },
+            "require-dev": {
+                "larastan/larastan": "^3.0",
+                "laravel/pint": "^1.14",
+                "orchestra/testbench": "^11.0|^10.0|^9.0|^8.0",
+                "pestphp/pest": "^3.8|^4.0",
+                "pestphp/pest-plugin-arch": "^3.0|^4.0",
+                "pestphp/pest-plugin-laravel": "^3.0|^4.0",
+                "phpstan/extension-installer": "^1.4",
+                "phpstan/phpstan": "^2.1",
+                "phpstan/phpstan-deprecation-rules": "^2.0",
+                "phpstan/phpstan-phpunit": "^2.0"
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "aliases": {
+                        "Vantage": "Storvia\\Vantage\\Facades\\Vantage"
+                    },
+                    "providers": [
+                        "Storvia\\Vantage\\VantageServiceProvider"
+                    ]
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Storvia\\Vantage\\": "src/",
+                    "Storvia\\Vantage\\Database\\Factories\\": "database/factories/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Houda Slassi",
+                    "role": "Developer"
+                }
+            ],
+            "description": "Vantage: Strategic queue monitoring and observability for Laravel applications.",
+            "homepage": "https://github.com/storviaio/vantage",
+            "keywords": [
+                "laravel",
+                "monitoring",
+                "observability",
+                "queue",
+                "storviaio",
+                "vantage"
+            ],
+            "support": {
+                "issues": "https://github.com/storviaio/vantage/issues",
+                "source": "https://github.com/storviaio/vantage/tree/v0.1.24"
+            },
+            "time": "2026-03-23T12:11:22+00:00"
+        },
+        {
             "name": "symfony/clock",
             "version": "v7.4.0",
             "source": {
@@ -8205,76 +8281,6 @@
                 "source": "https://github.com/webmozarts/assert/tree/2.1.6"
             },
             "time": "2026-02-27T10:28:38+00:00"
-        },
-        {
-            "name": "willypelz/queue-monitor",
-            "version": "dev-copilot/install-queue-monitor-package",
-            "dist": {
-                "type": "path",
-                "url": "packages/willypelz/queue-monitor",
-                "reference": "e29d228de2f9d0c0626f516183482132adce4ec0"
-            },
-            "require": {
-                "illuminate/cache": "^10.0|^11.0|^12.0|^13.0",
-                "illuminate/console": "^10.0|^11.0|^12.0|^13.0",
-                "illuminate/database": "^10.0|^11.0|^12.0|^13.0",
-                "illuminate/events": "^10.0|^11.0|^12.0|^13.0",
-                "illuminate/queue": "^10.0|^11.0|^12.0|^13.0",
-                "illuminate/routing": "^10.0|^11.0|^12.0|^13.0",
-                "illuminate/support": "^10.0|^11.0|^12.0|^13.0",
-                "illuminate/view": "^10.0|^11.0|^12.0|^13.0",
-                "php": "^8.0"
-            },
-            "require-dev": {
-                "orchestra/testbench": "^8.0|^9.0|^10.0",
-                "phpunit/phpunit": "^10.0|^11.0"
-            },
-            "type": "library",
-            "extra": {
-                "laravel": {
-                    "providers": [
-                        "QueueMonitor\\QueueMonitorServiceProvider"
-                    ]
-                }
-            },
-            "autoload": {
-                "psr-4": {
-                    "QueueMonitor\\": "src/"
-                }
-            },
-            "autoload-dev": {
-                "psr-4": {
-                    "QueueMonitor\\Tests\\": "tests/"
-                }
-            },
-            "scripts": {
-                "test": [
-                    "vendor/bin/phpunit"
-                ]
-            },
-            "license": [
-                "MIT"
-            ],
-            "authors": [
-                {
-                    "name": "Willy Pelz",
-                    "email": "willypelz@example.com"
-                }
-            ],
-            "description": "A Laravel queue monitor with database driver support, controls, and metrics.",
-            "keywords": [
-                "database",
-                "horizon",
-                "jobs",
-                "laravel",
-                "metrics",
-                "monitor",
-                "queue"
-            ],
-            "transport-options": {
-                "symlink": false,
-                "relative": true
-            }
         }
     ],
     "packages-dev": [
@@ -10685,9 +10691,7 @@
     ],
     "aliases": [],
     "minimum-stability": "dev",
-    "stability-flags": {
-        "willypelz/queue-monitor": 20
-    },
+    "stability-flags": {},
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {

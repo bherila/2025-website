@@ -8,8 +8,8 @@ class QueueMonitorAccessTest extends TestCase
 {
     public function test_queue_monitor_requires_authentication(): void
     {
-        $response = $this->get('/queue-monitor');
-        $response->assertRedirect('/login');
+        $response = $this->get('/vantage');
+        $response->assertForbidden();
     }
 
     public function test_queue_monitor_requires_admin_role(): void
@@ -18,7 +18,7 @@ class QueueMonitorAccessTest extends TestCase
         $this->createAdminUser();
         $user = $this->createUser();
 
-        $response = $this->actingAs($user)->get('/queue-monitor');
+        $response = $this->actingAs($user)->get('/vantage');
         $response->assertForbidden();
     }
 
@@ -26,7 +26,7 @@ class QueueMonitorAccessTest extends TestCase
     {
         $admin = $this->createAdminUser();
 
-        $response = $this->actingAs($admin)->get('/queue-monitor');
+        $response = $this->actingAs($admin)->get('/vantage');
         $response->assertSuccessful();
     }
 }
