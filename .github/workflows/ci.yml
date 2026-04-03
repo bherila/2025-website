@@ -1,24 +1,29 @@
-name: Deploy to Production
+name: CI/CD Pipeline
 
 on:
   push:
     branches:
       - main
+  pull_request:
 
 jobs:
   test:
+    name: Run Tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - uses: actions/checkout@v6
 
-      - uses: shivammathur/setup-php@v2
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
 
-      - name: Install Composer (with dev)
+      - name: Install Composer dependencies (with dev)
         run: composer install --no-interaction --prefer-dist
-        
+
       - name: Set up pnpm
         uses: pnpm/action-setup@v5
         with:
@@ -27,7 +32,7 @@ jobs:
       - name: Install Node dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build frontend (generates Vite manifest for PHPUnit blade tests)
+      - name: Build frontend
         run: pnpm run build
 
       - name: Run pnpm tests (Jest)
@@ -40,36 +45,39 @@ jobs:
         run: pnpm run type-check
 
       - name: Run PHPUnit
-        # SQLite in-memory DB is configured in phpunit.xml and tests/bootstrap.php.
-        # RefreshDatabase trait sets up the schema automatically — no dedicated DB step needed.
-        # Vite manifest is already present from the "Build frontend" step above,
-        # so blade views are tested with real asset loading (no withoutVite() needed).
         run: vendor/bin/phpunit --configuration phpunit.xml
 
+      - name: Upload frontend build artifact
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: public/build/
+          retention-days: 1
+
   deploy:
-    runs-on: ubuntu-latest
+    name: Deploy to Production
     needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
     environment: prod
 
     steps:
       - uses: actions/checkout@v6
 
-      - uses: shivammathur/setup-php@v2
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
 
       - name: Install Composer (no dev)
         run: composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
-        
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
-      - name: Build frontend
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm run build
+      - name: Download frontend build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+          path: public/build/
 
       - name: Append to .htaccess
         run: cat htaccess-append.txt >> public/.htaccess
