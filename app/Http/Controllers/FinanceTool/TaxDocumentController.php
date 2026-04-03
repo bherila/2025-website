@@ -144,12 +144,11 @@ class TaxDocumentController extends Controller
 
         $doc->recordDownload();
 
-        $viewUrl = $this->fileService->getSignedDownloadUrl($doc->s3_path, $doc->original_filename);
-        $downloadUrl = $this->fileService->getSignedDownloadUrl($doc->s3_path, $doc->original_filename);
+        $signedUrl = $this->fileService->getSignedDownloadUrl($doc->s3_path, $doc->original_filename);
 
         return response()->json([
-            'view_url' => $viewUrl,
-            'download_url' => $downloadUrl,
+            'view_url' => $signedUrl,
+            'download_url' => $signedUrl,
             'filename' => $doc->original_filename,
         ]);
     }

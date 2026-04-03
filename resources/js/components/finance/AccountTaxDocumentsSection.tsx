@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
+import { computeFileSHA256 } from '@/lib/fileUtils'
 
 interface TaxDocument {
   id: number
@@ -41,13 +42,6 @@ const FORM_TYPE_LABELS: Record<string, string> = {
   '1099_int_c': '1099-INT-C',
   '1099_div': '1099-DIV',
   '1099_div_c': '1099-DIV-C',
-}
-
-async function computeSHA256(file: File): Promise<string> {
-  const arrayBuffer = await file.arrayBuffer()
-  const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
 export default function AccountTaxDocumentsSection({ accountId, selectedYear }: AccountTaxDocumentsSectionProps) {
@@ -93,7 +87,7 @@ export default function AccountTaxDocumentsSection({ accountId, selectedYear }: 
     if (fileInputRef.current) fileInputRef.current.value = ''
 
     try {
-      const fileHash = await computeSHA256(file)
+      const fileHash = await computeFileSHA256(file)
 
       const uploadRequest = await fetchWrapper.post('/api/finance/tax-documents/request-upload', {
         filename: file.name,
