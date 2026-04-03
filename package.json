@@ -83,7 +83,7 @@
         "date-fns": "^4.1.0",
         "dayjs": "^1.11.20",
         "decimal.js": "^10.6.0",
-        "lodash": "^4.17.23",
+        "lodash": "^4.18.1",
         "lucide-react": "^0.552.0",
         "pdfjs-dist": "5.4.149",
         "prop-types": "^15.8.1",
