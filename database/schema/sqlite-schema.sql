@@ -1032,105 +1032,6 @@ CREATE TABLE `genai_daily_quota`(
   `request_count` INTEGER NOT NULL DEFAULT 0,
   `updated_at` TEXT
 );
-CREATE TABLE `queue_monitor_jobs`(
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `job_id` TEXT NOT NULL,
-  `uuid` TEXT,
-  `connection` TEXT NOT NULL,
-  `queue` TEXT NOT NULL,
-  `name` TEXT NOT NULL,
-  `status` TEXT NOT NULL,
-  `attempts` INTEGER NOT NULL DEFAULT 0,
-  `payload` TEXT,
-  `exception` TEXT,
-  `runtime_ms` INTEGER,
-  `started_at` TEXT,
-  `finished_at` TEXT,
-  `created_at` TEXT,
-  `updated_at` TEXT
-);
-CREATE INDEX `queue_monitor_jobs_job_id_index` ON `queue_monitor_jobs`(
-  `job_id`
-);
-CREATE INDEX `queue_monitor_jobs_uuid_index` ON `queue_monitor_jobs`(`uuid`);
-CREATE INDEX `queue_monitor_jobs_connection_index` ON `queue_monitor_jobs`(
-  `connection`
-);
-CREATE INDEX `queue_monitor_jobs_queue_index` ON `queue_monitor_jobs`(`queue`);
-CREATE INDEX `queue_monitor_jobs_status_index` ON `queue_monitor_jobs`(
-  `status`
-);
-CREATE INDEX `queue_monitor_jobs_started_at_index` ON `queue_monitor_jobs`(
-  `started_at`
-);
-CREATE INDEX `queue_monitor_jobs_finished_at_index` ON `queue_monitor_jobs`(
-  `finished_at`
-);
-CREATE INDEX `queue_monitor_jobs_connection_queue_status_index` ON `queue_monitor_jobs`(
-  `connection`,
-  `queue`,
-  `status`
-);
-CREATE INDEX `queue_monitor_jobs_created_at_status_index` ON `queue_monitor_jobs`(
-  `created_at`,
-  `status`
-);
-CREATE TABLE `queue_monitor_controls`(
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `connection` TEXT NOT NULL,
-  `queue` TEXT NOT NULL,
-  `type` TEXT NOT NULL,
-  `data` TEXT,
-  `created_at` TEXT,
-  `updated_at` TEXT
-);
-CREATE UNIQUE INDEX `queue_monitor_controls_connection_queue_type_unique` ON `queue_monitor_controls`(
-  `connection`,
-  `queue`,
-  `type`
-);
-CREATE INDEX `queue_monitor_controls_connection_index` ON `queue_monitor_controls`(
-  `connection`
-);
-CREATE INDEX `queue_monitor_controls_queue_index` ON `queue_monitor_controls`(
-  `queue`
-);
-CREATE INDEX `queue_monitor_controls_type_index` ON `queue_monitor_controls`(
-  `type`
-);
-CREATE TABLE `queue_monitor_metrics`(
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `connection` TEXT NOT NULL,
-  `queue` TEXT NOT NULL,
-  `period_type` TEXT NOT NULL,
-  `period` TEXT NOT NULL,
-  `total_jobs` INTEGER NOT NULL DEFAULT 0,
-  `processed` INTEGER NOT NULL DEFAULT 0,
-  `failed` INTEGER NOT NULL DEFAULT 0,
-  `avg_runtime` NUMERIC,
-  `max_runtime` INTEGER,
-  `min_runtime` INTEGER,
-  `created_at` TEXT,
-  `updated_at` TEXT
-);
-CREATE UNIQUE INDEX `queue_metrics_unique` ON `queue_monitor_metrics`(
-  `connection`,
-  `queue`,
-  `period`,
-  `period_type`
-);
-CREATE INDEX `queue_monitor_metrics_connection_index` ON `queue_monitor_metrics`(
-  `connection`
-);
-CREATE INDEX `queue_monitor_metrics_queue_index` ON `queue_monitor_metrics`(
-  `queue`
-);
-CREATE INDEX `queue_monitor_metrics_period_type_index` ON `queue_monitor_metrics`(
-  `period_type`
-);
-CREATE INDEX `queue_monitor_metrics_period_index` ON `queue_monitor_metrics`(
-  `period`
-);
 CREATE TABLE IF NOT EXISTS "client_tasks"(
   "id" integer primary key autoincrement,
   "project_id" integer not null,
@@ -1236,6 +1137,76 @@ CREATE TABLE IF NOT EXISTS "fin_employment_entity"(
 CREATE INDEX "fin_employment_entity_user_id_index" on "fin_employment_entity"(
   "user_id"
 );
+CREATE TABLE IF NOT EXISTS "vantage_jobs"(
+  "id" integer primary key autoincrement not null,
+  "uuid" varchar not null,
+  "job_class" varchar not null,
+  "queue" varchar,
+  "connection" varchar,
+  "attempt" integer not null default '0',
+  "retries" integer not null default '0',
+  "retried_from_id" integer,
+  "status" varchar check("status" in('processing', 'processed', 'failed')) not null,
+  "duration_ms" integer,
+  "exception_class" varchar,
+  "exception_message" text,
+  "stack" text,
+  "payload" text,
+  "job_tags" text,
+  "started_at" datetime,
+  "finished_at" datetime,
+  "created_at" datetime,
+  "updated_at" datetime,
+  "memory_start_bytes" integer,
+  "memory_end_bytes" integer,
+  "memory_peak_start_bytes" integer,
+  "memory_peak_end_bytes" integer,
+  "memory_peak_delta_bytes" integer,
+  "cpu_user_ms" integer,
+  "cpu_sys_ms" integer
+);
+CREATE INDEX "queue_job_runs_uuid_index" on "vantage_jobs"("uuid");
+CREATE INDEX "queue_job_runs_job_class_index" on "vantage_jobs"("job_class");
+CREATE INDEX "queue_job_runs_queue_index" on "vantage_jobs"("queue");
+CREATE INDEX "queue_job_runs_connection_index" on "vantage_jobs"("connection");
+CREATE INDEX "queue_job_runs_status_index" on "vantage_jobs"("status");
+CREATE INDEX "queue_job_runs_duration_ms_index" on "vantage_jobs"(
+  "duration_ms"
+);
+CREATE INDEX "queue_job_runs_exception_class_index" on "vantage_jobs"(
+  "exception_class"
+);
+CREATE INDEX "queue_job_runs_started_at_index" on "vantage_jobs"("started_at");
+CREATE INDEX "queue_job_runs_finished_at_index" on "vantage_jobs"(
+  "finished_at"
+);
+CREATE INDEX "idx_vantage_jobs_created_at" on "vantage_jobs"("created_at");
+CREATE INDEX "idx_vantage_jobs_status" on "vantage_jobs"("status");
+CREATE INDEX "idx_vantage_jobs_created_status" on "vantage_jobs"(
+  "created_at",
+  "status"
+);
+CREATE INDEX "idx_vantage_jobs_job_class" on "vantage_jobs"("job_class");
+CREATE INDEX "idx_vantage_jobs_exception_class" on "vantage_jobs"(
+  "exception_class"
+);
+CREATE INDEX "idx_vantage_jobs_queue" on "vantage_jobs"("queue");
+CREATE INDEX "idx_vantage_jobs_retried_from" on "vantage_jobs"(
+  "retried_from_id"
+);
+CREATE TABLE IF NOT EXISTS "vantage_job_tags"(
+  "id" integer primary key autoincrement not null,
+  "job_id" integer not null,
+  "tag" varchar not null,
+  "created_at" datetime,
+  foreign key("job_id") references "vantage_jobs"("id") on delete cascade
+);
+CREATE INDEX "idx_vantage_job_tags_tag_created" on "vantage_job_tags"(
+  "tag",
+  "created_at"
+);
+CREATE INDEX "idx_vantage_job_tags_job_id" on "vantage_job_tags"("job_id");
+CREATE INDEX "vantage_job_tags_tag_index" on "vantage_job_tags"("tag");
 
 INSERT INTO migrations VALUES(1,'0001_01_01_000000_create_schema_baseline',1);
 INSERT INTO migrations VALUES(2,'2026_03_05_000000_create_fin_account_lots_table',2);
@@ -1269,3 +1240,9 @@ INSERT INTO migrations VALUES(29,'2026_03_21_000001_add_is_hidden_to_fin_employm
 INSERT INTO migrations VALUES(30,'2026_03_23_000004_add_genai_daily_quota_limit_to_users_table',8);
 INSERT INTO migrations VALUES(31,'2026_03_25_000001_add_genai_job_id_to_fin_statements',8);
 INSERT INTO migrations VALUES(32,'2026_03_30_000001_convert_ip_address_to_binary_in_login_audit_log',8);
+INSERT INTO migrations VALUES(33,'2025_09_23_000000_create_queue_job_runs_table',9);
+INSERT INTO migrations VALUES(34,'2025_10_29_000001_add_performance_telemetry_to_queue_job_runs_table',9);
+INSERT INTO migrations VALUES(35,'2025_11_30_000002_rename_queue_job_runs_to_vantage_jobs',9);
+INSERT INTO migrations VALUES(36,'2025_11_30_000003_add_performance_indexes_to_vantage_jobs',9);
+INSERT INTO migrations VALUES(37,'2025_12_12_000004_create_vantage_job_tags_table',9);
+INSERT INTO migrations VALUES(38,'2026_04_03_020007_drop_queue_monitor_tables',9);

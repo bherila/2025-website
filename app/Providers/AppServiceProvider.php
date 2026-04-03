@@ -39,6 +39,11 @@ class AppServiceProvider extends ServiceProvider
             return $user->hasRole('admin');
         });
 
+        // Gate for Vantage queue monitor dashboard - admin only
+        Gate::define('viewVantage', function ($user) {
+            return $user->hasRole('admin');
+        });
+
         // Gate for accessing client company resources
         // User must be a member of the client company OR be an admin
         Gate::define('ClientCompanyMember', function ($user, $clientCompanyId) {
