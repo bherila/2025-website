@@ -1594,3 +1594,4 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (78,'2025_11_30_000
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (79,'2025_12_12_000004_create_vantage_job_tags_table',46);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (80,'2026_04_03_020007_drop_queue_monitor_tables',46);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (81,'2026_04_03_100000_create_fin_tax_documents_table',47);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (82,'2026_04_04_100000_add_genai_fields_to_fin_tax_documents',48);
