@@ -250,10 +250,19 @@ export default function TaxDocumentUploadModal({
           {/* Drop zone */}
           <div
             ref={dropZoneRef}
+            role="button"
+            tabIndex={isUploading ? -1 : 0}
+            aria-label="Drop file here, paste a screen clipping, or press Enter to select a file"
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onClick={() => !isUploading && fileInputRef.current?.click()}
+            onKeyDown={e => {
+              if (!isUploading && (e.key === 'Enter' || e.key === ' ')) {
+                e.preventDefault()
+                fileInputRef.current?.click()
+              }
+            }}
             className={`
               border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors
               ${isDragging ? 'border-primary bg-primary/5' : 'border-muted-foreground/30 hover:border-primary/60 hover:bg-muted/30'}
@@ -264,9 +273,9 @@ export default function TaxDocumentUploadModal({
               <div className="flex flex-col items-center gap-3">
                 <Loader2 className="h-8 w-8 text-primary animate-spin" />
                 <p className="text-sm text-muted-foreground">
-                  {phase === 'requesting' && 'Preparing upload…'}
-                  {phase === 'uploading' && `Uploading… ${uploadProgress}%`}
-                  {phase === 'saving' && 'Saving…'}
+                  {phase === 'requesting' && 'Preparing upload...'}
+                  {phase === 'uploading' && `Uploading... ${uploadProgress}%`}
+                  {phase === 'saving' && 'Saving...'}
                 </p>
                 {phase === 'uploading' && (
                   <Progress value={uploadProgress} className="w-full max-w-xs" />
