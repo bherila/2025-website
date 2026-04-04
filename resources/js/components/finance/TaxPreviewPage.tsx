@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useState } from 'react'
 
+import Form1040Preview from '@/components/finance/Form1040Preview'
+import ScheduleBPreview from '@/components/finance/ScheduleBPreview'
 import ScheduleCPreview from '@/components/finance/ScheduleCPreview'
+import TaxDocuments1099Section from '@/components/finance/TaxDocuments1099Section'
 import TaxDocumentsSection from '@/components/finance/TaxDocumentsSection'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import TotalsTable from '@/components/payslip/TotalsTable.client'
@@ -55,9 +58,9 @@ function W2IncomeSummary({ payslips }: { payslips: fin_payslip[] }) {
   ].filter(Boolean) as { label: string; value: number | null; bold?: boolean }[]
 
   return (
-    <div className="px-4 pb-4">
-      <h2 className="text-lg font-semibold mt-2 mb-2">W-2 Income Summary</h2>
-      <div className="border rounded-md overflow-hidden inline-block min-w-[320px]">
+    <div>
+      <h2 className="text-lg font-semibold mb-2">W-2 Income Summary</h2>
+      <div className="border rounded-md overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow>
@@ -125,6 +128,21 @@ export default function TaxPreviewPage() {
       q4: 0,
     },
   })
+
+  // 1099 income totals (from confirmed parsed documents)
+  const [income1099, setIncome1099] = useState({
+    interestIncome: 0,
+    dividendIncome: 0,
+    qualifiedDividends: 0,
+  })
+
+  const handle1099TotalsChange = useCallback((totals: {
+    interestIncome: number
+    dividendIncome: number
+    qualifiedDividends: number
+  }) => {
+    setIncome1099(totals)
+  }, [])
 
   const setYearInUrl = useCallback((year: number | 'all', mode: 'push' | 'replace' = 'push') => {
     const url = new URL(window.location.href)
@@ -266,6 +284,19 @@ export default function TaxPreviewPage() {
 
   const showTaxTables = typeof selectedYear === 'number' && !payslipsLoading && data.length > 0
 
+  // Compute W-2 gross income for 1040 preview
+  const w2GrossIncome = data.reduce((acc, r) => {
+    return acc
+      + Number(r.ps_salary ?? 0)
+      + Number(r.earnings_bonus ?? 0)
+      + Number(r.earnings_rsu ?? 0)
+      + Number(r.ps_vacation_payout ?? 0)
+      + Number(r.imp_ltd ?? 0)
+      + Number(r.imp_legal ?? 0)
+      + Number(r.imp_fitness ?? 0)
+      + Number(r.imp_other ?? 0)
+  }, 0)
+
   return (
     <div>
       <div className="flex items-center gap-4 px-4 pt-4 pb-2 flex-wrap">
@@ -280,34 +311,82 @@ export default function TaxPreviewPage() {
         </div>
       </div>
 
-      {showTaxTables && (
-        <>
-          <W2IncomeSummary payslips={data} />
-          <div className="px-4 pb-6">
-            <h2 className="text-lg font-semibold mt-4 mb-2">Federal Taxes</h2>
-            <TotalsTable
-              series={dataSeries}
-              taxConfig={{
-                year: String(selectedYear),
-                state: '',
-                filingStatus: 'Single',
-                standardDeduction: 13850,
-              }}
-              extraIncome={scheduleCIncomeBySeries}
-            />
-            <h2 className="text-lg font-semibold mt-6 mb-2">California State Taxes</h2>
-            <TotalsTable
-              series={dataSeries}
-              taxConfig={{
-                year: String(selectedYear),
-                state: 'CA',
-                filingStatus: 'Single',
-                standardDeduction: 13850,
-              }}
-              extraIncome={scheduleCIncomeBySeries}
+      {/* Row 1: W-2 Income Summary (1/3) + W-2 Upload & Reconciliation (2/3) */}
+      {showTaxTables && typeof selectedYear === 'number' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 px-4 pb-4">
+          <div className="lg:col-span-1">
+            <W2IncomeSummary payslips={data} />
+          </div>
+          <div className="lg:col-span-2">
+            <TaxDocumentsSection selectedYear={selectedYear} />
+          </div>
+        </div>
+      )}
+
+      {/* Show W-2 documents section even without payslip data */}
+      {!showTaxTables && typeof selectedYear === 'number' && (
+        <div className="px-4 pb-4">
+          <TaxDocumentsSection selectedYear={selectedYear} />
+        </div>
+      )}
+
+      {/* Row 2: Form 1040 Preview */}
+      {typeof selectedYear === 'number' && (
+        <Form1040Preview
+          w2Income={w2GrossIncome}
+          interestIncome={income1099.interestIncome}
+          dividendIncome={income1099.dividendIncome}
+          scheduleCIncome={scheduleCNetIncome.total}
+          selectedYear={selectedYear}
+        />
+      )}
+
+      {/* Row 3: Schedule B Preview (1/3) + 1099 Upload (2/3) */}
+      {typeof selectedYear === 'number' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 px-4 pb-4">
+          <div className="lg:col-span-1">
+            <ScheduleBPreview
+              interestIncome={income1099.interestIncome}
+              dividendIncome={income1099.dividendIncome}
+              qualifiedDividends={income1099.qualifiedDividends}
+              selectedYear={selectedYear}
             />
           </div>
-        </>
+          <div className="lg:col-span-2">
+            <TaxDocuments1099Section
+              selectedYear={selectedYear}
+              onTotalsChange={handle1099TotalsChange}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Federal & State Tax Tables */}
+      {showTaxTables && (
+        <div className="px-4 pb-6">
+          <h2 className="text-lg font-semibold mt-4 mb-2">Federal Taxes</h2>
+          <TotalsTable
+            series={dataSeries}
+            taxConfig={{
+              year: String(selectedYear),
+              state: '',
+              filingStatus: 'Single',
+              standardDeduction: 13850,
+            }}
+            extraIncome={scheduleCIncomeBySeries}
+          />
+          <h2 className="text-lg font-semibold mt-6 mb-2">California State Taxes</h2>
+          <TotalsTable
+            series={dataSeries}
+            taxConfig={{
+              year: String(selectedYear),
+              state: 'CA',
+              filingStatus: 'Single',
+              standardDeduction: 13850,
+            }}
+            extraIncome={scheduleCIncomeBySeries}
+          />
+        </div>
       )}
 
       <ScheduleCPreview
@@ -315,10 +394,6 @@ export default function TaxPreviewPage() {
         onAvailableYearsChange={handleAvailableYearsChange}
         onScheduleCNetIncomeChange={handleScheduleCNetIncomeChange}
       />
-
-      {typeof selectedYear === 'number' && (
-        <TaxDocumentsSection selectedYear={selectedYear} />
-      )}
     </div>
   )
 }

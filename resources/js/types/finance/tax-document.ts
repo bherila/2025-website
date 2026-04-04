@@ -14,6 +14,7 @@ export interface TaxDocument {
   file_size_bytes: number
   file_hash: string
   is_reconciled: boolean
+  is_confirmed: boolean
   notes: string | null
   human_file_size: string
   download_count: number
