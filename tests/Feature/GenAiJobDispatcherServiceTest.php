@@ -260,4 +260,59 @@ class GenAiJobDispatcherServiceTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         $service->buildPrompt('unknown_type', []);
     }
+
+    // ================================================================
+    // tax_document context validation and prompt tests
+    // ================================================================
+
+    public function test_validate_context_accepts_valid_tax_document_context(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $result = $service->validateContext('tax_document', [
+            'tax_year' => 2024,
+            'form_type' => 'w2',
+            'tax_document_id' => 1,
+        ]);
+        $this->assertTrue($result);
+    }
+
+    public function test_validate_context_rejects_unexpected_tax_document_keys(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches('/Unexpected context keys/');
+        $service->validateContext('tax_document', ['invalid_key' => 'value']);
+    }
+
+    public function test_build_prompt_for_w2(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $prompt = $service->buildPrompt('tax_document', ['form_type' => 'w2', 'tax_year' => 2024]);
+        $this->assertStringContainsString('W-2', $prompt);
+        $this->assertStringContainsString('box1_wages', $prompt);
+        $this->assertStringContainsString('box2_fed_tax', $prompt);
+        $this->assertStringContainsString('2024', $prompt);
+    }
+
+    public function test_build_prompt_for_1099_int(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $prompt = $service->buildPrompt('tax_document', ['form_type' => '1099_int', 'tax_year' => 2024]);
+        $this->assertStringContainsString('1099-INT', $prompt);
+        $this->assertStringContainsString('box1_interest', $prompt);
+    }
+
+    public function test_build_prompt_for_1099_div(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $prompt = $service->buildPrompt('tax_document', ['form_type' => '1099_div', 'tax_year' => 2024]);
+        $this->assertStringContainsString('1099-DIV', $prompt);
+        $this->assertStringContainsString('box1a_ordinary', $prompt);
+        $this->assertStringContainsString('box1b_qualified', $prompt);
+    }
 }
