@@ -416,40 +416,6 @@ CREATE TABLE `files_for_client_companies` (
   CONSTRAINT `files_for_client_companies_uploaded_by_user_id_foreign` FOREIGN KEY (`uploaded_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `fin_tax_documents`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `fin_tax_documents` (
-  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `user_id` bigint unsigned NOT NULL,
-  `tax_year` int NOT NULL,
-  `form_type` enum('w2','w2c','1099_int','1099_int_c','1099_div','1099_div_c') NOT NULL,
-  `employment_entity_id` bigint unsigned DEFAULT NULL,
-  `account_id` bigint unsigned DEFAULT NULL,
-  `original_filename` varchar(255) NOT NULL,
-  `stored_filename` varchar(255) NOT NULL,
-  `s3_path` varchar(255) NOT NULL,
-  `mime_type` varchar(255) NOT NULL DEFAULT 'application/pdf',
-  `file_size_bytes` int NOT NULL,
-  `file_hash` varchar(255) NOT NULL,
-  `uploaded_by_user_id` int DEFAULT NULL,
-  `notes` text DEFAULT NULL,
-  `is_reconciled` tinyint(1) NOT NULL DEFAULT 0,
-  `download_history` json DEFAULT NULL,
-  `created_at` timestamp NULL DEFAULT NULL,
-  `updated_at` timestamp NULL DEFAULT NULL,
-  `deleted_at` timestamp NULL DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `fin_tax_documents_user_id_index` (`user_id`),
-  KEY `fin_tax_documents_tax_year_index` (`tax_year`),
-  KEY `fin_tax_documents_employment_entity_id_index` (`employment_entity_id`),
-  KEY `fin_tax_documents_account_id_index` (`account_id`),
-  KEY `fin_tax_documents_form_type_index` (`form_type`),
-  CONSTRAINT `fin_tax_documents_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fin_tax_documents_employment_entity_id_foreign` FOREIGN KEY (`employment_entity_id`) REFERENCES `fin_employment_entity` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `fin_tax_documents_account_id_foreign` FOREIGN KEY (`account_id`) REFERENCES `fin_accounts` (`acct_id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `files_for_fin_accounts`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -998,6 +964,40 @@ CREATE TABLE `fin_statements` (
   CONSTRAINT `fin_statements_genai_job_id_foreign` FOREIGN KEY (`genai_job_id`) REFERENCES `genai_import_jobs` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_tax_documents`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_tax_documents` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(20) unsigned NOT NULL,
+  `tax_year` int(11) NOT NULL,
+  `form_type` enum('w2','w2c','1099_int','1099_int_c','1099_div','1099_div_c') NOT NULL,
+  `employment_entity_id` bigint(20) unsigned DEFAULT NULL,
+  `account_id` bigint(20) unsigned DEFAULT NULL,
+  `original_filename` varchar(255) NOT NULL,
+  `stored_filename` varchar(255) NOT NULL,
+  `s3_path` varchar(255) NOT NULL,
+  `mime_type` varchar(255) NOT NULL DEFAULT 'application/pdf',
+  `file_size_bytes` int(11) NOT NULL,
+  `file_hash` varchar(255) NOT NULL,
+  `uploaded_by_user_id` int(11) DEFAULT NULL,
+  `notes` text DEFAULT NULL,
+  `is_reconciled` tinyint(1) NOT NULL DEFAULT 0,
+  `download_history` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`download_history`)),
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `deleted_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `fin_tax_documents_user_id_index` (`user_id`),
+  KEY `fin_tax_documents_tax_year_index` (`tax_year`),
+  KEY `fin_tax_documents_employment_entity_id_index` (`employment_entity_id`),
+  KEY `fin_tax_documents_account_id_index` (`account_id`),
+  KEY `fin_tax_documents_form_type_index` (`form_type`),
+  CONSTRAINT `fin_tax_documents_account_id_foreign` FOREIGN KEY (`account_id`) REFERENCES `fin_accounts` (`acct_id`) ON DELETE SET NULL,
+  CONSTRAINT `fin_tax_documents_employment_entity_id_foreign` FOREIGN KEY (`employment_entity_id`) REFERENCES `fin_employment_entity` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fin_tax_documents_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_transaction_non_duplicate_pairs`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -1211,80 +1211,6 @@ CREATE TABLE `product_keys` (
   UNIQUE KEY `product_keys_product_key_unique` (`product_key`) USING HASH
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `queue_monitor_controls`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `queue_monitor_controls` (
-  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `connection` varchar(255) NOT NULL,
-  `queue` varchar(255) NOT NULL,
-  `type` varchar(255) NOT NULL,
-  `data` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`data`)),
-  `created_at` timestamp NULL DEFAULT NULL,
-  `updated_at` timestamp NULL DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `queue_monitor_controls_connection_queue_type_unique` (`connection`,`queue`,`type`),
-  KEY `queue_monitor_controls_connection_index` (`connection`),
-  KEY `queue_monitor_controls_queue_index` (`queue`),
-  KEY `queue_monitor_controls_type_index` (`type`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `queue_monitor_jobs`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `queue_monitor_jobs` (
-  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `job_id` varchar(255) NOT NULL,
-  `uuid` varchar(255) DEFAULT NULL,
-  `connection` varchar(255) NOT NULL,
-  `queue` varchar(255) NOT NULL,
-  `name` varchar(255) NOT NULL,
-  `status` varchar(255) NOT NULL,
-  `attempts` int(11) NOT NULL DEFAULT 0,
-  `payload` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`payload`)),
-  `exception` text DEFAULT NULL,
-  `runtime_ms` int(11) DEFAULT NULL,
-  `started_at` timestamp NULL DEFAULT NULL,
-  `finished_at` timestamp NULL DEFAULT NULL,
-  `created_at` timestamp NULL DEFAULT NULL,
-  `updated_at` timestamp NULL DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `queue_monitor_jobs_connection_queue_status_index` (`connection`,`queue`,`status`),
-  KEY `queue_monitor_jobs_created_at_status_index` (`created_at`,`status`),
-  KEY `queue_monitor_jobs_job_id_index` (`job_id`),
-  KEY `queue_monitor_jobs_uuid_index` (`uuid`),
-  KEY `queue_monitor_jobs_connection_index` (`connection`),
-  KEY `queue_monitor_jobs_queue_index` (`queue`),
-  KEY `queue_monitor_jobs_status_index` (`status`),
-  KEY `queue_monitor_jobs_started_at_index` (`started_at`),
-  KEY `queue_monitor_jobs_finished_at_index` (`finished_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `queue_monitor_metrics`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `queue_monitor_metrics` (
-  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `connection` varchar(255) NOT NULL,
-  `queue` varchar(255) NOT NULL,
-  `period_type` varchar(255) NOT NULL,
-  `period` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  `total_jobs` int(11) NOT NULL DEFAULT 0,
-  `processed` int(11) NOT NULL DEFAULT 0,
-  `failed` int(11) NOT NULL DEFAULT 0,
-  `avg_runtime` decimal(10,2) DEFAULT NULL,
-  `max_runtime` int(11) DEFAULT NULL,
-  `min_runtime` int(11) DEFAULT NULL,
-  `created_at` timestamp NULL DEFAULT NULL,
-  `updated_at` timestamp NULL DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `queue_metrics_unique` (`connection`,`queue`,`period`,`period_type`),
-  KEY `queue_monitor_metrics_connection_index` (`connection`),
-  KEY `queue_monitor_metrics_queue_index` (`queue`),
-  KEY `queue_monitor_metrics_period_type_index` (`period_type`),
-  KEY `queue_monitor_metrics_period_index` (`period`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `session`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -1456,6 +1382,70 @@ CREATE TABLE `utility_bill` (
   CONSTRAINT `utility_bill_utility_account_id_foreign` FOREIGN KEY (`utility_account_id`) REFERENCES `utility_account` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `vantage_job_tags`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `vantage_job_tags` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `job_id` bigint(20) unsigned NOT NULL,
+  `tag` varchar(255) NOT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_vantage_job_tags_tag_created` (`tag`,`created_at`),
+  KEY `idx_vantage_job_tags_job_id` (`job_id`),
+  KEY `vantage_job_tags_tag_index` (`tag`),
+  CONSTRAINT `vantage_job_tags_job_id_foreign` FOREIGN KEY (`job_id`) REFERENCES `vantage_jobs` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `vantage_jobs`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `vantage_jobs` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `uuid` char(36) NOT NULL,
+  `job_class` varchar(255) NOT NULL,
+  `queue` varchar(255) DEFAULT NULL,
+  `connection` varchar(255) DEFAULT NULL,
+  `attempt` int(10) unsigned NOT NULL DEFAULT 0,
+  `retries` int(10) unsigned NOT NULL DEFAULT 0,
+  `retried_from_id` bigint(20) unsigned DEFAULT NULL,
+  `status` enum('processing','processed','failed') NOT NULL,
+  `duration_ms` bigint(20) unsigned DEFAULT NULL,
+  `memory_start_bytes` bigint(20) unsigned DEFAULT NULL,
+  `memory_end_bytes` bigint(20) unsigned DEFAULT NULL,
+  `memory_peak_start_bytes` bigint(20) unsigned DEFAULT NULL,
+  `memory_peak_end_bytes` bigint(20) unsigned DEFAULT NULL,
+  `memory_peak_delta_bytes` bigint(20) unsigned DEFAULT NULL,
+  `cpu_user_ms` int(10) unsigned DEFAULT NULL,
+  `cpu_sys_ms` int(10) unsigned DEFAULT NULL,
+  `exception_class` varchar(255) DEFAULT NULL,
+  `exception_message` text DEFAULT NULL,
+  `stack` text DEFAULT NULL,
+  `payload` longtext DEFAULT NULL,
+  `job_tags` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`job_tags`)),
+  `started_at` timestamp NULL DEFAULT NULL,
+  `finished_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `queue_job_runs_uuid_index` (`uuid`),
+  KEY `queue_job_runs_job_class_index` (`job_class`),
+  KEY `queue_job_runs_queue_index` (`queue`),
+  KEY `queue_job_runs_connection_index` (`connection`),
+  KEY `queue_job_runs_status_index` (`status`),
+  KEY `queue_job_runs_duration_ms_index` (`duration_ms`),
+  KEY `queue_job_runs_exception_class_index` (`exception_class`),
+  KEY `queue_job_runs_started_at_index` (`started_at`),
+  KEY `queue_job_runs_finished_at_index` (`finished_at`),
+  KEY `idx_vantage_jobs_created_at` (`created_at`),
+  KEY `idx_vantage_jobs_status` (`status`),
+  KEY `idx_vantage_jobs_created_status` (`created_at`,`status`),
+  KEY `idx_vantage_jobs_job_class` (`job_class`),
+  KEY `idx_vantage_jobs_exception_class` (`exception_class`),
+  KEY `idx_vantage_jobs_queue` (`queue`),
+  KEY `idx_vantage_jobs_retried_from` (`retried_from_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `verification`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -1590,5 +1580,11 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (70,'2026_03_25_000
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (71,'2024_01_01_000001_create_queue_monitor_jobs_table',43);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (72,'2024_01_01_000002_create_queue_monitor_controls_table',43);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (73,'2024_01_01_000003_create_queue_monitor_metrics_table',43);
-
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (74,'2026_04_03_100000_create_fin_tax_documents_table',44);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (74,'2026_03_30_000001_convert_ip_address_to_binary_in_login_audit_log',44);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (75,'2025_09_23_000000_create_queue_job_runs_table',45);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (76,'2025_10_29_000001_add_performance_telemetry_to_queue_job_runs_table',45);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (77,'2025_11_30_000002_rename_queue_job_runs_to_vantage_jobs',46);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (78,'2025_11_30_000003_add_performance_indexes_to_vantage_jobs',46);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (79,'2025_12_12_000004_create_vantage_job_tags_table',46);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (80,'2026_04_03_020007_drop_queue_monitor_tables',46);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (81,'2026_04_03_100000_create_fin_tax_documents_table',47);
