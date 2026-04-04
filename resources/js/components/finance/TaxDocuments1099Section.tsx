@@ -304,7 +304,7 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
                           ? `Mark ${doc.original_filename} as unreconciled`
                           : `Mark ${doc.original_filename} as reconciled`
                       }
-                      aria-pressed={doc.is_reconciled}
+                      aria-checked={doc.is_reconciled}
                     >
                       <CheckCircle
                         className={`h-4 w-4 ${doc.is_reconciled ? 'text-green-600' : 'text-muted-foreground/40'}`}

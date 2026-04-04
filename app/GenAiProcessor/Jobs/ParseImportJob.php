@@ -359,7 +359,10 @@ class ParseImportJob implements ShouldQueue
 
     /**
      * If this is a tax_document job, mark the linked FileForTaxDocument as failed.
-     * Called in all failure paths to prevent the document being stuck in 'pending' indefinitely.
+     * This is a no-op for non-tax_document job types (finance_transactions, finance_payslip, etc.)
+     * since those don't have a linked document record with a genai_status column.
+     *
+     * Called in all failure catch blocks to prevent the document being stuck in 'pending' indefinitely.
      */
     private function markLinkedTaxDocumentFailed(GenAiImportJob $job): void
     {
