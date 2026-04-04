@@ -9,39 +9,12 @@ import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
 import { computeFileSHA256 } from '@/lib/fileUtils'
-
-interface TaxDocument {
-  id: number
-  user_id: number
-  tax_year: number
-  form_type: string
-  employment_entity_id: number | null
-  account_id: number | null
-  original_filename: string
-  stored_filename: string
-  s3_path: string
-  mime_type: string
-  file_size_bytes: number
-  file_hash: string
-  is_reconciled: boolean
-  notes: string | null
-  human_file_size: string
-  uploader: { id: number; name: string } | null
-  account: { acct_id: number; acct_name: string } | null
-  created_at: string
-}
+import type { TaxDocument } from '@/types/finance/tax-document'
+import { ACCOUNT_FORM_TYPES_1099, FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
 interface AccountTaxDocumentsSectionProps {
   accountId: number
   selectedYear?: number
-}
-
-const FORM_TYPES_1099 = ['1099_int', '1099_int_c', '1099_div', '1099_div_c'] as const
-const FORM_TYPE_LABELS: Record<string, string> = {
-  '1099_int': '1099-INT',
-  '1099_int_c': '1099-INT-C',
-  '1099_div': '1099-DIV',
-  '1099_div_c': '1099-DIV-C',
 }
 
 export default function AccountTaxDocumentsSection({ accountId, selectedYear }: AccountTaxDocumentsSectionProps) {
@@ -185,7 +158,7 @@ export default function AccountTaxDocumentsSection({ accountId, selectedYear }: 
       />
 
       <div className="flex flex-wrap gap-2 mb-3">
-        {FORM_TYPES_1099.map(ft => (
+        {ACCOUNT_FORM_TYPES_1099.map(ft => (
           <Button key={ft} size="sm" variant="outline" onClick={() => handleUploadClick(ft)}>
             <Upload className="h-3 w-3 mr-1" />
             {FORM_TYPE_LABELS[ft]}
@@ -223,15 +196,22 @@ export default function AccountTaxDocumentsSection({ accountId, selectedYear }: 
                   <TableCell className="text-sm">{doc.original_filename}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{doc.human_file_size}</TableCell>
                   <TableCell>
-                    <button
+                    <Button
+                      size="sm"
+                      variant="ghost"
                       onClick={() => handleToggleReconciled(doc)}
-                      className="flex items-center gap-1 text-sm"
+                      className="h-auto p-1"
                       title="Toggle reconciled"
+                      aria-label={
+                        doc.is_reconciled
+                          ? `Mark ${doc.original_filename} as unreconciled`
+                          : `Mark ${doc.original_filename} as reconciled`
+                      }
                     >
                       <CheckCircle
                         className={`h-4 w-4 ${doc.is_reconciled ? 'text-green-600' : 'text-muted-foreground/40'}`}
                       />
-                    </button>
+                    </Button>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">

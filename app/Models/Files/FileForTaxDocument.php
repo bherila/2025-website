@@ -2,6 +2,7 @@
 
 namespace App\Models\Files;
 
+use App\GenAiProcessor\Models\GenAiImportJob;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinEmploymentEntity;
 use App\Traits\HasFileStorage;
@@ -37,12 +38,19 @@ class FileForTaxDocument extends Model
         'uploaded_by_user_id',
         'notes',
         'is_reconciled',
+        'genai_job_id',
+        'genai_status',
+        'parsed_data',
+        'is_confirmed',
+        'download_history',
     ];
 
     protected $casts = [
         'file_size_bytes' => 'integer',
         'is_reconciled' => 'boolean',
+        'is_confirmed' => 'boolean',
         'tax_year' => 'integer',
+        'parsed_data' => 'array',
         'download_history' => 'array',
     ];
 
@@ -56,6 +64,11 @@ class FileForTaxDocument extends Model
     public function account(): BelongsTo
     {
         return $this->belongsTo(FinAccounts::class, 'account_id', 'acct_id');
+    }
+
+    public function genaiJob(): BelongsTo
+    {
+        return $this->belongsTo(GenAiImportJob::class, 'genai_job_id');
     }
 
     public static function generateS3Path(int $userId, string $storedFilename): string

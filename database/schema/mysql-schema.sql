@@ -980,9 +980,13 @@ CREATE TABLE `fin_tax_documents` (
   `mime_type` varchar(255) NOT NULL DEFAULT 'application/pdf',
   `file_size_bytes` int(11) NOT NULL,
   `file_hash` varchar(255) NOT NULL,
-  `uploaded_by_user_id` int(11) DEFAULT NULL,
+  `uploaded_by_user_id` bigint(20) unsigned DEFAULT NULL,
   `notes` text DEFAULT NULL,
   `is_reconciled` tinyint(1) NOT NULL DEFAULT 0,
+  `genai_job_id` bigint(20) unsigned DEFAULT NULL,
+  `genai_status` varchar(32) DEFAULT NULL,
+  `parsed_data` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`parsed_data`)),
+  `is_confirmed` tinyint(1) NOT NULL DEFAULT 0,
   `download_history` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`download_history`)),
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
@@ -993,8 +997,10 @@ CREATE TABLE `fin_tax_documents` (
   KEY `fin_tax_documents_employment_entity_id_index` (`employment_entity_id`),
   KEY `fin_tax_documents_account_id_index` (`account_id`),
   KEY `fin_tax_documents_form_type_index` (`form_type`),
+  KEY `fin_tax_documents_genai_job_id_index` (`genai_job_id`),
   CONSTRAINT `fin_tax_documents_account_id_foreign` FOREIGN KEY (`account_id`) REFERENCES `fin_accounts` (`acct_id`) ON DELETE SET NULL,
   CONSTRAINT `fin_tax_documents_employment_entity_id_foreign` FOREIGN KEY (`employment_entity_id`) REFERENCES `fin_employment_entity` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fin_tax_documents_genai_job_id_foreign` FOREIGN KEY (`genai_job_id`) REFERENCES `genai_import_jobs` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fin_tax_documents_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;

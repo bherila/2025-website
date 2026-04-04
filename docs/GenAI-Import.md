@@ -136,6 +136,7 @@ Create an import job after the file has been uploaded to S3.
 | `finance_transactions` | `accounts` (array of `{name, last4}`)           |
 | `finance_payslip`      | `employment_entity_id`, `file_count`            |
 | `utility_bill`         | `account_type`, `utility_account_id`, `file_count` |
+| `tax_document`         | `tax_year`, `form_type`, `tax_document_id`      |
 
 Context JSON is strictly validated per `job_type` to prevent injection attacks. Unexpected keys are rejected with a 422 error.
 
@@ -292,7 +293,7 @@ For finance-specific import UI details (components, checkboxes, button text), se
 | `id`               | bigint PK     | Auto-increment ID |
 | `user_id`          | bigint FK     | References `users.id` |
 | `acct_id`          | bigint FK     | Optional reference to `fin_accounts.acct_id` |
-| `job_type`         | varchar(64)   | One of: `finance_transactions`, `finance_payslip`, `utility_bill` |
+| `job_type`         | varchar(64)   | One of: `finance_transactions`, `finance_payslip`, `utility_bill`, `tax_document` |
 | `file_hash`        | varchar(64)   | SHA-256 hash for de-duplication |
 | `original_filename`| varchar(255)  | User-facing filename |
 | `s3_path`          | varchar(255)  | S3 storage key |

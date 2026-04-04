@@ -12,6 +12,12 @@ class GenAiJobDispatcherService
 {
     public const FINANCE_ACCOUNT_TOOL_NAME = 'addFinanceAccount';
 
+    public const TAX_DOCUMENT_W2_TOOL_NAME = 'extractW2Data';
+
+    public const TAX_DOCUMENT_1099INT_TOOL_NAME = 'extract1099IntData';
+
+    public const TAX_DOCUMENT_1099DIV_TOOL_NAME = 'extract1099DivData';
+
     /**
      * Atomically claim a quota slot for today (UTC).
      * Returns false if the site-wide or per-user limit is reached.
@@ -83,6 +89,7 @@ class GenAiJobDispatcherService
             'finance_transactions' => $this->buildFinanceTransactionsPrompt($context),
             'finance_payslip' => $this->buildPayslipPrompt($context),
             'utility_bill' => $this->buildUtilityBillPrompt($context),
+            'tax_document' => $this->buildTaxDocumentPrompt($context),
             default => throw new \InvalidArgumentException("Unknown job type: {$jobType}"),
         };
     }
@@ -122,6 +129,25 @@ class GenAiJobDispatcherService
             return $payload;
         }
 
+        if ($jobType === 'tax_document') {
+            // Extract the form_type from the prompt text to pick the right tool
+            // The prompt is built with the context; we store the tool name in a comment marker
+            $toolDef = $this->buildTaxDocumentToolDefinitionFromPrompt($prompt);
+            if ($toolDef !== null) {
+                $payload['tools'] = [[
+                    'function_declarations' => [$toolDef['definition']],
+                ]];
+                $payload['toolConfig'] = [
+                    'functionCallingConfig' => [
+                        'mode' => 'ANY',
+                        'allowedFunctionNames' => [$toolDef['name']],
+                    ],
+                ];
+
+                return $payload;
+            }
+        }
+
         $payload['generationConfig'] = [
             'response_mime_type' => 'application/json',
         ];
@@ -136,6 +162,10 @@ class GenAiJobDispatcherService
     {
         if ($jobType === 'finance_transactions') {
             return $this->extractFinanceGenerateContentData($responseBody);
+        }
+
+        if ($jobType === 'tax_document') {
+            return $this->extractTaxDocumentGenerateContentData($responseBody);
         }
 
         $jsonText = $this->extractTextParts($responseBody);
@@ -164,6 +194,7 @@ class GenAiJobDispatcherService
             'finance_transactions' => ['accounts'],
             'finance_payslip' => ['employment_entity_id', 'file_count'],
             'utility_bill' => ['account_type', 'utility_account_id', 'file_count'],
+            'tax_document' => ['tax_year', 'form_type', 'tax_document_id'],
             default => throw new \InvalidArgumentException("Unknown job type: {$jobType}"),
         };
 
@@ -755,5 +786,372 @@ Return ONLY the JSON array.
 PROMPT;
 
         return $basePrompt;
+    }
+
+    private function buildTaxDocumentPrompt(array $context): string
+    {
+        $formType = $context['form_type'] ?? 'w2';
+        $taxYear = $context['tax_year'] ?? date('Y');
+
+        return match (true) {
+            in_array($formType, ['w2', 'w2c']) => $this->buildW2Prompt($formType, (int) $taxYear),
+            in_array($formType, ['1099_int', '1099_int_c']) => $this->build1099IntPrompt($formType, (int) $taxYear),
+            in_array($formType, ['1099_div', '1099_div_c']) => $this->build1099DivPrompt($formType, (int) $taxYear),
+            default => throw new \InvalidArgumentException("Unknown tax form type: {$formType}"),
+        };
+    }
+
+    private function buildW2Prompt(string $formType, int $taxYear): string
+    {
+        $formName = $formType === 'w2c' ? 'W-2c (Corrected Wage and Tax Statement)' : 'W-2 (Wage and Tax Statement)';
+        $toolName = self::TAX_DOCUMENT_W2_TOOL_NAME;
+
+        return <<<PROMPT
+<!-- tool:{$toolName} -->
+Analyze the provided {$formName} PDF for tax year {$taxYear}.
+Use the `{$toolName}` tool to return ALL extracted box values from the form.
+All monetary values must be numbers (not strings). If a field is not present on the form, set it to null.
+For Box 12, return an empty array if no codes are present. For Box 14, return an empty array if nothing is listed.
+PROMPT;
+    }
+
+    private function build1099IntPrompt(string $formType, int $taxYear): string
+    {
+        $formName = $formType === '1099_int_c' ? '1099-INT (Corrected)' : '1099-INT';
+        $toolName = self::TAX_DOCUMENT_1099INT_TOOL_NAME;
+
+        return <<<PROMPT
+<!-- tool:{$toolName} -->
+Analyze the provided {$formName} PDF for tax year {$taxYear}.
+Use the `{$toolName}` tool to return ALL extracted box values from the Interest Income form.
+All monetary values must be numbers (not strings). If a field is not present on the form, set it to null.
+PROMPT;
+    }
+
+    private function build1099DivPrompt(string $formType, int $taxYear): string
+    {
+        $formName = $formType === '1099_div_c' ? '1099-DIV (Corrected)' : '1099-DIV';
+        $toolName = self::TAX_DOCUMENT_1099DIV_TOOL_NAME;
+
+        return <<<PROMPT
+<!-- tool:{$toolName} -->
+Analyze the provided {$formName} PDF for tax year {$taxYear}.
+Use the `{$toolName}` tool to return ALL extracted box values from the Dividends and Distributions form.
+All monetary values must be numbers (not strings). If a field is not present on the form, set it to null.
+PROMPT;
+    }
+
+    /**
+     * Extracts the tool name marker from the prompt and returns the tool definition.
+     * Returns null if no marker is found.
+     *
+     * @return array{name: string, definition: array}|null
+     */
+    private function buildTaxDocumentToolDefinitionFromPrompt(string $prompt): ?array
+    {
+        if (str_contains($prompt, self::TAX_DOCUMENT_W2_TOOL_NAME)) {
+            return ['name' => self::TAX_DOCUMENT_W2_TOOL_NAME, 'definition' => $this->buildW2ToolDefinition()];
+        }
+        if (str_contains($prompt, self::TAX_DOCUMENT_1099INT_TOOL_NAME)) {
+            return ['name' => self::TAX_DOCUMENT_1099INT_TOOL_NAME, 'definition' => $this->build1099IntToolDefinition()];
+        }
+        if (str_contains($prompt, self::TAX_DOCUMENT_1099DIV_TOOL_NAME)) {
+            return ['name' => self::TAX_DOCUMENT_1099DIV_TOOL_NAME, 'definition' => $this->build1099DivToolDefinition()];
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract structured data from a tax_document Gemini tool-call response.
+     * Falls back to JSON text parsing if no function call is found.
+     */
+    private function extractTaxDocumentGenerateContentData(array $responseBody): ?array
+    {
+        $taxToolNames = [
+            self::TAX_DOCUMENT_W2_TOOL_NAME,
+            self::TAX_DOCUMENT_1099INT_TOOL_NAME,
+            self::TAX_DOCUMENT_1099DIV_TOOL_NAME,
+        ];
+
+        $parts = $responseBody['candidates'][0]['content']['parts'] ?? [];
+        if (is_array($parts)) {
+            foreach ($parts as $part) {
+                if (! is_array($part)) {
+                    continue;
+                }
+                $functionCall = $part['functionCall'] ?? null;
+                if (! is_array($functionCall)) {
+                    continue;
+                }
+                $toolName = $functionCall['name'] ?? null;
+                if (! in_array($toolName, $taxToolNames, true)) {
+                    continue;
+                }
+                $args = $functionCall['args'] ?? [];
+                if (! is_array($args)) {
+                    continue;
+                }
+
+                return $this->coerceTaxDocumentArgs($toolName, $args);
+            }
+        }
+
+        // Fallback: try to extract JSON from text parts
+        $jsonText = $this->extractTextParts($responseBody);
+        if ($jsonText === '') {
+            return null;
+        }
+        $data = json_decode($jsonText, true);
+
+        return (json_last_error() === JSON_ERROR_NONE && is_array($data)) ? $data : null;
+    }
+
+    /**
+     * Coerce and validate the args returned by the Gemini tool call for tax documents.
+     * Ensures all numeric fields are cast to float|null and strings to string|null.
+     */
+    private function coerceTaxDocumentArgs(string $toolName, array $args): array
+    {
+        $moneyFields = match ($toolName) {
+            self::TAX_DOCUMENT_W2_TOOL_NAME => [
+                'box1_wages', 'box2_fed_tax', 'box3_ss_wages', 'box4_ss_tax',
+                'box5_medicare_wages', 'box6_medicare_tax', 'box7_ss_tips',
+                'box8_allocated_tips', 'box10_dependent_care', 'box11_nonqualified',
+                'box16_state_wages', 'box17_state_tax', 'box18_local_wages', 'box19_local_tax',
+            ],
+            self::TAX_DOCUMENT_1099INT_TOOL_NAME => [
+                'box1_interest', 'box2_early_withdrawal', 'box3_savings_bond', 'box4_fed_tax',
+                'box5_investment_expense', 'box6_foreign_tax', 'box8_tax_exempt',
+                'box9_private_activity', 'box10_market_discount', 'box11_bond_premium',
+                'box12_treasury_premium', 'box13_tax_exempt_premium',
+            ],
+            self::TAX_DOCUMENT_1099DIV_TOOL_NAME => [
+                'box1a_ordinary', 'box1b_qualified', 'box2a_cap_gain', 'box2b_unrecap_1250',
+                'box2c_section_1202', 'box2d_collectibles', 'box2e_section_897_ordinary',
+                'box2f_section_897_cap_gain', 'box3_nondividend', 'box4_fed_tax',
+                'box5_section_199a', 'box6_investment_expense', 'box7_foreign_tax',
+                'box9_cash_liquidation', 'box10_noncash_liquidation', 'box11_exempt_interest',
+                'box12_private_activity', 'box14_state_tax',
+            ],
+            default => [],
+        };
+
+        $stringFields = match ($toolName) {
+            self::TAX_DOCUMENT_W2_TOOL_NAME => [
+                'employer_name', 'employer_ein', 'employee_name', 'employee_ssn_last4',
+                'box15_state', 'box20_locality',
+            ],
+            self::TAX_DOCUMENT_1099INT_TOOL_NAME => [
+                'payer_name', 'payer_tin', 'recipient_name', 'recipient_tin_last4',
+                'box7_foreign_country', 'account_number',
+            ],
+            self::TAX_DOCUMENT_1099DIV_TOOL_NAME => [
+                'payer_name', 'payer_tin', 'recipient_name', 'recipient_tin_last4',
+                'box8_foreign_country', 'box13_state', 'account_number',
+            ],
+            default => [],
+        };
+
+        $coerced = [];
+
+        // Coerce money fields
+        foreach ($moneyFields as $field) {
+            if (! array_key_exists($field, $args)) {
+                $coerced[$field] = null;
+            } elseif ($args[$field] === null || $args[$field] === '') {
+                $coerced[$field] = null;
+            } else {
+                $coerced[$field] = is_numeric($args[$field]) ? (float) $args[$field] : null;
+            }
+        }
+
+        // Coerce string fields
+        foreach ($stringFields as $field) {
+            if (! array_key_exists($field, $args)) {
+                $coerced[$field] = null;
+            } elseif ($args[$field] === null || $args[$field] === '') {
+                $coerced[$field] = null;
+            } else {
+                $coerced[$field] = (string) $args[$field];
+            }
+        }
+
+        // Handle W-2 specific structured fields
+        if ($toolName === self::TAX_DOCUMENT_W2_TOOL_NAME) {
+            // box12_codes: array of {code: string, amount: number}
+            $box12 = $args['box12_codes'] ?? [];
+            $coerced['box12_codes'] = is_array($box12)
+                ? array_values(array_filter(array_map(function ($item) {
+                    if (! is_array($item) || ! isset($item['code'])) {
+                        return null;
+                    }
+
+                    return [
+                        'code' => (string) $item['code'],
+                        'amount' => is_numeric($item['amount'] ?? null) ? (float) $item['amount'] : 0.0,
+                    ];
+                }, $box12)))
+                : [];
+
+            // box14_other: array of {label: string, amount: number}
+            $box14 = $args['box14_other'] ?? [];
+            $coerced['box14_other'] = is_array($box14)
+                ? array_values(array_filter(array_map(function ($item) {
+                    if (! is_array($item) || ! isset($item['label'])) {
+                        return null;
+                    }
+
+                    return [
+                        'label' => (string) $item['label'],
+                        'amount' => is_numeric($item['amount'] ?? null) ? (float) $item['amount'] : 0.0,
+                    ];
+                }, $box14)))
+                : [];
+
+            // box13 booleans
+            foreach (['box13_statutory', 'box13_retirement', 'box13_sick_pay'] as $boolField) {
+                $coerced[$boolField] = isset($args[$boolField]) ? (bool) $args[$boolField] : null;
+            }
+        }
+
+        return $coerced;
+    }
+
+    private function buildW2ToolDefinition(): array
+    {
+        $numberProp = fn () => ['type' => 'NUMBER'];
+        $stringProp = fn () => ['type' => 'STRING'];
+        $boolProp = fn () => ['type' => 'BOOLEAN'];
+
+        return [
+            'name' => self::TAX_DOCUMENT_W2_TOOL_NAME,
+            'description' => 'Extract all box values from a W-2 or W-2c tax form.',
+            'parameters' => [
+                'type' => 'OBJECT',
+                'properties' => [
+                    'employer_name' => $stringProp(),
+                    'employer_ein' => $stringProp(),
+                    'employee_name' => $stringProp(),
+                    'employee_ssn_last4' => $stringProp(),
+                    'box1_wages' => $numberProp(),
+                    'box2_fed_tax' => $numberProp(),
+                    'box3_ss_wages' => $numberProp(),
+                    'box4_ss_tax' => $numberProp(),
+                    'box5_medicare_wages' => $numberProp(),
+                    'box6_medicare_tax' => $numberProp(),
+                    'box7_ss_tips' => $numberProp(),
+                    'box8_allocated_tips' => $numberProp(),
+                    'box10_dependent_care' => $numberProp(),
+                    'box11_nonqualified' => $numberProp(),
+                    'box12_codes' => [
+                        'type' => 'ARRAY',
+                        'items' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'code' => $stringProp(),
+                                'amount' => $numberProp(),
+                            ],
+                            'required' => ['code', 'amount'],
+                        ],
+                    ],
+                    'box13_statutory' => $boolProp(),
+                    'box13_retirement' => $boolProp(),
+                    'box13_sick_pay' => $boolProp(),
+                    'box14_other' => [
+                        'type' => 'ARRAY',
+                        'items' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'label' => $stringProp(),
+                                'amount' => $numberProp(),
+                            ],
+                            'required' => ['label', 'amount'],
+                        ],
+                    ],
+                    'box15_state' => $stringProp(),
+                    'box16_state_wages' => $numberProp(),
+                    'box17_state_tax' => $numberProp(),
+                    'box18_local_wages' => $numberProp(),
+                    'box19_local_tax' => $numberProp(),
+                    'box20_locality' => $stringProp(),
+                ],
+            ],
+        ];
+    }
+
+    private function build1099IntToolDefinition(): array
+    {
+        $numberProp = fn () => ['type' => 'NUMBER'];
+        $stringProp = fn () => ['type' => 'STRING'];
+
+        return [
+            'name' => self::TAX_DOCUMENT_1099INT_TOOL_NAME,
+            'description' => 'Extract all box values from a 1099-INT interest income form.',
+            'parameters' => [
+                'type' => 'OBJECT',
+                'properties' => [
+                    'payer_name' => $stringProp(),
+                    'payer_tin' => $stringProp(),
+                    'recipient_name' => $stringProp(),
+                    'recipient_tin_last4' => $stringProp(),
+                    'box1_interest' => $numberProp(),
+                    'box2_early_withdrawal' => $numberProp(),
+                    'box3_savings_bond' => $numberProp(),
+                    'box4_fed_tax' => $numberProp(),
+                    'box5_investment_expense' => $numberProp(),
+                    'box6_foreign_tax' => $numberProp(),
+                    'box7_foreign_country' => $stringProp(),
+                    'box8_tax_exempt' => $numberProp(),
+                    'box9_private_activity' => $numberProp(),
+                    'box10_market_discount' => $numberProp(),
+                    'box11_bond_premium' => $numberProp(),
+                    'box12_treasury_premium' => $numberProp(),
+                    'box13_tax_exempt_premium' => $numberProp(),
+                    'account_number' => $stringProp(),
+                ],
+            ],
+        ];
+    }
+
+    private function build1099DivToolDefinition(): array
+    {
+        $numberProp = fn () => ['type' => 'NUMBER'];
+        $stringProp = fn () => ['type' => 'STRING'];
+
+        return [
+            'name' => self::TAX_DOCUMENT_1099DIV_TOOL_NAME,
+            'description' => 'Extract all box values from a 1099-DIV dividends and distributions form.',
+            'parameters' => [
+                'type' => 'OBJECT',
+                'properties' => [
+                    'payer_name' => $stringProp(),
+                    'recipient_name' => $stringProp(),
+                    'recipient_tin_last4' => $stringProp(),
+                    'payer_tin' => $stringProp(),
+                    'box1a_ordinary' => $numberProp(),
+                    'box1b_qualified' => $numberProp(),
+                    'box2a_cap_gain' => $numberProp(),
+                    'box2b_unrecap_1250' => $numberProp(),
+                    'box2c_section_1202' => $numberProp(),
+                    'box2d_collectibles' => $numberProp(),
+                    'box2e_section_897_ordinary' => $numberProp(),
+                    'box2f_section_897_cap_gain' => $numberProp(),
+                    'box3_nondividend' => $numberProp(),
+                    'box4_fed_tax' => $numberProp(),
+                    'box5_section_199a' => $numberProp(),
+                    'box6_investment_expense' => $numberProp(),
+                    'box7_foreign_tax' => $numberProp(),
+                    'box8_foreign_country' => $stringProp(),
+                    'box9_cash_liquidation' => $numberProp(),
+                    'box10_noncash_liquidation' => $numberProp(),
+                    'box11_exempt_interest' => $numberProp(),
+                    'box12_private_activity' => $numberProp(),
+                    'box13_state' => $stringProp(),
+                    'box14_state_tax' => $numberProp(),
+                    'account_number' => $stringProp(),
+                ],
+            ],
+        ];
     }
 }

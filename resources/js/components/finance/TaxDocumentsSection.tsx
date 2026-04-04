@@ -1,6 +1,6 @@
 'use client'
 
-import { CheckCircle, Download, Loader2, Trash2, Upload } from 'lucide-react'
+import { CheckCircle, Clock, Download, Loader2, Trash2, Upload } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -9,34 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
 import { computeFileSHA256 } from '@/lib/fileUtils'
-
-interface TaxDocument {
-  id: number
-  user_id: number
-  tax_year: number
-  form_type: string
-  employment_entity_id: number | null
-  account_id: number | null
-  original_filename: string
-  stored_filename: string
-  s3_path: string
-  mime_type: string
-  file_size_bytes: number
-  file_hash: string
-  is_reconciled: boolean
-  notes: string | null
-  human_file_size: string
-  uploader: { id: number; name: string } | null
-  employment_entity: { id: number; display_name: string } | null
-  created_at: string
-}
-
-interface EmploymentEntity {
-  id: number
-  display_name: string
-  type: string
-  is_hidden: boolean
-}
+import type { EmploymentEntity, TaxDocument } from '@/types/finance/tax-document'
 
 interface TaxDocumentsSectionProps {
   selectedYear: number | 'all'
@@ -165,9 +138,33 @@ export default function TaxDocumentsSection({ selectedYear }: TaxDocumentsSectio
   const getDocsForEntity = (entityId: number) =>
     documents.filter(d => d.employment_entity_id === entityId)
 
+  const entityHasW2 = (entityId: number) =>
+    documents.some(d => d.employment_entity_id === entityId && d.form_type === 'w2')
+
+  const renderProcessingBadge = (doc: TaxDocument) => {
+    if (doc.genai_status === 'pending' || doc.genai_status === 'processing') {
+      return (
+        <Badge variant="outline" className="border-orange-400 text-orange-600 gap-1">
+          <Clock className="h-3 w-3" />
+          Processing
+        </Badge>
+      )
+    }
+    if (doc.genai_status === 'parsed' && doc.is_confirmed) {
+      return <Badge variant="outline" className="border-green-500 text-green-600">Confirmed</Badge>
+    }
+    if (doc.genai_status === 'parsed') {
+      return <Badge variant="outline" className="border-blue-400 text-blue-600">Ready for Review</Badge>
+    }
+    if (doc.genai_status === 'failed') {
+      return <Badge variant="destructive">Failed</Badge>
+    }
+    return null
+  }
+
   if (loading) {
     return (
-      <div className="px-4 pb-4 flex items-center gap-2 text-muted-foreground">
+      <div className="flex items-center gap-2 text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
         Loading tax documents...
       </div>
@@ -175,12 +172,12 @@ export default function TaxDocumentsSection({ selectedYear }: TaxDocumentsSectio
   }
 
   if (error) {
-    return <div className="px-4 pb-4 text-destructive text-sm">{error}</div>
+    return <div className="text-destructive text-sm">{error}</div>
   }
 
   return (
-    <div className="px-4 pb-6">
-      <h2 className="text-lg font-semibold mt-4 mb-2">W-2 Documents</h2>
+    <div>
+      <h2 className="text-lg font-semibold mb-2">W-2 Documents</h2>
       <input
         ref={fileInputRef}
         type="file"
@@ -190,11 +187,12 @@ export default function TaxDocumentsSection({ selectedYear }: TaxDocumentsSectio
       />
 
       {w2Entities.length === 0 && (
-        <p className="text-sm text-muted-foreground">No W-2 employers found for this year.</p>
+        <p className="text-sm text-muted-foreground">No W-2 employers found.</p>
       )}
 
       {w2Entities.map(entity => {
         const entityDocs = getDocsForEntity(entity.id)
+        const hasW2 = entityHasW2(entity.id)
         return (
           <div key={entity.id} className="mb-4 border rounded-md overflow-hidden">
             <div className="flex items-center justify-between px-3 py-2 bg-muted/30">
@@ -204,7 +202,13 @@ export default function TaxDocumentsSection({ selectedYear }: TaxDocumentsSectio
                   <Upload className="h-3 w-3 mr-1" />
                   W-2
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => handleUploadClick(entity.id, 'w2c')}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleUploadClick(entity.id, 'w2c')}
+                  disabled={!hasW2}
+                  title={hasW2 ? 'Upload W-2c' : 'Upload a W-2 first before uploading W-2c'}
+                >
                   <Upload className="h-3 w-3 mr-1" />
                   W-2c
                 </Button>
@@ -220,6 +224,7 @@ export default function TaxDocumentsSection({ selectedYear }: TaxDocumentsSectio
                     <TableHead>Form</TableHead>
                     <TableHead>Filename</TableHead>
                     <TableHead>Size</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead>Reconciled</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -232,16 +237,20 @@ export default function TaxDocumentsSection({ selectedYear }: TaxDocumentsSectio
                       </TableCell>
                       <TableCell className="text-sm">{doc.original_filename}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{doc.human_file_size}</TableCell>
+                      <TableCell>{renderProcessingBadge(doc)}</TableCell>
                       <TableCell>
-                        <button
+                        <Button
+                          size="sm"
+                          variant="ghost"
                           onClick={() => handleToggleReconciled(doc)}
-                          className="flex items-center gap-1 text-sm"
-                          title="Toggle reconciled"
+                          aria-label={doc.is_reconciled ? 'Mark as unreconciled' : 'Mark as reconciled'}
+                          aria-pressed={doc.is_reconciled}
+                          title={doc.is_reconciled ? 'Mark as unreconciled' : 'Mark as reconciled'}
                         >
                           <CheckCircle
                             className={`h-4 w-4 ${doc.is_reconciled ? 'text-green-600' : 'text-muted-foreground/40'}`}
                           />
-                        </button>
+                        </Button>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">

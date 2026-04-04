@@ -128,6 +128,7 @@ try {
 3. **DB in tests**: Tests use SQLite in-memory (`DB_DATABASE=:memory:`) — `RefreshDatabase` is safe
 4. **Validation**: All tests, linting, and type-checks in [TESTING.md](TESTING.md) must pass.
 5. **Types**: PHP methods must have return types; TypeScript must have no `any` (where possible).
+6. **Monetary Math**: Use `currency.js` (`import currency from 'currency.js'`) for ALL arithmetic on monetary values. Never use plain `+/-/*//` operators on money — floating-point errors accumulate. Use `currency(value).add(x).subtract(y).multiply(z)` for math and `.format()` for display.
 
 ---
 

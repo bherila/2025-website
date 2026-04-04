@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\FinanceTool;
 
+use App\GenAiProcessor\Jobs\ParseImportJob;
+use App\GenAiProcessor\Models\GenAiImportJob;
 use App\Http\Controllers\Controller;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccounts;
@@ -10,6 +12,7 @@ use App\Services\FileStorageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class TaxDocumentController extends Controller
 {
@@ -108,24 +111,102 @@ class TaxDocumentController extends Controller
                 ->firstOrFail();
         }
 
-        $s3Key = $request->s3_key;
+        $s3Key = (string) $request->s3_key;
+        $expectedPrefix = "tax_docs/{$userId}/";
+
+        if (! str_starts_with($s3Key, $expectedPrefix)) {
+            return response()->json([
+                'message' => 'The selected file key is invalid.',
+            ], 422);
+        }
+
         $storedFilename = basename($s3Key);
+        $keySuffix = substr($s3Key, strlen($expectedPrefix));
+
+        if ($storedFilename === '' || $storedFilename === '.' || $storedFilename === '..' || $keySuffix !== $storedFilename) {
+            return response()->json([
+                'message' => 'The selected file key is invalid.',
+            ], 422);
+        }
+
+        $doc = DB::transaction(function () use ($request, $userId, $formType, $s3Key, $storedFilename): FileForTaxDocument {
+            $taxDoc = FileForTaxDocument::create([
+                'user_id' => $userId,
+                'tax_year' => $request->tax_year,
+                'form_type' => $formType,
+                'employment_entity_id' => $request->employment_entity_id,
+                'account_id' => $request->account_id,
+                'original_filename' => $request->original_filename,
+                'stored_filename' => $storedFilename,
+                's3_path' => $s3Key,
+                'mime_type' => $request->input('mime_type', 'application/pdf'),
+                'file_size_bytes' => $request->file_size_bytes,
+                'file_hash' => $request->file_hash,
+                'uploaded_by_user_id' => $userId,
+                'notes' => $request->notes,
+                'is_reconciled' => false,
+                'genai_status' => 'pending',
+            ]);
+
+            $genaiJob = GenAiImportJob::create([
+                'user_id' => $userId,
+                'job_type' => 'tax_document',
+                'file_hash' => $request->file_hash,
+                'original_filename' => $request->original_filename,
+                's3_path' => $s3Key,
+                'mime_type' => $request->input('mime_type', 'application/pdf'),
+                'file_size_bytes' => $request->file_size_bytes,
+                'context_json' => json_encode([
+                    'tax_year' => (int) $request->tax_year,
+                    'form_type' => $formType,
+                    'tax_document_id' => $taxDoc->id,
+                ]),
+                'status' => 'pending',
+            ]);
+
+            $taxDoc->update(['genai_job_id' => $genaiJob->id]);
+
+            return $taxDoc;
+        });
+
+        ParseImportJob::dispatch($doc->genai_job_id);
+
+        return response()->json(
+            $doc->load(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name']),
+            201
+        );
+    }
+
+    /**
+     * Store a manually-entered tax document (no PDF upload, just data entry).
+     */
+    public function storeManual(Request $request): JsonResponse
+    {
+        $request->validate([
+            'form_type' => 'required|string|in:'.implode(',', FileForTaxDocument::FORM_TYPES),
+            'tax_year' => 'required|integer|min:1900|max:2100',
+            'parsed_data' => 'required|array',
+            'is_confirmed' => 'boolean',
+        ]);
+
+        $userId = Auth::id();
+        $formType = $request->form_type;
 
         $doc = FileForTaxDocument::create([
             'user_id' => $userId,
             'tax_year' => $request->tax_year,
             'form_type' => $formType,
-            'employment_entity_id' => $request->employment_entity_id,
-            'account_id' => $request->account_id,
-            'original_filename' => $request->original_filename,
-            'stored_filename' => $storedFilename,
-            's3_path' => $s3Key,
-            'mime_type' => $request->input('mime_type', 'application/pdf'),
-            'file_size_bytes' => $request->file_size_bytes,
-            'file_hash' => $request->file_hash,
+            'original_filename' => 'Manual entry',
+            'stored_filename' => 'manual-entry',
+            's3_path' => '',
+            'mime_type' => 'application/octet-stream',
+            'file_size_bytes' => 0,
+            'file_hash' => '',
             'uploaded_by_user_id' => $userId,
-            'notes' => $request->notes,
             'is_reconciled' => false,
+            'genai_status' => 'parsed',
+            'parsed_data' => $request->parsed_data,
+            'is_confirmed' => $request->boolean('is_confirmed', false),
         ]);
 
         return response()->json(
@@ -142,11 +223,12 @@ class TaxDocumentController extends Controller
 
         $doc->recordDownload();
 
-        $signedUrl = $this->fileService->getSignedDownloadUrl($doc->s3_path, $doc->original_filename);
+        $viewUrl = $this->fileService->getSignedViewUrl($doc->s3_path, $doc->mime_type);
+        $downloadUrl = $this->fileService->getSignedDownloadUrl($doc->s3_path, $doc->original_filename);
 
         return response()->json([
-            'view_url' => $signedUrl,
-            'download_url' => $signedUrl,
+            'view_url' => $viewUrl,
+            'download_url' => $downloadUrl,
             'filename' => $doc->original_filename,
         ]);
     }
@@ -173,6 +255,42 @@ class TaxDocumentController extends Controller
             ->firstOrFail();
 
         $doc->is_reconciled = $request->boolean('is_reconciled');
+        $doc->save();
+
+        return response()->json($doc);
+    }
+
+    public function updateParsedData(Request $request, int $id): JsonResponse
+    {
+        $request->validate([
+            'parsed_data' => 'required|array',
+        ]);
+
+        $doc = FileForTaxDocument::where('id', $id)
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
+
+        if ($doc->is_confirmed) {
+            return response()->json(['message' => 'Cannot edit confirmed document. Unconfirm first.'], 422);
+        }
+
+        $doc->parsed_data = $request->parsed_data;
+        $doc->save();
+
+        return response()->json($doc);
+    }
+
+    public function updateConfirmed(Request $request, int $id): JsonResponse
+    {
+        $request->validate([
+            'is_confirmed' => 'required|boolean',
+        ]);
+
+        $doc = FileForTaxDocument::where('id', $id)
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
+
+        $doc->is_confirmed = $request->boolean('is_confirmed');
         $doc->save();
 
         return response()->json($doc);

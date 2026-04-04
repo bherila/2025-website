@@ -215,4 +215,175 @@ class TaxDocumentControllerTest extends TestCase
         $response->assertOk();
         $this->assertCount(0, $response->json());
     }
+
+    public function test_store_rejects_invalid_s3_key_prefix(): void
+    {
+        $user = $this->createUser();
+        $entity = $this->createEmploymentEntity($user->id);
+
+        $response = $this->actingAs($user)->postJson('/api/finance/tax-documents', [
+            's3_key' => 'wrong_prefix/file.pdf',
+            'original_filename' => 'w2-2024.pdf',
+            'form_type' => 'w2',
+            'tax_year' => 2024,
+            'file_size_bytes' => 102400,
+            'file_hash' => str_repeat('f', 64),
+            'employment_entity_id' => $entity->id,
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonFragment(['message' => 'The selected file key is invalid.']);
+    }
+
+    public function test_store_rejects_s3_key_with_subdirectory(): void
+    {
+        $user = $this->createUser();
+        $entity = $this->createEmploymentEntity($user->id);
+
+        $response = $this->actingAs($user)->postJson('/api/finance/tax-documents', [
+            's3_key' => "tax_docs/{$user->id}/subdir/file.pdf",
+            'original_filename' => 'w2-2024.pdf',
+            'form_type' => 'w2',
+            'tax_year' => 2024,
+            'file_size_bytes' => 102400,
+            'file_hash' => str_repeat('f', 64),
+            'employment_entity_id' => $entity->id,
+        ]);
+
+        $response->assertStatus(422);
+    }
+
+    public function test_store_rejects_s3_key_for_different_user(): void
+    {
+        $user = $this->createUser();
+        $other = $this->createUser();
+        $entity = $this->createEmploymentEntity($user->id);
+
+        $response = $this->actingAs($user)->postJson('/api/finance/tax-documents', [
+            's3_key' => "tax_docs/{$other->id}/file.pdf",
+            'original_filename' => 'w2-2024.pdf',
+            'form_type' => 'w2',
+            'tax_year' => 2024,
+            'file_size_bytes' => 102400,
+            'file_hash' => str_repeat('f', 64),
+            'employment_entity_id' => $entity->id,
+        ]);
+
+        $response->assertStatus(422);
+    }
+
+    public function test_store_dispatches_genai_job(): void
+    {
+        $user = $this->createUser();
+        $entity = $this->createEmploymentEntity($user->id);
+
+        $response = $this->actingAs($user)->postJson('/api/finance/tax-documents', [
+            's3_key' => "tax_docs/{$user->id}/2024.01.01 abc12 w2-2024.pdf",
+            'original_filename' => 'w2-2024.pdf',
+            'form_type' => 'w2',
+            'tax_year' => 2024,
+            'file_size_bytes' => 102400,
+            'file_hash' => str_repeat('g', 64),
+            'employment_entity_id' => $entity->id,
+        ]);
+
+        $response->assertStatus(201);
+        $docId = $response->json('id');
+
+        // Verify the tax document has genai_status set
+        $doc = FileForTaxDocument::find($docId);
+        $this->assertNotNull($doc);
+        $this->assertNotNull($doc->genai_job_id);
+
+        // Verify a genai job was created and linked
+        $this->assertDatabaseHas('genai_import_jobs', [
+            'user_id' => $user->id,
+            'job_type' => 'tax_document',
+        ]);
+    }
+
+    public function test_can_update_parsed_data(): void
+    {
+        $user = $this->createUser();
+        $doc = $this->createTaxDocument($user->id, ['is_confirmed' => false]);
+
+        $parsedData = ['box1_wages' => 50000, 'box2_fed_tax' => 8000];
+
+        $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}/parsed-data", [
+            'parsed_data' => $parsedData,
+        ]);
+
+        $response->assertOk();
+        $doc->refresh();
+        $this->assertEquals(50000, $doc->parsed_data['box1_wages']);
+    }
+
+    public function test_cannot_update_parsed_data_when_confirmed(): void
+    {
+        $user = $this->createUser();
+        $doc = $this->createTaxDocument($user->id, ['is_confirmed' => true]);
+
+        $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}/parsed-data", [
+            'parsed_data' => ['box1_wages' => 50000],
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonFragment(['message' => 'Cannot edit confirmed document. Unconfirm first.']);
+    }
+
+    public function test_can_confirm_and_unconfirm_document(): void
+    {
+        $user = $this->createUser();
+        $doc = $this->createTaxDocument($user->id, ['is_confirmed' => false]);
+
+        // Confirm
+        $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}/confirmed", [
+            'is_confirmed' => true,
+        ]);
+        $response->assertOk();
+        $this->assertDatabaseHas('fin_tax_documents', ['id' => $doc->id, 'is_confirmed' => 1]);
+
+        // Unconfirm
+        $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}/confirmed", [
+            'is_confirmed' => false,
+        ]);
+        $response->assertOk();
+        $this->assertDatabaseHas('fin_tax_documents', ['id' => $doc->id, 'is_confirmed' => 0]);
+    }
+
+    public function test_download_returns_distinct_view_and_download_urls(): void
+    {
+        $user = $this->createUser();
+        $doc = $this->createTaxDocument($user->id);
+
+        $this->mock(FileStorageService::class, function ($mock) {
+            $mock->shouldReceive('getSignedViewUrl')->once()->andReturn('https://example.com/view');
+            $mock->shouldReceive('getSignedDownloadUrl')->once()->andReturn('https://example.com/download');
+        });
+
+        $response = $this->actingAs($user)->getJson("/api/finance/tax-documents/{$doc->id}/download");
+        $response->assertOk();
+        $response->assertJson([
+            'view_url' => 'https://example.com/view',
+            'download_url' => 'https://example.com/download',
+        ]);
+    }
+
+    public function test_genai_fields_included_in_api_response(): void
+    {
+        $user = $this->createUser();
+        $doc = $this->createTaxDocument($user->id, [
+            'genai_status' => 'parsed',
+            'parsed_data' => json_encode(['box1_wages' => 50000]),
+            'is_confirmed' => true,
+        ]);
+
+        $response = $this->actingAs($user)->getJson('/api/finance/tax-documents');
+        $response->assertOk();
+        $data = $response->json();
+        $this->assertCount(1, $data);
+        $this->assertEquals('parsed', $data[0]['genai_status']);
+        $this->assertTrue($data[0]['is_confirmed']);
+        $this->assertNotNull($data[0]['parsed_data']);
+    }
 }

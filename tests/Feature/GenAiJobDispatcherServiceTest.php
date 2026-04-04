@@ -260,4 +260,135 @@ class GenAiJobDispatcherServiceTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         $service->buildPrompt('unknown_type', []);
     }
+
+    // ================================================================
+    // tax_document context validation and prompt tests
+    // ================================================================
+
+    public function test_validate_context_accepts_valid_tax_document_context(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $result = $service->validateContext('tax_document', [
+            'tax_year' => 2024,
+            'form_type' => 'w2',
+            'tax_document_id' => 1,
+        ]);
+        $this->assertTrue($result);
+    }
+
+    public function test_validate_context_rejects_unexpected_tax_document_keys(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches('/Unexpected context keys/');
+        $service->validateContext('tax_document', ['invalid_key' => 'value']);
+    }
+
+    public function test_build_prompt_for_w2(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $prompt = $service->buildPrompt('tax_document', ['form_type' => 'w2', 'tax_year' => 2024]);
+        $this->assertStringContainsString('W-2', $prompt);
+        $this->assertStringContainsString(GenAiJobDispatcherService::TAX_DOCUMENT_W2_TOOL_NAME, $prompt);
+        $this->assertStringContainsString('2024', $prompt);
+    }
+
+    public function test_build_prompt_for_1099_int(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $prompt = $service->buildPrompt('tax_document', ['form_type' => '1099_int', 'tax_year' => 2024]);
+        $this->assertStringContainsString('1099-INT', $prompt);
+        $this->assertStringContainsString(GenAiJobDispatcherService::TAX_DOCUMENT_1099INT_TOOL_NAME, $prompt);
+    }
+
+    public function test_build_prompt_for_1099_div(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $prompt = $service->buildPrompt('tax_document', ['form_type' => '1099_div', 'tax_year' => 2024]);
+        $this->assertStringContainsString('1099-DIV', $prompt);
+        $this->assertStringContainsString(GenAiJobDispatcherService::TAX_DOCUMENT_1099DIV_TOOL_NAME, $prompt);
+    }
+
+    public function test_build_generate_content_payload_uses_tool_calling_for_w2(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $prompt = $service->buildPrompt('tax_document', ['form_type' => 'w2', 'tax_year' => 2024]);
+        $payload = $service->buildGenerateContentPayload('tax_document', 'files/abc123', 'application/pdf', $prompt);
+
+        $this->assertArrayHasKey('tools', $payload);
+        $this->assertArrayHasKey('toolConfig', $payload);
+        $this->assertSame(
+            GenAiJobDispatcherService::TAX_DOCUMENT_W2_TOOL_NAME,
+            $payload['tools'][0]['function_declarations'][0]['name']
+        );
+        $this->assertSame('ANY', $payload['toolConfig']['functionCallingConfig']['mode']);
+        $this->assertArrayNotHasKey('generationConfig', $payload);
+    }
+
+    public function test_extract_tax_document_data_from_tool_call_response(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $response = [
+            'candidates' => [[
+                'content' => [
+                    'parts' => [[
+                        'functionCall' => [
+                            'name' => GenAiJobDispatcherService::TAX_DOCUMENT_W2_TOOL_NAME,
+                            'args' => [
+                                'employer_name' => 'Acme Corp',
+                                'box1_wages' => 75000.00,
+                                'box2_fed_tax' => 10000.00,
+                                'box12_codes' => [['code' => 'DD', 'amount' => 1500.00]],
+                                'box13_retirement' => true,
+                            ],
+                        ],
+                    ]],
+                ],
+            ]],
+        ];
+
+        $data = $service->extractGenerateContentData('tax_document', $response);
+        $this->assertIsArray($data);
+        $this->assertEquals('Acme Corp', $data['employer_name']);
+        $this->assertEquals(75000.0, $data['box1_wages']);
+        $this->assertEquals(10000.0, $data['box2_fed_tax']);
+        $this->assertIsArray($data['box12_codes']);
+        $this->assertEquals('DD', $data['box12_codes'][0]['code']);
+        $this->assertTrue($data['box13_retirement']);
+    }
+
+    public function test_coerce_tax_document_args_converts_string_numbers(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        // Simulate Gemini returning a string for a number field
+        $response = [
+            'candidates' => [[
+                'content' => [
+                    'parts' => [[
+                        'functionCall' => [
+                            'name' => GenAiJobDispatcherService::TAX_DOCUMENT_1099INT_TOOL_NAME,
+                            'args' => [
+                                'payer_name' => 'First National Bank',
+                                'box1_interest' => '523.45', // string instead of number
+                                'box4_fed_tax' => null,
+                            ],
+                        ],
+                    ]],
+                ],
+            ]],
+        ];
+
+        $data = $service->extractGenerateContentData('tax_document', $response);
+        $this->assertIsArray($data);
+        $this->assertSame(523.45, $data['box1_interest']); // should be cast to float
+        $this->assertNull($data['box4_fed_tax']);
+    }
 }

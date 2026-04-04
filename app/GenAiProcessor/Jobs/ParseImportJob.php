@@ -7,6 +7,7 @@ use App\GenAiProcessor\Mail\GenAiJobDeferredMail;
 use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Models\GenAiImportResult;
 use App\GenAiProcessor\Services\GenAiJobDispatcherService;
+use App\Models\Files\FileForTaxDocument;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -143,6 +144,7 @@ class ParseImportJob implements ShouldQueue
             }
         } catch (GeminiRateLimitException $e) {
             $job->markFailed('API rate limit exceeded. Please wait and try again.');
+            $this->markLinkedTaxDocumentFailed($job);
 
             try {
                 Mail::to($user->email)->send(new GenAiJobCompleteMail($job));
@@ -156,6 +158,7 @@ class ParseImportJob implements ShouldQueue
                 'error_message' => $e->getMessage(),
                 'retry_count' => GenAiImportJob::MAX_RETRIES,
             ]);
+            $this->markLinkedTaxDocumentFailed($job);
 
             try {
                 Mail::to($user->email)->send(new GenAiJobCompleteMail($job));
@@ -168,6 +171,7 @@ class ParseImportJob implements ShouldQueue
                 'error' => $e->getMessage(),
             ]);
             $job->markFailed('An unexpected error occurred: '.$e->getMessage());
+            $this->markLinkedTaxDocumentFailed($job);
 
             try {
                 Mail::to($user->email)->send(new GenAiJobCompleteMail($job));
@@ -307,6 +311,9 @@ class ParseImportJob implements ShouldQueue
             case 'utility_bill':
                 $this->createUtilityBillResults($job, $data);
                 break;
+            case 'tax_document':
+                $this->createTaxDocumentResults($job, $data);
+                break;
         }
     }
 
@@ -347,6 +354,60 @@ class ParseImportJob implements ShouldQueue
                 'result_json' => json_encode($bill),
                 'status' => 'pending_review',
             ]);
+        }
+    }
+
+    /**
+     * If this is a tax_document job, mark the linked FileForTaxDocument as failed.
+     * This is a no-op for non-tax_document job types (finance_transactions, finance_payslip, etc.)
+     * since those don't have a linked document record with a genai_status column.
+     *
+     * Called in all failure catch blocks to prevent the document being stuck in 'pending' indefinitely.
+     */
+    private function markLinkedTaxDocumentFailed(GenAiImportJob $job): void
+    {
+        if ($job->job_type !== 'tax_document') {
+            return;
+        }
+
+        try {
+            $context = $job->getContextArray();
+            $taxDocId = $context['tax_document_id'] ?? null;
+            if ($taxDocId) {
+                $taxDoc = FileForTaxDocument::find($taxDocId);
+                if ($taxDoc && $taxDoc->genai_job_id === $job->id) {
+                    $taxDoc->update(['genai_status' => 'failed']);
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('ParseImportJob: could not mark tax document as failed', [
+                'job_id' => $job->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private function createTaxDocumentResults(GenAiImportJob $job, array $data): void
+    {
+        // Store the result in genai_import_results
+        GenAiImportResult::create([
+            'job_id' => $job->id,
+            'result_index' => 0,
+            'result_json' => json_encode($data),
+            'status' => 'pending_review',
+        ]);
+
+        // Update the linked FileForTaxDocument with parsed data
+        $context = $job->getContextArray();
+        $taxDocId = $context['tax_document_id'] ?? null;
+        if ($taxDocId) {
+            $taxDoc = FileForTaxDocument::find($taxDocId);
+            if ($taxDoc && $taxDoc->genai_job_id === $job->id) {
+                $taxDoc->update([
+                    'parsed_data' => $data,
+                    'genai_status' => 'parsed',
+                ]);
+            }
         }
     }
 }
