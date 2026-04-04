@@ -753,3 +753,13 @@ Each employment entity has an `is_hidden` boolean. When set:
 - The delete button has been moved from the table row into the edit modal footer (since deletion is uncommon).
 
 For full documentation, see [TaxSystem.md](TaxSystem.md).
+
+### Tax Documents
+
+Users can upload W-2, W-2c, 1099-INT, 1099-DIV, and correction forms (W-2c, 1099-INT-C, 1099-DIV-C) as PDFs. Documents are stored in S3 and linked to employment entities (for W-2 forms) or finance accounts (for 1099 forms).
+
+- W-2 documents appear in the **Tax Preview** page under "W-2 Documents", grouped by employer.
+- 1099 documents appear in the **Account Maintenance** page for each finance account.
+- Each document can be marked as reconciled and downloaded via signed S3 URLs.
+
+See [TaxSystem.md](TaxSystem.md) for full details.

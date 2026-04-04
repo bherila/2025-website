@@ -416,6 +416,40 @@ CREATE TABLE `files_for_client_companies` (
   CONSTRAINT `files_for_client_companies_uploaded_by_user_id_foreign` FOREIGN KEY (`uploaded_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_tax_documents`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_tax_documents` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint unsigned NOT NULL,
+  `tax_year` int NOT NULL,
+  `form_type` enum('w2','w2c','1099_int','1099_int_c','1099_div','1099_div_c') NOT NULL,
+  `employment_entity_id` bigint unsigned DEFAULT NULL,
+  `account_id` bigint unsigned DEFAULT NULL,
+  `original_filename` varchar(255) NOT NULL,
+  `stored_filename` varchar(255) NOT NULL,
+  `s3_path` varchar(255) NOT NULL,
+  `mime_type` varchar(255) NOT NULL DEFAULT 'application/pdf',
+  `file_size_bytes` int NOT NULL,
+  `file_hash` varchar(255) NOT NULL,
+  `uploaded_by_user_id` int DEFAULT NULL,
+  `notes` text DEFAULT NULL,
+  `is_reconciled` tinyint(1) NOT NULL DEFAULT 0,
+  `download_history` json DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `deleted_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `fin_tax_documents_user_id_index` (`user_id`),
+  KEY `fin_tax_documents_tax_year_index` (`tax_year`),
+  KEY `fin_tax_documents_employment_entity_id_index` (`employment_entity_id`),
+  KEY `fin_tax_documents_account_id_index` (`account_id`),
+  KEY `fin_tax_documents_form_type_index` (`form_type`),
+  CONSTRAINT `fin_tax_documents_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fin_tax_documents_employment_entity_id_foreign` FOREIGN KEY (`employment_entity_id`) REFERENCES `fin_employment_entity` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fin_tax_documents_account_id_foreign` FOREIGN KEY (`account_id`) REFERENCES `fin_accounts` (`acct_id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `files_for_fin_accounts`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -1556,3 +1590,5 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (70,'2026_03_25_000
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (71,'2024_01_01_000001_create_queue_monitor_jobs_table',43);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (72,'2024_01_01_000002_create_queue_monitor_controls_table',43);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (73,'2024_01_01_000003_create_queue_monitor_metrics_table',43);
+
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (74,'2026_04_03_100000_create_fin_tax_documents_table',44);
