@@ -1,10 +1,11 @@
 'use client'
 
 import currency from 'currency.js'
-import { CheckCircle, Clock, Download, Loader2, Plus, Trash2, Upload } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { CheckCircle, Clock, Download, Eye, Loader2, Trash2, Upload } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import TaxDocumentUploadModal from '@/components/finance/TaxDocumentUploadModal'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -18,9 +19,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
-import { computeFileSHA256 } from '@/lib/fileUtils'
 import type { F1099DivParsedData, F1099IntParsedData, TaxDocument } from '@/types/finance/tax-document'
-import { ACCOUNT_FORM_TYPES_1099, FORM_TYPE_LABELS } from '@/types/finance/tax-document'
+import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
+
+interface FinAccount {
+  acct_id: number
+  acct_name: string
+}
 
 interface TaxDocuments1099SectionProps {
   selectedYear: number
@@ -34,6 +39,8 @@ interface TaxDocuments1099SectionProps {
 interface ManualEntryState {
   open: boolean
   formType: '1099_int' | '1099_div'
+  accountId: number
+  accountName: string
   payerName: string
   /** 1099-INT box 1 */
   interest: string
@@ -43,28 +50,28 @@ interface ManualEntryState {
   qualifiedDividends: string
 }
 
-const defaultManualEntry = (formType: '1099_int' | '1099_div'): ManualEntryState => ({
-  open: true,
-  formType,
-  payerName: '',
-  interest: '',
-  ordinaryDividends: '',
-  qualifiedDividends: '',
-})
+interface UploadModalState {
+  open: boolean
+  formType: string
+  accountId: number
+}
+
+const DISPLAY_FORM_TYPES = ['1099_int', '1099_div', '1099_misc'] as const
+type DisplayFormType = (typeof DISPLAY_FORM_TYPES)[number]
 
 export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }: TaxDocuments1099SectionProps) {
   const [documents, setDocuments] = useState<TaxDocument[]>([])
+  const [accounts, setAccounts] = useState<FinAccount[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [uploadingFormType, setUploadingFormType] = useState<string | null>(null)
+  const [uploadModal, setUploadModal] = useState<UploadModalState | null>(null)
   const [manualEntry, setManualEntry] = useState<ManualEntryState | null>(null)
   const [manualSaving, setManualSaving] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const fetchDocuments = useCallback(async () => {
     try {
       const params = new URLSearchParams({
-        form_type: '1099_int,1099_int_c,1099_div,1099_div_c',
+        form_type: '1099_int,1099_int_c,1099_div,1099_div_c,1099_misc',
         year: String(selectedYear),
       })
       const data = await fetchWrapper.get(`/api/finance/tax-documents?${params.toString()}`)
@@ -93,95 +100,54 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
     }
   }, [selectedYear, onTotalsChange])
 
+  const fetchAccounts = useCallback(async () => {
+    try {
+      const data = (await fetchWrapper.get('/api/finance/accounts')) as {
+        assetAccounts: FinAccount[]
+        liabilityAccounts: FinAccount[]
+        retirementAccounts: FinAccount[]
+      }
+      const all: FinAccount[] = [
+        ...(data.assetAccounts ?? []),
+        ...(data.liabilityAccounts ?? []),
+        ...(data.retirementAccounts ?? []),
+      ]
+      setAccounts(all)
+    } catch {
+      // non-fatal
+    }
+  }, [])
+
   useEffect(() => {
     setLoading(true)
-    fetchDocuments().finally(() => setLoading(false))
-  }, [fetchDocuments])
+    Promise.all([fetchDocuments(), fetchAccounts()]).finally(() => setLoading(false))
+  }, [fetchDocuments, fetchAccounts])
 
-  const handleUploadClick = (formType: string) => {
-    setUploadingFormType(formType)
-    fileInputRef.current?.click()
-  }
+  /** Get docs for a specific account + form type (includes corrected variants). */
+  const getDocsForSlot = (accountId: number, formType: DisplayFormType): TaxDocument[] =>
+    documents.filter(d => {
+      if (d.account_id !== accountId) return false
+      if (formType === '1099_int') return d.form_type === '1099_int' || d.form_type === '1099_int_c'
+      if (formType === '1099_div') return d.form_type === '1099_div' || d.form_type === '1099_div_c'
+      return d.form_type === formType
+    })
 
-  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file || !uploadingFormType) return
-
-    const formType = uploadingFormType
-    setUploadingFormType(null)
-    if (fileInputRef.current) fileInputRef.current.value = ''
-
+  const handleView = async (doc: TaxDocument) => {
     try {
-      const fileHash = await computeFileSHA256(file)
-
-      const uploadRequest = await fetchWrapper.post('/api/finance/tax-documents/request-upload', {
-        filename: file.name,
-        content_type: file.type || 'application/pdf',
-        file_size: file.size,
-      }) as { upload_url: string; s3_key: string; expires_in: number }
-
-      const putResponse = await fetch(uploadRequest.upload_url, {
-        method: 'PUT',
-        body: file,
-        headers: { 'Content-Type': file.type || 'application/pdf' },
-      })
-
-      if (!putResponse.ok) {
-        throw new Error('Failed to upload file to storage')
+      const result = (await fetchWrapper.get(`/api/finance/tax-documents/${doc.id}/download`)) as {
+        view_url: string
+        download_url: string
       }
-
-      await fetchWrapper.post('/api/finance/tax-documents', {
-        s3_key: uploadRequest.s3_key,
-        original_filename: file.name,
-        form_type: formType,
-        tax_year: selectedYear,
-        file_size_bytes: file.size,
-        file_hash: fileHash,
-        mime_type: file.type || 'application/pdf',
-      })
-
-      toast.success('Document uploaded successfully')
-      await fetchDocuments()
-    } catch (err) {
-      toast.error('Upload failed: ' + (err instanceof Error ? err.message : 'Unknown error'))
-    }
-  }
-
-  const handleManualEntrySave = async () => {
-    if (!manualEntry) return
-    setManualSaving(true)
-    try {
-      const parsedData: F1099IntParsedData | F1099DivParsedData = manualEntry.formType === '1099_int'
-        ? {
-            payer_name: manualEntry.payerName || null,
-            box1_interest: currency(manualEntry.interest || 0).value,
-          }
-        : {
-            payer_name: manualEntry.payerName || null,
-            box1a_ordinary: currency(manualEntry.ordinaryDividends || 0).value,
-            box1b_qualified: currency(manualEntry.qualifiedDividends || 0).value,
-          }
-
-      await fetchWrapper.post('/api/finance/tax-documents/manual', {
-        form_type: manualEntry.formType,
-        tax_year: selectedYear,
-        parsed_data: parsedData,
-        is_confirmed: true,
-      })
-
-      toast.success('Manual entry saved successfully')
-      setManualEntry(null)
-      await fetchDocuments()
-    } catch (err) {
-      toast.error('Save failed: ' + (err instanceof Error ? err.message : 'Unknown error'))
-    } finally {
-      setManualSaving(false)
+      window.open(result.view_url, '_blank')
+    } catch {
+      toast.error('Failed to get view link')
     }
   }
 
   const handleDownload = async (doc: TaxDocument) => {
     try {
-      const result = await fetchWrapper.get(`/api/finance/tax-documents/${doc.id}/download`) as {
+      const result = (await fetchWrapper.get(`/api/finance/tax-documents/${doc.id}/download`)) as {
+        view_url: string
         download_url: string
       }
       window.open(result.download_url, '_blank')
@@ -212,121 +178,180 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
     }
   }
 
-  const renderProcessingBadge = (doc: TaxDocument) => {
+  const handleManualEntrySave = async () => {
+    if (!manualEntry) return
+    setManualSaving(true)
+    try {
+      const parsedData: F1099IntParsedData | F1099DivParsedData =
+        manualEntry.formType === '1099_int'
+          ? {
+              payer_name: manualEntry.payerName || null,
+              box1_interest: currency(manualEntry.interest || 0).value,
+            }
+          : {
+              payer_name: manualEntry.payerName || null,
+              box1a_ordinary: currency(manualEntry.ordinaryDividends || 0).value,
+              box1b_qualified: currency(manualEntry.qualifiedDividends || 0).value,
+            }
+
+      await fetchWrapper.post('/api/finance/tax-documents/manual', {
+        form_type: manualEntry.formType,
+        tax_year: selectedYear,
+        account_id: manualEntry.accountId,
+        parsed_data: parsedData,
+        is_confirmed: true,
+      })
+
+      toast.success('Manual entry saved successfully')
+      setManualEntry(null)
+      await fetchDocuments()
+    } catch (err) {
+      toast.error('Save failed: ' + (err instanceof Error ? err.message : 'Unknown error'))
+    } finally {
+      setManualSaving(false)
+    }
+  }
+
+  const renderStatusBadge = (doc: TaxDocument) => {
     if (doc.genai_status === 'pending' || doc.genai_status === 'processing') {
       return (
-        <Badge variant="outline" className="border-orange-400 text-orange-600 gap-1">
-          <Clock className="h-3 w-3" />
+        <Badge variant="outline" className="border-orange-400 text-orange-600 gap-1 text-xs">
+          <Clock className="h-2.5 w-2.5" />
           Processing
         </Badge>
       )
     }
     if (doc.genai_status === 'parsed' && doc.is_confirmed) {
-      return <Badge variant="outline" className="border-green-500 text-green-600">Confirmed</Badge>
+      return (
+        <Badge variant="outline" className="border-green-500 text-green-600 text-xs">
+          Confirmed
+        </Badge>
+      )
     }
     if (doc.genai_status === 'parsed') {
-      return <Badge variant="outline" className="border-blue-400 text-blue-600">Ready for Review</Badge>
+      return (
+        <Badge variant="outline" className="border-blue-400 text-blue-600 text-xs">
+          Review
+        </Badge>
+      )
     }
     if (doc.genai_status === 'failed') {
-      return <Badge variant="destructive">Failed</Badge>
+      return <Badge variant="destructive" className="text-xs">Failed</Badge>
+    }
+    if (doc.is_confirmed) {
+      return (
+        <Badge variant="outline" className="border-green-500 text-green-600 text-xs">
+          Confirmed
+        </Badge>
+      )
     }
     return null
+  }
+
+  /** Render the cell content for a given account + form type slot. */
+  const renderSlot = (account: FinAccount, formType: DisplayFormType) => {
+    const docs = getDocsForSlot(account.acct_id, formType)
+
+    if (docs.length === 0) {
+      return (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs"
+          onClick={() => setUploadModal({ open: true, formType, accountId: account.acct_id })}
+        >
+          <Upload className="h-3 w-3 mr-1" />
+          Upload
+        </Button>
+      )
+    }
+
+    const doc = docs[0]
+    if (!doc) return null
+    return (
+      <div className="flex flex-col gap-1">
+        {renderStatusBadge(doc)}
+        <div className="flex gap-0.5">
+          {doc.s3_path && (
+            <>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 w-6 p-0"
+                onClick={() => handleView(doc)}
+                title="View"
+              >
+                <Eye className="h-3 w-3" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 w-6 p-0"
+                onClick={() => handleDownload(doc)}
+                title="Download"
+              >
+                <Download className="h-3 w-3" />
+              </Button>
+            </>
+          )}
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 w-6 p-0"
+            onClick={() => handleToggleReconciled(doc)}
+            title={doc.is_reconciled ? 'Mark unreconciled' : 'Mark reconciled'}
+          >
+            <CheckCircle
+              className={`h-3 w-3 ${doc.is_reconciled ? 'text-green-600' : 'text-muted-foreground/40'}`}
+            />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+            onClick={() => handleDelete(doc)}
+            title="Delete"
+          >
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div>
       <h3 className="text-base font-semibold mb-2">1099 Documents</h3>
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="application/pdf"
-        className="hidden"
-        onChange={handleFileSelected}
-      />
-
-      <div className="flex flex-wrap gap-2 mb-3">
-        {ACCOUNT_FORM_TYPES_1099.map(ft => (
-          <Button key={ft} size="sm" variant="outline" onClick={() => handleUploadClick(ft)}>
-            <Upload className="h-3 w-3 mr-1" />
-            {FORM_TYPE_LABELS[ft]}
-          </Button>
-        ))}
-        <Button size="sm" variant="outline" onClick={() => setManualEntry(defaultManualEntry('1099_int'))}>
-          <Plus className="h-3 w-3 mr-1" />
-          Other 1099-INT
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => setManualEntry(defaultManualEntry('1099_div'))}>
-          <Plus className="h-3 w-3 mr-1" />
-          Other 1099-DIV
-        </Button>
-      </div>
-
       {loading ? (
         <div className="flex items-center gap-2 text-muted-foreground text-sm">
           <Loader2 className="h-4 w-4 animate-spin" />
-          Loading...
+          Loading…
         </div>
       ) : error ? (
         <div className="text-destructive text-sm">{error}</div>
-      ) : documents.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No 1099 documents for {selectedYear}.</p>
+      ) : accounts.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No accounts found. Add an account to upload 1099 documents.
+        </p>
       ) : (
         <div className="border rounded-md overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Form</TableHead>
-                <TableHead>Filename</TableHead>
-                <TableHead>Size</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Reconciled</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>Account</TableHead>
+                {DISPLAY_FORM_TYPES.map(ft => (
+                  <TableHead key={ft}>{FORM_TYPE_LABELS[ft]}</TableHead>
+                ))}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {documents.map(doc => (
-                <TableRow key={doc.id}>
-                  <TableCell>
-                    <Badge variant="secondary">{FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type}</Badge>
-                  </TableCell>
-                  <TableCell className="text-sm">{doc.original_filename}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{doc.human_file_size}</TableCell>
-                  <TableCell>{renderProcessingBadge(doc)}</TableCell>
-                  <TableCell>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleToggleReconciled(doc)}
-                      className="h-auto p-1"
-                      aria-label={
-                        doc.is_reconciled
-                          ? `Mark ${doc.original_filename} as unreconciled`
-                          : `Mark ${doc.original_filename} as reconciled`
-                      }
-                      aria-checked={doc.is_reconciled}
-                    >
-                      <CheckCircle
-                        className={`h-4 w-4 ${doc.is_reconciled ? 'text-green-600' : 'text-muted-foreground/40'}`}
-                      />
-                    </Button>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button size="sm" variant="ghost" onClick={() => handleDownload(doc)} title="Download">
-                        <Download className="h-3 w-3" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => handleDelete(doc)}
-                        title="Delete"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </TableCell>
+              {accounts.map(account => (
+                <TableRow key={account.acct_id}>
+                  <TableCell className="font-medium text-sm">{account.acct_name}</TableCell>
+                  {DISPLAY_FORM_TYPES.map(ft => (
+                    <TableCell key={ft}>{renderSlot(account, ft)}</TableCell>
+                  ))}
                 </TableRow>
               ))}
             </TableBody>
@@ -334,12 +359,46 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
         </div>
       )}
 
-      {/* Manual entry dialog for "Other 1099-INT / 1099-DIV" */}
+      {/* Upload modal */}
+      {uploadModal && (
+        <TaxDocumentUploadModal
+          open={uploadModal.open}
+          formType={uploadModal.formType}
+          taxYear={selectedYear}
+          accountId={uploadModal.accountId}
+          onSuccess={() => {
+            setUploadModal(null)
+            fetchDocuments()
+          }}
+          onCancel={() => setUploadModal(null)}
+          {...(uploadModal.formType === '1099_int' || uploadModal.formType === '1099_div'
+            ? {
+                onCreateBlank: () => {
+                  const ft = uploadModal.formType as '1099_int' | '1099_div'
+                  const account = accounts.find(a => a.acct_id === uploadModal.accountId)
+                  setManualEntry({
+                    open: true,
+                    formType: ft,
+                    accountId: uploadModal.accountId,
+                    accountName: account?.acct_name ?? '',
+                    payerName: '',
+                    interest: '',
+                    ordinaryDividends: '',
+                    qualifiedDividends: '',
+                  })
+                },
+              }
+            : {})}
+        />
+      )}
+
+      {/* Manual entry dialog */}
       <Dialog open={manualEntry?.open ?? false} onOpenChange={open => !open && setManualEntry(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
               Enter {manualEntry?.formType === '1099_int' ? '1099-INT' : '1099-DIV'} Data Manually
+              {manualEntry?.accountName ? ` — ${manualEntry.accountName}` : ''}
             </DialogTitle>
           </DialogHeader>
           {manualEntry && (
@@ -397,7 +456,9 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setManualEntry(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setManualEntry(null)}>
+              Cancel
+            </Button>
             <Button onClick={handleManualEntrySave} disabled={manualSaving}>
               {manualSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Save

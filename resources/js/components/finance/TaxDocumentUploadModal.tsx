@@ -1,0 +1,316 @@
+'use client'
+
+import { Loader2, Upload } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
+
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Progress } from '@/components/ui/progress'
+import { fetchWrapper } from '@/fetchWrapper'
+import { computeFileSHA256 } from '@/lib/fileUtils'
+import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
+
+interface TaxDocumentUploadModalProps {
+  open: boolean
+  formType: string
+  taxYear: number
+  accountId?: number
+  employmentEntityId?: number
+  onSuccess: () => void
+  onCancel: () => void
+  /** Called when the user clicks "Create Blank" */
+  onCreateBlank?: () => void
+}
+
+type UploadPhase = 'idle' | 'requesting' | 'uploading' | 'saving' | 'done'
+
+/**
+ * Compresses an image blob to an optimised PNG using an off-screen Canvas.
+ * Returns a new Blob with type 'image/png'.
+ */
+async function compressImageToPng(blob: Blob): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const url = URL.createObjectURL(blob)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      // Limit max dimension to 2000 px while preserving aspect ratio
+      const MAX = 2000
+      let { width, height } = img
+      if (width > MAX || height > MAX) {
+        if (width > height) {
+          height = Math.round((height * MAX) / width)
+          width = MAX
+        } else {
+          width = Math.round((width * MAX) / height)
+          height = MAX
+        }
+      }
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        reject(new Error('Canvas 2D context unavailable'))
+        return
+      }
+      ctx.drawImage(img, 0, 0, width, height)
+      canvas.toBlob(result => {
+        if (result) resolve(result)
+        else reject(new Error('Canvas toBlob failed'))
+      }, 'image/png')
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('Failed to load image for compression'))
+    }
+    img.src = url
+  })
+}
+
+export default function TaxDocumentUploadModal({
+  open,
+  formType,
+  taxYear,
+  accountId,
+  employmentEntityId,
+  onSuccess,
+  onCancel,
+  onCreateBlank,
+}: TaxDocumentUploadModalProps) {
+  const [phase, setPhase] = useState<UploadPhase>('idle')
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [isDragging, setIsDragging] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const dropZoneRef = useRef<HTMLDivElement>(null)
+
+  // Reset state when modal opens
+  useEffect(() => {
+    if (open) {
+      setPhase('idle')
+      setUploadProgress(0)
+      setIsDragging(false)
+    }
+  }, [open])
+
+  const doUpload = useCallback(
+    async (file: File, overrideFilename?: string) => {
+      const filename = overrideFilename ?? file.name
+      try {
+        setPhase('requesting')
+        setUploadProgress(0)
+
+        const fileHash = await computeFileSHA256(file)
+
+        const uploadRequest = (await fetchWrapper.post('/api/finance/tax-documents/request-upload', {
+          filename,
+          content_type: file.type || 'application/octet-stream',
+          file_size: file.size,
+        })) as { upload_url: string; s3_key: string; expires_in: number }
+
+        setPhase('uploading')
+
+        // Use XMLHttpRequest for progress tracking
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest()
+          xhr.open('PUT', uploadRequest.upload_url)
+          xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream')
+          xhr.upload.onprogress = e => {
+            if (e.lengthComputable) {
+              setUploadProgress(Math.round((e.loaded / e.total) * 100))
+            }
+          }
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) resolve()
+            else reject(new Error(`Upload failed: HTTP ${xhr.status}`))
+          }
+          xhr.onerror = () => reject(new Error('Network error during upload'))
+          xhr.send(file)
+        })
+
+        setPhase('saving')
+
+        await fetchWrapper.post('/api/finance/tax-documents', {
+          s3_key: uploadRequest.s3_key,
+          original_filename: filename,
+          form_type: formType,
+          tax_year: taxYear,
+          file_size_bytes: file.size,
+          file_hash: fileHash,
+          mime_type: file.type || 'application/octet-stream',
+          ...(accountId != null ? { account_id: accountId } : {}),
+          ...(employmentEntityId != null ? { employment_entity_id: employmentEntityId } : {}),
+        })
+
+        setPhase('done')
+        toast.success('Document uploaded successfully')
+        onSuccess()
+      } catch (err) {
+        setPhase('idle')
+        toast.error('Upload failed: ' + (err instanceof Error ? err.message : 'Unknown error'))
+      }
+    },
+    [formType, taxYear, accountId, employmentEntityId, onSuccess],
+  )
+
+  const handleFileSelected = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      if (!file) return
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      await doUpload(file)
+    },
+    [doUpload],
+  )
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault()
+      setIsDragging(false)
+      const file = e.dataTransfer.files?.[0]
+      if (!file) return
+      await doUpload(file)
+    },
+    [doUpload],
+  )
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = () => {
+    setIsDragging(false)
+  }
+
+  // Handle CTRL+V paste
+  useEffect(() => {
+    if (!open) return
+
+    const handlePaste = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items
+      if (!items) return
+
+      // Check for image first
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith('image/')) {
+          e.preventDefault()
+          const blob = item.getAsFile()
+          if (!blob) continue
+          try {
+            const pngBlob = await compressImageToPng(blob)
+            const file = new File([pngBlob], 'clipping.png', { type: 'image/png' })
+            await doUpload(file)
+          } catch {
+            toast.error('Failed to process pasted image. Please try a different format.')
+          }
+          return
+        }
+      }
+
+      // Check for text
+      for (const item of Array.from(items)) {
+        if (item.type === 'text/plain') {
+          item.getAsString(async text => {
+            if (!text.trim()) {
+              toast.error('No text content found in clipboard. Please paste an image or text.')
+              return
+            }
+            const file = new File([text], 'clipping.txt', { type: 'text/plain' })
+            await doUpload(file)
+          })
+          return
+        }
+      }
+
+      toast.error('No supported content found in clipboard. Please paste an image or text file.')
+    }
+
+    window.addEventListener('paste', handlePaste)
+    return () => window.removeEventListener('paste', handlePaste)
+  }, [open, doUpload])
+
+  const isUploading = phase !== 'idle' && phase !== 'done'
+  const formLabel = FORM_TYPE_LABELS[formType] ?? formType
+
+  return (
+    <Dialog open={open} onOpenChange={isOpen => !isOpen && !isUploading && onCancel()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Upload {formLabel}</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          {/* Drop zone */}
+          <div
+            ref={dropZoneRef}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onClick={() => !isUploading && fileInputRef.current?.click()}
+            className={`
+              border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors
+              ${isDragging ? 'border-primary bg-primary/5' : 'border-muted-foreground/30 hover:border-primary/60 hover:bg-muted/30'}
+              ${isUploading ? 'pointer-events-none opacity-70' : ''}
+            `}
+          >
+            {isUploading ? (
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                <p className="text-sm text-muted-foreground">
+                  {phase === 'requesting' && 'Preparing upload…'}
+                  {phase === 'uploading' && `Uploading… ${uploadProgress}%`}
+                  {phase === 'saving' && 'Saving…'}
+                </p>
+                {phase === 'uploading' && (
+                  <Progress value={uploadProgress} className="w-full max-w-xs" />
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                <Upload className="h-8 w-8" />
+                <p className="font-medium text-foreground">Drop file here, paste a screen clipping, or click here to select a file</p>
+                <p className="text-xs">PDF, PNG, JPG, or TXT</p>
+              </div>
+            )}
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/pdf,image/*,text/plain"
+            className="hidden"
+            onChange={handleFileSelected}
+          />
+
+          {/* Create Blank option */}
+          {onCreateBlank && !isUploading && (
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-xs text-muted-foreground">or</span>
+              <div className="flex-1 h-px bg-border" />
+            </div>
+          )}
+          {onCreateBlank && !isUploading && (
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                onCancel()
+                onCreateBlank()
+              }}
+            >
+              Create Blank {formLabel}
+            </Button>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}

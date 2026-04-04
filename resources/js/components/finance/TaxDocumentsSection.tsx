@@ -1,14 +1,14 @@
 'use client'
 
-import { CheckCircle, Clock, Download, Loader2, Trash2, Upload } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { CheckCircle, Clock, Download, Eye, Loader2, Trash2, Upload } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import TaxDocumentUploadModal from '@/components/finance/TaxDocumentUploadModal'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
-import { computeFileSHA256 } from '@/lib/fileUtils'
 import type { EmploymentEntity, TaxDocument } from '@/types/finance/tax-document'
 
 interface TaxDocumentsSectionProps {
@@ -20,8 +20,7 @@ export default function TaxDocumentsSection({ selectedYear }: TaxDocumentsSectio
   const [entities, setEntities] = useState<EmploymentEntity[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [uploadingFor, setUploadingFor] = useState<{ entityId: number; formType: string } | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [uploadModal, setUploadModal] = useState<{ entityId: number; formType: string } | null>(null)
 
   const fetchDocuments = useCallback(async () => {
     try {
@@ -50,59 +49,22 @@ export default function TaxDocumentsSection({ selectedYear }: TaxDocumentsSectio
     Promise.all([fetchDocuments(), fetchEntities()]).finally(() => setLoading(false))
   }, [fetchDocuments, fetchEntities])
 
-  const handleUploadClick = (entityId: number, formType: string) => {
-    setUploadingFor({ entityId, formType })
-    fileInputRef.current?.click()
-  }
-
-  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file || !uploadingFor) return
-
-    const { entityId, formType } = uploadingFor
-    setUploadingFor(null)
-    if (fileInputRef.current) fileInputRef.current.value = ''
-
+  const handleView = async (doc: TaxDocument) => {
     try {
-      const fileHash = await computeFileSHA256(file)
-
-      const uploadRequest = await fetchWrapper.post('/api/finance/tax-documents/request-upload', {
-        filename: file.name,
-        content_type: file.type || 'application/pdf',
-        file_size: file.size,
-      }) as { upload_url: string; s3_key: string; expires_in: number }
-
-      const putResponse = await fetch(uploadRequest.upload_url, {
-        method: 'PUT',
-        body: file,
-        headers: { 'Content-Type': file.type || 'application/pdf' },
-      })
-
-      if (!putResponse.ok) {
-        throw new Error('Failed to upload file to storage')
+      const result = (await fetchWrapper.get(`/api/finance/tax-documents/${doc.id}/download`)) as {
+        view_url: string
+        download_url: string
       }
-
-      await fetchWrapper.post('/api/finance/tax-documents', {
-        s3_key: uploadRequest.s3_key,
-        original_filename: file.name,
-        form_type: formType,
-        tax_year: typeof selectedYear === 'number' ? selectedYear : new Date().getFullYear(),
-        file_size_bytes: file.size,
-        file_hash: fileHash,
-        mime_type: file.type || 'application/pdf',
-        employment_entity_id: entityId,
-      })
-
-      toast.success('Document uploaded successfully')
-      await fetchDocuments()
-    } catch (err) {
-      toast.error('Upload failed: ' + (err instanceof Error ? err.message : 'Unknown error'))
+      window.open(result.view_url, '_blank')
+    } catch {
+      toast.error('Failed to get view link')
     }
   }
 
   const handleDownload = async (doc: TaxDocument) => {
     try {
-      const result = await fetchWrapper.get(`/api/finance/tax-documents/${doc.id}/download`) as {
+      const result = (await fetchWrapper.get(`/api/finance/tax-documents/${doc.id}/download`)) as {
+        view_url: string
         download_url: string
       }
       window.open(result.download_url, '_blank')
@@ -137,9 +99,6 @@ export default function TaxDocumentsSection({ selectedYear }: TaxDocumentsSectio
 
   const getDocsForEntity = (entityId: number) =>
     documents.filter(d => d.employment_entity_id === entityId)
-
-  const entityHasW2 = (entityId: number) =>
-    documents.some(d => d.employment_entity_id === entityId && d.form_type === 'w2')
 
   const renderProcessingBadge = (doc: TaxDocument) => {
     if (doc.genai_status === 'pending' || doc.genai_status === 'processing') {
@@ -178,13 +137,6 @@ export default function TaxDocumentsSection({ selectedYear }: TaxDocumentsSectio
   return (
     <div>
       <h2 className="text-lg font-semibold mb-2">W-2 Documents</h2>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="application/pdf"
-        className="hidden"
-        onChange={handleFileSelected}
-      />
 
       {w2Entities.length === 0 && (
         <p className="text-sm text-muted-foreground">No W-2 employers found.</p>
@@ -192,25 +144,18 @@ export default function TaxDocumentsSection({ selectedYear }: TaxDocumentsSectio
 
       {w2Entities.map(entity => {
         const entityDocs = getDocsForEntity(entity.id)
-        const hasW2 = entityHasW2(entity.id)
         return (
           <div key={entity.id} className="mb-4 border rounded-md overflow-hidden">
             <div className="flex items-center justify-between px-3 py-2 bg-muted/30">
               <span className="font-medium text-sm">{entity.display_name}</span>
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => handleUploadClick(entity.id, 'w2')}>
-                  <Upload className="h-3 w-3 mr-1" />
-                  W-2
-                </Button>
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => handleUploadClick(entity.id, 'w2c')}
-                  disabled={!hasW2}
-                  title={hasW2 ? 'Upload W-2c' : 'Upload a W-2 first before uploading W-2c'}
+                  onClick={() => setUploadModal({ entityId: entity.id, formType: 'w2' })}
                 >
                   <Upload className="h-3 w-3 mr-1" />
-                  W-2c
+                  W-2
                 </Button>
               </div>
             </div>
@@ -254,7 +199,15 @@ export default function TaxDocumentsSection({ selectedYear }: TaxDocumentsSectio
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
-                          <Button size="sm" variant="ghost" onClick={() => handleDownload(doc)} title="Download">
+                          <Button size="sm" variant="ghost" onClick={() => handleView(doc)} title="View">
+                            <Eye className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleDownload(doc)}
+                            title="Download"
+                          >
                             <Download className="h-3 w-3" />
                           </Button>
                           <Button
@@ -276,6 +229,21 @@ export default function TaxDocumentsSection({ selectedYear }: TaxDocumentsSectio
           </div>
         )
       })}
+
+      {/* Upload modal */}
+      {uploadModal && (
+        <TaxDocumentUploadModal
+          open
+          formType={uploadModal.formType}
+          taxYear={typeof selectedYear === 'number' ? selectedYear : new Date().getFullYear()}
+          employmentEntityId={uploadModal.entityId}
+          onSuccess={() => {
+            setUploadModal(null)
+            fetchDocuments()
+          }}
+          onCancel={() => setUploadModal(null)}
+        />
+      )}
     </div>
   )
 }

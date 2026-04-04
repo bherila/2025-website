@@ -18,6 +18,8 @@ class GenAiJobDispatcherService
 
     public const TAX_DOCUMENT_1099DIV_TOOL_NAME = 'extract1099DivData';
 
+    public const TAX_DOCUMENT_1099MISC_TOOL_NAME = 'extract1099MiscData';
+
     /**
      * Atomically claim a quota slot for today (UTC).
      * Returns false if the site-wide or per-user limit is reached.
@@ -797,6 +799,7 @@ PROMPT;
             in_array($formType, ['w2', 'w2c']) => $this->buildW2Prompt($formType, (int) $taxYear),
             in_array($formType, ['1099_int', '1099_int_c']) => $this->build1099IntPrompt($formType, (int) $taxYear),
             in_array($formType, ['1099_div', '1099_div_c']) => $this->build1099DivPrompt($formType, (int) $taxYear),
+            $formType === '1099_misc' => $this->build1099MiscPrompt((int) $taxYear),
             default => throw new \InvalidArgumentException("Unknown tax form type: {$formType}"),
         };
     }
@@ -841,6 +844,18 @@ All monetary values must be numbers (not strings). If a field is not present on 
 PROMPT;
     }
 
+    private function build1099MiscPrompt(int $taxYear): string
+    {
+        $toolName = self::TAX_DOCUMENT_1099MISC_TOOL_NAME;
+
+        return <<<PROMPT
+<!-- tool:{$toolName} -->
+Analyze the provided 1099-MISC PDF for tax year {$taxYear}.
+Use the `{$toolName}` tool to return ALL extracted box values from the Miscellaneous Income form.
+All monetary values must be numbers (not strings). If a field is not present on the form, set it to null.
+PROMPT;
+    }
+
     /**
      * Extracts the tool name marker from the prompt and returns the tool definition.
      * Returns null if no marker is found.
@@ -857,6 +872,9 @@ PROMPT;
         }
         if (str_contains($prompt, self::TAX_DOCUMENT_1099DIV_TOOL_NAME)) {
             return ['name' => self::TAX_DOCUMENT_1099DIV_TOOL_NAME, 'definition' => $this->build1099DivToolDefinition()];
+        }
+        if (str_contains($prompt, self::TAX_DOCUMENT_1099MISC_TOOL_NAME)) {
+            return ['name' => self::TAX_DOCUMENT_1099MISC_TOOL_NAME, 'definition' => $this->build1099MiscToolDefinition()];
         }
 
         return null;
@@ -934,6 +952,14 @@ PROMPT;
                 'box9_cash_liquidation', 'box10_noncash_liquidation', 'box11_exempt_interest',
                 'box12_private_activity', 'box14_state_tax',
             ],
+            self::TAX_DOCUMENT_1099MISC_TOOL_NAME => [
+                'box1_rents', 'box2_royalties', 'box3_other_income', 'box4_fed_tax',
+                'box5_fishing_boat', 'box6_medical', 'box8_substitute_payments',
+                'box9_crop_insurance', 'box10_gross_proceeds_attorney',
+                'box11_fish_purchased', 'box12_section_409a_deferrals',
+                'box14_excess_golden_parachute', 'box15_nonqualified_deferred',
+                'box16_state_tax',
+            ],
             default => [],
         };
 
@@ -949,6 +975,10 @@ PROMPT;
             self::TAX_DOCUMENT_1099DIV_TOOL_NAME => [
                 'payer_name', 'payer_tin', 'recipient_name', 'recipient_tin_last4',
                 'box8_foreign_country', 'box13_state', 'account_number',
+            ],
+            self::TAX_DOCUMENT_1099MISC_TOOL_NAME => [
+                'payer_name', 'payer_tin', 'recipient_name', 'recipient_tin_last4',
+                'box13_fatca_filing', 'box15_state', 'account_number',
             ],
             default => [],
         };
@@ -1150,6 +1180,44 @@ PROMPT;
                     'box13_state' => $stringProp(),
                     'box14_state_tax' => $numberProp(),
                     'account_number' => $stringProp(),
+                ],
+            ],
+        ];
+    }
+
+    private function build1099MiscToolDefinition(): array
+    {
+        $numberProp = fn () => ['type' => 'NUMBER'];
+        $stringProp = fn () => ['type' => 'STRING'];
+
+        return [
+            'name' => self::TAX_DOCUMENT_1099MISC_TOOL_NAME,
+            'description' => 'Extract all box values from a 1099-MISC miscellaneous income form.',
+            'parameters' => [
+                'type' => 'OBJECT',
+                'properties' => [
+                    'payer_name' => $stringProp(),
+                    'payer_tin' => $stringProp(),
+                    'recipient_name' => $stringProp(),
+                    'recipient_tin_last4' => $stringProp(),
+                    'account_number' => $stringProp(),
+                    'box1_rents' => $numberProp(),
+                    'box2_royalties' => $numberProp(),
+                    'box3_other_income' => $numberProp(),
+                    'box4_fed_tax' => $numberProp(),
+                    'box5_fishing_boat' => $numberProp(),
+                    'box6_medical' => $numberProp(),
+                    'box7_direct_sales_indicator' => ['type' => 'BOOLEAN'],
+                    'box8_substitute_payments' => $numberProp(),
+                    'box9_crop_insurance' => $numberProp(),
+                    'box10_gross_proceeds_attorney' => $numberProp(),
+                    'box11_fish_purchased' => $numberProp(),
+                    'box12_section_409a_deferrals' => $numberProp(),
+                    'box13_fatca_filing' => $stringProp(),
+                    'box14_excess_golden_parachute' => $numberProp(),
+                    'box15_nonqualified_deferred' => $numberProp(),
+                    'box15_state' => $stringProp(),
+                    'box16_state_tax' => $numberProp(),
                 ],
             ],
         ];

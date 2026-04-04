@@ -80,8 +80,34 @@ export interface F1099DivParsedData {
   account_number?: string | null
 }
 
+/** Parsed field values from 1099-MISC. */
+export interface F1099MiscParsedData {
+  payer_name?: string | null
+  payer_tin?: string | null
+  recipient_name?: string | null
+  recipient_tin_last4?: string | null
+  account_number?: string | null
+  box1_rents?: number | null
+  box2_royalties?: number | null
+  box3_other_income?: number | null
+  box4_fed_tax?: number | null
+  box5_fishing_boat?: number | null
+  box6_medical?: number | null
+  box7_direct_sales_indicator?: boolean | null
+  box8_substitute_payments?: number | null
+  box9_crop_insurance?: number | null
+  box10_gross_proceeds_attorney?: number | null
+  box11_fish_purchased?: number | null
+  box12_section_409a_deferrals?: number | null
+  box13_fatca_filing?: string | null
+  box14_excess_golden_parachute?: number | null
+  box15_nonqualified_deferred?: number | null
+  box15_state?: string | null
+  box16_state_tax?: number | null
+}
+
 /** Union of all possible parsed_data shapes. */
-export type TaxDocumentParsedData = W2ParsedData | F1099IntParsedData | F1099DivParsedData
+export type TaxDocumentParsedData = W2ParsedData | F1099IntParsedData | F1099DivParsedData | F1099MiscParsedData
 
 export interface TaxDocument {
   id: number
@@ -125,7 +151,8 @@ export const FORM_TYPE_LABELS: Record<string, string> = {
   '1099_int_c': '1099-INT-C',
   '1099_div': '1099-DIV',
   '1099_div_c': '1099-DIV-C',
+  '1099_misc': '1099-MISC',
 }
 
 export const W2_FORM_TYPES = ['w2', 'w2c'] as const
-export const ACCOUNT_FORM_TYPES_1099 = ['1099_int', '1099_int_c', '1099_div', '1099_div_c'] as const
+export const ACCOUNT_FORM_TYPES_1099 = ['1099_int', '1099_div', '1099_misc'] as const
