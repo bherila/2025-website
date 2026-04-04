@@ -83,6 +83,7 @@ class GenAiJobDispatcherService
             'finance_transactions' => $this->buildFinanceTransactionsPrompt($context),
             'finance_payslip' => $this->buildPayslipPrompt($context),
             'utility_bill' => $this->buildUtilityBillPrompt($context),
+            'tax_document' => $this->buildTaxDocumentPrompt($context),
             default => throw new \InvalidArgumentException("Unknown job type: {$jobType}"),
         };
     }
@@ -164,6 +165,7 @@ class GenAiJobDispatcherService
             'finance_transactions' => ['accounts'],
             'finance_payslip' => ['employment_entity_id', 'file_count'],
             'utility_bill' => ['account_type', 'utility_account_id', 'file_count'],
+            'tax_document' => ['tax_year', 'form_type', 'tax_document_id'],
             default => throw new \InvalidArgumentException("Unknown job type: {$jobType}"),
         };
 
@@ -755,5 +757,142 @@ Return ONLY the JSON array.
 PROMPT;
 
         return $basePrompt;
+    }
+
+    private function buildTaxDocumentPrompt(array $context): string
+    {
+        $formType = $context['form_type'] ?? 'w2';
+        $taxYear = $context['tax_year'] ?? date('Y');
+
+        return match (true) {
+            in_array($formType, ['w2', 'w2c']) => $this->buildW2Prompt($formType, (int) $taxYear),
+            in_array($formType, ['1099_int', '1099_int_c']) => $this->build1099IntPrompt($formType, (int) $taxYear),
+            in_array($formType, ['1099_div', '1099_div_c']) => $this->build1099DivPrompt($formType, (int) $taxYear),
+            default => throw new \InvalidArgumentException("Unknown tax form type: {$formType}"),
+        };
+    }
+
+    private function buildW2Prompt(string $formType, int $taxYear): string
+    {
+        $formName = $formType === 'w2c' ? 'W-2c (Corrected Wage and Tax Statement)' : 'W-2 (Wage and Tax Statement)';
+
+        return <<<PROMPT
+Analyze the provided {$formName} PDF for tax year {$taxYear}.
+Extract all box values from the form.
+
+Return a SINGLE JSON OBJECT with the following fields:
+- `employer_name`: Employer's name (string)
+- `employer_ein`: Employer's EIN (string, format XX-XXXXXXX)
+- `employee_name`: Employee's name (string)
+- `employee_ssn_last4`: Last 4 digits of employee SSN (string)
+- `box1_wages`: Box 1 - Wages, tips, other compensation (numeric)
+- `box2_fed_tax`: Box 2 - Federal income tax withheld (numeric)
+- `box3_ss_wages`: Box 3 - Social security wages (numeric)
+- `box4_ss_tax`: Box 4 - Social security tax withheld (numeric)
+- `box5_medicare_wages`: Box 5 - Medicare wages and tips (numeric)
+- `box6_medicare_tax`: Box 6 - Medicare tax withheld (numeric)
+- `box7_ss_tips`: Box 7 - Social security tips (numeric, null if not present)
+- `box8_allocated_tips`: Box 8 - Allocated tips (numeric, null if not present)
+- `box10_dependent_care`: Box 10 - Dependent care benefits (numeric, null if not present)
+- `box11_nonqualified`: Box 11 - Nonqualified plans (numeric, null if not present)
+- `box12_codes`: Box 12 - Array of objects with `code` (string, e.g. "DD") and `amount` (numeric)
+- `box13_statutory`: Box 13 - Statutory employee checkbox (boolean)
+- `box13_retirement`: Box 13 - Retirement plan checkbox (boolean)
+- `box13_sick_pay`: Box 13 - Third-party sick pay checkbox (boolean)
+- `box14_other`: Box 14 - Other: Array of objects with `label` (string) and `amount` (numeric)
+- `box15_state`: Box 15 - State (string)
+- `box16_state_wages`: Box 16 - State wages (numeric)
+- `box17_state_tax`: Box 17 - State income tax (numeric)
+- `box18_local_wages`: Box 18 - Local wages (numeric, null if not present)
+- `box19_local_tax`: Box 19 - Local income tax (numeric, null if not present)
+- `box20_locality`: Box 20 - Locality name (string, null if not present)
+
+**Instructions:**
+1. Return ONLY the JSON object, no explanatory text.
+2. All monetary values should be numbers (e.g., 1234.56), not strings.
+3. If a field is not present on the form, set its value to null.
+4. For Box 12, return an empty array if no codes are present.
+5. For Box 14, return an empty array if nothing is listed.
+
+PROMPT;
+    }
+
+    private function build1099IntPrompt(string $formType, int $taxYear): string
+    {
+        $formName = $formType === '1099_int_c' ? '1099-INT (Corrected)' : '1099-INT';
+
+        return <<<PROMPT
+Analyze the provided {$formName} PDF for tax year {$taxYear}.
+Extract all box values from the Interest Income form.
+
+Return a SINGLE JSON OBJECT with the following fields:
+- `payer_name`: Payer's name (string)
+- `payer_tin`: Payer's TIN (string)
+- `recipient_name`: Recipient's name (string)
+- `recipient_tin_last4`: Last 4 digits of recipient's TIN (string)
+- `box1_interest`: Box 1 - Interest income (numeric)
+- `box2_early_withdrawal`: Box 2 - Early withdrawal penalty (numeric, null if not present)
+- `box3_savings_bond`: Box 3 - Interest on U.S. Savings Bonds and Treasury obligations (numeric, null if not present)
+- `box4_fed_tax`: Box 4 - Federal income tax withheld (numeric, null if not present)
+- `box5_investment_expense`: Box 5 - Investment expenses (numeric, null if not present)
+- `box6_foreign_tax`: Box 6 - Foreign tax paid (numeric, null if not present)
+- `box7_foreign_country`: Box 7 - Foreign country or U.S. possession (string, null if not present)
+- `box8_tax_exempt`: Box 8 - Tax-exempt interest (numeric, null if not present)
+- `box9_private_activity`: Box 9 - Specified private activity bond interest (numeric, null if not present)
+- `box10_market_discount`: Box 10 - Market discount (numeric, null if not present)
+- `box11_bond_premium`: Box 11 - Bond premium (numeric, null if not present)
+- `box12_treasury_premium`: Box 12 - Bond premium on Treasury obligations (numeric, null if not present)
+- `box13_tax_exempt_premium`: Box 13 - Bond premium on tax-exempt bond (numeric, null if not present)
+- `account_number`: Account number (string, null if not present)
+
+**Instructions:**
+1. Return ONLY the JSON object, no explanatory text.
+2. All monetary values should be numbers (e.g., 1234.56), not strings.
+3. If a field is not present on the form, set its value to null.
+
+PROMPT;
+    }
+
+    private function build1099DivPrompt(string $formType, int $taxYear): string
+    {
+        $formName = $formType === '1099_div_c' ? '1099-DIV (Corrected)' : '1099-DIV';
+
+        return <<<PROMPT
+Analyze the provided {$formName} PDF for tax year {$taxYear}.
+Extract all box values from the Dividends and Distributions form.
+
+Return a SINGLE JSON OBJECT with the following fields:
+- `payer_name`: Payer's name (string)
+- `payer_tin`: Payer's TIN (string)
+- `recipient_name`: Recipient's name (string)
+- `recipient_tin_last4`: Last 4 digits of recipient's TIN (string)
+- `box1a_ordinary`: Box 1a - Total ordinary dividends (numeric)
+- `box1b_qualified`: Box 1b - Qualified dividends (numeric, null if not present)
+- `box2a_cap_gain`: Box 2a - Total capital gain distributions (numeric, null if not present)
+- `box2b_unrecap_1250`: Box 2b - Unrecaptured Section 1250 gain (numeric, null if not present)
+- `box2c_section_1202`: Box 2c - Section 1202 gain (numeric, null if not present)
+- `box2d_collectibles`: Box 2d - Collectibles (28%) gain (numeric, null if not present)
+- `box2e_section_897_ordinary`: Box 2e - Section 897 ordinary dividends (numeric, null if not present)
+- `box2f_section_897_cap_gain`: Box 2f - Section 897 capital gain (numeric, null if not present)
+- `box3_nondividend`: Box 3 - Nondividend distributions (numeric, null if not present)
+- `box4_fed_tax`: Box 4 - Federal income tax withheld (numeric, null if not present)
+- `box5_section_199a`: Box 5 - Section 199A dividends (numeric, null if not present)
+- `box6_investment_expense`: Box 6 - Investment expenses (numeric, null if not present)
+- `box7_foreign_tax`: Box 7 - Foreign tax paid (numeric, null if not present)
+- `box8_foreign_country`: Box 8 - Foreign country or U.S. possession (string, null if not present)
+- `box9_cash_liquidation`: Box 9 - Cash liquidation distributions (numeric, null if not present)
+- `box10_noncash_liquidation`: Box 10 - Noncash liquidation distributions (numeric, null if not present)
+- `box11_exempt_interest`: Box 11 - Exempt-interest dividends (numeric, null if not present)
+- `box12_private_activity`: Box 12 - Specified private activity bond interest dividends (numeric, null if not present)
+- `box13_state`: Box 13 - State (string, null if not present)
+- `box14_state_tax`: Box 14 - State tax withheld (numeric, null if not present)
+- `account_number`: Account number (string, null if not present)
+
+**Instructions:**
+1. Return ONLY the JSON object, no explanatory text.
+2. All monetary values should be numbers (e.g., 1234.56), not strings.
+3. If a field is not present on the form, set its value to null.
+
+PROMPT;
     }
 }

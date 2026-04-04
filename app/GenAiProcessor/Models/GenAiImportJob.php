@@ -18,6 +18,7 @@ class GenAiImportJob extends Model
         'finance_transactions',
         'finance_payslip',
         'utility_bill',
+        'tax_document',
     ];
 
     public const VALID_STATUSES = [

@@ -7,6 +7,7 @@ use App\GenAiProcessor\Mail\GenAiJobDeferredMail;
 use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Models\GenAiImportResult;
 use App\GenAiProcessor\Services\GenAiJobDispatcherService;
+use App\Models\Files\FileForTaxDocument;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -307,6 +308,9 @@ class ParseImportJob implements ShouldQueue
             case 'utility_bill':
                 $this->createUtilityBillResults($job, $data);
                 break;
+            case 'tax_document':
+                $this->createTaxDocumentResults($job, $data);
+                break;
         }
     }
 
@@ -347,6 +351,30 @@ class ParseImportJob implements ShouldQueue
                 'result_json' => json_encode($bill),
                 'status' => 'pending_review',
             ]);
+        }
+    }
+
+    private function createTaxDocumentResults(GenAiImportJob $job, array $data): void
+    {
+        // Store the result in genai_import_results
+        GenAiImportResult::create([
+            'job_id' => $job->id,
+            'result_index' => 0,
+            'result_json' => json_encode($data),
+            'status' => 'pending_review',
+        ]);
+
+        // Update the linked FileForTaxDocument with parsed data
+        $context = $job->getContextArray();
+        $taxDocId = $context['tax_document_id'] ?? null;
+        if ($taxDocId) {
+            $taxDoc = FileForTaxDocument::find($taxDocId);
+            if ($taxDoc && $taxDoc->genai_job_id === $job->id) {
+                $taxDoc->update([
+                    'parsed_data' => $data,
+                    'genai_status' => 'parsed',
+                ]);
+            }
         }
     }
 }

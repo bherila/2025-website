@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\FinanceTool;
 
+use App\GenAiProcessor\Jobs\ParseImportJob;
+use App\GenAiProcessor\Models\GenAiImportJob;
 use App\Http\Controllers\Controller;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccounts;
@@ -141,7 +143,29 @@ class TaxDocumentController extends Controller
             'uploaded_by_user_id' => $userId,
             'notes' => $request->notes,
             'is_reconciled' => false,
+            'genai_status' => 'pending',
         ]);
+
+        // Dispatch GenAI processing job for PDF extraction
+        $genaiJob = GenAiImportJob::create([
+            'user_id' => $userId,
+            'job_type' => 'tax_document',
+            'file_hash' => $request->file_hash,
+            'original_filename' => $request->original_filename,
+            's3_path' => $s3Key,
+            'mime_type' => $request->input('mime_type', 'application/pdf'),
+            'file_size_bytes' => $request->file_size_bytes,
+            'context_json' => json_encode([
+                'tax_year' => (int) $request->tax_year,
+                'form_type' => $formType,
+                'tax_document_id' => $doc->id,
+            ]),
+            'status' => 'pending',
+        ]);
+
+        $doc->update(['genai_job_id' => $genaiJob->id]);
+
+        ParseImportJob::dispatch($genaiJob->id);
 
         return response()->json(
             $doc->load(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name']),
