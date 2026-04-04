@@ -19,6 +19,7 @@ const job: GenAiImportJobData = {
   context_json: null,
   status: 'parsed',
   error_message: null,
+  raw_response: null,
   retry_count: 0,
   scheduled_for: null,
   parsed_at: '2026-03-28T12:00:00Z',
