@@ -114,7 +114,7 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
       ]
       setAccounts(all)
     } catch {
-      // non-fatal
+      setError('Failed to load accounts')
     }
   }, [])
 
@@ -138,7 +138,7 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
         view_url: string
         download_url: string
       }
-      window.open(result.view_url, '_blank')
+      window.open(result.view_url, '_blank', 'noopener,noreferrer')
     } catch {
       toast.error('Failed to get view link')
     }
@@ -150,7 +150,7 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
         view_url: string
         download_url: string
       }
-      window.open(result.download_url, '_blank')
+      window.open(result.download_url, '_blank', 'noopener,noreferrer')
     } catch {
       toast.error('Failed to get download link')
     }
@@ -299,7 +299,7 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
             variant="ghost"
             className="h-6 w-6 p-0"
             onClick={() => handleToggleReconciled(doc)}
-            title={doc.is_reconciled ? 'Mark unreconciled' : 'Mark reconciled'}
+            title={doc.is_reconciled ? 'Mark unreviewed' : 'Mark reviewed'}
           >
             <CheckCircle
               className={`h-3 w-3 ${doc.is_reconciled ? 'text-green-600' : 'text-muted-foreground/40'}`}
@@ -310,7 +310,8 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
             variant="ghost"
             className="h-6 w-6 p-0 text-destructive hover:text-destructive"
             onClick={() => handleDelete(doc)}
-            title="Delete"
+            title={doc.is_reconciled ? 'Uncheck Reviewed to enable delete' : 'Delete'}
+            disabled={doc.is_reconciled}
           >
             <Trash2 className="h-3 w-3" />
           </Button>

@@ -890,6 +890,7 @@ PROMPT;
             self::TAX_DOCUMENT_W2_TOOL_NAME,
             self::TAX_DOCUMENT_1099INT_TOOL_NAME,
             self::TAX_DOCUMENT_1099DIV_TOOL_NAME,
+            self::TAX_DOCUMENT_1099MISC_TOOL_NAME,
         ];
 
         $parts = $responseBody['candidates'][0]['content']['parts'] ?? [];
@@ -1043,6 +1044,13 @@ PROMPT;
             foreach (['box13_statutory', 'box13_retirement', 'box13_sick_pay'] as $boolField) {
                 $coerced[$boolField] = isset($args[$boolField]) ? (bool) $args[$boolField] : null;
             }
+        }
+
+        // Handle 1099-MISC boolean field
+        if ($toolName === self::TAX_DOCUMENT_1099MISC_TOOL_NAME) {
+            $coerced['box7_direct_sales_indicator'] = isset($args['box7_direct_sales_indicator'])
+                ? (bool) $args['box7_direct_sales_indicator']
+                : null;
         }
 
         return $coerced;

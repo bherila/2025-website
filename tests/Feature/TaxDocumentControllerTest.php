@@ -28,10 +28,12 @@ class TaxDocumentControllerTest extends TestCase
 
     private function createFinAccount(int $userId, string $name = 'Checking'): FinAccounts
     {
-        return FinAccounts::withoutGlobalScopes()->create([
-            'acct_owner' => $userId,
-            'acct_name' => $name,
-        ]);
+        return FinAccounts::withoutEvents(function () use ($userId, $name) {
+            return FinAccounts::withoutGlobalScopes()->forceCreate([
+                'acct_owner' => $userId,
+                'acct_name' => $name,
+            ]);
+        });
     }
 
     private function createTaxDocument(int $userId, array $overrides = []): FileForTaxDocument
@@ -421,5 +423,98 @@ class TaxDocumentControllerTest extends TestCase
         $this->assertEquals('parsed', $data[0]['genai_status']);
         $this->assertTrue($data[0]['is_confirmed']);
         $this->assertNotNull($data[0]['parsed_data']);
+    }
+
+    public function test_can_filter_by_genai_status(): void
+    {
+        $user = $this->createUser();
+        $this->actingAs($user);
+        $account = $this->createFinAccount($user->id);
+
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_int',
+            'account_id' => $account->acct_id,
+            'employment_entity_id' => null,
+            'genai_status' => 'parsed',
+            'is_confirmed' => false,
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_int',
+            'account_id' => $account->acct_id,
+            'employment_entity_id' => null,
+            'genai_status' => 'parsed',
+            'is_confirmed' => true,
+        ]);
+
+        // Filter for unconfirmed parsed docs
+        $response = $this->getJson('/api/finance/tax-documents?genai_status=parsed&is_confirmed=0');
+        $response->assertOk();
+        $docs = $response->json();
+        $this->assertCount(1, $docs);
+        $this->assertFalse($docs[0]['is_confirmed']);
+    }
+
+    public function test_manual_store_requires_account_id_for_1099(): void
+    {
+        $user = $this->createUser();
+
+        $response = $this->actingAs($user)->postJson('/api/finance/tax-documents/manual', [
+            'form_type' => '1099_int',
+            'tax_year' => 2024,
+            'parsed_data' => ['box1_interest' => 100.0],
+        ]);
+
+        $response->assertStatus(422);
+    }
+
+    public function test_manual_store_saves_account_id_for_1099(): void
+    {
+        $user = $this->createUser();
+        $this->actingAs($user);
+        $account = $this->createFinAccount($user->id);
+
+        $response = $this->postJson('/api/finance/tax-documents/manual', [
+            'form_type' => '1099_int',
+            'tax_year' => 2024,
+            'account_id' => $account->acct_id,
+            'parsed_data' => ['box1_interest' => 100.0],
+        ]);
+
+        $response->assertStatus(201);
+        $response->assertJsonFragment(['account_id' => $account->acct_id]);
+        $this->assertDatabaseHas('fin_tax_documents', [
+            'form_type' => '1099_int',
+            'account_id' => $account->acct_id,
+        ]);
+    }
+
+    public function test_manual_store_rejects_account_belonging_to_other_user(): void
+    {
+        $user = $this->createUser();
+        $other = $this->createUser();
+        $otherAccount = $this->createFinAccount($other->id);
+
+        $response = $this->actingAs($user)->postJson('/api/finance/tax-documents/manual', [
+            'form_type' => '1099_int',
+            'tax_year' => 2024,
+            'account_id' => $otherAccount->acct_id,
+            'parsed_data' => ['box1_interest' => 100.0],
+        ]);
+
+        $response->assertStatus(404);
+    }
+
+    public function test_mark_reviewed_confirms_and_reconciles(): void
+    {
+        $user = $this->createUser();
+        $doc = $this->createTaxDocument($user->id, ['is_confirmed' => false, 'is_reconciled' => false]);
+
+        $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}/mark-reviewed");
+        $response->assertOk();
+        $this->assertDatabaseHas('fin_tax_documents', [
+            'id' => $doc->id,
+            'is_confirmed' => 1,
+            'is_reconciled' => 1,
+        ]);
     }
 }

@@ -55,7 +55,7 @@ export default function TaxDocumentsSection({ selectedYear }: TaxDocumentsSectio
         view_url: string
         download_url: string
       }
-      window.open(result.view_url, '_blank')
+      window.open(result.view_url, '_blank', 'noopener,noreferrer')
     } catch {
       toast.error('Failed to get view link')
     }
@@ -67,7 +67,7 @@ export default function TaxDocumentsSection({ selectedYear }: TaxDocumentsSectio
         view_url: string
         download_url: string
       }
-      window.open(result.download_url, '_blank')
+      window.open(result.download_url, '_blank', 'noopener,noreferrer')
     } catch {
       toast.error('Failed to get download link')
     }
@@ -170,7 +170,7 @@ export default function TaxDocumentsSection({ selectedYear }: TaxDocumentsSectio
                     <TableHead>Filename</TableHead>
                     <TableHead>Size</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Reconciled</TableHead>
+                    <TableHead>Reviewed</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -188,9 +188,9 @@ export default function TaxDocumentsSection({ selectedYear }: TaxDocumentsSectio
                           size="sm"
                           variant="ghost"
                           onClick={() => handleToggleReconciled(doc)}
-                          aria-label={doc.is_reconciled ? 'Mark as unreconciled' : 'Mark as reconciled'}
+                          aria-label={doc.is_reconciled ? 'Mark as unreviewed' : 'Mark as reviewed'}
                           aria-pressed={doc.is_reconciled}
-                          title={doc.is_reconciled ? 'Mark as unreconciled' : 'Mark as reconciled'}
+                          title={doc.is_reconciled ? 'Mark as unreviewed' : 'Mark as reviewed'}
                         >
                           <CheckCircle
                             className={`h-4 w-4 ${doc.is_reconciled ? 'text-green-600' : 'text-muted-foreground/40'}`}
@@ -215,7 +215,8 @@ export default function TaxDocumentsSection({ selectedYear }: TaxDocumentsSectio
                             variant="ghost"
                             className="text-destructive hover:text-destructive"
                             onClick={() => handleDelete(doc)}
-                            title="Delete"
+                            title={doc.is_reconciled ? 'Uncheck Reviewed to enable delete' : 'Delete'}
+                            disabled={doc.is_reconciled}
                           >
                             <Trash2 className="h-3 w-3" />
                           </Button>
