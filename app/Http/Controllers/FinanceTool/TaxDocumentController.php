@@ -108,8 +108,23 @@ class TaxDocumentController extends Controller
                 ->firstOrFail();
         }
 
-        $s3Key = $request->s3_key;
+        $s3Key = (string) $request->s3_key;
+        $expectedPrefix = "tax_docs/{$userId}/";
+
+        if (! str_starts_with($s3Key, $expectedPrefix)) {
+            return response()->json([
+                'message' => 'The selected file key is invalid.',
+            ], 422);
+        }
+
         $storedFilename = basename($s3Key);
+        $keySuffix = substr($s3Key, strlen($expectedPrefix));
+
+        if ($storedFilename === '' || $storedFilename === '.' || $storedFilename === '..' || $keySuffix !== $storedFilename) {
+            return response()->json([
+                'message' => 'The selected file key is invalid.',
+            ], 422);
+        }
 
         $doc = FileForTaxDocument::create([
             'user_id' => $userId,
@@ -142,11 +157,12 @@ class TaxDocumentController extends Controller
 
         $doc->recordDownload();
 
-        $signedUrl = $this->fileService->getSignedDownloadUrl($doc->s3_path, $doc->original_filename);
+        $viewUrl = $this->fileService->getSignedViewUrl($doc->s3_path, $doc->mime_type);
+        $downloadUrl = $this->fileService->getSignedDownloadUrl($doc->s3_path, $doc->original_filename);
 
         return response()->json([
-            'view_url' => $signedUrl,
-            'download_url' => $signedUrl,
+            'view_url' => $viewUrl,
+            'download_url' => $downloadUrl,
             'filename' => $doc->original_filename,
         ]);
     }
@@ -173,6 +189,42 @@ class TaxDocumentController extends Controller
             ->firstOrFail();
 
         $doc->is_reconciled = $request->boolean('is_reconciled');
+        $doc->save();
+
+        return response()->json($doc);
+    }
+
+    public function updateParsedData(Request $request, int $id): JsonResponse
+    {
+        $request->validate([
+            'parsed_data' => 'required|array',
+        ]);
+
+        $doc = FileForTaxDocument::where('id', $id)
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
+
+        if ($doc->is_confirmed) {
+            return response()->json(['message' => 'Cannot edit confirmed document. Unconfirm first.'], 422);
+        }
+
+        $doc->parsed_data = $request->parsed_data;
+        $doc->save();
+
+        return response()->json($doc);
+    }
+
+    public function updateConfirmed(Request $request, int $id): JsonResponse
+    {
+        $request->validate([
+            'is_confirmed' => 'required|boolean',
+        ]);
+
+        $doc = FileForTaxDocument::where('id', $id)
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
+
+        $doc->is_confirmed = $request->boolean('is_confirmed');
         $doc->save();
 
         return response()->json($doc);

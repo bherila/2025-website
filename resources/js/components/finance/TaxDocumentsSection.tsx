@@ -9,34 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
 import { computeFileSHA256 } from '@/lib/fileUtils'
-
-interface TaxDocument {
-  id: number
-  user_id: number
-  tax_year: number
-  form_type: string
-  employment_entity_id: number | null
-  account_id: number | null
-  original_filename: string
-  stored_filename: string
-  s3_path: string
-  mime_type: string
-  file_size_bytes: number
-  file_hash: string
-  is_reconciled: boolean
-  notes: string | null
-  human_file_size: string
-  uploader: { id: number; name: string } | null
-  employment_entity: { id: number; display_name: string } | null
-  created_at: string
-}
-
-interface EmploymentEntity {
-  id: number
-  display_name: string
-  type: string
-  is_hidden: boolean
-}
+import type { EmploymentEntity, TaxDocument } from '@/types/finance/tax-document'
 
 interface TaxDocumentsSectionProps {
   selectedYear: number | 'all'
@@ -190,7 +163,7 @@ export default function TaxDocumentsSection({ selectedYear }: TaxDocumentsSectio
       />
 
       {w2Entities.length === 0 && (
-        <p className="text-sm text-muted-foreground">No W-2 employers found for this year.</p>
+        <p className="text-sm text-muted-foreground">No W-2 employers found.</p>
       )}
 
       {w2Entities.map(entity => {
@@ -233,15 +206,18 @@ export default function TaxDocumentsSection({ selectedYear }: TaxDocumentsSectio
                       <TableCell className="text-sm">{doc.original_filename}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{doc.human_file_size}</TableCell>
                       <TableCell>
-                        <button
+                        <Button
+                          size="sm"
+                          variant="ghost"
                           onClick={() => handleToggleReconciled(doc)}
-                          className="flex items-center gap-1 text-sm"
-                          title="Toggle reconciled"
+                          aria-label={doc.is_reconciled ? 'Mark as unreconciled' : 'Mark as reconciled'}
+                          aria-pressed={doc.is_reconciled}
+                          title={doc.is_reconciled ? 'Mark as unreconciled' : 'Mark as reconciled'}
                         >
                           <CheckCircle
                             className={`h-4 w-4 ${doc.is_reconciled ? 'text-green-600' : 'text-muted-foreground/40'}`}
                           />
-                        </button>
+                        </Button>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">

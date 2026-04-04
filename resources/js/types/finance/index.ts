@@ -1,3 +1,5 @@
 export type { AccountLineItem, AccountLineItemTag, LinkedTransaction } from './account-line-item'
 export { AccountLineItemSchema, AccountLineItemTagSchema, LinkedTransactionSchema } from './account-line-item'
 export type { IAward } from './rsu'
+export type { EmploymentEntity,TaxDocument } from './tax-document'
+export { ACCOUNT_FORM_TYPES_1099,FORM_TYPE_LABELS, W2_FORM_TYPES } from './tax-document'

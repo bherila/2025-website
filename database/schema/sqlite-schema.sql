@@ -1223,6 +1223,10 @@ CREATE TABLE `fin_tax_documents`(
   `uploaded_by_user_id` INTEGER NULL,
   `notes` TEXT NULL,
   `is_reconciled` INTEGER NOT NULL DEFAULT 0,
+  `genai_job_id` INTEGER NULL,
+  `genai_status` TEXT NULL,
+  `parsed_data` TEXT NULL,
+  `is_confirmed` INTEGER NOT NULL DEFAULT 0,
   `download_history` TEXT NULL,
   `created_at` TEXT,
   `updated_at` TEXT,
@@ -1234,6 +1238,7 @@ CREATE INDEX `fin_tax_documents_tax_year_index` ON `fin_tax_documents`(`tax_year
 CREATE INDEX `fin_tax_documents_employment_entity_id_index` ON `fin_tax_documents`(`employment_entity_id`);
 CREATE INDEX `fin_tax_documents_account_id_index` ON `fin_tax_documents`(`account_id`);
 CREATE INDEX `fin_tax_documents_form_type_index` ON `fin_tax_documents`(`form_type`);
+CREATE INDEX `fin_tax_documents_genai_job_id_index` ON `fin_tax_documents`(`genai_job_id`);
 
 INSERT INTO migrations VALUES(1,'0001_01_01_000000_create_schema_baseline',1);
 INSERT INTO migrations VALUES(2,'2026_03_05_000000_create_fin_account_lots_table',2);
