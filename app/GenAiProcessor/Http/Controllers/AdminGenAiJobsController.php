@@ -40,4 +40,38 @@ class AdminGenAiJobsController extends Controller
 
         return response()->json($job);
     }
+
+    /**
+     * Admin: Requeue/Retry a failed job.
+     * POST /api/admin/genai-jobs/{id}/requeue
+     */
+    public function retry(int $id): JsonResponse
+    {
+        Gate::authorize('admin');
+
+        $job = GenAiImportJob::findOrFail($id);
+
+        // Admins can retry even if MAX_RETRIES reached
+        if ($job->status !== 'failed') {
+            return response()->json(['error' => 'Job is not in a failed state.'], 422);
+        }
+
+        // Clear previous results/errors to start fresh
+        $job->results()->delete();
+        $job->update([
+            'status' => 'pending',
+            'error_message' => null,
+            'raw_response' => null,
+            'retry_count' => 0,
+        ]);
+
+        // Note: We don't dispatch here; we let the scheduled task / cron pick it up as requested.
+        // If immediate dispatch is desired, uncomment the line below:
+        // \App\GenAiProcessor\Jobs\ParseImportJob::dispatch($job->id);
+
+        return response()->json([
+            'success' => true,
+            'job' => $job->load(['user:id,name,email', 'results']),
+        ]);
+    }
 }

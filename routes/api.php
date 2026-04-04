@@ -231,6 +231,7 @@ Route::middleware(['web', 'auth'])->post('/admin/users/{id}/email', [UserManagem
 // Admin GenAI Jobs API
 Route::middleware(['web', 'auth'])->get('/admin/genai-jobs', [AdminGenAiJobsController::class, 'index']);
 Route::middleware(['web', 'auth'])->get('/admin/genai-jobs/{id}', [AdminGenAiJobsController::class, 'show']);
+Route::middleware(['web', 'auth'])->post('/admin/genai-jobs/{id}/requeue', [AdminGenAiJobsController::class, 'retry']);
 
 // File Management API routes
 

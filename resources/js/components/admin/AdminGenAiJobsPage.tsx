@@ -96,22 +96,52 @@ function CopyToClipboard({ text, label }: { text: string; label?: string }) {
 interface JobDetailModalProps {
   job: AdminGenAiJob | null
   open: boolean
-  onClose: () => void
+  onClose: (requeued?: boolean) => void
 }
 
 function JobDetailModal({ job, open, onClose }: JobDetailModalProps) {
+  const [requeuing, setRequeuing] = useState(false)
+
   if (!job) return null
+
+  const handleRequeue = async () => {
+    if (!job || requeuing) return
+    if (!confirm('Are you sure you want to clear results and requeue this job?')) return
+
+    setRequeuing(true)
+    try {
+      await fetchWrapper.post(`/api/admin/genai-jobs/${job.id}/requeue`, {})
+      onClose(true)
+    } catch (err) {
+      alert('Failed to requeue job')
+      console.error(err)
+    } finally {
+      setRequeuing(false)
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            Job #{job.id} — {job.original_filename}
-            <Badge variant={STATUS_COLORS[job.status] ?? 'outline'}>
-              {STATUS_LABELS[job.status] ?? job.status}
-            </Badge>
-          </DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="flex items-center gap-2">
+              Job #{job.id} — {job.original_filename}
+              <Badge variant={STATUS_COLORS[job.status] ?? 'outline'}>
+                {STATUS_LABELS[job.status] ?? job.status}
+              </Badge>
+            </DialogTitle>
+            {job.status === 'failed' && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleRequeue}
+                disabled={requeuing}
+              >
+                {requeuing ? 'Requeuing...' : 'Requeue Job'}
+              </Button>
+            )}
+          </div>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -252,9 +282,12 @@ export default function AdminGenAiJobsPage() {
     setDetailModalOpen(true)
   }
 
-  const handleCloseModal = () => {
+  const handleCloseModal = (requeued?: boolean) => {
     setDetailModalOpen(false)
     setSelectedJob(null)
+    if (requeued) {
+      fetchJobs(page)
+    }
   }
 
   return (
