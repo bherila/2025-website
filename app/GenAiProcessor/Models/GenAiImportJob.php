@@ -44,6 +44,7 @@ class GenAiImportJob extends Model
         'context_json',
         'status',
         'error_message',
+        'raw_response',
         'retry_count',
         'scheduled_for',
         'parsed_at',

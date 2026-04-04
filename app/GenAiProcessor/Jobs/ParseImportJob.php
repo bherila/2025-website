@@ -111,7 +111,7 @@ class ParseImportJob implements ShouldQueue
             $job->markProcessing();
 
             // Call generateContent with file_uri
-            $data = $this->callGeminiGenerateContent(
+            ['data' => $data, 'raw_response' => $rawResponse] = $this->callGeminiGenerateContent(
                 $dispatcher,
                 $job->job_type,
                 $apiKey,
@@ -119,6 +119,10 @@ class ParseImportJob implements ShouldQueue
                 $job->mime_type ?? 'application/pdf',
                 $prompt
             );
+
+            if ($rawResponse !== null) {
+                $job->update(['raw_response' => $rawResponse]);
+            }
 
             if ($data === null) {
                 $job->markFailed('Failed to parse response from AI.');
@@ -222,6 +226,8 @@ class ParseImportJob implements ShouldQueue
 
     /**
      * Call Gemini generateContent with a file_uri reference.
+     *
+     * @return array{data: ?array, raw_response: ?string}
      */
     private function callGeminiGenerateContent(
         GenAiJobDispatcherService $dispatcher,
@@ -230,7 +236,7 @@ class ParseImportJob implements ShouldQueue
         string $fileUri,
         string $mimeType,
         string $prompt
-    ): ?array {
+    ): array {
         $response = Http::withHeaders([
             'x-goog-api-key' => $apiKey,
             'Content-Type' => 'application/json',
@@ -255,7 +261,7 @@ class ParseImportJob implements ShouldQueue
                 throw new GeminiFatalException('Bad request: '.$response->body());
             }
 
-            return null;
+            return ['data' => null, 'raw_response' => $response->body()];
         }
 
         $body = $response->json();
@@ -267,7 +273,7 @@ class ParseImportJob implements ShouldQueue
             ]);
         }
 
-        return $data;
+        return ['data' => $data, 'raw_response' => $response->body()];
     }
 
     /**

@@ -2,6 +2,7 @@ export type GenAiJobType =
   | 'finance_transactions'
   | 'finance_payslip'
   | 'utility_bill'
+  | 'tax_document'
 
 export type GenAiJobStatus =
   | 'pending'
@@ -37,6 +38,7 @@ export interface GenAiImportJobData {
   context_json: string | null
   status: GenAiJobStatus
   error_message: string | null
+  raw_response: string | null
   retry_count: number
   scheduled_for: string | null
   parsed_at: string | null

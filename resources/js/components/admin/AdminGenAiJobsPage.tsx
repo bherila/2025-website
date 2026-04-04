@@ -1,3 +1,4 @@
+import { Check, Copy } from 'lucide-react'
 import React, { useCallback, useEffect, useState } from 'react'
 
 import Container from '@/components/container'
@@ -56,6 +57,7 @@ const JOB_TYPE_LABELS: Record<string, string> = {
   finance_transactions: 'Finance Transactions',
   finance_payslip: 'Payslip',
   utility_bill: 'Utility Bill',
+  tax_document: 'Tax Document',
 }
 
 function formatBytes(bytes: number): string {
@@ -67,6 +69,28 @@ function formatBytes(bytes: number): string {
 function formatDate(dateString: string | null): string {
   if (!dateString) return '—'
   return new Date(dateString).toLocaleString()
+}
+
+function CopyToClipboard({ text, label }: { text: string; label?: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+      onClick={handleCopy}
+    >
+      {copied ? <Check className="h-3 w-3 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
+      {copied ? 'Copied' : (label || 'Copy')}
+    </Button>
+  )
 }
 
 interface JobDetailModalProps {
@@ -142,9 +166,25 @@ function JobDetailModal({ job, open, onClose }: JobDetailModalProps) {
           {/* Context JSON */}
           {job.context_json && (
             <div>
-              <div className="font-semibold text-muted-foreground mb-1">Context (Request Input)</div>
+              <div className="flex items-center justify-between mb-1">
+                <div className="font-semibold text-muted-foreground">Context (Request Input)</div>
+                <CopyToClipboard text={JSON.stringify(JSON.parse(job.context_json), null, 2)} />
+              </div>
               <pre className="bg-gray-50 dark:bg-gray-900 border rounded p-3 text-xs overflow-auto max-h-40">
                 {JSON.stringify(JSON.parse(job.context_json), null, 2)}
+              </pre>
+            </div>
+          )}
+
+          {/* Raw LLM Response */}
+          {job.raw_response && (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <div className="font-semibold text-muted-foreground">Raw LLM Response</div>
+                <CopyToClipboard text={job.raw_response} />
+              </div>
+              <pre className="bg-gray-50 dark:bg-gray-900 border rounded p-3 text-xs overflow-auto max-h-64 font-mono">
+                {job.raw_response}
               </pre>
             </div>
           )}
@@ -160,7 +200,10 @@ function JobDetailModal({ job, open, onClose }: JobDetailModalProps) {
                   <div key={result.id} className="border rounded">
                     <div className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-900 text-xs">
                       <span>Result #{result.result_index + 1}</span>
-                      <Badge variant="outline">{result.status}</Badge>
+                      <div className="flex items-center gap-2">
+                        <CopyToClipboard text={JSON.stringify(JSON.parse(result.result_json), null, 2)} />
+                        <Badge variant="outline">{result.status}</Badge>
+                      </div>
                     </div>
                     <pre className="p-3 text-xs overflow-auto max-h-64 font-mono">
                       {JSON.stringify(JSON.parse(result.result_json), null, 2)}
