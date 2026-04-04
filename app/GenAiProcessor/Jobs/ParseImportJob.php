@@ -144,6 +144,7 @@ class ParseImportJob implements ShouldQueue
             }
         } catch (GeminiRateLimitException $e) {
             $job->markFailed('API rate limit exceeded. Please wait and try again.');
+            $this->markLinkedTaxDocumentFailed($job);
 
             try {
                 Mail::to($user->email)->send(new GenAiJobCompleteMail($job));
@@ -157,6 +158,7 @@ class ParseImportJob implements ShouldQueue
                 'error_message' => $e->getMessage(),
                 'retry_count' => GenAiImportJob::MAX_RETRIES,
             ]);
+            $this->markLinkedTaxDocumentFailed($job);
 
             try {
                 Mail::to($user->email)->send(new GenAiJobCompleteMail($job));
@@ -169,6 +171,7 @@ class ParseImportJob implements ShouldQueue
                 'error' => $e->getMessage(),
             ]);
             $job->markFailed('An unexpected error occurred: '.$e->getMessage());
+            $this->markLinkedTaxDocumentFailed($job);
 
             try {
                 Mail::to($user->email)->send(new GenAiJobCompleteMail($job));
@@ -350,6 +353,33 @@ class ParseImportJob implements ShouldQueue
                 'result_index' => $index,
                 'result_json' => json_encode($bill),
                 'status' => 'pending_review',
+            ]);
+        }
+    }
+
+    /**
+     * If this is a tax_document job, mark the linked FileForTaxDocument as failed.
+     * Called in all failure paths to prevent the document being stuck in 'pending' indefinitely.
+     */
+    private function markLinkedTaxDocumentFailed(GenAiImportJob $job): void
+    {
+        if ($job->job_type !== 'tax_document') {
+            return;
+        }
+
+        try {
+            $context = $job->getContextArray();
+            $taxDocId = $context['tax_document_id'] ?? null;
+            if ($taxDocId) {
+                $taxDoc = FileForTaxDocument::find($taxDocId);
+                if ($taxDoc && $taxDoc->genai_job_id === $job->id) {
+                    $taxDoc->update(['genai_status' => 'failed']);
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('ParseImportJob: could not mark tax document as failed', [
+                'job_id' => $job->id,
+                'error' => $e->getMessage(),
             ]);
         }
     }

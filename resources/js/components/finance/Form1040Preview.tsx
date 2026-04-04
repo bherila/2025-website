@@ -1,15 +1,13 @@
 'use client'
 
+import currency from 'currency.js'
+
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount)
-}
-
 interface Form1040PreviewProps {
-  w2Income: number
-  interestIncome: number
-  dividendIncome: number
+  w2Income: currency
+  interestIncome: currency
+  dividendIncome: currency
   scheduleCIncome: number
   selectedYear: number
 }
@@ -17,7 +15,7 @@ interface Form1040PreviewProps {
 interface LineItem {
   line: string
   label: string
-  value: number | null
+  value: currency | null
   bold?: boolean
   refSchedule?: string
 }
@@ -29,14 +27,17 @@ export default function Form1040Preview({
   scheduleCIncome,
   selectedYear,
 }: Form1040PreviewProps) {
-  const totalIncome = w2Income + interestIncome + dividendIncome + scheduleCIncome
+  const totalIncome = w2Income
+    .add(interestIncome)
+    .add(dividendIncome)
+    .add(scheduleCIncome)
 
   const lines: LineItem[] = [
     { line: '1a', label: 'Wages, salaries, tips (W-2, box 1)', value: w2Income },
     { line: '2b', label: 'Taxable interest', value: interestIncome, refSchedule: 'Schedule B' },
     { line: '3b', label: 'Ordinary dividends', value: dividendIncome, refSchedule: 'Schedule B' },
     ...(scheduleCIncome !== 0
-      ? [{ line: '8', label: 'Business income or loss (Schedule C)', value: scheduleCIncome, refSchedule: 'Schedule C' }]
+      ? [{ line: '8', label: 'Business income or loss (Schedule C)', value: currency(scheduleCIncome), refSchedule: 'Schedule C' }]
       : []),
     { line: '9', label: 'Total income', value: totalIncome, bold: true },
   ]
@@ -64,7 +65,7 @@ export default function Form1040Preview({
                   )}
                 </TableCell>
                 <TableCell className="text-right text-sm font-mono">
-                  {item.value !== null ? formatCurrency(item.value) : '—'}
+                  {item.value !== null ? item.value.format() : '—'}
                 </TableCell>
               </TableRow>
             ))}

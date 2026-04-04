@@ -1,15 +1,13 @@
 'use client'
 
+import currency from 'currency.js'
+
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount)
-}
-
 interface ScheduleBPreviewProps {
-  interestIncome: number
-  dividendIncome: number
-  qualifiedDividends: number
+  interestIncome: currency
+  dividendIncome: currency
+  qualifiedDividends: currency
   selectedYear: number
 }
 
@@ -25,10 +23,10 @@ export default function ScheduleBPreview({
 
   const dividendRows = [
     { label: 'Total Ordinary Dividends', value: dividendIncome, bold: true },
-    qualifiedDividends > 0
+    qualifiedDividends.value > 0
       ? { label: 'Qualified Dividends', value: qualifiedDividends }
       : null,
-  ].filter(Boolean) as { label: string; value: number; bold?: boolean }[]
+  ].filter(Boolean) as { label: string; value: currency; bold?: boolean }[]
 
   return (
     <div>
@@ -51,7 +49,7 @@ export default function ScheduleBPreview({
               <TableRow key={`int-${i}`} className={row.bold ? 'font-semibold' : ''}>
                 <TableCell />
                 <TableCell className="text-sm">{row.label}</TableCell>
-                <TableCell className="text-right text-sm font-mono">{formatCurrency(row.value)}</TableCell>
+                <TableCell className="text-right text-sm font-mono">{row.value.format()}</TableCell>
               </TableRow>
             ))}
             <TableRow className="bg-muted/20">
@@ -61,7 +59,7 @@ export default function ScheduleBPreview({
               <TableRow key={`div-${i}`} className={row.bold ? 'font-semibold' : ''}>
                 <TableCell />
                 <TableCell className="text-sm">{row.label}</TableCell>
-                <TableCell className="text-right text-sm font-mono">{formatCurrency(row.value)}</TableCell>
+                <TableCell className="text-right text-sm font-mono">{row.value.format()}</TableCell>
               </TableRow>
             ))}
           </TableBody>

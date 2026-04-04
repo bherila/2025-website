@@ -294,6 +294,7 @@ Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accoun
 // Tax documents (W-2, W-2c, 1099-INT, 1099-INT-C, 1099-DIV, 1099-DIV-C)
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents', [TaxDocumentController::class, 'index']);
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents/request-upload', [TaxDocumentController::class, 'requestUpload']);
+Route::middleware(['web', 'auth'])->post('/finance/tax-documents/manual', [TaxDocumentController::class, 'storeManual']);
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents', [TaxDocumentController::class, 'store']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents/{id}/download', [TaxDocumentController::class, 'download']);
 Route::middleware(['web', 'auth'])->delete('/finance/tax-documents/{id}', [TaxDocumentController::class, 'destroy']);

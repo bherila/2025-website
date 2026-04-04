@@ -1,5 +1,6 @@
 'use client'
 
+import currency from 'currency.js'
 import { useCallback, useEffect, useState } from 'react'
 
 import Form1040Preview from '@/components/finance/Form1040Preview'
@@ -14,48 +15,49 @@ import { fetchWrapper } from '@/fetchWrapper'
 
 import { YearSelectorWithNav } from './YearSelectorWithNav'
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount)
-}
-
 /** W-2 income summary table derived from payslips. */
 function W2IncomeSummary({ payslips }: { payslips: fin_payslip[] }) {
   if (payslips.length === 0) return null
 
-  const sum = (fn: (row: fin_payslip) => number) =>
-    payslips.reduce((acc, row) => acc + fn(row), 0)
+  const sum = (fn: (row: fin_payslip) => currency) =>
+    payslips.reduce((acc, row) => acc.add(fn(row)), currency(0))
 
-  const wages = sum(r => Number(r.ps_salary ?? 0))
-  const bonus = sum(r => Number(r.earnings_bonus ?? 0))
-  const rsu = sum(r => Number(r.earnings_rsu ?? 0))
-  const vacationPayout = sum(r => Number(r.ps_vacation_payout ?? 0))
+  const wages = sum(r => currency(r.ps_salary ?? 0))
+  const bonus = sum(r => currency(r.earnings_bonus ?? 0))
+  const rsu = sum(r => currency(r.earnings_rsu ?? 0))
+  const vacationPayout = sum(r => currency(r.ps_vacation_payout ?? 0))
   const imputed = sum(r =>
-    Number(r.imp_ltd ?? 0) + Number(r.imp_legal ?? 0) + Number(r.imp_fitness ?? 0) + Number(r.imp_other ?? 0),
+    currency(r.imp_ltd ?? 0)
+      .add(r.imp_legal ?? 0)
+      .add(r.imp_fitness ?? 0)
+      .add(r.imp_other ?? 0),
   )
-  const gross = wages + bonus + rsu + vacationPayout + imputed
+  const gross = wages.add(bonus).add(rsu).add(vacationPayout).add(imputed)
 
   const fedWH = sum(r =>
-    Number(r.ps_fed_tax ?? 0) + Number(r.ps_fed_tax_addl ?? 0) - Number(r.ps_fed_tax_refunded ?? 0),
+    currency(r.ps_fed_tax ?? 0)
+      .add(r.ps_fed_tax_addl ?? 0)
+      .subtract(r.ps_fed_tax_refunded ?? 0),
   )
-  const stateWH = sum(r => Number(r.ps_state_tax ?? 0) + Number(r.ps_state_tax_addl ?? 0))
-  const oasdi = sum(r => Number(r.ps_oasdi ?? 0))
-  const medicare = sum(r => Number(r.ps_medicare ?? 0))
-  const sdi = sum(r => Number(r.ps_state_disability ?? 0))
+  const stateWH = sum(r => currency(r.ps_state_tax ?? 0).add(r.ps_state_tax_addl ?? 0))
+  const oasdi = sum(r => currency(r.ps_oasdi ?? 0))
+  const medicare = sum(r => currency(r.ps_medicare ?? 0))
+  const sdi = sum(r => currency(r.ps_state_disability ?? 0))
 
   const rows = [
     { label: 'Wages / Salary', value: wages },
-    bonus > 0 ? { label: 'Bonus', value: bonus } : null,
-    rsu > 0 ? { label: 'RSU Vesting', value: rsu } : null,
-    vacationPayout > 0 ? { label: 'Vacation Payout', value: vacationPayout } : null,
-    imputed > 0 ? { label: 'Imputed Income (benefits)', value: imputed } : null,
+    bonus.value > 0 ? { label: 'Bonus', value: bonus } : null,
+    rsu.value > 0 ? { label: 'RSU Vesting', value: rsu } : null,
+    vacationPayout.value > 0 ? { label: 'Vacation Payout', value: vacationPayout } : null,
+    imputed.value > 0 ? { label: 'Imputed Income (benefits)', value: imputed } : null,
     { label: 'Total Gross W-2 Income', value: gross, bold: true },
     { label: '', value: null },
     { label: 'Federal Income Tax Withheld', value: fedWH },
     { label: 'State Income Tax Withheld', value: stateWH },
     { label: 'OASDI / Social Security Tax', value: oasdi },
     { label: 'Medicare Tax', value: medicare },
-    sdi > 0 ? { label: 'State Disability Insurance (SDI)', value: sdi } : null,
-  ].filter(Boolean) as { label: string; value: number | null; bold?: boolean }[]
+    sdi.value > 0 ? { label: 'State Disability Insurance (SDI)', value: sdi } : null,
+  ].filter(Boolean) as { label: string; value: currency | null; bold?: boolean }[]
 
   return (
     <div>
@@ -78,7 +80,7 @@ function W2IncomeSummary({ payslips }: { payslips: fin_payslip[] }) {
                 <TableRow key={i} className={row.bold ? 'font-semibold bg-muted/30' : ''}>
                   <TableCell className="text-sm">{row.label}</TableCell>
                   <TableCell className="text-right text-sm font-mono">
-                    {row.value !== null ? formatCurrency(row.value) : ''}
+                    {row.value !== null ? row.value.format() : ''}
                   </TableCell>
                 </TableRow>
               ),
@@ -131,15 +133,15 @@ export default function TaxPreviewPage() {
 
   // 1099 income totals (from confirmed parsed documents)
   const [income1099, setIncome1099] = useState({
-    interestIncome: 0,
-    dividendIncome: 0,
-    qualifiedDividends: 0,
+    interestIncome: currency(0),
+    dividendIncome: currency(0),
+    qualifiedDividends: currency(0),
   })
 
   const handle1099TotalsChange = useCallback((totals: {
-    interestIncome: number
-    dividendIncome: number
-    qualifiedDividends: number
+    interestIncome: currency
+    dividendIncome: currency
+    qualifiedDividends: currency
   }) => {
     setIncome1099(totals)
   }, [])
@@ -284,18 +286,16 @@ export default function TaxPreviewPage() {
 
   const showTaxTables = typeof selectedYear === 'number' && !payslipsLoading && data.length > 0
 
-  // Compute W-2 gross income for 1040 preview
-  const w2GrossIncome = data.reduce((acc, r) => {
-    return acc
-      + Number(r.ps_salary ?? 0)
-      + Number(r.earnings_bonus ?? 0)
-      + Number(r.earnings_rsu ?? 0)
-      + Number(r.ps_vacation_payout ?? 0)
-      + Number(r.imp_ltd ?? 0)
-      + Number(r.imp_legal ?? 0)
-      + Number(r.imp_fitness ?? 0)
-      + Number(r.imp_other ?? 0)
-  }, 0)
+  // Compute W-2 gross income for 1040 preview using currency.js for precise arithmetic
+  const w2GrossIncome = data.reduce((acc, r) => acc
+    .add(r.ps_salary ?? 0)
+    .add(r.earnings_bonus ?? 0)
+    .add(r.earnings_rsu ?? 0)
+    .add(r.ps_vacation_payout ?? 0)
+    .add(r.imp_ltd ?? 0)
+    .add(r.imp_legal ?? 0)
+    .add(r.imp_fitness ?? 0)
+    .add(r.imp_other ?? 0), currency(0))
 
   return (
     <div>

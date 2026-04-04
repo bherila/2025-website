@@ -1,27 +1,64 @@
 'use client'
 
+import currency from 'currency.js'
 import { CheckCircle, Clock, Download, Loader2, Plus, Trash2, Upload } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
 import { computeFileSHA256 } from '@/lib/fileUtils'
-import type { TaxDocument } from '@/types/finance/tax-document'
+import type { F1099DivParsedData, F1099IntParsedData, TaxDocument } from '@/types/finance/tax-document'
 import { ACCOUNT_FORM_TYPES_1099, FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
 interface TaxDocuments1099SectionProps {
   selectedYear: number
-  onTotalsChange?: (totals: { interestIncome: number; dividendIncome: number; qualifiedDividends: number }) => void
+  onTotalsChange?: (totals: {
+    interestIncome: currency
+    dividendIncome: currency
+    qualifiedDividends: currency
+  }) => void
 }
+
+interface ManualEntryState {
+  open: boolean
+  formType: '1099_int' | '1099_div'
+  payerName: string
+  /** 1099-INT box 1 */
+  interest: string
+  /** 1099-DIV box 1a */
+  ordinaryDividends: string
+  /** 1099-DIV box 1b */
+  qualifiedDividends: string
+}
+
+const defaultManualEntry = (formType: '1099_int' | '1099_div'): ManualEntryState => ({
+  open: true,
+  formType,
+  payerName: '',
+  interest: '',
+  ordinaryDividends: '',
+  qualifiedDividends: '',
+})
 
 export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }: TaxDocuments1099SectionProps) {
   const [documents, setDocuments] = useState<TaxDocument[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [uploadingFormType, setUploadingFormType] = useState<string | null>(null)
+  const [manualEntry, setManualEntry] = useState<ManualEntryState | null>(null)
+  const [manualSaving, setManualSaving] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const fetchDocuments = useCallback(async () => {
@@ -33,20 +70,21 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
       const data = await fetchWrapper.get(`/api/finance/tax-documents?${params.toString()}`)
       const docs = data as TaxDocument[]
       setDocuments(docs)
+      setError(null)
 
-      // Compute totals from confirmed parsed data
-      let interestIncome = 0
-      let dividendIncome = 0
-      let qualifiedDividends = 0
+      // Compute totals from confirmed parsed data using currency.js for precision
+      let interestIncome = currency(0)
+      let dividendIncome = currency(0)
+      let qualifiedDividends = currency(0)
       for (const doc of docs) {
         if (!doc.parsed_data || !doc.is_confirmed) continue
         const pd = doc.parsed_data
         if (doc.form_type === '1099_int' || doc.form_type === '1099_int_c') {
-          interestIncome += Number(pd.box1_interest ?? 0)
+          interestIncome = interestIncome.add((pd as F1099IntParsedData).box1_interest ?? 0)
         }
         if (doc.form_type === '1099_div' || doc.form_type === '1099_div_c') {
-          dividendIncome += Number(pd.box1a_ordinary ?? 0)
-          qualifiedDividends += Number(pd.box1b_qualified ?? 0)
+          dividendIncome = dividendIncome.add((pd as F1099DivParsedData).box1a_ordinary ?? 0)
+          qualifiedDividends = qualifiedDividends.add((pd as F1099DivParsedData).box1b_qualified ?? 0)
         }
       }
       onTotalsChange?.({ interestIncome, dividendIncome, qualifiedDividends })
@@ -106,6 +144,38 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
       await fetchDocuments()
     } catch (err) {
       toast.error('Upload failed: ' + (err instanceof Error ? err.message : 'Unknown error'))
+    }
+  }
+
+  const handleManualEntrySave = async () => {
+    if (!manualEntry) return
+    setManualSaving(true)
+    try {
+      const parsedData: F1099IntParsedData | F1099DivParsedData = manualEntry.formType === '1099_int'
+        ? {
+            payer_name: manualEntry.payerName || null,
+            box1_interest: currency(manualEntry.interest || 0).value,
+          }
+        : {
+            payer_name: manualEntry.payerName || null,
+            box1a_ordinary: currency(manualEntry.ordinaryDividends || 0).value,
+            box1b_qualified: currency(manualEntry.qualifiedDividends || 0).value,
+          }
+
+      await fetchWrapper.post('/api/finance/tax-documents/manual', {
+        form_type: manualEntry.formType,
+        tax_year: selectedYear,
+        parsed_data: parsedData,
+        is_confirmed: true,
+      })
+
+      toast.success('Manual entry saved successfully')
+      setManualEntry(null)
+      await fetchDocuments()
+    } catch (err) {
+      toast.error('Save failed: ' + (err instanceof Error ? err.message : 'Unknown error'))
+    } finally {
+      setManualSaving(false)
     }
   }
 
@@ -182,11 +252,11 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
             {FORM_TYPE_LABELS[ft]}
           </Button>
         ))}
-        <Button size="sm" variant="outline" onClick={() => handleUploadClick('1099_int')}>
+        <Button size="sm" variant="outline" onClick={() => setManualEntry(defaultManualEntry('1099_int'))}>
           <Plus className="h-3 w-3 mr-1" />
           Other 1099-INT
         </Button>
-        <Button size="sm" variant="outline" onClick={() => handleUploadClick('1099_div')}>
+        <Button size="sm" variant="outline" onClick={() => setManualEntry(defaultManualEntry('1099_div'))}>
           <Plus className="h-3 w-3 mr-1" />
           Other 1099-DIV
         </Button>
@@ -234,6 +304,7 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
                           ? `Mark ${doc.original_filename} as unreconciled`
                           : `Mark ${doc.original_filename} as reconciled`
                       }
+                      aria-pressed={doc.is_reconciled}
                     >
                       <CheckCircle
                         className={`h-4 w-4 ${doc.is_reconciled ? 'text-green-600' : 'text-muted-foreground/40'}`}
@@ -262,6 +333,78 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
           </Table>
         </div>
       )}
+
+      {/* Manual entry dialog for "Other 1099-INT / 1099-DIV" */}
+      <Dialog open={manualEntry?.open ?? false} onOpenChange={open => !open && setManualEntry(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Enter {manualEntry?.formType === '1099_int' ? '1099-INT' : '1099-DIV'} Data Manually
+            </DialogTitle>
+          </DialogHeader>
+          {manualEntry && (
+            <div className="grid gap-4 py-2">
+              <div className="grid gap-1">
+                <Label htmlFor="payer-name">Payer Name</Label>
+                <Input
+                  id="payer-name"
+                  placeholder="Bank or institution name"
+                  value={manualEntry.payerName}
+                  onChange={e => setManualEntry({ ...manualEntry, payerName: e.target.value })}
+                />
+              </div>
+              {manualEntry.formType === '1099_int' ? (
+                <div className="grid gap-1">
+                  <Label htmlFor="box1-interest">Box 1 — Interest Income ($)</Label>
+                  <Input
+                    id="box1-interest"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={manualEntry.interest}
+                    onChange={e => setManualEntry({ ...manualEntry, interest: e.target.value })}
+                  />
+                </div>
+              ) : (
+                <>
+                  <div className="grid gap-1">
+                    <Label htmlFor="box1a-div">Box 1a — Total Ordinary Dividends ($)</Label>
+                    <Input
+                      id="box1a-div"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0.00"
+                      value={manualEntry.ordinaryDividends}
+                      onChange={e => setManualEntry({ ...manualEntry, ordinaryDividends: e.target.value })}
+                    />
+                  </div>
+                  <div className="grid gap-1">
+                    <Label htmlFor="box1b-div">Box 1b — Qualified Dividends ($)</Label>
+                    <Input
+                      id="box1b-div"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0.00"
+                      value={manualEntry.qualifiedDividends}
+                      onChange={e => setManualEntry({ ...manualEntry, qualifiedDividends: e.target.value })}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setManualEntry(null)}>Cancel</Button>
+            <Button onClick={handleManualEntrySave} disabled={manualSaving}>
+              {manualSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
