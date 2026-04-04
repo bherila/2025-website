@@ -225,7 +225,6 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
                   <TableCell>{renderProcessingBadge(doc)}</TableCell>
                   <TableCell>
                     <Button
-                      type="button"
                       size="sm"
                       variant="ghost"
                       onClick={() => handleToggleReconciled(doc)}

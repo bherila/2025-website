@@ -197,7 +197,6 @@ export default function AccountTaxDocumentsSection({ accountId, selectedYear }: 
                   <TableCell className="text-sm text-muted-foreground">{doc.human_file_size}</TableCell>
                   <TableCell>
                     <Button
-                      type="button"
                       size="sm"
                       variant="ghost"
                       onClick={() => handleToggleReconciled(doc)}
