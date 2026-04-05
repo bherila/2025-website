@@ -5,6 +5,8 @@ import { CheckCircle, ChevronLeft, ChevronRight, Download, Eye, FileText, Loader
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import type { FK1StructuredData } from '@/components/finance/k1'
+import { isFK1StructuredData,K1ReviewPanel } from '@/components/finance/k1'
 import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { Badge } from '@/components/ui/badge'
@@ -632,12 +634,20 @@ export default function TaxDocumentReviewModal({
                       )}
                     </div>
                     <div className="bg-muted/40 rounded-lg p-3 border border-muted-foreground/10">
-                      <ParsedDataEditor
-                        data={editData}
-                        onChange={setEditData}
-                        readOnly={activeDoc.is_reviewed}
-                        formType={activeDoc.form_type}
-                      />
+                      {activeDoc.form_type === 'k1' && isFK1StructuredData(editData) ? (
+                        <K1ReviewPanel
+                          data={editData as unknown as FK1StructuredData}
+                          onChange={(updated) => setEditData(updated as unknown as Record<string, unknown>)}
+                          readOnly={activeDoc.is_reviewed}
+                        />
+                      ) : (
+                        <ParsedDataEditor
+                          data={editData}
+                          onChange={setEditData}
+                          readOnly={activeDoc.is_reviewed}
+                          formType={activeDoc.form_type}
+                        />
+                      )}
                     </div>
                   </div>
 

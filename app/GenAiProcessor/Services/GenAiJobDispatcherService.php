@@ -873,13 +873,10 @@ PROMPT;
     /**
      * Build the AI prompt for extracting Schedule K-1 data.
      *
-     * K-1 forms come from partnerships (Form 1065) and S-corporations (Form 1120-S).
-     * The data is extensive and includes many coded line items, so we store all extracted
-     * data as a flexible JSON object in parsed_data.
+     * The tool definition carries all the structural detail, so the prompt can be concise.
+     * Structured output (schemaVersion "2026.1") is stored directly in parsed_data.
      *
-     * Future extension: Box 16 (foreign transactions) will be used with Form 1116 for
-     * foreign tax credit calculation. When Form 1116 support is added, extract and map
-     * the country code, foreign income, and foreign taxes paid from this box.
+     * Future extension: Box 16 (foreign transactions) feeds into Form 1116 when that support is added.
      */
     private function buildK1Prompt(int $taxYear): string
     {
@@ -887,18 +884,10 @@ PROMPT;
 
         return <<<PROMPT
 <!-- tool:{$toolName} -->
-Analyze the provided Schedule K-1 PDF for tax year {$taxYear}. This may be a K-1 from a partnership
-(Form 1065), S-corporation (Form 1120-S), estate or trust (Form 1041), or other pass-through entity.
-
-Use the `{$toolName}` tool to extract ALL data from this document including:
-- Entity and partner/shareholder information (name, EIN, ownership percentage)
-- ALL income, deduction, credit, and other information boxes with their codes and amounts
-- Any supplemental statements or footnotes
-- State tax information if present
-
-Extract every line item fully — do not omit any box or code. All monetary values must be numbers.
-If a field is not present, set it to null. For items with multiple codes (e.g., Box 20 with codes A, B, C),
-represent each as a separate entry in the appropriate array field.
+Extract ALL data from this Schedule K-1 PDF (tax year {$taxYear}) using the `{$toolName}` tool.
+Include every box, code, and supplemental statement. Use null for absent fields.
+All monetary values must be numbers (not strings). For coded boxes (11, 13–20), include every
+code entry found as a separate item in the corresponding array.
 PROMPT;
     }
 
@@ -1103,29 +1092,115 @@ PROMPT;
                 : null;
         }
 
-        // Handle K-1: pass through all data as-is (flexible JSON blob)
-        // The K-1 form has many coded items stored in arrays; we preserve the full structure.
+        // Handle K-1: transform flat tool output into FK1StructuredData shape
         if ($toolName === self::TAX_DOCUMENT_K1_TOOL_NAME) {
-            // Pass through all K-1 data from args, coercing known numeric fields
-            foreach ($args as $key => $value) {
-                if (! array_key_exists($key, $coerced)) {
-                    // Preserve arrays (coded items) as-is
-                    if (is_array($value)) {
-                        $coerced[$key] = $value;
-                    } elseif (is_numeric($value)) {
-                        $coerced[$key] = (float) $value;
-                    } elseif (is_string($value) && $value !== '') {
-                        $coerced[$key] = $value;
-                    } elseif ($value === null || $value === '') {
-                        $coerced[$key] = null;
-                    } else {
-                        $coerced[$key] = $value;
-                    }
-                }
-            }
+            return $this->coerceK1Args($args);
         }
 
         return $coerced;
+    }
+
+    /**
+     * Transform the flat extractK1Data tool response into the canonical FK1StructuredData JSON.
+     *
+     * The tool uses flat field names (field_A, field_1, codes_11, etc.) for Gemini compatibility.
+     * This method assembles them into the nested structure stored in parsed_data.
+     *
+     * Adds server-stamped extraction metadata and the schemaVersion discriminator so the
+     * frontend can reliably detect new-format documents.
+     */
+    private function coerceK1Args(array $args): array
+    {
+        // Scalar field boxes (left panel A–O, right panel 1–10, 12)
+        $strBoxes = ['A', 'B', 'C', 'E', 'F', 'G', 'H1', 'I1', 'I2', 'I3', 'J', 'K', 'L', 'M', 'N', 'O'];
+        $boolBoxes = ['D', 'H2'];
+        $numBoxes = ['1', '2', '3', '4', '4a', '4b', '4c', '5', '6a', '6b', '6c', '7',
+            '8', '9a', '9b', '9c', '10', '12'];
+        $codedBoxes = ['11', '13', '14', '15', '16', '17', '18', '19', '20'];
+
+        $fields = [];
+
+        foreach ($strBoxes as $box) {
+            $raw = $args["field_{$box}"] ?? null;
+            $fields[$box] = [
+                'value' => ($raw !== null && $raw !== '') ? (string) $raw : null,
+            ];
+        }
+
+        foreach ($boolBoxes as $box) {
+            $raw = $args["field_{$box}"] ?? null;
+            $fields[$box] = [
+                'value' => ($raw !== null) ? ($raw ? 'true' : 'false') : null,
+            ];
+        }
+
+        foreach ($numBoxes as $box) {
+            $raw = $args["field_{$box}"] ?? null;
+            $fields[$box] = [
+                'value' => is_numeric($raw) ? (string) (float) $raw : null,
+            ];
+        }
+
+        // Coded boxes
+        $codes = [];
+        foreach ($codedBoxes as $box) {
+            $rawItems = $args["codes_{$box}"] ?? [];
+            if (! is_array($rawItems)) {
+                $rawItems = [];
+            }
+            $codes[$box] = array_values(array_filter(array_map(function ($item) {
+                if (! is_array($item) || ! isset($item['code'])) {
+                    return null;
+                }
+
+                return [
+                    'code' => (string) $item['code'],
+                    'value' => isset($item['value']) ? (string) $item['value'] : '',
+                    'notes' => isset($item['notes']) ? (string) $item['notes'] : '',
+                ];
+            }, $rawItems)));
+        }
+
+        // Schedule K-3 sections
+        $rawSections = $args['k3_sections'] ?? [];
+        $k3Sections = [];
+        if (is_array($rawSections)) {
+            foreach ($rawSections as $sec) {
+                if (! is_array($sec) || ! isset($sec['sectionId'])) {
+                    continue;
+                }
+                $k3Sections[] = [
+                    'sectionId' => (string) $sec['sectionId'],
+                    'title' => isset($sec['title']) ? (string) $sec['title'] : '',
+                    'data' => [],
+                    'notes' => isset($sec['notes']) ? (string) $sec['notes'] : '',
+                ];
+            }
+        }
+
+        // Warnings
+        $rawWarnings = $args['warnings'] ?? [];
+        $warnings = is_array($rawWarnings)
+            ? array_values(array_filter(array_map(fn ($w) => is_string($w) ? $w : null, $rawWarnings)))
+            : [];
+
+        return [
+            'schemaVersion' => '2026.1',
+            'formType' => isset($args['formType']) ? (string) $args['formType'] : 'K-1-1065',
+            'pages' => isset($args['pages']) && is_numeric($args['pages']) ? (int) $args['pages'] : null,
+            'fields' => $fields,
+            'codes' => $codes,
+            'k3' => ['sections' => $k3Sections],
+            'raw_text' => isset($args['raw_text']) ? (string) $args['raw_text'] : null,
+            'warnings' => $warnings,
+            'extraction' => [
+                'model' => 'gemini',
+                'version' => '2026.1',
+                'timestamp' => now()->toIso8601String(),
+                'source' => 'ai',
+            ],
+            'createdAt' => now()->toIso8601String(),
+        ];
     }
 
     private function buildW2ToolDefinition(): array
@@ -1314,86 +1389,121 @@ PROMPT;
      * a rigid schema here. Fields added by the AI that are not in this definition will
      * still be captured and stored.
      *
+    /**
+     * Build the Gemini tool definition for extracting Schedule K-1 (Form 1065) data.
+     *
+     * Produces structured output (schemaVersion "2026.1"):
+     *   - fields: all flat boxes A–O and 1–10, 12 (keyed by box identifier)
+     *   - codes:  coded boxes 11, 13–20 (each an array of {code, value, notes})
+     *   - k3_sections: Schedule K-3 foreign-source data (flattened for tool compat)
+     *
+     * The PHP coerce function assembles this into the canonical FK1StructuredData shape.
+     *
      * Future extension: When Form 1116 (Foreign Tax Credit) support is added:
-     * - Map box16_foreign_taxes_paid and box16_foreign_country to Form 1116 Part I.
-     * - Track foreign source income category (passive, general, etc.).
+     * - Map Box 16 codes I/J (foreign taxes paid/withheld) to Form 1116 Part I.
+     * - Use box16_country (code A) for the foreign country name.
      * - See IRS Publication 514 for Form 1116 computation rules.
      */
     private function buildK1ToolDefinition(): array
     {
-        $numberProp = fn () => ['type' => 'NUMBER'];
-        $stringProp = fn () => ['type' => 'STRING'];
-        $codedItemsProp = fn () => [
+        $strField = fn () => ['type' => 'STRING'];
+        $numField = fn () => ['type' => 'NUMBER'];
+        $boolField = fn () => ['type' => 'BOOLEAN'];
+        $codeItemsProp = fn () => [
             'type' => 'ARRAY',
             'items' => [
                 'type' => 'OBJECT',
                 'properties' => [
-                    'code' => $stringProp(),
-                    'description' => $stringProp(),
-                    'amount' => $numberProp(),
+                    'code' => ['type' => 'STRING'],
+                    'value' => ['type' => 'STRING'],
+                    'notes' => ['type' => 'STRING'],
                 ],
+                'required' => ['code', 'value'],
+            ],
+        ];
+        $k3SectionProp = fn () => [
+            'type' => 'ARRAY',
+            'items' => [
+                'type' => 'OBJECT',
+                'properties' => [
+                    'sectionId' => ['type' => 'STRING'],
+                    'title' => ['type' => 'STRING'],
+                    'notes' => ['type' => 'STRING'],
+                ],
+                'required' => ['sectionId', 'title'],
             ],
         ];
 
         return [
             'name' => self::TAX_DOCUMENT_K1_TOOL_NAME,
-            'description' => 'Extract all data from a Schedule K-1 (Form 1065, 1120-S, or 1041).',
+            'description' => 'Extract all boxes, codes, and K-3 sections from a Schedule K-1 (Form 1065, 1120-S, or 1041). Returns structured data keyed by box identifier.',
             'parameters' => [
                 'type' => 'OBJECT',
                 'properties' => [
-                    // Entity and partner/shareholder identification
-                    'form_source' => $stringProp(),         // e.g. "1065", "1120-S", "1041"
-                    'tax_year' => $stringProp(),
-                    'entity_name' => $stringProp(),         // partnership or S-corp name
-                    'entity_ein' => $stringProp(),
-                    'partner_name' => $stringProp(),        // partner / shareholder / beneficiary
-                    'partner_ssn_last4' => $stringProp(),
-                    'partner_ownership_pct' => $numberProp(),
-                    'partner_type' => $stringProp(),        // "general", "limited", "shareholder", etc.
+                    // ── Identification ────────────────────────────────────────────────
+                    'formType' => $strField(),   // "K-1-1065" | "K-1-1120S" | "K-1-1041"
+                    'pages' => $numField(),
 
-                    // Form 1065 / 1120-S main income / deduction boxes
-                    'box1_ordinary_income' => $numberProp(),        // Ordinary business income (loss)
-                    'box2_net_rental_real_estate' => $numberProp(), // Net rental real estate income (loss)
-                    'box3_other_net_rental' => $numberProp(),
-                    'box4_guaranteed_payments_services' => $numberProp(),
-                    'box5_guaranteed_payments_capital' => $numberProp(),
-                    'box6_guaranteed_payments_total' => $numberProp(),
-                    'box7_net_section_1231_gain' => $numberProp(),
-                    'box8_other_income' => $numberProp(),
-                    'box9_section_179_deduction' => $numberProp(),
-                    'box10_other_deductions' => $numberProp(),
-                    'box11_section_179_s_corp' => $numberProp(),    // S-Corp Box 11
+                    // ── Left-panel fields (A–O): entity & partner identification ─────
+                    'field_A' => $strField(),   // Partnership EIN
+                    'field_B' => $strField(),   // Partnership name/address (multiline)
+                    'field_C' => $strField(),   // IRS Center (Ogden / Kansas City / Cincinnati)
+                    'field_D' => $boolField(),  // PTP indicator (checkbox)
+                    'field_E' => $strField(),   // Partner identifying number
+                    'field_F' => $strField(),   // Partner name/address (multiline)
+                    'field_G' => $strField(),   // Partner type (General / LLC / Limited)
+                    'field_H1' => $strField(),   // Domestic or Foreign
+                    'field_H2' => $boolField(),  // Foreign U.S. person checkbox
+                    'field_I1' => $strField(),   // Profit share beginning/end
+                    'field_I2' => $strField(),   // Loss share beginning/end
+                    'field_I3' => $strField(),   // Capital share beginning/end
+                    'field_J' => $strField(),   // Liabilities share
+                    'field_K' => $strField(),   // Capital account analysis
+                    'field_L' => $strField(),   // Liability categories
+                    'field_M' => $strField(),   // Tax basis capital
+                    'field_N' => $strField(),   // At-risk amount
+                    'field_O' => $strField(),   // Qualified liability
 
-                    // Self-employment (Form 1065 Box 14)
-                    'box14_self_employment_earnings' => $numberProp(),
+                    // ── Right-panel fields (1–10, 12): numeric income/deduction boxes ─
+                    'field_1' => $numField(),   // Ordinary business income (loss)
+                    'field_2' => $numField(),   // Net rental real estate income (loss)
+                    'field_3' => $numField(),   // Other net rental income (loss)
+                    'field_4' => $numField(),   // Guaranteed payments (total)
+                    'field_4a' => $numField(),   // GP – services
+                    'field_4b' => $numField(),   // GP – capital
+                    'field_4c' => $numField(),   // GP – total
+                    'field_5' => $numField(),   // Interest income
+                    'field_6a' => $numField(),   // Ordinary dividends
+                    'field_6b' => $numField(),   // Qualified dividends
+                    'field_6c' => $numField(),   // Dividend equivalents
+                    'field_7' => $numField(),   // Royalties
+                    'field_8' => $numField(),   // Net short-term capital gain (loss)
+                    'field_9a' => $numField(),   // Net long-term capital gain (loss)
+                    'field_9b' => $numField(),   // Collectibles (28%) gain (loss)
+                    'field_9c' => $numField(),   // Unrecaptured Sec. 1250 gain
+                    'field_10' => $numField(),   // Net section 1231 gain (loss)
+                    'field_12' => $numField(),   // Section 179 deduction
 
-                    // Credits (coded items — Box 15 / Box 13 depending on form)
-                    'credits' => $codedItemsProp(),
+                    // ── Coded boxes (11, 13–20): arrays of {code, value, notes} ──────
+                    'codes_11' => $codeItemsProp(),  // Other income (loss)
+                    'codes_13' => $codeItemsProp(),  // Other deductions
+                    'codes_14' => $codeItemsProp(),  // Self-employment earnings
+                    'codes_15' => $codeItemsProp(),  // Credits
+                    'codes_16' => $codeItemsProp(),  // Foreign transactions
+                    'codes_17' => $codeItemsProp(),  // AMT items
+                    'codes_18' => $codeItemsProp(),  // Tax-exempt & nondeductible
+                    'codes_19' => $codeItemsProp(),  // Distributions
+                    'codes_20' => $codeItemsProp(),  // Other information
 
-                    // Foreign transactions (Box 16 / Box K)
-                    // Future Form 1116 extension: map these to Form 1116 Part I lines.
-                    'box16_foreign_taxes_paid' => $numberProp(),
-                    'box16_foreign_country' => $stringProp(),
-                    'box16_foreign_income_category' => $stringProp(), // passive, general, etc.
+                    // ── Schedule K-3 ──────────────────────────────────────────────────
+                    'k3_sections' => $k3SectionProp(),
 
-                    // AMT items (Box 17 / Box L) — Future Form 6251 extension
-                    'amt_items' => $codedItemsProp(),
-
-                    // Tax-exempt income and nondeductible expenses (Box 18 / Box M)
-                    'other_info_items' => $codedItemsProp(),
-
-                    // Distributions (Box 19 / Box N)
-                    'distributions' => $numberProp(),
-
-                    // All other coded items (Box 20 / any remaining boxes)
-                    'other_coded_items' => $codedItemsProp(),
-
-                    // State information
-                    'state' => $stringProp(),
-                    'state_tax_withheld' => $numberProp(),
-
-                    // Raw supplemental statement text (for items too complex for structured fields)
-                    'supplemental_statements' => $stringProp(),
+                    // ── Supplemental text & metadata ─────────────────────────────────
+                    'raw_text' => $strField(),
+                    'warnings' => [
+                        'type' => 'ARRAY',
+                        'items' => ['type' => 'STRING'],
+                    ],
                 ],
             ],
         ];

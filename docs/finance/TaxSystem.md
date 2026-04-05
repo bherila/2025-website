@@ -323,26 +323,93 @@ The W-2 comparison uses `getPayslipsForEntity()` which filters payslips by `empl
 
 Schedule K-1 forms are issued by partnerships (Form 1065), S-corporations (Form 1120-S), estates (Form 1041), and trusts to report each partner's/shareholder's/beneficiary's share of income, deductions, and credits.
 
-K-1 data is highly variable — the number of coded line items, footnotes, and supplemental statements can be extensive. For this reason, all extracted K-1 data is stored as a **flexible JSON blob** in `parsed_data`, rather than a fixed schema.
+All K-1 data is stored as a structured JSON blob in `parsed_data` using **schema version "2026.1"** (`FK1StructuredData`).
+
+### Structured Data Format (schemaVersion "2026.1")
+
+```json
+{
+  "schemaVersion": "2026.1",
+  "formType": "K-1-1065",
+  "pages": 3,
+  "fields": {
+    "A": { "value": "12-3456789", "confidence": 0.98 },
+    "D": { "value": "true",       "confidence": 0.92 },
+    "1": { "value": "15000.00",   "confidence": 0.97 }
+  },
+  "codes": {
+    "11": [{ "code": "A", "value": "150.00", "notes": "", "confidence": 0.90 }],
+    "13": [{ "code": "G", "value": "200.00", "notes": "" }]
+  },
+  "k3": {
+    "sections": [
+      { "sectionId": "K3-1", "title": "Foreign Source Income", "data": {}, "notes": "" }
+    ]
+  },
+  "raw_text": "...",
+  "warnings": [],
+  "extraction": {
+    "model": "gemini",
+    "version": "2026.1",
+    "timestamp": "2026-04-05T19:30:00Z",
+    "source": "ai"
+  },
+  "createdAt": "2026-04-05T19:30:00Z"
+}
+```
+
+- **`fields`** — all flat boxes (A–O, 1–10, 12) keyed by box identifier
+- **`codes`** — coded boxes (11, 13–20) keyed by box number; each is an array of `{ code, value, notes }`
+- **`k3.sections`** — Schedule K-3 sections (foreign source income reporting)
+- **`extraction`** — server-stamped AI provenance metadata
+- **`manualOverride`** — when `true` on a field/code item, re-extraction will not overwrite it
+
+### K-1 Code Organization
+
+All K-1 specific TypeScript code lives in `resources/js/components/finance/k1/`:
+
+| File | Purpose |
+|------|---------|
+| `k1-types.ts` | Interfaces: `FK1StructuredData`, `K1FieldValue`, `K1CodeItem`, `K3Section`, `K1FieldSpec` |
+| `k1-spec.ts` | `K1_SPEC` array — all A–O and 1–20 field definitions; drives generic rendering |
+| `k1-codes.ts` | Code definitions for boxes 11, 13–20 (from IRS instructions) |
+| `K1CodesModal.tsx` | Sub-modal for viewing / editing coded items on a single box |
+| `K1ReviewPanel.tsx` | Spec-driven two-panel K-1 review/edit UI (left: identification, right: financial) |
+| `index.ts` | Barrel exports |
 
 ### K-1 GenAI Extraction
 
-The `extractK1Data` tool (`TAX_DOCUMENT_K1_TOOL_NAME`) extracts:
-- Entity and partner/shareholder identification (name, EIN, ownership %)
-- All income/deduction boxes (Box 1: ordinary income, Box 2: rental, Box 14: SE earnings, etc.)
-- Credits (coded arrays)
-- Foreign transactions (Box 16) — **future Form 1116 extension point**
-- AMT adjustments — **future Form 6251 extension point**
-- State tax information
-- Supplemental statement text
+The `extractK1Data` tool (`TAX_DOCUMENT_K1_TOOL_NAME`) extracts ALL boxes using structured flat parameter names:
+- `field_A` through `field_O` — entity/partner identification (left panel)
+- `field_1` through `field_12` — income/deduction boxes (right panel, excluding coded boxes)
+- `codes_11`, `codes_13` through `codes_20` — arrays of `{ code, value, notes }` for coded boxes
+- `k3_sections` — Schedule K-3 sections array
+- `raw_text`, `warnings` — supplemental text and extraction warnings
+
+The PHP `coerceK1Args()` method transforms the flat tool output into the canonical `FK1StructuredData` JSON and stamps the `extraction` provenance metadata.
+
+### K-1 UI (TaxDocumentReviewModal)
+
+When `form_type === 'k1'` and the data contains `schemaVersion`, the modal renders `K1ReviewPanel` instead of the generic `ParsedDataEditor`:
+- **Left panel**: Entity/partner identification fields (A–O), including checkboxes and dropdowns
+- **Right panel**: Income/deduction/credit fields (1–20); coded boxes show a "Details →" button
+- Clicking "Details →" opens `K1CodesModal` for that box's codes
+- Fields edited by the user get `manualOverride: true` to prevent AI re-extraction from overwriting them
+- Extraction confidence and timestamp shown above the panels
+
+### TypeScript Types
+
+- `FK1StructuredData` — canonical structured format (re-exported from `@/types/finance`)
+- `FK1ParsedData` — legacy flat format (kept for backward compat with pre-2026.1 documents)
+- `isFK1StructuredData(data)` — type guard to detect new-format documents
 
 ### Future Extension: Form 1116 (Foreign Tax Credit)
 
-Box 16 (foreign transactions) from K-1 will feed into Form 1116 (Foreign Tax Credit) when that support is added. The `box16_foreign_taxes_paid`, `box16_foreign_country`, and `box16_foreign_income_category` fields in the K-1 parsed data are designed for this purpose. See comments in `GenAiJobDispatcherService::buildK1Prompt()` and `buildK1ToolDefinition()` for implementation details.
+Box 16 (foreign transactions) codes I and J (foreign taxes paid/withheld) will feed into Form 1116 when that support is added. Code A is the country name. See `buildK1ToolDefinition()` comments for details.
 
-### TypeScript Type
+### Future Extension: Partnership Basis Tracking
 
-The `FK1ParsedData` interface in `resources/js/types/finance/tax-document.ts` provides TypeScript typing for K-1 parsed data, including the index signature `[key: string]: unknown` to allow for additional AI-extracted fields.
+The `FK1StructuredData` format is designed to support basis tracking for the partnership interest. Box K (capital account analysis), Box N (at-risk amount), and coded distributions (Box 19) provide the data needed for an outside-basis tracker.
 
 ---
 
