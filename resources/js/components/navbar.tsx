@@ -20,6 +20,14 @@ function applyTheme(mode: ThemeMode) {
   root.classList.toggle('dark', isDark);
 }
 
+/** Sanitize hrefs to prevent javascript: or data: URLs from being rendered. */
+function safeHref(href: string): string {
+  if (href.startsWith('/') || href.startsWith('https://') || href.startsWith('http://')) {
+    return href;
+  }
+  return '#';
+}
+
 /** Renders the children of a dropdown (links, groups, dividers). */
 function DropdownChildren({ items, mobile = false }: { items: NavDropdownChild[]; mobile?: boolean }) {
   const linkCls = mobile
@@ -34,7 +42,7 @@ function DropdownChildren({ items, mobile = false }: { items: NavDropdownChild[]
       {items.map((item, i) => {
         if (item.type === 'link') {
           return (
-            <a key={i} role={mobile ? undefined : 'menuitem'} className={linkCls} href={item.href}>
+            <a key={i} role={mobile ? undefined : 'menuitem'} className={linkCls} href={safeHref(item.href)}>
               {item.label}
             </a>
           );
@@ -193,7 +201,7 @@ export default function Navbar({ authenticated, navItems = [], currentUser }: Na
             if (item.type === 'link') {
               return (
                 <li key={i}>
-                  <a className='hover:underline underline-offset-4' href={item.href}>
+                  <a className='hover:underline underline-offset-4' href={safeHref(item.href)}>
                     {item.label}
                   </a>
                 </li>
@@ -216,7 +224,7 @@ export default function Navbar({ authenticated, navItems = [], currentUser }: Na
             {navItems.map((item, i) => {
               if (item.type === 'link') {
                 return (
-                  <a key={i} className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base' href={item.href}>
+                  <a key={i} className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base' href={safeHref(item.href)}>
                     {item.label}
                   </a>
                 );
