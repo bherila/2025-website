@@ -462,15 +462,9 @@ class GenAiJobDispatcherServiceTest extends TestCase
     {
         $service = new GenAiJobDispatcherService;
 
-        $cases = [
-            [true],
-            [1],
-            ['true'],
-            ['1'],
-            ['TRUE'],
-        ];
+        $cases = [true, 1, 'true', '1', 'TRUE'];
 
-        foreach ($cases as [$value]) {
+        foreach ($cases as $value) {
             $response = $this->buildK1ToolResponse(['field_D' => $value]);
             $data = $service->extractGenerateContentData('tax_document', $response);
             $this->assertSame('true', $data['fields']['D']['value'], "Expected 'true' for input: ".var_export($value, true));
@@ -481,15 +475,9 @@ class GenAiJobDispatcherServiceTest extends TestCase
     {
         $service = new GenAiJobDispatcherService;
 
-        $cases = [
-            [false],
-            [0],
-            ['false'],
-            ['0'],
-            ['FALSE'],
-        ];
+        $cases = [false, 0, 'false', '0', 'FALSE'];
 
-        foreach ($cases as [$value]) {
+        foreach ($cases as $value) {
             $response = $this->buildK1ToolResponse(['field_D' => $value]);
             $data = $service->extractGenerateContentData('tax_document', $response);
             $this->assertSame('false', $data['fields']['D']['value'], "Expected 'false' for input: ".var_export($value, true));

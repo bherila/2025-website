@@ -45,7 +45,7 @@ export function extractForeignTaxFromK1(
 
   if (totalForeignTaxPaid === 0) return null
 
-  const country = data.codes['16']?.find(i => i.code.toUpperCase() === 'A')?.value ?? undefined
+  const country = data.codes['16']?.find(i => i.code.toUpperCase() === 'A')?.value
 
   // Determine income category from the K-3 sections or Box 16 codes
   const passiveIncome = getCodeValue(data.codes, '16', 'B')
@@ -58,7 +58,7 @@ export function extractForeignTaxFromK1(
     totalForeignTaxPaid,
     category,
     country,
-    grossForeignIncome: grossForeignIncome || undefined,
+    grossForeignIncome: grossForeignIncome > 0 ? grossForeignIncome : undefined,
     sourceType: 'k1',
     accountId: accountId ?? null,
   }

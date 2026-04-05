@@ -1139,9 +1139,9 @@ PROMPT;
             if (is_bool($raw)) {
                 $boolValue = $raw;
             } elseif (is_int($raw) || is_float($raw)) {
-                if ((float) $raw === 1.0) {
+                if ((int) $raw === 1) {
                     $boolValue = true;
-                } elseif ((float) $raw === 0.0) {
+                } elseif ((int) $raw === 0) {
                     $boolValue = false;
                 }
             } elseif (is_string($raw)) {
