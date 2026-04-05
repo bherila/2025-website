@@ -214,7 +214,7 @@ export default function TaxDocumentUploadModal({
               const result = optipng(input, ['-o2'])
               finalBlob = new Blob([result.data], { type: 'image/png' })
             } catch {
-              // optipng failed — fall back to canvas-compressed PNG
+              // optipng failed (e.g. WASM init error or unsupported image) — fall back to canvas-compressed PNG
             }
             const file = new File([finalBlob], 'clipping.png', { type: 'image/png' })
             await doUpload(file)
