@@ -1,5 +1,9 @@
 /** Shared types for tax document components and API responses. */
 
+import type { FK1StructuredData } from '@/components/finance/k1/k1-types'
+
+export type { FK1StructuredData }
+
 /** Parsed field values from W-2: all box values. */
 export interface W2ParsedData {
   employer_name?: string | null
@@ -133,54 +137,12 @@ export interface FK1ParsedData {
   box10_other_deductions?: number | null
   box11_section_179_s_corp?: number | null
   box14_self_employment_earnings?: number | null
-  credits?: Array<{ code: string; description?: string | null; amount?: number | null }> | null
-  amt_items?: Array<{ code: string; description?: string | null; amount?: number | null }> | null
-  other_info_items?: Array<{ code: string; description?: string | null; amount?: number | null }> | null
-  other_coded_items?: Array<{ code: string; description?: string | null; amount?: number | null }> | null
-  box16_foreign_taxes_paid?: number | null
-  box16_foreign_country?: string | null
-  box16_foreign_income_category?: string | null
   distributions?: number | null
   state?: string | null
   state_tax_withheld?: number | null
   supplemental_statements?: string | null
   [key: string]: unknown
 }
-
-/**
- * Structured K-1 / K-3 data (schemaVersion "2026.1").
- *
- * This is the canonical format for new K-1 extractions.  It mirrors FK1StructuredData
- * from @/components/finance/k1/k1-types but is re-exported here so shared consumer
- * code in @/types/finance can import it without depending on the component tree.
- *
- * - `fields`  — all flat boxes (A–O, 1–10, 12) keyed by box identifier
- * - `codes`   — coded boxes (11, 13–20) keyed by box number, each an array of K1CodeItem
- * - `k3`      — Schedule K-3 sections (foreign tax reporting)
- * - `extraction` — server-stamped AI provenance metadata
- */
-export interface FK1StructuredData {
-  schemaVersion: string
-  formType: 'K-1-1065' | 'K-1-1120S' | 'K-1-1041' | string
-  formId?: string
-  pages?: number
-  fields: Record<string, { value: string | null; confidence?: number; manualOverride?: boolean }>
-  codes: Record<string, Array<{ code: string; value: string; notes?: string; confidence?: number; manualOverride?: boolean }>>
-  k3?: {
-    sections: Array<{ sectionId: string; title: string; data: Record<string, unknown>; notes?: string }>
-  }
-  raw_text?: string
-  warnings?: string[]
-  extraction?: {
-    model?: string
-    version?: string
-    timestamp?: string
-    confidence?: number
-    source?: string
-  }
-  createdAt?: string
-}
-
 /** Union of all possible parsed_data shapes. */
 export type TaxDocumentParsedData = W2ParsedData | F1099IntParsedData | F1099DivParsedData | F1099MiscParsedData | FK1ParsedData | FK1StructuredData
 

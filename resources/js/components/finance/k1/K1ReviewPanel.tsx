@@ -205,7 +205,7 @@ export default function K1ReviewPanel({ data, onChange, readOnly = false }: K1Re
           </span>
           {data.extraction.confidence != null && (
             <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">
-              {Math.round(data.extraction.confidence * 100)}% conf.
+              {Math.round(Math.min(1, Math.max(0, data.extraction.confidence)) * 100)}% conf.
             </Badge>
           )}
           {data.extraction.timestamp && <span>· {new Date(data.extraction.timestamp).toLocaleString()}</span>}

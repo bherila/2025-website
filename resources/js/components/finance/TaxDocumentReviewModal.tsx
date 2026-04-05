@@ -5,8 +5,7 @@ import { CheckCircle, ChevronLeft, ChevronRight, Download, Eye, FileText, Loader
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
-import type { FK1StructuredData } from '@/components/finance/k1'
-import { isFK1StructuredData,K1ReviewPanel } from '@/components/finance/k1'
+import { isFK1StructuredData, K1ReviewPanel } from '@/components/finance/k1'
 import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { Badge } from '@/components/ui/badge'
@@ -30,7 +29,7 @@ import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { fetchWrapper } from '@/fetchWrapper'
-import type { TaxDocument, W2ParsedData } from '@/types/finance/tax-document'
+import type { TaxDocument, TaxDocumentParsedData, W2ParsedData } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
 interface TaxDocumentReviewModalProps {
@@ -381,7 +380,7 @@ export default function TaxDocumentReviewModal({
   
   // Local editor state for the active document
   const [notes, setNotes] = useState('')
-  const [editData, setEditData] = useState<Record<string, any>>({})
+  const [editData, setEditData] = useState<TaxDocumentParsedData | Record<string, unknown>>({})
 
   const activeDoc = documents[currentIndex]
 
@@ -391,7 +390,7 @@ export default function TaxDocumentReviewModal({
       setDocuments([propDocument])
       setCurrentIndex(0)
       setNotes(propDocument.notes ?? '')
-      setEditData((propDocument.parsed_data as Record<string, any>) || {})
+      setEditData(propDocument.parsed_data ?? {})
       return
     }
 
@@ -406,7 +405,7 @@ export default function TaxDocumentReviewModal({
         const d = docs[0];
         if (d) {
           setNotes(d.notes ?? '')
-          setEditData((d.parsed_data as Record<string, any>) || {})
+          setEditData(d.parsed_data ?? {})
         }
       }
     } catch {
@@ -428,7 +427,7 @@ export default function TaxDocumentReviewModal({
       if (doc) {
         setCurrentIndex(nextIdx)
         setNotes(doc.notes ?? '')
-        setEditData((doc.parsed_data as Record<string, any>) || {})
+        setEditData(doc.parsed_data ?? {})
       }
     }
   }
@@ -440,7 +439,7 @@ export default function TaxDocumentReviewModal({
       if (doc) {
         setCurrentIndex(prevIdx)
         setNotes(doc.notes ?? '')
-        setEditData((doc.parsed_data as Record<string, any>) || {})
+        setEditData(doc.parsed_data ?? {})
       }
     }
   }
@@ -493,7 +492,7 @@ export default function TaxDocumentReviewModal({
         if (nextDoc) {
           setCurrentIndex(newIdx)
           setNotes(nextDoc.notes ?? '')
-          setEditData((nextDoc.parsed_data as Record<string, any>) || {})
+          setEditData(nextDoc.parsed_data ?? {})
         }
       }
     } catch {
@@ -636,14 +635,14 @@ export default function TaxDocumentReviewModal({
                     <div className="bg-muted/40 rounded-lg p-3 border border-muted-foreground/10">
                       {activeDoc.form_type === 'k1' && isFK1StructuredData(editData) ? (
                         <K1ReviewPanel
-                          data={editData as unknown as FK1StructuredData}
-                          onChange={(updated) => setEditData(updated as unknown as Record<string, unknown>)}
+                          data={editData}
+                          onChange={(updated) => setEditData(updated)}
                           readOnly={activeDoc.is_reviewed}
                         />
                       ) : (
                         <ParsedDataEditor
-                          data={editData}
-                          onChange={setEditData}
+                          data={editData as Record<string, unknown>}
+                          onChange={(d) => setEditData(d)}
                           readOnly={activeDoc.is_reviewed}
                           formType={activeDoc.form_type}
                         />

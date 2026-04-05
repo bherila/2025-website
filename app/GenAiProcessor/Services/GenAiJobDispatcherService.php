@@ -1122,43 +1122,34 @@ PROMPT;
 
         foreach ($strBoxes as $box) {
             $raw = $args["field_{$box}"] ?? null;
-            $fields[$box] = [
-                'value' => ($raw !== null && $raw !== '') ? (string) $raw : null,
-            ];
+            $value = ($raw !== null && $raw !== '') ? (string) $raw : null;
+            if ($value !== null) {
+                $fields[$box] = ['value' => $value];
+            }
         }
 
         foreach ($boolBoxes as $box) {
             $raw = $args["field_{$box}"] ?? null;
-            $fields[$box] = [
-                'value' => ($raw !== null) ? ($raw ? 'true' : 'false') : null,
-            ];
+            if ($raw !== null) {
+                $fields[$box] = ['value' => $raw ? 'true' : 'false'];
+            }
         }
 
         foreach ($numBoxes as $box) {
             $raw = $args["field_{$box}"] ?? null;
-            $fields[$box] = [
-                'value' => is_numeric($raw) ? (string) (float) $raw : null,
-            ];
+            if (is_numeric($raw)) {
+                $fields[$box] = ['value' => (string) (float) $raw];
+            }
         }
 
         // Coded boxes
         $codes = [];
         foreach ($codedBoxes as $box) {
             $rawItems = $args["codes_{$box}"] ?? [];
-            if (! is_array($rawItems)) {
-                $rawItems = [];
+            $normalized = $this->normalizeCodeItems(is_array($rawItems) ? $rawItems : []);
+            if (! empty($normalized)) {
+                $codes[$box] = $normalized;
             }
-            $codes[$box] = array_values(array_filter(array_map(function ($item) {
-                if (! is_array($item) || ! isset($item['code'])) {
-                    return null;
-                }
-
-                return [
-                    'code' => (string) $item['code'],
-                    'value' => isset($item['value']) ? (string) $item['value'] : '',
-                    'notes' => isset($item['notes']) ? (string) $item['notes'] : '',
-                ];
-            }, $rawItems)));
         }
 
         // Schedule K-3 sections
@@ -1201,6 +1192,31 @@ PROMPT;
             ],
             'createdAt' => now()->toIso8601String(),
         ];
+    }
+
+    /**
+     * Normalize a raw array of code items from the K-1 tool call.
+     * Each item must have a 'code' key; 'value' and 'notes' are optional.
+     * Invalid items (non-array, missing 'code') are silently dropped.
+     *
+     * @param  array<mixed>  $rawItems
+     * @return array<array{code: string, value: string, notes: string}>
+     */
+    private function normalizeCodeItems(array $rawItems): array
+    {
+        $result = [];
+        foreach ($rawItems as $item) {
+            if (! is_array($item) || ! isset($item['code'])) {
+                continue;
+            }
+            $result[] = [
+                'code' => (string) $item['code'],
+                'value' => isset($item['value']) ? (string) $item['value'] : '',
+                'notes' => isset($item['notes']) ? (string) $item['notes'] : '',
+            ];
+        }
+
+        return $result;
     }
 
     private function buildW2ToolDefinition(): array
