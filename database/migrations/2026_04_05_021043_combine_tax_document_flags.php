@@ -9,28 +9,18 @@ return new class extends Migration
 {
     public function up(): void
     {
-        $driver = DB::getDriverName();
-
-        if ($driver === 'sqlite') {
+        if (Schema::hasColumn('fin_tax_documents', 'is_confirmed') && ! Schema::hasColumn('fin_tax_documents', 'is_reviewed')) {
             Schema::table('fin_tax_documents', function (Blueprint $table) {
                 $table->renameColumn('is_confirmed', 'is_reviewed');
             });
+        }
 
-            DB::table('fin_tax_documents')->update([
-                'is_reviewed' => DB::raw('is_reviewed OR is_reconciled'),
-            ]);
-
-            Schema::table('fin_tax_documents', function (Blueprint $table) {
-                $table->dropColumn('is_reconciled');
-            });
-        } else {
-            Schema::table('fin_tax_documents', function (Blueprint $table) {
-                $table->renameColumn('is_confirmed', 'is_reviewed');
-            });
-
-            DB::table('fin_tax_documents')->update([
-                'is_reviewed' => DB::raw('is_reviewed OR is_reconciled'),
-            ]);
+        if (Schema::hasColumn('fin_tax_documents', 'is_reconciled')) {
+            if (Schema::hasColumn('fin_tax_documents', 'is_reviewed')) {
+                DB::table('fin_tax_documents')->update([
+                    'is_reviewed' => DB::raw('is_reviewed OR is_reconciled'),
+                ]);
+            }
 
             Schema::table('fin_tax_documents', function (Blueprint $table) {
                 $table->dropColumn('is_reconciled');
@@ -40,9 +30,13 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::table('fin_tax_documents', function (Blueprint $table) {
-            $table->renameColumn('is_reviewed', 'is_confirmed');
-            $table->boolean('is_reconciled')->default(false);
-        });
+        if (Schema::hasColumn('fin_tax_documents', 'is_reviewed')) {
+            Schema::table('fin_tax_documents', function (Blueprint $table) {
+                $table->renameColumn('is_reviewed', 'is_confirmed');
+                if (! Schema::hasColumn('fin_tax_documents', 'is_reconciled')) {
+                    $table->boolean('is_reconciled')->default(false);
+                }
+            });
+        }
     }
 };
