@@ -366,11 +366,21 @@ All K-1 data is stored as a structured JSON blob in `parsed_data` using **schema
 
 ### K-1 Code Organization
 
-All K-1 specific TypeScript code lives in `resources/js/components/finance/k1/`:
+All K-1 specific TypeScript code lives in two layers:
+
+**Data types** (`resources/js/types/finance/k1-data.ts`) — no component dependencies:
+
+| Export | Purpose |
+|--------|---------|
+| `FK1StructuredData` | Canonical structured format (schemaVersion "2026.1") |
+| `K1FieldValue`, `K1CodeItem`, `K3Section`, `K1ExtractionInfo` | Sub-types |
+| `isFK1StructuredData(data)` | Type guard: detects new-format documents |
+
+**UI components** (`resources/js/components/finance/k1/`):
 
 | File | Purpose |
 |------|---------|
-| `k1-types.ts` | Interfaces: `FK1StructuredData`, `K1FieldValue`, `K1CodeItem`, `K3Section`, `K1FieldSpec` |
+| `k1-types.ts` | Re-exports data types + adds UI spec types (`K1FieldSpec`, `K1FieldType`) |
 | `k1-spec.ts` | `K1_SPEC` array — all A–O and 1–20 field definitions; drives generic rendering |
 | `k1-codes.ts` | Code definitions for boxes 11, 13–20 (from IRS instructions) |
 | `K1CodesModal.tsx` | Sub-modal for viewing / editing coded items on a single box |
@@ -382,11 +392,11 @@ All K-1 specific TypeScript code lives in `resources/js/components/finance/k1/`:
 The `extractK1Data` tool (`TAX_DOCUMENT_K1_TOOL_NAME`) extracts ALL boxes using structured flat parameter names:
 - `field_A` through `field_O` — entity/partner identification (left panel)
 - `field_1` through `field_12` — income/deduction boxes (right panel, excluding coded boxes)
-- `codes_11`, `codes_13` through `codes_20` — arrays of `{ code, value, notes }` for coded boxes
+- `codes_11`, `codes_13` through `codes_20` — arrays of `{ code, value (NUMBER), notes }` for coded boxes
 - `k3_sections` — Schedule K-3 sections array
 - `raw_text`, `warnings` — supplemental text and extraction warnings
 
-The PHP `coerceK1Args()` method transforms the flat tool output into the canonical `FK1StructuredData` JSON and stamps the `extraction` provenance metadata.
+The PHP `coerceK1Args()` method transforms the flat tool output into the canonical `FK1StructuredData` JSON and stamps the `extraction` provenance metadata. Coded box values are returned as numbers by Gemini and stringified for storage. Boolean boxes (D, H2) are robustly coerced from PHP booleans, integers, and strings.
 
 ### K-1 UI (TaxDocumentReviewModal)
 
@@ -399,13 +409,40 @@ When `form_type === 'k1'` and the data contains `schemaVersion`, the modal rende
 
 ### TypeScript Types
 
-- `FK1StructuredData` — canonical structured format (re-exported from `@/types/finance`)
+- `FK1StructuredData` — canonical structured format (defined in `@/types/finance/k1-data`, re-exported from `@/types/finance`)
 - `FK1ParsedData` — legacy flat format (kept for backward compat with pre-2026.1 documents)
 - `isFK1StructuredData(data)` — type guard to detect new-format documents
 
-### Future Extension: Form 1116 (Foreign Tax Credit)
+### Form 1116 (Foreign Tax Credit) Support
 
-Box 16 (foreign transactions) codes I and J (foreign taxes paid/withheld) will feed into Form 1116 when that support is added. Code A is the country name. See `buildK1ToolDefinition()` comments for details.
+Foreign tax information from K-1 Box 16 and 1099-DIV/INT feeds into Form 1116 via the `@/finance/1116` module:
+
+**Directory: `resources/js/finance/1116/`**
+
+| File | Purpose |
+|------|---------|
+| `types.ts` | `ForeignTaxSummary`, `F1116Data`, `F1116WorksheetInput/Result` |
+| `F1116_SPEC.ts` | Form 1116 field spec (spec-driven rendering) |
+| `k3-to-1116.ts` | Extraction functions: `extractForeignTaxFromK1`, `extractForeignTaxFrom1099Div`, `extractForeignTaxFrom1099Int`, `calculateApportionedInterest` |
+| `WorksheetModal.tsx` | Form 1116 Line 4b apportionment worksheet modal |
+| `index.ts` | Barrel exports |
+
+**K-1 Box 16 code mapping:**
+- Code A → country name
+- Code B → gross passive income
+- Code C → gross general income
+- Code I → foreign taxes paid
+- Code J → foreign taxes withheld at source
+
+**Asset Method Apportionment (IRS Pub. 514):**
+```
+Apportioned Foreign Interest = Total Interest Expense × (Foreign Basis / Total Basis)
+```
+
+The `WorksheetModal` assists the user in computing Line 4b by inputting total interest expense, foreign adjusted basis, and total adjusted basis. It also shows a summary of all foreign taxes paid from reviewed documents.
+
+**Account Documents Table:**
+The table includes a **Foreign Tax** column showing the total foreign taxes per account, and a **1116 Worksheet** button (visible when any foreign taxes are found) that opens the worksheet modal.
 
 ### Future Extension: Partnership Basis Tracking
 

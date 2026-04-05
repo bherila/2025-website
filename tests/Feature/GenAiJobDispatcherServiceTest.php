@@ -391,4 +391,220 @@ class GenAiJobDispatcherServiceTest extends TestCase
         $this->assertSame(523.45, $data['box1_interest']); // should be cast to float
         $this->assertNull($data['box4_fed_tax']);
     }
+
+    // ================================================================
+    // K-1 structured coercion tests
+    // ================================================================
+
+    private function buildK1ToolResponse(array $args): array
+    {
+        return [
+            'candidates' => [[
+                'content' => [
+                    'parts' => [[
+                        'functionCall' => [
+                            'name' => GenAiJobDispatcherService::TAX_DOCUMENT_K1_TOOL_NAME,
+                            'args' => $args,
+                        ],
+                    ]],
+                ],
+            ]],
+        ];
+    }
+
+    public function test_k1_coercion_produces_schema_version_and_form_type(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $response = $this->buildK1ToolResponse([
+            'formType' => 'K-1-1065',
+            'field_A' => '12-3456789',
+            'field_1' => 15000.0,
+        ]);
+
+        $data = $service->extractGenerateContentData('tax_document', $response);
+        $this->assertIsArray($data);
+        $this->assertSame('2026.1', $data['schemaVersion']);
+        $this->assertSame('K-1-1065', $data['formType']);
+        $this->assertArrayHasKey('fields', $data);
+        $this->assertArrayHasKey('codes', $data);
+    }
+
+    public function test_k1_coercion_populates_string_fields(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $response = $this->buildK1ToolResponse([
+            'field_A' => '12-3456789',
+            'field_B' => "Acme Partners\n123 Main St",
+            'field_C' => 'Ogden',
+        ]);
+
+        $data = $service->extractGenerateContentData('tax_document', $response);
+        $this->assertSame('12-3456789', $data['fields']['A']['value']);
+        $this->assertSame("Acme Partners\n123 Main St", $data['fields']['B']['value']);
+        $this->assertSame('Ogden', $data['fields']['C']['value']);
+    }
+
+    public function test_k1_coercion_omits_null_fields(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        // Only provide field_A; field_B is absent
+        $response = $this->buildK1ToolResponse(['field_A' => '12-3456789']);
+
+        $data = $service->extractGenerateContentData('tax_document', $response);
+        $this->assertArrayHasKey('A', $data['fields']);
+        $this->assertArrayNotHasKey('B', $data['fields']);
+    }
+
+    public function test_k1_coercion_handles_boolean_true(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $cases = [
+            [true],
+            [1],
+            ['true'],
+            ['1'],
+            ['TRUE'],
+        ];
+
+        foreach ($cases as [$value]) {
+            $response = $this->buildK1ToolResponse(['field_D' => $value]);
+            $data = $service->extractGenerateContentData('tax_document', $response);
+            $this->assertSame('true', $data['fields']['D']['value'], "Expected 'true' for input: ".var_export($value, true));
+        }
+    }
+
+    public function test_k1_coercion_handles_boolean_false(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $cases = [
+            [false],
+            [0],
+            ['false'],
+            ['0'],
+            ['FALSE'],
+        ];
+
+        foreach ($cases as [$value]) {
+            $response = $this->buildK1ToolResponse(['field_D' => $value]);
+            $data = $service->extractGenerateContentData('tax_document', $response);
+            $this->assertSame('false', $data['fields']['D']['value'], "Expected 'false' for input: ".var_export($value, true));
+        }
+    }
+
+    public function test_k1_coercion_omits_boolean_field_when_null(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $response = $this->buildK1ToolResponse([]);
+        $data = $service->extractGenerateContentData('tax_document', $response);
+        $this->assertArrayNotHasKey('D', $data['fields']);
+        $this->assertArrayNotHasKey('H2', $data['fields']);
+    }
+
+    public function test_k1_coercion_populates_numeric_fields(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $response = $this->buildK1ToolResponse([
+            'field_1' => 15000.50,
+            'field_5' => '2500.00',   // string from Gemini
+            'field_12' => 0,
+        ]);
+
+        $data = $service->extractGenerateContentData('tax_document', $response);
+        $this->assertSame('15000.5', $data['fields']['1']['value']);
+        $this->assertSame('2500', $data['fields']['5']['value']);
+        $this->assertSame('0', $data['fields']['12']['value']);
+    }
+
+    public function test_k1_coercion_normalizes_code_items(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $response = $this->buildK1ToolResponse([
+            'codes_13' => [
+                ['code' => 'G', 'value' => 200.0, 'notes' => 'Investment interest'],
+                ['code' => 'A', 'value' => 500.0],
+            ],
+        ]);
+
+        $data = $service->extractGenerateContentData('tax_document', $response);
+        $this->assertArrayHasKey('13', $data['codes']);
+        $this->assertCount(2, $data['codes']['13']);
+        $this->assertSame('G', $data['codes']['13'][0]['code']);
+        $this->assertSame('200', $data['codes']['13'][0]['value']);
+        $this->assertSame('Investment interest', $data['codes']['13'][0]['notes']);
+        $this->assertSame('A', $data['codes']['13'][1]['code']);
+        $this->assertSame('', $data['codes']['13'][1]['notes']);
+    }
+
+    public function test_k1_coercion_omits_empty_coded_boxes(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $response = $this->buildK1ToolResponse([
+            'codes_11' => [],
+            'codes_13' => [['code' => 'G', 'value' => 200.0]],
+        ]);
+
+        $data = $service->extractGenerateContentData('tax_document', $response);
+        $this->assertArrayNotHasKey('11', $data['codes']);
+        $this->assertArrayHasKey('13', $data['codes']);
+    }
+
+    public function test_k1_coercion_normalizes_k3_sections(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $response = $this->buildK1ToolResponse([
+            'k3_sections' => [
+                ['sectionId' => 'K3-1', 'title' => 'Foreign Source Income', 'notes' => 'Passive'],
+            ],
+        ]);
+
+        $data = $service->extractGenerateContentData('tax_document', $response);
+        $this->assertArrayHasKey('k3', $data);
+        $this->assertCount(1, $data['k3']['sections']);
+        $this->assertSame('K3-1', $data['k3']['sections'][0]['sectionId']);
+        $this->assertSame('Passive', $data['k3']['sections'][0]['notes']);
+        // data must be an object (empty stdClass), not an array
+        $this->assertIsObject($data['k3']['sections'][0]['data']);
+    }
+
+    public function test_k1_coercion_stamps_extraction_metadata(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $response = $this->buildK1ToolResponse(['field_A' => 'test']);
+        $data = $service->extractGenerateContentData('tax_document', $response);
+
+        $this->assertArrayHasKey('extraction', $data);
+        $this->assertSame('gemini', $data['extraction']['model']);
+        $this->assertSame('2026.1', $data['extraction']['version']);
+        $this->assertSame('ai', $data['extraction']['source']);
+        $this->assertNotEmpty($data['extraction']['timestamp']);
+    }
+
+    public function test_k1_coercion_drops_invalid_code_items(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $response = $this->buildK1ToolResponse([
+            'codes_20' => [
+                ['code' => 'V', 'value' => 100.0],
+                'not-an-array',               // should be dropped
+                ['value' => 200.0],           // missing code → should be dropped
+            ],
+        ]);
+
+        $data = $service->extractGenerateContentData('tax_document', $response);
+        $this->assertArrayHasKey('20', $data['codes']);
+        $this->assertCount(1, $data['codes']['20']);
+        $this->assertSame('V', $data['codes']['20'][0]['code']);
+    }
 }

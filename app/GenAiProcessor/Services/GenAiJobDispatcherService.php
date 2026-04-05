@@ -886,8 +886,8 @@ PROMPT;
 <!-- tool:{$toolName} -->
 Extract ALL data from this Schedule K-1 PDF (tax year {$taxYear}) using the `{$toolName}` tool.
 Include every box, code, and supplemental statement. Use null for absent fields.
-All monetary values must be numbers (not strings). For coded boxes (11, 13–20), include every
-code entry found as a separate item in the corresponding array.
+For numeric income/deduction boxes use numbers. For coded boxes (11, 13–20), include every
+code entry found as a separate item in the corresponding array, with the amount as a number.
 PROMPT;
     }
 
@@ -1130,8 +1130,31 @@ PROMPT;
 
         foreach ($boolBoxes as $box) {
             $raw = $args["field_{$box}"] ?? null;
-            if ($raw !== null) {
-                $fields[$box] = ['value' => $raw ? 'true' : 'false'];
+            if ($raw === null) {
+                continue;
+            }
+
+            $boolValue = null;
+
+            if (is_bool($raw)) {
+                $boolValue = $raw;
+            } elseif (is_int($raw) || is_float($raw)) {
+                if ((float) $raw === 1.0) {
+                    $boolValue = true;
+                } elseif ((float) $raw === 0.0) {
+                    $boolValue = false;
+                }
+            } elseif (is_string($raw)) {
+                $normalized = strtolower(trim($raw));
+                if (in_array($normalized, ['true', '1'], true)) {
+                    $boolValue = true;
+                } elseif (in_array($normalized, ['false', '0'], true)) {
+                    $boolValue = false;
+                }
+            }
+
+            if ($boolValue !== null) {
+                $fields[$box] = ['value' => $boolValue ? 'true' : 'false'];
             }
         }
 
@@ -1163,7 +1186,7 @@ PROMPT;
                 $k3Sections[] = [
                     'sectionId' => (string) $sec['sectionId'],
                     'title' => isset($sec['title']) ? (string) $sec['title'] : '',
-                    'data' => [],
+                    'data' => (object) [],
                     'notes' => isset($sec['notes']) ? (string) $sec['notes'] : '',
                 ];
             }
@@ -1196,6 +1219,11 @@ PROMPT;
 
     /**
      * Normalize a raw array of code items from the K-1 tool call.
+     *
+     * The tool schema defines `value` as NUMBER so Gemini returns a numeric type.
+     * We stringify the value here for consistent storage in the FK1StructuredData shape
+     * (K1CodeItem.value is string on the frontend).
+     *
      * Each item must have a 'code' key; 'value' and 'notes' are optional.
      * Invalid items (non-array, missing 'code') are silently dropped.
      *
@@ -1209,9 +1237,10 @@ PROMPT;
             if (! is_array($item) || ! isset($item['code'])) {
                 continue;
             }
+            $rawValue = $item['value'] ?? null;
             $result[] = [
                 'code' => (string) $item['code'],
-                'value' => isset($item['value']) ? (string) $item['value'] : '',
+                'value' => is_numeric($rawValue) ? (string) (float) $rawValue : (string) ($rawValue ?? ''),
                 'notes' => isset($item['notes']) ? (string) $item['notes'] : '',
             ];
         }
@@ -1395,17 +1424,6 @@ PROMPT;
     }
 
     /**
-     * Build the GenAI tool definition for extracting Schedule K-1 data.
-     *
-     * K-1 data is highly variable — partnerships and S-corps use different box numbering,
-     * and Box 20 / Box K alone can have dozens of codes. We capture the main numeric boxes
-     * plus flexible key-value arrays for coded items and supplemental statements.
-     *
-     * The entire extracted object is stored as JSON in parsed_data, so we do not enforce
-     * a rigid schema here. Fields added by the AI that are not in this definition will
-     * still be captured and stored.
-     *
-    /**
      * Build the Gemini tool definition for extracting Schedule K-1 (Form 1065) data.
      *
      * Produces structured output (schemaVersion "2026.1"):
@@ -1431,7 +1449,7 @@ PROMPT;
                 'type' => 'OBJECT',
                 'properties' => [
                     'code' => ['type' => 'STRING'],
-                    'value' => ['type' => 'STRING'],
+                    'value' => ['type' => 'NUMBER'],
                     'notes' => ['type' => 'STRING'],
                 ],
                 'required' => ['code', 'value'],

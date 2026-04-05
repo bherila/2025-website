@@ -1,8 +1,7 @@
 /** Shared types for tax document components and API responses. */
 
-import type { FK1StructuredData } from '@/components/finance/k1/k1-types'
-
-export type { FK1StructuredData }
+export type { FK1StructuredData } from '@/types/finance/k1-data'
+export { isFK1StructuredData } from '@/types/finance/k1-data'
 
 /** Parsed field values from W-2: all box values. */
 export interface W2ParsedData {
@@ -143,8 +142,11 @@ export interface FK1ParsedData {
   supplemental_statements?: string | null
   [key: string]: unknown
 }
+
+import type { FK1StructuredData as _FK1StructuredData } from './k1-data'
+
 /** Union of all possible parsed_data shapes. */
-export type TaxDocumentParsedData = W2ParsedData | F1099IntParsedData | F1099DivParsedData | F1099MiscParsedData | FK1ParsedData | FK1StructuredData
+export type TaxDocumentParsedData = W2ParsedData | F1099IntParsedData | F1099DivParsedData | F1099MiscParsedData | FK1ParsedData | _FK1StructuredData
 
 export interface TaxDocument {
   id: number
