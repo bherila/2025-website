@@ -1,20 +1,13 @@
 'use client'
 
-import { CheckCircle, Clock, Download, Eye, Loader2, Upload } from 'lucide-react'
+import { CheckCircle, Clock, Eye, Loader2, Upload } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
-import { toast } from 'sonner'
 
 import TaxDocumentReviewModal from '@/components/finance/TaxDocumentReviewModal'
 import TaxDocumentUploadModal from '@/components/finance/TaxDocumentUploadModal'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
 import type { EmploymentEntity, TaxDocument } from '@/types/finance/tax-document'
@@ -34,7 +27,6 @@ export default function TaxDocumentsSection({ selectedYear, payslips, onDocument
   const [error, setError] = useState<string | null>(null)
   const [uploadModal, setUploadModal] = useState<{ entityId: number; formType: string } | null>(null)
   const [reviewModalDoc, setReviewModalDoc] = useState<TaxDocument | null>(null)
-  const [imageViewState, setImageViewState] = useState<{ url: string; filename: string } | null>(null)
 
   const fetchDocuments = useCallback(async () => {
     try {
@@ -64,34 +56,6 @@ export default function TaxDocumentsSection({ selectedYear, payslips, onDocument
     setLoading(true)
     Promise.all([fetchDocuments(), fetchEntities()]).finally(() => setLoading(false))
   }, [fetchDocuments, fetchEntities])
-
-  const handleView = async (doc: TaxDocument) => {
-    try {
-      const result = (await fetchWrapper.get(`/api/finance/tax-documents/${doc.id}/download`)) as {
-        view_url: string
-        download_url: string
-      }
-      if (doc.mime_type?.startsWith('image/')) {
-        setImageViewState({ url: result.view_url, filename: doc.original_filename })
-      } else {
-        window.open(result.view_url, '_blank', 'noopener,noreferrer')
-      }
-    } catch {
-      toast.error('Failed to get view link')
-    }
-  }
-
-  const handleDownload = async (doc: TaxDocument) => {
-    try {
-      const result = (await fetchWrapper.get(`/api/finance/tax-documents/${doc.id}/download`)) as {
-        view_url: string
-        download_url: string
-      }
-      window.open(result.download_url, '_blank', 'noopener,noreferrer')
-    } catch {
-      toast.error('Failed to get download link')
-    }
-  }
 
   const w2Entities = entities.filter(e => e.type === 'w2')
 
@@ -199,19 +163,25 @@ export default function TaxDocumentsSection({ selectedYear, payslips, onDocument
                           )}
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
-                            <Button size="sm" variant="ghost" onClick={() => handleView(doc)} title="View">
-                              <Eye className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleDownload(doc)}
-                              title="Download"
-                            >
-                              <Download className="h-3 w-3" />
-                            </Button>
-                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className={`gap-1.5 h-8 ${doc.is_reviewed ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:text-green-800' : 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100 hover:text-amber-900'}`}
+                            onClick={() => setReviewModalDoc(doc)}
+                            title={doc.is_reviewed ? 'Reviewed' : 'Review document'}
+                          >
+                            {doc.is_reviewed ? (
+                              <>
+                                <CheckCircle className="h-3.5 w-3.5" />
+                                Reviewed
+                              </>
+                            ) : (
+                              <>
+                                <Eye className="h-3.5 w-3.5" />
+                                Needs Review
+                              </>
+                            )}
+                          </Button>
                         </TableCell>
                       </TableRow>
                     )
@@ -254,19 +224,6 @@ export default function TaxDocumentsSection({ selectedYear, payslips, onDocument
         />
       )}
 
-      {/* Inline image viewer */}
-      <Dialog open={imageViewState !== null} onOpenChange={open => !open && setImageViewState(null)}>
-        <DialogContent className="sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>{imageViewState?.filename}</DialogTitle>
-          </DialogHeader>
-          {imageViewState && (
-            <div className="flex justify-center overflow-auto max-h-[70vh]">
-              <img src={imageViewState.url} alt={imageViewState.filename} className="max-w-full object-contain" />
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
