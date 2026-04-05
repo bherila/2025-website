@@ -106,8 +106,78 @@ export interface F1099MiscParsedData {
   box16_state_tax?: number | null
 }
 
+/**
+ * Coded item used in K-1 for credits, AMT, foreign transactions, and other coded boxes.
+ */
+export interface K1CodedItem {
+  code: string
+  description?: string | null
+  amount?: number | null
+}
+
+/**
+ * Parsed field values from Schedule K-1 (Form 1065, 1120-S, or 1041).
+ *
+ * K-1 data is extensive and variable. All extracted data is stored in this flexible
+ * object as JSON (via parsed_data). Fields not listed here may still be present.
+ *
+ * Future extension: box16_foreign_taxes_paid and box16_foreign_country will be used
+ * when Form 1116 (Foreign Tax Credit) support is added. See GenAiJobDispatcherService
+ * for details on the extension points.
+ */
+export interface FK1ParsedData {
+  form_source?: string | null           // "1065", "1120-S", "1041"
+  tax_year?: string | null
+  entity_name?: string | null
+  entity_ein?: string | null
+  partner_name?: string | null
+  partner_ssn_last4?: string | null
+  partner_ownership_pct?: number | null
+  partner_type?: string | null
+
+  // Main income/deduction boxes
+  box1_ordinary_income?: number | null
+  box2_net_rental_real_estate?: number | null
+  box3_other_net_rental?: number | null
+  box4_guaranteed_payments_services?: number | null
+  box5_guaranteed_payments_capital?: number | null
+  box6_guaranteed_payments_total?: number | null
+  box7_net_section_1231_gain?: number | null
+  box8_other_income?: number | null
+  box9_section_179_deduction?: number | null
+  box10_other_deductions?: number | null
+  box11_section_179_s_corp?: number | null
+
+  // Self-employment
+  box14_self_employment_earnings?: number | null
+
+  // Coded arrays
+  credits?: K1CodedItem[] | null
+  amt_items?: K1CodedItem[] | null
+  other_info_items?: K1CodedItem[] | null
+  other_coded_items?: K1CodedItem[] | null
+
+  // Foreign transactions (future Form 1116 extension)
+  box16_foreign_taxes_paid?: number | null
+  box16_foreign_country?: string | null
+  box16_foreign_income_category?: string | null
+
+  // Distributions
+  distributions?: number | null
+
+  // State
+  state?: string | null
+  state_tax_withheld?: number | null
+
+  // Supplemental statement text
+  supplemental_statements?: string | null
+
+  // Allow any additional fields from AI extraction
+  [key: string]: unknown
+}
+
 /** Union of all possible parsed_data shapes. */
-export type TaxDocumentParsedData = W2ParsedData | F1099IntParsedData | F1099DivParsedData | F1099MiscParsedData
+export type TaxDocumentParsedData = W2ParsedData | F1099IntParsedData | F1099DivParsedData | F1099MiscParsedData | FK1ParsedData
 
 export interface TaxDocument {
   id: number
@@ -151,7 +221,8 @@ export const FORM_TYPE_LABELS: Record<string, string> = {
   '1099_div': '1099-DIV',
   '1099_div_c': '1099-DIV-C',
   '1099_misc': '1099-MISC',
+  k1: 'K-1 / K-3',
 }
 
 export const W2_FORM_TYPES = ['w2', 'w2c'] as const
-export const ACCOUNT_FORM_TYPES_1099 = ['1099_int', '1099_div', '1099_misc'] as const
+export const ACCOUNT_FORM_TYPES_1099 = ['1099_int', '1099_div', '1099_misc', 'k1'] as const

@@ -154,6 +154,26 @@ class TaxDocumentControllerTest extends TestCase
         $response->assertJsonFragment(['form_type' => '1099_misc', 'tax_year' => 2024]);
     }
 
+    public function test_can_store_k1_document(): void
+    {
+        $user = $this->createUser();
+        $this->actingAs($user);
+        $account = $this->createFinAccount($user->id);
+
+        $response = $this->postJson('/api/finance/tax-documents', [
+            's3_key' => "tax_docs/{$user->id}/2024.01.01 abc12 k1-2024.pdf",
+            'original_filename' => 'k1-2024.pdf',
+            'form_type' => 'k1',
+            'tax_year' => 2024,
+            'file_size_bytes' => 102400,
+            'file_hash' => str_repeat('k', 64),
+            'account_id' => $account->acct_id,
+        ]);
+
+        $response->assertStatus(201);
+        $response->assertJsonFragment(['form_type' => 'k1', 'tax_year' => 2024]);
+    }
+
     public function test_cannot_store_invalid_form_type(): void
     {
         $user = $this->createUser();

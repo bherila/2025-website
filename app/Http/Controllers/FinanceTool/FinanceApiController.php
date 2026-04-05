@@ -5,6 +5,7 @@ namespace App\Http\Controllers\FinanceTool;
 use App\Http\Controllers\Controller;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
@@ -12,7 +13,7 @@ use Illuminate\Support\Facades\DB;
 
 class FinanceApiController extends Controller
 {
-    public function accounts(Request $request)
+    public function accounts(Request $request): JsonResponse
     {
         $uid = Auth::id();
 
@@ -37,12 +38,29 @@ class FinanceApiController extends Controller
             return is_null($account->when_closed);
         });
 
-        return response()->json([
+        $response = [
             'assetAccounts' => $assetAccounts->values(),
             'liabilityAccounts' => $liabilityAccounts->values(),
             'retirementAccounts' => $retirementAccounts->values(),
             'activeChartAccounts' => $activeChartAccounts->values(),
-        ]);
+        ];
+
+        // When active_year is provided, include account IDs that have transactions in that year.
+        // Used by Account Documents section to sort accounts without activity to the bottom.
+        if ($request->filled('active_year')) {
+            $year = (int) $request->query('active_year');
+            $startDate = "{$year}-01-01";
+            $endDate = "{$year}-12-31";
+            $allAccountIds = $accounts->pluck('acct_id')->toArray();
+            $activeIds = FinAccountLineItems::whereIn('t_account', $allAccountIds)
+                ->whereBetween('t_date', [$startDate, $endDate])
+                ->distinct()
+                ->pluck('t_account')
+                ->toArray();
+            $response['active_account_ids'] = $activeIds;
+        }
+
+        return response()->json($response);
     }
 
     public function updateBalance(Request $request)

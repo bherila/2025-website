@@ -5,6 +5,7 @@ import { ClipboardList } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import Form1040Preview from '@/components/finance/Form1040Preview'
+import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
 import ScheduleBPreview from '@/components/finance/ScheduleBPreview'
 import ScheduleCPreview from '@/components/finance/ScheduleCPreview'
 import TaxDocumentReviewModal from '@/components/finance/TaxDocumentReviewModal'
@@ -22,78 +23,119 @@ import { YearSelectorWithNav } from './YearSelectorWithNav'
 
 /** W-2 income summary table derived from payslips. */
 function W2IncomeSummary({ payslips }: { payslips: fin_payslip[] }) {
+  const [dataSourceRow, setDataSourceRow] = useState<{
+    label: string
+    getter: (p: fin_payslip) => currency
+  } | null>(null)
+
   if (payslips.length === 0) return null
 
   const sum = (fn: (row: fin_payslip) => currency) =>
     payslips.reduce((acc, row) => acc.add(fn(row)), currency(0))
 
-  const wages = sum(r => currency(r.ps_salary ?? 0))
-  const bonus = sum(r => currency(r.earnings_bonus ?? 0))
-  const rsu = sum(r => currency(r.earnings_rsu ?? 0))
-  const vacationPayout = sum(r => currency(r.ps_vacation_payout ?? 0))
-  const imputed = sum(r =>
+  const wagesGetter = (r: fin_payslip) => currency(r.ps_salary ?? 0)
+  const bonusGetter = (r: fin_payslip) => currency(r.earnings_bonus ?? 0)
+  const rsuGetter = (r: fin_payslip) => currency(r.earnings_rsu ?? 0)
+  const vacationGetter = (r: fin_payslip) => currency(r.ps_vacation_payout ?? 0)
+  const imputedGetter = (r: fin_payslip) =>
     currency(r.imp_ltd ?? 0)
       .add(r.imp_legal ?? 0)
       .add(r.imp_fitness ?? 0)
-      .add(r.imp_other ?? 0),
-  )
-  const gross = wages.add(bonus).add(rsu).add(vacationPayout).add(imputed)
-
-  const fedWH = sum(r =>
+      .add(r.imp_other ?? 0)
+  const fedWHGetter = (r: fin_payslip) =>
     currency(r.ps_fed_tax ?? 0)
       .add(r.ps_fed_tax_addl ?? 0)
-      .subtract(r.ps_fed_tax_refunded ?? 0),
-  )
-  const stateWH = sum(r => currency(r.ps_state_tax ?? 0).add(r.ps_state_tax_addl ?? 0))
-  const oasdi = sum(r => currency(r.ps_oasdi ?? 0))
-  const medicare = sum(r => currency(r.ps_medicare ?? 0))
-  const sdi = sum(r => currency(r.ps_state_disability ?? 0))
+      .subtract(r.ps_fed_tax_refunded ?? 0)
+  const stateWHGetter = (r: fin_payslip) =>
+    currency(r.ps_state_tax ?? 0).add(r.ps_state_tax_addl ?? 0)
+  const oasdiGetter = (r: fin_payslip) => currency(r.ps_oasdi ?? 0)
+  const medicareGetter = (r: fin_payslip) => currency(r.ps_medicare ?? 0)
+  const sdiGetter = (r: fin_payslip) => currency(r.ps_state_disability ?? 0)
+
+  const wages = sum(wagesGetter)
+  const bonus = sum(bonusGetter)
+  const rsu = sum(rsuGetter)
+  const vacationPayout = sum(vacationGetter)
+  const imputed = sum(imputedGetter)
+  const gross = wages.add(bonus).add(rsu).add(vacationPayout).add(imputed)
+
+  const fedWH = sum(fedWHGetter)
+  const stateWH = sum(stateWHGetter)
+  const oasdi = sum(oasdiGetter)
+  const medicare = sum(medicareGetter)
+  const sdi = sum(sdiGetter)
+
+  const grossGetter = (r: fin_payslip) =>
+    wagesGetter(r).add(bonusGetter(r)).add(rsuGetter(r)).add(vacationGetter(r)).add(imputedGetter(r))
 
   const rows = [
-    { label: 'Wages / Salary', value: wages },
-    bonus.value > 0 ? { label: 'Bonus', value: bonus } : null,
-    rsu.value > 0 ? { label: 'RSU Vesting', value: rsu } : null,
-    vacationPayout.value > 0 ? { label: 'Vacation Payout', value: vacationPayout } : null,
-    imputed.value > 0 ? { label: 'Imputed Income (benefits)', value: imputed } : null,
-    { label: 'Total Gross W-2 Income', value: gross, bold: true },
-    { label: '', value: null },
-    { label: 'Federal Income Tax Withheld', value: fedWH },
-    { label: 'State Income Tax Withheld', value: stateWH },
-    { label: 'OASDI / Social Security Tax', value: oasdi },
-    { label: 'Medicare Tax', value: medicare },
-    sdi.value > 0 ? { label: 'State Disability Insurance (SDI)', value: sdi } : null,
-  ].filter(Boolean) as { label: string; value: currency | null; bold?: boolean }[]
+    { label: 'Wages / Salary', value: wages, getter: wagesGetter },
+    bonus.value > 0 ? { label: 'Bonus', value: bonus, getter: bonusGetter } : null,
+    rsu.value > 0 ? { label: 'RSU Vesting', value: rsu, getter: rsuGetter } : null,
+    vacationPayout.value > 0 ? { label: 'Vacation Payout', value: vacationPayout, getter: vacationGetter } : null,
+    imputed.value > 0 ? { label: 'Imputed Income (benefits)', value: imputed, getter: imputedGetter } : null,
+    { label: 'Total Gross W-2 Income', value: gross, bold: true, getter: grossGetter },
+    { label: '', value: null, getter: null },
+    { label: 'Federal Income Tax Withheld', value: fedWH, getter: fedWHGetter },
+    { label: 'State Income Tax Withheld', value: stateWH, getter: stateWHGetter },
+    { label: 'OASDI / Social Security Tax', value: oasdi, getter: oasdiGetter },
+    { label: 'Medicare Tax', value: medicare, getter: medicareGetter },
+    sdi.value > 0 ? { label: 'State Disability Insurance (SDI)', value: sdi, getter: sdiGetter } : null,
+  ].filter(Boolean) as { label: string; value: currency | null; bold?: boolean; getter: ((p: fin_payslip) => currency) | null }[]
 
   return (
-    <div>
-      <h2 className="text-lg font-semibold mb-2">W-2 Income Summary</h2>
-      <div className="border rounded-md overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Line Item</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((row, i) =>
-              row.label === '' ? (
-                <TableRow key={i} className="border-t-2">
-                  <TableCell colSpan={2} className="py-0 h-px bg-muted/30" />
-                </TableRow>
-              ) : (
-                <TableRow key={i} className={row.bold ? 'font-semibold bg-muted/30' : ''}>
-                  <TableCell className="text-sm">{row.label}</TableCell>
-                  <TableCell className="text-right text-sm font-mono">
-                    {row.value !== null ? row.value.format() : ''}
-                  </TableCell>
-                </TableRow>
-              ),
-            )}
-          </TableBody>
-        </Table>
+    <>
+      <div>
+        <h2 className="text-lg font-semibold mb-2">W-2 Income Summary</h2>
+        <div className="border rounded-md overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Line Item</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row, i) =>
+                row.label === '' ? (
+                  <TableRow key={i} className="border-t-2">
+                    <TableCell colSpan={2} className="py-0 h-px bg-muted/30" />
+                  </TableRow>
+                ) : (
+                  <TableRow key={i} className={row.bold ? 'font-semibold bg-muted/30' : ''}>
+                    <TableCell className="text-sm">{row.label}</TableCell>
+                    <TableCell className="text-right text-sm font-mono">
+                      {row.value !== null && row.getter ? (
+                        <button
+                          type="button"
+                          className="underline decoration-dotted cursor-pointer hover:text-primary"
+                          onClick={() => setDataSourceRow({ label: row.label, getter: row.getter! })}
+                          title="View data sources"
+                        >
+                          {row.value.format()}
+                        </button>
+                      ) : row.value !== null ? (
+                        row.value.format()
+                      ) : ''}
+                    </TableCell>
+                  </TableRow>
+                ),
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
-    </div>
+
+      {dataSourceRow && (
+        <PayslipDataSourceModal
+          open
+          label={dataSourceRow.label}
+          payslips={payslips}
+          valueGetter={dataSourceRow.getter}
+          onClose={() => setDataSourceRow(null)}
+        />
+      )}
+    </>
   )
 }
 

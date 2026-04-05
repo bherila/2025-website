@@ -56,12 +56,13 @@ interface UploadModalState {
   accountId: number
 }
 
-const DISPLAY_FORM_TYPES = ['1099_int', '1099_div', '1099_misc'] as const
+const DISPLAY_FORM_TYPES = ['1099_int', '1099_div', '1099_misc', 'k1'] as const
 type DisplayFormType = (typeof DISPLAY_FORM_TYPES)[number]
 
 export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }: TaxDocuments1099SectionProps) {
   const [documents, setDocuments] = useState<TaxDocument[]>([])
   const [accounts, setAccounts] = useState<FinAccount[]>([])
+  const [activeAccountIds, setActiveAccountIds] = useState<number[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [uploadModal, setUploadModal] = useState<UploadModalState | null>(null)
@@ -71,7 +72,7 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
   const fetchDocuments = useCallback(async () => {
     try {
       const params = new URLSearchParams({
-        form_type: '1099_int,1099_int_c,1099_div,1099_div_c,1099_misc',
+        form_type: '1099_int,1099_int_c,1099_div,1099_div_c,1099_misc,k1',
         year: String(selectedYear),
       })
       const data = await fetchWrapper.get(`/api/finance/tax-documents?${params.toString()}`)
@@ -96,16 +97,17 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
       }
       onTotalsChange?.({ interestIncome, dividendIncome, qualifiedDividends })
     } catch {
-      setError('Failed to load 1099 documents')
+      setError('Failed to load account documents')
     }
   }, [selectedYear, onTotalsChange])
 
   const fetchAccounts = useCallback(async () => {
     try {
-      const data = (await fetchWrapper.get('/api/finance/accounts')) as {
+      const data = (await fetchWrapper.get(`/api/finance/accounts?active_year=${selectedYear}`)) as {
         assetAccounts: FinAccount[]
         liabilityAccounts: FinAccount[]
         retirementAccounts: FinAccount[]
+        active_account_ids?: number[]
       }
       const all: FinAccount[] = [
         ...(data.assetAccounts ?? []),
@@ -113,10 +115,11 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
         ...(data.retirementAccounts ?? []),
       ]
       setAccounts(all)
+      setActiveAccountIds(data.active_account_ids ?? [])
     } catch {
       setError('Failed to load accounts')
     }
-  }, [])
+  }, [selectedYear])
 
   useEffect(() => {
     setLoading(true)
@@ -131,6 +134,10 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
       if (formType === '1099_div') return d.form_type === '1099_div' || d.form_type === '1099_div_c'
       return d.form_type === formType
     })
+
+  /** Split accounts into active (have transactions this year) and inactive. */
+  const activeAccounts = accounts.filter(a => activeAccountIds.includes(a.acct_id))
+  const inactiveAccounts = accounts.filter(a => !activeAccountIds.includes(a.acct_id))
 
   const handleView = async (doc: TaxDocument) => {
     try {
@@ -257,7 +264,7 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
       return (
         <Button
           size="sm"
-          variant="outline"
+          variant="ghost"
           className="h-7 text-xs"
           onClick={() => setUploadModal({ open: true, formType, accountId: account.acct_id })}
         >
@@ -334,9 +341,24 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
     )
   }
 
+  const renderAccountRows = (accountList: FinAccount[], isSecondary: boolean) =>
+    accountList.map(account => (
+      <TableRow
+        key={account.acct_id}
+        className={isSecondary ? 'opacity-50' : ''}
+      >
+        <TableCell className={`font-medium text-sm ${isSecondary ? 'text-muted-foreground' : ''}`}>
+          {account.acct_name}
+        </TableCell>
+        {DISPLAY_FORM_TYPES.map(ft => (
+          <TableCell key={ft}>{renderSlot(account, ft)}</TableCell>
+        ))}
+      </TableRow>
+    ))
+
   return (
     <div>
-      <h3 className="text-base font-semibold mb-2">1099 Documents</h3>
+      <h3 className="text-base font-semibold mb-2">Account Documents</h3>
 
       {loading ? (
         <div className="flex items-center gap-2 text-muted-foreground text-sm">
@@ -347,7 +369,7 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
         <div className="text-destructive text-sm">{error}</div>
       ) : accounts.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No accounts found. Add an account to upload 1099 documents.
+          No accounts found. Add an account to upload account documents.
         </p>
       ) : (
         <div className="border rounded-md overflow-hidden">
@@ -361,14 +383,18 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
               </TableRow>
             </TableHeader>
             <TableBody>
-              {accounts.map(account => (
-                <TableRow key={account.acct_id}>
-                  <TableCell className="font-medium text-sm">{account.acct_name}</TableCell>
-                  {DISPLAY_FORM_TYPES.map(ft => (
-                    <TableCell key={ft}>{renderSlot(account, ft)}</TableCell>
-                  ))}
+              {renderAccountRows(activeAccounts, false)}
+              {inactiveAccounts.length > 0 && activeAccounts.length > 0 && (
+                <TableRow>
+                  <TableCell
+                    colSpan={DISPLAY_FORM_TYPES.length + 1}
+                    className="py-1 bg-muted/20 text-[10px] text-muted-foreground font-medium uppercase tracking-wider"
+                  >
+                    No transactions in {selectedYear}
+                  </TableCell>
                 </TableRow>
-              ))}
+              )}
+              {renderAccountRows(inactiveAccounts, true)}
             </TableBody>
           </Table>
         </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { CheckCircle, Clock, Download, Eye, Loader2, Trash2, Upload } from 'lucide-react'
+import { CheckCircle, Clock, Download, Eye, Loader2, Upload } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -78,42 +78,15 @@ export default function TaxDocumentsSection({ selectedYear, payslips, onDocument
     }
   }
 
-  const handleDelete = async (doc: TaxDocument) => {
-    if (!confirm(`Delete "${doc.original_filename}"?`)) return
-    try {
-      await fetchWrapper.delete(`/api/finance/tax-documents/${doc.id}`, {})
-      toast.success('Document deleted')
-      await fetchDocuments()
-    } catch {
-      toast.error('Failed to delete document')
-    }
-  }
-
-
   const w2Entities = entities.filter(e => e.type === 'w2')
 
   const getDocsForEntity = (entityId: number) =>
     documents.filter(d => d.employment_entity_id === entityId)
 
-  const renderProcessingBadge = (doc: TaxDocument) => {
-    if (doc.genai_status === 'pending' || doc.genai_status === 'processing') {
-      return (
-        <Badge variant="outline" className="border-orange-400 text-orange-600 gap-1">
-          <Clock className="h-3 w-3" />
-          Processing
-        </Badge>
-      )
-    }
-    if (doc.genai_status === 'parsed' && doc.is_reviewed) {
-      return <Badge variant="outline" className="border-green-500 text-green-600">Reviewed</Badge>
-    }
-    if (doc.genai_status === 'parsed') {
-      return <Badge variant="outline" className="border-blue-400 text-blue-600">Ready for Review</Badge>
-    }
-    if (doc.genai_status === 'failed') {
-      return <Badge variant="destructive">Failed</Badge>
-    }
-    return null
+  /** Returns payslips filtered by entity id, falling back to all payslips when none match. */
+  const getPayslipsForEntity = (entityId: number | null) => {
+    const filtered = payslips.filter(p => p.employment_entity_id === entityId)
+    return filtered.length > 0 ? filtered : payslips
   }
 
   if (loading) {
@@ -164,67 +137,70 @@ export default function TaxDocumentsSection({ selectedYear, payslips, onDocument
                     <TableHead>Form</TableHead>
                     <TableHead>Filename</TableHead>
                     <TableHead>Size</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Reviewed</TableHead>
+                    <TableHead>Review</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {entityDocs.map(doc => (
-                    <TableRow key={doc.id}>
-                      <TableCell>
-                        <Badge variant="secondary">{doc.form_type.toUpperCase()}</Badge>
-                      </TableCell>
-                      <TableCell className="text-sm">{doc.original_filename}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{doc.human_file_size}</TableCell>
-                      <TableCell>{renderProcessingBadge(doc)}</TableCell>
-                      <TableCell>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className={`gap-1.5 h-8 ${doc.is_reviewed ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:text-green-800' : ''}`}
-                          onClick={() => setReviewModalDoc(doc)}
-                        >
-                          {doc.is_reviewed ? (
-                            <>
-                              <CheckCircle className="h-3.5 w-3.5" />
-                              Reviewed
-                            </>
+                  {entityDocs.map(doc => {
+                    const isProcessing = doc.genai_status === 'pending' || doc.genai_status === 'processing'
+                    const isFailed = doc.genai_status === 'failed'
+                    return (
+                      <TableRow key={doc.id}>
+                        <TableCell>
+                          <Badge variant="secondary">{doc.form_type.toUpperCase()}</Badge>
+                        </TableCell>
+                        <TableCell className="text-sm">{doc.original_filename}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{doc.human_file_size}</TableCell>
+                        <TableCell>
+                          {isProcessing ? (
+                            <Button size="sm" variant="outline" disabled className="gap-1.5 h-8 border-orange-300 text-orange-600">
+                              <Clock className="h-3.5 w-3.5 animate-pulse" />
+                              Processing
+                            </Button>
+                          ) : isFailed ? (
+                            <Button size="sm" variant="outline" disabled className="gap-1.5 h-8 border-destructive text-destructive">
+                              Failed
+                            </Button>
                           ) : (
-                            <>
-                              <Eye className="h-3.5 w-3.5" />
-                              Review
-                            </>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className={`gap-1.5 h-8 ${doc.is_reviewed ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:text-green-800' : ''}`}
+                              onClick={() => setReviewModalDoc(doc)}
+                            >
+                              {doc.is_reviewed ? (
+                                <>
+                                  <CheckCircle className="h-3.5 w-3.5" />
+                                  Reviewed
+                                </>
+                              ) : (
+                                <>
+                                  <Eye className="h-3.5 w-3.5" />
+                                  Needs Review
+                                </>
+                              )}
+                            </Button>
                           )}
-                        </Button>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button size="sm" variant="ghost" onClick={() => handleView(doc)} title="View">
-                            <Eye className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleDownload(doc)}
-                            title="Download"
-                          >
-                            <Download className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => handleDelete(doc)}
-                            title={doc.is_reviewed ? 'Uncheck Reviewed to enable delete' : 'Delete'}
-                            disabled={doc.is_reviewed}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button size="sm" variant="ghost" onClick={() => handleView(doc)} title="View">
+                              <Eye className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleDownload(doc)}
+                              title="Download"
+                            >
+                              <Download className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             )}
@@ -253,7 +229,7 @@ export default function TaxDocumentsSection({ selectedYear, payslips, onDocument
           open
           taxYear={typeof selectedYear === 'number' ? selectedYear : new Date().getFullYear()}
           document={reviewModalDoc}
-          payslips={payslips.filter(p => p.employment_entity_id === reviewModalDoc.employment_entity_id)}
+          payslips={getPayslipsForEntity(reviewModalDoc.employment_entity_id)}
           onClose={() => setReviewModalDoc(null)}
           onDocumentReviewed={() => {
             setReviewModalDoc(null)

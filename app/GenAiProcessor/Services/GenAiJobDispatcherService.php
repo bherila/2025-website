@@ -21,6 +21,19 @@ class GenAiJobDispatcherService
     public const TAX_DOCUMENT_1099MISC_TOOL_NAME = 'extract1099MiscData';
 
     /**
+     * Tool name for extracting Schedule K-1 data (Form 1065 Partnership or Form 1120-S S-Corporation).
+     *
+     * K-1 data is stored as a flexible JSON blob in parsed_data because the number of
+     * line items, codes, and footnotes varies significantly between partnerships and S-corps.
+     *
+     * Future extension points:
+     * - Foreign transactions (Box 16 / Box K) will feed into Form 1116 (Foreign Tax Credit).
+     *   When Form 1116 support is added, map box16_* fields to the appropriate Form 1116 lines.
+     * - AMT adjustments (Box 17 / Box K) feed into Form 6251.
+     */
+    public const TAX_DOCUMENT_K1_TOOL_NAME = 'extractK1Data';
+
+    /**
      * Atomically claim a quota slot for today (UTC).
      * Returns false if the site-wide or per-user limit is reached.
      *
@@ -800,6 +813,7 @@ PROMPT;
             in_array($formType, ['1099_int', '1099_int_c']) => $this->build1099IntPrompt($formType, (int) $taxYear),
             in_array($formType, ['1099_div', '1099_div_c']) => $this->build1099DivPrompt($formType, (int) $taxYear),
             $formType === '1099_misc' => $this->build1099MiscPrompt((int) $taxYear),
+            $formType === 'k1' => $this->buildK1Prompt((int) $taxYear),
             default => throw new \InvalidArgumentException("Unknown tax form type: {$formType}"),
         };
     }
@@ -857,6 +871,38 @@ PROMPT;
     }
 
     /**
+     * Build the AI prompt for extracting Schedule K-1 data.
+     *
+     * K-1 forms come from partnerships (Form 1065) and S-corporations (Form 1120-S).
+     * The data is extensive and includes many coded line items, so we store all extracted
+     * data as a flexible JSON object in parsed_data.
+     *
+     * Future extension: Box 16 (foreign transactions) will be used with Form 1116 for
+     * foreign tax credit calculation. When Form 1116 support is added, extract and map
+     * the country code, foreign income, and foreign taxes paid from this box.
+     */
+    private function buildK1Prompt(int $taxYear): string
+    {
+        $toolName = self::TAX_DOCUMENT_K1_TOOL_NAME;
+
+        return <<<PROMPT
+<!-- tool:{$toolName} -->
+Analyze the provided Schedule K-1 PDF for tax year {$taxYear}. This may be a K-1 from a partnership
+(Form 1065), S-corporation (Form 1120-S), estate or trust (Form 1041), or other pass-through entity.
+
+Use the `{$toolName}` tool to extract ALL data from this document including:
+- Entity and partner/shareholder information (name, EIN, ownership percentage)
+- ALL income, deduction, credit, and other information boxes with their codes and amounts
+- Any supplemental statements or footnotes
+- State tax information if present
+
+Extract every line item fully — do not omit any box or code. All monetary values must be numbers.
+If a field is not present, set it to null. For items with multiple codes (e.g., Box 20 with codes A, B, C),
+represent each as a separate entry in the appropriate array field.
+PROMPT;
+    }
+
+    /**
      * Extracts the tool name marker from the prompt and returns the tool definition.
      * Returns null if no marker is found.
      *
@@ -876,6 +922,9 @@ PROMPT;
         if (str_contains($prompt, self::TAX_DOCUMENT_1099MISC_TOOL_NAME)) {
             return ['name' => self::TAX_DOCUMENT_1099MISC_TOOL_NAME, 'definition' => $this->build1099MiscToolDefinition()];
         }
+        if (str_contains($prompt, self::TAX_DOCUMENT_K1_TOOL_NAME)) {
+            return ['name' => self::TAX_DOCUMENT_K1_TOOL_NAME, 'definition' => $this->buildK1ToolDefinition()];
+        }
 
         return null;
     }
@@ -891,6 +940,7 @@ PROMPT;
             self::TAX_DOCUMENT_1099INT_TOOL_NAME,
             self::TAX_DOCUMENT_1099DIV_TOOL_NAME,
             self::TAX_DOCUMENT_1099MISC_TOOL_NAME,
+            self::TAX_DOCUMENT_K1_TOOL_NAME,
         ];
 
         $parts = $responseBody['candidates'][0]['content']['parts'] ?? [];
@@ -1051,6 +1101,28 @@ PROMPT;
             $coerced['box7_direct_sales_indicator'] = isset($args['box7_direct_sales_indicator'])
                 ? (bool) $args['box7_direct_sales_indicator']
                 : null;
+        }
+
+        // Handle K-1: pass through all data as-is (flexible JSON blob)
+        // The K-1 form has many coded items stored in arrays; we preserve the full structure.
+        if ($toolName === self::TAX_DOCUMENT_K1_TOOL_NAME) {
+            // Pass through all K-1 data from args, coercing known numeric fields
+            foreach ($args as $key => $value) {
+                if (! array_key_exists($key, $coerced)) {
+                    // Preserve arrays (coded items) as-is
+                    if (is_array($value)) {
+                        $coerced[$key] = $value;
+                    } elseif (is_numeric($value)) {
+                        $coerced[$key] = (float) $value;
+                    } elseif (is_string($value) && $value !== '') {
+                        $coerced[$key] = $value;
+                    } elseif ($value === null || $value === '') {
+                        $coerced[$key] = null;
+                    } else {
+                        $coerced[$key] = $value;
+                    }
+                }
+            }
         }
 
         return $coerced;
@@ -1226,6 +1298,102 @@ PROMPT;
                     'box15_nonqualified_deferred' => $numberProp(),
                     'box15_state' => $stringProp(),
                     'box16_state_tax' => $numberProp(),
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * Build the GenAI tool definition for extracting Schedule K-1 data.
+     *
+     * K-1 data is highly variable — partnerships and S-corps use different box numbering,
+     * and Box 20 / Box K alone can have dozens of codes. We capture the main numeric boxes
+     * plus flexible key-value arrays for coded items and supplemental statements.
+     *
+     * The entire extracted object is stored as JSON in parsed_data, so we do not enforce
+     * a rigid schema here. Fields added by the AI that are not in this definition will
+     * still be captured and stored.
+     *
+     * Future extension: When Form 1116 (Foreign Tax Credit) support is added:
+     * - Map box16_foreign_taxes_paid and box16_foreign_country to Form 1116 Part I.
+     * - Track foreign source income category (passive, general, etc.).
+     * - See IRS Publication 514 for Form 1116 computation rules.
+     */
+    private function buildK1ToolDefinition(): array
+    {
+        $numberProp = fn () => ['type' => 'NUMBER'];
+        $stringProp = fn () => ['type' => 'STRING'];
+        $codedItemsProp = fn () => [
+            'type' => 'ARRAY',
+            'items' => [
+                'type' => 'OBJECT',
+                'properties' => [
+                    'code' => $stringProp(),
+                    'description' => $stringProp(),
+                    'amount' => $numberProp(),
+                ],
+            ],
+        ];
+
+        return [
+            'name' => self::TAX_DOCUMENT_K1_TOOL_NAME,
+            'description' => 'Extract all data from a Schedule K-1 (Form 1065, 1120-S, or 1041).',
+            'parameters' => [
+                'type' => 'OBJECT',
+                'properties' => [
+                    // Entity and partner/shareholder identification
+                    'form_source' => $stringProp(),         // e.g. "1065", "1120-S", "1041"
+                    'tax_year' => $stringProp(),
+                    'entity_name' => $stringProp(),         // partnership or S-corp name
+                    'entity_ein' => $stringProp(),
+                    'partner_name' => $stringProp(),        // partner / shareholder / beneficiary
+                    'partner_ssn_last4' => $stringProp(),
+                    'partner_ownership_pct' => $numberProp(),
+                    'partner_type' => $stringProp(),        // "general", "limited", "shareholder", etc.
+
+                    // Form 1065 / 1120-S main income / deduction boxes
+                    'box1_ordinary_income' => $numberProp(),        // Ordinary business income (loss)
+                    'box2_net_rental_real_estate' => $numberProp(), // Net rental real estate income (loss)
+                    'box3_other_net_rental' => $numberProp(),
+                    'box4_guaranteed_payments_services' => $numberProp(),
+                    'box5_guaranteed_payments_capital' => $numberProp(),
+                    'box6_guaranteed_payments_total' => $numberProp(),
+                    'box7_net_section_1231_gain' => $numberProp(),
+                    'box8_other_income' => $numberProp(),
+                    'box9_section_179_deduction' => $numberProp(),
+                    'box10_other_deductions' => $numberProp(),
+                    'box11_section_179_s_corp' => $numberProp(),    // S-Corp Box 11
+
+                    // Self-employment (Form 1065 Box 14)
+                    'box14_self_employment_earnings' => $numberProp(),
+
+                    // Credits (coded items — Box 15 / Box 13 depending on form)
+                    'credits' => $codedItemsProp(),
+
+                    // Foreign transactions (Box 16 / Box K)
+                    // Future Form 1116 extension: map these to Form 1116 Part I lines.
+                    'box16_foreign_taxes_paid' => $numberProp(),
+                    'box16_foreign_country' => $stringProp(),
+                    'box16_foreign_income_category' => $stringProp(), // passive, general, etc.
+
+                    // AMT items (Box 17 / Box L) — Future Form 6251 extension
+                    'amt_items' => $codedItemsProp(),
+
+                    // Tax-exempt income and nondeductible expenses (Box 18 / Box M)
+                    'other_info_items' => $codedItemsProp(),
+
+                    // Distributions (Box 19 / Box N)
+                    'distributions' => $numberProp(),
+
+                    // All other coded items (Box 20 / any remaining boxes)
+                    'other_coded_items' => $codedItemsProp(),
+
+                    // State information
+                    'state' => $stringProp(),
+                    'state_tax_withheld' => $numberProp(),
+
+                    // Raw supplemental statement text (for items too complex for structured fields)
+                    'supplemental_statements' => $stringProp(),
                 ],
             ],
         ];

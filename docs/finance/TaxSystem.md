@@ -206,7 +206,7 @@ This helps with local QA and screenshot generation for the Tax Preview and tags 
 
 ### Overview
 
-The `fin_tax_documents` table stores uploaded tax form PDFs (W-2, W-2c, 1099-INT, 1099-INT-C, 1099-DIV, 1099-DIV-C) for each user. Documents are stored in S3 and referenced by their path. Uploaded PDFs are automatically processed by the GenAI system to extract structured field data (e.g., W-2 box values, 1099 amounts).
+The `fin_tax_documents` table stores uploaded tax form PDFs (W-2, W-2c, 1099-INT, 1099-INT-C, 1099-DIV, 1099-DIV-C, 1099-MISC, K-1) for each user. Documents are stored in S3 and referenced by their path. Uploaded PDFs are automatically processed by the GenAI system to extract structured field data (e.g., W-2 box values, 1099 amounts, K-1 pass-through data).
 
 ### Table Schema
 
@@ -215,9 +215,9 @@ The `fin_tax_documents` table stores uploaded tax form PDFs (W-2, W-2c, 1099-INT
 | `id` | PK | Auto-increment |
 | `user_id` | FK → users | Owner of the document |
 | `tax_year` | integer | Tax year (e.g., 2024) |
-| `form_type` | enum | `w2`, `w2c`, `1099_int`, `1099_int_c`, `1099_div`, `1099_div_c` |
+| `form_type` | enum | `w2`, `w2c`, `1099_int`, `1099_int_c`, `1099_div`, `1099_div_c`, `1099_misc`, `k1` |
 | `employment_entity_id` | FK → fin_employment_entity (nullable) | Set for W-2 form types |
-| `account_id` | FK → fin_accounts.acct_id (nullable) | Set for 1099 form types |
+| `account_id` | FK → fin_accounts.acct_id (nullable) | Set for 1099/K-1 form types |
 | `original_filename` | string | User's original filename |
 | `stored_filename` | string | S3-stored filename with date prefix |
 | `s3_path` | string | Full S3 key (`tax_docs/{userId}/{storedFilename}`) |
@@ -226,11 +226,10 @@ The `fin_tax_documents` table stores uploaded tax form PDFs (W-2, W-2c, 1099-INT
 | `file_hash` | string | SHA-256 hash for deduplication |
 | `uploaded_by_user_id` | bigint unsigned (nullable) | Who uploaded it |
 | `notes` | text (nullable) | Optional notes |
-| `is_reconciled` | boolean | Whether document has been reconciled |
+| `is_reviewed` | boolean | Whether extracted data has been reviewed and confirmed by user |
 | `genai_job_id` | FK → genai_import_jobs (nullable) | Linked GenAI processing job |
 | `genai_status` | string (nullable) | Processing status: `pending`, `processing`, `parsed`, `failed` |
-| `parsed_data` | json (nullable) | Structured data extracted from the PDF (box values) |
-| `is_confirmed` | boolean | Whether extracted data has been reviewed and confirmed by user |
+| `parsed_data` | json (nullable) | Structured data extracted from the PDF (box values). For K-1, stored as a flexible JSON blob. |
 | `download_history` | json | Track who downloaded and when |
 | `deleted_at` | timestamp | Soft delete timestamp |
 
@@ -239,9 +238,9 @@ The `fin_tax_documents` table stores uploaded tax form PDFs (W-2, W-2c, 1099-INT
 Uses `HasFileStorage`, `SerializesDatesAsLocal`, and `SoftDeletes` traits.
 
 Form type constants:
-- `FORM_TYPES` — all valid form type strings
+- `FORM_TYPES` — all valid form type strings (includes `k1`)
 - `W2_FORM_TYPES` — `['w2', 'w2c']` (require `employment_entity_id`)
-- `ACCOUNT_FORM_TYPES` — `['1099_int', '1099_int_c', '1099_div', '1099_div_c']` (require `account_id`)
+- `ACCOUNT_FORM_TYPES` — `['1099_int', '1099_int_c', '1099_div', '1099_div_c', '1099_misc', 'k1']` (require `account_id`)
 
 ### Controller: `App\Http\Controllers\FinanceTool\TaxDocumentController`
 
@@ -252,11 +251,11 @@ Form type constants:
 | GET | `/api/finance/tax-documents` | List documents. Optional filters: `year`, `form_type` (comma-sep), `employment_entity_id`, `account_id` |
 | POST | `/api/finance/tax-documents/request-upload` | Get presigned S3 upload URL. Returns `{ upload_url, s3_key, expires_in }` |
 | POST | `/api/finance/tax-documents` | Confirm upload, create DB record, dispatch GenAI job. Returns 201. |
+| POST | `/api/finance/tax-documents/manual` | Create a manual entry (no PDF) with pre-filled parsed_data |
 | GET | `/api/finance/tax-documents/{id}/download` | Get signed download URLs. Returns `{ view_url, download_url, filename }` |
 | DELETE | `/api/finance/tax-documents/{id}` | Soft-delete document and remove from S3 |
-| PUT | `/api/finance/tax-documents/{id}/reconciled` | Update `is_reconciled` boolean |
-| PUT | `/api/finance/tax-documents/{id}/parsed-data` | Update parsed data fields (blocked when `is_confirmed = true`) |
-| PUT | `/api/finance/tax-documents/{id}/confirmed` | Toggle `is_confirmed` boolean |
+| PUT | `/api/finance/tax-documents/{id}` | Update notes, parsed_data, is_reviewed |
+| PUT | `/api/finance/tax-documents/{id}/mark-reviewed` | Mark document as reviewed (also saves notes/parsed_data) |
 
 ### Upload Flow
 
@@ -284,36 +283,88 @@ When a tax document PDF is uploaded, a GenAI job (`job_type: tax_document`) is a
    - **W-2/W-2c**: All box values (1–20), employer/employee info, Box 12 codes, Box 14 items
    - **1099-INT**: Interest income, penalties, savings bonds, foreign tax, bond premiums
    - **1099-DIV**: Ordinary/qualified dividends, capital gains, foreign tax, liquidation distributions
+   - **1099-MISC**: Rents, royalties, other income, federal tax withheld
+   - **K-1 / K-3**: Full pass-through entity data (see K-1 section below)
 4. **Results stored** → Parsed JSON saved to `parsed_data` column, `genai_status` → `parsed`
-5. **User review** → User can view/edit extracted fields, then confirm
+5. **User review** → User can view/edit extracted fields, then mark as reviewed
 
-### Processing Status Display
+### Processing Status in W-2 Documents Table
 
-Documents show status badges in the UI:
-- **Orange clock icon** + "Processing" — `genai_status` is `pending` or `processing`
-- **Blue "Ready for Review"** — `genai_status` is `parsed` but `is_confirmed` is false
-- **Green "Confirmed"** — `genai_status` is `parsed` and `is_confirmed` is true
-- **Red "Failed"** — `genai_status` is `failed`
+The W-2 Documents table shows a combined **Review** column (replaces separate Status + Reviewed columns):
+- **Disabled "Processing" button** (orange) — `genai_status` is `pending` or `processing`
+- **Disabled "Failed" button** (red) — `genai_status` is `failed`
+- **"Needs Review" button** — `genai_status` is `parsed` but not yet reviewed
+- **"Reviewed" button** (green) — document has been reviewed and confirmed
 
-Processing status is also visible in `/admin/genai-jobs` for debugging (with raw inputs/outputs).
+### Review Document Modal
 
-### W-2c Upload Restriction
+The Review Document modal (`TaxDocumentReviewModal`) provides:
+- **Extracted Data** panel — editable fields from `parsed_data` (read-only when document is confirmed/reviewed)
+- **Review Notes** — free-text notes
+- **Save Changes** button — only shown when document is not yet reviewed
+- **W-2 Comparison table** — compares W-2 box values against payslips calculations
+  - Each "Payslips" amount is clickable → opens a **Data Source** modal showing the individual payslip rows that contributed
+- **Delete button** in the footer — removes the document (disabled when reviewed)
+- **Mark as Reviewed / Reopen for Review** button
 
-W-2c (correction form) upload is only enabled for an employment entity after a W-2 has been uploaded for that entity. The button is disabled with a tooltip explaining the requirement.
+### W-2 Income Summary
 
-### Frontend Components
+The **W-2 Income Summary** table (derived from payslip data) now has clickable amounts that open a **Data Source** modal showing the contributing payslip rows for each line item (wages, bonus, RSU, tax withheld, etc.).
 
-- **`TaxDocumentsSection`** (`resources/js/components/finance/TaxDocumentsSection.tsx`) — Shows W-2/W-2c documents grouped by employment entity, used in TaxPreviewPage. Includes processing status badges.
-- **`TaxDocuments1099Section`** (`resources/js/components/finance/TaxDocuments1099Section.tsx`) — Shows 1099-INT/DIV documents for the TaxPreviewPage, includes upload buttons and "Other 1099" manual entry support.
-- **`AccountTaxDocumentsSection`** (`resources/js/components/finance/AccountTaxDocumentsSection.tsx`) — Shows 1099 documents for a specific finance account, used in FinanceAccountMaintenancePage.
+### Payslips Filter Bug Fix
 
-### Shared Types
+The W-2 comparison uses `getPayslipsForEntity()` which filters payslips by `employment_entity_id`. If no payslips have the entity ID set (common if payslips predate the entity linkage feature), it falls back to using ALL payslips for the year, ensuring the comparison never shows zero.
 
-TypeScript types are defined in `resources/js/types/finance/tax-document.ts`:
-- `TaxDocument` interface — API response shape
-- `EmploymentEntity` interface
-- `FORM_TYPE_LABELS` — display labels for form types
-- `W2_FORM_TYPES`, `ACCOUNT_FORM_TYPES_1099` — form type groupings
+---
+
+## K-1 / K-3 Form Support
+
+### Overview
+
+Schedule K-1 forms are issued by partnerships (Form 1065), S-corporations (Form 1120-S), estates (Form 1041), and trusts to report each partner's/shareholder's/beneficiary's share of income, deductions, and credits.
+
+K-1 data is highly variable — the number of coded line items, footnotes, and supplemental statements can be extensive. For this reason, all extracted K-1 data is stored as a **flexible JSON blob** in `parsed_data`, rather than a fixed schema.
+
+### K-1 GenAI Extraction
+
+The `extractK1Data` tool (`TAX_DOCUMENT_K1_TOOL_NAME`) extracts:
+- Entity and partner/shareholder identification (name, EIN, ownership %)
+- All income/deduction boxes (Box 1: ordinary income, Box 2: rental, Box 14: SE earnings, etc.)
+- Credits (coded arrays)
+- Foreign transactions (Box 16) — **future Form 1116 extension point**
+- AMT adjustments — **future Form 6251 extension point**
+- State tax information
+- Supplemental statement text
+
+### Future Extension: Form 1116 (Foreign Tax Credit)
+
+Box 16 (foreign transactions) from K-1 will feed into Form 1116 (Foreign Tax Credit) when that support is added. The `box16_foreign_taxes_paid`, `box16_foreign_country`, and `box16_foreign_income_category` fields in the K-1 parsed data are designed for this purpose. See comments in `GenAiJobDispatcherService::buildK1Prompt()` and `buildK1ToolDefinition()` for implementation details.
+
+### TypeScript Type
+
+The `FK1ParsedData` interface in `resources/js/types/finance/tax-document.ts` provides TypeScript typing for K-1 parsed data, including the index signature `[key: string]: unknown` to allow for additional AI-extracted fields.
+
+---
+
+## Account Documents Section
+
+The **Account Documents** section (formerly "1099 Documents") on the Tax Preview page shows a table with one row per account and one column per document type:
+
+| Account | 1099-INT | 1099-DIV | 1099-MISC | K-1 / K-3 |
+|---------|----------|----------|-----------|-----------|
+| Account A | [Upload/doc] | [Upload/doc] | [Upload/doc] | [Upload/doc] |
+
+### Account Ordering
+
+Accounts are sorted into two groups:
+1. **Active accounts** (top) — accounts with at least one transaction in the selected year
+2. **Inactive accounts** (bottom, dimmed) — accounts with no transactions in the selected year, separated by a "No transactions in YYYY" divider row
+
+This sorting uses the `/api/finance/accounts?active_year=YYYY` endpoint, which returns an `active_account_ids` array alongside the normal account lists.
+
+### Upload Button Style
+
+The Upload buttons in the Account Documents table use the `ghost` variant to reduce visual clutter.
 
 ---
 
@@ -322,17 +373,32 @@ TypeScript types are defined in `resources/js/types/finance/tax-document.ts`:
 The Tax Preview page (`TaxPreviewPage.tsx`) uses a structured grid layout:
 
 ### Row 1: W-2 Section
-- **Left (1/3)**: W-2 Income Summary — derived from payslip data
-- **Right (2/3)**: W-2 Upload & Reconciliation — per-entity document management
+- **Left (1/3)**: W-2 Income Summary — derived from payslip data; each line item is clickable to show a Data Source modal listing contributing payslips
+- **Right (2/3)**: W-2 Documents — per-entity document management with combined Review column
 
 ### Row 2: Form 1040 Preview
 - **Full width**: Shows key 1040 lines (Line 1a: W-2 wages, Line 2b: taxable interest, Line 3b: ordinary dividends, Line 8: Schedule C income, Line 9: total income)
 
-### Row 3: Schedule B & 1099 Section
+### Row 3: Schedule B & Account Documents Section
 - **Left (1/3)**: Schedule B Preview — Interest (Part I) and Dividends (Part II) totals from confirmed 1099 documents
-- **Right (2/3)**: 1099-INT/DIV Upload — document management with processing status
+- **Right (2/3)**: Account Documents — 1099-INT/DIV/MISC/K-1 document management
 
 ### Remaining Sections
 - Federal Taxes (quarterly estimates)
 - California State Taxes (quarterly estimates)
 - Schedule C Preview (per-entity income/expense detail)
+
+### Frontend Components
+
+- **`TaxDocumentsSection`** (`TaxDocumentsSection.tsx`) — W-2/W-2c documents grouped by employment entity. Combined Review column. Delete moved to Review modal.
+- **`TaxDocumentReviewModal`** (`TaxDocumentReviewModal.tsx`) — Document review with editable extracted data (read-only when confirmed), W-2 vs. payslip comparison with clickable Data Source links, and Delete button in footer.
+- **`TaxDocuments1099Section`** (`TaxDocuments1099Section.tsx`) — "Account Documents" section for 1099/K-1 forms. Ghost-style upload buttons. Accounts without transactions appear at the bottom in dimmed style.
+
+### Shared Types
+
+TypeScript types are defined in `resources/js/types/finance/tax-document.ts`:
+- `TaxDocument` interface — API response shape
+- `EmploymentEntity` interface
+- `W2ParsedData`, `F1099IntParsedData`, `F1099DivParsedData`, `F1099MiscParsedData`, `FK1ParsedData` — per-form parsed data interfaces
+- `FORM_TYPE_LABELS` — display labels for form types (`k1` → `'K-1 / K-3'`)
+- `W2_FORM_TYPES`, `ACCOUNT_FORM_TYPES_1099` — form type groupings (includes `k1`)
