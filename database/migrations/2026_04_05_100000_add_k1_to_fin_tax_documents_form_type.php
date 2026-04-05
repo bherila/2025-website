@@ -11,10 +11,19 @@ return new class extends Migration
   `genai_status`, `parsed_data`, `download_history`,
   `created_at`, `updated_at`, `deleted_at`';
 
+    /**
+     * Rebuilds fin_tax_documents with an updated form_type CHECK constraint.
+     *
+     * Uses the safe pattern: CREATE new → COPY data → PRAGMA foreign_keys=OFF
+     * → DROP old → RENAME new → PRAGMA foreign_keys=ON.
+     *
+     * Do NOT use "RENAME original → backup" first: SQLite 3.45+ remaps FK
+     * references in dependent tables (e.g. genai_import_jobs.id) to the backup
+     * name, which breaks them after the backup is dropped.
+     */
     private function rebuildTable(string $checkValues): void
     {
-        DB::statement('ALTER TABLE `fin_tax_documents` RENAME TO `_fin_tax_documents_backup`');
-        DB::statement("CREATE TABLE `fin_tax_documents`(
+        DB::statement("CREATE TABLE `fin_tax_documents_new`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `user_id` INTEGER NOT NULL,
   `tax_year` INTEGER NOT NULL,
@@ -41,12 +50,21 @@ return new class extends Migration
 )");
     }
 
-    private function copyAndDrop(string $whereClause = ''): void
+    private function copyDropRenameAndIndex(string $whereClause = ''): void
     {
         $cols = self::COLS;
         $where = $whereClause ? "WHERE {$whereClause}" : '';
-        DB::statement("INSERT INTO `fin_tax_documents` ({$cols}) SELECT {$cols} FROM `_fin_tax_documents_backup` {$where}");
-        DB::statement('DROP TABLE `_fin_tax_documents_backup`');
+        DB::statement("INSERT INTO `fin_tax_documents_new` ({$cols}) SELECT {$cols} FROM `fin_tax_documents` {$where}");
+
+        DB::statement('PRAGMA foreign_keys = OFF');
+
+        try {
+            DB::statement('DROP TABLE `fin_tax_documents`');
+            DB::statement('ALTER TABLE `fin_tax_documents_new` RENAME TO `fin_tax_documents`');
+        } finally {
+            DB::statement('PRAGMA foreign_keys = ON');
+        }
+
         DB::statement('CREATE INDEX `fin_tax_documents_user_id_index` ON `fin_tax_documents`(`user_id`)');
         DB::statement('CREATE INDEX `fin_tax_documents_tax_year_index` ON `fin_tax_documents`(`tax_year`)');
         DB::statement('CREATE INDEX `fin_tax_documents_employment_entity_id_index` ON `fin_tax_documents`(`employment_entity_id`)');
@@ -76,7 +94,7 @@ return new class extends Migration
 
         if ($driver === 'sqlite') {
             $this->rebuildTable("'w2', 'w2c', '1099_int', '1099_int_c', '1099_div', '1099_div_c', '1099_misc', 'k1'");
-            $this->copyAndDrop();
+            $this->copyDropRenameAndIndex();
         }
     }
 
@@ -92,7 +110,7 @@ return new class extends Migration
 
         if ($driver === 'sqlite') {
             $this->rebuildTable("'w2', 'w2c', '1099_int', '1099_int_c', '1099_div', '1099_div_c', '1099_misc'");
-            $this->copyAndDrop("`form_type` != 'k1'");
+            $this->copyDropRenameAndIndex("`form_type` != 'k1'");
         }
     }
 };

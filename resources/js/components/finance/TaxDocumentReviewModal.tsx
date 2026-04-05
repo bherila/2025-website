@@ -5,6 +5,7 @@ import { CheckCircle, ChevronLeft, ChevronRight, Download, Eye, FileText, Loader
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -32,69 +33,6 @@ interface TaxDocumentReviewModalProps {
   onClose: () => void
   /** Called when any document is reviewed so parent can refresh. */
   onDocumentReviewed?: () => void
-}
-
-/** Small modal that lists the payslip rows that contributed to a computed value. */
-function DataSourceModal({
-  open,
-  label,
-  payslips,
-  valueGetter,
-  onClose,
-}: {
-  open: boolean
-  label: string
-  payslips: fin_payslip[]
-  valueGetter: (p: fin_payslip) => currency
-  onClose: () => void
-}) {
-  const rows = payslips
-    .map(p => ({ payslip: p, value: valueGetter(p) }))
-    .filter(r => r.value.value !== 0)
-  const total = rows.reduce((acc, r) => acc.add(r.value), currency(0))
-
-  return (
-    <Dialog open={open} onOpenChange={isOpen => !isOpen && onClose()}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Data Source — {label}</DialogTitle>
-        </DialogHeader>
-        <div className="overflow-y-auto max-h-[60vh]">
-          {rows.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">No payslip contributions found for this field.</p>
-          ) : (
-            <Table className="text-xs">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Pay Date</TableHead>
-                  <TableHead>Period</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((r, i) => (
-                  <TableRow key={i}>
-                    <TableCell className="font-mono">{r.payslip.pay_date}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {r.payslip.period_start} – {r.payslip.period_end}
-                    </TableCell>
-                    <TableCell className="text-right font-mono">{r.value.format()}</TableCell>
-                  </TableRow>
-                ))}
-                <TableRow className="font-semibold bg-muted/30">
-                  <TableCell colSpan={2}>Total ({rows.length} payslips)</TableCell>
-                  <TableCell className="text-right font-mono">{total.format()}</TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          )}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Close</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
 }
 
 /**
@@ -191,7 +129,7 @@ function W2Comparison({ parsed, payslips }: { parsed: W2ParsedData; payslips: fi
       </div>
 
       {dataSourceRow && (
-        <DataSourceModal
+        <PayslipDataSourceModal
           open
           label={dataSourceRow.label}
           payslips={payslips}

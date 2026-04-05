@@ -109,7 +109,7 @@ export interface F1099MiscParsedData {
 /**
  * Coded item used in K-1 for credits, AMT, foreign transactions, and other coded boxes.
  */
-interface K1CodedItem {
+export interface K1CodedItem {
   code: string
   description?: string | null
   amount?: number | null

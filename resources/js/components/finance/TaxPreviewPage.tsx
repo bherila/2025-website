@@ -5,6 +5,7 @@ import { ClipboardList } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import Form1040Preview from '@/components/finance/Form1040Preview'
+import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
 import ScheduleBPreview from '@/components/finance/ScheduleBPreview'
 import ScheduleCPreview from '@/components/finance/ScheduleCPreview'
 import TaxDocumentReviewModal from '@/components/finance/TaxDocumentReviewModal'
@@ -14,81 +15,11 @@ import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import TotalsTable from '@/components/payslip/TotalsTable.client'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
 import type { TaxDocument } from '@/types/finance/tax-document'
 
 import { YearSelectorWithNav } from './YearSelectorWithNav'
-
-/** Small reusable data-source modal showing contributing payslip rows. */
-function PayslipDataSourceModal({
-  open,
-  label,
-  payslips,
-  valueGetter,
-  onClose,
-}: {
-  open: boolean
-  label: string
-  payslips: fin_payslip[]
-  valueGetter: (p: fin_payslip) => currency
-  onClose: () => void
-}) {
-  const rows = payslips
-    .map(p => ({ payslip: p, value: valueGetter(p) }))
-    .filter(r => r.value.value !== 0)
-  const total = rows.reduce((acc, r) => acc.add(r.value), currency(0))
-
-  return (
-    <Dialog open={open} onOpenChange={isOpen => !isOpen && onClose()}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Data Source — {label}</DialogTitle>
-        </DialogHeader>
-        <div className="overflow-y-auto max-h-[60vh]">
-          {rows.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">No payslip contributions found for this field.</p>
-          ) : (
-            <Table className="text-xs">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Pay Date</TableHead>
-                  <TableHead>Period</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((r, i) => (
-                  <TableRow key={i}>
-                    <TableCell className="font-mono">{r.payslip.pay_date}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {r.payslip.period_start} – {r.payslip.period_end}
-                    </TableCell>
-                    <TableCell className="text-right font-mono">{r.value.format()}</TableCell>
-                  </TableRow>
-                ))}
-                <TableRow className="font-semibold bg-muted/30">
-                  <TableCell colSpan={2}>Total ({rows.length} payslips)</TableCell>
-                  <TableCell className="text-right font-mono">{total.format()}</TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          )}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Close</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
 
 /** W-2 income summary table derived from payslips. */
 function W2IncomeSummary({ payslips }: { payslips: fin_payslip[] }) {
