@@ -299,9 +299,7 @@ Route::middleware(['web', 'auth'])->post('/finance/tax-documents/manual', [TaxDo
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents', [TaxDocumentController::class, 'store']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents/{id}/download', [TaxDocumentController::class, 'download']);
 Route::middleware(['web', 'auth'])->delete('/finance/tax-documents/{id}', [TaxDocumentController::class, 'destroy']);
-Route::middleware(['web', 'auth'])->put('/finance/tax-documents/{id}/reconciled', [TaxDocumentController::class, 'updateReconciled']);
-Route::middleware(['web', 'auth'])->put('/finance/tax-documents/{id}/parsed-data', [TaxDocumentController::class, 'updateParsedData']);
-Route::middleware(['web', 'auth'])->put('/finance/tax-documents/{id}/confirmed', [TaxDocumentController::class, 'updateConfirmed']);
+Route::middleware(['web', 'auth'])->put('/finance/tax-documents/{id}', [TaxDocumentController::class, 'update']);
 Route::middleware(['web', 'auth'])->put('/finance/tax-documents/{id}/mark-reviewed', [TaxDocumentController::class, 'markReviewed']);
 
 // GenAI Import routes

@@ -122,8 +122,7 @@ export interface TaxDocument {
   mime_type: string
   file_size_bytes: number
   file_hash: string
-  is_reconciled: boolean
-  is_confirmed: boolean
+  is_reviewed: boolean
   notes: string | null
   human_file_size: string
   download_count: number

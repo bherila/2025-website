@@ -37,18 +37,16 @@ class FileForTaxDocument extends Model
         'file_hash',
         'uploaded_by_user_id',
         'notes',
-        'is_reconciled',
+        'is_reviewed',
         'genai_job_id',
         'genai_status',
         'parsed_data',
-        'is_confirmed',
         'download_history',
     ];
 
     protected $casts = [
         'file_size_bytes' => 'integer',
-        'is_reconciled' => 'boolean',
-        'is_confirmed' => 'boolean',
+        'is_reviewed' => 'boolean',
         'tax_year' => 'integer',
         'parsed_data' => 'array',
         'download_history' => 'array',

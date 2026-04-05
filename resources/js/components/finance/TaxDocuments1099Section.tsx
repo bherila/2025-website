@@ -1,7 +1,7 @@
 'use client'
 
 import currency from 'currency.js'
-import { CheckCircle, Clock, Download, Eye, Loader2, Trash2, Upload } from 'lucide-react'
+import { CheckCircle, Clock, Download, Eye, FileText, Loader2, Trash2, Upload } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -84,7 +84,7 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
       let dividendIncome = currency(0)
       let qualifiedDividends = currency(0)
       for (const doc of docs) {
-        if (!doc.parsed_data || !doc.is_confirmed) continue
+        if (!doc.parsed_data || !doc.is_reviewed) continue
         const pd = doc.parsed_data
         if (doc.form_type === '1099_int' || doc.form_type === '1099_int_c') {
           interestIncome = interestIncome.add((pd as F1099IntParsedData).box1_interest ?? 0)
@@ -167,14 +167,15 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
     }
   }
 
-  const handleToggleReconciled = async (doc: TaxDocument) => {
+
+  const handleToggleReviewed = async (doc: TaxDocument) => {
     try {
-      await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}/reconciled`, {
-        is_reconciled: !doc.is_reconciled,
+      await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}`, {
+        is_reviewed: !doc.is_reviewed,
       })
       await fetchDocuments()
     } catch {
-      toast.error('Failed to update reconciliation status')
+      toast.error('Failed to update review status')
     }
   }
 
@@ -199,7 +200,7 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
         tax_year: selectedYear,
         account_id: manualEntry.accountId,
         parsed_data: parsedData,
-        is_confirmed: true,
+        is_reviewed: true,
       })
 
       toast.success('Manual entry saved successfully')
@@ -221,10 +222,10 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
         </Badge>
       )
     }
-    if (doc.genai_status === 'parsed' && doc.is_confirmed) {
+    if (doc.genai_status === 'parsed' && doc.is_reviewed) {
       return (
         <Badge variant="outline" className="border-green-500 text-green-600 text-xs">
-          Confirmed
+          Reviewed
         </Badge>
       )
     }
@@ -238,10 +239,10 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
     if (doc.genai_status === 'failed') {
       return <Badge variant="destructive" className="text-xs">Failed</Badge>
     }
-    if (doc.is_confirmed) {
+    if (doc.is_reviewed) {
       return (
         <Badge variant="outline" className="border-green-500 text-green-600 text-xs">
-          Confirmed
+          Reviewed
         </Badge>
       )
     }
@@ -272,37 +273,50 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
       <div className="flex flex-col gap-1">
         {renderStatusBadge(doc)}
         <div className="flex gap-0.5">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 w-6 p-0"
+            onClick={() => {
+              if (doc.s3_path) {
+                handleView(doc)
+              } else {
+                setManualEntry({
+                  open: true,
+                  formType: doc.form_type as '1099_int' | '1099_div',
+                  accountId: doc.account_id!,
+                  accountName: doc.account?.acct_name ?? '',
+                  payerName: (doc.parsed_data as any)?.payer_name ?? '',
+                  interest: (doc.parsed_data as any)?.box1_interest ?? '',
+                  ordinaryDividends: (doc.parsed_data as any)?.box1a_ordinary ?? '',
+                  qualifiedDividends: (doc.parsed_data as any)?.box1b_qualified ?? '',
+                })
+              }
+            }}
+            title={doc.s3_path ? 'View PDF' : 'Edit entry'}
+          >
+            {doc.s3_path ? <Eye className="h-3 w-3" /> : <FileText className="h-3 w-3" />}
+          </Button>
           {doc.s3_path && (
-            <>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-6 w-6 p-0"
-                onClick={() => handleView(doc)}
-                title="View"
-              >
-                <Eye className="h-3 w-3" />
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-6 w-6 p-0"
-                onClick={() => handleDownload(doc)}
-                title="Download"
-              >
-                <Download className="h-3 w-3" />
-              </Button>
-            </>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 w-6 p-0"
+              onClick={() => handleDownload(doc)}
+              title="Download"
+            >
+              <Download className="h-3 w-3" />
+            </Button>
           )}
           <Button
             size="sm"
             variant="ghost"
             className="h-6 w-6 p-0"
-            onClick={() => handleToggleReconciled(doc)}
-            title={doc.is_reconciled ? 'Mark unreviewed' : 'Mark reviewed'}
+            onClick={() => handleToggleReviewed(doc)}
+            title={doc.is_reviewed ? 'Mark unreviewed' : 'Mark reviewed'}
           >
             <CheckCircle
-              className={`h-3 w-3 ${doc.is_reconciled ? 'text-green-600' : 'text-muted-foreground/40'}`}
+              className={`h-3 w-3 ${doc.is_reviewed ? 'text-green-600' : 'text-muted-foreground/40'}`}
             />
           </Button>
           <Button
@@ -310,8 +324,8 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
             variant="ghost"
             className="h-6 w-6 p-0 text-destructive hover:text-destructive"
             onClick={() => handleDelete(doc)}
-            title={doc.is_reconciled ? 'Uncheck Reviewed to enable delete' : 'Delete'}
-            disabled={doc.is_reconciled}
+            title={doc.is_reviewed ? 'Uncheck Reviewed to enable delete' : 'Delete'}
+            disabled={doc.is_reviewed}
           >
             <Trash2 className="h-3 w-3" />
           </Button>

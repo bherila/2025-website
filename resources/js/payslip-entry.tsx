@@ -9,7 +9,7 @@ async function renderPayslipEntryPage() {
   const urlParams = new URLSearchParams(window.location.search)
   const payslip_id = urlParams.get('id')
 
-  let initialPayslip: fin_payslip | undefined = undefined
+  let initialPayslip: fin_payslip | null = null
   if (payslip_id) {
     initialPayslip = await fetchPayslipById(parseInt(payslip_id))
   }

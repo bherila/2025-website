@@ -118,14 +118,14 @@ export default function AccountTaxDocumentsSection({ accountId, selectedYear }: 
     }
   }
 
-  const handleToggleReconciled = async (doc: TaxDocument) => {
+  const handleToggleReviewed = async (doc: TaxDocument) => {
     try {
-      await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}/reconciled`, {
-        is_reconciled: !doc.is_reconciled,
+      await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}`, {
+        is_reviewed: !doc.is_reviewed,
       })
       await fetchDocuments()
     } catch {
-      toast.error('Failed to update reconciliation status')
+      toast.error('Failed to update review status')
     }
   }
 
@@ -183,7 +183,7 @@ export default function AccountTaxDocumentsSection({ accountId, selectedYear }: 
                 <TableHead>Form</TableHead>
                 <TableHead>Filename</TableHead>
                 <TableHead>Size</TableHead>
-                <TableHead>Reconciled</TableHead>
+                <TableHead>Reviewed</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -199,17 +199,17 @@ export default function AccountTaxDocumentsSection({ accountId, selectedYear }: 
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => handleToggleReconciled(doc)}
+                      onClick={() => handleToggleReviewed(doc)}
                       className="h-auto p-1"
-                      title="Toggle reconciled"
+                      title="Toggle reviewed status"
                       aria-label={
-                        doc.is_reconciled
-                          ? `Mark ${doc.original_filename} as unreconciled`
-                          : `Mark ${doc.original_filename} as reconciled`
+                        doc.is_reviewed
+                          ? `Mark ${doc.original_filename} as unreviewed`
+                          : `Mark ${doc.original_filename} as reviewed`
                       }
                     >
                       <CheckCircle
-                        className={`h-4 w-4 ${doc.is_reconciled ? 'text-green-600' : 'text-muted-foreground/40'}`}
+                        className={`h-4 w-4 ${doc.is_reviewed ? 'text-green-600' : 'text-muted-foreground/40'}`}
                       />
                     </Button>
                   </TableCell>

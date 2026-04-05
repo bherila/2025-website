@@ -57,8 +57,8 @@ class TaxDocumentController extends Controller
             $query->where('genai_status', $request->genai_status);
         }
 
-        if ($request->filled('is_confirmed')) {
-            $query->where('is_confirmed', (bool) (int) $request->is_confirmed);
+        if ($request->filled('is_reviewed')) {
+            $query->where('is_reviewed', $request->boolean('is_reviewed'));
         }
 
         return response()->json($query->get());
@@ -152,7 +152,6 @@ class TaxDocumentController extends Controller
                 'file_hash' => $request->file_hash,
                 'uploaded_by_user_id' => $userId,
                 'notes' => $request->notes,
-                'is_reconciled' => false,
                 'genai_status' => 'pending',
             ]);
 
@@ -242,10 +241,9 @@ class TaxDocumentController extends Controller
             'file_size_bytes' => 0,
             'file_hash' => '',
             'uploaded_by_user_id' => $userId,
-            'is_reconciled' => false,
             'genai_status' => 'parsed',
             'parsed_data' => $request->parsed_data,
-            'is_confirmed' => $request->boolean('is_confirmed', false),
+            'is_reviewed' => $request->boolean('is_reviewed', false),
         ]);
 
         return response()->json(
@@ -283,71 +281,65 @@ class TaxDocumentController extends Controller
         return response()->json(['success' => true]);
     }
 
-    public function updateReconciled(Request $request, int $id): JsonResponse
+    /**
+     * Update tax document fields (notes, reviewed state, etc.)
+     */
+    public function update(Request $request, int $id): JsonResponse
     {
         $request->validate([
-            'is_reconciled' => 'required|boolean',
+            'notes' => 'nullable|string',
+            'is_reviewed' => 'nullable|boolean',
+            'parsed_data' => 'nullable|array',
         ]);
 
         $doc = FileForTaxDocument::where('id', $id)
             ->where('user_id', Auth::id())
             ->firstOrFail();
 
-        $doc->is_reconciled = $request->boolean('is_reconciled');
-        $doc->save();
-
-        return response()->json($doc);
-    }
-
-    public function updateParsedData(Request $request, int $id): JsonResponse
-    {
-        $request->validate([
-            'parsed_data' => 'required|array',
-        ]);
-
-        $doc = FileForTaxDocument::where('id', $id)
-            ->where('user_id', Auth::id())
-            ->firstOrFail();
-
-        if ($doc->is_confirmed) {
-            return response()->json(['message' => 'Cannot edit confirmed document. Unconfirm first.'], 422);
+        if ($request->has('notes')) {
+            $doc->notes = $request->notes;
         }
 
-        $doc->parsed_data = $request->parsed_data;
-        $doc->save();
+        if ($request->has('is_reviewed')) {
+            $doc->is_reviewed = $request->boolean('is_reviewed');
+        }
 
-        return response()->json($doc);
-    }
+        if ($request->has('parsed_data')) {
+            // Only allow editing parsed data if NOT reviewed, OR the request explicitly un-reviews it
+            $isBecomingReviewed = $request->has('is_reviewed') && $request->boolean('is_reviewed');
+            $stayReviewed = $doc->is_reviewed && ! $request->has('is_reviewed');
 
-    public function updateConfirmed(Request $request, int $id): JsonResponse
-    {
-        $request->validate([
-            'is_confirmed' => 'required|boolean',
-        ]);
+            if ($isBecomingReviewed || $stayReviewed) {
+                return response()->json(['message' => 'Cannot edit parsed data on a reviewed document.'], 422);
+            }
 
-        $doc = FileForTaxDocument::where('id', $id)
-            ->where('user_id', Auth::id())
-            ->firstOrFail();
+            $doc->parsed_data = $request->parsed_data;
+        }
 
-        $doc->is_confirmed = $request->boolean('is_confirmed');
         $doc->save();
 
         return response()->json($doc);
     }
 
     /**
-     * Atomically confirm and mark a document as reviewed (reconciled).
-     * Used by the "Ready for Review" modal to avoid partial state when
-     * the two-step confirm+reconcile sequence is interrupted.
+     * Atomically mark a document as reviewed.
      */
-    public function markReviewed(int $id): JsonResponse
+    public function markReviewed(int $id, Request $request): JsonResponse
     {
         $doc = FileForTaxDocument::where('id', $id)
             ->where('user_id', Auth::id())
             ->firstOrFail();
 
-        $doc->is_confirmed = true;
-        $doc->is_reconciled = true;
+        $doc->is_reviewed = true;
+
+        if ($request->has('notes')) {
+            $doc->notes = $request->notes;
+        }
+
+        if ($request->has('parsed_data')) {
+            $doc->parsed_data = $request->parsed_data;
+        }
+
         $doc->save();
 
         return response()->json($doc);
