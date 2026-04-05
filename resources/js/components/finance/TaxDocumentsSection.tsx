@@ -9,6 +9,12 @@ import TaxDocumentUploadModal from '@/components/finance/TaxDocumentUploadModal'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
 import type { EmploymentEntity, TaxDocument } from '@/types/finance/tax-document'
@@ -17,15 +23,18 @@ interface TaxDocumentsSectionProps {
   selectedYear: number | 'all'
   payslips: fin_payslip[]
   onDocumentReviewed?: () => void
+  /** Called whenever reviewed W-2 documents change (for Form 1040 data source). */
+  onW2DocumentsChange?: (docs: TaxDocument[]) => void
 }
 
-export default function TaxDocumentsSection({ selectedYear, payslips, onDocumentReviewed }: TaxDocumentsSectionProps) {
+export default function TaxDocumentsSection({ selectedYear, payslips, onDocumentReviewed, onW2DocumentsChange }: TaxDocumentsSectionProps) {
   const [documents, setDocuments] = useState<TaxDocument[]>([])
   const [entities, setEntities] = useState<EmploymentEntity[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [uploadModal, setUploadModal] = useState<{ entityId: number; formType: string } | null>(null)
   const [reviewModalDoc, setReviewModalDoc] = useState<TaxDocument | null>(null)
+  const [imageViewState, setImageViewState] = useState<{ url: string; filename: string } | null>(null)
 
   const fetchDocuments = useCallback(async () => {
     try {
@@ -34,11 +43,13 @@ export default function TaxDocumentsSection({ selectedYear, payslips, onDocument
         params.set('year', String(selectedYear))
       }
       const data = await fetchWrapper.get(`/api/finance/tax-documents?${params.toString()}`)
-      setDocuments(data as TaxDocument[])
+      const docs = data as TaxDocument[]
+      setDocuments(docs)
+      onW2DocumentsChange?.(docs.filter(d => d.is_reviewed))
     } catch {
       setError('Failed to load tax documents')
     }
-  }, [selectedYear])
+  }, [selectedYear, onW2DocumentsChange])
 
   const fetchEntities = useCallback(async () => {
     try {
@@ -60,7 +71,11 @@ export default function TaxDocumentsSection({ selectedYear, payslips, onDocument
         view_url: string
         download_url: string
       }
-      window.open(result.view_url, '_blank', 'noopener,noreferrer')
+      if (doc.mime_type?.startsWith('image/')) {
+        setImageViewState({ url: result.view_url, filename: doc.original_filename })
+      } else {
+        window.open(result.view_url, '_blank', 'noopener,noreferrer')
+      }
     } catch {
       toast.error('Failed to get view link')
     }
@@ -238,6 +253,20 @@ export default function TaxDocumentsSection({ selectedYear, payslips, onDocument
           }}
         />
       )}
+
+      {/* Inline image viewer */}
+      <Dialog open={imageViewState !== null} onOpenChange={open => !open && setImageViewState(null)}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{imageViewState?.filename}</DialogTitle>
+          </DialogHeader>
+          {imageViewState && (
+            <div className="flex justify-center overflow-auto max-h-[70vh]">
+              <img src={imageViewState.url} alt={imageViewState.filename} className="max-w-full object-contain" />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

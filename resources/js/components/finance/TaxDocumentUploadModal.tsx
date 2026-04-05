@@ -205,7 +205,18 @@ export default function TaxDocumentUploadModal({
           if (!blob) continue
           try {
             const pngBlob = await compressImageToPng(blob)
-            const file = new File([pngBlob], 'clipping.png', { type: 'image/png' })
+            // Minify pasted image using optipng-js (only for pasted images, not uploaded files)
+            let finalBlob = pngBlob
+            try {
+              const { default: optipng } = await import('optipng-js')
+              const arrayBuffer = await pngBlob.arrayBuffer()
+              const input = new Uint8Array(arrayBuffer)
+              const result = optipng(input, ['-o2'])
+              finalBlob = new Blob([result.data], { type: 'image/png' })
+            } catch {
+              // optipng failed (e.g. WASM init error or unsupported image) — fall back to canvas-compressed PNG
+            }
+            const file = new File([finalBlob], 'clipping.png', { type: 'image/png' })
             await doUpload(file)
           } catch {
             toast.error('Failed to process pasted image. Please try a different format.')
