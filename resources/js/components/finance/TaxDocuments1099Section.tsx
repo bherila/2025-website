@@ -1,8 +1,8 @@
 'use client'
 
 import currency from 'currency.js'
-import { CheckCircle, Clock, Eye, Loader2, Upload } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { Calculator, CheckCircle, Clock, Eye, Loader2, Upload } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import TaxDocumentReviewModal from '@/components/finance/TaxDocumentReviewModal'
@@ -19,8 +19,15 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
-import type { F1099DivParsedData, F1099IntParsedData, TaxDocument } from '@/types/finance/tax-document'
-import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
+import type { ForeignTaxSummary } from '@/finance/1116'
+import {
+  extractForeignTaxFrom1099Div,
+  extractForeignTaxFrom1099Int,
+  extractForeignTaxFromK1,
+  WorksheetModal,
+} from '@/finance/1116'
+import type { F1099DivParsedData, F1099IntParsedData, FK1StructuredData, TaxDocument } from '@/types/finance/tax-document'
+import { FORM_TYPE_LABELS, isFK1StructuredData } from '@/types/finance/tax-document'
 
 interface FinAccount {
   acct_id: number
@@ -71,6 +78,27 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange, 
   const [manualEntry, setManualEntry] = useState<ManualEntryState | null>(null)
   const [manualSaving, setManualSaving] = useState(false)
   const [reviewModalDoc, setReviewModalDoc] = useState<TaxDocument | null>(null)
+  const [worksheetOpen, setWorksheetOpen] = useState(false)
+
+  /** Collect foreign tax summaries from all reviewed documents. */
+  const foreignTaxSummaries = useMemo<ForeignTaxSummary[]>(() => {
+    const summaries: ForeignTaxSummary[] = []
+    for (const doc of documents) {
+      if (!doc.is_reviewed || !doc.parsed_data) continue
+      const pd = doc.parsed_data as Record<string, unknown>
+      if (doc.form_type === 'k1' && isFK1StructuredData(pd)) {
+        const s = extractForeignTaxFromK1(pd as FK1StructuredData, doc.account_id)
+        if (s) summaries.push(s)
+      } else if (doc.form_type === '1099_div' || doc.form_type === '1099_div_c') {
+        const s = extractForeignTaxFrom1099Div(pd, doc.account_id)
+        if (s) summaries.push(s)
+      } else if (doc.form_type === '1099_int' || doc.form_type === '1099_int_c') {
+        const s = extractForeignTaxFrom1099Int(pd, doc.account_id)
+        if (s) summaries.push(s)
+      }
+    }
+    return summaries
+  }, [documents])
 
   const fetchDocuments = useCallback(async () => {
     try {
@@ -273,23 +301,48 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange, 
   }
 
   const renderAccountRows = (accountList: FinAccount[], isSecondary: boolean) =>
-    accountList.map(account => (
-      <TableRow
-        key={account.acct_id}
-        className={isSecondary ? 'opacity-50' : ''}
-      >
-        <TableCell className={`font-medium text-sm ${isSecondary ? 'text-muted-foreground' : ''}`}>
-          {account.acct_name}
-        </TableCell>
-        {DISPLAY_FORM_TYPES.map(ft => (
-          <TableCell key={ft}>{renderSlot(account, ft)}</TableCell>
-        ))}
-      </TableRow>
-    ))
+    accountList.map(account => {
+      const accountForeignTax = foreignTaxSummaries
+        .filter(s => s.accountId === account.acct_id)
+        .reduce((sum, s) => currency(sum).add(s.totalForeignTaxPaid).value, 0)
+      return (
+        <TableRow
+          key={account.acct_id}
+          className={isSecondary ? 'opacity-50' : ''}
+        >
+          <TableCell className={`font-medium text-sm ${isSecondary ? 'text-muted-foreground' : ''}`}>
+            {account.acct_name}
+          </TableCell>
+          {DISPLAY_FORM_TYPES.map(ft => (
+            <TableCell key={ft}>{renderSlot(account, ft)}</TableCell>
+          ))}
+          <TableCell>
+            {accountForeignTax > 0 && (
+              <span className="text-xs text-amber-700 font-medium">
+                {currency(accountForeignTax).format()}
+              </span>
+            )}
+          </TableCell>
+        </TableRow>
+      )
+    })
 
   return (
     <div>
-      <h3 className="text-base font-semibold mb-2">Account Documents</h3>
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-base font-semibold">Account Documents</h3>
+        {foreignTaxSummaries.length > 0 && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs gap-1"
+            onClick={() => setWorksheetOpen(true)}
+          >
+            <Calculator className="h-3 w-3" />
+            1116 Worksheet
+          </Button>
+        )}
+      </div>
 
       {loading ? (
         <div className="flex items-center gap-2 text-muted-foreground text-sm">
@@ -311,6 +364,7 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange, 
                 {DISPLAY_FORM_TYPES.map(ft => (
                   <TableHead key={ft}>{FORM_TYPE_LABELS[ft]}</TableHead>
                 ))}
+                <TableHead>Foreign Tax</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -318,7 +372,7 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange, 
               {inactiveAccounts.length > 0 && activeAccounts.length > 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={DISPLAY_FORM_TYPES.length + 1}
+                    colSpan={DISPLAY_FORM_TYPES.length + 2}
                     className="py-1 bg-muted/20 text-[10px] text-muted-foreground font-medium uppercase tracking-wider"
                   >
                     No transactions in {selectedYear}
@@ -454,6 +508,13 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange, 
       </Dialog>
 
       {/* Inline image viewer */}
+
+      {/* Form 1116 Worksheet modal */}
+      <WorksheetModal
+        open={worksheetOpen}
+        onClose={() => setWorksheetOpen(false)}
+        foreignTaxSummaries={foreignTaxSummaries}
+      />
     </div>
   )
 }

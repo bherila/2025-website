@@ -1,5 +1,8 @@
 /** Shared types for tax document components and API responses. */
 
+export type { FK1StructuredData } from '@/types/finance/k1-data'
+export { isFK1StructuredData } from '@/types/finance/k1-data'
+
 /** Parsed field values from W-2: all box values. */
 export interface W2ParsedData {
   employer_name?: string | null
@@ -107,26 +110,13 @@ export interface F1099MiscParsedData {
 }
 
 /**
- * Coded item used in K-1 for credits, AMT, foreign transactions, and other coded boxes.
- */
-export interface K1CodedItem {
-  code: string
-  description?: string | null
-  amount?: number | null
-}
-
-/**
- * Parsed field values from Schedule K-1 (Form 1065, 1120-S, or 1041).
+ * @deprecated Use FK1StructuredData (schemaVersion "2026.1") for new K-1 documents.
  *
- * K-1 data is extensive and variable. All extracted data is stored in this flexible
- * object as JSON (via parsed_data). Fields not listed here may still be present.
- *
- * Future extension: box16_foreign_taxes_paid and box16_foreign_country will be used
- * when Form 1116 (Foreign Tax Credit) support is added. See GenAiJobDispatcherService
- * for details on the extension points.
+ * Flat K-1 parsed data shape used before the structured format was introduced.
+ * Kept for backward compatibility with existing stored documents.
  */
 export interface FK1ParsedData {
-  form_source?: string | null           // "1065", "1120-S", "1041"
+  form_source?: string | null
   tax_year?: string | null
   entity_name?: string | null
   entity_ein?: string | null
@@ -134,8 +124,6 @@ export interface FK1ParsedData {
   partner_ssn_last4?: string | null
   partner_ownership_pct?: number | null
   partner_type?: string | null
-
-  // Main income/deduction boxes
   box1_ordinary_income?: number | null
   box2_net_rental_real_estate?: number | null
   box3_other_net_rental?: number | null
@@ -147,37 +135,18 @@ export interface FK1ParsedData {
   box9_section_179_deduction?: number | null
   box10_other_deductions?: number | null
   box11_section_179_s_corp?: number | null
-
-  // Self-employment
   box14_self_employment_earnings?: number | null
-
-  // Coded arrays
-  credits?: K1CodedItem[] | null
-  amt_items?: K1CodedItem[] | null
-  other_info_items?: K1CodedItem[] | null
-  other_coded_items?: K1CodedItem[] | null
-
-  // Foreign transactions (future Form 1116 extension)
-  box16_foreign_taxes_paid?: number | null
-  box16_foreign_country?: string | null
-  box16_foreign_income_category?: string | null
-
-  // Distributions
   distributions?: number | null
-
-  // State
   state?: string | null
   state_tax_withheld?: number | null
-
-  // Supplemental statement text
   supplemental_statements?: string | null
-
-  // Allow any additional fields from AI extraction
   [key: string]: unknown
 }
 
+import type { FK1StructuredData as _FK1StructuredData } from './k1-data'
+
 /** Union of all possible parsed_data shapes. */
-export type TaxDocumentParsedData = W2ParsedData | F1099IntParsedData | F1099DivParsedData | F1099MiscParsedData | FK1ParsedData
+export type TaxDocumentParsedData = W2ParsedData | F1099IntParsedData | F1099DivParsedData | F1099MiscParsedData | FK1ParsedData | _FK1StructuredData
 
 export interface TaxDocument {
   id: number
