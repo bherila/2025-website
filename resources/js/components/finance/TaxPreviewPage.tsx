@@ -265,7 +265,7 @@ export default function TaxPreviewPage() {
       return
     }
     let cancelled = false
-    const params = new URLSearchParams({ year: String(selectedYear), genai_status: 'parsed', is_confirmed: '0' })
+    const params = new URLSearchParams({ year: String(selectedYear), genai_status: 'parsed', is_reviewed: '0' })
     fetchWrapper.get(`/api/finance/tax-documents?${params.toString()}`)
       .then((data: unknown) => {
         if (!cancelled) setPendingReviewCount(Array.isArray(data) ? (data as TaxDocument[]).length : 0)

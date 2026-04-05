@@ -89,16 +89,6 @@ export default function TaxDocumentsSection({ selectedYear, payslips, onDocument
     }
   }
 
-  const handleToggleReconciled = async (doc: TaxDocument) => {
-    try {
-      await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}/reconciled`, {
-        is_reconciled: !doc.is_reconciled,
-      })
-      await fetchDocuments()
-    } catch {
-      toast.error('Failed to update reconciliation status')
-    }
-  }
 
   const w2Entities = entities.filter(e => e.type === 'w2')
 
@@ -114,8 +104,8 @@ export default function TaxDocumentsSection({ selectedYear, payslips, onDocument
         </Badge>
       )
     }
-    if (doc.genai_status === 'parsed' && doc.is_confirmed) {
-      return <Badge variant="outline" className="border-green-500 text-green-600">Confirmed</Badge>
+    if (doc.genai_status === 'parsed' && doc.is_reviewed) {
+      return <Badge variant="outline" className="border-green-500 text-green-600">Reviewed</Badge>
     }
     if (doc.genai_status === 'parsed') {
       return <Badge variant="outline" className="border-blue-400 text-blue-600">Ready for Review</Badge>
@@ -192,10 +182,10 @@ export default function TaxDocumentsSection({ selectedYear, payslips, onDocument
                         <Button
                           size="sm"
                           variant="outline"
-                          className={`gap-1.5 h-8 ${doc.is_confirmed ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:text-green-800' : ''}`}
+                          className={`gap-1.5 h-8 ${doc.is_reviewed ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:text-green-800' : ''}`}
                           onClick={() => setReviewModalDoc(doc)}
                         >
-                          {doc.is_confirmed ? (
+                          {doc.is_reviewed ? (
                             <>
                               <CheckCircle className="h-3.5 w-3.5" />
                               Reviewed
@@ -226,8 +216,8 @@ export default function TaxDocumentsSection({ selectedYear, payslips, onDocument
                             variant="ghost"
                             className="text-destructive hover:text-destructive"
                             onClick={() => handleDelete(doc)}
-                            title={doc.is_reconciled ? 'Uncheck Reviewed to enable delete' : 'Delete'}
-                            disabled={doc.is_reconciled}
+                            title={doc.is_reviewed ? 'Uncheck Reviewed to enable delete' : 'Delete'}
+                            disabled={doc.is_reviewed}
                           >
                             <Trash2 className="h-3 w-3" />
                           </Button>

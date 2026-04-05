@@ -49,7 +49,7 @@ class TaxDocumentControllerTest extends TestCase
             'file_size_bytes' => 102400,
             'file_hash' => str_repeat('a', 64),
             'uploaded_by_user_id' => $userId,
-            'is_reconciled' => false,
+            'is_reviewed' => false,
         ], $overrides));
     }
 
@@ -230,17 +230,17 @@ class TaxDocumentControllerTest extends TestCase
         $response->assertStatus(404);
     }
 
-    public function test_can_update_reconciled_status(): void
+    public function test_can_update_reviewed_status(): void
     {
         $user = $this->createUser();
-        $doc = $this->createTaxDocument($user->id, ['is_reconciled' => false]);
+        $doc = $this->createTaxDocument($user->id, ['is_reviewed' => false]);
 
-        $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}/reconciled", [
-            'is_reconciled' => true,
+        $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}", [
+            'is_reviewed' => true,
         ]);
 
         $response->assertOk();
-        $this->assertDatabaseHas('fin_tax_documents', ['id' => $doc->id, 'is_reconciled' => 1]);
+        $this->assertDatabaseHas('fin_tax_documents', ['id' => $doc->id, 'is_reviewed' => 1]);
     }
 
     public function test_cross_user_isolation(): void
@@ -343,11 +343,11 @@ class TaxDocumentControllerTest extends TestCase
     public function test_can_update_parsed_data(): void
     {
         $user = $this->createUser();
-        $doc = $this->createTaxDocument($user->id, ['is_confirmed' => false]);
+        $doc = $this->createTaxDocument($user->id, ['is_reviewed' => false]);
 
         $parsedData = ['box1_wages' => 50000, 'box2_fed_tax' => 8000];
 
-        $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}/parsed-data", [
+        $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}", [
             'parsed_data' => $parsedData,
         ]);
 
@@ -356,37 +356,37 @@ class TaxDocumentControllerTest extends TestCase
         $this->assertEquals(50000, $doc->parsed_data['box1_wages']);
     }
 
-    public function test_cannot_update_parsed_data_when_confirmed(): void
+    public function test_cannot_update_parsed_data_when_reviewed(): void
     {
         $user = $this->createUser();
-        $doc = $this->createTaxDocument($user->id, ['is_confirmed' => true]);
+        $doc = $this->createTaxDocument($user->id, ['is_reviewed' => true]);
 
-        $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}/parsed-data", [
+        $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}", [
             'parsed_data' => ['box1_wages' => 50000],
         ]);
 
         $response->assertStatus(422);
-        $response->assertJsonFragment(['message' => 'Cannot edit confirmed document. Unconfirm first.']);
+        $response->assertJsonFragment(['message' => 'Cannot edit parsed data on a reviewed document.']);
     }
 
-    public function test_can_confirm_and_unconfirm_document(): void
+    public function test_can_review_and_unreview_document(): void
     {
         $user = $this->createUser();
-        $doc = $this->createTaxDocument($user->id, ['is_confirmed' => false]);
+        $doc = $this->createTaxDocument($user->id, ['is_reviewed' => false]);
 
-        // Confirm
-        $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}/confirmed", [
-            'is_confirmed' => true,
+        // Review
+        $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}", [
+            'is_reviewed' => true,
         ]);
         $response->assertOk();
-        $this->assertDatabaseHas('fin_tax_documents', ['id' => $doc->id, 'is_confirmed' => 1]);
+        $this->assertDatabaseHas('fin_tax_documents', ['id' => $doc->id, 'is_reviewed' => 1]);
 
-        // Unconfirm
-        $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}/confirmed", [
-            'is_confirmed' => false,
+        // Unreview
+        $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}", [
+            'is_reviewed' => false,
         ]);
         $response->assertOk();
-        $this->assertDatabaseHas('fin_tax_documents', ['id' => $doc->id, 'is_confirmed' => 0]);
+        $this->assertDatabaseHas('fin_tax_documents', ['id' => $doc->id, 'is_reviewed' => 0]);
     }
 
     public function test_download_returns_distinct_view_and_download_urls(): void
@@ -413,7 +413,7 @@ class TaxDocumentControllerTest extends TestCase
         $doc = $this->createTaxDocument($user->id, [
             'genai_status' => 'parsed',
             'parsed_data' => json_encode(['box1_wages' => 50000]),
-            'is_confirmed' => true,
+            'is_reviewed' => true,
         ]);
 
         $response = $this->actingAs($user)->getJson('/api/finance/tax-documents');
@@ -421,7 +421,7 @@ class TaxDocumentControllerTest extends TestCase
         $data = $response->json();
         $this->assertCount(1, $data);
         $this->assertEquals('parsed', $data[0]['genai_status']);
-        $this->assertTrue($data[0]['is_confirmed']);
+        $this->assertTrue($data[0]['is_reviewed']);
         $this->assertNotNull($data[0]['parsed_data']);
     }
 
@@ -436,22 +436,22 @@ class TaxDocumentControllerTest extends TestCase
             'account_id' => $account->acct_id,
             'employment_entity_id' => null,
             'genai_status' => 'parsed',
-            'is_confirmed' => false,
+            'is_reviewed' => false,
         ]);
         $this->createTaxDocument($user->id, [
             'form_type' => '1099_int',
             'account_id' => $account->acct_id,
             'employment_entity_id' => null,
             'genai_status' => 'parsed',
-            'is_confirmed' => true,
+            'is_reviewed' => true,
         ]);
 
-        // Filter for unconfirmed parsed docs
-        $response = $this->getJson('/api/finance/tax-documents?genai_status=parsed&is_confirmed=0');
+        // Filter for unreviewed parsed docs
+        $response = $this->getJson('/api/finance/tax-documents?genai_status=parsed&is_reviewed=0');
         $response->assertOk();
         $docs = $response->json();
         $this->assertCount(1, $docs);
-        $this->assertFalse($docs[0]['is_confirmed']);
+        $this->assertFalse($docs[0]['is_reviewed']);
     }
 
     public function test_manual_store_requires_account_id_for_1099(): void
@@ -507,14 +507,13 @@ class TaxDocumentControllerTest extends TestCase
     public function test_mark_reviewed_confirms_and_reconciles(): void
     {
         $user = $this->createUser();
-        $doc = $this->createTaxDocument($user->id, ['is_confirmed' => false, 'is_reconciled' => false]);
+        $doc = $this->createTaxDocument($user->id, ['is_reviewed' => false]);
 
         $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}/mark-reviewed");
         $response->assertOk();
         $this->assertDatabaseHas('fin_tax_documents', [
             'id' => $doc->id,
-            'is_confirmed' => 1,
-            'is_reconciled' => 1,
+            'is_reviewed' => 1,
         ]);
     }
 }
