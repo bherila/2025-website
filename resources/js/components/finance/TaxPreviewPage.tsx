@@ -14,86 +14,197 @@ import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import TotalsTable from '@/components/payslip/TotalsTable.client'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
 import type { TaxDocument } from '@/types/finance/tax-document'
 
 import { YearSelectorWithNav } from './YearSelectorWithNav'
 
+/** Small reusable data-source modal showing contributing payslip rows. */
+function PayslipDataSourceModal({
+  open,
+  label,
+  payslips,
+  valueGetter,
+  onClose,
+}: {
+  open: boolean
+  label: string
+  payslips: fin_payslip[]
+  valueGetter: (p: fin_payslip) => currency
+  onClose: () => void
+}) {
+  const rows = payslips
+    .map(p => ({ payslip: p, value: valueGetter(p) }))
+    .filter(r => r.value.value !== 0)
+  const total = rows.reduce((acc, r) => acc.add(r.value), currency(0))
+
+  return (
+    <Dialog open={open} onOpenChange={isOpen => !isOpen && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Data Source — {label}</DialogTitle>
+        </DialogHeader>
+        <div className="overflow-y-auto max-h-[60vh]">
+          {rows.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">No payslip contributions found for this field.</p>
+          ) : (
+            <Table className="text-xs">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Pay Date</TableHead>
+                  <TableHead>Period</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((r, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="font-mono">{r.payslip.pay_date}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {r.payslip.period_start} – {r.payslip.period_end}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">{r.value.format()}</TableCell>
+                  </TableRow>
+                ))}
+                <TableRow className="font-semibold bg-muted/30">
+                  <TableCell colSpan={2}>Total ({rows.length} payslips)</TableCell>
+                  <TableCell className="text-right font-mono">{total.format()}</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 /** W-2 income summary table derived from payslips. */
 function W2IncomeSummary({ payslips }: { payslips: fin_payslip[] }) {
+  const [dataSourceRow, setDataSourceRow] = useState<{
+    label: string
+    getter: (p: fin_payslip) => currency
+  } | null>(null)
+
   if (payslips.length === 0) return null
 
   const sum = (fn: (row: fin_payslip) => currency) =>
     payslips.reduce((acc, row) => acc.add(fn(row)), currency(0))
 
-  const wages = sum(r => currency(r.ps_salary ?? 0))
-  const bonus = sum(r => currency(r.earnings_bonus ?? 0))
-  const rsu = sum(r => currency(r.earnings_rsu ?? 0))
-  const vacationPayout = sum(r => currency(r.ps_vacation_payout ?? 0))
-  const imputed = sum(r =>
+  const wagesGetter = (r: fin_payslip) => currency(r.ps_salary ?? 0)
+  const bonusGetter = (r: fin_payslip) => currency(r.earnings_bonus ?? 0)
+  const rsuGetter = (r: fin_payslip) => currency(r.earnings_rsu ?? 0)
+  const vacationGetter = (r: fin_payslip) => currency(r.ps_vacation_payout ?? 0)
+  const imputedGetter = (r: fin_payslip) =>
     currency(r.imp_ltd ?? 0)
       .add(r.imp_legal ?? 0)
       .add(r.imp_fitness ?? 0)
-      .add(r.imp_other ?? 0),
-  )
-  const gross = wages.add(bonus).add(rsu).add(vacationPayout).add(imputed)
-
-  const fedWH = sum(r =>
+      .add(r.imp_other ?? 0)
+  const fedWHGetter = (r: fin_payslip) =>
     currency(r.ps_fed_tax ?? 0)
       .add(r.ps_fed_tax_addl ?? 0)
-      .subtract(r.ps_fed_tax_refunded ?? 0),
-  )
-  const stateWH = sum(r => currency(r.ps_state_tax ?? 0).add(r.ps_state_tax_addl ?? 0))
-  const oasdi = sum(r => currency(r.ps_oasdi ?? 0))
-  const medicare = sum(r => currency(r.ps_medicare ?? 0))
-  const sdi = sum(r => currency(r.ps_state_disability ?? 0))
+      .subtract(r.ps_fed_tax_refunded ?? 0)
+  const stateWHGetter = (r: fin_payslip) =>
+    currency(r.ps_state_tax ?? 0).add(r.ps_state_tax_addl ?? 0)
+  const oasdiGetter = (r: fin_payslip) => currency(r.ps_oasdi ?? 0)
+  const medicareGetter = (r: fin_payslip) => currency(r.ps_medicare ?? 0)
+  const sdiGetter = (r: fin_payslip) => currency(r.ps_state_disability ?? 0)
+
+  const wages = sum(wagesGetter)
+  const bonus = sum(bonusGetter)
+  const rsu = sum(rsuGetter)
+  const vacationPayout = sum(vacationGetter)
+  const imputed = sum(imputedGetter)
+  const gross = wages.add(bonus).add(rsu).add(vacationPayout).add(imputed)
+
+  const fedWH = sum(fedWHGetter)
+  const stateWH = sum(stateWHGetter)
+  const oasdi = sum(oasdiGetter)
+  const medicare = sum(medicareGetter)
+  const sdi = sum(sdiGetter)
+
+  const grossGetter = (r: fin_payslip) =>
+    wagesGetter(r).add(bonusGetter(r)).add(rsuGetter(r)).add(vacationGetter(r)).add(imputedGetter(r))
 
   const rows = [
-    { label: 'Wages / Salary', value: wages },
-    bonus.value > 0 ? { label: 'Bonus', value: bonus } : null,
-    rsu.value > 0 ? { label: 'RSU Vesting', value: rsu } : null,
-    vacationPayout.value > 0 ? { label: 'Vacation Payout', value: vacationPayout } : null,
-    imputed.value > 0 ? { label: 'Imputed Income (benefits)', value: imputed } : null,
-    { label: 'Total Gross W-2 Income', value: gross, bold: true },
-    { label: '', value: null },
-    { label: 'Federal Income Tax Withheld', value: fedWH },
-    { label: 'State Income Tax Withheld', value: stateWH },
-    { label: 'OASDI / Social Security Tax', value: oasdi },
-    { label: 'Medicare Tax', value: medicare },
-    sdi.value > 0 ? { label: 'State Disability Insurance (SDI)', value: sdi } : null,
-  ].filter(Boolean) as { label: string; value: currency | null; bold?: boolean }[]
+    { label: 'Wages / Salary', value: wages, getter: wagesGetter },
+    bonus.value > 0 ? { label: 'Bonus', value: bonus, getter: bonusGetter } : null,
+    rsu.value > 0 ? { label: 'RSU Vesting', value: rsu, getter: rsuGetter } : null,
+    vacationPayout.value > 0 ? { label: 'Vacation Payout', value: vacationPayout, getter: vacationGetter } : null,
+    imputed.value > 0 ? { label: 'Imputed Income (benefits)', value: imputed, getter: imputedGetter } : null,
+    { label: 'Total Gross W-2 Income', value: gross, bold: true, getter: grossGetter },
+    { label: '', value: null, getter: null },
+    { label: 'Federal Income Tax Withheld', value: fedWH, getter: fedWHGetter },
+    { label: 'State Income Tax Withheld', value: stateWH, getter: stateWHGetter },
+    { label: 'OASDI / Social Security Tax', value: oasdi, getter: oasdiGetter },
+    { label: 'Medicare Tax', value: medicare, getter: medicareGetter },
+    sdi.value > 0 ? { label: 'State Disability Insurance (SDI)', value: sdi, getter: sdiGetter } : null,
+  ].filter(Boolean) as { label: string; value: currency | null; bold?: boolean; getter: ((p: fin_payslip) => currency) | null }[]
 
   return (
-    <div>
-      <h2 className="text-lg font-semibold mb-2">W-2 Income Summary</h2>
-      <div className="border rounded-md overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Line Item</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((row, i) =>
-              row.label === '' ? (
-                <TableRow key={i} className="border-t-2">
-                  <TableCell colSpan={2} className="py-0 h-px bg-muted/30" />
-                </TableRow>
-              ) : (
-                <TableRow key={i} className={row.bold ? 'font-semibold bg-muted/30' : ''}>
-                  <TableCell className="text-sm">{row.label}</TableCell>
-                  <TableCell className="text-right text-sm font-mono">
-                    {row.value !== null ? row.value.format() : ''}
-                  </TableCell>
-                </TableRow>
-              ),
-            )}
-          </TableBody>
-        </Table>
+    <>
+      <div>
+        <h2 className="text-lg font-semibold mb-2">W-2 Income Summary</h2>
+        <div className="border rounded-md overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Line Item</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row, i) =>
+                row.label === '' ? (
+                  <TableRow key={i} className="border-t-2">
+                    <TableCell colSpan={2} className="py-0 h-px bg-muted/30" />
+                  </TableRow>
+                ) : (
+                  <TableRow key={i} className={row.bold ? 'font-semibold bg-muted/30' : ''}>
+                    <TableCell className="text-sm">{row.label}</TableCell>
+                    <TableCell className="text-right text-sm font-mono">
+                      {row.value !== null && row.getter ? (
+                        <button
+                          type="button"
+                          className="underline decoration-dotted cursor-pointer hover:text-primary"
+                          onClick={() => setDataSourceRow({ label: row.label, getter: row.getter! })}
+                          title="View data sources"
+                        >
+                          {row.value.format()}
+                        </button>
+                      ) : row.value !== null ? (
+                        row.value.format()
+                      ) : ''}
+                    </TableCell>
+                  </TableRow>
+                ),
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
-    </div>
+
+      {dataSourceRow && (
+        <PayslipDataSourceModal
+          open
+          label={dataSourceRow.label}
+          payslips={payslips}
+          valueGetter={dataSourceRow.getter}
+          onClose={() => setDataSourceRow(null)}
+        />
+      )}
+    </>
   )
 }
 

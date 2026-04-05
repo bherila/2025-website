@@ -1,7 +1,7 @@
 'use client'
 
 import currency from 'currency.js'
-import { CheckCircle, ChevronLeft, ChevronRight, Download, Eye, FileText, Loader2, Save } from 'lucide-react'
+import { CheckCircle, ChevronLeft, ChevronRight, Download, Eye, FileText, Loader2, Save, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -34,76 +34,172 @@ interface TaxDocumentReviewModalProps {
   onDocumentReviewed?: () => void
 }
 
+/** Small modal that lists the payslip rows that contributed to a computed value. */
+function DataSourceModal({
+  open,
+  label,
+  payslips,
+  valueGetter,
+  onClose,
+}: {
+  open: boolean
+  label: string
+  payslips: fin_payslip[]
+  valueGetter: (p: fin_payslip) => currency
+  onClose: () => void
+}) {
+  const rows = payslips
+    .map(p => ({ payslip: p, value: valueGetter(p) }))
+    .filter(r => r.value.value !== 0)
+  const total = rows.reduce((acc, r) => acc.add(r.value), currency(0))
+
+  return (
+    <Dialog open={open} onOpenChange={isOpen => !isOpen && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Data Source — {label}</DialogTitle>
+        </DialogHeader>
+        <div className="overflow-y-auto max-h-[60vh]">
+          {rows.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">No payslip contributions found for this field.</p>
+          ) : (
+            <Table className="text-xs">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Pay Date</TableHead>
+                  <TableHead>Period</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((r, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="font-mono">{r.payslip.pay_date}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {r.payslip.period_start} – {r.payslip.period_end}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">{r.value.format()}</TableCell>
+                  </TableRow>
+                ))}
+                <TableRow className="font-semibold bg-muted/30">
+                  <TableCell colSpan={2}>Total ({rows.length} payslips)</TableCell>
+                  <TableCell className="text-right font-mono">{total.format()}</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 /**
  * Renders a comparison table for W-2 documents.
  */
 function W2Comparison({ parsed, payslips }: { parsed: W2ParsedData; payslips: fin_payslip[] }) {
+  const [dataSourceRow, setDataSourceRow] = useState<{
+    label: string
+    getter: (p: fin_payslip) => currency
+  } | null>(null)
+
   const sum = (fn: (row: fin_payslip) => currency) =>
     payslips.reduce((acc, row) => acc.add(fn(row)), currency(0))
 
-  const wages = sum(r => 
+  const wagesGetter = (r: fin_payslip) =>
     currency(r.ps_salary ?? 0)
-    .add(r.earnings_bonus ?? 0)
-    .add(r.earnings_rsu ?? 0)
-    .add(r.ps_vacation_payout ?? 0)
-    .add(r.imp_ltd ?? 0)
-    .add(r.imp_legal ?? 0)
-    .add(r.imp_fitness ?? 0)
-    .add(r.imp_other ?? 0)
-    .subtract(r.ps_pretax_medical ?? 0)
-    .subtract(r.ps_pretax_fsa ?? 0)
-    .subtract(r.ps_401k_pretax ?? 0)
-    .subtract(r.ps_pretax_dental ?? 0)
-    .subtract(r.ps_pretax_vision ?? 0)
-  )
+      .add(r.earnings_bonus ?? 0)
+      .add(r.earnings_rsu ?? 0)
+      .add(r.ps_vacation_payout ?? 0)
+      .add(r.imp_ltd ?? 0)
+      .add(r.imp_legal ?? 0)
+      .add(r.imp_fitness ?? 0)
+      .add(r.imp_other ?? 0)
+      .subtract(r.ps_pretax_medical ?? 0)
+      .subtract(r.ps_pretax_fsa ?? 0)
+      .subtract(r.ps_401k_pretax ?? 0)
+      .subtract(r.ps_pretax_dental ?? 0)
+      .subtract(r.ps_pretax_vision ?? 0)
 
-  const fedWH = sum(r =>
+  const fedWHGetter = (r: fin_payslip) =>
     currency(r.ps_fed_tax ?? 0)
       .add(r.ps_fed_tax_addl ?? 0)
-      .subtract(r.ps_fed_tax_refunded ?? 0),
-  )
-  const stateWH = sum(r => currency(r.ps_state_tax ?? 0).add(r.ps_state_tax_addl ?? 0))
-  const oasdi = sum(r => currency(r.ps_oasdi ?? 0))
-  const medicare = sum(r => currency(r.ps_medicare ?? 0))
+      .subtract(r.ps_fed_tax_refunded ?? 0)
+
+  const stateWHGetter = (r: fin_payslip) =>
+    currency(r.ps_state_tax ?? 0).add(r.ps_state_tax_addl ?? 0)
+
+  const oasdiGetter = (r: fin_payslip) => currency(r.ps_oasdi ?? 0)
+  const medicareGetter = (r: fin_payslip) => currency(r.ps_medicare ?? 0)
+
+  const wages = sum(wagesGetter)
+  const fedWH = sum(fedWHGetter)
+  const stateWH = sum(stateWHGetter)
+  const oasdi = sum(oasdiGetter)
+  const medicare = sum(medicareGetter)
 
   const rows = [
-    { label: 'Box 1: Wages, tips, other compensation', parsed: currency(parsed.box1_wages ?? 0), calculated: wages },
-    { label: 'Box 2: Federal income tax withheld', parsed: currency(parsed.box2_fed_tax ?? 0), calculated: fedWH },
-    { label: 'Box 4: Social security tax withheld', parsed: currency(parsed.box4_ss_tax ?? 0), calculated: oasdi },
-    { label: 'Box 6: Medicare tax withheld', parsed: currency(parsed.box6_medicare_tax ?? 0), calculated: medicare },
-    { label: 'Box 17: State income tax', parsed: currency(parsed.box17_state_tax ?? 0), calculated: stateWH },
+    { label: 'Box 1: Wages, tips, other compensation', parsed: currency(parsed.box1_wages ?? 0), calculated: wages, getter: wagesGetter },
+    { label: 'Box 2: Federal income tax withheld', parsed: currency(parsed.box2_fed_tax ?? 0), calculated: fedWH, getter: fedWHGetter },
+    { label: 'Box 4: Social security tax withheld', parsed: currency(parsed.box4_ss_tax ?? 0), calculated: oasdi, getter: oasdiGetter },
+    { label: 'Box 6: Medicare tax withheld', parsed: currency(parsed.box6_medicare_tax ?? 0), calculated: medicare, getter: medicareGetter },
+    { label: 'Box 17: State income tax', parsed: currency(parsed.box17_state_tax ?? 0), calculated: stateWH, getter: stateWHGetter },
   ]
 
   return (
-    <div className="mt-4 border rounded-lg overflow-hidden">
-      <div className="bg-muted/30 px-3 py-1.5 text-xs font-semibold border-b">Comparison: W-2 vs. Payslips</div>
-      <Table className="text-xs">
-        <TableHeader className="bg-muted/10">
-          <TableRow>
-            <TableHead className="h-8">Field</TableHead>
-            <TableHead className="text-right h-8">W-2 Form</TableHead>
-            <TableHead className="text-right h-8">Payslips</TableHead>
-            <TableHead className="text-right h-8">Difference</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map(row => {
-            const diff = row.parsed.subtract(row.calculated)
-            const isError = Math.abs(diff.value) > 0.01
-            return (
-              <TableRow key={row.label} className="h-8">
-                <TableCell className="py-1 font-medium">{row.label}</TableCell>
-                <TableCell className="py-1 text-right font-mono">{row.parsed.format()}</TableCell>
-                <TableCell className="py-1 text-right font-mono">{row.calculated.format()}</TableCell>
-                <TableCell className={`py-1 text-right font-mono ${isError ? 'text-destructive font-bold' : 'text-green-600'}`}>
-                  {isError ? diff.format() : 'Match'}
-                </TableCell>
-              </TableRow>
-            )
-          })}
-        </TableBody>
-      </Table>
-    </div>
+    <>
+      <div className="mt-4 border rounded-lg overflow-hidden">
+        <div className="bg-muted/30 px-3 py-1.5 text-xs font-semibold border-b">Comparison: W-2 vs. Payslips</div>
+        <Table className="text-xs">
+          <TableHeader className="bg-muted/10">
+            <TableRow>
+              <TableHead className="h-8">Field</TableHead>
+              <TableHead className="text-right h-8">W-2 Form</TableHead>
+              <TableHead className="text-right h-8">Payslips ({payslips.length})</TableHead>
+              <TableHead className="text-right h-8">Difference</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map(row => {
+              const diff = row.parsed.subtract(row.calculated)
+              const isError = Math.abs(diff.value) > 0.01
+              return (
+                <TableRow key={row.label} className="h-8">
+                  <TableCell className="py-1 font-medium">{row.label}</TableCell>
+                  <TableCell className="py-1 text-right font-mono">{row.parsed.format()}</TableCell>
+                  <TableCell className="py-1 text-right font-mono">
+                    <button
+                      type="button"
+                      className="underline decoration-dotted cursor-pointer hover:text-primary"
+                      onClick={() => setDataSourceRow({ label: row.label, getter: row.getter })}
+                      title="View data sources"
+                    >
+                      {row.calculated.format()}
+                    </button>
+                  </TableCell>
+                  <TableCell className={`py-1 text-right font-mono ${isError ? 'text-destructive font-bold' : 'text-green-600'}`}>
+                    {isError ? diff.format() : 'Match'}
+                  </TableCell>
+                </TableRow>
+              )
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
+      {dataSourceRow && (
+        <DataSourceModal
+          open
+          label={dataSourceRow.label}
+          payslips={payslips}
+          valueGetter={dataSourceRow.getter}
+          onClose={() => setDataSourceRow(null)}
+        />
+      )}
+    </>
   )
 }
 
@@ -112,15 +208,18 @@ function W2Comparison({ parsed, payslips }: { parsed: W2ParsedData; payslips: fi
  */
 function ParsedDataEditor({ 
   data, 
-  onChange 
+  onChange,
+  readOnly = false,
 }: { 
   data: Record<string, unknown>, 
-  onChange: (newData: Record<string, unknown>) => void 
+  onChange: (newData: Record<string, unknown>) => void
+  readOnly?: boolean
 }) {
   // Exclude nested objects/arrays, but include null (typeof null === 'object')
   const entries = Object.entries(data).filter(([, v]) => v === null || typeof v !== 'object')
   
   const handleFieldChange = (key: string, value: string) => {
+    if (readOnly) return
     const isPossiblyNumeric = key.startsWith('box') || key.includes('wages') || key.includes('tax') || key.includes('amount') || key.includes('interest') || key.includes('dividend')
     let finalValue: any = value
     if (value === '') {
@@ -146,9 +245,10 @@ function ParsedDataEditor({
           </label>
           <div className="w-1/2">
             <Input 
-              className="h-6 text-[11px] font-mono px-1.5 bg-background border-muted-foreground/20 text-right focus-visible:ring-1 focus-visible:ring-primary/40 rounded-sm"
+              className={`h-6 text-[11px] font-mono px-1.5 text-right rounded-sm ${readOnly ? 'bg-muted/30 border-transparent text-muted-foreground cursor-default focus-visible:ring-0' : 'bg-background border-muted-foreground/20 focus-visible:ring-1 focus-visible:ring-primary/40'}`}
               value={value === null || value === undefined ? '' : String(value)}
               onChange={(e) => handleFieldChange(key, e.target.value)}
+              readOnly={readOnly}
             />
           </div>
         </div>
@@ -169,6 +269,7 @@ export default function TaxDocumentReviewModal({
   const [currentIndex, setCurrentIndex] = useState(0)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   
   // Local editor state for the active document
   const [notes, setNotes] = useState('')
@@ -259,6 +360,34 @@ export default function TaxDocumentReviewModal({
       window.open(result.download_url, '_blank', 'noopener,noreferrer')
     } catch {
       toast.error('Failed to get download link')
+    }
+  }
+
+  const handleDelete = async (doc: TaxDocument) => {
+    if (!confirm(`Delete "${doc.original_filename}"? This action cannot be undone.`)) return
+    setDeleting(true)
+    try {
+      await fetchWrapper.delete(`/api/finance/tax-documents/${doc.id}`, {})
+      toast.success('Document deleted')
+      // Remove from local list
+      const newDocs = documents.filter(d => d.id !== doc.id)
+      if (newDocs.length === 0) {
+        onDocumentReviewed?.()
+        onClose()
+      } else {
+        setDocuments(newDocs)
+        const newIdx = Math.min(currentIndex, newDocs.length - 1)
+        const nextDoc = newDocs[newIdx]
+        if (nextDoc) {
+          setCurrentIndex(newIdx)
+          setNotes(nextDoc.notes ?? '')
+          setEditData((nextDoc.parsed_data as Record<string, any>) || {})
+        }
+      }
+    } catch {
+      toast.error('Failed to delete document')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -385,10 +514,14 @@ export default function TaxDocumentReviewModal({
                   <div className="space-y-3">
                     <div className="flex items-center justify-between px-1">
                       <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Extracted Data</div>
-                      <div className="text-[10px] text-muted-foreground/60 italic">Mistakes? Correct them below</div>
+                      {activeDoc.is_reviewed ? (
+                        <div className="text-[10px] text-muted-foreground/60 italic">Read-only (confirmed)</div>
+                      ) : (
+                        <div className="text-[10px] text-muted-foreground/60 italic">Mistakes? Correct them below</div>
+                      )}
                     </div>
                     <div className="bg-muted/40 rounded-lg p-3 border border-muted-foreground/10 h-full max-h-[300px] overflow-y-auto">
-                      <ParsedDataEditor data={editData} onChange={setEditData} />
+                      <ParsedDataEditor data={editData} onChange={setEditData} readOnly={activeDoc.is_reviewed} />
                     </div>
                   </div>
 
@@ -401,20 +534,23 @@ export default function TaxDocumentReviewModal({
                         placeholder="Add notes about this document or discrepancies found..."
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
+                        readOnly={activeDoc.is_reviewed}
                       />
                     </div>
-                    <div className="flex justify-end pt-1">
-                      <Button
-                        variant="ghost" 
-                        size="sm" 
-                        className="text-xs gap-1 h-8"
-                        disabled={saving}
-                        onClick={() => handleUpdate(activeDoc, activeDoc.is_reviewed)}
-                      >
-                        <Save className="h-3.5 w-3.5" />
-                        Save Changes
-                      </Button>
-                    </div>
+                    {!activeDoc.is_reviewed && (
+                      <div className="flex justify-end pt-1">
+                        <Button
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-xs gap-1 h-8"
+                          disabled={saving}
+                          onClick={() => handleUpdate(activeDoc, activeDoc.is_reviewed)}
+                        >
+                          <Save className="h-3.5 w-3.5" />
+                          Save Changes
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -432,7 +568,22 @@ export default function TaxDocumentReviewModal({
 
         <DialogFooter className="border-t pt-4 px-1">
           <div className="flex w-full items-center justify-between">
-            <Button variant="ghost" onClick={onClose}>Close</Button>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" onClick={onClose}>Close</Button>
+              {activeDoc && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => handleDelete(activeDoc)}
+                  disabled={deleting || activeDoc.is_reviewed}
+                  title={activeDoc.is_reviewed ? 'Reopen for review before deleting' : 'Delete document'}
+                >
+                  {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                  Delete
+                </Button>
+              )}
+            </div>
             {activeDoc && (
                <Button
                 size="default"

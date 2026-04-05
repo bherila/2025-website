@@ -17,11 +17,11 @@ class FileForTaxDocument extends Model
 
     protected $table = 'fin_tax_documents';
 
-    public const FORM_TYPES = ['w2', 'w2c', '1099_int', '1099_int_c', '1099_div', '1099_div_c', '1099_misc'];
+    public const FORM_TYPES = ['w2', 'w2c', '1099_int', '1099_int_c', '1099_div', '1099_div_c', '1099_misc', 'k1'];
 
     public const W2_FORM_TYPES = ['w2', 'w2c'];
 
-    public const ACCOUNT_FORM_TYPES = ['1099_int', '1099_int_c', '1099_div', '1099_div_c', '1099_misc'];
+    public const ACCOUNT_FORM_TYPES = ['1099_int', '1099_int_c', '1099_div', '1099_div_c', '1099_misc', 'k1'];
 
     protected $fillable = [
         'user_id',
