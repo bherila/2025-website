@@ -277,7 +277,7 @@ function ParsedDataEditor({
 }) {
   // A value is "nullish" for display purposes (string "null" counts as null; 0 is valid)
   const isNullish = (v: unknown): boolean =>
-    v === null || v === undefined || v === '' || v === 'null' || (typeof v === 'string' && v.trim() === 'null')
+    v === null || v === undefined || v === '' || (typeof v === 'string' && v.trim() === 'null')
 
   // Exclude nested objects/arrays; in readOnly mode also exclude nullish values
   const allEntries = Object.entries(data).filter(([, v]) => v === null || typeof v !== 'object')
@@ -293,7 +293,8 @@ function ParsedDataEditor({
       finalValue = null
     } else if (isPossiblyNumeric) {
       const c = currency(value)
-      if (!isNaN(c.value) && (String(c.value) !== '0' || value.match(/[0-9]/))) {
+      // Store as a number if valid and non-zero, or if the input explicitly contains a digit (allows 0.00 / "0")
+      if (!isNaN(c.value) && (c.value !== 0 || value.match(/[0-9]/))) {
         finalValue = c.value
       }
     }

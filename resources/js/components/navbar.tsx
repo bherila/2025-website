@@ -6,7 +6,7 @@ import type { NavDropdownChild, NavItem, NavItemDropdown } from '@/types/client-
 
 type NavbarProps = {
   authenticated: boolean;
-  isAdmin: boolean;
+  isAdmin?: boolean;
   navItems?: NavItem[];
   currentUser?: { id: number; name: string; email: string; user_role?: string | null; last_login_date?: string | null } | null;
 };
@@ -119,7 +119,7 @@ function MobileDropdown({ item }: { item: NavItemDropdown }) {
   );
 }
 
-export default function Navbar({ authenticated, isAdmin: _isAdmin, navItems = [], currentUser }: NavbarProps) {
+export default function Navbar({ authenticated, navItems = [], currentUser }: NavbarProps) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const initials = currentUser && currentUser.name
     ? currentUser.name.trim().split(/\s+/).map(p => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()

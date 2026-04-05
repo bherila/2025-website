@@ -9,9 +9,10 @@
     <meta name="color-scheme" content="dark light">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css" integrity="sha512-c42qTSw/wPZ3/5LBzD+Bw5f7bSF2oxou6wEb+I/lqeaKV5FDIfMvvRp772y4jcJLKuGUOpbJMdg/BTl50fJYAw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
     @php
-      $__isAdmin = auth()->check() && auth()->user()->hasRole('admin');
-      $__isAuthenticated = auth()->check();
-      $__clientCompanies = $__isAuthenticated ? auth()->user()->clientCompanies()->select('client_companies.id', 'company_name', 'slug')->get() : collect();
+      $__currentUser = auth()->user();
+      $__isAuthenticated = !is_null($__currentUser);
+      $__isAdmin = $__isAuthenticated && $__currentUser->hasRole('admin');
+      $__clientCompanies = $__isAuthenticated ? $__currentUser->clientCompanies()->select('client_companies.id', 'company_name', 'slug')->get() : collect();
 
       // Build Finance submenu items (authenticated only)
       $__financeItems = $__isAuthenticated ? [
@@ -58,12 +59,12 @@
         'authenticated' => $__isAuthenticated,
         'isAdmin' => $__isAdmin,
         'clientCompanies' => $__clientCompanies,
-        'currentUser' => auth()->user() ? [
-          'id' => auth()->id(),
-          'name' => auth()->user()->name,
-          'email' => auth()->user()->email,
-          'user_role' => auth()->user()->user_role,
-          'last_login_date' => optional(auth()->user()->last_login_date)->toDateTimeString(),
+        'currentUser' => $__currentUser ? [
+          'id' => $__currentUser->id,
+          'name' => $__currentUser->name,
+          'email' => $__currentUser->email,
+          'user_role' => $__currentUser->user_role,
+          'last_login_date' => optional($__currentUser->last_login_date)->toDateTimeString(),
         ] : null,
         'navItems' => $__navItems,
       ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!}
