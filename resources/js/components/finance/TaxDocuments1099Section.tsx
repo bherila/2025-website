@@ -1,7 +1,7 @@
 'use client'
 
 import currency from 'currency.js'
-import { CheckCircle, Clock, Download, Eye, FileText, Loader2, Upload } from 'lucide-react'
+import { CheckCircle, Clock, Eye, Loader2, Upload } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -71,7 +71,6 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange, 
   const [manualEntry, setManualEntry] = useState<ManualEntryState | null>(null)
   const [manualSaving, setManualSaving] = useState(false)
   const [reviewModalDoc, setReviewModalDoc] = useState<TaxDocument | null>(null)
-  const [imageViewState, setImageViewState] = useState<{ url: string; filename: string } | null>(null)
 
   const fetchDocuments = useCallback(async () => {
     try {
@@ -163,34 +162,6 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange, 
     a => !activeAccountIds.includes(a.acct_id) && !accountsWithDocs.has(a.acct_id),
   )
 
-  const handleView = async (doc: TaxDocument) => {
-    try {
-      const result = (await fetchWrapper.get(`/api/finance/tax-documents/${doc.id}/download`)) as {
-        view_url: string
-        download_url: string
-      }
-      if (doc.mime_type?.startsWith('image/')) {
-        setImageViewState({ url: result.view_url, filename: doc.original_filename })
-      } else {
-        window.open(result.view_url, '_blank', 'noopener,noreferrer')
-      }
-    } catch {
-      toast.error('Failed to get view link')
-    }
-  }
-
-  const handleDownload = async (doc: TaxDocument) => {
-    try {
-      const result = (await fetchWrapper.get(`/api/finance/tax-documents/${doc.id}/download`)) as {
-        view_url: string
-        download_url: string
-      }
-      window.open(result.download_url, '_blank', 'noopener,noreferrer')
-    } catch {
-      toast.error('Failed to get download link')
-    }
-  }
-
   const handleManualEntrySave = async () => {
     if (!manualEntry) return
     setManualSaving(true)
@@ -265,8 +236,9 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange, 
           <Button
             size="sm"
             variant="outline"
-            className={`gap-1 h-7 text-xs px-2 ${doc.is_reviewed ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:text-green-800' : ''}`}
+            className={`gap-1 h-7 text-xs px-2 ${doc.is_reviewed ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:text-green-800' : 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100 hover:text-amber-900'}`}
             onClick={() => setReviewModalDoc(doc)}
+            title={doc.is_reviewed ? 'Reviewed' : 'Review document'}
           >
             {doc.is_reviewed ? (
               <>
@@ -276,49 +248,11 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange, 
             ) : (
               <>
                 <Eye className="h-3 w-3" />
-                Review
+                Needs Review
               </>
             )}
           </Button>
         )}
-        {/* View action */}
-        <div className="flex gap-0.5">
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-6 w-6 p-0"
-            onClick={() => {
-              if (doc.s3_path) {
-                handleView(doc)
-              } else {
-                setManualEntry({
-                  open: true,
-                  formType: doc.form_type as '1099_int' | '1099_div',
-                  accountId: doc.account_id!,
-                  accountName: doc.account?.acct_name ?? '',
-                  payerName: (doc.parsed_data as any)?.payer_name ?? '',
-                  interest: (doc.parsed_data as any)?.box1_interest ?? '',
-                  ordinaryDividends: (doc.parsed_data as any)?.box1a_ordinary ?? '',
-                  qualifiedDividends: (doc.parsed_data as any)?.box1b_qualified ?? '',
-                })
-              }
-            }}
-            title={doc.s3_path ? (doc.mime_type?.startsWith('image/') ? 'View image' : 'View PDF') : 'Edit entry'}
-          >
-            {doc.s3_path ? <Eye className="h-3 w-3" /> : <FileText className="h-3 w-3" />}
-          </Button>
-          {doc.s3_path && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-6 w-6 p-0"
-              onClick={() => handleDownload(doc)}
-              title="Download"
-            >
-              <Download className="h-3 w-3" />
-            </Button>
-          )}
-        </div>
       </div>
     )
   }
@@ -505,18 +439,6 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange, 
       </Dialog>
 
       {/* Inline image viewer */}
-      <Dialog open={imageViewState !== null} onOpenChange={open => !open && setImageViewState(null)}>
-        <DialogContent className="sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>{imageViewState?.filename}</DialogTitle>
-          </DialogHeader>
-          {imageViewState && (
-            <div className="flex justify-center overflow-auto max-h-[70vh]">
-              <img src={imageViewState.url} alt={imageViewState.filename} className="max-w-full object-contain" />
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
