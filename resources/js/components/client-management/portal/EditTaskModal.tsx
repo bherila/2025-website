@@ -189,7 +189,16 @@ export default function EditTaskModal({ open, onOpenChange, task, slug, projectS
           </TabsList>
           
           <TabsContent value="details">
-            <form onSubmit={handleUpdateTask} className="space-y-4 mt-4">
+            <form 
+              onSubmit={handleUpdateTask} 
+              onKeyDown={(e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                  e.preventDefault();
+                  handleUpdateTask(e as unknown as React.FormEvent);
+                }
+              }}
+              className="space-y-4 mt-4"
+            >
               {error && !timeSuccess && (
                 <div className="text-sm text-destructive bg-destructive/10 p-2 rounded">
                   {error}
@@ -229,7 +238,16 @@ export default function EditTaskModal({ open, onOpenChange, task, slug, projectS
           </TabsContent>
           
           <TabsContent value="time">
-            <form onSubmit={handleLogTime} className="space-y-4 mt-4">
+            <form 
+              onSubmit={handleLogTime} 
+              onKeyDown={(e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                  e.preventDefault();
+                  handleLogTime(e as unknown as React.FormEvent);
+                }
+              }}
+              className="space-y-4 mt-4"
+            >
                {timeSuccess && (
                  <div className="text-sm text-green-600 bg-green-50 p-2 rounded border border-green-200">
                    Time logged successfully!

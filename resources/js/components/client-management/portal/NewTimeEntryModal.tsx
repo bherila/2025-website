@@ -219,7 +219,16 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
           </DialogDescription>
         </DialogHeader>
         
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form 
+          onSubmit={handleSubmit} 
+          onKeyDown={(e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+              e.preventDefault();
+              handleSubmit(e as unknown as React.FormEvent);
+            }
+          }}
+          className="space-y-4"
+        >
           {error && (
             <div className="text-sm text-destructive bg-destructive/10 p-2 rounded">
               {error}
