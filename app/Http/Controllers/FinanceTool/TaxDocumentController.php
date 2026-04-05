@@ -53,6 +53,14 @@ class TaxDocumentController extends Controller
             $query->where('account_id', (int) $request->account_id);
         }
 
+        if ($request->filled('genai_status')) {
+            $query->where('genai_status', $request->genai_status);
+        }
+
+        if ($request->filled('is_confirmed')) {
+            $query->where('is_confirmed', (bool) (int) $request->is_confirmed);
+        }
+
         return response()->json($query->get());
     }
 
@@ -187,15 +195,46 @@ class TaxDocumentController extends Controller
             'tax_year' => 'required|integer|min:1900|max:2100',
             'parsed_data' => 'required|array',
             'is_confirmed' => 'boolean',
+            'employment_entity_id' => 'nullable|integer',
+            'account_id' => 'nullable|integer',
         ]);
 
         $userId = Auth::id();
         $formType = $request->form_type;
 
+        // Account-based forms (1099-INT, 1099-DIV, 1099-MISC) require account_id
+        if (in_array($formType, FileForTaxDocument::ACCOUNT_FORM_TYPES, true)) {
+            $request->validate(['account_id' => 'required|integer']);
+            // Bypass global scope (which filters by auth user) and verify ownership explicitly
+            $exists = FinAccounts::withoutGlobalScopes()
+                ->where('acct_id', $request->account_id)
+                ->where('acct_owner', $userId)
+                ->exists();
+            if (! $exists) {
+                return response()->json(['message' => 'Account not found.'], 404);
+            }
+        }
+
+        // W-2 based forms require employment_entity_id
+        if (in_array($formType, FileForTaxDocument::W2_FORM_TYPES, true) && $request->filled('employment_entity_id')) {
+            $exists = FinEmploymentEntity::where('id', $request->employment_entity_id)
+                ->where('user_id', $userId)
+                ->exists();
+            if (! $exists) {
+                return response()->json(['message' => 'Employment entity not found.'], 404);
+            }
+        }
+
         $doc = FileForTaxDocument::create([
             'user_id' => $userId,
             'tax_year' => $request->tax_year,
             'form_type' => $formType,
+            'employment_entity_id' => in_array($formType, FileForTaxDocument::W2_FORM_TYPES, true)
+                ? $request->employment_entity_id
+                : null,
+            'account_id' => in_array($formType, FileForTaxDocument::ACCOUNT_FORM_TYPES, true)
+                ? $request->account_id
+                : null,
             'original_filename' => 'Manual entry',
             'stored_filename' => 'manual-entry',
             's3_path' => '',
@@ -291,6 +330,24 @@ class TaxDocumentController extends Controller
             ->firstOrFail();
 
         $doc->is_confirmed = $request->boolean('is_confirmed');
+        $doc->save();
+
+        return response()->json($doc);
+    }
+
+    /**
+     * Atomically confirm and mark a document as reviewed (reconciled).
+     * Used by the "Ready for Review" modal to avoid partial state when
+     * the two-step confirm+reconcile sequence is interrupted.
+     */
+    public function markReviewed(int $id): JsonResponse
+    {
+        $doc = FileForTaxDocument::where('id', $id)
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
+
+        $doc->is_confirmed = true;
+        $doc->is_reconciled = true;
         $doc->save();
 
         return response()->json($doc);

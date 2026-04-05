@@ -302,6 +302,7 @@ Route::middleware(['web', 'auth'])->delete('/finance/tax-documents/{id}', [TaxDo
 Route::middleware(['web', 'auth'])->put('/finance/tax-documents/{id}/reconciled', [TaxDocumentController::class, 'updateReconciled']);
 Route::middleware(['web', 'auth'])->put('/finance/tax-documents/{id}/parsed-data', [TaxDocumentController::class, 'updateParsedData']);
 Route::middleware(['web', 'auth'])->put('/finance/tax-documents/{id}/confirmed', [TaxDocumentController::class, 'updateConfirmed']);
+Route::middleware(['web', 'auth'])->put('/finance/tax-documents/{id}/mark-reviewed', [TaxDocumentController::class, 'markReviewed']);
 
 // GenAI Import routes
 Route::middleware(['web', 'auth'])->post('/genai/import/request-upload', [GenAiImportController::class, 'requestUpload']);

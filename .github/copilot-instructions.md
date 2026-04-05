@@ -130,7 +130,7 @@ class MyTest extends TestCase
 - `database/schema/mysql-schema.sql` - Production MySQL schema
 - `database/schema/sqlite-schema.sql` - SQLite schema for tests (RefreshDatabase uses this)
 
-When adding new tables/columns to production, update both schema files using `php artisan schema:dump` (**NEVER** use the `--prune` flag).
+**IMPORTANT**: Schema dump files (`mysql-schema.sql`, `sqlite-schema.sql`) are **automatically generated after merging a PR** and must **NEVER** be generated or modified by AI agents in pull requests unless the user **explicitly asks** for a schema dump. Always use migration files (`database/migrations/`) for schema changes. Never use `php artisan schema:dump` or `--prune` unless explicitly instructed.
 
 See [TESTING.md](TESTING.md) for comprehensive testing documentation.
 

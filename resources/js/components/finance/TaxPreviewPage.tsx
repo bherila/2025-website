@@ -1,17 +1,22 @@
 'use client'
 
 import currency from 'currency.js'
+import { ClipboardList } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import Form1040Preview from '@/components/finance/Form1040Preview'
 import ScheduleBPreview from '@/components/finance/ScheduleBPreview'
 import ScheduleCPreview from '@/components/finance/ScheduleCPreview'
+import TaxDocumentReviewModal from '@/components/finance/TaxDocumentReviewModal'
 import TaxDocuments1099Section from '@/components/finance/TaxDocuments1099Section'
 import TaxDocumentsSection from '@/components/finance/TaxDocumentsSection'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import TotalsTable from '@/components/payslip/TotalsTable.client'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
+import type { TaxDocument } from '@/types/finance/tax-document'
 
 import { YearSelectorWithNav } from './YearSelectorWithNav'
 
@@ -103,6 +108,10 @@ export default function TaxPreviewPage() {
   const [availableYears, setAvailableYears] = useState<number[]>([])
   const [isYearsLoading, setIsYearsLoading] = useState(true)
 
+  // Review modal
+  const [reviewModalOpen, setReviewModalOpen] = useState(false)
+  const [pendingReviewCount, setPendingReviewCount] = useState(0)
+
   // Read initial year from URL query string, default to current year
   const [selectedYear, setSelectedYear] = useState<number | 'all'>(() => {
     try {
@@ -137,6 +146,9 @@ export default function TaxPreviewPage() {
     dividendIncome: currency(0),
     qualifiedDividends: currency(0),
   })
+
+  // Refresh trigger — increment to force child sections to reload after a review
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
   const handle1099TotalsChange = useCallback((totals: {
     interestIncome: currency
@@ -246,6 +258,22 @@ export default function TaxPreviewPage() {
     return () => { cancelled = true }
   }, [selectedYear])
 
+  // Fetch count of documents ready for review (parsed but not confirmed)
+  useEffect(() => {
+    if (typeof selectedYear !== 'number') {
+      setPendingReviewCount(0)
+      return
+    }
+    let cancelled = false
+    const params = new URLSearchParams({ year: String(selectedYear), genai_status: 'parsed', is_confirmed: '0' })
+    fetchWrapper.get(`/api/finance/tax-documents?${params.toString()}`)
+      .then((data: unknown) => {
+        if (!cancelled) setPendingReviewCount(Array.isArray(data) ? (data as TaxDocument[]).length : 0)
+      })
+      .catch(() => { if (!cancelled) setPendingReviewCount(0) })
+    return () => { cancelled = true }
+  }, [selectedYear, refreshTrigger])
+
   // Build quarterly payslip series in a single pass (same logic as PayslipClient)
   const year = typeof selectedYear === 'number' ? selectedYear : null
   const { data, dataThroughQ1, dataThroughQ2, dataThroughQ3 } = (() => {
@@ -301,6 +329,20 @@ export default function TaxPreviewPage() {
     <div>
       <div className="flex items-center gap-4 px-4 pt-4 pb-2 flex-wrap">
         <h1 className="text-2xl font-bold">Tax Preview</h1>
+        {typeof selectedYear === 'number' && pendingReviewCount > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => setReviewModalOpen(true)}
+          >
+            <ClipboardList className="h-4 w-4" />
+            Review Documents
+            <Badge variant="destructive" className="text-xs px-1.5 py-0 h-4">
+              {pendingReviewCount}
+            </Badge>
+          </Button>
+        )}
         <div className="ml-auto">
           <YearSelectorWithNav
             selectedYear={selectedYear}
@@ -310,6 +352,16 @@ export default function TaxPreviewPage() {
           />
         </div>
       </div>
+
+      {/* Review modal */}
+      {typeof selectedYear === 'number' && (
+        <TaxDocumentReviewModal
+          open={reviewModalOpen}
+          taxYear={selectedYear}
+          onClose={() => setReviewModalOpen(false)}
+          onDocumentReviewed={() => setRefreshTrigger(t => t + 1)}
+        />
+      )}
 
       {/* Row 1: W-2 Income Summary (1/3) + W-2 Upload & Reconciliation (2/3) */}
       {showTaxTables && typeof selectedYear === 'number' && (
