@@ -74,6 +74,43 @@ export const AppCompanySchema = z.object({
   slug: z.string(),
 })
 
+// Navbar item schemas for server-side encoded nav tree
+export const NavItemLinkSchema = z.object({
+  type: z.literal('link'),
+  label: z.string(),
+  href: z.string(),
+})
+export type NavItemLink = z.infer<typeof NavItemLinkSchema>
+
+export const NavItemGroupSchema = z.object({
+  type: z.literal('group'),
+  label: z.string(),
+})
+export type NavItemGroup = z.infer<typeof NavItemGroupSchema>
+
+export const NavItemDividerSchema = z.object({
+  type: z.literal('divider'),
+})
+export type NavItemDivider = z.infer<typeof NavItemDividerSchema>
+
+export type NavDropdownChild = NavItemLink | NavItemGroup | NavItemDivider
+
+const NavDropdownChildSchema: z.ZodType<NavDropdownChild> = z.union([
+  NavItemLinkSchema,
+  NavItemGroupSchema,
+  NavItemDividerSchema,
+])
+
+export const NavItemDropdownSchema = z.object({
+  type: z.literal('dropdown'),
+  label: z.string(),
+  items: z.array(NavDropdownChildSchema),
+})
+export type NavItemDropdown = z.infer<typeof NavItemDropdownSchema>
+
+export type NavItem = NavItemLink | NavItemDropdown
+const NavItemSchema: z.ZodType<NavItem> = z.union([NavItemLinkSchema, NavItemDropdownSchema])
+
 export const AppInitialDataSchema = z.object({
   appName: z.string().optional(),
   appUrl: z.string().optional(),
@@ -81,5 +118,6 @@ export const AppInitialDataSchema = z.object({
   isAdmin: z.coerce.boolean().optional(),
   clientCompanies: z.array(AppCompanySchema).optional(),
   currentUser: UserSchema.nullable().optional(),
+  navItems: z.array(NavItemSchema).optional(),
 })
 export type AppInitialData = z.infer<typeof AppInitialDataSchema>

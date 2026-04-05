@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client';
 
 import Navbar from '@/components/navbar';
+import type { NavItem } from '@/types/client-management/hydration-schemas';
 import { AppInitialDataSchema } from '@/types/client-management/hydration-schemas';
 
 const initNavbar = () => {
@@ -10,8 +11,8 @@ const initNavbar = () => {
   // Defaults
   let authenticated = false;
   let isAdmin = false;
-  let clientCompanies: any[] = [];
   let currentUser: any = null;
+  let navItems: NavItem[] = [];
 
   try {
     const script = document.getElementById('app-initial-data') as HTMLScriptElement | null;
@@ -25,15 +26,15 @@ const initNavbar = () => {
         const data = appParsed.data;
         authenticated = !!data.authenticated;
         isAdmin = !!data.isAdmin;
-        clientCompanies = data.clientCompanies ?? [];
         currentUser = data.currentUser ?? null;
+        navItems = data.navItems ?? [];
       } else {
         console.error('Navbar: Invalid app initial data — falling back to raw payload', appParsed.error);
         // Fallback to raw data if parsing fails but object exists
         authenticated = !!appRaw.authenticated;
         isAdmin = !!appRaw.isAdmin;
-        clientCompanies = appRaw.clientCompanies ?? [];
         currentUser = appRaw.currentUser ?? null;
+        navItems = appRaw.navItems ?? [];
       }
     }
   } catch (e) {
@@ -44,8 +45,8 @@ const initNavbar = () => {
     <Navbar 
       authenticated={authenticated} 
       isAdmin={isAdmin} 
-      clientCompanies={clientCompanies} 
-      currentUser={currentUser} 
+      currentUser={currentUser}
+      navItems={navItems}
     />
   );
 };
