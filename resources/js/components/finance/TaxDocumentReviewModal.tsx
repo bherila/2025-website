@@ -1,7 +1,7 @@
 'use client'
 
 import currency from 'currency.js'
-import { CheckCircle, ChevronLeft, ChevronRight, Download, Eye, FileText, Loader2, Save, Trash2 } from 'lucide-react'
+import { CheckCircle, ChevronLeft, ChevronRight, Download, Eye, FileText, Loader2, Plus, Save, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -16,6 +16,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
@@ -141,6 +149,118 @@ function W2Comparison({ parsed, payslips }: { parsed: W2ParsedData; payslips: fi
   )
 }
 
+interface FormFieldDef {
+  key: string
+  label: string
+  box: string
+  frequency: 'common' | 'sometimes' | 'rarely'
+}
+
+const F1099_INT_FIELDS: FormFieldDef[] = [
+  { key: 'box1_interest', label: 'Interest income', box: '1', frequency: 'common' },
+  { key: 'box2_early_withdrawal', label: 'Early withdrawal penalty', box: '2', frequency: 'sometimes' },
+  { key: 'box3_savings_bond', label: 'Interest on U.S. Savings Bonds and Treasury obligations', box: '3', frequency: 'sometimes' },
+  { key: 'box4_fed_tax', label: 'Federal income tax withheld', box: '4', frequency: 'rarely' },
+  { key: 'box5_investment_expense', label: 'Investment expenses', box: '5', frequency: 'rarely' },
+  { key: 'box6_foreign_tax', label: 'Foreign tax paid', box: '6', frequency: 'rarely' },
+  { key: 'box7_foreign_country', label: 'Foreign country or U.S. possession', box: '7', frequency: 'rarely' },
+  { key: 'box8_tax_exempt', label: 'Tax-exempt interest', box: '8', frequency: 'sometimes' },
+  { key: 'box9_private_activity', label: 'Specified private activity bond interest', box: '9', frequency: 'rarely' },
+  { key: 'box10_market_discount', label: 'Market discount', box: '10', frequency: 'rarely' },
+  { key: 'box11_bond_premium', label: 'Bond premium', box: '11', frequency: 'sometimes' },
+  { key: 'box12_treasury_premium', label: 'Bond premium on Treasury obligations', box: '12', frequency: 'sometimes' },
+  { key: 'box13_tax_exempt_premium', label: 'Bond premium on tax-exempt bond', box: '13', frequency: 'sometimes' },
+]
+
+const F1099_DIV_FIELDS: FormFieldDef[] = [
+  { key: 'box1a_ordinary', label: 'Total ordinary dividends', box: '1a', frequency: 'common' },
+  { key: 'box1b_qualified', label: 'Qualified dividends', box: '1b', frequency: 'common' },
+  { key: 'box2a_cap_gain', label: 'Total capital gain distributions', box: '2a', frequency: 'common' },
+  { key: 'box2b_unrecap_1250', label: 'Unrecaptured section 1250 gain', box: '2b', frequency: 'rarely' },
+  { key: 'box2c_section_1202', label: 'Section 1202 gain', box: '2c', frequency: 'rarely' },
+  { key: 'box2d_collectibles', label: 'Collectibles (28%) gain', box: '2d', frequency: 'rarely' },
+  { key: 'box3_nondividend', label: 'Nondividend distributions', box: '3', frequency: 'sometimes' },
+  { key: 'box4_fed_tax', label: 'Federal income tax withheld', box: '4', frequency: 'rarely' },
+  { key: 'box5_section_199a', label: 'Section 199A dividends', box: '5', frequency: 'sometimes' },
+  { key: 'box6_investment_expense', label: 'Investment expenses', box: '6', frequency: 'rarely' },
+  { key: 'box7_foreign_tax', label: 'Foreign tax paid', box: '7', frequency: 'sometimes' },
+  { key: 'box8_foreign_country', label: 'Foreign country or U.S. possession', box: '8', frequency: 'sometimes' },
+  { key: 'box9_cash_liquidation', label: 'Cash liquidation distributions', box: '9', frequency: 'rarely' },
+  { key: 'box10_noncash_liquidation', label: 'Noncash liquidation distributions', box: '10', frequency: 'rarely' },
+  { key: 'box11_exempt_interest', label: 'Exempt-interest dividends', box: '11', frequency: 'sometimes' },
+  { key: 'box12_private_activity', label: 'Specified private activity bond interest dividends', box: '12', frequency: 'rarely' },
+  { key: 'box14_state_tax', label: 'Exempt-interest dividends from regulated investment company', box: '14', frequency: 'sometimes' },
+]
+
+/** Returns the list of addable fields for the given form type, excluding fields already in data. */
+function getAddableFields(formType: string | undefined, data: Record<string, unknown>): FormFieldDef[] {
+  let fields: FormFieldDef[] = []
+  if (formType === '1099_int' || formType === '1099_int_c') fields = F1099_INT_FIELDS
+  else if (formType === '1099_div' || formType === '1099_div_c') fields = F1099_DIV_FIELDS
+  else return []
+
+  return fields.filter(f => {
+    const v = data[f.key]
+    // Already present with a non-nullish value → not addable
+    return v === null || v === undefined
+  })
+}
+
+/** Dropdown button that lets the user add a field to the editor. */
+function AddFieldDropdown({ fields, onAdd }: { fields: FormFieldDef[]; onAdd: (key: string) => void }) {
+  const common = fields.filter(f => f.frequency === 'common')
+  const sometimes = fields.filter(f => f.frequency === 'sometimes')
+  const rarely = fields.filter(f => f.frequency === 'rarely')
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button size="sm" variant="outline" className="h-7 gap-1 text-xs">
+          <Plus className="h-3 w-3" />
+          Add Field
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="max-h-[320px] overflow-y-auto w-72">
+        {common.length > 0 && (
+          <>
+            <DropdownMenuLabel className="text-[10px] uppercase tracking-wide">Common</DropdownMenuLabel>
+            {common.map(f => (
+              <DropdownMenuItem key={f.key} onClick={() => onAdd(f.key)}>
+                <span className="text-muted-foreground font-mono text-xs w-8 shrink-0">Box {f.box}</span>
+                <span className="truncate">{f.label}</span>
+              </DropdownMenuItem>
+            ))}
+          </>
+        )}
+        {sometimes.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-[10px] uppercase tracking-wide">Sometimes</DropdownMenuLabel>
+            {sometimes.map(f => (
+              <DropdownMenuItem key={f.key} onClick={() => onAdd(f.key)}>
+                <span className="text-muted-foreground font-mono text-xs w-8 shrink-0">Box {f.box}</span>
+                <span className="truncate">{f.label}</span>
+              </DropdownMenuItem>
+            ))}
+          </>
+        )}
+        {rarely.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-[10px] uppercase tracking-wide">Rarely</DropdownMenuLabel>
+            {rarely.map(f => (
+              <DropdownMenuItem key={f.key} onClick={() => onAdd(f.key)}>
+                <span className="text-muted-foreground font-mono text-xs w-8 shrink-0">Box {f.box}</span>
+                <span className="truncate">{f.label}</span>
+              </DropdownMenuItem>
+            ))}
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 /**
  * Editor for the parsed_data object.
  */
@@ -148,49 +268,95 @@ function ParsedDataEditor({
   data, 
   onChange,
   readOnly = false,
+  formType,
 }: { 
   data: Record<string, unknown>, 
   onChange: (newData: Record<string, unknown>) => void
   readOnly?: boolean
+  formType?: string
 }) {
-  // Exclude nested objects/arrays, but include null (typeof null === 'object')
-  const entries = Object.entries(data).filter(([, v]) => v === null || typeof v !== 'object')
-  
+  // A value is "nullish" for display purposes (string "null" counts as null; 0 is valid)
+  const isNullish = (v: unknown): boolean =>
+    v === null || v === undefined || v === '' || v === 'null' || (typeof v === 'string' && v.trim() === 'null')
+
+  // Exclude nested objects/arrays; in readOnly mode also exclude nullish values
+  const allEntries = Object.entries(data).filter(([, v]) => v === null || typeof v !== 'object')
+  const entries = readOnly
+    ? allEntries.filter(([, v]) => !isNullish(v))
+    : allEntries
+
   const handleFieldChange = (key: string, value: string) => {
     if (readOnly) return
     const isPossiblyNumeric = key.startsWith('box') || key.includes('wages') || key.includes('tax') || key.includes('amount') || key.includes('interest') || key.includes('dividend')
-    let finalValue: any = value
+    let finalValue: unknown = value
     if (value === '') {
       finalValue = null
     } else if (isPossiblyNumeric) {
       const c = currency(value)
-      // Check if it's actually numeric or something else
-      if (!isNaN(c.value) && String(c.value) !== '0' || value.match(/[0-9]/)) {
+      if (!isNaN(c.value) && (String(c.value) !== '0' || value.match(/[0-9]/))) {
         finalValue = c.value
       }
     }
     onChange({ ...data, [key]: finalValue })
   }
 
-  if (entries.length === 0) return <p className="text-sm text-muted-foreground">No parsed data available.</p>
+  // Split into non-tax (identifiers/names) vs tax (box fields) columns
+  const nonTaxEntries = entries.filter(([k]) => !k.startsWith('box'))
+  const taxEntries = entries.filter(([k]) => k.startsWith('box'))
+
+  if (entries.length === 0) return <p className="text-sm text-muted-foreground">No extracted data available.</p>
+
+  const renderField = ([key, value]: [string, unknown]) => (
+    <div key={key} className="flex items-center gap-2 group">
+      <label className="text-[10px] text-muted-foreground font-mono w-1/2 truncate select-none cursor-help" title={key}>
+        {key.replace(/_/g, ' ')}
+      </label>
+      <div className="w-1/2">
+        <Input 
+          className={`h-6 text-[11px] font-mono px-1.5 text-right rounded-sm ${readOnly ? 'bg-muted/30 border-transparent text-muted-foreground cursor-default focus-visible:ring-0' : 'bg-background border-muted-foreground/20 focus-visible:ring-1 focus-visible:ring-primary/40'}`}
+          value={isNullish(value) ? '' : String(value)}
+          onChange={(e) => handleFieldChange(key, e.target.value)}
+          readOnly={readOnly}
+        />
+      </div>
+    </div>
+  )
+
+  // Available fields for "Add Field" dropdown (not yet in data with a non-nullish value)
+  const addableFields = getAddableFields(formType, data)
 
   return (
-    <div className="space-y-1.5 py-1">
-      {entries.map(([key, value]) => (
-        <div key={key} className="flex items-center gap-2 group">
-          <label className="text-[10px] text-muted-foreground font-mono w-1/2 truncate select-none cursor-help" title={key}>
-            {key.replace(/_/g, ' ')}
-          </label>
-          <div className="w-1/2">
-            <Input 
-              className={`h-6 text-[11px] font-mono px-1.5 text-right rounded-sm ${readOnly ? 'bg-muted/30 border-transparent text-muted-foreground cursor-default focus-visible:ring-0' : 'bg-background border-muted-foreground/20 focus-visible:ring-1 focus-visible:ring-primary/40'}`}
-              value={value === null || value === undefined ? '' : String(value)}
-              onChange={(e) => handleFieldChange(key, e.target.value)}
-              readOnly={readOnly}
-            />
-          </div>
+    <div className="space-y-3">
+      {/* Add Field dropdown — only in edit mode for supported form types */}
+      {!readOnly && addableFields.length > 0 && (
+        <div className="flex justify-end">
+          <AddFieldDropdown
+            fields={addableFields}
+            onAdd={(key) => {
+              if (!(key in data)) {
+                onChange({ ...data, [key]: null })
+              }
+            }}
+          />
         </div>
-      ))}
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Left: Non-tax info (names, TINs, account numbers) */}
+        {nonTaxEntries.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60 pb-1">Payer / Recipient Info</div>
+            {nonTaxEntries.map(renderField)}
+          </div>
+        )}
+        {/* Right: Tax boxes */}
+        {taxEntries.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60 pb-1">Tax Data</div>
+            {taxEntries.map(renderField)}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -382,9 +548,9 @@ export default function TaxDocumentReviewModal({
   return (
     <>
     <Dialog open={open} onOpenChange={isOpen => !isOpen && onClose()}>
-      <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col p-4">
+      <DialogContent className="w-[90vw] max-w-[90vw] max-h-[90vh] flex flex-col p-4">
         <DialogHeader className="px-1">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center justify-between gap-4 pr-8">
             <DialogTitle>
               {propDocument ? 'Review Document' : `Review Documents (${currentIndex + 1} of ${documents.length})`}
             </DialogTitle>
@@ -453,9 +619,9 @@ export default function TaxDocumentReviewModal({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Left side: Parsed Data Detail */}
-                  <div className="space-y-3">
+                <div className="space-y-4">
+                  {/* Extracted Data - full width with 2-column internal layout */}
+                  <div className="space-y-2">
                     <div className="flex items-center justify-between px-1">
                       <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Extracted Data</div>
                       {activeDoc.is_reviewed ? (
@@ -464,28 +630,31 @@ export default function TaxDocumentReviewModal({
                         <div className="text-[10px] text-muted-foreground/60 italic">Mistakes? Correct them below</div>
                       )}
                     </div>
-                    <div className="bg-muted/40 rounded-lg p-3 border border-muted-foreground/10 h-full max-h-[300px] overflow-y-auto">
-                      <ParsedDataEditor data={editData} onChange={setEditData} readOnly={activeDoc.is_reviewed} />
+                    <div className="bg-muted/40 rounded-lg p-3 border border-muted-foreground/10">
+                      <ParsedDataEditor
+                        data={editData}
+                        onChange={setEditData}
+                        readOnly={activeDoc.is_reviewed}
+                        formType={activeDoc.form_type}
+                      />
                     </div>
                   </div>
 
-                  {/* Right side: Notes */}
-                  <div className="space-y-3 flex flex-col">
+                  {/* Review Notes - full width below extracted data */}
+                  <div className="space-y-2">
                     <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1">Review Notes</div>
-                    <div className="flex-1 min-h-[140px]">
-                      <Textarea 
-                        className="h-full resize-none text-sm leading-relaxed" 
-                        placeholder="Add notes about this document or discrepancies found..."
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                        readOnly={activeDoc.is_reviewed}
-                      />
-                    </div>
+                    <Textarea
+                      className="resize-none text-sm leading-relaxed min-h-[80px]"
+                      placeholder="Add notes about this document or discrepancies found..."
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      readOnly={activeDoc.is_reviewed}
+                    />
                     {!activeDoc.is_reviewed && (
-                      <div className="flex justify-end pt-1">
+                      <div className="flex justify-end">
                         <Button
-                          variant="ghost" 
-                          size="sm" 
+                          variant="ghost"
+                          size="sm"
                           className="text-xs gap-1 h-8"
                           disabled={saving}
                           onClick={() => handleUpdate(activeDoc, activeDoc.is_reviewed)}

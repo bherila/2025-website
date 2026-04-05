@@ -2,11 +2,37 @@ import { fireEvent,render, screen } from '@testing-library/react';
 
 import Navbar from './navbar';
 
+const baseNavItems = [
+  { type: 'link' as const, label: 'Recipes', href: '/recipes' },
+  { type: 'link' as const, label: 'Projects', href: '/projects' },
+];
+
+const toolsDropdown = {
+  type: 'dropdown' as const,
+  label: 'Tools',
+  items: [
+    { type: 'group' as const, label: 'Utilities' },
+    { type: 'link' as const, label: 'License Manager', href: '/tools/license-manager' },
+  ],
+};
+
+const toolsDropdownWithAdmin = {
+  type: 'dropdown' as const,
+  label: 'Tools',
+  items: [
+    { type: 'group' as const, label: 'Utilities' },
+    { type: 'link' as const, label: 'License Manager', href: '/tools/license-manager' },
+    { type: 'group' as const, label: 'Admin' },
+    { type: 'link' as const, label: 'User Management', href: '/admin/users' },
+    { type: 'link' as const, label: 'Client Management', href: '/client/mgmt' },
+  ],
+};
+
 describe('Navbar', () => {
   const defaultProps = {
     authenticated: false,
     isAdmin: false,
-    clientCompanies: [],
+    navItems: [...baseNavItems, toolsDropdown],
   };
 
   it('renders mobile menu button on mobile', () => {
@@ -51,14 +77,14 @@ describe('Navbar', () => {
     expect(screen.getByText('My Account')).toBeInTheDocument();
   });
 
-  it('shows admin options in mobile menu when user is admin', () => {
-    render(<Navbar {...defaultProps} authenticated={true} isAdmin={true} />);
+  it('shows admin options in mobile menu when navItems includes them', () => {
+    render(<Navbar {...defaultProps} authenticated={true} isAdmin={true} navItems={[...baseNavItems, toolsDropdownWithAdmin]} />);
     const menuButton = screen.getByLabelText('Toggle menu');
     fireEvent.click(menuButton);
     
     // Find and expand Tools section first
     const toolsButtons = screen.getAllByText('Tools');
-    const toolsButton = toolsButtons[1]; // Get the mobile one
+    const toolsButton = toolsButtons[toolsButtons.length - 1]; // Get the mobile one
     if (toolsButton) {
       fireEvent.click(toolsButton);
     }
@@ -67,11 +93,19 @@ describe('Navbar', () => {
     expect(screen.getByText('Client Management')).toBeInTheDocument();
   });
 
-  it('shows client portal in mobile menu when client companies exist', () => {
-    const clientCompanies = [
-      { id: 1, company_name: 'Test Company', slug: 'test-company' },
+  it('shows client portal in mobile menu when navItems includes it', () => {
+    const navItemsWithClientPortal = [
+      ...baseNavItems,
+      toolsDropdown,
+      {
+        type: 'dropdown' as const,
+        label: 'Client Portal',
+        items: [
+          { type: 'link' as const, label: 'Test Company', href: '/client/portal/test-company' },
+        ],
+      },
     ];
-    render(<Navbar {...defaultProps} authenticated={true} clientCompanies={clientCompanies} />);
+    render(<Navbar {...defaultProps} authenticated={true} navItems={navItemsWithClientPortal} />);
     const menuButton = screen.getByLabelText('Toggle menu');
     fireEvent.click(menuButton);
     

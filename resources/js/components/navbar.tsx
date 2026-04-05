@@ -2,16 +2,12 @@ import { ChevronDown, Laptop, Menu, Moon, Sun, X } from 'lucide-react';
 import * as React from 'react';
 import { useEffect, useRef, useState } from 'react';
 
-type ClientCompany = {
-  id: number;
-  company_name: string;
-  slug: string;
-};
+import type { NavDropdownChild, NavItem, NavItemDropdown } from '@/types/client-management/hydration-schemas';
 
 type NavbarProps = {
   authenticated: boolean;
   isAdmin: boolean;
-  clientCompanies?: ClientCompany[];
+  navItems?: NavItem[];
   currentUser?: { id: number; name: string; email: string; user_role?: string | null; last_login_date?: string | null } | null;
 };
 
@@ -24,25 +20,113 @@ function applyTheme(mode: ThemeMode) {
   root.classList.toggle('dark', isDark);
 }
 
-export default function Navbar({ authenticated, isAdmin, clientCompanies, currentUser }: NavbarProps) {
-  const [financeOpen, setFinanceOpen] = useState(false);
-  const [toolsOpen, setToolsOpen] = useState(false);
+/** Renders the children of a dropdown (links, groups, dividers). */
+function DropdownChildren({ items, mobile = false }: { items: NavDropdownChild[]; mobile?: boolean }) {
+  const linkCls = mobile
+    ? 'block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm'
+    : 'block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]';
+  const groupCls = mobile
+    ? 'px-3 py-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]'
+    : 'px-2 py-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]';
+
+  return (
+    <>
+      {items.map((item, i) => {
+        if (item.type === 'link') {
+          return (
+            <a key={i} role={mobile ? undefined : 'menuitem'} className={linkCls} href={item.href}>
+              {item.label}
+            </a>
+          );
+        }
+        if (item.type === 'group') {
+          return (
+            <div key={i} className={groupCls} aria-hidden='true'>
+              {item.label}
+            </div>
+          );
+        }
+        // divider
+        return <div key={i} className='my-1 border-t border-gray-100 dark:border-[#3E3E3A]' />;
+      })}
+    </>
+  );
+}
+
+/** Desktop dropdown menu item. */
+function DesktopDropdown({ item }: { item: NavItemDropdown }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLLIElement | null>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const menuId = `menu-${item.label.toLowerCase().replace(/\s+/g, '-')}`;
+
+  return (
+    <li ref={ref} className='relative'>
+      <button
+        type='button'
+        className='inline-flex items-center gap-1 hover:underline underline-offset-4'
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup='menu'
+        id={`${menuId}-button`}
+      >
+        {item.label} <ChevronDown className='w-4 h-4' aria-hidden='true' />
+      </button>
+      {open && (
+        <div
+          role='menu'
+          aria-labelledby={`${menuId}-button`}
+          className='absolute z-50 mt-2 w-64 rounded-md border border-gray-200 dark:border-[#3E3E3A] bg-white dark:bg-[#161615] shadow-[0_10px_30px_rgba(0,0,0,0.08)] p-2'
+        >
+          <DropdownChildren items={item.items} />
+        </div>
+      )}
+    </li>
+  );
+}
+
+/** Mobile expandable section. */
+function MobileDropdown({ item }: { item: NavItemDropdown }) {
+  const [open, setOpen] = useState(false);
+  const menuId = `mobile-menu-${item.label.toLowerCase().replace(/\s+/g, '-')}`;
+
+  return (
+    <div>
+      <button
+        type='button'
+        className='w-full flex items-center justify-between px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base'
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={menuId}
+      >
+        <span>{item.label}</span>
+        <ChevronDown className={`w-4 h-4 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden='true' />
+      </button>
+      {open && (
+        <div id={menuId} className='pl-4 space-y-1'>
+          <DropdownChildren items={item.items} mobile />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function Navbar({ authenticated, isAdmin: _isAdmin, navItems = [], currentUser }: NavbarProps) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const initials = currentUser && currentUser.name 
-    ? currentUser.name.trim().split(/\s+/).map(p => p[0]).filter(Boolean).slice(0,2).join('').toUpperCase() 
+  const initials = currentUser && currentUser.name
+    ? currentUser.name.trim().split(/\s+/).map(p => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()
     : '';
 
-  const financeRef = useRef<HTMLLIElement | null>(null);
-  const toolsRef = useRef<HTMLLIElement | null>(null);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
-  
-  const [clientsOpen, setClientsOpen] = useState(false);
-  const clientsRef = useRef<HTMLLIElement | null>(null);
-
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [mobileFinanceOpen, setMobileFinanceOpen] = useState(false);
-  const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
-  const [mobileClientsOpen, setMobileClientsOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement | null>(null);
 
   const [theme, setTheme] = useState<ThemeMode>(() => (localStorage.getItem('theme') as ThemeMode) || 'system');
@@ -56,23 +140,11 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (financeRef.current && !financeRef.current.contains(e.target as Node)) {
-        setFinanceOpen(false);
-      }
-      if (toolsRef.current && !toolsRef.current.contains(e.target as Node)) {
-        setToolsOpen(false);
-      }
-      if (clientsRef.current && !clientsRef.current.contains(e.target as Node)) {
-        setClientsOpen(false);
-      }
       if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
         setUserMenuOpen(false);
       }
       if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target as Node)) {
         setMobileMenuOpen(false);
-        setMobileFinanceOpen(false);
-        setMobileToolsOpen(false);
-        setMobileClientsOpen(false);
       }
     };
     document.addEventListener('mousedown', handler);
@@ -117,111 +189,18 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
           </a>
         </div>
         <ul className='hidden md:flex items-center gap-4 text-sm print:hidden'>
-          <li><a className='hover:underline underline-offset-4' href='/recipes'>Recipes</a></li>
-          <li><a className='hover:underline underline-offset-4' href='/projects'>Projects</a></li>
-          {authenticated && (
-            <li ref={financeRef} className='relative'>
-              <button
-                type='button'
-                className='inline-flex items-center gap-1 hover:underline underline-offset-4'
-                onClick={() => setFinanceOpen((v) => !v)}
-                aria-expanded={financeOpen}
-                aria-haspopup='menu'
-                id='finance-menu-button'
-              >
-                Finance <ChevronDown className='w-4 h-4' aria-hidden='true' />
-              </button>
-              {financeOpen && (
-                <div
-                  role='menu'
-                  aria-labelledby='finance-menu-button'
-                  className='absolute z-50 mt-2 w-56 rounded-md border border-gray-200 dark:border-[#3E3E3A] bg-white dark:bg-[#161615] shadow-[0_10px_30px_rgba(0,0,0,0.08)] p-2'
-                >
-                  <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/accounts'>Accounts</a>
-                  <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/all-transactions'>Transactions</a>
-                  <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/tax-preview'>Tax Preview</a>
-                  <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/rsu'>RSU</a>
-                  <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/finance/payslips'>Payslips</a>
-                  <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/utility-bill-tracker'>Utility Bill Tracker</a>
-                </div>
-              )}
-            </li>
-          )}
-          <li ref={toolsRef} className='relative'>
-            <button
-              type='button'
-              className='inline-flex items-center gap-1 hover:underline underline-offset-4'
-              onClick={() => setToolsOpen((v) => !v)}
-              aria-expanded={toolsOpen}
-              aria-haspopup='menu'
-              id='tools-menu-button'
-            >
-              Tools <ChevronDown className='w-4 h-4' aria-hidden='true' />
-            </button>
-            {toolsOpen && (
-              <div
-                role='menu'
-                aria-labelledby='tools-menu-button'
-                className='absolute z-50 mt-2 w-64 rounded-md border border-gray-200 dark:border-[#3E3E3A] bg-white dark:bg-[#161615] shadow-[0_10px_30px_rgba(0,0,0,0.08)] p-2'
-              >
-                <div className='px-2 py-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]' aria-hidden='true'>Utilities</div>
-                <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/tools/license-manager'>License Manager</a>
-                <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/tools/bingo'>Bingo Card Generator</a>
-                <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/tools/irs-f461'>Capital Loss Carryover Worksheet</a>
-                {authenticated && isAdmin && (
-                  <>
-                    <div className='px-2 pt-3 pb-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]' aria-hidden='true'>Admin</div>
-                    <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/admin/users'>User Management</a>
-                    <a role='menuitem' className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]' href='/client/mgmt'>Client Management</a>
-                  </>
-                )}
-              </div>
-            )}
-          </li>
-          {authenticated && clientCompanies && clientCompanies.length > 0 && (
-            <li ref={clientsRef} className='relative'>
-              <button
-                type='button'
-                className='inline-flex items-center gap-1 hover:underline underline-offset-4'
-                onClick={() => setClientsOpen((v) => !v)}
-                aria-expanded={clientsOpen}
-                aria-haspopup='menu'
-                id='client-portal-menu-button'
-              >
-                Client Portal <ChevronDown className='w-4 h-4' aria-hidden='true' />
-              </button>
-              {clientsOpen && (
-                <div
-                  role='menu'
-                  aria-labelledby='client-portal-menu-button'
-                  className='absolute z-50 mt-2 w-64 rounded-md border border-gray-200 dark:border-[#3E3E3A] bg-white dark:bg-[#161615] shadow-[0_10px_30px_rgba(0,0,0,0.08)] p-2'
-                >
-                  {clientCompanies.map((company) => (
-                    <a
-                      key={company.id}
-                      role='menuitem'
-                      className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] truncate'
-                      href={`/client/portal/${company.slug}`}
-                    >
-                      {company.company_name}
-                    </a>
-                  ))}
-                  {isAdmin && (
-                    <>
-                      <div className='my-1 border-t border-gray-100 dark:border-[#3E3E3A]' />
-                      <a
-                        role='menuitem'
-                        className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]'
-                        href='/client/mgmt'
-                      >
-                        All Companies
-                      </a>
-                    </>
-                  )}
-                </div>
-              )}
-            </li>
-          )}
+          {navItems.map((item, i) => {
+            if (item.type === 'link') {
+              return (
+                <li key={i}>
+                  <a className='hover:underline underline-offset-4' href={item.href}>
+                    {item.label}
+                  </a>
+                </li>
+              );
+            }
+            return <DesktopDropdown key={i} item={item} />;
+          })}
         </ul>
       </div>
 
@@ -234,129 +213,16 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
           role='menu'
         >
           <div className='px-4 py-2 space-y-1'>
-            <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base' href='/recipes'>
-              Recipes
-            </a>
-            <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base' href='/projects'>
-              Projects
-            </a>
-
-            {/* Finance section in mobile menu */}
-            {authenticated && (
-              <div>
-                <button
-                  type='button'
-                  className='w-full flex items-center justify-between px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base'
-                  onClick={() => setMobileFinanceOpen((v) => !v)}
-                  aria-expanded={mobileFinanceOpen}
-                  aria-controls='mobile-finance-menu'
-                >
-                  <span>Finance</span>
-                  <ChevronDown className={`w-4 h-4 transition-transform ${mobileFinanceOpen ? 'rotate-180' : ''}`} aria-hidden='true' />
-                </button>
-                {mobileFinanceOpen && (
-                  <div id='mobile-finance-menu' className='pl-4 space-y-1'>
-                    <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/finance/accounts'>
-                      Accounts
-                    </a>
-                    <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/finance/all-transactions'>
-                      Transactions
-                    </a>
-                    <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/finance/tax-preview'>
-                      Tax Preview
-                    </a>
-                    <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/finance/rsu'>
-                      RSU
-                    </a>
-                    <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/finance/payslips'>
-                      Payslips
-                    </a>
-                    <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/utility-bill-tracker'>
-                      Utility Bill Tracker
-                    </a>
-                  </div>
-                )}
-              </div>
-            )}
-            
-            {/* Tools section in mobile menu */}
-            <div>
-              <button
-                type='button'
-                className='w-full flex items-center justify-between px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base'
-                onClick={() => setMobileToolsOpen((v) => !v)}
-                aria-expanded={mobileToolsOpen}
-                aria-controls='mobile-tools-menu'
-              >
-                <span>Tools</span>
-                <ChevronDown className={`w-4 h-4 transition-transform ${mobileToolsOpen ? 'rotate-180' : ''}`} aria-hidden='true' />
-              </button>
-              {mobileToolsOpen && (
-                <div id='mobile-tools-menu' className='pl-4 space-y-1'>
-                  <div className='px-3 py-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]' aria-hidden='true'>Utilities</div>
-                  <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/tools/license-manager'>
-                    License Manager
+            {navItems.map((item, i) => {
+              if (item.type === 'link') {
+                return (
+                  <a key={i} className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base' href={item.href}>
+                    {item.label}
                   </a>
-                  <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/tools/bingo'>
-                    Bingo Card Generator
-                  </a>
-                  <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/tools/irs-f461'>
-                    Capital Loss Carryover Worksheet
-                  </a>
-                  {authenticated && isAdmin && (
-                    <>
-                      <div className='px-3 pt-2 pb-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]' aria-hidden='true'>Admin</div>
-                      <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/admin/users'>
-                        User Management
-                      </a>
-                      <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm' href='/client/mgmt'>
-                        Client Management
-                      </a>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Client Portal section in mobile menu */}
-            {authenticated && clientCompanies && clientCompanies.length > 0 && (
-              <div>
-                <button
-                  type='button'
-                  className='w-full flex items-center justify-between px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base'
-                  onClick={() => setMobileClientsOpen((v) => !v)}
-                  aria-expanded={mobileClientsOpen}
-                  aria-controls='mobile-clients-menu'
-                >
-                  <span>Client Portal</span>
-                  <ChevronDown className={`w-4 h-4 transition-transform ${mobileClientsOpen ? 'rotate-180' : ''}`} aria-hidden='true' />
-                </button>
-                {mobileClientsOpen && (
-                  <div id='mobile-clients-menu' className='pl-4 space-y-1'>
-                    {clientCompanies.map((company) => (
-                      <a
-                        key={company.id}
-                        className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm truncate'
-                        href={`/client/portal/${company.slug}`}
-                      >
-                        {company.company_name}
-                      </a>
-                    ))}
-                    {isAdmin && (
-                      <>
-                        <div className='my-1 border-t border-gray-100 dark:border-[#3E3E3A]' />
-                        <a
-                          className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm'
-                          href='/client/mgmt'
-                        >
-                          All Companies
-                        </a>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
+                );
+              }
+              return <MobileDropdown key={i} item={item} />;
+            })}
 
             {/* Account section in mobile menu */}
             {authenticated && (
@@ -364,18 +230,8 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
                 <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base' href='/dashboard'>
                   User Settings
                 </a>
-                {isAdmin && (
-                  <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base' href='/admin/genai-jobs'>
-                    Admin: GenAI Jobs
-                  </a>
-                )}
-                {isAdmin && (
-                  <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base' href='/queue-monitor'>
-                    Admin: Queue Monitor
-                  </a>
-                )}
-                <a 
-                  className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base text-red-600 dark:text-red-400' 
+                <a
+                  className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base text-red-600 dark:text-red-400'
                   href='/logout'
                   onClick={handleLogout}
                 >
@@ -383,7 +239,7 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
                 </a>
               </div>
             )}
-            
+
             {!authenticated && (
               <div className='pt-2 border-t border-gray-100 dark:border-[#3E3E3A]'>
                 <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base' href='/login'>
@@ -455,7 +311,7 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
               <span className='hidden sm:inline'>{currentUser?.name ?? 'My Account'}</span>
               <ChevronDown className={`w-4 h-4 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} aria-hidden='true' />
             </button>
-            
+
             {userMenuOpen && (
               <div
                 role='menu'
@@ -468,24 +324,6 @@ export default function Navbar({ authenticated, isAdmin, clientCompanies, curren
                 >
                   User Settings
                 </a>
-                {isAdmin && (
-                  <a
-                    role='menuitem'
-                    className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm'
-                    href='/admin/genai-jobs'
-                  >
-                    Admin: GenAI Jobs
-                  </a>
-                )}
-                {isAdmin && (
-                  <a
-                    role='menuitem'
-                    className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm'
-                    href='/queue-monitor'
-                  >
-                    Admin: Queue Monitor
-                  </a>
-                )}
                 <div className='my-1 border-t border-gray-100 dark:border-[#3E3E3A]' />
                 <a
                   role='menuitem'

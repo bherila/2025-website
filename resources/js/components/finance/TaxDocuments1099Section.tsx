@@ -201,6 +201,21 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange, 
     const docs = getDocsForSlot(account.acct_id, formType)
 
     if (docs.length === 0) {
+      // Hide upload button if an incompatible form type is already uploaded (but not both)
+      const hasK1 = getDocsForSlot(account.acct_id, 'k1').length > 0
+      const has1099Int = getDocsForSlot(account.acct_id, '1099_int').length > 0
+      const has1099Div = getDocsForSlot(account.acct_id, '1099_div').length > 0
+      const has1099 = has1099Int || has1099Div
+
+      // If k-1 is uploaded but no 1099, hide 1099-int/1099-div upload buttons
+      if ((formType === '1099_int' || formType === '1099_div') && hasK1 && !has1099) {
+        return null
+      }
+      // If 1099-int or 1099-div is uploaded but no k-1, hide the k-1 upload button
+      if (formType === 'k1' && has1099 && !hasK1) {
+        return null
+      }
+
       return (
         <Button
           size="sm"

@@ -117,7 +117,6 @@ export default function TaxDocumentsSection({ selectedYear, payslips, onDocument
                     <TableHead>Filename</TableHead>
                     <TableHead>Size</TableHead>
                     <TableHead>Review</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -145,8 +144,9 @@ export default function TaxDocumentsSection({ selectedYear, payslips, onDocument
                             <Button
                               size="sm"
                               variant="outline"
-                              className={`gap-1.5 h-8 ${doc.is_reviewed ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:text-green-800' : ''}`}
+                              className={`gap-1.5 h-8 ${doc.is_reviewed ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:text-green-800' : 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100 hover:text-amber-900'}`}
                               onClick={() => setReviewModalDoc(doc)}
+                              title={doc.is_reviewed ? 'Reviewed' : 'Review document'}
                             >
                               {doc.is_reviewed ? (
                                 <>
@@ -161,27 +161,6 @@ export default function TaxDocumentsSection({ selectedYear, payslips, onDocument
                               )}
                             </Button>
                           )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className={`gap-1.5 h-8 ${doc.is_reviewed ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:text-green-800' : 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100 hover:text-amber-900'}`}
-                            onClick={() => setReviewModalDoc(doc)}
-                            title={doc.is_reviewed ? 'Reviewed' : 'Review document'}
-                          >
-                            {doc.is_reviewed ? (
-                              <>
-                                <CheckCircle className="h-3.5 w-3.5" />
-                                Reviewed
-                              </>
-                            ) : (
-                              <>
-                                <Eye className="h-3.5 w-3.5" />
-                                Needs Review
-                              </>
-                            )}
-                          </Button>
                         </TableCell>
                       </TableRow>
                     )
