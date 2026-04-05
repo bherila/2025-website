@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { isFK1StructuredData, K1ReviewPanel } from '@/components/finance/k1'
+import { F1116ReviewPanel, isF1116Data } from '@/finance/1116'
 import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { Badge } from '@/components/ui/badge'
@@ -635,6 +636,12 @@ export default function TaxDocumentReviewModal({
                     <div className="bg-muted/40 rounded-lg p-3 border border-muted-foreground/10">
                       {activeDoc.form_type === 'k1' && isFK1StructuredData(editData) ? (
                         <K1ReviewPanel
+                          data={editData}
+                          onChange={(updated) => setEditData(updated)}
+                          readOnly={activeDoc.is_reviewed}
+                        />
+                      ) : activeDoc.form_type === '1116' && isF1116Data(editData) ? (
+                        <F1116ReviewPanel
                           data={editData}
                           onChange={(updated) => setEditData(updated)}
                           readOnly={activeDoc.is_reviewed}

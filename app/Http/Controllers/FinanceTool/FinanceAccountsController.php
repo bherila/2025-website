@@ -64,7 +64,7 @@ class FinanceAccountsController extends Controller
             ->where('acct_owner', $uid)
             ->first();
 
-        if (! $account) {
+        if (!$account) {
             abort(404, 'Account not found');
         }
 
@@ -79,7 +79,7 @@ class FinanceAccountsController extends Controller
             ->where('acct_owner', $uid)
             ->first();
 
-        if (! $account) {
+        if (!$account) {
             abort(404, 'Account not found');
         }
 
@@ -96,7 +96,7 @@ class FinanceAccountsController extends Controller
             ->where('acct_owner', $uid)
             ->first();
 
-        if (! $account) {
+        if (!$account) {
             abort(404, 'Account not found');
         }
 
@@ -126,7 +126,7 @@ class FinanceAccountsController extends Controller
             ->where('acct_owner', $uid)
             ->first();
 
-        if (! $account) {
+        if (!$account) {
             abort(404, 'Account not found');
         }
 
@@ -148,7 +148,7 @@ class FinanceAccountsController extends Controller
             ->where('acct_owner', $uid)
             ->first();
 
-        if (! $account) {
+        if (!$account) {
             abort(404, 'Account not found');
         }
 
@@ -163,7 +163,7 @@ class FinanceAccountsController extends Controller
             ->where('acct_owner', $uid)
             ->first();
 
-        if (! $account) {
+        if (!$account) {
             abort(404, 'Account not found');
         }
 
@@ -178,7 +178,7 @@ class FinanceAccountsController extends Controller
             ->where('acct_owner', $uid)
             ->first();
 
-        if (! $account) {
+        if (!$account) {
             abort(404, 'Account not found');
         }
 

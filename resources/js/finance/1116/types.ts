@@ -36,6 +36,13 @@ export interface F1116Data {
   createdAt?: string
 }
 
+/** Type guard to check if parsed_data is structured Form 1116 data. */
+export function isF1116Data(data: unknown): data is F1116Data {
+  if (!data || typeof data !== 'object') return false
+  const d = data as Record<string, unknown>
+  return d['schemaVersion'] === '2026.1' && d['formType'] === '1116' && typeof d['fields'] === 'object'
+}
+
 /**
  * Input for the Form 1116 apportionment worksheet.
  * Used by WorksheetModal to compute Line 4b (apportioned interest expense).

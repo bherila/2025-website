@@ -13,6 +13,30 @@ use Illuminate\Support\Facades\DB;
 class FinanceLotsController extends Controller
 {
     /**
+     * List all lots for the current user (across all accounts).
+     * Used by Form 1116 worksheet for adjusted basis discovery.
+     */
+    public function showAllLots(Request $request)
+    {
+        $uid = Auth::id();
+        $accountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
+
+        $query = FinAccountLot::whereIn('acct_id', $accountIds);
+
+        // Default to open lots if no status specified
+        $status = $request->query('status', 'open');
+        if ($status === 'open') {
+            $query->whereNull('sale_date');
+        } elseif ($status === 'closed') {
+            $query->whereNotNull('sale_date');
+        }
+
+        $lots = $query->orderBy('purchase_date', 'desc')->get();
+
+        return response()->json(['lots' => $lots]);
+    }
+
+    /**
      * List lots for an account.
      * Query params: status=open|closed, year=YYYY (for closed lots)
      */
