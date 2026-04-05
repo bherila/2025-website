@@ -189,6 +189,10 @@ export default function TaxPreviewPage() {
     qualifiedDividends: currency(0),
   })
 
+  // Reviewed W-2 and 1099 documents for Form 1040 data source drill-down
+  const [reviewedW2Docs, setReviewedW2Docs] = useState<TaxDocument[]>([])
+  const [reviewed1099Docs, setReviewed1099Docs] = useState<TaxDocument[]>([])
+
   // Refresh trigger — increment to force child sections to reload after a review
   const [refreshTrigger, setRefreshTrigger] = useState(0)
 
@@ -198,6 +202,14 @@ export default function TaxPreviewPage() {
     qualifiedDividends: currency
   }) => {
     setIncome1099(totals)
+  }, [])
+
+  const handle1099DocumentsChange = useCallback((docs: TaxDocument[]) => {
+    setReviewed1099Docs(docs)
+  }, [])
+
+  const handleW2DocumentsChange = useCallback((docs: TaxDocument[]) => {
+    setReviewedW2Docs(docs)
   }, [])
 
   const setYearInUrl = useCallback((year: number | 'all', mode: 'push' | 'replace' = 'push') => {
@@ -415,7 +427,8 @@ export default function TaxPreviewPage() {
             <TaxDocumentsSection 
               selectedYear={selectedYear} 
               payslips={data} 
-              onDocumentReviewed={() => setRefreshTrigger(t => t + 1)} 
+              onDocumentReviewed={() => setRefreshTrigger(t => t + 1)}
+              onW2DocumentsChange={handleW2DocumentsChange}
             />
           </div>
         </div>
@@ -427,7 +440,8 @@ export default function TaxPreviewPage() {
           <TaxDocumentsSection 
             selectedYear={selectedYear} 
             payslips={data} 
-            onDocumentReviewed={() => setRefreshTrigger(t => t + 1)} 
+            onDocumentReviewed={() => setRefreshTrigger(t => t + 1)}
+            onW2DocumentsChange={handleW2DocumentsChange}
           />
         </div>
       )}
@@ -440,6 +454,9 @@ export default function TaxPreviewPage() {
           dividendIncome={income1099.dividendIncome}
           scheduleCIncome={scheduleCNetIncome.total}
           selectedYear={selectedYear}
+          w2Documents={reviewedW2Docs}
+          interestDocuments={reviewed1099Docs.filter(d => d.form_type === '1099_int' || d.form_type === '1099_int_c')}
+          dividendDocuments={reviewed1099Docs.filter(d => d.form_type === '1099_div' || d.form_type === '1099_div_c')}
         />
       )}
 
@@ -458,6 +475,7 @@ export default function TaxPreviewPage() {
             <TaxDocuments1099Section
               selectedYear={selectedYear}
               onTotalsChange={handle1099TotalsChange}
+              onDocumentsChange={handle1099DocumentsChange}
             />
           </div>
         </div>

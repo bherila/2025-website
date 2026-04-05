@@ -1,8 +1,24 @@
 'use client'
 
 import currency from 'currency.js'
+import { useState } from 'react'
 
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import type { TaxDocument } from '@/types/finance/tax-document'
+import type { F1099DivParsedData, F1099IntParsedData, W2ParsedData } from '@/types/finance/tax-document'
+
+interface DataSource {
+  label: string
+  amount: currency
+  note?: string
+}
 
 interface Form1040PreviewProps {
   w2Income: currency
@@ -10,6 +26,12 @@ interface Form1040PreviewProps {
   dividendIncome: currency
   scheduleCIncome: number
   selectedYear: number
+  /** Confirmed/reviewed W-2 documents — when provided, line 1a uses their parsed data instead of payslip estimate. */
+  w2Documents?: TaxDocument[]
+  /** Confirmed/reviewed 1099-INT documents for interest income drill-down. */
+  interestDocuments?: TaxDocument[]
+  /** Confirmed/reviewed 1099-DIV documents for dividend income drill-down. */
+  dividendDocuments?: TaxDocument[]
 }
 
 interface LineItem {
@@ -18,6 +40,13 @@ interface LineItem {
   value: currency | null
   bold?: boolean
   refSchedule?: string
+  sources?: DataSource[]
+}
+
+interface DataSourceModalState {
+  line: string
+  label: string
+  sources: DataSource[]
 }
 
 export default function Form1040Preview({
@@ -26,20 +55,99 @@ export default function Form1040Preview({
   dividendIncome,
   scheduleCIncome,
   selectedYear,
+  w2Documents,
+  interestDocuments,
+  dividendDocuments,
 }: Form1040PreviewProps) {
-  const totalIncome = w2Income
+  const [dataSourceModal, setDataSourceModal] = useState<DataSourceModalState | null>(null)
+
+  // Compute W-2 income: prefer confirmed W-2 documents when available
+  const reviewedW2Docs = (w2Documents ?? []).filter(d => d.is_reviewed && d.parsed_data)
+  const w2IncomeFromDocs = reviewedW2Docs.length > 0
+    ? reviewedW2Docs.reduce(
+        (acc, d) => acc.add((d.parsed_data as W2ParsedData)?.box1_wages ?? 0),
+        currency(0),
+      )
+    : null
+
+  const effectiveW2Income = w2IncomeFromDocs ?? w2Income
+
+  // Build data sources for W-2 line
+  const w2Sources: DataSource[] = reviewedW2Docs.length > 0
+    ? reviewedW2Docs.map(d => ({
+        label: (d.parsed_data as W2ParsedData)?.employer_name ?? d.employment_entity?.display_name ?? d.original_filename,
+        amount: currency((d.parsed_data as W2ParsedData)?.box1_wages ?? 0),
+        note: 'W-2 Box 1',
+      }))
+    : [{ label: 'Payslip estimate (no W-2 uploaded)', amount: w2Income }]
+
+  // Build data sources for interest income
+  const reviewedIntDocs = (interestDocuments ?? []).filter(d => d.is_reviewed && d.parsed_data)
+  const interestSources: DataSource[] = reviewedIntDocs.length > 0
+    ? reviewedIntDocs.map(d => ({
+        label: (d.parsed_data as F1099IntParsedData)?.payer_name ?? d.account?.acct_name ?? d.original_filename,
+        amount: currency((d.parsed_data as F1099IntParsedData)?.box1_interest ?? 0),
+        note: '1099-INT Box 1',
+      }))
+    : [{ label: 'From confirmed 1099-INT documents', amount: interestIncome }]
+
+  // Build data sources for dividend income
+  const reviewedDivDocs = (dividendDocuments ?? []).filter(d => d.is_reviewed && d.parsed_data)
+  const dividendSources: DataSource[] = reviewedDivDocs.length > 0
+    ? reviewedDivDocs.map(d => ({
+        label: (d.parsed_data as F1099DivParsedData)?.payer_name ?? d.account?.acct_name ?? d.original_filename,
+        amount: currency((d.parsed_data as F1099DivParsedData)?.box1a_ordinary ?? 0),
+        note: '1099-DIV Box 1a',
+      }))
+    : [{ label: 'From confirmed 1099-DIV documents', amount: dividendIncome }]
+
+  const totalIncome = effectiveW2Income
     .add(interestIncome)
     .add(dividendIncome)
     .add(scheduleCIncome)
 
   const lines: LineItem[] = [
-    { line: '1a', label: 'Wages, salaries, tips (W-2, box 1)', value: w2Income },
-    { line: '2b', label: 'Taxable interest', value: interestIncome, refSchedule: 'Schedule B' },
-    { line: '3b', label: 'Ordinary dividends', value: dividendIncome, refSchedule: 'Schedule B' },
+    {
+      line: '1a',
+      label: 'Wages, salaries, tips (W-2, box 1)',
+      value: effectiveW2Income,
+      sources: w2Sources,
+    },
+    {
+      line: '2b',
+      label: 'Taxable interest',
+      value: interestIncome,
+      refSchedule: 'Schedule B',
+      sources: interestSources,
+    },
+    {
+      line: '3b',
+      label: 'Ordinary dividends',
+      value: dividendIncome,
+      refSchedule: 'Schedule B',
+      sources: dividendSources,
+    },
     ...(scheduleCIncome !== 0
-      ? [{ line: '8', label: 'Business income or loss (Schedule C)', value: currency(scheduleCIncome), refSchedule: 'Schedule C' }]
+      ? [{
+          line: '8',
+          label: 'Business income or loss (Schedule C)',
+          value: currency(scheduleCIncome),
+          refSchedule: 'Schedule C',
+          sources: [{ label: 'Schedule C net income', amount: currency(scheduleCIncome) }],
+        }]
       : []),
-    { line: '9', label: 'Total income', value: totalIncome, bold: true },
+    {
+      line: '9',
+      label: 'Total income',
+      value: totalIncome,
+      bold: true,
+      sources: [
+        { label: 'W-2 wages (Line 1a)', amount: effectiveW2Income },
+        { label: 'Interest income (Line 2b)', amount: interestIncome },
+        { label: 'Ordinary dividends (Line 3b)', amount: dividendIncome },
+        ...(scheduleCIncome !== 0 ? [{ label: 'Schedule C income (Line 8)', amount: currency(scheduleCIncome) }] : []),
+      ],
+    },
   ]
 
   return (
@@ -65,13 +173,72 @@ export default function Form1040Preview({
                   )}
                 </TableCell>
                 <TableCell className="text-right text-sm font-mono">
-                  {item.value !== null ? item.value.format() : '—'}
+                  {item.value !== null ? (
+                    item.sources && item.sources.length > 0 ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto p-0 font-mono text-sm underline decoration-dotted hover:text-primary"
+                        onClick={() => setDataSourceModal({ line: item.line, label: item.label, sources: item.sources! })}
+                        title="View data sources"
+                      >
+                        {item.value.format()}
+                      </Button>
+                    ) : (
+                      item.value.format()
+                    )
+                  ) : '—'}
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
+
+      {/* Data Source drill-down modal */}
+      <Dialog open={dataSourceModal !== null} onOpenChange={open => !open && setDataSourceModal(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Data Source — Line {dataSourceModal?.line}</DialogTitle>
+          </DialogHeader>
+          {dataSourceModal && (
+            <div className="space-y-3 py-1">
+              <p className="text-sm text-muted-foreground">{dataSourceModal.label}</p>
+              <div className="border rounded-md overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Source</TableHead>
+                      {dataSourceModal.sources.some(s => s.note) && <TableHead>Field</TableHead>}
+                      <TableHead className="text-right">Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {dataSourceModal.sources.map((src, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="text-sm">{src.label}</TableCell>
+                        {dataSourceModal.sources.some(s => s.note) && (
+                          <TableCell className="text-xs text-muted-foreground">{src.note ?? ''}</TableCell>
+                        )}
+                        <TableCell className="text-right text-sm font-mono">{src.amount.format()}</TableCell>
+                      </TableRow>
+                    ))}
+                    {dataSourceModal.sources.length > 1 && (
+                      <TableRow className="font-semibold bg-muted/30">
+                        <TableCell className="text-sm">Total</TableCell>
+                        {dataSourceModal.sources.some(s => s.note) && <TableCell />}
+                        <TableCell className="text-right text-sm font-mono">
+                          {dataSourceModal.sources.reduce((acc, s) => acc.add(s.amount), currency(0)).format()}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

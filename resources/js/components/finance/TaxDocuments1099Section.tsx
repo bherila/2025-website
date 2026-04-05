@@ -1,12 +1,12 @@
 'use client'
 
 import currency from 'currency.js'
-import { CheckCircle, Clock, Download, Eye, FileText, Loader2, Trash2, Upload } from 'lucide-react'
+import { CheckCircle, Clock, Download, Eye, FileText, Loader2, Upload } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import TaxDocumentReviewModal from '@/components/finance/TaxDocumentReviewModal'
 import TaxDocumentUploadModal from '@/components/finance/TaxDocumentUploadModal'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -34,6 +34,8 @@ interface TaxDocuments1099SectionProps {
     dividendIncome: currency
     qualifiedDividends: currency
   }) => void
+  /** Called whenever reviewed documents change (for Form 1040 data source drill-down). */
+  onDocumentsChange?: (docs: TaxDocument[]) => void
 }
 
 interface ManualEntryState {
@@ -59,7 +61,7 @@ interface UploadModalState {
 const DISPLAY_FORM_TYPES = ['1099_int', '1099_div', '1099_misc', 'k1'] as const
 type DisplayFormType = (typeof DISPLAY_FORM_TYPES)[number]
 
-export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }: TaxDocuments1099SectionProps) {
+export default function TaxDocuments1099Section({ selectedYear, onTotalsChange, onDocumentsChange }: TaxDocuments1099SectionProps) {
   const [documents, setDocuments] = useState<TaxDocument[]>([])
   const [accounts, setAccounts] = useState<FinAccount[]>([])
   const [activeAccountIds, setActiveAccountIds] = useState<number[]>([])
@@ -68,6 +70,8 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
   const [uploadModal, setUploadModal] = useState<UploadModalState | null>(null)
   const [manualEntry, setManualEntry] = useState<ManualEntryState | null>(null)
   const [manualSaving, setManualSaving] = useState(false)
+  const [reviewModalDoc, setReviewModalDoc] = useState<TaxDocument | null>(null)
+  const [imageViewState, setImageViewState] = useState<{ url: string; filename: string } | null>(null)
 
   const fetchDocuments = useCallback(async () => {
     try {
@@ -96,10 +100,11 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
         }
       }
       onTotalsChange?.({ interestIncome, dividendIncome, qualifiedDividends })
+      onDocumentsChange?.(docs.filter(d => d.is_reviewed))
     } catch {
       setError('Failed to load account documents')
     }
-  }, [selectedYear, onTotalsChange])
+  }, [selectedYear, onTotalsChange, onDocumentsChange])
 
   const fetchAccounts = useCallback(async () => {
     try {
@@ -126,6 +131,18 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
     Promise.all([fetchDocuments(), fetchAccounts()]).finally(() => setLoading(false))
   }, [fetchDocuments, fetchAccounts])
 
+  // Auto-refetch every minute when any document is still processing
+  useEffect(() => {
+    const hasPending = documents.some(
+      d => d.genai_status === 'pending' || d.genai_status === 'processing',
+    )
+    if (!hasPending) return
+    const timer = setTimeout(() => {
+      fetchDocuments()
+    }, 60_000)
+    return () => clearTimeout(timer)
+  }, [documents, fetchDocuments])
+
   /** Get docs for a specific account + form type (includes corrected variants). */
   const getDocsForSlot = (accountId: number, formType: DisplayFormType): TaxDocument[] =>
     documents.filter(d => {
@@ -135,9 +152,16 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
       return d.form_type === formType
     })
 
-  /** Split accounts into active (have transactions this year) and inactive. */
-  const activeAccounts = accounts.filter(a => activeAccountIds.includes(a.acct_id))
-  const inactiveAccounts = accounts.filter(a => !activeAccountIds.includes(a.acct_id))
+  // Accounts with at least one 1099/k-1 document should be promoted to the active section
+  const accountsWithDocs = new Set(documents.map(d => d.account_id).filter(Boolean) as number[])
+
+  /** Split accounts: active = has transactions OR has 1099 docs; inactive = neither */
+  const activeAccounts = accounts.filter(
+    a => activeAccountIds.includes(a.acct_id) || accountsWithDocs.has(a.acct_id),
+  )
+  const inactiveAccounts = accounts.filter(
+    a => !activeAccountIds.includes(a.acct_id) && !accountsWithDocs.has(a.acct_id),
+  )
 
   const handleView = async (doc: TaxDocument) => {
     try {
@@ -145,7 +169,11 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
         view_url: string
         download_url: string
       }
-      window.open(result.view_url, '_blank', 'noopener,noreferrer')
+      if (doc.mime_type?.startsWith('image/')) {
+        setImageViewState({ url: result.view_url, filename: doc.original_filename })
+      } else {
+        window.open(result.view_url, '_blank', 'noopener,noreferrer')
+      }
     } catch {
       toast.error('Failed to get view link')
     }
@@ -160,29 +188,6 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
       window.open(result.download_url, '_blank', 'noopener,noreferrer')
     } catch {
       toast.error('Failed to get download link')
-    }
-  }
-
-  const handleDelete = async (doc: TaxDocument) => {
-    if (!confirm(`Delete "${doc.original_filename}"?`)) return
-    try {
-      await fetchWrapper.delete(`/api/finance/tax-documents/${doc.id}`, {})
-      toast.success('Document deleted')
-      await fetchDocuments()
-    } catch {
-      toast.error('Failed to delete document')
-    }
-  }
-
-
-  const handleToggleReviewed = async (doc: TaxDocument) => {
-    try {
-      await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}`, {
-        is_reviewed: !doc.is_reviewed,
-      })
-      await fetchDocuments()
-    } catch {
-      toast.error('Failed to update review status')
     }
   }
 
@@ -220,42 +225,6 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
     }
   }
 
-  const renderStatusBadge = (doc: TaxDocument) => {
-    if (doc.genai_status === 'pending' || doc.genai_status === 'processing') {
-      return (
-        <Badge variant="outline" className="border-orange-400 text-orange-600 gap-1 text-xs">
-          <Clock className="h-2.5 w-2.5" />
-          Processing
-        </Badge>
-      )
-    }
-    if (doc.genai_status === 'parsed' && doc.is_reviewed) {
-      return (
-        <Badge variant="outline" className="border-green-500 text-green-600 text-xs">
-          Reviewed
-        </Badge>
-      )
-    }
-    if (doc.genai_status === 'parsed') {
-      return (
-        <Badge variant="outline" className="border-blue-400 text-blue-600 text-xs">
-          Review
-        </Badge>
-      )
-    }
-    if (doc.genai_status === 'failed') {
-      return <Badge variant="destructive" className="text-xs">Failed</Badge>
-    }
-    if (doc.is_reviewed) {
-      return (
-        <Badge variant="outline" className="border-green-500 text-green-600 text-xs">
-          Reviewed
-        </Badge>
-      )
-    }
-    return null
-  }
-
   /** Render the cell content for a given account + form type slot. */
   const renderSlot = (account: FinAccount, formType: DisplayFormType) => {
     const docs = getDocsForSlot(account.acct_id, formType)
@@ -276,9 +245,43 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
 
     const doc = docs[0]
     if (!doc) return null
+
+    const isProcessing = doc.genai_status === 'pending' || doc.genai_status === 'processing'
+    const isFailed = doc.genai_status === 'failed'
+
     return (
       <div className="flex flex-col gap-1">
-        {renderStatusBadge(doc)}
+        {/* Combined Review/status button */}
+        {isProcessing ? (
+          <Button size="sm" variant="outline" disabled className="gap-1 h-7 text-xs border-orange-300 text-orange-600 px-2">
+            <Clock className="h-3 w-3 animate-pulse" />
+            Processing
+          </Button>
+        ) : isFailed ? (
+          <Button size="sm" variant="outline" disabled className="gap-1 h-7 text-xs border-destructive text-destructive px-2">
+            Failed
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            variant="outline"
+            className={`gap-1 h-7 text-xs px-2 ${doc.is_reviewed ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:text-green-800' : ''}`}
+            onClick={() => setReviewModalDoc(doc)}
+          >
+            {doc.is_reviewed ? (
+              <>
+                <CheckCircle className="h-3 w-3" />
+                Reviewed
+              </>
+            ) : (
+              <>
+                <Eye className="h-3 w-3" />
+                Review
+              </>
+            )}
+          </Button>
+        )}
+        {/* View action */}
         <div className="flex gap-0.5">
           <Button
             size="sm"
@@ -300,7 +303,7 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
                 })
               }
             }}
-            title={doc.s3_path ? 'View PDF' : 'Edit entry'}
+            title={doc.s3_path ? (doc.mime_type?.startsWith('image/') ? 'View image' : 'View PDF') : 'Edit entry'}
           >
             {doc.s3_path ? <Eye className="h-3 w-3" /> : <FileText className="h-3 w-3" />}
           </Button>
@@ -315,27 +318,6 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
               <Download className="h-3 w-3" />
             </Button>
           )}
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-6 w-6 p-0"
-            onClick={() => handleToggleReviewed(doc)}
-            title={doc.is_reviewed ? 'Mark unreviewed' : 'Mark reviewed'}
-          >
-            <CheckCircle
-              className={`h-3 w-3 ${doc.is_reviewed ? 'text-green-600' : 'text-muted-foreground/40'}`}
-            />
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-6 w-6 p-0 text-destructive hover:text-destructive"
-            onClick={() => handleDelete(doc)}
-            title={doc.is_reviewed ? 'Uncheck Reviewed to enable delete' : 'Delete'}
-            disabled={doc.is_reviewed}
-          >
-            <Trash2 className="h-3 w-3" />
-          </Button>
         </div>
       </div>
     )
@@ -433,6 +415,20 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
         />
       )}
 
+      {/* Review modal (for individual 1099/K-1 documents) */}
+      {reviewModalDoc && (
+        <TaxDocumentReviewModal
+          open
+          taxYear={selectedYear}
+          document={reviewModalDoc}
+          onClose={() => setReviewModalDoc(null)}
+          onDocumentReviewed={() => {
+            setReviewModalDoc(null)
+            fetchDocuments()
+          }}
+        />
+      )}
+
       {/* Manual entry dialog */}
       <Dialog open={manualEntry?.open ?? false} onOpenChange={open => !open && setManualEntry(null)}>
         <DialogContent>
@@ -505,6 +501,20 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange }
               Save
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Inline image viewer */}
+      <Dialog open={imageViewState !== null} onOpenChange={open => !open && setImageViewState(null)}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{imageViewState?.filename}</DialogTitle>
+          </DialogHeader>
+          {imageViewState && (
+            <div className="flex justify-center overflow-auto max-h-[70vh]">
+              <img src={imageViewState.url} alt={imageViewState.filename} className="max-w-full object-contain" />
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

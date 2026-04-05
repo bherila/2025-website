@@ -208,6 +208,7 @@ export default function TaxDocumentReviewModal({
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [imageViewState, setImageViewState] = useState<{ url: string; filename: string } | null>(null)
   
   // Local editor state for the active document
   const [notes, setNotes] = useState('')
@@ -282,7 +283,11 @@ export default function TaxDocumentReviewModal({
         view_url: string
         download_url: string
       }
-      window.open(result.view_url, '_blank', 'noopener,noreferrer')
+      if (doc.mime_type?.startsWith('image/')) {
+        setImageViewState({ url: result.view_url, filename: doc.original_filename })
+      } else {
+        window.open(result.view_url, '_blank', 'noopener,noreferrer')
+      }
     } catch {
       toast.error('Failed to get view link')
     }
@@ -375,6 +380,7 @@ export default function TaxDocumentReviewModal({
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={isOpen => !isOpen && onClose()}>
       <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col p-4">
         <DialogHeader className="px-1">
@@ -437,7 +443,7 @@ export default function TaxDocumentReviewModal({
                       <>
                         <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => handleView(activeDoc)}>
                           <Eye className="h-3.5 w-3.5" />
-                          View PDF
+                          {activeDoc.mime_type?.startsWith('image/') ? 'View Image' : 'View PDF'}
                         </Button>
                         <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleDownload(activeDoc)} title="Download">
                           <Download className="h-4 w-4" />
@@ -541,5 +547,20 @@ export default function TaxDocumentReviewModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* Inline image viewer */}
+    <Dialog open={imageViewState !== null} onOpenChange={open => !open && setImageViewState(null)}>
+      <DialogContent className="sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>{imageViewState?.filename}</DialogTitle>
+        </DialogHeader>
+        {imageViewState && (
+          <div className="flex justify-center overflow-auto max-h-[70vh]">
+            <img src={imageViewState.url} alt={imageViewState.filename} className="max-w-full object-contain" />
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+    </>
   )
 }
