@@ -1,50 +1,155 @@
 'use client'
 
-import { CheckCircle, Download, Eye, FileText, Loader2, X } from 'lucide-react'
+import currency from 'currency.js'
+import { CheckCircle, Download, Eye, FileText, Loader2, Save } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Textarea } from '@/components/ui/textarea'
 import { fetchWrapper } from '@/fetchWrapper'
-import type { TaxDocument } from '@/types/finance/tax-document'
+import type { TaxDocument, W2ParsedData } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
 interface TaxDocumentReviewModalProps {
   open: boolean
   taxYear: number
+  /** If provided, review this specific document. If not, fetch all pending. */
+  document?: TaxDocument
+  /** Optional payslips for comparison (specific to the entity/employer if possible) */
+  payslips?: fin_payslip[]
   onClose: () => void
   /** Called when any document is reviewed so parent can refresh. */
   onDocumentReviewed?: () => void
 }
 
 /**
- * Renders a key–value row from the parsed_data object.
+ * Renders a comparison table for W-2 documents.
  */
-function ParsedDataDisplay({ data }: { data: Record<string, unknown> }) {
-  const entries = Object.entries(data).filter(([, v]) => v !== null && v !== undefined)
+function W2Comparison({ parsed, payslips }: { parsed: W2ParsedData; payslips: fin_payslip[] }) {
+  const sum = (fn: (row: fin_payslip) => currency) =>
+    payslips.reduce((acc, row) => acc.add(fn(row)), currency(0))
+
+  // Box 1: Wages, tips, other compensation (roughly Salary + Bonus + RSU + Vacation Payout + Imputed - Pretax)
+  // Simplified for now based on what's available in the payslip schema
+  const wages = sum(r => 
+    currency(r.ps_salary ?? 0)
+    .add(r.earnings_bonus ?? 0)
+    .add(r.earnings_rsu ?? 0)
+    .add(r.ps_vacation_payout ?? 0)
+    .add(r.imp_ltd ?? 0)
+    .add(r.imp_legal ?? 0)
+    .add(r.imp_fitness ?? 0)
+    .add(r.imp_other ?? 0)
+    .subtract(r.ps_pretax_medical ?? 0)
+    .subtract(r.ps_pretax_fsa ?? 0)
+    .subtract(r.ps_401k_pretax ?? 0)
+    .subtract(r.ps_pretax_dental ?? 0)
+    .subtract(r.ps_pretax_vision ?? 0)
+  )
+
+  const fedWH = sum(r =>
+    currency(r.ps_fed_tax ?? 0)
+      .add(r.ps_fed_tax_addl ?? 0)
+      .subtract(r.ps_fed_tax_refunded ?? 0),
+  )
+  const stateWH = sum(r => currency(r.ps_state_tax ?? 0).add(r.ps_state_tax_addl ?? 0))
+  const oasdi = sum(r => currency(r.ps_oasdi ?? 0))
+  const medicare = sum(r => currency(r.ps_medicare ?? 0))
+
+  const rows = [
+    { label: 'Box 1: Wages, tips, other compensation', parsed: currency(parsed.box1_wages ?? 0), calculated: wages },
+    { label: 'Box 2: Federal income tax withheld', parsed: currency(parsed.box2_fed_tax ?? 0), calculated: fedWH },
+    { label: 'Box 4: Social security tax withheld', parsed: currency(parsed.box4_ss_tax ?? 0), calculated: oasdi },
+    { label: 'Box 6: Medicare tax withheld', parsed: currency(parsed.box6_medicare_tax ?? 0), calculated: medicare },
+    { label: 'Box 17: State income tax', parsed: currency(parsed.box17_state_tax ?? 0), calculated: stateWH },
+  ]
+
+  return (
+    <div className="mt-4 border rounded-lg overflow-hidden">
+      <div className="bg-muted/30 px-3 py-1.5 text-xs font-semibold border-b">Comparison: W-2 vs. Payslips</div>
+      <Table className="text-xs">
+        <TableHeader className="bg-muted/10">
+          <TableRow>
+            <TableHead className="h-8">Field</TableHead>
+            <TableHead className="text-right h-8">W-2 Form</TableHead>
+            <TableHead className="text-right h-8">Payslips</TableHead>
+            <TableHead className="text-right h-8">Difference</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map(row => {
+            const diff = row.parsed.subtract(row.calculated)
+            const isError = Math.abs(diff.value) > 0.01
+            return (
+              <TableRow key={row.label} className="h-8">
+                <TableCell className="py-1 font-medium">{row.label}</TableCell>
+                <TableCell className="py-1 text-right font-mono">{row.parsed.format()}</TableCell>
+                <TableCell className="py-1 text-right font-mono">{row.calculated.format()}</TableCell>
+                <TableCell className={`py-1 text-right font-mono ${isError ? 'text-destructive font-bold' : 'text-green-600'}`}>
+                  {isError ? diff.format() : 'Match'}
+                </TableCell>
+              </TableRow>
+            )
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
+
+/**
+ * Editor for the parsed_data object.
+ */
+function ParsedDataEditor({ 
+  data, 
+  onChange 
+}: { 
+  data: Record<string, unknown>, 
+  onChange: (newData: Record<string, unknown>) => void 
+}) {
+  const entries = Object.entries(data).filter(([, v]) => typeof v !== 'object')
+  
+  const handleFieldChange = (key: string, value: string) => {
+    // If it looks like a box number or amount, try to parse as number
+    // Otherwise keep as string
+    const isPossiblyNumeric = key.includes('box') || key.includes('wages') || key.includes('tax') || key.includes('amount')
+    let finalValue: any = value
+    if (value === '') {
+      finalValue = null
+    } else if (isPossiblyNumeric && !isNaN(Number(value))) {
+      finalValue = Number(value)
+    }
+    onChange({ ...data, [key]: finalValue })
+  }
+
   if (entries.length === 0) return <p className="text-sm text-muted-foreground">No parsed data available.</p>
 
   return (
-    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+    <div className="space-y-1.5 py-1">
       {entries.map(([key, value]) => (
-        <div key={key} className="contents">
-          <span className="text-muted-foreground font-medium truncate">{key}</span>
-          <span className="font-mono">
-            {typeof value === 'boolean'
-              ? value
-                ? 'Yes'
-                : 'No'
-              : typeof value === 'object'
-                ? JSON.stringify(value)
-                : String(value)}
-          </span>
+        <div key={key} className="flex items-center gap-2 group">
+          <label className="text-[10px] text-muted-foreground font-mono w-1/2 truncate select-none cursor-help" title={key}>
+            {key.replace(/_/g, ' ')}
+          </label>
+          <div className="w-1/2">
+            <Input 
+              className="h-6 text-[11px] font-mono px-1.5 bg-background border-muted-foreground/20 text-right focus-visible:ring-1 focus-visible:ring-primary/40 rounded-sm"
+              value={value === null || value === undefined ? '' : String(value)}
+              onChange={(e) => handleFieldChange(key, e.target.value)}
+            />
+          </div>
         </div>
       ))}
     </div>
@@ -54,26 +159,43 @@ function ParsedDataDisplay({ data }: { data: Record<string, unknown> }) {
 export default function TaxDocumentReviewModal({
   open,
   taxYear,
+  document: propDocument,
+  payslips = [],
   onClose,
   onDocumentReviewed,
 }: TaxDocumentReviewModalProps) {
   const [documents, setDocuments] = useState<TaxDocument[]>([])
   const [loading, setLoading] = useState(false)
-  const [reviewing, setReviewing] = useState<number | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [notes, setNotes] = useState('')
+  const [editData, setEditData] = useState<Record<string, any>>({})
 
   const fetchPending = useCallback(async () => {
     if (!open) return
+    if (propDocument) {
+      setDocuments([propDocument])
+      setNotes(propDocument.notes ?? '')
+      setEditData((propDocument.parsed_data as Record<string, any>) || {})
+      return
+    }
+
     setLoading(true)
     try {
       const params = new URLSearchParams({ year: String(taxYear), genai_status: 'parsed', is_confirmed: '0' })
       const data = await fetchWrapper.get(`/api/finance/tax-documents?${params.toString()}`)
-      setDocuments(data as TaxDocument[])
+      const docs = data as TaxDocument[]
+      setDocuments(docs)
+      if (docs.length > 0) {
+        const firstDoc = docs[0]
+        setNotes(firstDoc ? (firstDoc.notes ?? '') : '')
+        setEditData(firstDoc ? ((firstDoc.parsed_data as Record<string, any>) || {}) : {})
+      }
     } catch {
       toast.error('Failed to load documents for review')
     } finally {
       setLoading(false)
     }
-  }, [open, taxYear])
+  }, [open, propDocument, taxYear])
 
   useEffect(() => {
     fetchPending()
@@ -105,114 +227,187 @@ export default function TaxDocumentReviewModal({
     }
   }
 
-  const handleMarkReviewed = async (doc: TaxDocument) => {
-    setReviewing(doc.id)
+  const handleUpdate = async (doc: TaxDocument, isConfirmed: boolean) => {
+    setSaving(true)
     try {
-      // Atomically confirm and mark as reviewed in one request
-      await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}/mark-reviewed`, {})
-      toast.success(`${FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type} marked as reviewed`)
+      const payload: any = { notes, parsed_data: editData }
+      if (isConfirmed) {
+        // markReviewed endpoint handles confirm + reconcile
+        await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}/mark-reviewed`, payload)
+        toast.success('Document marked as reviewed and confirmed')
+      } else {
+        // generic update handles notes and parsed_data
+        await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}`, { ...payload, is_confirmed: false })
+        toast.success('Changes saved')
+      }
       onDocumentReviewed?.()
-      // Re-fetch to remove reviewed docs from list
-      await fetchPending()
+      if (!propDocument) {
+        await fetchPending()
+      } else if (isConfirmed) {
+        onClose()
+      } else {
+        // Refresh local doc state if not closing
+        doc.notes = notes
+        doc.parsed_data = editData as any
+      }
     } catch {
-      toast.error('Failed to mark document as reviewed')
+      toast.error('Failed to update document')
     } finally {
-      setReviewing(null)
+      setSaving(false)
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={isOpen => !isOpen && onClose()}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Review Documents — {taxYear}</DialogTitle>
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col p-4">
+        <DialogHeader className="px-1">
+          <DialogTitle>
+            {propDocument ? 'Review Document' : `Review Documents — ${taxYear}`}
+          </DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto px-1">
           {loading ? (
-            <div className="flex items-center gap-2 py-8 justify-center text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
+            <div className="flex items-center gap-2 py-12 justify-center text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
               Loading...
             </div>
           ) : documents.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 py-10 text-muted-foreground">
-              <CheckCircle className="h-10 w-10 text-green-500" />
-              <p className="font-medium">All documents reviewed!</p>
-              <p className="text-sm">No documents are waiting for review.</p>
+            <div className="flex flex-col items-center gap-2 py-12 text-muted-foreground text-center">
+              <CheckCircle className="h-12 w-12 text-green-500 mb-2" />
+              <p className="font-semibold text-foreground">All documents reviewed!</p>
+              <p className="text-sm max-w-xs">No documents are currently waiting for your review.</p>
             </div>
           ) : (
-            <div className="space-y-3 py-1">
+            <div className="space-y-6 py-2">
               {documents.map(doc => (
-                <div key={doc.id} className="border rounded-lg p-3 space-y-2">
-                  {/* Header row */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <span className="font-medium text-sm">
-                        {FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type}
-                      </span>
-                      {doc.account?.acct_name && (
-                        <Badge variant="outline" className="text-xs">{doc.account.acct_name}</Badge>
-                      )}
-                      {doc.employment_entity?.display_name && (
-                        <Badge variant="outline" className="text-xs">
-                          {doc.employment_entity.display_name}
-                        </Badge>
-                      )}
-                      <span className="text-xs text-muted-foreground">{doc.original_filename}</span>
+                <div key={doc.id} className="space-y-4">
+                  {/* Header info */}
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-primary shrink-0" />
+                        <h3 className="font-bold text-base leading-none">
+                          {FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type}
+                        </h3>
+                        {doc.is_confirmed && (
+                          <Badge className="bg-green-100 text-green-700 border-green-200 hover:bg-green-100">Reviewed</Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+                        {doc.employment_entity?.display_name && (
+                          <span className="font-medium text-foreground">{doc.employment_entity.display_name}</span>
+                        )}
+                        <span className="text-muted-foreground/30">•</span>
+                        <span>{taxYear}</span>
+                        <span className="text-muted-foreground/30">•</span>
+                        <span className="truncate max-w-[200px]">{doc.original_filename}</span>
+                      </div>
                     </div>
                     <div className="flex gap-1 shrink-0">
                       {doc.s3_path && (
                         <>
-                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handleView(doc)} title="View">
-                            <Eye className="h-3 w-3" />
+                          <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => handleView(doc)}>
+                            <Eye className="h-3.5 w-3.5" />
+                            View PDF
                           </Button>
-                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handleDownload(doc)} title="Download">
-                            <Download className="h-3 w-3" />
+                          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleDownload(doc)} title="Download">
+                            <Download className="h-4 w-4" />
                           </Button>
                         </>
                       )}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 w-7 p-0"
-                        onClick={onClose}
-                        title="Dismiss"
-                        aria-label="Dismiss"
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
                     </div>
                   </div>
 
-                  {/* Parsed data */}
-                  {doc.parsed_data && (
-                    <div className="bg-muted/40 rounded p-2">
-                      <ParsedDataDisplay data={doc.parsed_data as Record<string, unknown>} />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Left side: Parsed Data Detail */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between px-1">
+                        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Extracted Data</div>
+                        <div className="text-[10px] text-muted-foreground/60 italic">Mistakes? Correct them below</div>
+                      </div>
+                      <div className="bg-muted/40 rounded-lg p-3 border border-muted-foreground/10 h-full max-h-[300px] overflow-y-auto">
+                        <ParsedDataEditor data={editData} onChange={setEditData} />
+                      </div>
                     </div>
+
+                    {/* Right side: Notes */}
+                    <div className="space-y-3 flex flex-col">
+                      <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1">Review Notes</div>
+                      <div className="flex-1 min-h-[140px]">
+                        <Textarea 
+                          className="h-full resize-none text-sm leading-relaxed" 
+                          placeholder="Add notes about this document or discrepancies found..."
+                          value={notes}
+                          onChange={(e) => setNotes(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex justify-end pt-1">
+                        <Button
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-xs gap-1 h-8"
+                          disabled={saving}
+                          onClick={() => handleUpdate(doc, false)}
+                        >
+                          <Save className="h-3.5 w-3.5" />
+                          Save Progress
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Comparison Table (for W-2s) */}
+                  {doc.form_type.startsWith('w2') && editData && (
+                    <W2Comparison 
+                      parsed={editData as W2ParsedData} 
+                      payslips={payslips}
+                    />
                   )}
 
-                  {/* Review action */}
-                  <div className="flex justify-end pt-1">
-                    <Button
-                      size="sm"
-                      onClick={() => handleMarkReviewed(doc)}
-                      disabled={reviewing === doc.id}
-                      className="gap-1"
-                    >
-                      {reviewing === doc.id ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <CheckCircle className="h-3 w-3" />
-                      )}
-                      Mark as Reviewed
-                    </Button>
-                  </div>
+                  {!propDocument && (
+                    <div className="flex justify-end pt-4 border-t">
+                       <Button
+                        size="default"
+                        onClick={() => handleUpdate(doc, true)}
+                        disabled={saving}
+                        className="gap-2"
+                      >
+                        {saving ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <CheckCircle className="h-4 w-4" />
+                        )}
+                        Confirm & Mark Reviewed
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           )}
         </div>
+
+        <DialogFooter className="border-t pt-4 px-1">
+          <div className="flex w-full items-center justify-between">
+            <Button variant="ghost" onClick={onClose}>Close</Button>
+            {propDocument && (
+               <Button
+                size="default"
+                onClick={() => handleUpdate(propDocument, !propDocument.is_confirmed)}
+                disabled={saving}
+                className={`gap-2 ${propDocument.is_confirmed ? 'bg-amber-600 hover:bg-amber-700' : ''}`}
+              >
+                {saving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle className="h-4 w-4" />
+                )}
+                {propDocument.is_confirmed ? 'Reopen for Review' : 'Mark as Reviewed'}
+              </Button>
+            )}
+          </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

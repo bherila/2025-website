@@ -370,7 +370,11 @@ export default function TaxPreviewPage() {
             <W2IncomeSummary payslips={data} />
           </div>
           <div className="lg:col-span-2">
-            <TaxDocumentsSection selectedYear={selectedYear} />
+            <TaxDocumentsSection 
+              selectedYear={selectedYear} 
+              payslips={data} 
+              onDocumentReviewed={() => setRefreshTrigger(t => t + 1)} 
+            />
           </div>
         </div>
       )}
@@ -378,7 +382,11 @@ export default function TaxPreviewPage() {
       {/* Show W-2 documents section even without payslip data */}
       {!showTaxTables && typeof selectedYear === 'number' && (
         <div className="px-4 pb-4">
-          <TaxDocumentsSection selectedYear={selectedYear} />
+          <TaxDocumentsSection 
+            selectedYear={selectedYear} 
+            payslips={data} 
+            onDocumentReviewed={() => setRefreshTrigger(t => t + 1)} 
+          />
         </div>
       )}
 

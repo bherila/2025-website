@@ -336,11 +336,52 @@ class TaxDocumentController extends Controller
     }
 
     /**
+     * Update tax document fields (notes, confirmation state, etc.)
+     */
+    public function update(Request $request, int $id): JsonResponse
+    {
+        $request->validate([
+            'notes' => 'nullable|string',
+            'is_confirmed' => 'nullable|boolean',
+            'is_reconciled' => 'nullable|boolean',
+            'parsed_data' => 'nullable|array',
+        ]);
+
+        $doc = FileForTaxDocument::where('id', $id)
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
+
+        if ($request->has('notes')) {
+            $doc->notes = $request->notes;
+        }
+
+        if ($request->has('is_confirmed')) {
+            $doc->is_confirmed = $request->boolean('is_confirmed');
+        }
+
+        if ($request->has('is_reconciled')) {
+            $doc->is_reconciled = $request->boolean('is_reconciled');
+        }
+
+        if ($request->has('parsed_data')) {
+            // Only allow editing parsed data if NOT confirmed, unless we are toggling confirmation in the same request
+            if ($doc->is_confirmed && ! $request->has('is_confirmed')) {
+                return response()->json(['message' => 'Cannot edit parsed data on a confirmed document.'], 422);
+            }
+            $doc->parsed_data = $request->parsed_data;
+        }
+
+        $doc->save();
+
+        return response()->json($doc);
+    }
+
+    /**
      * Atomically confirm and mark a document as reviewed (reconciled).
      * Used by the "Ready for Review" modal to avoid partial state when
      * the two-step confirm+reconcile sequence is interrupted.
      */
-    public function markReviewed(int $id): JsonResponse
+    public function markReviewed(int $id, Request $request): JsonResponse
     {
         $doc = FileForTaxDocument::where('id', $id)
             ->where('user_id', Auth::id())
@@ -348,6 +389,15 @@ class TaxDocumentController extends Controller
 
         $doc->is_confirmed = true;
         $doc->is_reconciled = true;
+
+        if ($request->has('notes')) {
+            $doc->notes = $request->notes;
+        }
+
+        if ($request->has('parsed_data')) {
+            $doc->parsed_data = $request->parsed_data;
+        }
+
         $doc->save();
 
         return response()->json($doc);

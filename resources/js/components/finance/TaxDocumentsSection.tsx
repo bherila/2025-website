@@ -4,7 +4,9 @@ import { CheckCircle, Clock, Download, Eye, Loader2, Trash2, Upload } from 'luci
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import TaxDocumentReviewModal from '@/components/finance/TaxDocumentReviewModal'
 import TaxDocumentUploadModal from '@/components/finance/TaxDocumentUploadModal'
+import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -13,14 +15,17 @@ import type { EmploymentEntity, TaxDocument } from '@/types/finance/tax-document
 
 interface TaxDocumentsSectionProps {
   selectedYear: number | 'all'
+  payslips: fin_payslip[]
+  onDocumentReviewed?: () => void
 }
 
-export default function TaxDocumentsSection({ selectedYear }: TaxDocumentsSectionProps) {
+export default function TaxDocumentsSection({ selectedYear, payslips, onDocumentReviewed }: TaxDocumentsSectionProps) {
   const [documents, setDocuments] = useState<TaxDocument[]>([])
   const [entities, setEntities] = useState<EmploymentEntity[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [uploadModal, setUploadModal] = useState<{ entityId: number; formType: string } | null>(null)
+  const [reviewModalDoc, setReviewModalDoc] = useState<TaxDocument | null>(null)
 
   const fetchDocuments = useCallback(async () => {
     try {
@@ -186,15 +191,21 @@ export default function TaxDocumentsSection({ selectedYear }: TaxDocumentsSectio
                       <TableCell>
                         <Button
                           size="sm"
-                          variant="ghost"
-                          onClick={() => handleToggleReconciled(doc)}
-                          aria-label={doc.is_reconciled ? 'Mark as unreviewed' : 'Mark as reviewed'}
-                          aria-pressed={doc.is_reconciled}
-                          title={doc.is_reconciled ? 'Mark as unreviewed' : 'Mark as reviewed'}
+                          variant="outline"
+                          className={`gap-1.5 h-8 ${doc.is_confirmed ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:text-green-800' : ''}`}
+                          onClick={() => setReviewModalDoc(doc)}
                         >
-                          <CheckCircle
-                            className={`h-4 w-4 ${doc.is_reconciled ? 'text-green-600' : 'text-muted-foreground/40'}`}
-                          />
+                          {doc.is_confirmed ? (
+                            <>
+                              <CheckCircle className="h-3.5 w-3.5" />
+                              Reviewed
+                            </>
+                          ) : (
+                            <>
+                              <Eye className="h-3.5 w-3.5" />
+                              Review
+                            </>
+                          )}
                         </Button>
                       </TableCell>
                       <TableCell className="text-right">
@@ -243,6 +254,22 @@ export default function TaxDocumentsSection({ selectedYear }: TaxDocumentsSectio
             fetchDocuments()
           }}
           onCancel={() => setUploadModal(null)}
+        />
+      )}
+
+      {/* Review Modal */}
+      {reviewModalDoc && (
+        <TaxDocumentReviewModal
+          open
+          taxYear={typeof selectedYear === 'number' ? selectedYear : new Date().getFullYear()}
+          document={reviewModalDoc}
+          payslips={payslips.filter(p => p.employment_entity_id === reviewModalDoc.employment_entity_id)}
+          onClose={() => setReviewModalDoc(null)}
+          onDocumentReviewed={() => {
+            setReviewModalDoc(null)
+            fetchDocuments()
+            onDocumentReviewed?.()
+          }}
         />
       )}
     </div>

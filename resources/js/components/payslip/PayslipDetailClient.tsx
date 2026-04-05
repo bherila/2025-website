@@ -75,7 +75,7 @@ const PayslipFormSection = ({
 )
 
 interface PayslipDetailClientProps {
-  initialPayslip?: (fin_payslip & { employment_entity_id?: number | null }) | undefined
+  initialPayslip?: fin_payslip | null
 }
 
 export default function PayrollForm({ initialPayslip }: PayslipDetailClientProps) {

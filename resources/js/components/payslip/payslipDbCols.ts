@@ -58,6 +58,7 @@ export const fin_payslip_schema = z
     ps_pretax_dental: maybeNum,
     ps_salary: maybeNum,
     ps_vacation_payout: maybeNum,
+    employment_entity_id: z.number().nullable().optional(),
     other: z.any(),
   })
   .refine((data) => data.period_start <= data.period_end, {
