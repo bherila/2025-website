@@ -31,10 +31,8 @@ interface WorksheetModalProps {
 }
 
 interface Lot {
-  lot_id: number
   acct_id: number
   cost_basis: string | number
-  symbol: string
 }
 
 /**
