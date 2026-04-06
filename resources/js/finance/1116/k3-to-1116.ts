@@ -15,6 +15,8 @@
  * 1099-INT Box 6 = foreign taxes paid
  */
 
+import currency from 'currency.js'
+
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 
 import type { F1116Category, ForeignTaxSummary } from './types'
@@ -41,7 +43,7 @@ export function extractForeignTaxFromK1(
 ): ForeignTaxSummary | null {
   const foreignTaxesPaid = getCodeValue(data.codes, '16', 'I')
   const foreignTaxesWithheld = getCodeValue(data.codes, '16', 'J')
-  const totalForeignTaxPaid = foreignTaxesPaid + foreignTaxesWithheld
+  const totalForeignTaxPaid = currency(foreignTaxesPaid).add(foreignTaxesWithheld).value
 
   if (totalForeignTaxPaid === 0) return null
 
@@ -52,7 +54,7 @@ export function extractForeignTaxFromK1(
   const generalIncome = getCodeValue(data.codes, '16', 'C')
   const category: F1116Category = generalIncome > 0 ? 'general' : 'passive'
 
-  const grossForeignIncome = passiveIncome + generalIncome
+  const grossForeignIncome = currency(passiveIncome).add(generalIncome).value
 
   return {
     totalForeignTaxPaid,
@@ -121,7 +123,7 @@ export function calculateApportionedInterest(
   if (totalAdjustedBasis === 0) {
     return { apportionedForeignInterest: 0, ratio: 0 }
   }
-  const ratio = foreignAdjustedBasis / totalAdjustedBasis
-  const apportionedForeignInterest = totalInterestExpense * ratio
+  const ratio = currency(foreignAdjustedBasis).divide(totalAdjustedBasis).value
+  const apportionedForeignInterest = currency(totalInterestExpense).multiply(ratio).value
   return { apportionedForeignInterest, ratio }
 }

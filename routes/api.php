@@ -121,6 +121,7 @@ Route::middleware(['web', 'auth'])->post('/finance/{account_id}/import-ib-statem
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/import-pdf-statement', [StatementController::class, 'importPdfStatement']);
 
 // Lots API routes
+Route::middleware(['web', 'auth'])->get('/finance/all/lots', [FinanceLotsController::class, 'showAllLots']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/lots', [FinanceLotsController::class, 'index']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/lots', [FinanceLotsController::class, 'store']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/lots/import', [FinanceLotsController::class, 'importLots']);
@@ -299,6 +300,7 @@ Route::middleware(['web', 'auth'])->post('/finance/tax-documents/manual', [TaxDo
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents', [TaxDocumentController::class, 'store']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents/{id}/download', [TaxDocumentController::class, 'download']);
 Route::middleware(['web', 'auth'])->delete('/finance/tax-documents/{id}', [TaxDocumentController::class, 'destroy']);
+Route::middleware(['web', 'auth'])->get('/finance/tax-documents/all-reviewed', [TaxDocumentController::class, 'getAllReviewed']);
 Route::middleware(['web', 'auth'])->put('/finance/tax-documents/{id}', [TaxDocumentController::class, 'update']);
 Route::middleware(['web', 'auth'])->put('/finance/tax-documents/{id}/mark-reviewed', [TaxDocumentController::class, 'markReviewed']);
 

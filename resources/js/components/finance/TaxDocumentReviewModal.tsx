@@ -29,6 +29,7 @@ import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { fetchWrapper } from '@/fetchWrapper'
+import { F1116ReviewPanel, isF1116Data } from '@/finance/1116'
 import type { TaxDocument, TaxDocumentParsedData, W2ParsedData } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
@@ -635,6 +636,12 @@ export default function TaxDocumentReviewModal({
                     <div className="bg-muted/40 rounded-lg p-3 border border-muted-foreground/10">
                       {activeDoc.form_type === 'k1' && isFK1StructuredData(editData) ? (
                         <K1ReviewPanel
+                          data={editData}
+                          onChange={(updated) => setEditData(updated)}
+                          readOnly={activeDoc.is_reviewed}
+                        />
+                      ) : activeDoc.form_type === '1116' && isF1116Data(editData) ? (
+                        <F1116ReviewPanel
                           data={editData}
                           onChange={(updated) => setEditData(updated)}
                           readOnly={activeDoc.is_reviewed}

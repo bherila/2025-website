@@ -3,8 +3,10 @@ import { Settings, Upload } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   getEffectiveYear,
+  getTabUrl,
   importUrl,
   maintenanceUrl,
   type YearSelection,
@@ -53,12 +55,12 @@ export function useFinanceAccounts(): { accounts: FinAccount[]; isLoading: boole
 
 // Tabs that show year selector
 const TAB_ITEMS = [
-  { value: 'transactions', showYearSelector: true },
-  { value: 'duplicates', showYearSelector: true },
-  { value: 'linker', showYearSelector: true },
-  { value: 'statements', showYearSelector: true },
-  { value: 'lots', showYearSelector: false },
-  { value: 'summary', showYearSelector: true },
+  { value: 'transactions', title: 'Transactions', showYearSelector: true },
+  { value: 'duplicates', title: 'Duplicates', showYearSelector: true },
+  { value: 'linker', title: 'Linker', showYearSelector: true },
+  { value: 'statements', title: 'Statements', showYearSelector: true },
+  { value: 'lots', title: 'Lots', showYearSelector: false },
+  { value: 'summary', title: 'Summary', showYearSelector: true },
 ]
 
 export default function AccountNavigation({
@@ -91,6 +93,18 @@ export default function AccountNavigation({
   return (
     <div className="flex items-center justify-between px-4 py-2 border-b border-border/40">
       <div className="flex items-center gap-4">
+        {typeof accountId === 'number' && (
+          <Tabs value={activeTab} className="w-auto">
+            <TabsList>
+              {TAB_ITEMS.map((item) => (
+                <TabsTrigger key={item.value} value={item.value} asChild>
+                  <a href={getTabUrl(item.value, accountId, selectedYear)}>{item.title}</a>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        )}
+
         {showYearSelector && typeof accountId === 'number' && (
           <AccountYearSelector
             accountId={accountId}

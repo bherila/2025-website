@@ -1,8 +1,9 @@
 'use client'
 
 import currency from 'currency.js'
-import { Calculator } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { Calculator, Loader2, Sparkles } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -15,6 +16,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { fetchWrapper } from '@/fetchWrapper'
 
 import { calculateApportionedInterest } from './k3-to-1116'
 import type { ForeignTaxSummary } from './types'
@@ -24,26 +26,68 @@ interface WorksheetModalProps {
   onClose: () => void
   /** Foreign tax summaries collected from all reviewed documents for the tax year. */
   foreignTaxSummaries: ForeignTaxSummary[]
+  /** Tax year for basis discovery (used to filter lots held as-of year-end). */
+  taxYear?: number
+}
+
+interface Lot {
+  acct_id: number
+  cost_basis: string | number
 }
 
 /**
  * Form 1116 Apportionment Worksheet Modal.
- *
- * Assists the user in computing the asset-method apportionment for
- * Form 1116 Line 4b (apportioned investment interest expense).
- *
- * Formula (IRS Publication 514, Asset Method):
- *   Apportioned = TotalInterestExpense × (ForeignBasis / TotalBasis)
  */
-export default function WorksheetModal({ open, onClose, foreignTaxSummaries }: WorksheetModalProps) {
+export default function WorksheetModal({ open, onClose, foreignTaxSummaries, taxYear }: WorksheetModalProps) {
   const [totalInterest, setTotalInterest] = useState('')
   const [foreignBasis, setForeignBasis] = useState('')
   const [totalBasis, setTotalBasis] = useState('')
+  const [loadingBasis, setLoadingBasis] = useState(false)
+  const [suggestedValues, setSuggestedValues] = useState<{ foreign: number; total: number } | null>(null)
 
   const totalForeignTax = useMemo(
     () => foreignTaxSummaries.reduce((sum, s) => currency(sum).add(s.totalForeignTaxPaid).value, 0),
     [foreignTaxSummaries],
   )
+
+  const fetchBasisDiscovery = useCallback(async () => {
+    if (!open) return
+    setLoadingBasis(true)
+    try {
+      // Pass as_of=YYYY-12-31 when a tax year is known so the backend returns lots
+      // held as of year-end (purchase_date <= as_of AND sale_date IS NULL OR > as_of).
+      const asOf = taxYear ? `${taxYear}-12-31` : null
+      const url = asOf ? `/api/finance/all/lots?as_of=${asOf}` : '/api/finance/all/lots?status=open'
+      const data = await fetchWrapper.get(url) as { lots: Lot[] }
+      const lots = data.lots || []
+      
+      // Total assets: sum of cost_basis for ALL open lots
+      const total = lots.reduce((sum, lot) => currency(sum).add(lot.cost_basis).value, 0)
+      
+      // Foreign assets: sum of cost_basis for lots in accounts that have foreign tax
+      const foreignAccountIds = new Set(foreignTaxSummaries.map(s => s.accountId).filter(Boolean))
+      const foreign = lots
+        .filter(lot => foreignAccountIds.has(lot.acct_id))
+        .reduce((sum, lot) => currency(sum).add(lot.cost_basis).value, 0)
+      
+      setSuggestedValues({ foreign, total })
+    } catch {
+      toast.error('Failed to discover adjusted basis from lots')
+    } finally {
+      setLoadingBasis(false)
+    }
+  }, [open, foreignTaxSummaries, taxYear])
+
+  useEffect(() => {
+    fetchBasisDiscovery()
+  }, [fetchBasisDiscovery])
+
+  const applySuggestions = () => {
+    if (suggestedValues) {
+      setForeignBasis(String(suggestedValues.foreign))
+      setTotalBasis(String(suggestedValues.total))
+    }
+  }
 
   const result = useMemo(() => {
     const ti = parseFloat(totalInterest) || 0
@@ -103,9 +147,27 @@ export default function WorksheetModal({ open, onClose, foreignTaxSummaries }: W
 
           {/* Asset method apportionment inputs */}
           <div>
-            <p className="text-sm font-medium mb-2">
-              Asset Method — Interest Expense Apportionment (Line 4b)
-            </p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium">
+                Asset Method — Interest Expense Apportionment (Line 4b)
+              </p>
+              {suggestedValues && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-[10px] gap-1 text-primary hover:text-primary hover:bg-primary/5"
+                  onClick={applySuggestions}
+                  disabled={loadingBasis}
+                >
+                  {loadingBasis ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3 w-3" />
+                  )}
+                  Use Suggested Values
+                </Button>
+              )}
+            </div>
             <p className="text-xs text-muted-foreground mb-3">
               Apportioned Foreign Interest = Total Interest Expense × (Foreign Basis / Total Basis)
             </p>
@@ -129,31 +191,45 @@ export default function WorksheetModal({ open, onClose, foreignTaxSummaries }: W
                 <Label htmlFor="foreign-basis" className="text-xs">
                   Adjusted Basis of Foreign Assets ($)
                 </Label>
-                <Input
-                  id="foreign-basis"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="0.00"
-                  value={foreignBasis}
-                  onChange={e => setForeignBasis(e.target.value)}
-                  className="h-8 text-sm"
-                />
+                <div className="relative">
+                  <Input
+                    id="foreign-basis"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={foreignBasis}
+                    onChange={e => setForeignBasis(e.target.value)}
+                    className="h-8 text-sm pr-16"
+                  />
+                  {suggestedValues && !foreignBasis && (
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">
+                      Sug: {currency(suggestedValues.foreign).format()}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="grid gap-1 col-span-2">
                 <Label htmlFor="total-basis" className="text-xs">
                   Adjusted Basis of All Assets ($)
                 </Label>
-                <Input
-                  id="total-basis"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="0.00"
-                  value={totalBasis}
-                  onChange={e => setTotalBasis(e.target.value)}
-                  className="h-8 text-sm"
-                />
+                <div className="relative">
+                  <Input
+                    id="total-basis"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={totalBasis}
+                    onChange={e => setTotalBasis(e.target.value)}
+                    className="h-8 text-sm pr-20"
+                  />
+                  {suggestedValues && !totalBasis && (
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">
+                      Sug: {currency(suggestedValues.total).format()}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
