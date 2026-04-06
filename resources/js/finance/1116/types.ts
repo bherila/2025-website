@@ -40,7 +40,11 @@ export interface F1116Data {
 export function isF1116Data(data: unknown): data is F1116Data {
   if (!data || typeof data !== 'object') return false
   const d = data as Record<string, unknown>
-  return d['schemaVersion'] === '2026.1' && d['formType'] === '1116' && typeof d['fields'] === 'object'
+  const fields = d['fields']
+  const codes = d['codes']
+  const hasValidFields = typeof fields === 'object' && fields !== null && !Array.isArray(fields)
+  const hasValidCodes = typeof codes === 'object' && codes !== null && !Array.isArray(codes)
+  return d['schemaVersion'] === '2026.1' && d['formType'] === '1116' && hasValidFields && hasValidCodes
 }
 
 /**

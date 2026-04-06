@@ -26,19 +26,21 @@ interface WorksheetModalProps {
   onClose: () => void
   /** Foreign tax summaries collected from all reviewed documents for the tax year. */
   foreignTaxSummaries: ForeignTaxSummary[]
+  /** Tax year for basis discovery (used to filter lots held as-of year-end). */
+  taxYear?: number
 }
 
 interface Lot {
   lot_id: number
   acct_id: number
-  cost_basis: number
+  cost_basis: string | number
   symbol: string
 }
 
 /**
  * Form 1116 Apportionment Worksheet Modal.
  */
-export default function WorksheetModal({ open, onClose, foreignTaxSummaries }: WorksheetModalProps) {
+export default function WorksheetModal({ open, onClose, foreignTaxSummaries, taxYear }: WorksheetModalProps) {
   const [totalInterest, setTotalInterest] = useState('')
   const [foreignBasis, setForeignBasis] = useState('')
   const [totalBasis, setTotalBasis] = useState('')
@@ -54,7 +56,11 @@ export default function WorksheetModal({ open, onClose, foreignTaxSummaries }: W
     if (!open) return
     setLoadingBasis(true)
     try {
-      const data = await fetchWrapper.get('/api/finance/all/lots?status=open') as { lots: Lot[] }
+      // Pass as_of=YYYY-12-31 when a tax year is known so the backend returns lots
+      // held as of year-end (purchase_date <= as_of AND sale_date IS NULL OR > as_of).
+      const asOf = taxYear ? `${taxYear}-12-31` : null
+      const url = asOf ? `/api/finance/all/lots?as_of=${asOf}` : '/api/finance/all/lots?status=open'
+      const data = await fetchWrapper.get(url) as { lots: Lot[] }
       const lots = data.lots || []
       
       // Total assets: sum of cost_basis for ALL open lots
@@ -72,7 +78,7 @@ export default function WorksheetModal({ open, onClose, foreignTaxSummaries }: W
     } finally {
       setLoadingBasis(false)
     }
-  }, [open, foreignTaxSummaries])
+  }, [open, foreignTaxSummaries, taxYear])
 
   useEffect(() => {
     fetchBasisDiscovery()

@@ -322,6 +322,39 @@ class TaxDocumentController extends Controller
     }
 
     /**
+     * Return all reviewed tax documents for the authenticated user.
+     *
+     * Optional query params:
+     *   year       integer  – filter by tax_year
+     *   form_type  string   – comma-separated list of form types to include
+     */
+    public function getAllReviewed(Request $request): JsonResponse
+    {
+        $userId = Auth::id();
+
+        $query = FileForTaxDocument::where('user_id', $userId)
+            ->where('is_reviewed', true)
+            ->with([
+                'uploader:id,name',
+                'employmentEntity:id,display_name',
+                'account:acct_id,acct_name',
+            ])
+            ->orderBy('tax_year', 'desc')
+            ->orderBy('created_at', 'desc');
+
+        if ($request->filled('year')) {
+            $query->where('tax_year', (int) $request->year);
+        }
+
+        if ($request->filled('form_type')) {
+            $types = array_filter(array_map('trim', explode(',', $request->form_type)));
+            $query->whereIn('form_type', $types);
+        }
+
+        return response()->json($query->get());
+    }
+
+    /**
      * Atomically mark a document as reviewed.
      */
     public function markReviewed(int $id, Request $request): JsonResponse

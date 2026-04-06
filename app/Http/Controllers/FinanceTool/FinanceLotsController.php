@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -15,20 +16,38 @@ class FinanceLotsController extends Controller
     /**
      * List all lots for the current user (across all accounts).
      * Used by Form 1116 worksheet for adjusted basis discovery.
+     *
+     * Query params:
+     *   status  open|closed  (default: open; any other value falls back to open)
+     *   as_of   YYYY-MM-DD   (optional; if provided, returns lots held on that date:
+     *                          purchase_date <= as_of AND (sale_date IS NULL OR sale_date > as_of))
      */
-    public function showAllLots(Request $request)
+    public function showAllLots(Request $request): JsonResponse
     {
         $uid = Auth::id();
         $accountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
 
-        $query = FinAccountLot::whereIn('acct_id', $accountIds);
+        $query = FinAccountLot::whereIn('acct_id', $accountIds)
+            ->select(['acct_id', 'cost_basis', 'purchase_date', 'sale_date']);
 
-        // Default to open lots if no status specified
-        $status = $request->query('status', 'open');
-        if ($status === 'open') {
-            $query->whereNull('sale_date');
-        } elseif ($status === 'closed') {
-            $query->whereNotNull('sale_date');
+        $asOf = $request->query('as_of');
+
+        if ($asOf) {
+            // Return lots held on the given date: bought on/before as_of and not yet sold (or sold after as_of).
+            $query->where('purchase_date', '<=', $asOf)
+                ->where(function ($q) use ($asOf): void {
+                    $q->whereNull('sale_date')->orWhere('sale_date', '>', $asOf);
+                });
+        } else {
+            // Whitelist status to open|closed; any unexpected value defaults to open.
+            $rawStatus = $request->query('status');
+            $status = in_array($rawStatus, ['open', 'closed'], true) ? $rawStatus : 'open';
+
+            if ($status === 'open') {
+                $query->whereNull('sale_date');
+            } else {
+                $query->whereNotNull('sale_date');
+            }
         }
 
         $lots = $query->orderBy('purchase_date', 'desc')->get();

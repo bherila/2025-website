@@ -514,6 +514,7 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange, 
         open={worksheetOpen}
         onClose={() => setWorksheetOpen(false)}
         foreignTaxSummaries={foreignTaxSummaries}
+        taxYear={selectedYear}
       />
     </div>
   )
