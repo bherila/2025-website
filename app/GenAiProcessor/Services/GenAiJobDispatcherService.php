@@ -885,9 +885,62 @@ PROMPT;
         return <<<PROMPT
 <!-- tool:{$toolName} -->
 Extract ALL data from this Schedule K-1 PDF (tax year {$taxYear}) using the `{$toolName}` tool.
-Include every box, code, and supplemental statement. Use null for absent fields.
-For numeric income/deduction boxes use numbers. For coded boxes (11, 13–20), include every
-code entry found as a separate item in the corresponding array, with the amount as a number.
+This document may include the K-1 face page, supporting statements, and a multi-page Schedule K-3.
+
+EXTRACTION RULES:
+
+1. FLAT FIELDS (fields A–O, boxes 1–10, 12, 14, 21):
+   Extract every labeled field. Use null for absent fields. Numbers must be numeric (not strings).
+   Negative amounts shown in parentheses like (1,234) must be returned as -1234.
+   Box 21 (foreign taxes paid or accrued) is a direct numeric field, not a coded box.
+
+2. CODED BOXES (11, 13–20):
+   Each code entry becomes a SEPARATE array item even if the same code appears multiple times.
+   CRITICAL: When a box has multiple sub-items under the same code (e.g., Box 11 Code ZZ
+   contains three distinct items: §988 loss, swap loss, PFIC income), create one array entry
+   per sub-item with its individual dollar amount and a descriptive note.
+   Example: three Box 11 ZZ entries with values -23167, -54237, and 3198 respectively.
+   The `notes` field must include: (a) what the item is, (b) its tax character
+   (ordinary vs. capital), and (c) where it goes on the return (e.g., "Schedule E Part II
+   nonpassive" or "Schedule D"). Quote the K-1 footnote verbatim when it specifies treatment.
+
+3. SUPPORTING STATEMENTS:
+   Read ALL supplemental pages. Box totals on the face page are often aggregates;
+   the breakdown is in the supporting statements. Always prefer the line-item detail
+   over the face-page total when both are present.
+
+4. SCHEDULE K-3 — PART II (Foreign Tax Credit Limitation):
+   This is the most structurally complex section. Extract EVERY row from EVERY table.
+   For each K-3 line (6–24 for income, 25–55 for deductions), capture every country
+   row as a separate entry with its 7-column breakdown:
+     (a) U.S. source, (b) Foreign branch, (c) Passive category,
+     (d) General category, (e) Other 901j, (f) Sourced by partner, (g) Total.
+   The country code is a 2-letter IRS code (US, AS, BE, CA, etc.) or XX for
+   "sourced by partner" items. Include the section totals (lines 24, 54, 55).
+
+5. SCHEDULE K-3 — PART III (Form 1116 Apportionment):
+   Section 2 (interest expense apportionment): extract all 8 asset rows with their
+   7-column breakdown. Record the passive asset ratio (passive assets / total assets).
+   Section 4 (foreign taxes): extract each country with tax type (WHTD = withholding),
+   amount paid, and which basket (passive/general/branch) it falls into.
+   Section 1 (Part I Box 4 FX translation): if present, extract the exchange rate table
+   showing each country's foreign currency amount, exchange rate, and USD equivalent.
+
+6. SCHEDULE K-3 — OTHER PARTS:
+   For Parts IV–XIII, note which parts apply (checkbox). Capture any numeric data present.
+   Most will be blank (N/A). Record that fact in a warning if Parts unexpectedly have data.
+
+7. WARNINGS:
+   Add a warning string for: (a) any item whose tax character is ambiguous,
+   (b) any K-3 section that has data but couldn't be fully parsed,
+   (c) any footnote that overrides standard treatment (e.g., "report on Schedule E,
+   not Schedule D" for swap losses).
+
+8. NORMALIZATION:
+   - All monetary values: numbers, never strings. Parentheses = negative.
+   - All percentages: store as decimal (e.g., 0.042400 not 4.2400).
+   - All dates: YYYY-MM-DD.
+   - Partner number / form ID: capture from header if present.
 PROMPT;
     }
 
@@ -1111,11 +1164,11 @@ PROMPT;
      */
     private function coerceK1Args(array $args): array
     {
-        // Scalar field boxes (left panel A–O, right panel 1–10, 12)
-        $strBoxes = ['A', 'B', 'C', 'E', 'F', 'G', 'H1', 'I1', 'I2', 'I3', 'J', 'K', 'L', 'M', 'N', 'O'];
+        // Scalar field boxes (left panel A–O, right panel 1–10, 12, 21)
+        $strBoxes = ['A', 'B', 'C', 'E', 'F', 'G', 'H1', 'I1', 'I2', 'I3', 'M', 'N', 'O'];
         $boolBoxes = ['D', 'H2'];
         $numBoxes = ['1', '2', '3', '4', '4a', '4b', '4c', '5', '6a', '6b', '6c', '7',
-            '8', '9a', '9b', '9c', '10', '12'];
+            '8', '9a', '9b', '9c', '10', '12', '21'];
         $codedBoxes = ['11', '13', '14', '15', '16', '17', '18', '19', '20'];
 
         $fields = [];
@@ -1165,6 +1218,27 @@ PROMPT;
             }
         }
 
+        // Structured Item J (profit/loss/capital %), Item K (liabilities), Item L (capital account)
+        $structuredFields = [
+            'J_profit_beginning', 'J_profit_ending', 'J_loss_beginning', 'J_loss_ending',
+            'J_capital_beginning', 'J_capital_ending',
+            'K_recourse_beginning', 'K_recourse_ending',
+            'K_nonrecourse_beginning', 'K_nonrecourse_ending',
+            'K_qual_nonrecourse_beginning', 'K_qual_nonrecourse_ending',
+            'L_beginning_capital', 'L_contributed', 'L_current_year_net',
+            'L_other_increase', 'L_withdrawals', 'L_ending_capital',
+        ];
+        foreach ($structuredFields as $key) {
+            $raw = $args["field_{$key}"] ?? null;
+            if (is_numeric($raw)) {
+                $fields[$key] = ['value' => (string) (float) $raw];
+            }
+        }
+        $rawMethod = $args['field_L_capital_method'] ?? null;
+        if ($rawMethod !== null && $rawMethod !== '') {
+            $fields['L_capital_method'] = ['value' => (string) $rawMethod];
+        }
+
         // Coded boxes
         $codes = [];
         foreach ($codedBoxes as $box) {
@@ -1175,21 +1249,94 @@ PROMPT;
             }
         }
 
-        // Schedule K-3 sections
-        $rawSections = $args['k3_sections'] ?? [];
+        // Schedule K-3 — assemble structured sections from new flat arrays
         $k3Sections = [];
-        if (is_array($rawSections)) {
-            foreach ($rawSections as $sec) {
-                if (! is_array($sec) || ! isset($sec['sectionId'])) {
-                    continue;
-                }
+
+        // Part I checkboxes
+        $checkboxes = is_array($args['k3_part1_checkboxes'] ?? null) ? $args['k3_part1_checkboxes'] : [];
+        $fxRows = is_array($args['k3_part1_fx_translation'] ?? null) ? $args['k3_part1_fx_translation'] : [];
+        if (! empty($checkboxes) || ! empty($fxRows)) {
+            $part1Data = [];
+            if (! empty($checkboxes)) {
+                $part1Data['checkboxes'] = $checkboxes;
+            }
+            if (! empty($fxRows)) {
+                $part1Data['fxTranslation'] = $fxRows;
+            }
+            $k3Sections[] = [
+                'sectionId' => 'part1',
+                'title' => 'Part I – Other Current Year International Information',
+                'data' => $part1Data,
+                'notes' => '',
+            ];
+        }
+
+        // Part II income/deduction rows — split into income (lines 6–24) and deductions (lines 25–55)
+        $part2Rows = is_array($args['k3_part2_rows'] ?? null) ? $args['k3_part2_rows'] : [];
+        if (! empty($part2Rows)) {
+            $incomeLines = ['6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24'];
+            $deductionLines = ['25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46', '47', '48', '49', '50', '51', '52', '53', '54', '55'];
+            $section1Rows = array_values(array_filter($part2Rows, fn ($r) => in_array($r['line'] ?? '', $incomeLines)));
+            $section2Rows = array_values(array_filter($part2Rows, fn ($r) => in_array($r['line'] ?? '', $deductionLines)));
+            if (! empty($section1Rows)) {
                 $k3Sections[] = [
-                    'sectionId' => (string) $sec['sectionId'],
-                    'title' => isset($sec['title']) ? (string) $sec['title'] : '',
-                    'data' => (object) [],
-                    'notes' => isset($sec['notes']) ? (string) $sec['notes'] : '',
+                    'sectionId' => 'part2_section1',
+                    'title' => 'Part II – Foreign Tax Credit Limitation, Section 1: Gross Income',
+                    'data' => ['rows' => $section1Rows],
+                    'notes' => '',
                 ];
             }
+            if (! empty($section2Rows)) {
+                $k3Sections[] = [
+                    'sectionId' => 'part2_section2',
+                    'title' => 'Part II – Foreign Tax Credit Limitation, Section 2: Deductions',
+                    'data' => ['rows' => $section2Rows],
+                    'notes' => '',
+                ];
+            }
+        }
+
+        // Part III Section 2: interest expense apportionment asset rows
+        $assetRows = is_array($args['k3_part3_asset_rows'] ?? null) ? $args['k3_part3_asset_rows'] : [];
+        if (! empty($assetRows)) {
+            $k3Sections[] = [
+                'sectionId' => 'part3_section2',
+                'title' => 'Part III – Section 2: Interest Expense Apportionment Factors',
+                'data' => ['rows' => $assetRows],
+                'notes' => '',
+            ];
+        }
+
+        // Part III Section 4: foreign taxes by country
+        $foreignTaxes = is_array($args['k3_part3_foreign_taxes'] ?? null) ? $args['k3_part3_foreign_taxes'] : [];
+        if (! empty($foreignTaxes)) {
+            $k3Sections[] = [
+                'sectionId' => 'part3_section4',
+                'title' => 'Part III – Section 4: Foreign Taxes',
+                'data' => [
+                    'countries' => $foreignTaxes,
+                    'grandTotalUSD' => array_sum(array_column($foreignTaxes, 'amount_usd')),
+                ],
+                'notes' => '',
+            ];
+        }
+
+        // Backward-compat: merge any legacy k3_sections entries not already covered
+        $rawSections = is_array($args['k3_sections'] ?? null) ? $args['k3_sections'] : [];
+        $existingIds = array_column($k3Sections, 'sectionId');
+        foreach ($rawSections as $sec) {
+            if (! is_array($sec) || ! isset($sec['sectionId'])) {
+                continue;
+            }
+            if (in_array($sec['sectionId'], $existingIds)) {
+                continue;
+            }
+            $k3Sections[] = [
+                'sectionId' => (string) $sec['sectionId'],
+                'title' => isset($sec['title']) ? (string) $sec['title'] : '',
+                'data' => (object) [],
+                'notes' => isset($sec['notes']) ? (string) $sec['notes'] : '',
+            ];
         }
 
         // Warnings
@@ -1201,7 +1348,13 @@ PROMPT;
         return [
             'schemaVersion' => '2026.1',
             'formType' => isset($args['formType']) ? (string) $args['formType'] : 'K-1-1065',
+            'formId' => isset($args['formId']) && $args['formId'] !== '' ? (string) $args['formId'] : null,
+            'partnerNumber' => isset($args['partnerNumber']) && $args['partnerNumber'] !== '' ? (string) $args['partnerNumber'] : null,
             'pages' => isset($args['pages']) && is_numeric($args['pages']) ? (int) $args['pages'] : null,
+            'amendedK1' => isset($args['amendedK1']) ? (bool) $args['amendedK1'] : false,
+            'finalK1' => isset($args['finalK1']) ? (bool) $args['finalK1'] : false,
+            'taxYearBeginning' => isset($args['taxYearBeginning']) && $args['taxYearBeginning'] !== '' ? (string) $args['taxYearBeginning'] : null,
+            'taxYearEnding' => isset($args['taxYearEnding']) && $args['taxYearEnding'] !== '' ? (string) $args['taxYearEnding'] : null,
             'fields' => $fields,
             'codes' => $codes,
             'k3' => ['sections' => $k3Sections],
@@ -1449,7 +1602,7 @@ PROMPT;
                 'type' => 'OBJECT',
                 'properties' => [
                     'code' => ['type' => 'STRING'],
-                    'value' => ['type' => 'NUMBER'],
+                    'value' => ['type' => 'STRING'],
                     'notes' => ['type' => 'STRING'],
                 ],
                 'required' => ['code', 'value'],
@@ -1476,7 +1629,13 @@ PROMPT;
                 'properties' => [
                     // ── Identification ────────────────────────────────────────────────
                     'formType' => $strField(),   // "K-1-1065" | "K-1-1120S" | "K-1-1041"
+                    'formId' => $strField(),   // e.g. "AQR-DELPHI-1693-2025"
+                    'partnerNumber' => $strField(),   // e.g. "1693"
                     'pages' => $numField(),
+                    'amendedK1' => $boolField(),
+                    'finalK1' => $boolField(),
+                    'taxYearBeginning' => $strField(),   // YYYY-MM-DD
+                    'taxYearEnding' => $strField(),   // YYYY-MM-DD
 
                     // ── Left-panel fields (A–O): entity & partner identification ─────
                     'field_A' => $strField(),   // Partnership EIN
@@ -1491,14 +1650,36 @@ PROMPT;
                     'field_I1' => $strField(),   // Profit share beginning/end
                     'field_I2' => $strField(),   // Loss share beginning/end
                     'field_I3' => $strField(),   // Capital share beginning/end
-                    'field_J' => $strField(),   // Liabilities share
-                    'field_K' => $strField(),   // Capital account analysis
-                    'field_L' => $strField(),   // Liability categories
                     'field_M' => $strField(),   // Tax basis capital
                     'field_N' => $strField(),   // At-risk amount
                     'field_O' => $strField(),   // Qualified liability
 
-                    // ── Right-panel fields (1–10, 12): numeric income/deduction boxes ─
+                    // ── Item J: Profit/Loss/Capital percentages ───────────────────────
+                    'field_J_profit_beginning' => $numField(),
+                    'field_J_profit_ending' => $numField(),
+                    'field_J_loss_beginning' => $numField(),
+                    'field_J_loss_ending' => $numField(),
+                    'field_J_capital_beginning' => $numField(),
+                    'field_J_capital_ending' => $numField(),
+
+                    // ── Item K: Partner's share of liabilities ───────────────────────
+                    'field_K_recourse_beginning' => $numField(),
+                    'field_K_recourse_ending' => $numField(),
+                    'field_K_nonrecourse_beginning' => $numField(),
+                    'field_K_nonrecourse_ending' => $numField(),
+                    'field_K_qual_nonrecourse_beginning' => $numField(),
+                    'field_K_qual_nonrecourse_ending' => $numField(),
+
+                    // ── Item L: Capital account analysis ─────────────────────────────
+                    'field_L_beginning_capital' => $numField(),
+                    'field_L_contributed' => $numField(),
+                    'field_L_current_year_net' => $numField(),
+                    'field_L_other_increase' => $numField(),
+                    'field_L_withdrawals' => $numField(),
+                    'field_L_ending_capital' => $numField(),
+                    'field_L_capital_method' => $strField(),  // "TAX_BASIS" | "GAAP" | "SECTION_704B" | "OTHER"
+
+                    // ── Right-panel fields (1–10, 12, 21): numeric income/deduction boxes ─
                     'field_1' => $numField(),   // Ordinary business income (loss)
                     'field_2' => $numField(),   // Net rental real estate income (loss)
                     'field_3' => $numField(),   // Other net rental income (loss)
@@ -1517,6 +1698,7 @@ PROMPT;
                     'field_9c' => $numField(),   // Unrecaptured Sec. 1250 gain
                     'field_10' => $numField(),   // Net section 1231 gain (loss)
                     'field_12' => $numField(),   // Section 179 deduction
+                    'field_21' => $numField(),   // Foreign taxes paid or accrued
 
                     // ── Coded boxes (11, 13–20): arrays of {code, value, notes} ──────
                     'codes_11' => $codeItemsProp(),  // Other income (loss)
@@ -1529,8 +1711,113 @@ PROMPT;
                     'codes_19' => $codeItemsProp(),  // Distributions
                     'codes_20' => $codeItemsProp(),  // Other information
 
-                    // ── Schedule K-3 ──────────────────────────────────────────────────
+                    // ── Schedule K-3 (backward-compat fallback) ───────────────────────
                     'k3_sections' => $k3SectionProp(),
+
+                    // ── Schedule K-3 Part I checkboxes ────────────────────────────────
+                    'k3_part1_checkboxes' => [
+                        'type' => 'ARRAY',
+                        'items' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'box' => $strField(),
+                                'checked' => $boolField(),
+                                'note' => $strField(),
+                            ],
+                            'required' => ['box', 'checked'],
+                        ],
+                    ],
+
+                    // ── Schedule K-3 Part II rows (one per line+country combination) ──
+                    'k3_part2_rows' => [
+                        'type' => 'ARRAY',
+                        'items' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'line' => $strField(),
+                                'country' => $strField(),
+                                'col_a_us_source' => $numField(),
+                                'col_b_foreign_branch' => $numField(),
+                                'col_c_passive' => $numField(),
+                                'col_d_general' => $numField(),
+                                'col_e_other_901j' => $numField(),
+                                'col_f_sourced_by_partner' => $numField(),
+                                'col_g_total' => $numField(),
+                                'note' => $strField(),
+                            ],
+                            'required' => ['line', 'country'],
+                        ],
+                    ],
+
+                    // ── Schedule K-3 Part III Section 2: asset apportionment rows ─────
+                    'k3_part3_asset_rows' => [
+                        'type' => 'ARRAY',
+                        'items' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'line' => $strField(),
+                                'col_a_us_source' => $numField(),
+                                'col_b_foreign_branch' => $numField(),
+                                'col_c_passive' => $numField(),
+                                'col_d_general' => $numField(),
+                                'col_f_sourced_by_partner' => $numField(),
+                                'col_g_total' => $numField(),
+                            ],
+                            'required' => ['line'],
+                        ],
+                    ],
+
+                    // ── Schedule K-3 Part III Section 4: foreign taxes by country ─────
+                    'k3_part3_foreign_taxes' => [
+                        'type' => 'ARRAY',
+                        'items' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'country' => $strField(),
+                                'tax_type' => $strField(),   // "WHTD" | "PAID" | "ACCRUED"
+                                'basket' => $strField(),   // "passive" | "general" | "branch" | "951A"
+                                'amount_usd' => $numField(),
+                                'amount_foreign_currency' => $numField(),
+                                'exchange_rate' => $numField(),
+                                'date_paid' => $strField(),
+                            ],
+                            'required' => ['country', 'amount_usd'],
+                        ],
+                    ],
+
+                    // ── Schedule K-3 Part I Box 4: FX translation table ───────────────
+                    'k3_part1_fx_translation' => [
+                        'type' => 'ARRAY',
+                        'items' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'country' => $strField(),
+                                'date_paid' => $strField(),
+                                'exchange_rate' => $numField(),
+                                'amount_foreign_currency' => $numField(),
+                                'amount_usd' => $numField(),
+                            ],
+                            'required' => ['country', 'amount_usd'],
+                        ],
+                    ],
+
+                    // ── Schedule K-3 parts applicability checkboxes ───────────────────
+                    'k3_parts_applicable' => [
+                        'type' => 'OBJECT',
+                        'properties' => [
+                            'part1' => $boolField(), 'part2' => $boolField(), 'part3' => $boolField(),
+                            'part4' => $boolField(), 'part5' => $boolField(), 'part6' => $boolField(),
+                            'part7' => $boolField(), 'part8' => $boolField(), 'part9' => $boolField(),
+                            'part10' => $boolField(), 'part11' => $boolField(), 'part12' => $boolField(),
+                            'part13' => $boolField(),
+                        ],
+                    ],
+
+                    // ── K-3 general notes ─────────────────────────────────────────────
+                    'k3_notes' => [
+                        'type' => 'ARRAY',
+                        'items' => ['type' => 'STRING'],
+                    ],
 
                     // ── Supplemental text & metadata ─────────────────────────────────
                     'raw_text' => $strField(),
