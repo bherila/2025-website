@@ -1,7 +1,7 @@
 'use client'
 
 import currency from 'currency.js'
-import { CheckCircle, ChevronLeft, ChevronRight, Download, Eye, FileText, Loader2, Plus, Save, Trash2 } from 'lucide-react'
+import { CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Download, Eye, FileText, Loader2, Plus, Save, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -307,6 +307,8 @@ function ParsedDataEditor({
   const nonTaxEntries = entries.filter(([k]) => !k.startsWith('box'))
   const taxEntries = entries.filter(([k]) => k.startsWith('box'))
 
+  const [payerInfoOpen, setPayerInfoOpen] = useState(false)
+
   if (entries.length === 0) return <p className="text-sm text-muted-foreground">No extracted data available.</p>
 
   const renderField = ([key, value]: [string, unknown]) => (
@@ -315,7 +317,7 @@ function ParsedDataEditor({
         {key.replace(/_/g, ' ')}
       </label>
       <div className="w-1/2">
-        <Input 
+        <Input
           className={`h-6 text-[11px] font-mono px-1.5 text-right rounded-sm ${readOnly ? 'bg-muted/30 border-transparent text-muted-foreground cursor-default focus-visible:ring-0' : 'bg-background border-muted-foreground/20 focus-visible:ring-1 focus-visible:ring-primary/40'}`}
           value={isNullish(value) ? '' : String(value)}
           onChange={(e) => handleFieldChange(key, e.target.value)}
@@ -330,36 +332,53 @@ function ParsedDataEditor({
 
   return (
     <div className="space-y-3">
-      {/* Add Field dropdown — only in edit mode for supported form types */}
-      {!readOnly && addableFields.length > 0 && (
-        <div className="flex justify-end">
-          <AddFieldDropdown
-            fields={addableFields}
-            onAdd={(key) => {
-              if (!(key in data)) {
-                onChange({ ...data, [key]: null })
-              }
-            }}
-          />
+      {/* Payer / Recipient Info — collapsed by default */}
+      {nonTaxEntries.length > 0 && (
+        <div className="border rounded-lg overflow-hidden">
+          <button
+            type="button"
+            className="w-full flex items-center gap-2 px-3 py-2 bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+            onClick={() => setPayerInfoOpen((o) => !o)}
+          >
+            {payerInfoOpen
+              ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+            <span className="text-xs font-semibold tracking-wide">Payer / Recipient Info</span>
+            {!payerInfoOpen && (
+              <span className="text-[11px] text-muted-foreground truncate ml-1">
+                {String(nonTaxEntries.find(([k]) => k.includes('name') || k.includes('employer'))?.[1] ?? '')}
+              </span>
+            )}
+          </button>
+          {payerInfoOpen && (
+            <div className="p-3 space-y-1.5">
+              {nonTaxEntries.map(renderField)}
+            </div>
+          )}
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Left: Non-tax info (names, TINs, account numbers) */}
-        {nonTaxEntries.length > 0 && (
-          <div className="space-y-1.5">
-            <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60 pb-1">Payer / Recipient Info</div>
-            {nonTaxEntries.map(renderField)}
+      {/* Tax Data — full width */}
+      {taxEntries.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">Tax Data</div>
+            {!readOnly && addableFields.length > 0 && (
+              <AddFieldDropdown
+                fields={addableFields}
+                onAdd={(key) => {
+                  if (!(key in data)) {
+                    onChange({ ...data, [key]: null })
+                  }
+                }}
+              />
+            )}
           </div>
-        )}
-        {/* Right: Tax boxes */}
-        {taxEntries.length > 0 && (
-          <div className="space-y-1.5">
-            <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60 pb-1">Tax Data</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
             {taxEntries.map(renderField)}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
