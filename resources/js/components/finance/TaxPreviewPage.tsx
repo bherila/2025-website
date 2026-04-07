@@ -5,6 +5,7 @@ import { ClipboardList } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import Form1040Preview from '@/components/finance/Form1040Preview'
+import Form4952Preview from '@/components/finance/Form4952Preview'
 import { isFK1StructuredData } from '@/components/finance/k1'
 import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
 import ScheduleBPreview from '@/components/finance/ScheduleBPreview'
@@ -895,6 +896,15 @@ export default function TaxPreviewPage() {
             />
           </div>
         </div>
+      )}
+
+      {/* Form 4952 — Investment Interest Expense */}
+      {typeof selectedYear === 'number' && (reviewedK1Docs.length > 0 || reviewed1099Docs.length > 0) && (
+        <Form4952Preview
+          reviewedK1Docs={reviewedK1Docs}
+          reviewed1099Docs={reviewed1099Docs}
+          income1099={income1099}
+        />
       )}
 
       {/* Federal & State Tax Tables */}
