@@ -9,7 +9,9 @@
 ## Principles
 
 - **Preserve the document pipeline.** Upload → GenAI extraction → review/confirm flow must remain intact for W-2, 1099-INT, 1099-DIV, 1099-B, K-1/K-3 documents. The GenAI processing system (Gemini tool-call pipeline) continues to be used for all document types.
-- **Preload and share data.** Avoid repeated API calls for the same dataset across tabs. Data fetched once in `TaxPreviewPage` is passed as props to child tabs. For initial page load, inject pre-fetched server-side data via `<script type="application/json" id="tax-preview-data">` in the Blade template to eliminate the first round-trip.
+- **Year changes are full navigations.** The year selector navigates to `/finance/tax-preview?year=2025` — a full page load. The Blade template reads the query string and passes the year to the controller, which preloads data for that year. This eliminates client-side year-change waterfalls entirely.
+- **Preload what's cheap, lazy-load what's heavy.** Payslips, 1099 totals, Schedule C summary, pending review count, and reviewed W-2 docs are small and cheap — preload them in the Blade template via `<script type="application/json">`. K-1 documents with full `parsed_data` (K-3 sections can be large) are better fetched client-side on demand.
+- **Retire single-purpose API endpoints.** If data is preloaded in the Blade template, the corresponding API endpoint used only by the tax preview page can be removed (e.g., the payslips-for-year fetch). Endpoints used by other pages or for mutations (upload, save, review) stay.
 - **Blade/PHP separation.** Data injection belongs in a dedicated `TaxPreviewController` method that calls service classes. No business logic in the Blade file — the script tag contains only serialized DTO output. Keep controllers thin; logic in service classes.
 - **Tabs for all workflows.** The tab structure covers the full return scope, including Schedule C (self-employment, home office) which was not in the reference HTML but is part of the existing codebase.
 
@@ -63,11 +65,36 @@ Overview | Documents | K-1 Details | Schedules | Capital Gains | Form 1116 | Sch
 ## Data loading strategy
 
 ### Current state (problems)
-- `TaxPreviewPage` fetches K-1 docs in its own `useEffect` — separate from the W-2 and 1099 fetches in `TaxDocumentsSection` / `TaxDocuments1099Section`
-- On first render, users see the page before any data arrives (multiple waterfalls)
-- No data shared between tabs — if two tabs need "all reviewed K-1s" they each re-derive from the same prop
+
+The Tax Preview page currently issues **5+ independent API calls** on mount:
+
+| Call | Endpoint | Triggered by |
+|---|---|---|
+| Payslips for year | `GET /api/payslips?year=X` | `TaxPreviewPage useEffect` |
+| Pending review count | `GET /api/finance/tax-documents?genai_status=parsed&is_reviewed=0` | `TaxPreviewPage useEffect` |
+| Reviewed K-1 docs | `GET /api/finance/tax-documents?form_type=k1&is_reviewed=1` | `TaxPreviewPage useEffect` |
+| W-2 docs (by form_type) | `GET /api/finance/tax-documents?form_type=w2...` | `TaxDocumentsSection useEffect` |
+| 1099 docs | `GET /api/finance/tax-documents?form_type=1099_int...` | `TaxDocuments1099Section useEffect` |
+| Schedule C | `GET /api/finance/schedule-c` | `ScheduleCPreview useEffect` |
+| Employment entities | `GET /api/finance/employment-entities?visible_only=false` | `TaxDocumentsSection useEffect` |
+| Accounts | `GET /api/finance/accounts?active_year=X` | `TaxDocuments1099Section useEffect` |
+
+Result: waterfall of requests, visible loading spinners, no data on first paint.
 
 ### Target architecture
+
+**Year changes navigate to a new URL.** When the user selects a different year, instead of client-side state update + re-fetch, we do:
+
+```tsx
+// YearSelectorWithNav or TaxPreviewPage
+function handleYearChange(year: number | 'all') {
+    const url = new URL(window.location.href)
+    url.searchParams.set('year', String(year))
+    window.location.href = url.toString() // full navigation
+}
+```
+
+This means the Blade preload always has the right year's data — no stale/mismatched state.
 
 **Server-side preload (Blade template injection):**
 
@@ -76,40 +103,68 @@ Overview | Documents | K-1 Details | Schedules | Capital Gains | Form 1116 | Sch
 
 class TaxPreviewController extends Controller
 {
-    public function __construct(private TaxDocumentService $taxDocService) {}
+    public function __construct(
+        private TaxPreviewDataService $preloadService,
+    ) {}
 
     public function show(Request $request): View
     {
         $year = (int) ($request->query('year') ?? date('Y'));
-        $userId = Auth::id();
 
-        $preload = $this->taxDocService->getPreloadData($userId, $year);
+        $preload = $this->preloadService->forYear(Auth::id(), $year);
 
-        return view('finance.tax-preview', compact('preload', 'year'));
+        return view('finance.tax-preview', [
+            'preload' => $preload,
+            'year' => $year,
+        ]);
     }
 }
 ```
 
 ```php
-// app/Services/Finance/TaxDocumentService.php  (new method)
+// app/Services/Finance/TaxPreviewDataService.php
 
-public function getPreloadData(int $userId, int $year): array
+class TaxPreviewDataService
 {
-    return [
-        'reviewedK1Docs'   => $this->reviewedDocs($userId, $year, 'k1'),
-        'reviewedW2Docs'   => $this->reviewedDocs($userId, $year, 'w2'),
-        'reviewed1099Docs' => $this->reviewedDocs($userId, $year, ['1099_int', '1099_div', '1099_b']),
-        'pendingCount'     => $this->pendingCount($userId, $year),
-    ];
+    public function forYear(int $userId, int $year): array
+    {
+        return [
+            'year'               => $year,
+            'availableYears'     => $this->availableYears($userId),
+            'payslips'           => $this->payslipsForYear($userId, $year),
+            'pendingReviewCount' => $this->pendingReviewCount($userId, $year),
+            'reviewedW2Docs'     => $this->reviewedDocs($userId, $year, ['w2']),
+            'reviewed1099Docs'   => $this->reviewedDocs($userId, $year, ['1099_int', '1099_div', '1099_b', '1099_int_c', '1099_div_c', '1099_b_c']),
+            'scheduleCData'      => $this->scheduleCForYear($userId, $year),
+            'employmentEntities' => $this->entities($userId),
+        ];
+        // NOTE: K-1 docs are NOT preloaded — they carry large parsed_data with K-3 sections.
+        // They are fetched client-side on demand when the user visits the K-1 Details tab
+        // or any tab that needs them (first access triggers fetch, result is cached in React state).
+    }
 }
 ```
+
+**What gets preloaded vs. lazy-loaded:**
+
+| Data | Preloaded? | Reason |
+|---|---|---|
+| Payslips for year | ✅ Yes | Small rows, needed immediately for W-2 summary and tax tables |
+| Pending review count | ✅ Yes | Single integer, drives the "Review Documents" button badge |
+| Reviewed W-2 docs | ✅ Yes | Small `parsed_data`, needed for Overview + Tax Estimate |
+| Reviewed 1099 docs | ✅ Yes | Small `parsed_data`, needed for Overview + Schedule B + Form 4952 |
+| Schedule C data | ✅ Yes | Already aggregated on server, needed for Schedule C tab + Tax Estimate |
+| Employment entities | ✅ Yes | Small list, needed by Documents tab |
+| Available years | ✅ Yes | Drives the year selector — merge payslip years + Schedule C available years |
+| Reviewed K-1 docs | ❌ No | `parsed_data` includes full K-3 sections (can be 10KB+ per doc). Fetched once client-side, then shared across all tabs via React state |
+| Accounts (for 1099 linking) | ❌ No | Only needed when Documents tab 1099 section is visible |
 
 **Blade template:**
 
 ```blade
 {{-- resources/views/finance/tax-preview.blade.php --}}
 <script type="application/json" id="tax-preview-data">
-    {!! json_encode($preload, JSON_HEX_TAG) !!}
+    {!! json_encode($preload, JSON_HEX_TAG | JSON_THROW_ON_ERROR) !!}
 </script>
 
 @viteReactRefresh
@@ -119,186 +174,183 @@ public function getPreloadData(int $userId, int $year): array
 **React bootstrap:**
 
 ```tsx
-// resources/js/pages/finance/tax-preview.tsx
-function readPreload(): TaxPreviewPreload {
+// In TaxPreviewPage or its mount point
+
+interface TaxPreviewPreload {
+    year: number
+    availableYears: number[]
+    payslips: fin_payslip[]
+    pendingReviewCount: number
+    reviewedW2Docs: TaxDocument[]
+    reviewed1099Docs: TaxDocument[]
+    scheduleCData: YearData[]  // same shape as ScheduleCResponse.years
+    employmentEntities: { id: number; display_name: string; type: string }[]
+}
+
+function readPreload(): TaxPreviewPreload | null {
     const el = document.getElementById('tax-preview-data')
-    if (!el) return { reviewedK1Docs: [], reviewedW2Docs: [], reviewed1099Docs: [], pendingCount: 0 }
-    try {
-        return JSON.parse(el.textContent ?? '{}') as TaxPreviewPreload
-    } catch {
-        return { reviewedK1Docs: [], reviewedW2Docs: [], reviewed1099Docs: [], pendingCount: 0 }
-    }
-}
-
-// Pass preload as initialState to TaxPreviewPage
-const preload = readPreload()
-createRoot(document.getElementById('app')!).render(<TaxPreviewPage initialData={preload} />)
-```
-
-**TaxPreviewPage prop:**
-
-```tsx
-interface TaxPreviewPageProps {
-    initialData?: TaxPreviewPreload
-}
-
-export default function TaxPreviewPage({ initialData }: TaxPreviewPageProps) {
-    const [reviewedK1Docs, setReviewedK1Docs] = useState<TaxDocument[]>(initialData?.reviewedK1Docs ?? [])
-    const [reviewedW2Docs, setReviewedW2Docs] = useState<TaxDocument[]>(initialData?.reviewedW2Docs ?? [])
-    const [reviewed1099Docs, setReviewed1099Docs] = useState<TaxDocument[]>(initialData?.reviewed1099Docs ?? [])
-    // ...
+    if (!el?.textContent) return null
+    try { return JSON.parse(el.textContent) } catch { return null }
 }
 ```
 
-After a document is reviewed/confirmed, refresh only the changed document type (not the full page). The `refreshTrigger` increment already handles this; make the per-type fetches depend on it.
+`TaxPreviewPage` initializes state from the preload. The only client-side fetch on mount is for K-1 docs. After a document is reviewed/confirmed in the modal, the affected doc-type state is re-fetched (single targeted call, not full-page reload).
+
+### API endpoints to retire (after Blade preload is live)
+
+These are currently called only by TaxPreviewPage and would be fully replaced by the preload:
+
+| Endpoint | Used by | Can retire? |
+|---|---|---|
+| `GET /api/payslips?year=X` | TaxPreviewPage | ✅ Yes — preloaded; only TaxPreviewPage uses the year-filtered version |
+| `GET /api/finance/schedule-c` | ScheduleCPreview | ✅ Yes — preloaded (year-filtered); only ScheduleCPreview uses this |
+| `GET /api/finance/employment-entities?visible_only=false` | TaxDocumentsSection | ⚠️ Maybe — check if other pages use it too |
+
+Endpoints that must stay:
+- `GET /api/finance/tax-documents` — used with various filters by multiple pages, plus the K-1 lazy-load
+- All mutation endpoints (POST, PUT, DELETE) for uploads, reviews, etc.
+- `GET /api/payslips` without year filter (used by PayslipClient page)
 
 ---
 
 ## Item 1 — Fix Form 4952 "no election needed" case ✅ DONE
 
-**Status:** Implemented in `Form4952Preview.tsx`.
-
-- When `NII ≥ totalInvIntExpense`, shows `✓ Full $X Deductible` good callout; election analysis table hidden.
-- Box 20A used as authoritative NII figure when present.
-- §67(g) suspended items shown on Line 5 with note (not deducted).
+Implemented in `Form4952Preview.tsx`. When `NII ≥ totalInvIntExpense`, shows ✓ good callout; election analysis table hidden. Box 20A used as authoritative NII figure. §67(g) suspended items shown on Line 5.
 
 ---
 
 ## Item 2 — Enhance Schedule B to show line-by-line sources ✅ DONE
 
-**Status:** Implemented in `ScheduleBPreview.tsx`.
-
-- Per-source lines from K-1 Box 5/6a/6b and 1099-INT/DIV.
-- Aggregated fallback when no per-source data is available.
-- Two-column layout (Part I Interest / Part II Dividends).
+Implemented in `ScheduleBPreview.tsx`. Per-source lines from K-1 and 1099 docs. Aggregated fallback. Two-column layout.
 
 ---
 
 ## Item 3 — K-1 Details tab ✅ DONE
 
-**Status:** Implemented in `K1DetailsTab.tsx`.
-
-- Per-fund cards with income, deduction, K-3 Part II, K-3 Part III §4 blocks.
-- Box 11ZZ ordinary income callout.
-- §67(g) suspension cross-fund summary with CA savings estimate.
+Implemented in `K1DetailsTab.tsx`. Per-fund cards, Box 11ZZ callout, §67(g) cross-fund summary.
 
 ---
 
 ## Item 4 — Form 1116 Preview tab ✅ DONE
 
-**Status:** Implemented in `Form1116Preview.tsx`.
-
-- Passive income and foreign tax sources.
-- Simplified election threshold check.
-- General category (XX) check.
-- TurboTax Line 1d correction alert.
-- Part III limitation (estimated, with placeholders for prior-return data).
+Implemented in `Form1116Preview.tsx`. Passive FTC, simplified election check, general category check, TurboTax Line 1d alert.
 
 ---
 
 ## Item 5 — Capital Gains / Schedule D tab ✅ DONE
 
-**Status:** Implemented in `ScheduleDPreview.tsx`.
-
-- Form 6781 Section 1256 with 60/40 split.
-- Schedule D Part I/II per-source lines.
-- Carryforward summary with $3,000 annual cap.
-- 1099-B placeholder with upload prompt.
+Implemented in `ScheduleDPreview.tsx`. Form 6781 60/40 split, per-source lines, carryforward.
 
 ---
 
 ## Item 6 — Action Items tab ✅ DONE
 
-**Status:** Implemented in `ActionItemsTab.tsx`.
-
-- Computed resolved/outstanding items.
-- TurboTax FTC Line 1d alert, §67(g) CA deductions table, Box 21 K-3 confirmation, prior-year carryforward checklist.
-- Estimated tax position summary table.
+Implemented in `ActionItemsTab.tsx`. Resolved/outstanding alerts, estimated tax position summary.
 
 ---
 
 ## Item 7 — Schedule C tab ⬜ NOT DONE
 
-**File:** Existing `ScheduleCPreview.tsx` (currently embedded in Documents tab)  
+**Existing code:** `ScheduleCPreview.tsx` (currently in Documents tab)  
 **New file:** `resources/js/components/finance/ScheduleCTab.tsx`
 
-The Schedule C content already exists in the codebase (`ScheduleCPreview`) but is currently buried inside the Documents tab. It needs to be:
+### Current state
 
-1. **Moved to its own tab** "Schedule C" between "Form 1116" and "Tax Estimate".
-2. **Enhanced with home office deduction section:**
+`ScheduleCPreview` already handles:
+- Fetching transaction-based Schedule C data from `GET /api/finance/schedule-c`
+- Income/expense categories grouped by `tax_characteristic` from `FinAccountTag`
+- Home office expenses as a separate category (`sch_c_home_office` characteristics)
+- Home office carry-forward calculation across years
+- Per-entity breakdown when multiple Schedule C businesses exist
 
-```tsx
-// In ScheduleCTab.tsx (wraps ScheduleCPreview + adds home office block)
+### What needs to change
 
-// Home office deduction (Form 8829)
-// Data source: user-entered or from parsed documents
-//   - office_sqft: number
-//   - home_sqft: number
-//   - home_expenses: { mortgage_interest, rent, utilities, insurance, repairs }
-// Computation:
-//   - business_pct = office_sqft / home_sqft
-//   - deductible = home_expenses_total × business_pct  (simplified method: $5/sqft, max 300 sqft)
-//   - Form 8829 Line 36 flows to Schedule C Line 30
+1. **Move to its own tab.** Currently buried at the bottom of the Documents tab. It should be a first-class tab between "Form 1116" and "Tax Estimate."
 
-// Render:
-<FormBlock title="Form 8829 — Home Office Deduction">
-  <FormLine label="Office sq ft" raw={String(office_sqft)} />
-  <FormLine label="Home sq ft" raw={String(home_sqft)} />
-  <FormLine label="Business-use percentage" raw={`${(business_pct * 100).toFixed(1)}%`} />
-  <FormLine label="Allowable home expenses" value={deductible} />
-  <FormTotalLine label="Home office deduction (→ Sch C Line 30)" value={deductible} />
-</FormBlock>
+2. **Accept preloaded Schedule C data.** Instead of fetching internally, accept `scheduleCData` as a prop from TaxPreviewPage (which gets it from the Blade preload). The year-filter logic stays but operates on preloaded data.
 
-<Callout kind="info" title="ℹ Simplified vs. Regular Method">
-  <p>Simplified: $5/sq ft × office sq ft (max $1,500).
-     Regular: actual expenses × business %.</p>
-  <p>Show both and let the user choose.</p>
-</Callout>
+3. **Lift year-availability detection up.** Currently `ScheduleCPreview` calls `onAvailableYearsChange` with years derived from the Schedule C response. After preload, available years are already known from `TaxPreviewDataService::availableYears()` (which should merge payslip years + Schedule C years). Remove the `onAvailableYearsChange` callback.
+
+4. **Home office data is transaction-based.** The `sch_c_home_office` tax characteristics (`scho_rent`, `scho_mortgage_interest`, `scho_utilities`, `scho_insurance`, etc.) are already defined in `FinAccountTag::TAX_CHARACTERISTICS`. Users tag transactions with these characteristics, and `FinanceScheduleCController::getSummary()` aggregates them. The Schedule C tab already renders these via `schedule_c_home_office` in the entity data. What's missing:
+   - **Form 8829 presentation.** Currently shows raw category totals. Should render as Form 8829 line items with business-use percentage computation.
+   - **Simplified method comparison.** Show both simplified ($5/sqft, max $1,500) and regular (actual expenses × business %) side by side so the user can pick the better option.
+   - **Business-use percentage storage.** The `office_sqft` and `home_sqft` values need to be stored per entity per year. Options:
+     - Add fields to the employment entity model
+     - Store as a separate `schedule_c_config` JSON column on the employment entity
+     - Store as user-entered metadata in a new table
+   - For now, accept as props or editable fields in the UI; persist design TBD.
+
+5. **Vehicle expense section (Form 4562 / Sch C Line 9):**
+   - `sce_car_truck` characteristic already captures tagged vehicle transactions
+   - Add comparison: standard mileage rate ($0.70/mi for 2025) × user-entered miles vs. actual expenses
+   - Mileage tracking is manual entry (not derived from transactions)
+
+6. **Wire into TaxPreviewPage:** Add `schedule-c` tab. Remove `ScheduleCPreview` from the Documents tab. Pass preloaded schedule C data + the net income callback.
+
+### Form 8829 rendering (pseudo-structure)
+
 ```
+FormBlock: "Form 8829 — Home Office Deduction"
+  // Lines 1-7: Area calculation
+  FormLine: "L.1  Office area (sq ft)"           → user-entered
+  FormLine: "L.2  Home total area (sq ft)"       → user-entered
+  FormLine: "L.3  Business-use percentage"        → L.1 ÷ L.2
+  
+  // Lines 8-27: Direct + indirect expenses
+  // Pull from tagged transactions:
+  //   scho_mortgage_interest → Line 10
+  //   scho_real_estate_taxes → Line 11
+  //   scho_insurance         → Line 18
+  //   scho_utilities         → Line 21
+  //   scho_repairs_maintenance → Line 22
+  //   scho_rent              → Line 20
+  //   scho_depreciation      → Line 28
+  // Each shows: full amount × business_pct = allowable
+  
+  FormTotalLine: "L.36  Allowable home office deduction"  → flows to Sch C Line 30
+  
+  // Carry-forward (already computed in ScheduleCPreview)
+  FormLine: "Carryforward from prior year"
+  FormLine: "Disallowed this year (income limitation)"
 
-3. **Vehicle deduction section (if applicable):**
-
+Callout (info): "Simplified Method Comparison"
+  "Simplified: $5 × [sqft] = $[min(sqft*5, 1500)]"
+  "Regular:    actual expenses × [pct]% = $[regular_total]"
+  "→ [Better method] saves $[difference]"
 ```
-FormBlock: "Vehicle Expenses (Form 4562 / Sch C Line 9)"
-  Standard mileage rate: [miles] × $0.67/mi = $X  (2024 rate)
-  — OR —
-  Actual expenses: gas + insurance + depreciation × business %
-```
-
-4. **Wire into TaxPreviewPage:** Add `schedule-c` tab between `form-1116` and `estimate`. Remove Schedule C from Documents tab.
 
 ---
 
 ## Item 8 — Data loading improvements ⬜ NOT DONE
 
-**Priority:** Medium (performance / UX)
+### Phase A: Centralize React state + preload prop
 
-### Phase A: Centralize React state (immediate, no Blade change needed)
+1. Add `TaxPreviewPreload` interface to TaxPreviewPage.
+2. Accept `initialData?: TaxPreviewPreload` prop.
+3. Initialize all state from preload when available (payslips, W-2 docs, 1099 docs, Schedule C, entities, pending count, available years).
+4. Keep the K-1 docs fetch as a client-side `useEffect` (only fetch that fires on mount).
+5. Refactor child components to accept data as props:
+   - `TaxDocumentsSection`: accept `documents` and `employmentEntities` as optional props; skip internal fetch when provided
+   - `TaxDocuments1099Section`: accept `documents` as optional prop; skip internal fetch when provided
+   - `ScheduleCPreview` / `ScheduleCTab`: accept `scheduleCData` prop; skip internal fetch when provided
+6. Keep all `onDocumentReviewed()` callbacks — on review, re-fetch only the affected doc type.
 
-All three reviewed-doc arrays (`reviewedK1Docs`, `reviewedW2Docs`, `reviewed1099Docs`) are already in `TaxPreviewPage` state. The issue is that `TaxDocumentsSection` and `TaxDocuments1099Section` also fetch internally. Refactor so that:
+### Phase B: Server-side preload
 
-- `TaxPreviewPage` owns all fetches.
-- Pass fetched data down as props to child sections.
-- Child sections emit `onDocumentReviewed()` → parent re-fetches that type only.
+1. Create `TaxPreviewDataService` (as described in Data Loading Strategy above).
+2. Create `TaxPreviewController::show()` — thin, delegates to service.
+3. Update `routes/web.php`: replace the inline closure with the controller.
+4. Update Blade template to inject `<script type="application/json" id="tax-preview-data">`.
+5. Update TaxPreviewPage mount point to read preload and pass as `initialData`.
+6. Year selector navigates (`window.location.href = ...`) instead of `setSelectedYear()` + `pushState`.
 
-This eliminates duplicate API calls when both the overview card grid and the documents section need "reviewed W-2 docs".
+### Phase C: Retire redundant API endpoints
 
-### Phase B: Server-side preload (Blade script tag)
-
-As described in the "Data loading strategy" section above. Requires:
-
-1. New `TaxPreviewController::show()` method.
-2. New `TaxDocumentService::getPreloadData()` method.
-3. Blade template updated to inject `<script type="application/json">`.
-4. `TaxPreviewPage` reads preload via `document.getElementById('tax-preview-data')`.
-
-**Do NOT put business logic in Blade.** The Blade file outputs only `{!! json_encode($preload) !!}` where `$preload` is a plain array from the service. All filtering, formatting, and computation stays in the service class.
-
-### Phase C: Year-aware caching
-
-The preload is year-specific. If the user switches years:
-- The React year selector triggers a fresh `fetchWrapper.get(...)` for the new year.
-- The Blade preload only applies to the initial year on page load.
+After Phase B is stable:
+- Remove client-side `useEffect` fetches for payslips, 1099 docs, W-2 docs, Schedule C, pending count.
+- Evaluate whether `GET /api/payslips?year=X` is used elsewhere; if not, remove.
+- Evaluate whether `GET /api/finance/schedule-c` is used elsewhere; if not, remove.
+- Keep `GET /api/finance/tax-documents` — used for K-1 lazy-load and by other pages.
 
 ---
 
@@ -321,36 +373,38 @@ The preload is year-specific. If the user switches years:
 </TabsList>
 ```
 
-**Documents tab** should retain:
-- W-2 upload + payslip summary
+**Documents tab** retains:
+- W-2 upload + payslip summary + GenAI review
 - 1099 document upload + review (GenAI pipeline)
 - K-1 / K-3 document upload + review (GenAI pipeline)
-- "Review Documents" button with pending-count badge (already works)
+- "Review Documents" button with pending-count badge
 
-Schedule C content moves to its own tab; the ScheduleCPreview component stays in the Documents tab's data pipeline (for year availability detection) but its display moves to the Schedule C tab.
+Schedule C moves entirely to its own tab. The year-availability detection moves up to TaxPreviewPage (derived from preloaded `availableYears`).
 
 ---
 
 ## Implementation order
 
-1. **Data loading Phase A** — centralize fetches in TaxPreviewPage, eliminate duplicate API calls
-2. **Schedule C tab** — move ScheduleCPreview out of Documents, add Form 8829 home office block
-3. **TaxPreviewPage wiring** — add `schedule-c` tab trigger + content, adjust Documents tab
-4. **Data loading Phase B** — Blade script-tag preload, TaxPreviewController, TaxDocumentService
+1. **Data loading Phase A** — centralize React state, accept preload prop, refactor children to accept data as props
+2. **Schedule C tab** — extract ScheduleCPreview into ScheduleCTab, add Form 8829 presentation, accept preloaded data
+3. **TaxPreviewPage wiring** — add `schedule-c` tab, remove ScheduleCPreview from Documents, year selector navigates instead of pushState
+4. **Data loading Phase B** — TaxPreviewDataService, TaxPreviewController, Blade preload, mount-point reads preload
+5. **Data loading Phase C** — retire single-purpose API endpoints after preload is stable
 
 ---
 
 ## Files to create
-- `resources/js/components/finance/ScheduleCTab.tsx` (wraps ScheduleCPreview + home office block)
+- `resources/js/components/finance/ScheduleCTab.tsx` (wraps ScheduleCPreview + Form 8829 block)
 - `app/Http/Controllers/Finance/TaxPreviewController.php` (thin controller for preload)
-- `app/Services/Finance/TaxDocumentPreloadService.php` (or add method to existing service)
+- `app/Services/Finance/TaxPreviewDataService.php` (aggregates preload data for a given year)
 
 ## Files to modify
-- `resources/js/components/finance/TaxPreviewPage.tsx` (tab order, Schedule C tab, preload prop)
-- `resources/js/components/finance/TaxDocumentsSection.tsx` (accept pre-fetched docs as optional prop)
+- `resources/js/components/finance/TaxPreviewPage.tsx` (preload prop, tab order, Schedule C tab, year-change-as-navigation)
+- `resources/js/components/finance/ScheduleCPreview.tsx` (accept data as prop, remove internal fetch when prop provided)
+- `resources/js/components/finance/TaxDocumentsSection.tsx` (accept pre-fetched docs + entities as optional props)
 - `resources/js/components/finance/TaxDocuments1099Section.tsx` (accept pre-fetched docs as optional prop)
 - `resources/views/finance/tax-preview.blade.php` (add script tag for preload)
-- `routes/web.php` (point tax-preview route to new controller if not already)
+- `routes/web.php` (replace inline closure with TaxPreviewController)
 
 ## Files NOT to change
 - All GenAI processor PHP files (`GenAiJobDispatcherService`, prompts, tool definitions)
