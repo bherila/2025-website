@@ -72,7 +72,7 @@ class FinancePayslipImportController extends Controller
             ])->withHeaders([
                 'x-goog-api-key' => $apiKey,
                 'Content-Type' => 'application/json',
-            ])->post('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent', [
+            ])->post('https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent', [
                 'contents' => [
                     [
                         'parts' => $parts,
