@@ -232,7 +232,7 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
         <Callout kind="info" title="ℹ 1099-B Not Yet Uploaded">
           <p>
             Brokerage 1099-B is not yet in the reviewed documents. Upload and review 1099-B statements in the
-            Documents tab to include brokerage transactions in this analysis.
+            Overview tab (All Tax Documents section) to include brokerage transactions in this analysis.
           </p>
         </Callout>
       )}

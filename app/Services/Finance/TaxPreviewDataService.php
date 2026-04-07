@@ -16,6 +16,8 @@ class TaxPreviewDataService
 
     /**
      * Lightweight shell data safe to preload in Blade.
+     * Intentionally passes an empty Schedule C years array to avoid running
+     * the heavier Schedule C summary query during the initial page load.
      *
      * @return array{year: int, availableYears: int[]}
      */
@@ -23,7 +25,7 @@ class TaxPreviewDataService
     {
         return [
             'year' => $year,
-            'availableYears' => $this->availableYears($userId),
+            'availableYears' => $this->availableYears($userId, []),
         ];
     }
 

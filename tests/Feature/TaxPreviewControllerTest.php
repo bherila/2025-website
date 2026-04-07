@@ -93,16 +93,12 @@ class TaxPreviewControllerTest extends TestCase
         $this->assertEquals((int) date('Y'), $preload['year']);
     }
 
-    public function test_tax_preview_ignores_non_numeric_year_query_values(): void
+    public function test_tax_preview_redirects_non_numeric_year_query_values(): void
     {
         $user = $this->createUser();
 
         $response = $this->actingAs($user)->get('/finance/tax-preview?year=all');
 
-        $response->assertStatus(200);
-
-        $preload = $this->extractPreload($response->getContent());
-        $this->assertNotNull($preload);
-        $this->assertEquals((int) date('Y'), $preload['year']);
+        $response->assertRedirect('/finance/tax-preview?year=' . date('Y'));
     }
 }

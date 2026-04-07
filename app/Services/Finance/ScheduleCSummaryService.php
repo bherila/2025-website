@@ -40,7 +40,24 @@ class ScheduleCSummaryService
                 ->toArray();
         }
 
-        $allRows = DB::table('fin_account_line_items as li')
+        // Fetch available years using a lightweight distinct query
+        $availableYears = DB::table('fin_account_line_items as li')
+            ->join('fin_account_line_item_tag_map as tm', function ($join) {
+                $join->on('li.t_id', '=', 'tm.t_id')
+                    ->whereNull('tm.when_deleted');
+            })
+            ->join('fin_account_tag as t', function ($join) use ($tagIds) {
+                $join->on('tm.tag_id', '=', 't.tag_id')
+                    ->whereIn('t.tag_id', $tagIds->toArray());
+            })
+            ->join('fin_accounts as a', 'li.t_account', '=', 'a.acct_id')
+            ->where('a.acct_owner', $userId)
+            ->selectRaw("DISTINCT SUBSTRING(li.t_date, 1, 4) as year")
+            ->orderByRaw("year DESC")
+            ->pluck('year')
+            ->toArray();
+
+        $query = DB::table('fin_account_line_items as li')
             ->join('fin_account_line_item_tag_map as tm', function ($join) {
                 $join->on('li.t_id', '=', 'tm.t_id')
                     ->whereNull('tm.when_deleted');
@@ -52,19 +69,14 @@ class ScheduleCSummaryService
             ->join('fin_accounts as a', 'li.t_account', '=', 'a.acct_id')
             ->where('a.acct_owner', $userId)
             ->select('li.t_id', 'li.t_date', 'li.t_description', 'li.t_amt', 'li.t_account', 't.tag_id')
-            ->orderBy('li.t_date')
-            ->get();
+            ->orderBy('li.t_date');
 
-        $availableYears = $allRows
-            ->map(fn ($row) => substr($row->t_date, 0, 4))
-            ->unique()
-            ->sortDesc()
-            ->values()
-            ->toArray();
+        // Apply year filter at DB level when provided so only the requested year's rows are fetched
+        if ($yearFilter !== null) {
+            $query->where(DB::raw("SUBSTRING(li.t_date, 1, 4)"), '=', (string) $yearFilter);
+        }
 
-        $rows = $yearFilter !== null
-            ? $allRows->filter(fn ($row) => substr($row->t_date, 0, 4) === (string) $yearFilter)
-            : $allRows;
+        $rows = $query->get();
 
         $categoryKeyMap = [
             'sch_c_income' => 'schedule_c_income',
@@ -164,9 +176,32 @@ class ScheduleCSummaryService
      */
     public function availableYears(int $userId): array
     {
-        return array_map(
-            static fn (string $year): int => (int) $year,
-            $this->getSummary($userId)['available_years'],
-        );
+        $tags = FinAccountTag::where('tag_userid', $userId)
+            ->whereNull('when_deleted')
+            ->whereNotNull('tax_characteristic')
+            ->where('tax_characteristic', '!=', '')
+            ->where('tax_characteristic', '!=', 'none')
+            ->pluck('tag_id');
+
+        if ($tags->isEmpty()) {
+            return [];
+        }
+
+        return DB::table('fin_account_line_items as li')
+            ->join('fin_account_line_item_tag_map as tm', function ($join) {
+                $join->on('li.t_id', '=', 'tm.t_id')
+                    ->whereNull('tm.when_deleted');
+            })
+            ->join('fin_account_tag as t', function ($join) use ($tags) {
+                $join->on('tm.tag_id', '=', 't.tag_id')
+                    ->whereIn('t.tag_id', $tags->toArray());
+            })
+            ->join('fin_accounts as a', 'li.t_account', '=', 'a.acct_id')
+            ->where('a.acct_owner', $userId)
+            ->selectRaw("DISTINCT SUBSTRING(li.t_date, 1, 4) as year")
+            ->orderByRaw("year DESC")
+            ->pluck('year')
+            ->map(static fn (string $year): int => (int) $year)
+            ->toArray();
     }
 }

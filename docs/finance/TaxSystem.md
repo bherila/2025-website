@@ -129,14 +129,12 @@ The React mini-SPA is wrapped in `TaxPreviewProvider`, which loads `/api/finance
 ### Tab Structure
 
 ```
-Overview | Documents | K-1 Details | Schedules | Capital Gains | Form 1116 | Schedule C | Tax Estimate | Action Items
+Overview | Schedules | Capital Gains | Form 1116 | Schedule C | Tax Estimate | Action Items
 ```
 
 | Tab | Component | Description |
 |-----|-----------|-------------|
-| Overview | `TaxIncomeOverview` | Income card grid + summary table |
-| Documents | `TaxDocumentsSection` + `TaxDocuments1099Section` | W-2, K-1, 1099 upload + GenAI review |
-| K-1 Details | `K1DetailsTab` | Per-fund income/deduction/K-3 cards |
+| Overview | `TaxIncomeOverview` | Income card grid + summary table + W-2 Income Summary + All Tax Documents |
 | Schedules | `ScheduleBPreview` + `Form4952Preview` | Schedule B + Form 4952 |
 | Capital Gains | `ScheduleDPreview` | Form 6781 + Schedule D |
 | Form 1116 | `Form1116Preview` | Passive FTC |

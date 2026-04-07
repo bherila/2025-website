@@ -273,7 +273,7 @@ export default function TaxDocuments1099Section({
       return amt != null ? currency(amt).format() : null
     }
     if (doc.form_type === '1099_misc') {
-      const amt = (p.box3_other ?? p.box7_nonemployee ?? p.total_amount) as number | undefined
+      const amt = (p.box3_other_income ?? p.box3_other ?? p.box7_nonemployee ?? p.total_amount) as number | undefined
       return amt != null ? currency(amt).format() : null
     }
     return null
