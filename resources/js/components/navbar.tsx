@@ -31,8 +31,8 @@ function safeHref(href: string): string {
 /** Renders the children of a dropdown (links, groups, dividers). */
 function DropdownChildren({ items, mobile = false }: { items: NavDropdownChild[]; mobile?: boolean }) {
   const linkCls = mobile
-    ? 'block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm'
-    : 'block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e]';
+    ? 'block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm text-gray-900 dark:text-[#E5E5E5]'
+    : 'block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-gray-900 dark:text-[#E5E5E5]';
   const groupCls = mobile
     ? 'px-3 py-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]'
     : 'px-2 py-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]';
@@ -80,13 +80,13 @@ function DesktopDropdown({ item }: { item: NavItemDropdown }) {
     <li ref={ref} className='relative'>
       <button
         type='button'
-        className='inline-flex items-center gap-1 hover:underline underline-offset-4'
+        className='inline-flex items-center gap-1 hover:underline underline-offset-4 text-gray-900 dark:text-[#E5E5E5]'
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup='menu'
         id={`${menuId}-button`}
       >
-        {item.label} <ChevronDown className='w-4 h-4' aria-hidden='true' />
+        {item.label} <ChevronDown className='w-4 h-4 text-gray-500 dark:text-[#A1A09A]' aria-hidden='true' />
       </button>
       {open && (
         <div
@@ -309,7 +309,7 @@ export default function Navbar({ authenticated, navItems = [], currentUser }: Na
             <button
               type='button'
               onClick={() => setUserMenuOpen((v) => !v)}
-              className='inline-flex items-center gap-2 px-3 py-1.5 rounded border border-gray-200 dark:border-[#3E3E3A] hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm'
+              className='inline-flex items-center gap-2 px-3 py-1.5 rounded border border-gray-200 dark:border-[#3E3E3A] hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm text-gray-900 dark:text-[#E5E5E5]'
               aria-expanded={userMenuOpen}
               aria-haspopup='menu'
             >
@@ -317,7 +317,7 @@ export default function Navbar({ authenticated, navItems = [], currentUser }: Na
                 {initials || 'U'}
               </div>
               <span className='hidden sm:inline'>{currentUser?.name ?? 'My Account'}</span>
-              <ChevronDown className={`w-4 h-4 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} aria-hidden='true' />
+              <ChevronDown className={`w-4 h-4 transition-transform text-gray-500 dark:text-[#A1A09A] ${userMenuOpen ? 'rotate-180' : ''}`} aria-hidden='true' />
             </button>
 
             {userMenuOpen && (
@@ -327,7 +327,7 @@ export default function Navbar({ authenticated, navItems = [], currentUser }: Na
               >
                 <a
                   role='menuitem'
-                  className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm'
+                  className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm text-gray-900 dark:text-[#E5E5E5]'
                   href='/dashboard'
                 >
                   User Settings
