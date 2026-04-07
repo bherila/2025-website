@@ -101,34 +101,54 @@ Marriage/filing status is stored per year as a JSON column (`marriage_status_by_
 
 ## Tax Preview Page
 
-**Routes**: `GET /finance/tax-preview` (canonical), `GET /finance/schedule-c` (301 redirect)
-**Component**: `resources/js/components/finance/TaxPreviewPage.tsx` (orchestrator) + `ScheduleCPreview.tsx` (Schedule C section)
-**Controller**: `app/Http/Controllers/FinanceTool/FinanceScheduleCController.php`
+**Route**: `GET /finance/tax-preview` (canonical), `GET /finance/schedule-c` (301 redirect)
+**Controller**: `app/Http/Controllers/Finance/TaxPreviewController.php` (delegates to `TaxPreviewDataService`)
+**Service**: `app/Services/Finance/TaxPreviewDataService.php`
+**Component**: `resources/js/components/finance/TaxPreviewPage.tsx` (orchestrator)
 
-### Sections (top to bottom)
+### Data Loading Architecture
 
-1. **W-2 Row** — Grid layout (1/3 + 2/3):
-   - Left: W-2 Income Summary from payslips
-   - Right: W-2 Document Upload & Reconciliation (per employment entity, with processing status)
+Year changes are **full page navigations** (`window.location.href = ...`). The Blade template preloads data for the selected year via a `<script type="application/json" id="tax-preview-data">` tag, eliminating client-side waterfalls:
 
-2. **Form 1040 Preview** — Key income lines from Form 1040 (wages, interest, dividends, Schedule C, total income)
+**Preloaded** (in Blade template via `TaxPreviewDataService::forYear()`):
+- Payslips for the year
+- Pending review count
+- Reviewed W-2 documents
+- Reviewed 1099 documents (INT, DIV, MISC)
+- Schedule C data (all years, for carry-forward calculations)
+- Employment entities
+- Available years (merged from payslips + tax documents)
 
-3. **Schedule B & 1099 Row** — Grid layout (1/3 + 2/3):
-   - Left: Schedule B Preview (Part I: Interest, Part II: Dividends) from confirmed 1099 documents
-   - Right: 1099-INT/DIV Upload with processing status badges and "Other 1099" manual entry
+**Lazy-loaded** (client-side, on demand):
+- K-1 documents — large `parsed_data` with K-3 sections, fetched once and shared across tabs
 
-4. **Federal Taxes** — Quarterly cumulative tax estimate table (Q1/Q2/Q3/Q4). Income = W-2 payslip income + Schedule C net income (income − expenses − allowable home office). Reuses the `TotalsTable` component from the Payslips page via the `extraIncome` prop.
+### Tab Structure
 
-5. **California State Taxes** — Same as Federal Taxes but for CA state brackets.
+```
+Overview | Documents | K-1 Details | Schedules | Capital Gains | Form 1116 | Schedule C | Tax Estimate | Action Items
+```
 
-6. **Schedule C Preview** (`ScheduleCPreview` component) — Transaction-tag-based Schedule C summary:
-   - Ordinary Income (interest, dividends, other)
-   - W-2 income tagged via transaction tags
-   - Schedule C sections per entity (income / expenses / home office)
-   - **"List transactions in-line" toggle** — when enabled, Schedule C cards expand to full container width (single column) so inline transaction rows are readable
-   - Cards are always single-column on mobile/small screens (< md breakpoint)
-   - All years loaded at once; year selector filters display client-side
-   - `onScheduleCNetIncomeChange` callback emits net Schedule C income to the parent for tax table calculations
+| Tab | Component | Description |
+|-----|-----------|-------------|
+| Overview | `TaxIncomeOverview` | Income card grid + summary table |
+| Documents | `TaxDocumentsSection` + `TaxDocuments1099Section` | W-2, K-1, 1099 upload + GenAI review |
+| K-1 Details | `K1DetailsTab` | Per-fund income/deduction/K-3 cards |
+| Schedules | `ScheduleBPreview` + `Form4952Preview` | Schedule B + Form 4952 |
+| Capital Gains | `ScheduleDPreview` | Form 6781 + Schedule D |
+| Form 1116 | `Form1116Preview` | Passive FTC |
+| Schedule C | `ScheduleCTab` | Self-employment income/expenses + Form 8829 home office |
+| Tax Estimate | `Form1040Preview` + `TotalsTable` | Form 1040 preview + federal/state tax tables |
+| Action Items | `ActionItemsTab` | Resolved/outstanding alerts |
+
+### Schedule C Tab
+
+`ScheduleCTab` (`resources/js/components/finance/ScheduleCTab.tsx`) renders:
+- Per-entity Schedule C income/expense summaries using `FormBlock`/`FormLine` primitives
+- Net profit/loss calculation
+- **Form 8829 — Home Office Deduction**: office/home area inputs, business-use percentage, expense breakdown by Form 8829 line, income limitation, carry-forward
+- **Simplified Method Comparison**: side-by-side comparison of simplified ($5/sqft, max $1,500) vs. regular method
+
+`ScheduleCPreview` (`resources/js/components/finance/ScheduleCPreview.tsx`) remains as a data-computation component that emits `onScheduleCNetIncomeChange` for the Tax Estimate tab.
 
 ### API
 
@@ -136,6 +156,7 @@ Marriage/filing status is stored per year as a JSON column (`marriage_status_by_
 |--------|----------|-------------|
 | `GET` | `/api/finance/schedule-c` | Tax data grouped by characteristic and year |
 | `GET` | `/api/payslips?year=YYYY` | Payslip records for the year (W-2 summary and tax tables) |
+| `GET` | `/api/finance/tax-documents` | Tax documents with various filters (year, form_type, is_reviewed) |
 
 ---
 
@@ -166,11 +187,14 @@ Marriage/filing status is stored per year as a JSON column (`marriage_status_by_
 ```
 Employment Entity (sch_c)
   └── Tags (with sce_*/scho_*/business_* tax_characteristic)
-        └── Tagged Transactions → Schedule C tax preview
+        └── Tagged Transactions → Schedule C tab + Form 8829 home office
 
 Employment Entity (w2)
   ├── Payslips → W-2 income summary + Federal/State quarterly tax estimates
   └── Tags (with w2_* tax_characteristic) → W-2 income summary (transaction-based)
+
+Tax Documents (W-2, 1099, K-1)
+  └── GenAI extraction → parsed_data → Overview/Schedules/Capital Gains/Form 1116 tabs
 
 Marriage Status (per year on users table)
   └── Filing status for tax year calculations
