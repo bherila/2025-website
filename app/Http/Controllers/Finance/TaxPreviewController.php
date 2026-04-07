@@ -27,12 +27,12 @@ class TaxPreviewController extends Controller
                 if ($parsedYear > 0) {
                     $year = $parsedYear;
                 } else {
-                    // Non-numeric year param (e.g. "all") — redirect to the default year
-                    return redirect('/finance/tax-preview?year=' . $defaultYear);
+                    // Non-positive numeric year (e.g. 0 or negative) — redirect to the default year
+                    return redirect('/finance/tax-preview?year='.$defaultYear);
                 }
             } else {
                 // Non-numeric year param (e.g. "all") — redirect to the default year
-                return redirect('/finance/tax-preview?year=' . $defaultYear);
+                return redirect('/finance/tax-preview?year='.$defaultYear);
             }
         }
 

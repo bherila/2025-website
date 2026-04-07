@@ -52,8 +52,8 @@ class ScheduleCSummaryService
             })
             ->join('fin_accounts as a', 'li.t_account', '=', 'a.acct_id')
             ->where('a.acct_owner', $userId)
-            ->selectRaw("DISTINCT SUBSTRING(li.t_date, 1, 4) as year")
-            ->orderByRaw("year DESC")
+            ->selectRaw('DISTINCT SUBSTRING(li.t_date, 1, 4) as year')
+            ->orderByRaw('year DESC')
             ->pluck('year')
             ->toArray();
 
@@ -73,7 +73,7 @@ class ScheduleCSummaryService
 
         // Apply year filter at DB level when provided so only the requested year's rows are fetched
         if ($yearFilter !== null) {
-            $query->where(DB::raw("SUBSTRING(li.t_date, 1, 4)"), '=', (string) $yearFilter);
+            $query->where(DB::raw('SUBSTRING(li.t_date, 1, 4)'), '=', (string) $yearFilter);
         }
 
         $rows = $query->get();
@@ -198,8 +198,8 @@ class ScheduleCSummaryService
             })
             ->join('fin_accounts as a', 'li.t_account', '=', 'a.acct_id')
             ->where('a.acct_owner', $userId)
-            ->selectRaw("DISTINCT SUBSTRING(li.t_date, 1, 4) as year")
-            ->orderByRaw("year DESC")
+            ->selectRaw('DISTINCT SUBSTRING(li.t_date, 1, 4) as year')
+            ->orderByRaw('year DESC')
             ->pluck('year')
             ->map(static fn (string $year): int => (int) $year)
             ->toArray();

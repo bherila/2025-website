@@ -99,6 +99,6 @@ class TaxPreviewControllerTest extends TestCase
 
         $response = $this->actingAs($user)->get('/finance/tax-preview?year=all');
 
-        $response->assertRedirect('/finance/tax-preview?year=' . date('Y'));
+        $response->assertRedirect('/finance/tax-preview?year='.date('Y'));
     }
 }
