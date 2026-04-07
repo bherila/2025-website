@@ -33,6 +33,7 @@ const DIRECT_UPLOAD_MAX_SIZE = 50 * 1024 * 1024
 interface FileListProps {
   files: FileRecord[]
   loading: boolean
+  error?: string | null
   onDownload: (file: FileRecord) => void
   onDelete?: (file: FileRecord) => void
   onViewHistory?: (file: FileRecord) => void
@@ -41,7 +42,7 @@ interface FileListProps {
   className?: string
 }
 
-export function FileList({ files, loading, onDownload, onDelete, onViewHistory, title = 'Files', actions, className }: FileListProps) {
+export function FileList({ files, loading, error, onDownload, onDelete, onViewHistory, title = 'Files', actions, className }: FileListProps) {
   const isAdmin = useIsUserAdmin()
   if (loading) {
     return (
@@ -71,7 +72,12 @@ export function FileList({ files, loading, onDownload, onDelete, onViewHistory, 
           </div>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col items-center justify-center py-8 text-center">
+          <div className="flex flex-col items-center justify-center py-8 text-center gap-4">
+            {error && (
+              <div className="w-full bg-destructive/15 p-3 text-sm text-destructive border rounded border-destructive/20 mb-4">
+                {error}
+              </div>
+            )}
             <FileIcon className="h-12 w-12 text-muted-foreground mb-4" />
             <p className="text-sm text-muted-foreground">No files uploaded yet</p>
           </div>
@@ -89,6 +95,11 @@ export function FileList({ files, loading, onDownload, onDelete, onViewHistory, 
         </div>
       </CardHeader>
       <CardContent className="p-0">
+        {error && (
+          <div className="bg-destructive/15 p-3 text-sm text-destructive border-b border-destructive/20">
+            {error}
+          </div>
+        )}
         <Table>
           <TableHeader>
             <TableRow>

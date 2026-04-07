@@ -448,6 +448,7 @@ export default function StatementsListView({
             className="mt-8"
             files={fileManager.files}
             loading={fileManager.loading}
+            error={fileManager.error}
             onDownload={fileManager.downloadFile}
             onDelete={fileManager.handleDeleteRequest}
             title="Statement Files"
