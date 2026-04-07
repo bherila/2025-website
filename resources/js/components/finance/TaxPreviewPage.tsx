@@ -12,7 +12,9 @@ import { isFK1StructuredData } from '@/components/finance/k1'
 import K1DetailsTab from '@/components/finance/K1DetailsTab'
 import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
 import ScheduleBPreview from '@/components/finance/ScheduleBPreview'
+import type { ScheduleCResponse } from '@/components/finance/ScheduleCPreview'
 import ScheduleCPreview from '@/components/finance/ScheduleCPreview'
+import ScheduleCTab from '@/components/finance/ScheduleCTab'
 import ScheduleDPreview from '@/components/finance/ScheduleDPreview'
 import TaxDocumentReviewModal from '@/components/finance/TaxDocumentReviewModal'
 import TaxDocuments1099Section from '@/components/finance/TaxDocuments1099Section'
@@ -29,6 +31,20 @@ import type { TaxDocument } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
 import { YearSelectorWithNav } from './YearSelectorWithNav'
+
+// ── Preload interface ─────────────────────────────────────────────────────────
+
+/** Data preloaded server-side in the Blade template <script> tag. */
+export interface TaxPreviewPreload {
+  year: number
+  availableYears: number[]
+  payslips: fin_payslip[]
+  pendingReviewCount: number
+  reviewedW2Docs: TaxDocument[]
+  reviewed1099Docs: TaxDocument[]
+  scheduleCData: ScheduleCResponse
+  employmentEntities: { id: number; display_name: string; type: string }[]
+}
 
 // ── Income Overview helpers ───────────────────────────────────────────────────
 
@@ -535,19 +551,23 @@ function W2IncomeSummary({ payslips }: { payslips: fin_payslip[] }) {
  * Tax Preview page — comprehensive tax analysis and planning view.
  * Shows W-2 income (from payslips), Federal and State tax estimates,
  * and Schedule C data for each sch_c employment entity.
+ *
+ * Accepts optional `initialData` preloaded from the Blade template.
+ * When available, payslips, W-2 docs, 1099 docs, Schedule C, entities,
+ * pending review count, and available years are initialized from the preload.
+ * K-1 docs are always fetched client-side (large parsed_data with K-3 sections).
  */
-export default function TaxPreviewPage() {
-  const [hadExplicitYearParamOnLoad, setHadExplicitYearParamOnLoad] = useState(false)
-  const [hadInvalidYearParamOnLoad, setHadInvalidYearParamOnLoad] = useState(false)
-  const [availableYears, setAvailableYears] = useState<number[]>([])
-  const [isYearsLoading, setIsYearsLoading] = useState(true)
+export default function TaxPreviewPage({ initialData }: { initialData?: TaxPreviewPreload | null }) {
+  const [availableYears, setAvailableYears] = useState<number[]>(() => initialData?.availableYears ?? [])
+  const [isYearsLoading, setIsYearsLoading] = useState(() => !initialData)
 
   // Review modal
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
-  const [pendingReviewCount, setPendingReviewCount] = useState(0)
+  const [pendingReviewCount, setPendingReviewCount] = useState(() => initialData?.pendingReviewCount ?? 0)
 
-  // Read initial year from URL query string, default to current year
+  // Read initial year from preload or URL query string, default to current year
   const [selectedYear, setSelectedYear] = useState<number | 'all'>(() => {
+    if (initialData?.year) return initialData.year
     try {
       const params = new URLSearchParams(window.location.search)
       const y = params.get('year')
@@ -560,8 +580,8 @@ export default function TaxPreviewPage() {
   })
 
   // Payslip data for the selected year (used for W-2 income and tax tables)
-  const [payslips, setPayslips] = useState<fin_payslip[]>([])
-  const [payslipsLoading, setPayslipsLoading] = useState(false)
+  const [payslips, setPayslips] = useState<fin_payslip[]>(() => initialData?.payslips ?? [])
+  const [payslipsLoading, setPayslipsLoading] = useState(() => !initialData)
 
   // Net Schedule C income for the selected year (emitted by ScheduleCPreview)
   const [scheduleCNetIncome, setScheduleCNetIncome] = useState({
@@ -582,9 +602,12 @@ export default function TaxPreviewPage() {
   })
 
   // Reviewed W-2, 1099, and K-1 documents for Form 1040 data source drill-down
-  const [reviewedW2Docs, setReviewedW2Docs] = useState<TaxDocument[]>([])
-  const [reviewed1099Docs, setReviewed1099Docs] = useState<TaxDocument[]>([])
+  const [reviewedW2Docs, setReviewedW2Docs] = useState<TaxDocument[]>(() => (initialData?.reviewedW2Docs ?? []) as TaxDocument[])
+  const [reviewed1099Docs, setReviewed1099Docs] = useState<TaxDocument[]>(() => (initialData?.reviewed1099Docs ?? []) as TaxDocument[])
   const [reviewedK1Docs, setReviewedK1Docs] = useState<TaxDocument[]>([])
+
+  // Preloaded Schedule C data (passed to ScheduleCPreview and ScheduleCTab)
+  const preloadedScheduleC = initialData?.scheduleCData ?? null
 
   // Refresh trigger — increment to force child sections to reload after a review
   const [refreshTrigger, setRefreshTrigger] = useState(0)
@@ -605,7 +628,9 @@ export default function TaxPreviewPage() {
     setReviewedW2Docs(docs)
   }, [])
 
-  const setYearInUrl = useCallback((year: number | 'all', mode: 'push' | 'replace' = 'push') => {
+  // Year changes navigate to a new URL (full page load).
+  // This ensures the Blade preload always has the correct year's data.
+  const handleYearChange = useCallback((year: number | 'all') => {
     const url = new URL(window.location.href)
     const defaultYear = new Date().getFullYear()
     if (typeof year === 'number' && year === defaultYear) {
@@ -613,45 +638,7 @@ export default function TaxPreviewPage() {
     } else {
       url.searchParams.set('year', String(year))
     }
-    if (mode === 'replace') {
-      window.history.replaceState(null, '', url.toString())
-      return
-    }
-    window.history.pushState(null, '', url.toString())
-  }, [])
-
-  useEffect(() => {
-    try {
-      const params = new URLSearchParams(window.location.search)
-      const y = params.get('year')
-      setHadExplicitYearParamOnLoad(y !== null)
-      setHadInvalidYearParamOnLoad(y !== null && y !== 'all' && Number.isNaN(parseInt(y, 10)))
-    } catch {
-      setHadExplicitYearParamOnLoad(false)
-      setHadInvalidYearParamOnLoad(false)
-    }
-  }, [])
-
-  // Push browser history when the user changes year (so Back button works)
-  const handleYearChange = useCallback((year: number | 'all') => {
-    setSelectedYear(year)
-    setYearInUrl(year, 'push')
-  }, [setYearInUrl])
-
-  // Restore selected year when the user navigates with Back / Forward
-  useEffect(() => {
-    const onPopState = () => {
-      const params = new URLSearchParams(window.location.search)
-      const y = params.get('year')
-      if (y === 'all') {
-        setSelectedYear('all')
-      } else {
-        const parsed = y ? parseInt(y, 10) : NaN
-        setSelectedYear(isNaN(parsed) ? new Date().getFullYear() : parsed)
-      }
-    }
-    window.addEventListener('popstate', onPopState)
-    return () => window.removeEventListener('popstate', onPopState)
+    window.location.href = url.toString()
   }, [])
 
   const handleAvailableYearsChange = useCallback((years: number[], isLoading: boolean) => {
@@ -671,25 +658,20 @@ export default function TaxPreviewPage() {
     setScheduleCNetIncome(netIncome)
   }, [])
 
-  // Normalize invalid year query values so URL always matches the selected state.
-  useEffect(() => {
-    if (!hadInvalidYearParamOnLoad) return
-    setYearInUrl(selectedYear, 'replace')
-  }, [hadInvalidYearParamOnLoad, selectedYear, setYearInUrl])
-
   // If year wasn't explicitly set in URL, default to newest available year when current year has no data.
   useEffect(() => {
-    if ((hadExplicitYearParamOnLoad && !hadInvalidYearParamOnLoad) || isYearsLoading || availableYears.length === 0) return
+    if (isYearsLoading || availableYears.length === 0) return
     if (typeof selectedYear !== 'number') return
     if (availableYears.includes(selectedYear)) return
     const newestYear = availableYears[0]
     if (newestYear === undefined) return
-    setSelectedYear(newestYear)
-    setYearInUrl(newestYear, 'replace')
-  }, [availableYears, hadExplicitYearParamOnLoad, hadInvalidYearParamOnLoad, isYearsLoading, selectedYear, setYearInUrl])
+    // Navigate to the newest year
+    handleYearChange(newestYear)
+  }, [availableYears, isYearsLoading, selectedYear, handleYearChange])
 
-  // Fetch payslips for the selected year
+  // Fetch payslips for the selected year — skip when preloaded
   useEffect(() => {
+    if (initialData) return // Already initialized from preload
     if (selectedYear === 'all') {
       setPayslips([])
       return
@@ -703,10 +685,12 @@ export default function TaxPreviewPage() {
       .catch(() => { if (!cancelled) setPayslips([]) })
       .finally(() => { if (!cancelled) setPayslipsLoading(false) })
     return () => { cancelled = true }
-  }, [selectedYear])
+  }, [selectedYear, initialData])
 
   // Fetch count of documents ready for review (parsed but not confirmed)
+  // Skip initial fetch when preloaded; still re-fetch after review actions
   useEffect(() => {
+    if (initialData && refreshTrigger === 0) return // Already initialized from preload
     if (typeof selectedYear !== 'number') {
       setPendingReviewCount(0)
       return
@@ -719,7 +703,7 @@ export default function TaxPreviewPage() {
       })
       .catch(() => { if (!cancelled) setPendingReviewCount(0) })
     return () => { cancelled = true }
-  }, [selectedYear, refreshTrigger])
+  }, [selectedYear, refreshTrigger, initialData])
 
   // Fetch reviewed K-1 documents for the selected year
   useEffect(() => {
@@ -827,6 +811,17 @@ export default function TaxPreviewPage() {
         />
       )}
 
+      {/* Hidden ScheduleCPreview — computes net income for Tax Estimate tab and available years.
+          Renders no visible UI; it only fires the onScheduleCNetIncomeChange callback. */}
+      <div className="hidden">
+        <ScheduleCPreview
+          selectedYear={selectedYear}
+          onAvailableYearsChange={handleAvailableYearsChange}
+          onScheduleCNetIncomeChange={handleScheduleCNetIncomeChange}
+          preloadedData={preloadedScheduleC}
+        />
+      </div>
+
       {/* ── Tabbed content ──────────────────────────────────────────────────── */}
       <Tabs defaultValue="overview" className="px-4 pb-8">
         <TabsList className="mb-4 flex-wrap">
@@ -843,6 +838,7 @@ export default function TaxPreviewPage() {
           <TabsTrigger value="schedules">Schedules</TabsTrigger>
           <TabsTrigger value="capital-gains">Capital Gains</TabsTrigger>
           <TabsTrigger value="form-1116">Form 1116</TabsTrigger>
+          <TabsTrigger value="schedule-c">Schedule C</TabsTrigger>
           <TabsTrigger value="estimate">Tax Estimate</TabsTrigger>
           <TabsTrigger value="action-items">Action Items</TabsTrigger>
         </TabsList>
@@ -897,13 +893,6 @@ export default function TaxPreviewPage() {
               onDocumentsChange={handle1099DocumentsChange}
             />
           )}
-
-          {/* Schedule C */}
-          <ScheduleCPreview
-            selectedYear={selectedYear}
-            onAvailableYearsChange={handleAvailableYearsChange}
-            onScheduleCNetIncomeChange={handleScheduleCNetIncomeChange}
-          />
         </TabsContent>
 
         {/* ── K-1 Details tab ───────────────────────────────────────────────── */}
@@ -951,6 +940,23 @@ export default function TaxPreviewPage() {
             reviewed1099Docs={reviewed1099Docs}
             income1099={income1099}
           />
+        </TabsContent>
+
+        {/* ── Schedule C tab ────────────────────────────────────────────────── */}
+        <TabsContent value="schedule-c" className="space-y-6 mt-0">
+          {typeof selectedYear === 'number' && preloadedScheduleC?.years ? (
+            <ScheduleCTab
+              selectedYear={selectedYear}
+              scheduleCData={preloadedScheduleC.years}
+            />
+          ) : (
+            <ScheduleCPreview
+              selectedYear={selectedYear}
+              onAvailableYearsChange={handleAvailableYearsChange}
+              onScheduleCNetIncomeChange={handleScheduleCNetIncomeChange}
+              preloadedData={preloadedScheduleC}
+            />
+          )}
         </TabsContent>
 
         {/* ── Tax Estimate tab ──────────────────────────────────────────────── */}

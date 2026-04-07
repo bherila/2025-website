@@ -25,7 +25,7 @@ import {
 import { fetchWrapper } from '@/fetchWrapper'
 import { transactionsUrl } from '@/lib/financeRouteBuilder'
 
-interface ScheduleCTransaction {
+export interface ScheduleCTransaction {
   t_id: number
   t_date: string
   t_description: string | null
@@ -33,13 +33,13 @@ interface ScheduleCTransaction {
   t_account: number
 }
 
-interface CategoryTotal {
+export interface CategoryTotal {
   label: string
   total: number
   transactions?: ScheduleCTransaction[]
 }
 
-interface EntityData {
+export interface EntityData {
   entity_id: number | null
   entity_name: string | null
   schedule_c_income?: Record<string, CategoryTotal>
@@ -49,12 +49,12 @@ interface EntityData {
   w2_income?: Record<string, CategoryTotal>
 }
 
-interface YearData {
+export interface YearData {
   year: number
   entities: EntityData[]
 }
 
-interface ScheduleCResponse {
+export interface ScheduleCResponse {
   available_years: string[]
   years: YearData[]
   entities?: { id: number; display_name: string; type: string }[]
@@ -292,16 +292,32 @@ interface ScheduleCPreviewProps {
       q4: number
     }
   }) => void
+  /** Optional preloaded Schedule C response from server. When provided, skips client-side fetch. */
+  preloadedData?: ScheduleCResponse | null
 }
 
-export default function ScheduleCPreview({ selectedYear, onAvailableYearsChange, onScheduleCNetIncomeChange }: ScheduleCPreviewProps) {
-  const [allData, setAllData] = useState<YearData[] | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+export default function ScheduleCPreview({ selectedYear, onAvailableYearsChange, onScheduleCNetIncomeChange, preloadedData }: ScheduleCPreviewProps) {
+  const [allData, setAllData] = useState<YearData[] | null>(() => preloadedData?.years ?? null)
+  const [isLoading, setIsLoading] = useState(() => !preloadedData)
   const [error, setError] = useState<string | null>(null)
   const [showInline, setShowInline] = useState(false)
 
-  // Load ALL years upfront — year selector only filters the display
+  // If preloaded data is available, notify parent of available years immediately
   useEffect(() => {
+    if (preloadedData) {
+      if (preloadedData.available_years) {
+        const years = preloadedData.available_years.map(Number).filter((y) => !isNaN(y)).sort((a, b) => b - a)
+        onAvailableYearsChange(years, false)
+      } else {
+        onAvailableYearsChange([], false)
+      }
+    }
+  }, [preloadedData, onAvailableYearsChange])
+
+  // Load ALL years upfront — year selector only filters the display
+  // Skip fetch when preloaded data is provided
+  useEffect(() => {
+    if (preloadedData) return
     const load = async () => {
       try {
         setIsLoading(true)
@@ -320,7 +336,7 @@ export default function ScheduleCPreview({ selectedYear, onAvailableYearsChange,
       }
     }
     void load()
-  }, [onAvailableYearsChange]) // only load once; onAvailableYearsChange is stable (useCallback in parent)
+  }, [onAvailableYearsChange, preloadedData]) // only load once; onAvailableYearsChange is stable (useCallback in parent)
 
   // Filter displayed data based on selectedYear (client-side)
   const data = useMemo(() => {

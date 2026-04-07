@@ -3,6 +3,11 @@
 @section('title', 'Tax Preview | ' . config('app.name', 'Ben Herila'))
 
 @section('content')
+  @if(isset($preload))
+    <script id="tax-preview-data" type="application/json">
+      {!! json_encode($preload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!}
+    </script>
+  @endif
   <div class="w-full">
     <div id="FinanceNavbar" data-active-section="tax-preview"></div>
     <div id="TaxPreviewPage"></div>

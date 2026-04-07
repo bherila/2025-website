@@ -7,6 +7,7 @@ use App\Http\Controllers\ClientManagement\ClientCompanyController;
 use App\Http\Controllers\ClientManagement\ClientPortalAgreementController;
 use App\Http\Controllers\ClientManagement\ClientPortalController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\Finance\TaxPreviewController;
 use App\Http\Controllers\FinanceTool\FinanceAccountsController;
 use App\Http\Controllers\FinanceTool\FinancePayslipController;
 use App\Http\Controllers\LoginController;
@@ -44,9 +45,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/finance/accounts', [FinanceAccountsController::class, 'index']);
     Route::get('/finance/payslips', [FinancePayslipController::class, 'index']);
     Route::get('/finance/payslips/entry', [FinancePayslipController::class, 'entry']);
-    Route::get('/finance/tax-preview', function () {
-        return view('finance.tax-preview');
-    });
+    Route::get('/finance/tax-preview', [TaxPreviewController::class, 'show']);
     // Backward compat redirect for old Schedule C URL
     Route::redirect('/finance/schedule-c', '/finance/tax-preview', 301);
     Route::get('/finance/tags', function () {
