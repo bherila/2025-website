@@ -64,7 +64,7 @@ function formatCurrency(amount: number): string {
   return currency(amount).format()
 }
 
-function sumCategories(cats: Record<string, CategoryTotal>): number {
+export function sumCategories(cats: Record<string, CategoryTotal>): number {
   return Object.values(cats).reduce((sum, c) => sum.add(c.total), currency(0)).value
 }
 
@@ -72,6 +72,133 @@ interface HomeOfficeCalc {
   allowable: number
   disallowed: number
   priorCarryForward: number
+}
+
+/**
+ * Pure function: compute home-office carry-forward per entity across all years.
+ * Returns a Map keyed by `${year}-${entityId}`.
+ */
+export function computeHomeOfficeCalcs(allData: YearData[]): Map<string, HomeOfficeCalc> {
+  const map = new Map<string, HomeOfficeCalc>()
+  const carryForwardByEntity = new Map<string, number>()
+
+  const chronological = [...allData].reverse()
+
+  for (const yearData of chronological) {
+    for (const entity of yearData.entities) {
+      const entityKey = String(entity.entity_id ?? 'unassigned')
+      const mapKey = `${yearData.year}-${entityKey}`
+
+      const incomeTotal = sumCategories(entity.schedule_c_income ?? {})
+      const expenseTotal = sumCategories(entity.schedule_c_expense)
+      const homeOfficeTotal = sumCategories(entity.schedule_c_home_office)
+
+      const priorCF = carryForwardByEntity.get(entityKey) ?? 0
+      const netIncome = incomeTotal - expenseTotal
+      const limit = Math.max(0, netIncome)
+      const totalClaim = homeOfficeTotal + priorCF
+      const allowable = Math.min(totalClaim, limit)
+      const disallowed = totalClaim - allowable
+
+      map.set(mapKey, { allowable, disallowed, priorCarryForward: priorCF })
+      carryForwardByEntity.set(entityKey, disallowed)
+    }
+  }
+  return map
+}
+
+/** Quarterly net income result from Schedule C computation */
+export interface ScheduleCNetIncome {
+  total: number
+  byQuarter: {
+    q1: number
+    q2: number
+    q3: number
+    q4: number
+  }
+}
+
+/**
+ * Pure function: compute Schedule C net income (total + cumulative quarterly).
+ * `allData` is needed for carry-forward; `selectedYear` selects which year to compute.
+ */
+export function computeScheduleCNetIncome(allData: YearData[], selectedYear: number): ScheduleCNetIncome {
+  const homeOfficeCalcs = computeHomeOfficeCalcs(allData)
+  const yearData = allData.find((yd) => Number(yd.year) === selectedYear)
+
+  if (!yearData) {
+    return { total: 0, byQuarter: { q1: 0, q2: 0, q3: 0, q4: 0 } }
+  }
+
+  const perQuarter = { q1: currency(0), q2: currency(0), q3: currency(0), q4: currency(0) }
+
+  for (const entity of yearData.entities) {
+    const entityKey = String(entity.entity_id ?? 'unassigned')
+    const mapKey = `${yearData.year}-${entityKey}`
+    const calc = homeOfficeCalcs.get(mapKey)
+    const quarterSums = {
+      q1: { income: currency(0), expense: currency(0) },
+      q2: { income: currency(0), expense: currency(0) },
+      q3: { income: currency(0), expense: currency(0) },
+      q4: { income: currency(0), expense: currency(0) },
+    }
+
+    const addTransactionsByQuarter = (
+      categories: Record<string, CategoryTotal> | undefined,
+      kind: 'income' | 'expense',
+    ) => {
+      if (!categories) return
+      for (const cat of Object.values(categories)) {
+        for (const tx of cat.transactions ?? []) {
+          const month = Number((tx.t_date ?? '').slice(5, 7))
+          if (!month || Number.isNaN(month)) continue
+          const quarter = month < 4 ? 'q1' : month < 7 ? 'q2' : month < 10 ? 'q3' : 'q4'
+          if (kind === 'income') {
+            quarterSums[quarter].income = quarterSums[quarter].income.add(tx.t_amt ?? 0)
+          } else {
+            quarterSums[quarter].expense = quarterSums[quarter].expense.add(Math.abs(Number(tx.t_amt ?? 0)))
+          }
+        }
+      }
+    }
+
+    addTransactionsByQuarter(entity.schedule_c_income, 'income')
+    addTransactionsByQuarter(entity.schedule_c_expense, 'expense')
+
+    const entityTotalIncome = currency(sumCategories(entity.schedule_c_income ?? {}))
+    const entityTotalExpense = currency(sumCategories(entity.schedule_c_expense))
+    const entityAllowableHO = currency(calc?.allowable ?? 0)
+    const entityTotalNet = entityTotalIncome.subtract(entityTotalExpense).subtract(entityAllowableHO)
+
+    const preHomeOfficeNet = quarterSums.q1.income.add(quarterSums.q2.income).add(quarterSums.q3.income).add(quarterSums.q4.income)
+      .subtract(quarterSums.q1.expense.add(quarterSums.q2.expense).add(quarterSums.q3.expense).add(quarterSums.q4.expense))
+
+    const homeOfficeScale = preHomeOfficeNet.value !== 0 ? entityAllowableHO.divide(preHomeOfficeNet.value).value : 0
+
+    const q1GrossNet = quarterSums.q1.income.subtract(quarterSums.q1.expense)
+    const q2GrossNet = quarterSums.q2.income.subtract(quarterSums.q2.expense)
+    const q3GrossNet = quarterSums.q3.income.subtract(quarterSums.q3.expense)
+
+    const q1Net = q1GrossNet.subtract(q1GrossNet.multiply(homeOfficeScale))
+    const q2Net = q2GrossNet.subtract(q2GrossNet.multiply(homeOfficeScale))
+    const q3Net = q3GrossNet.subtract(q3GrossNet.multiply(homeOfficeScale))
+    const q4Net = entityTotalNet.subtract(q1Net).subtract(q2Net).subtract(q3Net)
+
+    perQuarter.q1 = perQuarter.q1.add(q1Net)
+    perQuarter.q2 = perQuarter.q2.add(q2Net)
+    perQuarter.q3 = perQuarter.q3.add(q3Net)
+    perQuarter.q4 = perQuarter.q4.add(q4Net)
+  }
+
+  return {
+    total: perQuarter.q1.add(perQuarter.q2).add(perQuarter.q3).add(perQuarter.q4).value,
+    byQuarter: {
+      q1: perQuarter.q1.value,
+      q2: perQuarter.q1.add(perQuarter.q2).value,
+      q3: perQuarter.q1.add(perQuarter.q2).add(perQuarter.q3).value,
+      q4: perQuarter.q1.add(perQuarter.q2).add(perQuarter.q3).add(perQuarter.q4).value,
+    },
+  }
 }
 
 interface TransactionListModalProps {
@@ -347,119 +474,19 @@ export default function ScheduleCPreview({ selectedYear, onAvailableYearsChange,
 
   // Compute home-office carry-forward per entity across all years
   const homeOfficeCalcs = useMemo(() => {
-    if (!allData) return new Map<string, HomeOfficeCalc>()
-
-    const map = new Map<string, HomeOfficeCalc>()
-    const carryForwardByEntity = new Map<string, number>()
-
-    // Process chronologically (oldest first) — allData is sorted descending
-    const chronological = [...allData].reverse()
-
-    for (const yearData of chronological) {
-      for (const entity of yearData.entities) {
-        const entityKey = String(entity.entity_id ?? 'unassigned')
-        const mapKey = `${yearData.year}-${entityKey}`
-
-        const incomeTotal = sumCategories(entity.schedule_c_income ?? {})
-        const expenseTotal = sumCategories(entity.schedule_c_expense)
-        const homeOfficeTotal = sumCategories(entity.schedule_c_home_office)
-
-        const priorCF = carryForwardByEntity.get(entityKey) ?? 0
-        const netIncome = incomeTotal - expenseTotal
-        const limit = Math.max(0, netIncome)
-        const totalClaim = homeOfficeTotal + priorCF
-        const allowable = Math.min(totalClaim, limit)
-        const disallowed = totalClaim - allowable
-
-        map.set(mapKey, { allowable, disallowed, priorCarryForward: priorCF })
-        carryForwardByEntity.set(entityKey, disallowed)
-      }
-    }
-    return map
+    if (!allData) return computeHomeOfficeCalcs([])
+    return computeHomeOfficeCalcs(allData)
   }, [allData])
 
   // Compute and emit Schedule C net income (total + cumulative quarterly) for the selected year
   useEffect(() => {
     if (!onScheduleCNetIncomeChange) return
-    if (!data || selectedYear === 'all') {
+    if (!allData || selectedYear === 'all') {
       onScheduleCNetIncomeChange({ total: 0, byQuarter: { q1: 0, q2: 0, q3: 0, q4: 0 } })
       return
     }
-    const yearData = data[0]
-    if (!yearData) {
-      onScheduleCNetIncomeChange({ total: 0, byQuarter: { q1: 0, q2: 0, q3: 0, q4: 0 } })
-      return
-    }
-    const perQuarter = { q1: currency(0), q2: currency(0), q3: currency(0), q4: currency(0) }
-    for (const entity of yearData.entities) {
-      const entityKey = String(entity.entity_id ?? 'unassigned')
-      const mapKey = `${yearData.year}-${entityKey}`
-      const calc = homeOfficeCalcs.get(mapKey)
-      const quarterSums = {
-        q1: { income: currency(0), expense: currency(0) },
-        q2: { income: currency(0), expense: currency(0) },
-        q3: { income: currency(0), expense: currency(0) },
-        q4: { income: currency(0), expense: currency(0) },
-      }
-
-      const addTransactionsByQuarter = (
-        categories: Record<string, CategoryTotal> | undefined,
-        kind: 'income' | 'expense',
-      ) => {
-        if (!categories) return
-        for (const cat of Object.values(categories)) {
-          for (const tx of cat.transactions ?? []) {
-            const month = Number((tx.t_date ?? '').slice(5, 7))
-            if (!month || Number.isNaN(month)) continue
-            const quarter = month < 4 ? 'q1' : month < 7 ? 'q2' : month < 10 ? 'q3' : 'q4'
-            // For expense categories, API stores original t_amt (usually negative),
-            // so add absolute value as an expense amount.
-            if (kind === 'income') {
-              quarterSums[quarter].income = quarterSums[quarter].income.add(tx.t_amt ?? 0)
-            } else {
-              quarterSums[quarter].expense = quarterSums[quarter].expense.add(Math.abs(Number(tx.t_amt ?? 0)))
-            }
-          }
-        }
-      }
-
-      addTransactionsByQuarter(entity.schedule_c_income, 'income')
-      addTransactionsByQuarter(entity.schedule_c_expense, 'expense')
-
-      const entityTotalIncome = currency(sumCategories(entity.schedule_c_income ?? {}))
-      const entityTotalExpense = currency(sumCategories(entity.schedule_c_expense))
-      const entityAllowableHO = currency(calc?.allowable ?? 0)
-      const entityTotalNet = entityTotalIncome.subtract(entityTotalExpense).subtract(entityAllowableHO)
-      
-      const preHomeOfficeNet = quarterSums.q1.income.add(quarterSums.q2.income).add(quarterSums.q3.income).add(quarterSums.q4.income)
-        .subtract(quarterSums.q1.expense.add(quarterSums.q2.expense).add(quarterSums.q3.expense).add(quarterSums.q4.expense))
-      
-      const homeOfficeScale = preHomeOfficeNet.value !== 0 ? entityAllowableHO.divide(preHomeOfficeNet.value).value : 0
-      
-      const q1GrossNet = quarterSums.q1.income.subtract(quarterSums.q1.expense)
-      const q2GrossNet = quarterSums.q2.income.subtract(quarterSums.q2.expense)
-      const q3GrossNet = quarterSums.q3.income.subtract(quarterSums.q3.expense)
-      
-      const q1Net = q1GrossNet.subtract(q1GrossNet.multiply(homeOfficeScale))
-      const q2Net = q2GrossNet.subtract(q2GrossNet.multiply(homeOfficeScale))
-      const q3Net = q3GrossNet.subtract(q3GrossNet.multiply(homeOfficeScale))
-      const q4Net = entityTotalNet.subtract(q1Net).subtract(q2Net).subtract(q3Net)
-
-      perQuarter.q1 = perQuarter.q1.add(q1Net)
-      perQuarter.q2 = perQuarter.q2.add(q2Net)
-      perQuarter.q3 = perQuarter.q3.add(q3Net)
-      perQuarter.q4 = perQuarter.q4.add(q4Net)
-    }
-    onScheduleCNetIncomeChange({
-      total: perQuarter.q1.add(perQuarter.q2).add(perQuarter.q3).add(perQuarter.q4).value,
-      byQuarter: {
-        q1: perQuarter.q1.value,
-        q2: perQuarter.q1.add(perQuarter.q2).value,
-        q3: perQuarter.q1.add(perQuarter.q2).add(perQuarter.q3).value,
-        q4: perQuarter.q1.add(perQuarter.q2).add(perQuarter.q3).add(perQuarter.q4).value,
-      },
-    })
-  }, [data, homeOfficeCalcs, selectedYear, onScheduleCNetIncomeChange])
+    onScheduleCNetIncomeChange(computeScheduleCNetIncome(allData, typeof selectedYear === 'number' ? selectedYear : 0))
+  }, [allData, selectedYear, onScheduleCNetIncomeChange])
 
   return (
     <div className="px-4 pb-8">

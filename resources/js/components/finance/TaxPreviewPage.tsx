@@ -2,7 +2,7 @@
 
 import currency from 'currency.js'
 import { ClipboardList } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import ActionItemsTab from '@/components/finance/ActionItemsTab'
 import Form1040Preview from '@/components/finance/Form1040Preview'
@@ -12,8 +12,8 @@ import { isFK1StructuredData } from '@/components/finance/k1'
 import K1DetailsTab from '@/components/finance/K1DetailsTab'
 import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
 import ScheduleBPreview from '@/components/finance/ScheduleBPreview'
-import type { ScheduleCResponse } from '@/components/finance/ScheduleCPreview'
-import ScheduleCPreview from '@/components/finance/ScheduleCPreview'
+import type { ScheduleCResponse, YearData } from '@/components/finance/ScheduleCPreview'
+import ScheduleCPreview, { computeScheduleCNetIncome } from '@/components/finance/ScheduleCPreview'
 import ScheduleCTab from '@/components/finance/ScheduleCTab'
 import ScheduleDPreview from '@/components/finance/ScheduleDPreview'
 import TaxDocumentReviewModal from '@/components/finance/TaxDocumentReviewModal'
@@ -583,16 +583,22 @@ export default function TaxPreviewPage({ initialData }: { initialData?: TaxPrevi
   const [payslips, setPayslips] = useState<fin_payslip[]>(() => initialData?.payslips ?? [])
   const [payslipsLoading, setPayslipsLoading] = useState(() => !initialData)
 
-  // Net Schedule C income for the selected year (emitted by ScheduleCPreview)
-  const [scheduleCNetIncome, setScheduleCNetIncome] = useState({
+  // Net Schedule C income for the selected year — computed from Schedule C data
+  const [scheduleCNetIncomeFromFetch, setScheduleCNetIncomeFromFetch] = useState({
     total: 0,
-    byQuarter: {
-      q1: 0,
-      q2: 0,
-      q3: 0,
-      q4: 0,
-    },
+    byQuarter: { q1: 0, q2: 0, q3: 0, q4: 0 },
   })
+
+  // Preloaded Schedule C data (passed to ScheduleCTab and used for net income computation)
+  const preloadedScheduleC = initialData?.scheduleCData ?? null
+
+  // When preloaded Schedule C data is available, compute net income directly via pure function
+  const scheduleCNetIncome = useMemo(() => {
+    if (preloadedScheduleC?.years && typeof selectedYear === 'number') {
+      return computeScheduleCNetIncome(preloadedScheduleC.years as YearData[], selectedYear)
+    }
+    return scheduleCNetIncomeFromFetch
+  }, [preloadedScheduleC, selectedYear, scheduleCNetIncomeFromFetch])
 
   // 1099 income totals (from confirmed parsed documents)
   const [income1099, setIncome1099] = useState({
@@ -606,11 +612,10 @@ export default function TaxPreviewPage({ initialData }: { initialData?: TaxPrevi
   const [reviewed1099Docs, setReviewed1099Docs] = useState<TaxDocument[]>(() => (initialData?.reviewed1099Docs ?? []) as TaxDocument[])
   const [reviewedK1Docs, setReviewedK1Docs] = useState<TaxDocument[]>([])
 
-  // Preloaded Schedule C data (passed to ScheduleCPreview and ScheduleCTab)
-  const preloadedScheduleC = initialData?.scheduleCData ?? null
-
   // Refresh trigger — increment to force child sections to reload after a review
   const [refreshTrigger, setRefreshTrigger] = useState(0)
+  // Track whether this is the initial mount (used to skip preloaded data re-fetch)
+  const isInitialMount = useRef(true)
 
   const handle1099TotalsChange = useCallback((totals: {
     interestIncome: currency
@@ -655,7 +660,7 @@ export default function TaxPreviewPage({ initialData }: { initialData?: TaxPrevi
       q4: number
     }
   }) => {
-    setScheduleCNetIncome(netIncome)
+    setScheduleCNetIncomeFromFetch(netIncome)
   }, [])
 
   // If year wasn't explicitly set in URL, default to newest available year when current year has no data.
@@ -690,7 +695,11 @@ export default function TaxPreviewPage({ initialData }: { initialData?: TaxPrevi
   // Fetch count of documents ready for review (parsed but not confirmed)
   // Skip initial fetch when preloaded; still re-fetch after review actions
   useEffect(() => {
-    if (initialData && refreshTrigger === 0) return // Already initialized from preload
+    if (initialData && isInitialMount.current) {
+      isInitialMount.current = false
+      return // Already initialized from preload
+    }
+    isInitialMount.current = false
     if (typeof selectedYear !== 'number') {
       setPendingReviewCount(0)
       return
@@ -810,17 +819,6 @@ export default function TaxPreviewPage({ initialData }: { initialData?: TaxPrevi
           onDocumentReviewed={() => setRefreshTrigger(t => t + 1)}
         />
       )}
-
-      {/* Hidden ScheduleCPreview — computes net income for Tax Estimate tab and available years.
-          Renders no visible UI; it only fires the onScheduleCNetIncomeChange callback. */}
-      <div className="hidden">
-        <ScheduleCPreview
-          selectedYear={selectedYear}
-          onAvailableYearsChange={handleAvailableYearsChange}
-          onScheduleCNetIncomeChange={handleScheduleCNetIncomeChange}
-          preloadedData={preloadedScheduleC}
-        />
-      </div>
 
       {/* ── Tabbed content ──────────────────────────────────────────────────── */}
       <Tabs defaultValue="overview" className="px-4 pb-8">

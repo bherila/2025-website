@@ -124,6 +124,9 @@ class TaxPreviewDataService
      * Returns Schedule C data (all years). Year filtering is done client-side
      * since the data is used for carry-forward calculations across years.
      *
+     * Note: delegates to FinanceScheduleCController which uses Auth::id() internally.
+     * This works because the service is called within the auth middleware context.
+     *
      * @return array<string, mixed>
      */
     private function scheduleCForYear(int $userId): array
@@ -131,7 +134,6 @@ class TaxPreviewDataService
         $controller = new FinanceScheduleCController;
         $request = new Request;
 
-        // Temporarily authenticate as the user for the controller
         $response = app()->call([$controller, 'getSummary'], ['request' => $request]);
 
         // The controller returns a JsonResponse; we need the data

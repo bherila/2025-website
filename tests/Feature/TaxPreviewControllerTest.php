@@ -9,6 +9,21 @@ class TaxPreviewControllerTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * Extract the preload JSON from a tax-preview response.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function extractPreload(string $content): ?array
+    {
+        preg_match('/<script id="tax-preview-data" type="application\/json">\s*(.*?)\s*<\/script>/s', $content, $matches);
+        if (empty($matches[1])) {
+            return null;
+        }
+
+        return json_decode($matches[1], true);
+    }
+
     public function test_tax_preview_page_loads_for_authenticated_user(): void
     {
         $user = $this->createUser();
@@ -38,13 +53,9 @@ class TaxPreviewControllerTest extends TestCase
 
         $response->assertStatus(200);
 
-        // Extract the preload JSON from the response
-        $content = $response->getContent();
-        preg_match('/<script id="tax-preview-data" type="application\/json">\s*(.*?)\s*<\/script>/s', $content, $matches);
-        $this->assertNotEmpty($matches[1] ?? '', 'Preload script tag should contain JSON');
+        $preload = $this->extractPreload($response->getContent());
+        $this->assertNotNull($preload, 'Preload script tag should contain JSON');
 
-        $preload = json_decode($matches[1], true);
-        $this->assertIsArray($preload);
         $this->assertArrayHasKey('year', $preload);
         $this->assertArrayHasKey('availableYears', $preload);
         $this->assertArrayHasKey('payslips', $preload);
@@ -84,10 +95,8 @@ class TaxPreviewControllerTest extends TestCase
 
         $response->assertStatus(200);
 
-        $content = $response->getContent();
-        preg_match('/<script id="tax-preview-data" type="application\/json">\s*(.*?)\s*<\/script>/s', $content, $matches);
-
-        $preload = json_decode($matches[1] ?? '', true);
+        $preload = $this->extractPreload($response->getContent());
+        $this->assertNotNull($preload);
         $this->assertEquals((int) date('Y'), $preload['year']);
     }
 }
