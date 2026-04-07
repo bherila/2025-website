@@ -4,6 +4,7 @@ namespace App\Http\Controllers\FinanceTool;
 
 use App\GenAiProcessor\Jobs\ParseImportJob;
 use App\GenAiProcessor\Models\GenAiImportJob;
+use App\GenAiProcessor\Services\GenAiJobDispatcherService;
 use App\Http\Controllers\Controller;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccounts;
@@ -18,9 +19,12 @@ class TaxDocumentController extends Controller
 {
     protected FileStorageService $fileService;
 
-    public function __construct(FileStorageService $fileService)
+    protected GenAiJobDispatcherService $dispatcherService;
+
+    public function __construct(FileStorageService $fileService, GenAiJobDispatcherService $dispatcherService)
     {
         $this->fileService = $fileService;
+        $this->dispatcherService = $dispatcherService;
     }
 
     public function index(Request $request): JsonResponse
@@ -182,6 +186,43 @@ class TaxDocumentController extends Controller
             $doc->load(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name']),
             201
         );
+    }
+
+    /**
+     * Return the LLM prompt text and JSON schema for a given form type.
+     *
+     * Used by the "Attach JSON" feature so users can extract data via any external LLM
+     * and paste the resulting JSON back without uploading a PDF.
+     *
+     * Query params:
+     *   form_type  string   – one of the supported form types (w2, 1099_int, 1099_div, 1099_misc, k1)
+     *   tax_year   integer  – the tax year (defaults to current year)
+     */
+    public function getPromptInfo(Request $request): JsonResponse
+    {
+        $formType = (string) ($request->query('form_type') ?? 'w2');
+        $taxYear = is_numeric($request->query('tax_year')) ? (int) $request->query('tax_year') : (int) date('Y');
+
+        if (! in_array($formType, FileForTaxDocument::FORM_TYPES, true)) {
+            return response()->json(['message' => 'Invalid form type.'], 422);
+        }
+
+        // K-1 prompt exists; other form types that don't have a dedicated manual flow
+        // (e.g. w2c, 1099_int_c, 1099_div_c) reuse the base type prompt
+        $effectiveType = match ($formType) {
+            'w2c' => 'w2',
+            '1099_int_c' => '1099_int',
+            '1099_div_c' => '1099_div',
+            default => $formType,
+        };
+
+        try {
+            $info = $this->dispatcherService->getTaxDocumentPromptInfo($effectiveType, $taxYear);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json($info);
     }
 
     /**

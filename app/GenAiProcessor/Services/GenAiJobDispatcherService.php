@@ -96,6 +96,120 @@ class GenAiJobDispatcherService
     }
 
     /**
+     * Return the human-readable LLM prompt and expected JSON schema for a tax document form type.
+     *
+     * Used by the "Attach JSON" feature so users can extract data manually via any LLM
+     * and paste the result back without needing Gemini tool calls.
+     *
+     * The returned prompt is stripped of the internal `<!-- tool:... -->` marker and augmented
+     * with JSON-output instructions.  The `json_schema` mirrors the properties of the Gemini
+     * tool definition for W-2 / 1099 forms; for K-1 it reflects the FK1StructuredData shape
+     * (the format that is actually stored in `parsed_data` and consumed by the UI).
+     *
+     * @return array{prompt: string, json_schema: array<string,mixed>, form_label: string}
+     */
+    public function getTaxDocumentPromptInfo(string $formType, int $taxYear): array
+    {
+        $rawPrompt = $this->buildTaxDocumentPrompt(['form_type' => $formType, 'tax_year' => $taxYear]);
+
+        // Strip the internal `<!-- tool:... -->` marker so users don't see it
+        $cleanInstructions = trim((string) preg_replace('/<!--[^>]+-->\s*\n?/', '', $rawPrompt));
+
+        // Build the JSON schema the user should produce
+        if ($formType === 'k1') {
+            $jsonSchema = $this->buildK1ManualJsonSchema();
+        } else {
+            $toolDef = $this->buildTaxDocumentToolDefinitionFromPrompt($rawPrompt);
+            $jsonSchema = $toolDef ? ($toolDef['definition']['parameters']['properties'] ?? []) : [];
+        }
+
+        // Build a complete copy-paste prompt for external LLMs (no tool calls)
+        $schemaJson = json_encode($jsonSchema, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $fullPrompt = <<<PROMPT
+{$cleanInstructions}
+
+──────────────────────────────────────────
+IMPORTANT: Since tool calls are not available, return ONLY a single valid JSON object
+with no markdown, no code fences, and no additional explanation.
+The JSON must exactly match this schema:
+
+{$schemaJson}
+PROMPT;
+
+        $formLabels = [
+            'w2' => 'W-2',
+            'w2c' => 'W-2c',
+            '1099_int' => '1099-INT',
+            '1099_div' => '1099-DIV',
+            '1099_misc' => '1099-MISC',
+            'k1' => 'K-1 / K-3',
+        ];
+
+        return [
+            'prompt' => $fullPrompt,
+            'json_schema' => $jsonSchema,
+            'form_label' => $formLabels[$formType] ?? $formType,
+        ];
+    }
+
+    /**
+     * Returns the expected JSON schema for manual K-1 / K-3 attachment.
+     * This mirrors the FK1StructuredData shape stored in parsed_data.
+     *
+     * @return array<string,mixed>
+     */
+    private function buildK1ManualJsonSchema(): array
+    {
+        return [
+            'schemaVersion' => [
+                'type' => 'STRING',
+                'description' => 'Must be exactly "2026.1"',
+            ],
+            'formType' => [
+                'type' => 'STRING',
+                'description' => 'e.g. "K-1-1065" for partnerships, "K-1-1120S" for S-corps',
+            ],
+            'formId' => [
+                'type' => 'STRING',
+                'description' => 'Form identifier / partner number from the K-1 header (optional)',
+            ],
+            'fields' => [
+                'type' => 'OBJECT',
+                'description' => 'All flat K-1 boxes keyed by identifier (A–O, 1–10, 12, 21). '
+                    .'Each value is an object: { "value": "<string>", "confidence": <0-1> }.',
+                'example' => [
+                    'A' => ['value' => 'Acme Partnership LLC'],
+                    '1' => ['value' => '12345.67'],
+                    '21' => ['value' => '150.00'],
+                ],
+            ],
+            'codes' => [
+                'type' => 'OBJECT',
+                'description' => 'Coded K-1 boxes (11, 13–20) keyed by box number. '
+                    .'Each is an array of { "code": "<letter>", "value": "<string>", "notes": "<optional>" }.',
+                'example' => [
+                    '11' => [
+                        ['code' => 'A', 'value' => '500.00', 'notes' => 'Net long-term capital gain'],
+                        ['code' => 'ZZ', 'value' => '-2500.00', 'notes' => 'Other item — §988 loss'],
+                    ],
+                    '16' => [
+                        ['code' => 'I', 'value' => '75.00', 'notes' => 'Foreign taxes paid — passive basket'],
+                    ],
+                ],
+            ],
+            'k3' => [
+                'type' => 'OBJECT',
+                'description' => 'Schedule K-3 data (omit entirely if no K-3 was attached). '
+                    .'Shape: { "sections": [ { "sectionId": "part2_section1", "title": "...", "data": { ... } } ] }',
+            ],
+            'warnings' => [
+                'type' => 'ARRAY',
+                'description' => 'Array of warning strings for ambiguous or complex items (optional).',
+            ],
+        ];
+    }
+
+    /**
      * Build the Gemini prompt for the given job type and context.
      */
     public function buildPrompt(string $jobType, array $context): string

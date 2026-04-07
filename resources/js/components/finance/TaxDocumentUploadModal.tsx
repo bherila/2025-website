@@ -1,9 +1,10 @@
 'use client'
 
-import { Loader2, Upload } from 'lucide-react'
+import { FileCode2, Loader2, Upload } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
+import ManualJsonAttachModal from '@/components/finance/ManualJsonAttachModal'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -14,6 +15,7 @@ import {
 import { Progress } from '@/components/ui/progress'
 import { fetchWrapper } from '@/fetchWrapper'
 import { computeFileSHA256 } from '@/lib/fileUtils'
+import type { TaxDocument } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
 interface TaxDocumentUploadModalProps {
@@ -87,6 +89,7 @@ export default function TaxDocumentUploadModal({
   const [phase, setPhase] = useState<UploadPhase>('idle')
   const [uploadProgress, setUploadProgress] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
+  const [showManualJson, setShowManualJson] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropZoneRef = useRef<HTMLDivElement>(null)
 
@@ -96,6 +99,7 @@ export default function TaxDocumentUploadModal({
       setPhase('idle')
       setUploadProgress(0)
       setIsDragging(false)
+      setShowManualJson(false)
     }
   }, [open])
 
@@ -251,86 +255,121 @@ export default function TaxDocumentUploadModal({
   const formLabel = FORM_TYPE_LABELS[formType] ?? formType
 
   return (
-    <Dialog open={open} onOpenChange={isOpen => !isOpen && !isUploading && onCancel()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Upload {formLabel}</DialogTitle>
-        </DialogHeader>
+    <>
+      <Dialog open={open && !showManualJson} onOpenChange={isOpen => !isOpen && !isUploading && onCancel()}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Upload {formLabel}</DialogTitle>
+          </DialogHeader>
 
-        <div className="space-y-4 py-2">
-          {/* Drop zone */}
-          <div
-            ref={dropZoneRef}
-            role="button"
-            tabIndex={isUploading ? -1 : 0}
-            aria-label="Drop file here, paste a screen clipping, or press Enter to select a file"
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onClick={() => !isUploading && fileInputRef.current?.click()}
-            onKeyDown={e => {
-              if (!isUploading && (e.key === 'Enter' || e.key === ' ')) {
-                e.preventDefault()
-                fileInputRef.current?.click()
-              }
-            }}
-            className={`
-              border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors
-              ${isDragging ? 'border-primary bg-primary/5' : 'border-muted-foreground/30 hover:border-primary/60 hover:bg-muted/30'}
-              ${isUploading ? 'pointer-events-none opacity-70' : ''}
-            `}
-          >
-            {isUploading ? (
-              <div className="flex flex-col items-center gap-3">
-                <Loader2 className="h-8 w-8 text-primary animate-spin" />
-                <p className="text-sm text-muted-foreground">
-                  {phase === 'requesting' && 'Preparing upload...'}
-                  {phase === 'uploading' && `Uploading... ${uploadProgress}%`}
-                  {phase === 'saving' && 'Saving...'}
-                </p>
-                {phase === 'uploading' && (
-                  <Progress value={uploadProgress} className="w-full max-w-xs" />
-                )}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                <Upload className="h-8 w-8" />
-                <p className="font-medium text-foreground">Drop file here, paste a screen clipping, or click here to select a file</p>
-                <p className="text-xs">PDF, PNG, JPG, or TXT</p>
-              </div>
+          <div className="space-y-4 py-2">
+            {/* Drop zone */}
+            <div
+              ref={dropZoneRef}
+              role="button"
+              tabIndex={isUploading ? -1 : 0}
+              aria-label="Drop file here, paste a screen clipping, or press Enter to select a file"
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onClick={() => !isUploading && fileInputRef.current?.click()}
+              onKeyDown={e => {
+                if (!isUploading && (e.key === 'Enter' || e.key === ' ')) {
+                  e.preventDefault()
+                  fileInputRef.current?.click()
+                }
+              }}
+              className={`
+                border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors
+                ${isDragging ? 'border-primary bg-primary/5' : 'border-muted-foreground/30 hover:border-primary/60 hover:bg-muted/30'}
+                ${isUploading ? 'pointer-events-none opacity-70' : ''}
+              `}
+            >
+              {isUploading ? (
+                <div className="flex flex-col items-center gap-3">
+                  <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                  <p className="text-sm text-muted-foreground">
+                    {phase === 'requesting' && 'Preparing upload...'}
+                    {phase === 'uploading' && `Uploading... ${uploadProgress}%`}
+                    {phase === 'saving' && 'Saving...'}
+                  </p>
+                  {phase === 'uploading' && (
+                    <Progress value={uploadProgress} className="w-full max-w-xs" />
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                  <Upload className="h-8 w-8" />
+                  <p className="font-medium text-foreground">Drop file here, paste a screen clipping, or click here to select a file</p>
+                  <p className="text-xs">PDF, PNG, JPG, or TXT</p>
+                </div>
+              )}
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/pdf,image/*,text/plain"
+              className="hidden"
+              onChange={handleFileSelected}
+            />
+
+            {/* Attach JSON option */}
+            {!isUploading && (
+              <>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-px bg-border" />
+                  <span className="text-xs text-muted-foreground">or</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+                <Button
+                  variant="outline"
+                  className="w-full gap-2"
+                  onClick={() => setShowManualJson(true)}
+                >
+                  <FileCode2 className="h-4 w-4" />
+                  Attach JSON from LLM
+                </Button>
+              </>
+            )}
+
+            {/* Create Blank option */}
+            {onCreateBlank && !isUploading && (
+              <>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-px bg-border" />
+                  <span className="text-xs text-muted-foreground">or</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    onCancel()
+                    onCreateBlank()
+                  }}
+                >
+                  Create Blank {formLabel}
+                </Button>
+              </>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
 
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="application/pdf,image/*,text/plain"
-            className="hidden"
-            onChange={handleFileSelected}
-          />
-
-          {/* Create Blank option */}
-          {onCreateBlank && !isUploading && (
-            <div className="flex items-center gap-3">
-              <div className="flex-1 h-px bg-border" />
-              <span className="text-xs text-muted-foreground">or</span>
-              <div className="flex-1 h-px bg-border" />
-            </div>
-          )}
-          {onCreateBlank && !isUploading && (
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => {
-                onCancel()
-                onCreateBlank()
-              }}
-            >
-              Create Blank {formLabel}
-            </Button>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
+      {/* Manual JSON attachment sub-dialog */}
+      <ManualJsonAttachModal
+        open={open && showManualJson}
+        formType={formType}
+        taxYear={taxYear}
+        accountId={accountId}
+        employmentEntityId={employmentEntityId}
+        onSuccess={(_doc: TaxDocument) => {
+          setShowManualJson(false)
+          onSuccess()
+        }}
+        onBack={() => setShowManualJson(false)}
+      />
+    </>
   )
 }
