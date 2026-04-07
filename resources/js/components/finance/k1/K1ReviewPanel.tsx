@@ -1,5 +1,6 @@
 'use client'
 
+import currency from 'currency.js'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 
@@ -179,9 +180,9 @@ function IncomeItemsBlock({
 
   const box11Items = data.codes['11'] ?? []
 
-  const fieldSum = incomeFieldLines.reduce((acc, { val }) => acc + (val ?? 0), 0)
-  const codeSum = box11Items.reduce((acc, item) => acc + (parseFieldVal(item.value) ?? 0), 0)
-  const subtotal = fieldSum + codeSum
+  const fieldSum = incomeFieldLines.reduce((acc, { val }) => acc.add(val ?? 0), currency(0)).value
+  const codeSum = box11Items.reduce((acc, item) => acc.add(parseFieldVal(item.value) ?? 0), currency(0)).value
+  const subtotal = currency(fieldSum).add(codeSum).value
 
   if (incomeFieldLines.length === 0 && box11Items.length === 0) return null
 
@@ -219,16 +220,17 @@ function DeductionItemsBlock({
   const box21Val = parseFieldVal(data.fields['21']?.value)
   const box13Items = data.codes['13'] ?? []
 
-  const incomeTotal =
-    INCOME_BOXES.reduce((acc, box) => acc + (parseFieldVal(data.fields[box]?.value) ?? 0), 0) +
-    (data.codes['11'] ?? []).reduce((acc, item) => acc + (parseFieldVal(item.value) ?? 0), 0)
+  const incomeTotal = INCOME_BOXES
+    .reduce((acc, box) => acc.add(parseFieldVal(data.fields[box]?.value) ?? 0), currency(0))
+    .add((data.codes['11'] ?? []).reduce((acc, item) => acc.add(parseFieldVal(item.value) ?? 0), currency(0)))
+    .value
 
-  const deductionTotal =
-    (box12Val !== null ? -Math.abs(box12Val) : 0) +
-    box13Items.reduce((acc, item) => acc + (parseFieldVal(item.value) ?? 0), 0) +
-    (box21Val !== null ? -Math.abs(box21Val) : 0)
+  const deductionTotal = currency(box12Val !== null ? -Math.abs(box12Val) : 0)
+    .add(box13Items.reduce((acc, item) => acc.add(parseFieldVal(item.value) ?? 0), currency(0)))
+    .add(box21Val !== null ? -Math.abs(box21Val) : 0)
+    .value
 
-  const netK1 = incomeTotal + deductionTotal
+  const netK1 = currency(incomeTotal).add(deductionTotal).value
 
   const hasContent = box12Val !== null || box13Items.length > 0 || box21Val !== null
 

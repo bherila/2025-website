@@ -1279,8 +1279,8 @@ PROMPT;
         if (! empty($part2Rows)) {
             $incomeLines = ['6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24'];
             $deductionLines = ['25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46', '47', '48', '49', '50', '51', '52', '53', '54', '55'];
-            $section1Rows = array_values(array_filter($part2Rows, fn ($r) => in_array($r['line'] ?? '', $incomeLines)));
-            $section2Rows = array_values(array_filter($part2Rows, fn ($r) => in_array($r['line'] ?? '', $deductionLines)));
+            $section1Rows = array_values(array_filter($part2Rows, fn ($r) => is_array($r) && in_array($r['line'] ?? '', $incomeLines)));
+            $section2Rows = array_values(array_filter($part2Rows, fn ($r) => is_array($r) && in_array($r['line'] ?? '', $deductionLines)));
             if (! empty($section1Rows)) {
                 $k3Sections[] = [
                     'sectionId' => 'part2_section1',
@@ -1313,12 +1313,19 @@ PROMPT;
         // Part III Section 4: foreign taxes by country
         $foreignTaxes = is_array($args['k3_part3_foreign_taxes'] ?? null) ? $args['k3_part3_foreign_taxes'] : [];
         if (! empty($foreignTaxes)) {
+            $foreignTaxesWithAmounts = array_values(array_filter(
+                $foreignTaxes,
+                static fn ($row): bool => is_array($row) && is_numeric($row['amount_usd'] ?? null)
+            ));
             $k3Sections[] = [
                 'sectionId' => 'part3_section4',
                 'title' => 'Part III – Section 4: Foreign Taxes',
                 'data' => [
                     'countries' => $foreignTaxes,
-                    'grandTotalUSD' => array_sum(array_column($foreignTaxes, 'amount_usd')),
+                    'grandTotalUSD' => array_sum(array_map(
+                        static fn (array $row): float => (float) $row['amount_usd'],
+                        $foreignTaxesWithAmounts
+                    )),
                 ],
                 'notes' => '',
             ];

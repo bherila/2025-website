@@ -24,8 +24,8 @@ function parseK1Codes(data: FK1StructuredData, box: string, filterCodes?: string
     .filter((item) => !filterCodes || filterCodes.includes(item.code))
     .reduce((acc, item) => {
       const n = parseFloat(item.value)
-      return acc + (isNaN(n) ? 0 : n)
-    }, 0)
+      return isNaN(n) ? acc : acc.add(n)
+    }, currency(0)).value
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -81,26 +81,26 @@ export default function Form4952Preview({
     }
   }
 
-  const totalInvInt = invIntSources.reduce((acc, s) => acc + s.amount, 0)
+  const totalInvInt = invIntSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value
   const totalInvIntExpense = Math.abs(totalInvInt)
 
   // ── Gather Net Investment Income ─────────────────────────────────────────
-  const k1Interest = k1Parsed.reduce((acc, { data }) => acc + parseK1Field(data, '5'), 0)
-  const k1OrdDiv = k1Parsed.reduce((acc, { data }) => acc + parseK1Field(data, '6a'), 0)
-  const k1QualDiv = k1Parsed.reduce((acc, { data }) => acc + parseK1Field(data, '6b'), 0)
-  const k1NonQualDiv = k1OrdDiv - k1QualDiv
+  const k1Interest = k1Parsed.reduce((acc, { data }) => acc.add(parseK1Field(data, '5')), currency(0)).value
+  const k1OrdDiv = k1Parsed.reduce((acc, { data }) => acc.add(parseK1Field(data, '6a')), currency(0)).value
+  const k1QualDiv = k1Parsed.reduce((acc, { data }) => acc.add(parseK1Field(data, '6b')), currency(0)).value
+  const k1NonQualDiv = currency(k1OrdDiv).subtract(k1QualDiv).value
 
   // Box 11C = Section 1256 contracts (60% LT / 40% ST); treated as NII
   const k1Sec1256 = k1Parsed.reduce(
-    (acc, { data }) => acc + parseK1Codes(data, '11', ['C']),
-    0,
-  )
+    (acc, { data }) => acc.add(parseK1Codes(data, '11', ['C'])),
+    currency(0),
+  ).value
 
   // Box 20A = investment income per Form 4952 (authoritative figure if present)
   const k1Box20A = k1Parsed.reduce(
-    (acc, { data }) => acc + parseK1Codes(data, '20', ['A']),
-    0,
-  )
+    (acc, { data }) => acc.add(parseK1Codes(data, '20', ['A'])),
+    currency(0),
+  ).value
 
   // §67(g) suspended investment expenses (Box 13L, 13AE) — shown on Form 4952 Line 5 but not deductible
   type SuspendedLine = { label: string; amount: number }
@@ -118,20 +118,20 @@ export default function Form4952Preview({
     }
   }
   // Suspended deductions do NOT reduce NII for §163(d) purposes (federally suspended)
-  const totalSuspended = suspendedLines.reduce((acc, l) => acc + l.amount, 0)
+  const totalSuspended = suspendedLines.reduce((acc, l) => acc.add(l.amount), currency(0)).value
 
   const direct1099Interest = income1099.interestIncome.value
   const direct1099OrdDiv = income1099.dividendIncome.value
   const direct1099QualDiv = income1099.qualifiedDividends.value
-  const direct1099NonQualDiv = direct1099OrdDiv - direct1099QualDiv
+  const direct1099NonQualDiv = currency(direct1099OrdDiv).subtract(direct1099QualDiv).value
 
   // If Box 20A is present, use it as the authoritative NII figure
   const niiBefore =
     k1Box20A > 0
-      ? k1Box20A + direct1099Interest + direct1099NonQualDiv
-      : k1Interest + k1NonQualDiv + k1Sec1256 + direct1099Interest + direct1099NonQualDiv
+      ? currency(k1Box20A).add(direct1099Interest).add(direct1099NonQualDiv).value
+      : currency(k1Interest).add(k1NonQualDiv).add(k1Sec1256).add(direct1099Interest).add(direct1099NonQualDiv).value
 
-  const totalQualDiv = k1QualDiv + direct1099QualDiv
+  const totalQualDiv = currency(k1QualDiv).add(direct1099QualDiv).value
 
   if (totalInvIntExpense === 0 && niiBefore === 0) return null
 

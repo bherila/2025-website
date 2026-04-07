@@ -30,6 +30,7 @@ interface ActionItemsTabProps {
     qualifiedDividends: currency
   }
   w2GrossIncome: currency
+  selectedYear?: number
 }
 
 export default function ActionItemsTab({
@@ -38,7 +39,10 @@ export default function ActionItemsTab({
   reviewedW2Docs,
   income1099,
   w2GrossIncome,
+  selectedYear,
 }: ActionItemsTabProps) {
+  const taxYear = selectedYear ?? new Date().getFullYear()
+  const priorYear = taxYear - 1
   const k1Parsed = reviewedK1Docs
     .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
     .filter((x): x is { doc: TaxDocument; data: FK1StructuredData } => x.data !== null)
@@ -58,12 +62,12 @@ export default function ActionItemsTab({
         amount: Math.abs(parseFieldVal(i.value) ?? 0),
       }))
   })
-  const totalSuspended = suspendedItems.reduce((acc, i) => acc + i.amount, 0)
+  const totalSuspended = suspendedItems.reduce((acc, i) => acc.add(i.amount), currency(0)).value
   const hasSuspendedDeductions = suspendedItems.length > 0
 
   // TurboTax FTC Line 1d issue
-  const totalK1Box5 = k1Parsed.reduce((acc, { data }) => acc + pk1(data, '5'), 0)
-  let totalK3PassiveIncome = 0
+  const totalK1Box5 = k1Parsed.reduce((acc, { data }) => acc.add(pk1(data, '5')), currency(0)).value
+  let totalK3PassiveIncomeC = currency(0)
   for (const { data } of k1Parsed) {
     const k3Sections = data.k3?.sections ?? []
     for (const sec of k3Sections) {
@@ -71,10 +75,11 @@ export default function ActionItemsTab({
       const rows = ((sec.data as Record<string, unknown>)?.rows as Array<Record<string, unknown>> | undefined) ?? []
       for (const row of rows) {
         const passive = parseFieldVal(String(row.col_c_passive ?? '')) ?? 0
-        totalK3PassiveIncome += passive
+        totalK3PassiveIncomeC = totalK3PassiveIncomeC.add(passive)
       }
     }
   }
+  const totalK3PassiveIncome = totalK3PassiveIncomeC.value
   const turboTaxFTCIssue = totalK1Box5 > 0 && totalK3PassiveIncome < totalK1Box5 * 0.5
 
   // Box 21 without K-3 Part III Section 4 country entries
@@ -115,55 +120,60 @@ export default function ActionItemsTab({
   // NII ≥ investment interest → no QD election needed
   const k1InvInt = k1Parsed.reduce((acc, { data }) => {
     const hItems = (data.codes['13'] ?? []).filter((i) => i.code === 'H' || i.code === 'G')
-    return acc + hItems.reduce((s, i) => s + Math.abs(parseFieldVal(i.value) ?? 0), 0)
-  }, 0)
-  const niiBefore =
-    k1Parsed.reduce((acc, { data }) => acc + pk1(data, '5'), 0) +
-    income1099.interestIncome.value +
-    income1099.dividendIncome.value -
-    income1099.qualifiedDividends.value
+    return acc.add(hItems.reduce((s, i) => s.add(Math.abs(parseFieldVal(i.value) ?? 0)), currency(0)))
+  }, currency(0)).value
+  const niiBefore = k1Parsed
+    .reduce((acc, { data }) => acc.add(pk1(data, '5')), currency(0))
+    .add(income1099.interestIncome)
+    .add(income1099.dividendIncome)
+    .subtract(income1099.qualifiedDividends)
+    .value
   const noQdElectionNeeded = k1InvInt > 0 && niiBefore >= k1InvInt
 
   // Capital gain/loss
-  const netST = k1Parsed.reduce((acc, { data }) => acc + pk1(data, '8'), 0)
+  const netST = k1Parsed.reduce((acc, { data }) => acc.add(pk1(data, '8')), currency(0)).value
   const netLT = k1Parsed.reduce(
-    (acc, { data }) => acc + pk1(data, '9a') + pk1(data, '9b') + pk1(data, '9c') + pk1(data, '10'),
-    0,
-  )
-  const combined = netST + netLT
+    (acc, { data }) => acc.add(pk1(data, '9a')).add(pk1(data, '9b')).add(pk1(data, '9c')).add(pk1(data, '10')),
+    currency(0),
+  ).value
+  const combined = currency(netST).add(netLT).value
   const largeCapLossCarryforward = combined < -3000
 
   // Withholding
   const totalW2FedWH = reviewedW2Docs.reduce((acc, doc) => {
     const p = doc.parsed_data as Record<string, unknown>
     const v = p?.box2_fed_tax as number | undefined
-    return acc + (v ?? 0)
-  }, 0)
+    return acc.add(v ?? 0)
+  }, currency(0)).value
 
-  const totalForeignTax = k1Parsed.reduce((acc, { data }) => acc + pk1(data, '21'), 0) +
-    reviewed1099Docs.reduce((acc, doc) => {
+  const totalForeignTax = k1Parsed
+    .reduce((acc, { data }) => acc.add(pk1(data, '21')), currency(0))
+    .add(reviewed1099Docs.reduce((acc, doc) => {
       const p = doc.parsed_data as Record<string, unknown>
       const v = (p?.box7_foreign_tax ?? p?.box6_foreign_tax) as number | undefined
-      return acc + (v ?? 0)
-    }, 0)
+      return acc.add(v ?? 0)
+    }, currency(0)))
+    .value
 
   const addlMedicare = Math.max(0, w2GrossIncome.value - 200000) * 0.009
 
   // AQR ordinary items (Box 11ZZ sum)
   const aqrBox11ZZSum = k1Parsed.reduce((acc, { data }) => {
-    return acc + (data.codes['11'] ?? [])
-      .filter((i) => i.code === 'ZZ')
-      .reduce((s, i) => s + (parseFieldVal(i.value) ?? 0), 0)
-  }, 0)
+    return acc.add(
+      (data.codes['11'] ?? [])
+        .filter((i) => i.code === 'ZZ')
+        .reduce((s, i) => s.add(parseFieldVal(i.value) ?? 0), currency(0)),
+    )
+  }, currency(0)).value
 
   const k1NetTotal = k1Parsed.reduce((acc, { data }) => {
     const incomeBoxes = ['1', '2', '3', '4', '5', '6a', '7', '8', '9a', '9b', '9c', '10']
-    const income = incomeBoxes.reduce((s, b) => s + pk1(data, b), 0)
-    const box11 = (data.codes['11'] ?? []).reduce((s, i) => s + (parseFieldVal(i.value) ?? 0), 0)
+    const income = incomeBoxes.reduce((s, b) => s.add(pk1(data, b)), currency(0))
+    const box11 = (data.codes['11'] ?? []).reduce((s, i) => s.add(parseFieldVal(i.value) ?? 0), currency(0))
     const box12 = pk1(data, '12')
-    const box13 = (data.codes['13'] ?? []).reduce((s, i) => s + (parseFieldVal(i.value) ?? 0), 0)
-    return acc + income + box11 + (box12 !== 0 ? -Math.abs(box12) : 0) + box13
-  }, 0)
+    const box13 = (data.codes['13'] ?? []).reduce((s, i) => s.add(parseFieldVal(i.value) ?? 0), currency(0))
+    return acc.add(income).add(box11).add(box12 !== 0 ? -Math.abs(box12) : 0).add(box13)
+  }, currency(0)).value
 
   // ── Resolved items ────────────────────────────────────────────────────────
   const resolvedItems: { title: string; body: string }[] = []
@@ -267,9 +277,9 @@ export default function ActionItemsTab({
     body: (
       <ul className="list-none space-y-1">
         <li>☐ Form 4952 Line 7 — investment interest carryforward (assumed $0)</li>
-        <li>☐ Schedule D carryforward worksheet — any 2024 ST/LT capital loss carryforwards</li>
+        <li>☐ Schedule D carryforward worksheet — any {priorYear} ST/LT capital loss carryforwards</li>
         <li>☐ Form 1116 — any unused FTC carryforward (likely $0)</li>
-        <li className="text-[10px] mt-1 opacity-80">Retrieve from your 2024 tax return before finalizing.</li>
+        <li className="text-[10px] mt-1 opacity-80">Retrieve from your {priorYear} tax return before finalizing.</li>
       </ul>
     ),
   })

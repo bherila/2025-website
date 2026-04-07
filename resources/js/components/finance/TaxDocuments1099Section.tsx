@@ -1,7 +1,7 @@
 'use client'
 
 import currency from 'currency.js'
-import { Calculator, CheckCircle, Clock, Eye, Loader2, Upload } from 'lucide-react'
+import { Calculator, CheckCircle, ChevronDown, Clock, Eye, Loader2, Plus, Upload } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -15,6 +15,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -205,15 +211,6 @@ export default function TaxDocuments1099Section({
     return () => clearTimeout(timer)
   }, [documents, fetchDocuments])
 
-  /** Get docs for a specific account + form type (includes corrected variants). */
-  const getDocsForSlot = (accountId: number, formType: DisplayFormType): TaxDocument[] =>
-    documents.filter(d => {
-      if (d.account_id !== accountId) return false
-      if (formType === '1099_int') return d.form_type === '1099_int' || d.form_type === '1099_int_c'
-      if (formType === '1099_div') return d.form_type === '1099_div' || d.form_type === '1099_div_c'
-      return d.form_type === formType
-    })
-
   // Accounts with at least one 1099/k-1 document should be promoted to the active section
   const accountsWithDocs = new Set(documents.map(d => d.account_id).filter(Boolean) as number[])
 
@@ -263,78 +260,116 @@ export default function TaxDocuments1099Section({
     }
   }
 
-  /** Render the cell content for a given account + form type slot. */
-  const renderSlot = (account: FinAccount, formType: DisplayFormType) => {
-    const docs = getDocsForSlot(account.acct_id, formType)
+  /** Extract the primary dollar amount from a document for display in the button label. */
+  const getDocDisplayValue = (doc: TaxDocument): string | null => {
+    if (!doc.parsed_data) return null
+    const p = doc.parsed_data as Record<string, unknown>
+    if (doc.form_type === '1099_int' || doc.form_type === '1099_int_c') {
+      const amt = p.box1_interest as number | undefined
+      return amt != null ? currency(amt).format() : null
+    }
+    if (doc.form_type === '1099_div' || doc.form_type === '1099_div_c') {
+      const amt = (p.box1a_ordinary ?? p.box1_ordinary) as number | undefined
+      return amt != null ? currency(amt).format() : null
+    }
+    if (doc.form_type === '1099_misc') {
+      const amt = (p.box3_other ?? p.box7_nonemployee ?? p.total_amount) as number | undefined
+      return amt != null ? currency(amt).format() : null
+    }
+    return null
+  }
 
-    if (docs.length === 0) {
-      // Hide upload button if an incompatible form type is already uploaded (but not both)
-      const hasK1 = getDocsForSlot(account.acct_id, 'k1').length > 0
-      const has1099Int = getDocsForSlot(account.acct_id, '1099_int').length > 0
-      const has1099Div = getDocsForSlot(account.acct_id, '1099_div').length > 0
-      const has1099 = has1099Int || has1099Div
+  /** Render a single reviewed/processing/failed doc button. */
+  const renderDocButton = (doc: TaxDocument) => {
+    const isProcessing = doc.genai_status === 'pending' || doc.genai_status === 'processing'
+    const isFailed = doc.genai_status === 'failed'
+    const displayValue = getDocDisplayValue(doc)
+    const formLabel = FORM_TYPE_LABELS[doc.form_type as DisplayFormType] ?? doc.form_type
 
-      // If k-1 is uploaded but no 1099, hide 1099-int/1099-div upload buttons
-      if ((formType === '1099_int' || formType === '1099_div') && hasK1 && !has1099) {
-        return null
-      }
-      // If 1099-int or 1099-div is uploaded but no k-1, hide the k-1 upload button
-      if (formType === 'k1' && has1099 && !hasK1) {
-        return null
-      }
-
+    if (isProcessing) {
       return (
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-7 text-xs"
-          onClick={() => setUploadModal({ open: true, formType, accountId: account.acct_id })}
-        >
-          <Upload className="h-3 w-3 mr-1" />
-          Upload
+        <Button key={doc.id} size="sm" variant="outline" disabled className="gap-1 h-7 text-xs border-orange-300 text-orange-600 px-2">
+          <Clock className="h-3 w-3 animate-pulse" />
+          {formLabel} — Processing
         </Button>
       )
     }
-
-    const doc = docs[0]
-    if (!doc) return null
-
-    const isProcessing = doc.genai_status === 'pending' || doc.genai_status === 'processing'
-    const isFailed = doc.genai_status === 'failed'
+    if (isFailed) {
+      return (
+        <Button key={doc.id} size="sm" variant="outline" disabled className="gap-1 h-7 text-xs border-destructive text-destructive px-2">
+          {formLabel} — Failed
+        </Button>
+      )
+    }
+    // show value (or "Needs Review") in button; style based on reviewed status
+    const btnClass = doc.is_reviewed
+      ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:text-green-800 dark:bg-green-950 dark:border-green-800 dark:text-green-400'
+      : 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100 hover:text-amber-900 dark:bg-amber-950 dark:border-amber-800 dark:text-amber-400'
 
     return (
-      <div className="flex flex-col gap-1">
-        {/* Combined Review/status button */}
-        {isProcessing ? (
-          <Button size="sm" variant="outline" disabled className="gap-1 h-7 text-xs border-orange-300 text-orange-600 px-2">
-            <Clock className="h-3 w-3 animate-pulse" />
-            Processing
-          </Button>
-        ) : isFailed ? (
-          <Button size="sm" variant="outline" disabled className="gap-1 h-7 text-xs border-destructive text-destructive px-2">
-            Failed
-          </Button>
+      <Button
+        key={doc.id}
+        size="sm"
+        variant="outline"
+        className={`gap-1 h-7 text-xs px-2 ${btnClass}`}
+        onClick={() => setReviewModalDoc(doc)}
+        title={doc.is_reviewed ? `${formLabel} — Reviewed` : `${formLabel} — Needs Review`}
+      >
+        {doc.form_type !== 'k1' && displayValue != null ? (
+          <>
+            {doc.is_reviewed && <CheckCircle className="h-3 w-3 shrink-0" />}
+            <span className="font-mono tabular-nums">{formLabel}: {displayValue}</span>
+          </>
+        ) : doc.is_reviewed ? (
+          <>
+            <CheckCircle className="h-3 w-3" />
+            {formLabel} ✓
+          </>
         ) : (
-          <Button
-            size="sm"
-            variant="outline"
-            className={`gap-1 h-7 text-xs px-2 ${doc.is_reviewed ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:text-green-800' : 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100 hover:text-amber-900'}`}
-            onClick={() => setReviewModalDoc(doc)}
-            title={doc.is_reviewed ? 'Reviewed' : 'Review document'}
-          >
-            {doc.is_reviewed ? (
-              <>
-                <CheckCircle className="h-3 w-3" />
-                Reviewed
-              </>
-            ) : (
-              <>
-                <Eye className="h-3 w-3" />
-                Needs Review
-              </>
-            )}
-          </Button>
+          <>
+            <Eye className="h-3 w-3" />
+            {formLabel} — Review
+          </>
         )}
+      </Button>
+    )
+  }
+
+  /** Render all doc buttons for a given account (all form types). */
+  const renderAccountDocButtons = (account: FinAccount) => {
+    const accountDocs = documents.filter(d => d.account_id === account.acct_id)
+
+    // Determine which form types are already uploaded for this account
+    const uploadedFormTypes = new Set(accountDocs.map(d => {
+      if (d.form_type === '1099_int_c') return '1099_int'
+      if (d.form_type === '1099_div_c') return '1099_div'
+      return d.form_type
+    }))
+
+    return (
+      <div className="flex flex-wrap gap-1 items-center">
+        {accountDocs.map(doc => renderDocButton(doc))}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 px-2">
+              <Plus className="h-3 w-3" />
+              Add
+              <ChevronDown className="h-3 w-3" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            {DISPLAY_FORM_TYPES.map(ft => (
+              <DropdownMenuItem
+                key={ft}
+                onClick={() => setUploadModal({ open: true, formType: ft, accountId: account.acct_id })}
+              >
+                <Upload className="h-3 w-3 mr-2" />
+                {FORM_TYPE_LABELS[ft]}
+                {uploadedFormTypes.has(ft) && <span className="ml-2 text-xs text-muted-foreground">(add another)</span>}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     )
   }
@@ -349,13 +384,13 @@ export default function TaxDocuments1099Section({
           key={account.acct_id}
           className={isSecondary ? 'opacity-50' : ''}
         >
-          <TableCell className={`font-medium text-sm ${isSecondary ? 'text-muted-foreground' : ''}`}>
+          <TableCell className={`font-medium text-sm align-middle ${isSecondary ? 'text-muted-foreground' : ''}`}>
             {account.acct_name}
           </TableCell>
-          {DISPLAY_FORM_TYPES.map(ft => (
-            <TableCell key={ft}>{renderSlot(account, ft)}</TableCell>
-          ))}
           <TableCell>
+            {renderAccountDocButtons(account)}
+          </TableCell>
+          <TableCell className="align-middle">
             {accountForeignTax > 0 && (
               <span className="text-xs text-amber-700 font-medium">
                 {currency(accountForeignTax).format()}
@@ -400,9 +435,7 @@ export default function TaxDocuments1099Section({
             <TableHeader>
               <TableRow>
                 <TableHead>Account</TableHead>
-                {DISPLAY_FORM_TYPES.map(ft => (
-                  <TableHead key={ft}>{FORM_TYPE_LABELS[ft]}</TableHead>
-                ))}
+                <TableHead>Documents</TableHead>
                 <TableHead>Foreign Tax</TableHead>
               </TableRow>
             </TableHeader>
@@ -411,7 +444,7 @@ export default function TaxDocuments1099Section({
               {inactiveAccounts.length > 0 && activeAccounts.length > 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={DISPLAY_FORM_TYPES.length + 2}
+                    colSpan={3}
                     className="py-1 bg-muted/20 text-[10px] text-muted-foreground font-medium uppercase tracking-wider"
                   >
                     No transactions in {selectedYear}

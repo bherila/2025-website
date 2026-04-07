@@ -21,9 +21,11 @@ function pk1(data: FK1StructuredData, box: string): number {
 interface ScheduleDPreviewProps {
   reviewedK1Docs: TaxDocument[]
   reviewed1099Docs: TaxDocument[]
+  selectedYear?: number
 }
 
-export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs }: ScheduleDPreviewProps) {
+export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, selectedYear }: ScheduleDPreviewProps) {
+  const taxYear = selectedYear ?? new Date().getFullYear()
   const k1Parsed = reviewedK1Docs
     .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
     .filter((x): x is { doc: TaxDocument; data: FK1StructuredData } => x.data !== null)
@@ -206,11 +208,11 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs }: S
         {combined < 0 && (
           <>
             <FormLine
-              label="Capital loss applied to 2025 return"
+              label={`Capital loss applied to ${taxYear} return`}
               value={appliedToReturn}
             />
             <FormLine
-              label={`Capital loss carryforward to ${new Date().getFullYear() + 1}`}
+              label={`Capital loss carryforward to ${taxYear + 1}`}
               value={carryforward}
             />
           </>

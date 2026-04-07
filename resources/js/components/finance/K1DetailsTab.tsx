@@ -1,5 +1,7 @@
 'use client'
 
+import currency from 'currency.js'
+
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { Callout, fmtAmt, FormBlock, FormLine, FormSubLine, FormTotalLine, parseFieldVal } from '@/components/finance/tax-preview-primitives'
 import { Badge } from '@/components/ui/badge'
@@ -24,8 +26,8 @@ function pk1Codes(data: FK1StructuredData, box: string, codes?: string[]): K1Cod
 function codeSum(items: K1CodeItem[]): number {
   return items.reduce((acc, i) => {
     const n = parseFloat(i.value)
-    return acc + (isNaN(n) ? 0 : n)
-  }, 0)
+    return isNaN(n) ? acc : acc.add(n)
+  }, currency(0)).value
 }
 
 // ── K-3 Part II table ─────────────────────────────────────────────────────────
@@ -339,9 +341,11 @@ function K1Card({ doc, data }: { doc: TaxDocument; data: FK1StructuredData }) {
 
 interface K1DetailsTabProps {
   reviewedK1Docs: TaxDocument[]
+  selectedYear?: number
 }
 
-export default function K1DetailsTab({ reviewedK1Docs }: K1DetailsTabProps) {
+export default function K1DetailsTab({ reviewedK1Docs, selectedYear }: K1DetailsTabProps) {
+  const taxYear = selectedYear ?? new Date().getFullYear()
   const k1Parsed = reviewedK1Docs
     .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
     .filter((x): x is { doc: TaxDocument; data: FK1StructuredData } => x.data !== null)
@@ -359,7 +363,7 @@ export default function K1DetailsTab({ reviewedK1Docs }: K1DetailsTabProps) {
         amount: parseFieldVal(i.value) ?? 0,
       }))
   })
-  const totalSuspended = allSuspended.reduce((acc, i) => acc + Math.abs(i.amount), 0)
+  const totalSuspended = allSuspended.reduce((acc, i) => acc.add(Math.abs(i.amount)), currency(0)).value
 
   if (k1Parsed.length === 0) {
     return (
@@ -389,7 +393,7 @@ export default function K1DetailsTab({ reviewedK1Docs }: K1DetailsTabProps) {
         <div className="space-y-3">
           <Callout kind="warn" title={`§67(g) — ${fmtAmt(totalSuspended)} Total Suspended Federal Deductions`}>
             <p>
-              None of the following are deductible on the 2025 federal return under TCJA §67(g) miscellaneous
+              None of the following are deductible on the {taxYear} federal return under TCJA §67(g) miscellaneous
               itemized deduction suspension.
             </p>
             <div className="mt-2 rounded border border-current/20 overflow-hidden">

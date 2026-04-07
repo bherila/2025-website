@@ -94,11 +94,11 @@ export function computeHomeOfficeCalcs(allData: YearData[]): Map<string, HomeOff
       const homeOfficeTotal = sumCategories(entity.schedule_c_home_office)
 
       const priorCF = carryForwardByEntity.get(entityKey) ?? 0
-      const netIncome = incomeTotal - expenseTotal
-      const limit = Math.max(0, netIncome)
-      const totalClaim = homeOfficeTotal + priorCF
-      const allowable = Math.min(totalClaim, limit)
-      const disallowed = totalClaim - allowable
+      const netIncome = currency(incomeTotal).subtract(expenseTotal)
+      const limit = Math.max(0, netIncome.value)
+      const totalClaim = currency(homeOfficeTotal).add(priorCF)
+      const allowable = currency(Math.min(totalClaim.value, limit)).value
+      const disallowed = totalClaim.subtract(allowable).value
 
       map.set(mapKey, { allowable, disallowed, priorCarryForward: priorCF })
       carryForwardByEntity.set(entityKey, disallowed)

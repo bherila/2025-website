@@ -52,9 +52,6 @@ class TaxPreviewDataService
     }
 
     /**
-     * @return int[]
-     */
-    /**
      * @param  int[]|null  $scheduleCYears
      * @return int[]
      */

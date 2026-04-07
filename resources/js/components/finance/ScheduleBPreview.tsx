@@ -79,13 +79,13 @@ export default function ScheduleBPreview({
 
   // Compute totals from line items; fall back to aggregated props if no line items
   const interestTotal = interestLines.length > 0
-    ? interestLines.reduce((acc, l) => acc + l.amount, 0)
+    ? interestLines.reduce((acc, l) => acc.add(l.amount), currency(0)).value
     : interestIncome.value
   const dividendTotal = dividendLines.length > 0
-    ? dividendLines.reduce((acc, l) => acc + l.amount, 0)
+    ? dividendLines.reduce((acc, l) => acc.add(l.amount), currency(0)).value
     : dividendIncome.value
   const qualDivTotal = qualDividendLines.length > 0
-    ? qualDividendLines.reduce((acc, l) => acc + l.amount, 0)
+    ? qualDividendLines.reduce((acc, l) => acc.add(l.amount), currency(0)).value
     : qualifiedDividends.value
 
   const hasLineSources = interestLines.length > 0 || dividendLines.length > 0

@@ -19,7 +19,12 @@ class FinanceScheduleCController extends Controller
      */
     public function getSummary(Request $request): JsonResponse
     {
-        $yearFilter = $request->filled('year') ? (int) $request->query('year') : null;
+        $yearParam = $request->query('year');
+        $yearFilter = null;
+        if (is_numeric($yearParam)) {
+            $parsedYear = (int) $yearParam;
+            $yearFilter = $parsedYear > 0 ? $parsedYear : null;
+        }
 
         return response()->json(
             $this->scheduleCSummaryService->getSummary((int) Auth::id(), $yearFilter),

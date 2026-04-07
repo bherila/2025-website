@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 import type { CategoryTotal, EntityData, YearData } from './ScheduleCPreview'
+import { computeHomeOfficeCalcs } from './ScheduleCPreview'
 
 interface ScheduleCTabProps {
   selectedYear: number
@@ -177,36 +178,8 @@ export default function ScheduleCTab({ selectedYear, scheduleCData }: ScheduleCT
     return scheduleCData.filter((yd) => Number(yd.year) === selectedYear)
   }, [scheduleCData, selectedYear])
 
-  // Compute home-office carry-forward per entity across all years
-  const homeOfficeCalcs = useMemo(() => {
-    const map = new Map<string, { allowable: number; disallowed: number; priorCarryForward: number }>()
-    const carryForwardByEntity = new Map<string, number>()
-
-    // Process chronologically (oldest first)
-    const chronological = [...scheduleCData].reverse()
-
-    for (const yd of chronological) {
-      for (const entity of yd.entities) {
-        const entityKey = String(entity.entity_id ?? 'unassigned')
-        const mapKey = `${yd.year}-${entityKey}`
-
-        const incomeTotal = sumCategories(entity.schedule_c_income ?? {})
-        const expenseTotal = sumCategories(entity.schedule_c_expense)
-        const homeOfficeTotal = sumCategories(entity.schedule_c_home_office)
-
-        const priorCF = carryForwardByEntity.get(entityKey) ?? 0
-        const netIncome = currency(incomeTotal).subtract(expenseTotal).value
-        const limit = Math.max(0, netIncome)
-        const totalClaim = currency(homeOfficeTotal).add(priorCF).value
-        const allowable = Math.min(totalClaim, limit)
-        const disallowed = currency(totalClaim).subtract(allowable).value
-
-        map.set(mapKey, { allowable, disallowed, priorCarryForward: priorCF })
-        carryForwardByEntity.set(entityKey, disallowed)
-      }
-    }
-    return map
-  }, [scheduleCData])
+  // Compute home-office carry-forward per entity across all years (reuses shared pure function)
+  const homeOfficeCalcs = useMemo(() => computeHomeOfficeCalcs(scheduleCData), [scheduleCData])
 
   if (yearData.length === 0) {
     return (

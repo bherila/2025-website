@@ -104,7 +104,7 @@ export default function Form1116Preview({
     }
   }
 
-  const totalPassiveIncome = incomeSources.reduce((acc, s) => acc + s.amount, 0)
+  const totalPassiveIncome = incomeSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value
 
   // ── Part II — Foreign Taxes Paid ──────────────────────────────────────────
   type TaxSource = { label: string; amount: number }
@@ -134,7 +134,7 @@ export default function Form1116Preview({
     }
   }
 
-  const totalForeignTaxes = taxSources.reduce((acc, s) => acc + s.amount, 0)
+  const totalForeignTaxes = taxSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value
 
   // ── Callouts ──────────────────────────────────────────────────────────────
 

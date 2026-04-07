@@ -9,7 +9,6 @@ import Form1040Preview from '@/components/finance/Form1040Preview'
 import Form1116Preview from '@/components/finance/Form1116Preview'
 import Form4952Preview from '@/components/finance/Form4952Preview'
 import { isFK1StructuredData } from '@/components/finance/k1'
-import K1DetailsTab from '@/components/finance/K1DetailsTab'
 import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
 import ScheduleBPreview from '@/components/finance/ScheduleBPreview'
 import ScheduleCTab from '@/components/finance/ScheduleCTab'
@@ -693,15 +692,6 @@ function TaxPreviewPageContent() {
       <Tabs defaultValue="overview" className="px-4 pb-8">
         <TabsList className="mb-4 flex-wrap">
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="documents">Documents</TabsTrigger>
-          <TabsTrigger value="k1-details">
-            K-1 Details
-            {reviewedK1Docs.length > 0 && (
-              <Badge variant="secondary" className="ml-1.5 text-[10px] px-1 py-0 h-4">
-                {reviewedK1Docs.length}
-              </Badge>
-            )}
-          </TabsTrigger>
           <TabsTrigger value="schedules">Schedules</TabsTrigger>
           <TabsTrigger value="capital-gains">Capital Gains</TabsTrigger>
           <TabsTrigger value="form-1116">Form 1116</TabsTrigger>
@@ -710,7 +700,7 @@ function TaxPreviewPageContent() {
           <TabsTrigger value="action-items">Action Items</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="space-y-0 mt-0">
+        <TabsContent value="overview" className="space-y-6 mt-0">
           <TaxIncomeOverview
             taxYear={selectedYear}
             payslips={data}
@@ -720,9 +710,7 @@ function TaxPreviewPageContent() {
             reviewed1099Docs={reviewed1099Docs}
             reviewedK1Docs={reviewedK1Docs}
           />
-        </TabsContent>
 
-        <TabsContent value="documents" className="space-y-6 mt-0">
           {showTaxTables ? (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <div className="lg:col-span-1">
@@ -760,10 +748,6 @@ function TaxPreviewPageContent() {
           />
         </TabsContent>
 
-        <TabsContent value="k1-details" className="mt-0">
-          <K1DetailsTab reviewedK1Docs={reviewedK1Docs} />
-        </TabsContent>
-
         <TabsContent value="schedules" className="space-y-6 mt-0">
           <ScheduleBPreview
             interestIncome={income1099.interestIncome}
@@ -787,6 +771,7 @@ function TaxPreviewPageContent() {
           <ScheduleDPreview
             reviewedK1Docs={reviewedK1Docs}
             reviewed1099Docs={reviewed1099Docs}
+            selectedYear={selectedYear}
           />
         </TabsContent>
 
@@ -856,6 +841,7 @@ function TaxPreviewPageContent() {
             reviewedW2Docs={reviewedW2Docs}
             income1099={income1099}
             w2GrossIncome={w2GrossIncome}
+            selectedYear={selectedYear}
           />
         </TabsContent>
       </Tabs>
