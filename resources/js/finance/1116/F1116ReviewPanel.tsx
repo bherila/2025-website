@@ -1,10 +1,10 @@
 'use client'
 
-import currency from 'currency.js'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 
 import type { K1FieldSpec } from '@/components/finance/k1/k1-types'
+import { FormBlock, FormLine, FormTotalLine, parseFieldVal } from '@/components/finance/tax-preview-primitives'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -19,86 +19,6 @@ interface F1116ReviewPanelProps {
   data: F1116Data
   onChange: (updated: F1116Data) => void
   readOnly?: boolean
-}
-
-// ── Value helpers ─────────────────────────────────────────────────────────────
-
-function parseVal(v: string | null | undefined): number | null {
-  if (v === null || v === undefined || v === '' || v === 'null') return null
-  const n = parseFloat(v)
-  return isNaN(n) ? null : n
-}
-
-function fmtAmt(n: number, precision = 2): string {
-  const abs = currency(Math.abs(n), { precision }).format()
-  return n < 0 ? `(${abs})` : abs
-}
-
-function AmountCell({ val, className = '' }: { val: string | number | null | undefined; className?: string }) {
-  const n = typeof val === 'number' ? val : parseVal(val as string | null | undefined)
-  if (n === null) return <span className={`font-mono text-muted-foreground ${className}`}>—</span>
-  if (n === 0) return <span className={`font-mono ${className}`}>$0</span>
-  const cls = n < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'
-  return <span className={`font-mono tabular-nums ${cls} ${className}`}>{fmtAmt(n)}</span>
-}
-
-// ── Form-block card primitives ────────────────────────────────────────────────
-
-function FormBlock({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="border rounded-lg overflow-hidden text-sm">
-      <div className="bg-muted/40 px-3 py-2 text-xs font-semibold tracking-wide border-b">{title}</div>
-      <div className="divide-y divide-dashed divide-border/50">{children}</div>
-    </div>
-  )
-}
-
-function FormLine({
-  lineRef,
-  label,
-  value,
-  approx,
-}: {
-  lineRef?: string
-  label: React.ReactNode
-  value: string | number | null | undefined
-  approx?: boolean
-}) {
-  return (
-    <div className="flex items-center gap-2 px-3 py-1.5">
-      <span className="text-[10px] font-mono text-muted-foreground w-14 shrink-0 select-none">{lineRef ?? ''}</span>
-      <span className="flex-1 text-[13px]">{label}</span>
-      {approx ? (
-        <span className="font-mono tabular-nums text-[13px] text-muted-foreground shrink-0">
-          {typeof value === 'string' ? value : value !== null && value !== undefined ? `~${fmtAmt(Number(value))}` : '—'}
-        </span>
-      ) : (
-        <AmountCell val={value} className="text-[13px] shrink-0" />
-      )}
-    </div>
-  )
-}
-
-function FormSubLine({ text }: { text: string }) {
-  return (
-    <div className="px-3 py-0.5 pl-[4.5rem]">
-      <span className="text-[11px] text-muted-foreground leading-tight">{text}</span>
-    </div>
-  )
-}
-
-function FormTotalLine({ label, value, double }: { label: string; value: number | null; double?: boolean }) {
-  const cls =
-    value === null ? 'text-muted-foreground' : value < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'
-  return (
-    <div className={`flex items-center gap-2 px-3 py-2 font-semibold ${double ? 'border-t-2 border-double border-border' : 'border-t border-border'} bg-muted/20`}>
-      <span className="w-14 shrink-0" />
-      <span className="flex-1 text-[13px]">{label}</span>
-      <span className={`font-mono text-[13px] tabular-nums ${cls}`}>
-        {value === null ? '—' : fmtAmt(value)}
-      </span>
-    </div>
-  )
 }
 
 // ── Field editor (for classification collapsible) ─────────────────────────────
@@ -245,25 +165,25 @@ function ClassificationSection({
 // ── Financial blocks ──────────────────────────────────────────────────────────
 
 function PartIBlock({ data }: { data: F1116Data }) {
-  const income1a = parseVal(data.fields['1a']?.value)
-  const income1b = parseVal(data.fields['1b']?.value)
+  const income1a = parseFieldVal(data.fields['1a']?.value)
+  const income1b = parseFieldVal(data.fields['1b']?.value)
   const total = (income1a ?? 0) + (income1b ?? 0)
 
   if (income1a === null && income1b === null) return null
 
   return (
     <FormBlock title="Part I — Foreign Country &amp; Income">
-      <FormLine lineRef="L.1a" label="Gross income — passive category" value={income1a} />
-      {income1b !== null && <FormLine lineRef="L.1b" label="Gross income — general category" value={income1b} />}
+      <FormLine boxRef="L.1a" label="Gross income — passive category" value={income1a} />
+      {income1b !== null && <FormLine boxRef="L.1b" label="Gross income — general category" value={income1b} />}
       <FormTotalLine label="Total gross foreign income" value={total} />
     </FormBlock>
   )
 }
 
 function PartIIBlock({ data }: { data: F1116Data }) {
-  const expenses = parseVal(data.fields['2']?.value)
-  const income1a = parseVal(data.fields['1a']?.value)
-  const income1b = parseVal(data.fields['1b']?.value)
+  const expenses = parseFieldVal(data.fields['2']?.value)
+  const income1a = parseFieldVal(data.fields['1a']?.value)
+  const income1b = parseFieldVal(data.fields['1b']?.value)
   const grossIncome = (income1a ?? 0) + (income1b ?? 0)
   const netIncome = expenses !== null ? grossIncome - Math.abs(expenses) : null
 
@@ -271,16 +191,16 @@ function PartIIBlock({ data }: { data: F1116Data }) {
 
   return (
     <FormBlock title="Part II — Apportioned Deductions">
-      <FormLine lineRef="L.2" label="Pro-rata allocable expenses" value={expenses !== null ? -Math.abs(expenses) : null} />
+      <FormLine boxRef="L.2" label="Pro-rata allocable expenses" value={expenses !== null ? -Math.abs(expenses) : null} />
       <FormTotalLine label="Foreign source taxable income" value={netIncome} />
     </FormBlock>
   )
 }
 
 function PartIIIBlock({ data }: { data: F1116Data }) {
-  const taxesPaid = parseVal(data.fields['9']?.value)
-  const carryover = parseVal(data.fields['10']?.value)
-  const tentative = parseVal(data.fields['20']?.value)
+  const taxesPaid = parseFieldVal(data.fields['9']?.value)
+  const carryover = parseFieldVal(data.fields['10']?.value)
+  const tentative = parseFieldVal(data.fields['20']?.value)
   const ftcAdjustments = data.codes?.FTCAdjustments ?? []
 
   if (taxesPaid === null && tentative === null) return null
@@ -290,14 +210,14 @@ function PartIIIBlock({ data }: { data: F1116Data }) {
 
   return (
     <FormBlock title="Part III — Limitation Calculation">
-      {taxesPaid !== null && <FormLine lineRef="L.9" label="Foreign taxes paid or accrued" value={taxesPaid} />}
-      {carryover !== null && carryover !== 0 && <FormLine lineRef="L.10" label="Tax carryover from prior year" value={carryover} />}
+      {taxesPaid !== null && <FormLine boxRef="L.9" label="Foreign taxes paid or accrued" value={taxesPaid} />}
+      {carryover !== null && carryover !== 0 && <FormLine boxRef="L.10" label="Tax carryover from prior year" value={carryover} />}
       {ftcAdjustments.length > 0 && (
         ftcAdjustments.map((adj, i) => (
-          <FormLine key={i} lineRef={adj.code} label={`FTC adjustment (${adj.code})`} value={adj.value} />
+          <FormLine key={i} boxRef={adj.code} label={`FTC adjustment (${adj.code})`} value={adj.value} />
         ))
       )}
-      {tentative !== null && <FormLine lineRef="L.21" label="FTC limitation (tentative credit)" value={tentative} />}
+      {tentative !== null && <FormLine boxRef="L.21" label="FTC limitation (tentative credit)" value={tentative} />}
       <FormTotalLine
         label={creditAllowed !== null && tentative !== null && totalTaxes <= tentative ? 'Credit allowed — fully allowed ✓' : 'Credit allowed'}
         value={creditAllowed}
@@ -305,7 +225,7 @@ function PartIIIBlock({ data }: { data: F1116Data }) {
       />
       {creditAllowed !== null && totalTaxes > (tentative ?? Infinity) && (
         <FormLine
-          lineRef=""
+          boxRef=""
           label="Excess taxes (carryforward to next year)"
           value={totalTaxes - (tentative ?? 0)}
         />

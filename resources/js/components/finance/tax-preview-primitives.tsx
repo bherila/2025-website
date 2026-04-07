@@ -1,0 +1,114 @@
+'use client'
+
+import currency from 'currency.js'
+
+// ── Value helpers ─────────────────────────────────────────────────────────────
+
+export function parseFieldVal(v: string | null | undefined): number | null {
+  if (v === null || v === undefined || v === '' || v === 'null') return null
+  const n = parseFloat(v)
+  return isNaN(n) ? null : n
+}
+
+export function fmtAmt(n: number, precision = 0): string {
+  const abs = currency(Math.abs(n), { precision }).format()
+  return n < 0 ? `(${abs})` : abs
+}
+
+export function AmountCell({ val, className = '' }: { val: string | number | null | undefined; className?: string }) {
+  const n = typeof val === 'number' ? val : parseFieldVal(val as string | null | undefined)
+  if (n === null) return <span className={`font-mono text-muted-foreground ${className}`}>—</span>
+  if (n === 0) return <span className={`font-mono text-foreground ${className}`}>$0</span>
+  const cls = n < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'
+  return <span className={`font-mono tabular-nums ${cls} ${className}`}>{fmtAmt(n)}</span>
+}
+
+// ── Form-block card primitives ────────────────────────────────────────────────
+
+export function FormBlock({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="border rounded-lg overflow-hidden text-sm">
+      <div className="bg-muted/40 px-3 py-2 text-xs font-semibold tracking-wide border-b">{title}</div>
+      <div className="divide-y divide-dashed divide-border/50">{children}</div>
+    </div>
+  )
+}
+
+export function FormLine({
+  boxRef,
+  label,
+  value,
+  raw,
+  onClick,
+}: {
+  boxRef?: string
+  label: React.ReactNode
+  value?: string | number | null
+  raw?: string
+  onClick?: () => void
+}) {
+  const n = typeof value === 'number' ? value : parseFieldVal(value as string | null | undefined)
+  const cls = n === null ? '' : n < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'
+  return (
+    <div
+      className={`flex items-center gap-2 px-3 py-1.5 ${onClick ? 'cursor-pointer hover:bg-muted/20 transition-colors' : ''}`}
+      onClick={onClick}
+    >
+      <span className="text-[10px] font-mono text-muted-foreground w-14 shrink-0 select-none">{boxRef ?? ''}</span>
+      <span className="flex-1 text-[13px]">{label}</span>
+      <span className={`font-mono tabular-nums text-[13px] shrink-0 ${cls}`}>
+        {raw ?? (n === null ? '—' : fmtAmt(n))}
+      </span>
+    </div>
+  )
+}
+
+export function FormSubLine({ text }: { text: string }) {
+  return (
+    <div className="px-3 py-0.5 pl-[4.5rem]">
+      <span className="text-[11px] text-muted-foreground leading-tight">{text}</span>
+    </div>
+  )
+}
+
+export function FormTotalLine({ label, value, double }: { label: string; value: number | null; double?: boolean }) {
+  const cls =
+    value === null ? 'text-muted-foreground' : value < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'
+  return (
+    <div
+      className={`flex items-center gap-2 px-3 py-2 font-semibold ${double ? 'border-t-2 border-double border-border' : 'border-t border-border'} bg-muted/20`}
+    >
+      <span className="w-14 shrink-0" />
+      <span className="flex-1 text-[13px]">{label}</span>
+      <span className={`font-mono text-[13px] tabular-nums ${cls}`}>{value === null ? '—' : fmtAmt(value)}</span>
+    </div>
+  )
+}
+
+// ── Callout component ─────────────────────────────────────────────────────────
+
+export type CalloutKind = 'good' | 'warn' | 'info' | 'alert'
+
+const CALLOUT_STYLES: Record<CalloutKind, string> = {
+  good: 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300',
+  warn: 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300',
+  info: 'border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30 text-blue-800 dark:text-blue-300',
+  alert: 'border-destructive/30 bg-destructive/5 dark:bg-destructive/10 text-destructive',
+}
+
+export function Callout({
+  kind,
+  title,
+  children,
+}: {
+  kind: CalloutKind
+  title: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className={`border rounded-lg p-3 space-y-1 ${CALLOUT_STYLES[kind]}`}>
+      <div className="text-xs font-semibold">{title}</div>
+      <div className="text-xs leading-relaxed space-y-1">{children}</div>
+    </div>
+  )
+}

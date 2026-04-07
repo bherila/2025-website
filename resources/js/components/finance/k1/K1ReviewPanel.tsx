@@ -1,6 +1,5 @@
 'use client'
 
-import currency from 'currency.js'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 
@@ -12,87 +11,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 
+import { fmtAmt, FormBlock, FormLine, FormSubLine, FormTotalLine, parseFieldVal } from '../tax-preview-primitives'
 import { BOX11_CODES, BOX13_CODES } from './k1-codes'
 import { K1_SPEC } from './k1-spec'
 import type { FK1StructuredData, K1CodeItem, K1FieldSpec, K3Section } from './k1-types'
 import K1CodesModal from './K1CodesModal'
-
-// ── Value helpers ─────────────────────────────────────────────────────────────
-
-function parseFieldVal(v: string | null | undefined): number | null {
-  if (v === null || v === undefined || v === '' || v === 'null') return null
-  const n = parseFloat(v)
-  return isNaN(n) ? null : n
-}
-
-function fmtAmt(n: number, precision = 0): string {
-  const abs = currency(Math.abs(n), { precision }).format()
-  return n < 0 ? `(${abs})` : abs
-}
-
-function AmountCell({ val, className = '' }: { val: string | number | null | undefined; className?: string }) {
-  const n = typeof val === 'number' ? val : parseFieldVal(val as string | null | undefined)
-  if (n === null) return <span className={`font-mono text-muted-foreground ${className}`}>—</span>
-  if (n === 0) return <span className={`font-mono text-foreground ${className}`}>$0</span>
-  const cls = n < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'
-  return <span className={`font-mono tabular-nums ${cls} ${className}`}>{fmtAmt(n)}</span>
-}
-
-// ── Form-block card primitives ────────────────────────────────────────────────
-
-function FormBlock({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="border rounded-lg overflow-hidden text-sm">
-      <div className="bg-muted/40 px-3 py-2 text-xs font-semibold tracking-wide border-b">{title}</div>
-      <div className="divide-y divide-dashed divide-border/50">{children}</div>
-    </div>
-  )
-}
-
-function FormLine({
-  boxRef,
-  label,
-  value,
-  onClick,
-}: {
-  boxRef?: string
-  label: React.ReactNode
-  value: string | number | null | undefined
-  onClick?: () => void
-}) {
-  return (
-    <div
-      className={`flex items-center gap-2 px-3 py-1.5 ${onClick ? 'cursor-pointer hover:bg-muted/20 transition-colors' : ''}`}
-      onClick={onClick}
-    >
-      <span className="text-[10px] font-mono text-muted-foreground w-14 shrink-0 select-none">{boxRef ?? ''}</span>
-      <span className="flex-1 text-[13px]">{label}</span>
-      <AmountCell val={value} className="text-[13px] shrink-0" />
-    </div>
-  )
-}
-
-function FormSubLine({ text }: { text: string }) {
-  return (
-    <div className="px-3 py-0.5 pl-[4.5rem]">
-      <span className="text-[11px] text-muted-foreground leading-tight">{text}</span>
-    </div>
-  )
-}
-
-function FormTotalLine({ label, value, double }: { label: string; value: number | null; double?: boolean }) {
-  const cls =
-    value === null ? 'text-muted-foreground' : value < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'
-  return (
-    <div className={`flex items-center gap-2 px-3 py-2 font-semibold ${double ? 'border-t-2 border-double border-border' : 'border-t border-border'} bg-muted/20`}>
-      <span className="w-14 shrink-0" />
-      <span className="flex-1 text-[13px]">{label}</span>
-      <span className={`font-mono text-[13px] tabular-nums ${cls}`}>
-        {value === null ? '—' : fmtAmt(value)}
-      </span>
-    </div>
-  )
-}
 
 // ── Entity / Partner info (collapsible) ───────────────────────────────────────
 

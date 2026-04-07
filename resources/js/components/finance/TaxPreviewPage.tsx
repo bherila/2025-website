@@ -4,12 +4,16 @@ import currency from 'currency.js'
 import { ClipboardList } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
+import ActionItemsTab from '@/components/finance/ActionItemsTab'
 import Form1040Preview from '@/components/finance/Form1040Preview'
+import Form1116Preview from '@/components/finance/Form1116Preview'
 import Form4952Preview from '@/components/finance/Form4952Preview'
 import { isFK1StructuredData } from '@/components/finance/k1'
+import K1DetailsTab from '@/components/finance/K1DetailsTab'
 import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
 import ScheduleBPreview from '@/components/finance/ScheduleBPreview'
 import ScheduleCPreview from '@/components/finance/ScheduleCPreview'
+import ScheduleDPreview from '@/components/finance/ScheduleDPreview'
 import TaxDocumentReviewModal from '@/components/finance/TaxDocumentReviewModal'
 import TaxDocuments1099Section from '@/components/finance/TaxDocuments1099Section'
 import TaxDocumentsSection from '@/components/finance/TaxDocumentsSection'
@@ -825,11 +829,22 @@ export default function TaxPreviewPage() {
 
       {/* ── Tabbed content ──────────────────────────────────────────────────── */}
       <Tabs defaultValue="overview" className="px-4 pb-8">
-        <TabsList className="mb-4">
+        <TabsList className="mb-4 flex-wrap">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
+          <TabsTrigger value="k1-details">
+            K-1 Details
+            {reviewedK1Docs.length > 0 && (
+              <Badge variant="secondary" className="ml-1.5 text-[10px] px-1 py-0 h-4">
+                {reviewedK1Docs.length}
+              </Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="schedules">Schedules</TabsTrigger>
+          <TabsTrigger value="capital-gains">Capital Gains</TabsTrigger>
+          <TabsTrigger value="form-1116">Form 1116</TabsTrigger>
           <TabsTrigger value="estimate">Tax Estimate</TabsTrigger>
+          <TabsTrigger value="action-items">Action Items</TabsTrigger>
         </TabsList>
 
         {/* ── Overview tab ──────────────────────────────────────────────────── */}
@@ -891,6 +906,11 @@ export default function TaxPreviewPage() {
           />
         </TabsContent>
 
+        {/* ── K-1 Details tab ───────────────────────────────────────────────── */}
+        <TabsContent value="k1-details" className="mt-0">
+          <K1DetailsTab reviewedK1Docs={reviewedK1Docs} />
+        </TabsContent>
+
         {/* ── Schedules tab ─────────────────────────────────────────────────── */}
         <TabsContent value="schedules" className="space-y-6 mt-0">
           {/* Schedule B — Interest & Dividends */}
@@ -900,6 +920,8 @@ export default function TaxPreviewPage() {
               dividendIncome={income1099.dividendIncome}
               qualifiedDividends={income1099.qualifiedDividends}
               selectedYear={selectedYear}
+              reviewedK1Docs={reviewedK1Docs}
+              reviewed1099Docs={reviewed1099Docs}
             />
           )}
 
@@ -912,6 +934,23 @@ export default function TaxPreviewPage() {
                 income1099={income1099}
               />
             )}
+        </TabsContent>
+
+        {/* ── Capital Gains tab ─────────────────────────────────────────────── */}
+        <TabsContent value="capital-gains" className="mt-0">
+          <ScheduleDPreview
+            reviewedK1Docs={reviewedK1Docs}
+            reviewed1099Docs={reviewed1099Docs}
+          />
+        </TabsContent>
+
+        {/* ── Form 1116 tab ─────────────────────────────────────────────────── */}
+        <TabsContent value="form-1116" className="mt-0">
+          <Form1116Preview
+            reviewedK1Docs={reviewedK1Docs}
+            reviewed1099Docs={reviewed1099Docs}
+            income1099={income1099}
+          />
         </TabsContent>
 
         {/* ── Tax Estimate tab ──────────────────────────────────────────────── */}
@@ -961,6 +1000,17 @@ export default function TaxPreviewPage() {
               </div>
             </div>
           )}
+        </TabsContent>
+
+        {/* ── Action Items tab ──────────────────────────────────────────────── */}
+        <TabsContent value="action-items" className="mt-0">
+          <ActionItemsTab
+            reviewedK1Docs={reviewedK1Docs}
+            reviewed1099Docs={reviewed1099Docs}
+            reviewedW2Docs={reviewedW2Docs}
+            income1099={income1099}
+            w2GrossIncome={w2GrossIncome}
+          />
         </TabsContent>
       </Tabs>
     </div>
