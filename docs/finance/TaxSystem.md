@@ -320,7 +320,9 @@ When a tax document PDF is uploaded, a GenAI job (`job_type: tax_document`) is a
 ### Processing Status in W-2 Documents Table
 
 The W-2 Documents table shows a combined **Review** column (replaces separate Status + Reviewed columns):
-- **Disabled "Processing" button** (orange) — `genai_status` is `pending` or `processing`
+- **"Processing" button** (orange) — `genai_status` is `pending` or `processing`
+  - For **K-1 documents only**: the button is **clickable** and opens the review modal (to allow deletion if processing is stuck)
+  - For other document types: the button is **disabled** 
 - **Disabled "Failed" button** (red) — `genai_status` is `failed`
 - **"Needs Review" button** — `genai_status` is `parsed` but not yet reviewed
 - **"Reviewed" button** (green) — document has been reviewed and confirmed
@@ -333,8 +335,23 @@ The Review Document modal (`TaxDocumentReviewModal`) provides:
 - **Save Changes** button — only shown when document is not yet reviewed
 - **W-2 Comparison table** — compares W-2 box values against payslips calculations
   - Each "Payslips" amount is clickable → opens a **Data Source** modal showing the individual payslip rows that contributed
+- **Edit JSON button** (pencil icon) in the footer — opens `ManualJsonAttachModal` in edit mode, pre-filled with the current `parsed_data`. Saving posts to `PUT /api/finance/tax-documents/{id}` with updated JSON. Works on both reviewed and unreviewed documents.
 - **Delete button** in the footer — removes the document (disabled when reviewed)
 - **Mark as Reviewed / Reopen for Review** button
+
+### JSON-First Upload Flow
+
+Instead of uploading a PDF and waiting for AI extraction, users can supply pre-parsed JSON before uploading the file:
+
+1. In the **Upload Document** modal, click **"Attach JSON from LLM"**
+2. Paste or write JSON in the editor — the modal validates it against the schema for the selected form type
+3. Click **"Attach JSON"** — the JSON is stored locally in the upload dialog (no API call yet); a green indicator shows "JSON attached — upload the PDF to complete"
+4. Select the PDF file and click **Upload**
+5. The upload API (`POST /api/finance/tax-documents`) receives both the file and `parsed_data`. The backend sets `genai_status = 'parsed'` and skips AI extraction entirely
+
+This flow is ideal for K-1 / K-3 documents where an LLM prompt is used externally.
+
+To remove the attached JSON before uploading, click the **✕** next to the green indicator.
 
 ### W-2 Income Summary
 

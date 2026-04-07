@@ -120,6 +120,13 @@ interface ManualJsonAttachModalProps {
   taxYear: number
   accountId?: number | undefined
   employmentEntityId?: number | undefined
+  /** Existing document JSON (for edit mode — pre-fills the textarea). */
+  initialJson?: unknown
+  /**
+   * When provided, clicking the action button calls onJsonReady(parsedData) instead
+   * of posting to the API. Used when attaching JSON before uploading the PDF file.
+   */
+  onJsonReady?: (data: unknown) => void
   onSuccess: (document: TaxDocument) => void
   onBack: () => void
 }
@@ -132,6 +139,8 @@ export default function ManualJsonAttachModal({
   taxYear,
   accountId,
   employmentEntityId,
+  initialJson,
+  onJsonReady,
   onSuccess,
   onBack,
 }: ManualJsonAttachModalProps) {
@@ -150,9 +159,11 @@ export default function ManualJsonAttachModal({
   // Fetch prompt info when modal opens
   useEffect(() => {
     if (!open) return
-    setJsonInput('')
+    // Pre-fill with initialJson when in edit mode
+    const initStr = initialJson != null ? JSON.stringify(initialJson, null, 2) : ''
+    setJsonInput(initStr)
     setValidationErrors([])
-    setIsValid(false)
+    setIsValid(initStr !== '')
     setPromptCopied(false)
     setSchemaCopied(false)
 
@@ -162,7 +173,7 @@ export default function ManualJsonAttachModal({
       .then((data: unknown) => setPromptInfo(data as PromptInfo))
       .catch(() => toast.error('Could not load prompt info.'))
       .finally(() => setPromptLoading(false))
-  }, [open, formType, taxYear])
+  }, [open, formType, taxYear, initialJson])
 
   // Validate json input on change
   useEffect(() => {
@@ -204,6 +215,13 @@ export default function ManualJsonAttachModal({
     } catch {
       return
     }
+
+    // If caller wants the JSON without an API call (e.g., attach JSON before uploading PDF)
+    if (onJsonReady) {
+      onJsonReady(parsedData)
+      return
+    }
+
     setSubmitting(true)
     try {
       const doc = (await fetchWrapper.post('/api/finance/tax-documents/manual', {
@@ -221,7 +239,7 @@ export default function ManualJsonAttachModal({
     } finally {
       setSubmitting(false)
     }
-  }, [isValid, jsonInput, formType, taxYear, accountId, employmentEntityId, formLabel, onSuccess])
+  }, [isValid, jsonInput, onJsonReady, formType, taxYear, accountId, employmentEntityId, formLabel, onSuccess])
 
   return (
     <Dialog open={open} onOpenChange={isOpen => !isOpen && !submitting && onBack()}>
@@ -334,7 +352,7 @@ export default function ManualJsonAttachModal({
             className="gap-1.5"
           >
             {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-            {submitting ? 'Saving…' : 'Attach JSON'}
+            {submitting ? 'Saving…' : onJsonReady ? 'Attach JSON' : 'Attach JSON'}
           </Button>
         </DialogFooter>
       </DialogContent>

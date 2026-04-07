@@ -1,11 +1,12 @@
 'use client'
 
 import currency from 'currency.js'
-import { CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Download, Eye, FileText, Loader2, Plus, Save, Trash2 } from 'lucide-react'
+import { CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Download, Eye, FileText, Loader2, Pencil, Plus, Save, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { isFK1StructuredData, K1ReviewPanel } from '@/components/finance/k1'
+import ManualJsonAttachModal from '@/components/finance/ManualJsonAttachModal'
 import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { Badge } from '@/components/ui/badge'
@@ -396,6 +397,7 @@ export default function TaxDocumentReviewModal({
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [jsonEditOpen, setJsonEditOpen] = useState(false)
   const [imageViewState, setImageViewState] = useState<{ url: string; filename: string } | null>(null)
   
   // Local editor state for the active document
@@ -494,6 +496,25 @@ export default function TaxDocumentReviewModal({
     }
   }
 
+  const handleJsonEdit = useCallback(async (doc: TaxDocument, parsedData: unknown) => {
+    setSaving(true)
+    try {
+      await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}`, { parsed_data: parsedData })
+      setEditData(parsedData as TaxDocumentParsedData | Record<string, unknown>)
+      setDocuments(prev => prev.map(d => d.id === doc.id ? {
+        ...d,
+        parsed_data: JSON.parse(JSON.stringify(parsedData)),
+      } : d))
+      toast.success('JSON updated')
+      onDocumentReviewed?.()
+    } catch {
+      toast.error('Failed to update JSON')
+    } finally {
+      setSaving(false)
+      setJsonEditOpen(false)
+    }
+  }, [onDocumentReviewed])
+
   const handleDelete = async (doc: TaxDocument) => {
     if (!confirm(`Delete "${doc.original_filename}"? This action cannot be undone.`)) return
     setDeleting(true)
@@ -570,7 +591,7 @@ export default function TaxDocumentReviewModal({
   return (
     <>
     <Dialog open={open} onOpenChange={isOpen => !isOpen && onClose()}>
-      <DialogContent className="w-[90vw] max-w-[90vw] max-h-[90vh] flex flex-col p-4">
+      <DialogContent className="w-[95vw] max-w-[1400px] max-h-[90vh] flex flex-col p-4">
         <DialogHeader className="px-1">
           <div className="flex items-center justify-between gap-4 pr-8">
             <DialogTitle>
@@ -720,17 +741,29 @@ export default function TaxDocumentReviewModal({
             <div className="flex items-center gap-2">
               <Button variant="ghost" onClick={onClose}>Close</Button>
               {activeDoc && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
-                  onClick={() => handleDelete(activeDoc)}
-                  disabled={deleting || activeDoc.is_reviewed}
-                  title={activeDoc.is_reviewed ? 'Reopen for review before deleting' : 'Delete document'}
-                >
-                  {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                  Delete
-                </Button>
+                <>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="gap-1.5 text-muted-foreground hover:text-foreground"
+                    onClick={() => setJsonEditOpen(true)}
+                    title="View / edit the raw JSON for this document"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit JSON
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => handleDelete(activeDoc)}
+                    disabled={deleting || activeDoc.is_reviewed}
+                    title={activeDoc.is_reviewed ? 'Reopen for review before deleting' : 'Delete document'}
+                  >
+                    {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                    Delete
+                  </Button>
+                </>
               )}
             </div>
             {activeDoc && (
@@ -752,6 +785,23 @@ export default function TaxDocumentReviewModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* Edit JSON sub-modal */}
+    {activeDoc && (
+      <ManualJsonAttachModal
+        open={jsonEditOpen}
+        formType={activeDoc.form_type}
+        taxYear={taxYear}
+        accountId={activeDoc.account_id ?? undefined}
+        employmentEntityId={activeDoc.employment_entity_id ?? undefined}
+        initialJson={editData}
+        onJsonReady={async (data) => {
+          await handleJsonEdit(activeDoc, data)
+        }}
+        onSuccess={() => setJsonEditOpen(false)}
+        onBack={() => setJsonEditOpen(false)}
+      />
+    )}
 
     {/* Inline image viewer */}
     <Dialog open={imageViewState !== null} onOpenChange={open => !open && setImageViewState(null)}>

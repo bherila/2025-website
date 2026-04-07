@@ -1,6 +1,6 @@
 'use client'
 
-import { FileCode2, Loader2, Upload } from 'lucide-react'
+import { FileCode2, Loader2, Upload, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -90,6 +90,7 @@ export default function TaxDocumentUploadModal({
   const [uploadProgress, setUploadProgress] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
   const [showManualJson, setShowManualJson] = useState(false)
+  const [attachedJson, setAttachedJson] = useState<unknown | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropZoneRef = useRef<HTMLDivElement>(null)
 
@@ -100,6 +101,7 @@ export default function TaxDocumentUploadModal({
       setUploadProgress(0)
       setIsDragging(false)
       setShowManualJson(false)
+      setAttachedJson(null)
     }
   }, [open])
 
@@ -140,6 +142,9 @@ export default function TaxDocumentUploadModal({
 
         setPhase('saving')
 
+        // Capture the current attachedJson value for this specific upload
+        const jsonToAttach = attachedJson
+
         await fetchWrapper.post('/api/finance/tax-documents', {
           s3_key: uploadRequest.s3_key,
           original_filename: filename,
@@ -150,6 +155,8 @@ export default function TaxDocumentUploadModal({
           mime_type: file.type || 'application/octet-stream',
           ...(accountId != null ? { account_id: accountId } : {}),
           ...(employmentEntityId != null ? { employment_entity_id: employmentEntityId } : {}),
+          // When JSON was pre-attached, include it so the backend skips AI processing
+          ...(jsonToAttach != null ? { parsed_data: jsonToAttach } : {}),
         })
 
         setPhase('done')
@@ -160,7 +167,7 @@ export default function TaxDocumentUploadModal({
         toast.error('Upload failed: ' + (err instanceof Error ? err.message : 'Unknown error'))
       }
     },
-    [formType, taxYear, accountId, employmentEntityId, onSuccess],
+    [formType, taxYear, accountId, employmentEntityId, onSuccess, attachedJson],
   )
 
   const handleFileSelected = useCallback(
@@ -314,8 +321,24 @@ export default function TaxDocumentUploadModal({
               onChange={handleFileSelected}
             />
 
+            {/* Attached JSON indicator */}
+            {attachedJson != null && !isUploading && (
+              <div className="flex items-center gap-2 rounded-md border border-green-300 bg-green-50 dark:border-green-800 dark:bg-green-950/40 px-3 py-2 text-sm">
+                <FileCode2 className="h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
+                <span className="flex-1 text-green-800 dark:text-green-300 font-medium">JSON attached — upload the PDF to complete</span>
+                <button
+                  type="button"
+                  className="text-green-600 dark:text-green-400 hover:text-green-900 dark:hover:text-green-200"
+                  onClick={() => setAttachedJson(null)}
+                  title="Remove attached JSON"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+
             {/* Attach JSON option */}
-            {!isUploading && (
+            {!isUploading && attachedJson == null && (
               <>
                 <div className="flex items-center gap-3">
                   <div className="flex-1 h-px bg-border" />
@@ -364,6 +387,10 @@ export default function TaxDocumentUploadModal({
         taxYear={taxYear}
         accountId={accountId}
         employmentEntityId={employmentEntityId}
+        onJsonReady={(data) => {
+          setAttachedJson(data)
+          setShowManualJson(false)
+        }}
         onSuccess={(_doc: TaxDocument) => {
           setShowManualJson(false)
           onSuccess()

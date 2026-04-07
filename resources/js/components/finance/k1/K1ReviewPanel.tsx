@@ -9,14 +9,84 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 
-import { fmtAmt, FormBlock, FormLine, FormSubLine, FormTotalLine, parseFieldVal } from '../tax-preview-primitives'
+import { fmtAmt, parseFieldVal } from '../tax-preview-primitives'
 import { BOX11_CODES, BOX13_CODES } from './k1-codes'
 import { K1_SPEC } from './k1-spec'
 import type { FK1StructuredData, K1CodeItem, K1FieldSpec, K3Section } from './k1-types'
 import K1CodesModal from './K1CodesModal'
+
+// ── Badge helpers ─────────────────────────────────────────────────────────────
+
+type BadgeInfo = { label: string; className: string }
+
+/**
+ * Parses notes text for known tax treatment keywords and returns badge metadata.
+ * Falls back to a generic "Note" badge if notes exist but no specific keyword is found.
+ */
+function parseBadges(notes?: string): BadgeInfo[] {
+  if (!notes) return []
+  const badges: BadgeInfo[] = []
+  const lower = notes.toLowerCase()
+
+  if (lower.includes('nii') || lower.includes('net investment income')) {
+    badges.push({ label: 'NII', className: 'bg-blue-600 text-white dark:bg-blue-500' })
+  }
+  if (lower.includes('ordinary') && !lower.includes('ordinary dividend')) {
+    badges.push({ label: 'ORDINARY', className: 'bg-amber-600 text-white dark:bg-amber-500' })
+  }
+  if (lower.includes('passive')) {
+    badges.push({ label: 'PASSIVE', className: 'bg-purple-600 text-white dark:bg-purple-500' })
+  }
+
+  return badges
+}
+
+/** Shows a clickable "Note" badge that triggers an onClick handler. */
+function NoteBadge({ notes, onClick }: { notes?: string | undefined; onClick?: (() => void) | undefined }) {
+  if (!notes) return null
+  const badges = parseBadges(notes)
+  const hasBadges = badges.length > 0
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      {hasBadges
+        ? badges.map((b) => (
+            <span
+              key={b.label}
+              className={`inline-flex items-center px-1.5 py-0 text-[9px] font-bold rounded ${b.className} ${onClick ? 'cursor-pointer' : ''}`}
+              onClick={onClick}
+              title={notes}
+            >
+              {b.label}
+            </span>
+          ))
+        : null}
+      {!hasBadges && onClick && (
+        <span
+          className="inline-flex items-center px-1.5 py-0 text-[9px] font-bold rounded bg-muted text-muted-foreground cursor-pointer hover:bg-muted/80"
+          onClick={onClick}
+          title={notes}
+        >
+          Note
+        </span>
+      )}
+    </span>
+  )
+}
+
+// ── Amount formatting helpers ─────────────────────────────────────────────────
+
+function amtCls(n: number | null): string {
+  if (n === null) return 'text-muted-foreground'
+  return n < 0 ? 'text-destructive' : ''
+}
+
+function renderAmt(n: number | null): string {
+  if (n === null) return '—'
+  return fmtAmt(n)
+}
 
 // ── Entity / Partner info (collapsible) ───────────────────────────────────────
 
@@ -108,16 +178,15 @@ function EntityInfoSection({
   const [open, setOpen] = useState(false)
   const leftSpec = K1_SPEC.filter((s) => s.side === 'left').sort((a, b) => (a.uiOrder ?? 99) - (b.uiOrder ?? 99))
 
-  // Build a one-line summary for the collapsed header
   const partnerName = data.fields['F']?.value ?? data.fields['B']?.value ?? null
   const ein = data.fields['A']?.value ?? null
   const summary = [partnerName, ein ? `EIN ${ein}` : null].filter(Boolean).join(' · ')
 
   return (
-    <div className="border rounded-lg overflow-hidden">
+    <div className="border border-border rounded-lg overflow-hidden">
       <button
         type="button"
-        className="w-full flex items-center gap-2 px-3 py-2 bg-muted/30 border-b hover:bg-muted/50 transition-colors text-left"
+        className="w-full flex items-center gap-2 px-3 py-2 bg-muted/30 border-b border-border hover:bg-muted/50 transition-colors text-left"
         onClick={() => setOpen((o) => !o)}
       >
         {open ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
@@ -160,6 +229,92 @@ function EntityInfoSection({
   )
 }
 
+// ── Section header primitive ──────────────────────────────────────────────────
+
+function SectionHeader({ title }: { title: string }) {
+  return (
+    <div className="bg-muted/40 px-3 py-1.5 border-b border-border">
+      <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">{title}</span>
+    </div>
+  )
+}
+
+// ── Income / Deduction line item ──────────────────────────────────────────────
+
+function LineItem({
+  boxRef,
+  label,
+  value,
+  raw,
+  notes,
+  onClick,
+  onNoteClick,
+}: {
+  boxRef?: string | undefined
+  label: string
+  value?: number | null | undefined
+  raw?: string | undefined
+  notes?: string | undefined
+  onClick?: (() => void) | undefined
+  onNoteClick?: (() => void) | undefined
+}) {
+  const n = value ?? null
+  return (
+    <div
+      className={`flex items-baseline gap-2 px-3 py-1 min-h-[24px] ${onClick ? 'cursor-pointer hover:bg-muted/20 transition-colors' : ''}`}
+      onClick={onClick}
+    >
+      <span className="text-[10px] font-mono text-muted-foreground w-16 shrink-0 select-none">{boxRef ?? ''}</span>
+      <span className="flex items-center gap-1.5 flex-1 text-xs">
+        <span>{label}</span>
+        <NoteBadge notes={notes} onClick={onNoteClick} />
+      </span>
+      <span className={`font-mono tabular-nums text-xs shrink-0 text-right min-w-[80px] ${amtCls(n)}`}>
+        {raw ?? renderAmt(n)}
+      </span>
+    </div>
+  )
+}
+
+function SubLine({ text }: { text: string }) {
+  return (
+    <div className="px-3 py-0.5 pl-[5.5rem]">
+      <span className="text-[10px] text-muted-foreground leading-tight italic">{text}</span>
+    </div>
+  )
+}
+
+function TotalLine({ label, value, double }: { label: string; value: number | null; double?: boolean }) {
+  return (
+    <div
+      className={`flex items-baseline gap-2 px-3 py-1.5 font-semibold ${double ? 'border-t-2 border-double border-border' : 'border-t border-border'} bg-muted/20`}
+    >
+      <span className="w-16 shrink-0" />
+      <span className="flex-1 text-xs">{label}</span>
+      <span className={`font-mono text-xs tabular-nums min-w-[80px] text-right ${amtCls(value)}`}>{renderAmt(value)}</span>
+    </div>
+  )
+}
+
+// ── Note detail popover (shown on click) ──────────────────────────────────────
+
+function NoteDetail({ notes, onClose }: { notes: string; onClose: () => void }) {
+  return (
+    <div className="px-3 py-2 pl-[5.5rem] animate-in fade-in-0 slide-in-from-top-1 duration-200">
+      <div className="bg-muted/40 border border-border rounded-md p-2 text-[10px] text-muted-foreground leading-relaxed relative">
+        <button
+          type="button"
+          className="absolute top-1 right-1 text-[10px] text-muted-foreground hover:text-foreground"
+          onClick={(e) => { e.stopPropagation(); onClose() }}
+        >
+          ✕
+        </button>
+        {notes}
+      </div>
+    </div>
+  )
+}
+
 // ── Income Items block ────────────────────────────────────────────────────────
 
 const INCOME_BOXES = ['1', '2', '3', '4', '5', '6a', '6b', '6c', '7', '8', '9a', '9b', '9c', '10']
@@ -172,10 +327,13 @@ function IncomeItemsBlock({
   data: FK1StructuredData
   onOpenCodes: (box: string) => void
 }) {
+  const [openNote, setOpenNote] = useState<string | null>(null)
+
   const incomeFieldLines = INCOME_BOXES.map((box) => ({
     box,
     spec: specByBox[box],
     val: parseFieldVal(data.fields[box]?.value),
+    notes: data.fields[box]?.notes,
   })).filter(({ val }) => val !== null && val !== 0)
 
   const box11Items = data.codes['11'] ?? []
@@ -187,23 +345,53 @@ function IncomeItemsBlock({
   if (incomeFieldLines.length === 0 && box11Items.length === 0) return null
 
   return (
-    <FormBlock title="Income Items — Part III">
-      {incomeFieldLines.map(({ box, spec, val }) => (
-        <FormLine key={box} boxRef={`Box ${box}`} label={spec?.concise ?? box} value={val} />
-      ))}
-      {box11Items.map((item, i) => (
-        <div key={i}>
-          <FormLine
-            boxRef={`Box 11${item.code}`}
-            label={BOX11_CODES[item.code] ?? `Other income (code ${item.code})`}
-            value={item.value}
-            onClick={() => onOpenCodes('11')}
-          />
-          {item.notes && <FormSubLine text={item.notes} />}
-        </div>
-      ))}
-      <FormTotalLine label="Subtotal gross income items" value={subtotal} />
-    </FormBlock>
+    <div className="border border-border rounded-lg overflow-hidden">
+      <SectionHeader title="Income Items — Part III" />
+      <div className="divide-y divide-dashed divide-border/50">
+        {incomeFieldLines.map(({ box, spec, val, notes }) => {
+          const noteKey = `field-${box}`
+          return (
+            <div key={box}>
+              <LineItem
+                boxRef={`Box ${box}`}
+                label={spec?.concise ?? box}
+                value={val}
+                notes={notes}
+                onNoteClick={notes ? () => setOpenNote(openNote === noteKey ? null : noteKey) : undefined}
+              />
+              {openNote === noteKey && notes && (
+                <NoteDetail notes={notes} onClose={() => setOpenNote(null)} />
+              )}
+              {notes && openNote !== noteKey && (
+                <SubLine text={notes.length > 120 ? notes.substring(0, 120) + '…' : notes} />
+              )}
+            </div>
+          )
+        })}
+        {box11Items.map((item, i) => {
+          const noteKey = `11-${i}`
+          return (
+            <div key={i}>
+              <LineItem
+                boxRef={`Box 11${item.code}`}
+                label={BOX11_CODES[item.code] ?? `Other income (code ${item.code})`}
+                value={parseFieldVal(item.value)}
+                notes={item.notes}
+                onClick={() => onOpenCodes('11')}
+                onNoteClick={() => setOpenNote(openNote === noteKey ? null : noteKey)}
+              />
+              {openNote === noteKey && item.notes && (
+                <NoteDetail notes={item.notes} onClose={() => setOpenNote(null)} />
+              )}
+              {item.notes && openNote !== noteKey && (
+                <SubLine text={item.notes.length > 100 ? item.notes.substring(0, 100) + '…' : item.notes} />
+              )}
+            </div>
+          )
+        })}
+        <TotalLine label="Subtotal gross income items" value={subtotal} />
+      </div>
+    </div>
   )
 }
 
@@ -216,6 +404,8 @@ function DeductionItemsBlock({
   data: FK1StructuredData
   onOpenCodes: (box: string) => void
 }) {
+  const [openNote, setOpenNote] = useState<string | null>(null)
+
   const box12Val = parseFieldVal(data.fields['12']?.value)
   const box21Val = parseFieldVal(data.fields['21']?.value)
   const box13Items = data.codes['13'] ?? []
@@ -230,6 +420,13 @@ function DeductionItemsBlock({
     .add(box21Val !== null ? -Math.abs(box21Val) : 0)
     .value
 
+  const totalBoxDeductions = box13Items.reduce((acc, item) => {
+    const v = parseFieldVal(item.value) ?? 0
+    return acc.add(-Math.abs(v))
+  }, currency(0))
+    .add(box21Val !== null ? -Math.abs(box21Val) : 0)
+    .value
+
   const netK1 = currency(incomeTotal).add(deductionTotal).value
 
   const hasContent = box12Val !== null || box13Items.length > 0 || box21Val !== null
@@ -237,280 +434,505 @@ function DeductionItemsBlock({
   if (!hasContent) return null
 
   return (
-    <FormBlock title="Deduction Items — Part III">
-      {box12Val !== null && box12Val !== 0 && (
-        <FormLine boxRef="Box 12" label="Section 179 deduction" value={-Math.abs(box12Val)} />
-      )}
-      {box13Items.map((item, i) => (
-        <div key={i}>
-          <FormLine
-            boxRef={`Box 13${item.code}`}
-            label={BOX13_CODES[item.code] ?? `Other deductions (code ${item.code})`}
-            value={item.value}
-            onClick={() => onOpenCodes('13')}
-          />
-          {item.notes && <FormSubLine text={item.notes} />}
-        </div>
-      ))}
-      {box21Val !== null && box21Val !== 0 && (
-        <FormLine boxRef="Box 21" label="Foreign taxes paid/accrued → Form 1116" value={box21Val} />
-      )}
-      <FormTotalLine label="Total deductions" value={deductionTotal} />
-      <FormTotalLine label="Net K-1 income (loss)" value={netK1} double />
-    </FormBlock>
+    <div className="border border-border rounded-lg overflow-hidden">
+      <SectionHeader title="Deduction Items — Part III" />
+      <div className="divide-y divide-dashed divide-border/50">
+        {box13Items.map((item, i) => {
+          const noteKey = `13-${i}`
+          return (
+            <div key={i}>
+              <LineItem
+                boxRef={`Box 13${item.code}`}
+                label={BOX13_CODES[item.code] ?? `Other deductions (code ${item.code})`}
+                value={parseFieldVal(item.value) !== null ? -Math.abs(parseFieldVal(item.value)!) : null}
+                notes={item.notes}
+                onClick={() => onOpenCodes('13')}
+                onNoteClick={() => setOpenNote(openNote === noteKey ? null : noteKey)}
+              />
+              {openNote === noteKey && item.notes && (
+                <NoteDetail notes={item.notes} onClose={() => setOpenNote(null)} />
+              )}
+            </div>
+          )
+        })}
+        {box12Val !== null && box12Val !== 0 && (
+          <LineItem boxRef="Box 12" label="Section 179 deduction" value={-Math.abs(box12Val)} />
+        )}
+        {box21Val !== null && box21Val !== 0 && (
+          <LineItem boxRef="Box 21" label="Foreign taxes (WHTD, all passive) → Form 1116" value={box21Val} />
+        )}
+        <TotalLine label="Total deductions" value={totalBoxDeductions} />
+        <TotalLine label="Net K-1 income/(loss)" value={netK1} double />
+      </div>
+    </div>
   )
 }
 
-// ── Other / Supplemental block ────────────────────────────────────────────────
+// ── Box 20 Supplemental block ─────────────────────────────────────────────────
 
-const OTHER_CODE_BOXES: Array<{ box: string; label: string }> = [
-  { box: '14', label: 'Self-employment earnings' },
-  { box: '15', label: 'Credits' },
-  { box: '16', label: 'Foreign transactions' },
-  { box: '17', label: 'AMT items' },
-  { box: '18', label: 'Tax-exempt & nondeductible' },
-  { box: '19', label: 'Distributions' },
-  { box: '20', label: 'Other information' },
-]
+const BOX20_LABELS: Record<string, string> = {
+  A: 'Investment income (Form 4952 reference)',
+  B: 'Investment expenses (informational)',
+  AA: 'Sec. 704(c) — already embedded in K-1 boxes',
+  AJ: '§461(l) excess business loss components',
+}
 
-function OtherSupplementalBlock({
+function SupplementalBlock({
   data,
   onOpenCodes,
 }: {
   data: FK1StructuredData
   onOpenCodes: (box: string) => void
 }) {
-  // Capital account / supplemental display fields from Item L / K
+  const [openNote, setOpenNote] = useState<string | null>(null)
+  const box20Items = data.codes['20'] ?? []
+  if (box20Items.length === 0) return null
+
+  // Capital account fields (unused in this block but kept for reference)
+  // const endingCapital = parseFieldVal(data.fields['L_ending_capital']?.value)
+
+  return (
+    <div className="border border-border rounded-lg overflow-hidden">
+      <SectionHeader title="Box 20 Supplemental" />
+      <div className="divide-y divide-dashed divide-border/50">
+        {box20Items.map((item, i) => {
+          const noteKey = `20-${i}`
+          return (
+            <div key={i}>
+              <LineItem
+                boxRef={`20${item.code}`}
+                label={BOX20_LABELS[item.code] ?? `Other information (code ${item.code})`}
+                value={item.value === 'STMT' ? null : parseFieldVal(item.value)}
+                raw={item.value === 'STMT' ? 'STMT' : undefined}
+                notes={item.notes}
+                onClick={() => onOpenCodes('20')}
+                onNoteClick={() => setOpenNote(openNote === noteKey ? null : noteKey)}
+              />
+              {openNote === noteKey && item.notes && (
+                <NoteDetail notes={item.notes} onClose={() => setOpenNote(null)} />
+              )}
+              {item.value === 'STMT' && item.notes && openNote !== noteKey && (
+                <SubLine text={item.notes.length > 120 ? item.notes.substring(0, 120) + '…' : item.notes} />
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── Capital Account & Liabilities block ───────────────────────────────────────
+
+function CapitalAccountBlock({ data }: { data: FK1StructuredData }) {
   const endingCapital = parseFieldVal(data.fields['L_ending_capital']?.value)
   const capitalMethod = data.fields['L_capital_method']?.value ?? null
+  // Support both 'K_recourse' (legacy) and 'K_recourse_ending' (current backend format)
+  const recourseEnding = parseFieldVal(
+    (data.fields['K_recourse_ending'] ?? data.fields['K_recourse'])?.value
+  )
 
-  // Other code boxes with data
-  const otherBoxesWithData = OTHER_CODE_BOXES.filter(({ box }) => {
-    const items = data.codes[box]
-    return Array.isArray(items) && items.length > 0
-  })
-
-  const hasContent = endingCapital !== null || otherBoxesWithData.length > 0
-  if (!hasContent) return null
+  if (endingCapital === null && recourseEnding === null) return null
 
   return (
-    <FormBlock title="Box 20 Supplemental / Other">
-      {otherBoxesWithData.map(({ box, label }) => {
-        const items = data.codes[box] ?? []
-        return items.map((item, i) => (
-          <div key={`${box}-${i}`}>
-            <FormLine
-              boxRef={`${box}${item.code}`}
-              label={item.notes ? item.notes.split('·')[0]?.trim() || label : label}
-              value={item.value}
-              onClick={() => onOpenCodes(box)}
-            />
-          </div>
-        ))
-      })}
-      {endingCapital !== null && (
-        <FormLine
-          boxRef="L"
-          label={`Ending capital account${capitalMethod ? ` (${capitalMethod.replace('_', ' ')})` : ''}`}
-          value={endingCapital}
-        />
-      )}
-    </FormBlock>
+    <div className="border border-border rounded-lg overflow-hidden">
+      <div className="divide-y divide-dashed divide-border/50">
+        {endingCapital !== null && (
+          <LineItem
+            boxRef="L"
+            label={`Ending capital account${capitalMethod ? ` (${capitalMethod.replace(/_/g, ' ').toLowerCase()})` : ''}`}
+            value={endingCapital}
+          />
+        )}
+        {recourseEnding !== null && (
+          <LineItem boxRef="K1" label="Recourse liabilities (ending)" value={recourseEnding} />
+        )}
+      </div>
+    </div>
   )
 }
 
-// ── K-3 tables ────────────────────────────────────────────────────────────────
+// ── Box 11ZZ Callout ──────────────────────────────────────────────────────────
 
-type K3Part2Row = {
+function Box11ZZCallout({ items }: { items: K1CodeItem[] }) {
+  const zzItems = items.filter((i) => i.code === 'ZZ')
+  if (zzItems.length === 0) return null
+
+  return (
+    <div className="border border-amber-300 dark:border-amber-700 rounded-lg overflow-hidden bg-amber-50/50 dark:bg-amber-950/30">
+      <div className="px-3 py-2">
+        <div className="text-[11px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-400 mb-1">
+          ‼ Box 11ZZ — All three items are ordinary, not capital
+        </div>
+        <div className="text-[11px] text-amber-600 dark:text-amber-500 leading-relaxed">
+          All {zzItems.length} Box 11ZZ components report to Schedule E Part II as nonpassive ordinary income/loss.
+          {zzItems.map((item, i) => {
+            const val = parseFieldVal(item.value)
+            const shortDesc = item.notes?.split('.')[0] ?? `Item ${i + 1}`
+            return (
+              <span key={i}>
+                {i > 0 ? ' ' : ' '}
+                ({i + 1}) {shortDesc} ({val !== null ? fmtAmt(val) : '—'})
+                {i < zzItems.length - 1 ? '.' : '.'}
+              </span>
+            )
+          })}
+          {' '}None of these go to Schedule D.
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── K-3 Gross Income Summary table ────────────────────────────────────────────
+
+interface K3GrossIncomeRow {
   line: string
+  description: string
   country?: string
-  col_a_us_source?: number | null
-  col_b_foreign_branch?: number | null
-  col_c_passive?: number | null
-  col_d_general?: number | null
-  col_e_other_901j?: number | null
-  col_f_sourced_by_partner?: number | null
-  col_g_total?: number | null
-  note?: string
+  usSource: number
+  passive: number
+  sourcedByPartner: number
+  total: number
+  isTotal?: boolean
+  subRows?: Array<{ country: string; a: number; c: number; f: number; g: number }>
 }
 
-function fmtK3(n: number | null | undefined): string {
-  if (n === null || n === undefined) return '—'
-  return fmtAmt(n)
+function parseK3Part2GrossIncome(sections: K3Section[]): K3GrossIncomeRow[] {
+  const sec1 = sections.find((s) => s.sectionId === 'part2_section1')
+  if (!sec1) return []
+
+  const d = sec1.data as Record<string, unknown>
+  const rows: K3GrossIncomeRow[] = []
+
+  const LINE_MAP: Record<string, { description: string; field: string }> = {
+    '6': { description: 'Interest income', field: 'line6_interestIncome' },
+    '7-8': { description: 'Dividends', field: 'line7_ordinaryDividends' },
+    '12': { description: 'Net LT cap gain', field: 'line12_netLongTermCapitalGain' },
+    '20': { description: 'Other income', field: 'line20_otherIncome' },
+  }
+
+  for (const [line, meta] of Object.entries(LINE_MAP)) {
+    const lineData = d[meta.field] as Record<string, unknown> | undefined
+    if (!lineData) continue
+
+    const lineRows = (lineData.rows as Array<Record<string, number | string>> | undefined) ?? []
+    if (lineRows.length === 0) continue
+
+    // For lines with many countries (7-8), aggregate into summary
+    const usRows = lineRows.filter((r) => r.country === 'US')
+    const foreignRows = lineRows.filter((r) => r.country !== 'US' && r.country !== 'XX')
+    const xxRows = lineRows.filter((r) => r.country === 'XX')
+
+    const agg = (rows: Array<Record<string, number | string>>, col: string) =>
+      rows.reduce((acc, r) => acc + (Number(r[col]) || 0), 0)
+
+    // US rows
+    for (const r of usRows) {
+      rows.push({
+        line: `Line ${line}`,
+        description: `${meta.description} (US)`,
+        country: 'US',
+        usSource: Number(r.a) || 0,
+        passive: Number(r.c) || 0,
+        sourcedByPartner: Number(r.f) || 0,
+        total: Number(r.g) || 0,
+      })
+    }
+
+    // Foreign rows: if many countries, collapse
+    if (foreignRows.length > 3) {
+      rows.push({
+        line: `Lines ${line}`,
+        description: `${meta.description} (${foreignRows.length} foreign countries)`,
+        usSource: agg(foreignRows, 'a'),
+        passive: agg(foreignRows, 'c'),
+        sourcedByPartner: agg(foreignRows, 'f'),
+        total: agg(foreignRows, 'g'),
+        subRows: foreignRows.map((r) => ({
+          country: String(r.country ?? ''),
+          a: Number(r.a) || 0,
+          c: Number(r.c) || 0,
+          f: Number(r.f) || 0,
+          g: Number(r.g) || 0,
+        })),
+      })
+    } else {
+      for (const r of foreignRows) {
+        rows.push({
+          line: `Line ${line}`,
+          description: `${meta.description} (${r.country})`,
+          country: String(r.country ?? ''),
+          usSource: Number(r.a) || 0,
+          passive: Number(r.c) || 0,
+          sourcedByPartner: Number(r.f) || 0,
+          total: Number(r.g) || 0,
+        })
+      }
+    }
+
+    // XX rows (sourced by partner)
+    for (const r of xxRows) {
+      rows.push({
+        line: `Line ${line}`,
+        description: `${meta.description} (XX)`,
+        country: 'XX',
+        usSource: Number(r.a) || 0,
+        passive: Number(r.c) || 0,
+        sourcedByPartner: Number(r.f) || 0,
+        total: Number(r.g) || 0,
+      })
+    }
+  }
+
+  // Total line from line24
+  const line24 = d['line24_totalGrossIncome'] as Record<string, unknown> | undefined
+  if (line24) {
+    const totals = line24.totals as Record<string, number> | undefined
+    if (totals) {
+      rows.push({
+        line: 'Line 24',
+        description: 'Total Gross Income',
+        usSource: totals.a ?? 0,
+        passive: totals.c ?? 0,
+        sourcedByPartner: totals.f ?? 0,
+        total: totals.g ?? 0,
+        isTotal: true,
+      })
+    }
+  }
+
+  return rows
 }
 
-function k3Cls(n: number | null | undefined): string {
-  if (!n) return 'text-muted-foreground'
-  return n < 0 ? 'text-destructive' : ''
-}
+function K3GrossIncomeTable({ sections }: { sections: K3Section[] }) {
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
+  const rows = parseK3Part2GrossIncome(sections)
+  if (rows.length === 0) return null
 
-function K3Part2Table({ section }: { section: K3Section }) {
-  const rows = (section.data as Record<string, unknown>)?.rows as K3Part2Row[] | undefined
-  if (!rows?.length) return null
+  const toggleExpand = (idx: number) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev)
+      if (next.has(idx)) next.delete(idx)
+      else next.add(idx)
+      return next
+    })
+  }
 
-  const isTotalLine = (line: string) => ['24', '54', '55'].includes(line)
+  const fmtK3 = (n: number) => (n === 0 ? '—' : fmtAmt(n))
+  const k3Cls = (n: number) => (n === 0 ? 'text-muted-foreground' : n < 0 ? 'text-destructive' : '')
+
 
   return (
-    <div className="mt-4">
-      <div className="text-xs font-semibold text-muted-foreground mb-1 px-0.5">{section.title}</div>
-      <div className="border rounded-lg overflow-hidden">
-        <Table className="text-xs">
-          <TableHeader className="bg-muted/20">
-            <TableRow>
-              <TableHead className="h-8 text-xs">Line / Country</TableHead>
-              <TableHead className="h-8 text-xs text-right">U.S. Source</TableHead>
-              <TableHead className="h-8 text-xs text-right">Passive</TableHead>
-              <TableHead className="h-8 text-xs text-right">General</TableHead>
-              <TableHead className="h-8 text-xs text-right">Total</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((row, i) => (
-              <TableRow key={i} className={isTotalLine(row.line) ? 'font-semibold bg-muted/20' : ''}>
-                <TableCell className="py-1">
-                  Line {row.line}
-                  {row.country && row.country !== 'US' ? ` (${row.country})` : ''}
-                  {row.note ? ` — ${row.note}` : ''}
-                </TableCell>
-                <TableCell className={`py-1 text-right font-mono tabular-nums ${k3Cls(row.col_a_us_source)}`}>
-                  {fmtK3(row.col_a_us_source)}
-                </TableCell>
-                <TableCell className={`py-1 text-right font-mono tabular-nums ${k3Cls(row.col_c_passive)}`}>
-                  {fmtK3(row.col_c_passive)}
-                </TableCell>
-                <TableCell className={`py-1 text-right font-mono tabular-nums ${k3Cls(row.col_d_general)}`}>
-                  {fmtK3(row.col_d_general)}
-                </TableCell>
-                <TableCell className={`py-1 text-right font-mono tabular-nums ${k3Cls(row.col_g_total)}`}>
-                  {fmtK3(row.col_g_total)}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+    <div className="border border-border rounded-lg overflow-hidden">
+      <SectionHeader title="K-3 Gross Income & Foreign Tax Summary" />
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-muted/20 border-b border-border">
+              <th className="text-left px-3 py-1.5 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground">K-3 Line / Description</th>
+              <th className="text-right px-3 py-1.5 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground">U.S. Source (A)</th>
+              <th className="text-right px-3 py-1.5 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground">Passive (C)</th>
+              <th className="text-right px-3 py-1.5 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground">Sourced by Partner (F)</th>
+              <th className="text-right px-3 py-1.5 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground">Total (G)</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-dashed divide-border/50">
+            {rows.map((row, idx) => {
+              const isExpandable = row.subRows && row.subRows.length > 0
+              const isExpanded = expandedRows.has(idx)
+              return (
+                <tr key={idx} className="group">
+                  <td colSpan={5} className="p-0">
+                    <div
+                      className={`flex items-baseline ${row.isTotal ? 'bg-muted/30 font-semibold border-t border-border' : ''} ${isExpandable ? 'cursor-pointer hover:bg-muted/20' : ''}`}
+                      onClick={isExpandable ? () => toggleExpand(idx) : undefined}
+                    >
+                      <span className={`px-3 py-1.5 flex-1 flex items-center gap-1.5 ${row.isTotal ? 'text-xs font-semibold' : 'text-xs'}`}>
+                        {isExpandable && (
+                          isExpanded
+                            ? <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />
+                            : <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                        )}
+                        <span className={isExpandable ? 'underline decoration-dotted underline-offset-2' : ''}>
+                          {row.description}
+                        </span>
+                      </span>
+                      <span className={`px-3 py-1.5 text-right font-mono tabular-nums w-[100px] shrink-0 ${k3Cls(row.usSource)}`}>{fmtK3(row.usSource)}</span>
+                      <span className={`px-3 py-1.5 text-right font-mono tabular-nums w-[100px] shrink-0 ${k3Cls(row.passive)}`}>{fmtK3(row.passive)}</span>
+                      <span className={`px-3 py-1.5 text-right font-mono tabular-nums w-[120px] shrink-0 ${k3Cls(row.sourcedByPartner)}`}>{fmtK3(row.sourcedByPartner)}</span>
+                      <span className={`px-3 py-1.5 text-right font-mono tabular-nums w-[100px] shrink-0 ${k3Cls(row.total)} ${row.isTotal ? 'font-semibold' : ''}`}>{fmtK3(row.total)}</span>
+                    </div>
+                    {/* Expanded sub-rows */}
+                    {isExpandable && isExpanded && row.subRows && (
+                      <div className="bg-muted/10 border-t border-dashed border-border/50">
+                        {row.subRows.map((sub, si) => (
+                          <div key={si} className="flex items-baseline border-b border-dashed border-border/30 last:border-b-0">
+                            <span className="px-3 py-0.5 pl-10 flex-1 text-[11px] text-muted-foreground font-mono">{sub.country}</span>
+                            <span className={`px-3 py-0.5 text-right font-mono tabular-nums w-[100px] shrink-0 text-[11px] ${k3Cls(sub.a)}`}>{fmtK3(sub.a)}</span>
+                            <span className={`px-3 py-0.5 text-right font-mono tabular-nums w-[100px] shrink-0 text-[11px] ${k3Cls(sub.c)}`}>{fmtK3(sub.c)}</span>
+                            <span className={`px-3 py-0.5 text-right font-mono tabular-nums w-[120px] shrink-0 text-[11px] ${k3Cls(sub.f)}`}>{fmtK3(sub.f)}</span>
+                            <span className={`px-3 py-0.5 text-right font-mono tabular-nums w-[100px] shrink-0 text-[11px] ${k3Cls(sub.g)}`}>{fmtK3(sub.g)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="px-3 py-1.5 text-[10px] text-muted-foreground italic border-t border-border bg-muted/10">
+        Column (d) General category = $0 for every row. XX rows are "Sourced by Partner" = U.S.-source for domestic partner not subject to a treaty.
       </div>
     </div>
   )
 }
 
-type K3ForeignTaxRow = {
-  country: string
-  tax_type?: string
-  basket?: string
-  amount_usd: number
-  amount_foreign_currency?: number
-  exchange_rate?: number
-  date_paid?: string
+// ── K-3 Part III Section 4 — Foreign Taxes Country Grid ───────────────────────
+
+interface K3ForeignTaxCountry {
+  code: string
+  usd: number
 }
 
-function K3ForeignTaxesTable({ section }: { section: K3Section }) {
-  const d = section.data as Record<string, unknown>
-  const countries = d?.countries as K3ForeignTaxRow[] | undefined
-  const grandTotal = d?.grandTotalUSD as number | undefined
+function parseK3ForeignTaxes(sections: K3Section[]): { countries: K3ForeignTaxCountry[]; total: number; countryCount: number; allPassive: boolean } | null {
+  const sec = sections.find((s) => s.sectionId === 'part3_section4')
+  if (!sec) return null
 
-  if (!countries?.length) return null
+  const d = sec.data as Record<string, unknown>
+  const taxData = d.line1_foreignTaxesPaid as Record<string, unknown> | undefined
+  if (!taxData) return null
+
+  const countries = (taxData.countries as Array<Record<string, unknown>> | undefined) ?? []
+  if (countries.length === 0) return null
+
+  const allPassive = (taxData.allPassiveCategory as boolean) ?? true
+
+  const parsed = countries.map((c) => ({
+    code: String(c.code ?? ''),
+    usd: Number(c.total ?? c.passiveForeign ?? 0),
+  }))
+
+  return {
+    countries: parsed,
+    total: Number(taxData.grandTotalUSD ?? parsed.reduce((acc, c) => acc + c.usd, 0)),
+    countryCount: parsed.length,
+    allPassive,
+  }
+}
+
+/** Country name lookup for common IRS country codes. */
+const COUNTRY_NAMES: Record<string, string> = {
+  AS: 'Australia', BE: 'Belgium', CA: 'Canada', DA: 'Denmark', EI: 'Ireland',
+  FI: 'Finland', FR: 'France', GM: 'Germany', IT: 'Italy', JA: 'Japan',
+  NL: 'Netherlands', NO: 'Norway', RQ: 'Qatar', SP: 'Spain', SW: 'Sweden',
+  SZ: 'Switzerland', UK: 'United Kingdom', HK: 'Hong Kong', SN: 'Singapore',
+  BD: 'Bermuda', CJ: 'Cayman Islands', GK: 'Greece', JE: 'Jersey', LU: 'Luxembourg',
+}
+
+function K3ForeignTaxGrid({ sections }: { sections: K3Section[] }) {
+  const taxInfo = parseK3ForeignTaxes(sections)
+  if (!taxInfo) return null
+
+  const { countries, total, countryCount, allPassive } = taxInfo
+
+  // Arrange into a 4-column grid
+  const colCount = 4
+  const rowCount = Math.ceil(countries.length / colCount)
+  const columns: K3ForeignTaxCountry[][] = Array.from({ length: colCount }, (_, col) =>
+    countries.slice(col * rowCount, (col + 1) * rowCount)
+  )
 
   return (
-    <div className="mt-4">
-      <div className="text-xs font-semibold text-muted-foreground mb-1 px-0.5">{section.title}</div>
-      <div className="border rounded-lg overflow-hidden">
-        <Table className="text-xs">
-          <TableHeader className="bg-muted/20">
-            <TableRow>
-              <TableHead className="h-8 text-xs">Country</TableHead>
-              <TableHead className="h-8 text-xs">Type</TableHead>
-              <TableHead className="h-8 text-xs">Basket</TableHead>
-              <TableHead className="h-8 text-xs text-right">Amount USD</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {countries.map((row, i) => (
-              <TableRow key={i}>
-                <TableCell className="py-1 font-mono font-semibold">{row.country}</TableCell>
-                <TableCell className="py-1">{row.tax_type ?? '—'}</TableCell>
-                <TableCell className="py-1">{row.basket ?? '—'}</TableCell>
-                <TableCell className="py-1 text-right font-mono tabular-nums">{fmtAmt(row.amount_usd)}</TableCell>
-              </TableRow>
+    <div className="border border-border rounded-lg overflow-hidden">
+      <SectionHeader title={`K-3 Part III Section 4 — Foreign Taxes (${countryCount} Countries, All WHTD${allPassive ? ', All Passive' : ''})`} />
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-muted/20 border-b border-border">
+              {Array.from({ length: colCount }).map((_, ci) => (
+                <th key={`ch-${ci}`} className="text-left px-2 py-1 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground" colSpan={1}>
+                  Country
+                </th>
+              )).flatMap((th, ci) => [
+                th,
+                <th key={`ca-${ci}`} className="text-right px-2 py-1 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground">USD</th>,
+              ])}
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: rowCount }).map((_, ri) => (
+              <tr key={ri} className="border-b border-dashed border-border/50">
+                {columns.map((col, ci) => {
+                  const entry = col[ri]
+                  if (!entry) {
+                    return [
+                      <td key={`e-${ci}-name`} className="px-2 py-1" />,
+                      <td key={`e-${ci}-amt`} className="px-2 py-1" />,
+                    ]
+                  }
+                  return [
+                    <td key={`${ci}-name`} className="px-2 py-1 font-mono">
+                      <span className="font-semibold">{entry.code}</span>
+                      <span className="text-muted-foreground ml-1">({COUNTRY_NAMES[entry.code] ?? entry.code})</span>
+                    </td>,
+                    <td key={`${ci}-amt`} className="px-2 py-1 text-right font-mono tabular-nums">${entry.usd.toLocaleString()}</td>,
+                  ]
+                })}
+              </tr>
             ))}
-            {grandTotal !== undefined && (
-              <TableRow className="font-semibold bg-muted/20">
-                <TableCell colSpan={3} className="py-1">Grand Total</TableCell>
-                <TableCell className="py-1 text-right font-mono tabular-nums">{fmtAmt(grandTotal)}</TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+            <tr className="bg-muted/30 font-semibold border-t border-border">
+              <td colSpan={colCount * 2 - 1} className="px-2 py-1.5 text-xs">Total (equals Box 21)</td>
+              <td className="px-2 py-1.5 text-right font-mono tabular-nums text-xs">${total.toLocaleString()}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   )
 }
 
-type K3AssetRow = {
-  line: string
-  col_a_us_source?: number | null
-  col_c_passive?: number | null
-  col_d_general?: number | null
-  col_g_total?: number | null
-}
+// ── K-3 generic section fallback ──────────────────────────────────────────────
 
-function K3AssetTable({ section }: { section: K3Section }) {
-  const rows = (section.data as Record<string, unknown>)?.rows as K3AssetRow[] | undefined
-  if (!rows?.length) return null
+function K3SectionFallback({ section }: { section: K3Section }) {
+  // Skip sections handled by dedicated components
+  if (['header', 'part2_section1', 'part2_section2', 'part3_section4'].includes(section.sectionId)) return null
 
   return (
-    <div className="mt-4">
-      <div className="text-xs font-semibold text-muted-foreground mb-1 px-0.5">{section.title}</div>
-      <div className="border rounded-lg overflow-hidden">
-        <Table className="text-xs">
-          <TableHeader className="bg-muted/20">
-            <TableRow>
-              <TableHead className="h-8 text-xs">Asset Category (Line)</TableHead>
-              <TableHead className="h-8 text-xs text-right">U.S. Source</TableHead>
-              <TableHead className="h-8 text-xs text-right">Passive Foreign</TableHead>
-              <TableHead className="h-8 text-xs text-right">General Foreign</TableHead>
-              <TableHead className="h-8 text-xs text-right">Total</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((row, i) => (
-              <TableRow key={i}>
-                <TableCell className="py-1 font-mono">{row.line}</TableCell>
-                <TableCell className={`py-1 text-right font-mono tabular-nums ${k3Cls(row.col_a_us_source)}`}>
-                  {fmtK3(row.col_a_us_source)}
-                </TableCell>
-                <TableCell className={`py-1 text-right font-mono tabular-nums ${k3Cls(row.col_c_passive)}`}>
-                  {fmtK3(row.col_c_passive)}
-                </TableCell>
-                <TableCell className={`py-1 text-right font-mono tabular-nums ${k3Cls(row.col_d_general)}`}>
-                  {fmtK3(row.col_d_general)}
-                </TableCell>
-                <TableCell className={`py-1 text-right font-mono tabular-nums ${k3Cls(row.col_g_total)}`}>
-                  {fmtK3(row.col_g_total)}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
-  )
-}
-
-function K3Section_({ section }: { section: K3Section }) {
-  if (section.sectionId === 'part2_section1' || section.sectionId === 'part2_section2') {
-    return <K3Part2Table section={section} />
-  }
-  if (section.sectionId === 'part3_section4') {
-    return <K3ForeignTaxesTable section={section} />
-  }
-  if (section.sectionId === 'part3_section2') {
-    return <K3AssetTable section={section} />
-  }
-  // Generic fallback: show title + notes only
-  return (
-    <div className="mt-3 border rounded-lg px-3 py-2">
+    <div className="border border-border rounded-lg px-3 py-2">
       <div className="text-xs font-semibold">{section.title}</div>
       {section.notes && <p className="text-xs text-muted-foreground mt-1 italic">{section.notes}</p>}
+    </div>
+  )
+}
+
+// ── Main K-1 header ───────────────────────────────────────────────────────────
+
+function K1Header({ data }: { data: FK1StructuredData }) {
+  const fundName = data.fields['B']?.value?.split('\n')[0] ?? 'Partnership'
+  const ein = data.fields['A']?.value ?? '—'
+  const partnerNumber = data.fields['partnerNumber']?.value ?? null
+  const endingPct = data.fields['J_capitalPctEnding']?.value ?? data.fields['J_capital_ending']?.value ?? null
+  const partnerType = data.fields['G']?.value ?? data.fields['G_partnerType']?.value ?? null
+  const isTrader = data.fields['partnershipPosition_traderInSecurities']?.value === 'true'
+
+  const subtitleParts = [
+    ein ? `EIN ${ein}` : null,
+    partnerNumber ? `Partner #${partnerNumber}` : null,
+    endingPct ? `${endingPct}% ending interest` : null,
+    partnerType ? partnerType.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : null,
+    isTrader ? 'Trader in securities' : null,
+  ].filter(Boolean)
+
+  return (
+    <div className="mb-4">
+      <h2 className="text-sm font-bold uppercase tracking-wide text-foreground">{fundName} — K-1 & K-3 Detail</h2>
+      <div className="text-[11px] text-muted-foreground mt-0.5">
+        {subtitleParts.join(' · ')}
+      </div>
     </div>
   )
 }
@@ -543,9 +965,13 @@ export default function K1ReviewPanel({ data, onChange, readOnly = false }: K1Re
   const activeCodesSpec = codesModal ? K1_SPEC.find((s) => s.box === codesModal.box) : null
 
   const k3Sections = data.k3?.sections ?? []
+  const box11Items = data.codes['11'] ?? []
 
   return (
     <div className="space-y-4">
+      {/* K-1 Header */}
+      <K1Header data={data} />
+
       {/* Extraction metadata */}
       {data.extraction?.model && (
         <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
@@ -569,17 +995,23 @@ export default function K1ReviewPanel({ data, onChange, readOnly = false }: K1Re
         <DeductionItemsBlock data={data} onOpenCodes={(box) => setCodesModal({ box })} />
       </div>
 
-      {/* Other / Supplemental */}
-      <OtherSupplementalBlock data={data} onOpenCodes={(box) => setCodesModal({ box })} />
+      {/* Box 11ZZ Callout */}
+      <Box11ZZCallout items={box11Items} />
+
+      {/* Box 20 Supplemental */}
+      <SupplementalBlock data={data} onOpenCodes={(box) => setCodesModal({ box })} />
+
+      {/* Capital Account & Liabilities */}
+      <CapitalAccountBlock data={data} />
 
       {/* K-3 sections */}
       {k3Sections.length > 0 && (
-        <div className="space-y-1">
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground pt-1">
-            Schedule K-3
-          </div>
+        <div className="space-y-4">
+          <K3GrossIncomeTable sections={k3Sections} />
+          <K3ForeignTaxGrid sections={k3Sections} />
+          {/* Generic fallback for other K-3 sections */}
           {k3Sections.map((section) => (
-            <K3Section_ key={section.sectionId} section={section} />
+            <K3SectionFallback key={section.sectionId} section={section} />
           ))}
         </div>
       )}

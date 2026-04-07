@@ -287,6 +287,22 @@ export default function TaxDocuments1099Section({
     const formLabel = FORM_TYPE_LABELS[doc.form_type as DisplayFormType] ?? doc.form_type
 
     if (isProcessing) {
+      // For K-1 documents, allow opening the modal even during processing (e.g., to delete)
+      if (doc.form_type === 'k1') {
+        return (
+          <Button
+            key={doc.id}
+            size="sm"
+            variant="outline"
+            className="gap-1 h-7 text-xs border-orange-300 text-orange-600 hover:bg-orange-50 px-2"
+            onClick={() => setReviewModalDoc(doc)}
+            title="K-1 processing — click to open (e.g., to delete)"
+          >
+            <Clock className="h-3 w-3 animate-pulse" />
+            {formLabel} — Processing
+          </Button>
+        )
+      }
       return (
         <Button key={doc.id} size="sm" variant="outline" disabled className="gap-1 h-7 text-xs border-orange-300 text-orange-600 px-2">
           <Clock className="h-3 w-3 animate-pulse" />

@@ -102,6 +102,7 @@ class TaxDocumentController extends Controller
             'employment_entity_id' => 'nullable|integer',
             'account_id' => 'nullable|integer',
             'notes' => 'nullable|string',
+            'parsed_data' => 'nullable|array',
         ]);
 
         $userId = Auth::id();
@@ -141,7 +142,11 @@ class TaxDocumentController extends Controller
             ], 422);
         }
 
-        $doc = DB::transaction(function () use ($request, $userId, $formType, $s3Key, $storedFilename): FileForTaxDocument {
+        // When caller supplies pre-parsed JSON (e.g., user attached JSON from LLM before uploading
+        // the PDF), skip AI processing entirely.
+        $hasParsedData = $request->filled('parsed_data');
+
+        $doc = DB::transaction(function () use ($request, $userId, $formType, $s3Key, $storedFilename, $hasParsedData): FileForTaxDocument {
             $taxDoc = FileForTaxDocument::create([
                 'user_id' => $userId,
                 'tax_year' => $request->tax_year,
@@ -156,31 +161,36 @@ class TaxDocumentController extends Controller
                 'file_hash' => $request->file_hash,
                 'uploaded_by_user_id' => $userId,
                 'notes' => $request->notes,
-                'genai_status' => 'pending',
+                'parsed_data' => $hasParsedData ? $request->parsed_data : null,
+                'genai_status' => $hasParsedData ? 'parsed' : 'pending',
             ]);
 
-            $genaiJob = GenAiImportJob::create([
-                'user_id' => $userId,
-                'job_type' => 'tax_document',
-                'file_hash' => $request->file_hash,
-                'original_filename' => $request->original_filename,
-                's3_path' => $s3Key,
-                'mime_type' => $request->input('mime_type', 'application/pdf'),
-                'file_size_bytes' => $request->file_size_bytes,
-                'context_json' => json_encode([
-                    'tax_year' => (int) $request->tax_year,
-                    'form_type' => $formType,
-                    'tax_document_id' => $taxDoc->id,
-                ]),
-                'status' => 'pending',
-            ]);
+            if (! $hasParsedData) {
+                $genaiJob = GenAiImportJob::create([
+                    'user_id' => $userId,
+                    'job_type' => 'tax_document',
+                    'file_hash' => $request->file_hash,
+                    'original_filename' => $request->original_filename,
+                    's3_path' => $s3Key,
+                    'mime_type' => $request->input('mime_type', 'application/pdf'),
+                    'file_size_bytes' => $request->file_size_bytes,
+                    'context_json' => json_encode([
+                        'tax_year' => (int) $request->tax_year,
+                        'form_type' => $formType,
+                        'tax_document_id' => $taxDoc->id,
+                    ]),
+                    'status' => 'pending',
+                ]);
 
-            $taxDoc->update(['genai_job_id' => $genaiJob->id]);
+                $taxDoc->update(['genai_job_id' => $genaiJob->id]);
+            }
 
             return $taxDoc;
         });
 
-        ParseImportJob::dispatch($doc->genai_job_id);
+        if (! $hasParsedData) {
+            ParseImportJob::dispatch($doc->genai_job_id);
+        }
 
         return response()->json(
             $doc->load(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name']),
@@ -346,14 +356,6 @@ class TaxDocumentController extends Controller
         }
 
         if ($request->has('parsed_data')) {
-            // Only allow editing parsed data if NOT reviewed, OR the request explicitly un-reviews it
-            $isBecomingReviewed = $request->has('is_reviewed') && $request->boolean('is_reviewed');
-            $stayReviewed = $doc->is_reviewed && ! $request->has('is_reviewed');
-
-            if ($isBecomingReviewed || $stayReviewed) {
-                return response()->json(['message' => 'Cannot edit parsed data on a reviewed document.'], 422);
-            }
-
             $doc->parsed_data = $request->parsed_data;
         }
 
