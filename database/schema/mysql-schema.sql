@@ -614,7 +614,7 @@ CREATE TABLE `fin_account_tag` (
   `tag_userid` varchar(50) NOT NULL,
   `tag_color` varchar(20) NOT NULL,
   `tag_label` varchar(50) NOT NULL,
-  `tax_characteristic` enum('business_income','business_returns','sce_advertising','sce_car_truck','sce_commissions_fees','sce_contract_labor','sce_depletion','sce_depreciation','sce_employee_benefits','sce_insurance','sce_interest_mortgage','sce_interest_other','sce_legal_professional','sce_office_expenses','sce_pension','sce_rent_vehicles','sce_rent_property','sce_repairs_maintenance','sce_supplies','sce_taxes_licenses','sce_travel','sce_meals','sce_utilities','sce_wages','sce_other','scho_rent','scho_mortgage_interest','scho_real_estate_taxes','scho_insurance','scho_utilities','scho_repairs_maintenance','scho_security','scho_depreciation','scho_cleaning','scho_hoa','scho_casualty_losses','interest','ordinary_dividend','qualified_dividend','other_ordinary_income','w2_wages','w2_other_comp') DEFAULT NULL,
+  `tax_characteristic` enum('business_income','business_returns','sce_advertising','sce_car_truck','sce_commissions_fees','sce_contract_labor','sce_depletion','sce_depreciation','sce_employee_benefits','sce_insurance','sce_interest_mortgage','sce_interest_other','sce_legal_professional','sce_office_expenses','sce_pension','sce_rent_vehicles','sce_rent_property','sce_repairs_maintenance','sce_supplies','sce_taxes_licenses','sce_travel','sce_meals','sce_utilities','sce_wages','sce_other','scho_rent','scho_mortgage_interest','scho_real_estate_taxes','scho_insurance','scho_utilities','scho_repairs_maintenance','scho_security','scho_depreciation','scho_cleaning','scho_hoa','scho_casualty_losses','interest','ordinary_dividend','qualified_dividend','other_ordinary_income','w2_wages','w2_other_comp','us_government_interest') DEFAULT NULL,
   `employment_entity_id` bigint(20) unsigned DEFAULT NULL,
   `when_added` timestamp NOT NULL DEFAULT current_timestamp(),
   `when_deleted` timestamp NULL DEFAULT NULL,
@@ -971,7 +971,7 @@ CREATE TABLE `fin_tax_documents` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `user_id` bigint(20) unsigned NOT NULL,
   `tax_year` int(11) NOT NULL,
-  `form_type` enum('w2','w2c','1099_int','1099_int_c','1099_div','1099_div_c') NOT NULL,
+  `form_type` enum('w2','w2c','1099_int','1099_int_c','1099_div','1099_div_c','1099_misc','k1','1116') NOT NULL,
   `employment_entity_id` bigint(20) unsigned DEFAULT NULL,
   `account_id` bigint(20) unsigned DEFAULT NULL,
   `original_filename` varchar(255) NOT NULL,
@@ -982,11 +982,10 @@ CREATE TABLE `fin_tax_documents` (
   `file_hash` varchar(255) NOT NULL,
   `uploaded_by_user_id` bigint(20) unsigned DEFAULT NULL,
   `notes` text DEFAULT NULL,
-  `is_reconciled` tinyint(1) NOT NULL DEFAULT 0,
   `genai_job_id` bigint(20) unsigned DEFAULT NULL,
   `genai_status` varchar(32) DEFAULT NULL,
   `parsed_data` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`parsed_data`)),
-  `is_confirmed` tinyint(1) NOT NULL DEFAULT 0,
+  `is_reviewed` tinyint(1) NOT NULL DEFAULT 0,
   `download_history` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`download_history`)),
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
@@ -1045,6 +1044,7 @@ CREATE TABLE `genai_import_jobs` (
   `context_json` text DEFAULT NULL,
   `status` varchar(32) NOT NULL DEFAULT 'pending',
   `error_message` text DEFAULT NULL,
+  `raw_response` longtext DEFAULT NULL,
   `retry_count` tinyint(3) unsigned NOT NULL DEFAULT 0,
   `scheduled_for` date DEFAULT NULL,
   `parsed_at` timestamp NULL DEFAULT NULL,
@@ -1595,3 +1595,9 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (79,'2025_12_12_000
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (80,'2026_04_03_020007_drop_queue_monitor_tables',46);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (81,'2026_04_03_100000_create_fin_tax_documents_table',47);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (82,'2026_04_04_100000_add_genai_fields_to_fin_tax_documents',48);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (83,'2026_04_04_092526_add_raw_response_to_genai_import_jobs_table',49);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (84,'2026_04_04_110000_add_1099_misc_to_fin_tax_documents_form_type',50);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (85,'2026_04_04_110001_add_us_government_interest_tax_characteristic',50);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (86,'2026_04_05_021043_combine_tax_document_flags',51);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (87,'2026_04_05_100000_add_k1_to_fin_tax_documents_form_type',52);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (88,'2026_04_06_000001_add_1116_to_fin_tax_documents_form_type',53);
