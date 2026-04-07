@@ -113,7 +113,7 @@ class GenAiJobDispatcherService
         $rawPrompt = $this->buildTaxDocumentPrompt(['form_type' => $formType, 'tax_year' => $taxYear]);
 
         // Strip the internal `<!-- tool:... -->` marker so users don't see it
-        $cleanInstructions = trim((string) preg_replace('/<!--[^>]+-->\s*\n?/', '', $rawPrompt));
+        $cleanInstructions = trim((string) preg_replace('/<!--\s*tool:[^>]+-->\s*\n?/', '', $rawPrompt));
 
         // Build the JSON schema the user should produce
         if ($formType === 'k1') {

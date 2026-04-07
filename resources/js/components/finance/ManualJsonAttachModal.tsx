@@ -81,7 +81,32 @@ function validateParsedData(data: unknown, formType: string): string[] {
   return errors
 }
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+/** Returns a short form-specific JSON placeholder example for the textarea. */
+function getJsonPlaceholder(formType: string): string {
+  switch (formType) {
+    case 'w2':
+    case 'w2c':
+      return '{\n  "employer_name": "Acme Corp",\n  "box1_wages": 100000,\n  "box2_fed_tax": 22000\n}'
+    case '1099_int':
+    case '1099_int_c':
+      return '{\n  "payer_name": "Big Bank NA",\n  "box1_interest": 1234.56,\n  "box6_foreign_tax": 0\n}'
+    case '1099_div':
+    case '1099_div_c':
+      return '{\n  "payer_name": "Fidelity",\n  "box1a_ordinary": 2500.00,\n  "box1b_qualified": 2000.00\n}'
+    case '1099_misc':
+      return '{\n  "payer_name": "Payer LLC",\n  "box3_other_income": 5000.00,\n  "box4_fed_tax": null\n}'
+    case 'k1':
+      return (
+        '{\n  "schemaVersion": "2026.1",\n  "formType": "K-1-1065",\n' +
+        '  "fields": { "A": { "value": "Partnership LLC" }, "1": { "value": "12345.67" } },\n' +
+        '  "codes": { "11": [{ "code": "A", "value": "500.00", "notes": "Net LT cap gain" }] }\n}'
+      )
+    default:
+      return '{\n  /* paste the JSON returned by the LLM here */\n}'
+  }
+}
+
+
 
 interface PromptInfo {
   prompt: string
@@ -133,7 +158,7 @@ export default function ManualJsonAttachModal({
 
     setPromptLoading(true)
     fetchWrapper
-      .get(`/api/finance/tax-documents/prompt?form_type=${encodeURIComponent(formType)}&tax_year=${taxYear}`)
+      .get(`/api/finance/tax-documents/prompt?form_type=${encodeURIComponent(formType)}&tax_year=${encodeURIComponent(String(taxYear))}`)
       .then((data: unknown) => setPromptInfo(data as PromptInfo))
       .catch(() => toast.error('Could not load prompt info.'))
       .finally(() => setPromptLoading(false))
@@ -278,7 +303,7 @@ export default function ManualJsonAttachModal({
             <Textarea
               value={jsonInput}
               onChange={e => setJsonInput(e.target.value)}
-              placeholder={'{\n  "box1_wages": 100000,\n  "employer_name": "Acme Corp"\n}'}
+              placeholder={getJsonPlaceholder(formType)}
               className="font-mono text-xs h-40 resize-none"
               disabled={submitting}
             />
