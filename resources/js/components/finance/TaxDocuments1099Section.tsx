@@ -29,13 +29,18 @@ import {
 import type { F1099DivParsedData, F1099IntParsedData, FK1StructuredData, TaxDocument } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS, isFK1StructuredData } from '@/types/finance/tax-document'
 
-interface FinAccount {
+export interface FinAccount {
   acct_id: number
   acct_name: string
 }
 
 interface TaxDocuments1099SectionProps {
   selectedYear: number
+  documents?: TaxDocument[] | undefined
+  accounts?: FinAccount[] | undefined
+  activeAccountIds?: number[] | undefined
+  isLoading?: boolean | undefined
+  onDocumentsReload?: (() => void | Promise<void>) | undefined
   onTotalsChange?: (totals: {
     interestIncome: currency
     dividendIncome: currency
@@ -68,17 +73,47 @@ interface UploadModalState {
 const DISPLAY_FORM_TYPES = ['1099_int', '1099_div', '1099_misc', 'k1'] as const
 type DisplayFormType = (typeof DISPLAY_FORM_TYPES)[number]
 
-export default function TaxDocuments1099Section({ selectedYear, onTotalsChange, onDocumentsChange }: TaxDocuments1099SectionProps) {
-  const [documents, setDocuments] = useState<TaxDocument[]>([])
-  const [accounts, setAccounts] = useState<FinAccount[]>([])
-  const [activeAccountIds, setActiveAccountIds] = useState<number[]>([])
-  const [loading, setLoading] = useState(true)
+export default function TaxDocuments1099Section({
+  selectedYear,
+  documents: controlledDocuments,
+  accounts: controlledAccounts,
+  activeAccountIds: controlledActiveAccountIds,
+  isLoading: controlledLoading,
+  onDocumentsReload,
+  onTotalsChange,
+  onDocumentsChange,
+}: TaxDocuments1099SectionProps) {
+  const [documents, setDocuments] = useState<TaxDocument[]>(controlledDocuments ?? [])
+  const [accounts, setAccounts] = useState<FinAccount[]>(controlledAccounts ?? [])
+  const [activeAccountIds, setActiveAccountIds] = useState<number[]>(controlledActiveAccountIds ?? [])
+  const [loading, setLoading] = useState(controlledLoading ?? true)
   const [error, setError] = useState<string | null>(null)
   const [uploadModal, setUploadModal] = useState<UploadModalState | null>(null)
   const [manualEntry, setManualEntry] = useState<ManualEntryState | null>(null)
   const [manualSaving, setManualSaving] = useState(false)
   const [reviewModalDoc, setReviewModalDoc] = useState<TaxDocument | null>(null)
   const [worksheetOpen, setWorksheetOpen] = useState(false)
+
+  useEffect(() => {
+    let interestIncome = currency(0)
+    let dividendIncome = currency(0)
+    let qualifiedDividends = currency(0)
+
+    for (const doc of documents) {
+      if (!doc.parsed_data || !doc.is_reviewed) continue
+      const parsedData = doc.parsed_data
+      if (doc.form_type === '1099_int' || doc.form_type === '1099_int_c') {
+        interestIncome = interestIncome.add((parsedData as F1099IntParsedData).box1_interest ?? 0)
+      }
+      if (doc.form_type === '1099_div' || doc.form_type === '1099_div_c') {
+        dividendIncome = dividendIncome.add((parsedData as F1099DivParsedData).box1a_ordinary ?? 0)
+        qualifiedDividends = qualifiedDividends.add((parsedData as F1099DivParsedData).box1b_qualified ?? 0)
+      }
+    }
+
+    onTotalsChange?.({ interestIncome, dividendIncome, qualifiedDividends })
+    onDocumentsChange?.(documents.filter((doc) => doc.is_reviewed))
+  }, [documents, onDocumentsChange, onTotalsChange])
 
   /** Collect foreign tax summaries from all reviewed documents. */
   const foreignTaxSummaries = useMemo<ForeignTaxSummary[]>(() => {
@@ -111,27 +146,10 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange, 
       setDocuments(docs)
       setError(null)
 
-      // Compute totals from confirmed parsed data using currency.js for precision
-      let interestIncome = currency(0)
-      let dividendIncome = currency(0)
-      let qualifiedDividends = currency(0)
-      for (const doc of docs) {
-        if (!doc.parsed_data || !doc.is_reviewed) continue
-        const pd = doc.parsed_data
-        if (doc.form_type === '1099_int' || doc.form_type === '1099_int_c') {
-          interestIncome = interestIncome.add((pd as F1099IntParsedData).box1_interest ?? 0)
-        }
-        if (doc.form_type === '1099_div' || doc.form_type === '1099_div_c') {
-          dividendIncome = dividendIncome.add((pd as F1099DivParsedData).box1a_ordinary ?? 0)
-          qualifiedDividends = qualifiedDividends.add((pd as F1099DivParsedData).box1b_qualified ?? 0)
-        }
-      }
-      onTotalsChange?.({ interestIncome, dividendIncome, qualifiedDividends })
-      onDocumentsChange?.(docs.filter(d => d.is_reviewed))
     } catch {
       setError('Failed to load account documents')
     }
-  }, [selectedYear, onTotalsChange, onDocumentsChange])
+  }, [selectedYear])
 
   const fetchAccounts = useCallback(async () => {
     try {
@@ -154,9 +172,26 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange, 
   }, [selectedYear])
 
   useEffect(() => {
+    if (controlledDocuments) setDocuments(controlledDocuments)
+  }, [controlledDocuments])
+
+  useEffect(() => {
+    if (controlledAccounts) setAccounts(controlledAccounts)
+  }, [controlledAccounts])
+
+  useEffect(() => {
+    if (controlledActiveAccountIds) setActiveAccountIds(controlledActiveAccountIds)
+  }, [controlledActiveAccountIds])
+
+  useEffect(() => {
+    if (controlledLoading !== undefined) setLoading(controlledLoading)
+  }, [controlledLoading])
+
+  useEffect(() => {
+    if (controlledDocuments || controlledAccounts || controlledActiveAccountIds) return
     setLoading(true)
     Promise.all([fetchDocuments(), fetchAccounts()]).finally(() => setLoading(false))
-  }, [fetchDocuments, fetchAccounts])
+  }, [fetchDocuments, fetchAccounts, controlledDocuments, controlledAccounts, controlledActiveAccountIds])
 
   // Auto-refetch every minute when any document is still processing
   useEffect(() => {
@@ -216,7 +251,11 @@ export default function TaxDocuments1099Section({ selectedYear, onTotalsChange, 
 
       toast.success('Manual entry saved successfully')
       setManualEntry(null)
-      await fetchDocuments()
+      if (onDocumentsReload) {
+        await onDocumentsReload()
+      } else {
+        await fetchDocuments()
+      }
     } catch (err) {
       toast.error('Save failed: ' + (err instanceof Error ? err.message : 'Unknown error'))
     } finally {

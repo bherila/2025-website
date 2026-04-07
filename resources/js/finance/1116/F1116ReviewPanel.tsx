@@ -1,5 +1,6 @@
 'use client'
 
+import currency from 'currency.js'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 
@@ -167,7 +168,7 @@ function ClassificationSection({
 function PartIBlock({ data }: { data: F1116Data }) {
   const income1a = parseFieldVal(data.fields['1a']?.value)
   const income1b = parseFieldVal(data.fields['1b']?.value)
-  const total = (income1a ?? 0) + (income1b ?? 0)
+  const total = currency(income1a ?? 0).add(income1b ?? 0).value
 
   if (income1a === null && income1b === null) return null
 
@@ -184,8 +185,8 @@ function PartIIBlock({ data }: { data: F1116Data }) {
   const expenses = parseFieldVal(data.fields['2']?.value)
   const income1a = parseFieldVal(data.fields['1a']?.value)
   const income1b = parseFieldVal(data.fields['1b']?.value)
-  const grossIncome = (income1a ?? 0) + (income1b ?? 0)
-  const netIncome = expenses !== null ? grossIncome - Math.abs(expenses) : null
+  const grossIncome = currency(income1a ?? 0).add(income1b ?? 0).value
+  const netIncome = expenses !== null ? currency(grossIncome).subtract(Math.abs(expenses)).value : null
 
   if (expenses === null) return null
 
@@ -205,7 +206,7 @@ function PartIIIBlock({ data }: { data: F1116Data }) {
 
   if (taxesPaid === null && tentative === null) return null
 
-  const totalTaxes = (taxesPaid ?? 0) + (carryover ?? 0)
+  const totalTaxes = currency(taxesPaid ?? 0).add(carryover ?? 0).value
   const creditAllowed = tentative !== null ? Math.min(totalTaxes, tentative) : null
 
   return (
@@ -227,7 +228,7 @@ function PartIIIBlock({ data }: { data: F1116Data }) {
         <FormLine
           boxRef=""
           label="Excess taxes (carryforward to next year)"
-          value={totalTaxes - (tentative ?? 0)}
+          value={currency(totalTaxes).subtract(tentative ?? 0).value}
         />
       )}
     </FormBlock>

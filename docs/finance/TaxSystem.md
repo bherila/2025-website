@@ -102,25 +102,29 @@ Marriage/filing status is stored per year as a JSON column (`marriage_status_by_
 ## Tax Preview Page
 
 **Route**: `GET /finance/tax-preview` (canonical), `GET /finance/schedule-c` (301 redirect)
-**Controller**: `app/Http/Controllers/Finance/TaxPreviewController.php` (delegates to `TaxPreviewDataService`)
-**Service**: `app/Services/Finance/TaxPreviewDataService.php`
-**Component**: `resources/js/components/finance/TaxPreviewPage.tsx` (orchestrator)
+**Controller**: `app/Http/Controllers/Finance/TaxPreviewController.php` (shell preload only)
+**API Controller**: `app/Http/Controllers/Finance/TaxPreviewDataController.php`
+**Services**: `app/Services/Finance/TaxPreviewDataService.php`, `app/Services/Finance/ScheduleCSummaryService.php`
+**Components**: `resources/js/components/finance/TaxPreviewPage.tsx` + `TaxPreviewContext.tsx`
 
 ### Data Loading Architecture
 
-Year changes are **full page navigations** (`window.location.href = ...`). The Blade template preloads data for the selected year via a `<script type="application/json" id="tax-preview-data">` tag, eliminating client-side waterfalls:
+Year changes are **full page navigations** (`window.location.href = ...`). Blade now preloads only a lightweight shell payload via `<script type="application/json" id="tax-preview-data">`:
 
-**Preloaded** (in Blade template via `TaxPreviewDataService::forYear()`):
-- Payslips for the year
+**Preloaded shell data** (safe to embed in Blade):
+- `year`
+- `availableYears`
+
+**Mutable tax-preview dataset** (owned by React context and fetched from API):
+- Payslips for the selected year
 - Pending review count
-- Reviewed W-2 documents
-- Reviewed 1099 documents (INT, DIV, MISC)
-- Schedule C data (all years, for carry-forward calculations)
+- W-2 documents
+- Account documents (1099 + K-1)
+- Schedule C data
 - Employment entities
-- Available years (merged from payslips + tax documents)
+- Accounts + active-account IDs
 
-**Lazy-loaded** (client-side, on demand):
-- K-1 documents — large `parsed_data` with K-3 sections, fetched once and shared across tabs
+The React mini-SPA is wrapped in `TaxPreviewProvider`, which loads `/api/finance/tax-preview-data?year=YYYY`, exposes getters/setters for shared data, derives reviewed document subsets, computes 1099 totals and Schedule C net income, and provides `refreshAll()` for mutation sync after upload/review/edit actions.
 
 ### Tab Structure
 
@@ -148,14 +152,15 @@ Overview | Documents | K-1 Details | Schedules | Capital Gains | Form 1116 | Sch
 - **Form 8829 — Home Office Deduction**: office/home area inputs, business-use percentage, expense breakdown by Form 8829 line, income limitation, carry-forward
 - **Simplified Method Comparison**: side-by-side comparison of simplified ($5/sqft, max $1,500) vs. regular method
 
-`ScheduleCPreview` (`resources/js/components/finance/ScheduleCPreview.tsx`) remains as a data-computation component that emits `onScheduleCNetIncomeChange` for the Tax Estimate tab.
+`ScheduleCPreview` (`resources/js/components/finance/ScheduleCPreview.tsx`) still exports the shared Schedule C calculation utilities (`computeScheduleCNetIncome`, `computeHomeOfficeCalcs`) used by the Tax Preview context.
 
 ### API
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
+| `GET` | `/api/finance/tax-preview-data?year=YYYY` | Consolidated mutable Tax Preview dataset for the React context |
 | `GET` | `/api/finance/schedule-c` | Tax data grouped by characteristic and year |
-| `GET` | `/api/payslips?year=YYYY` | Payslip records for the year (W-2 summary and tax tables) |
+| `GET` | `/api/payslips?year=YYYY` | Payslip records for the year (still available for other pages) |
 | `GET` | `/api/finance/tax-documents` | Tax documents with various filters (year, form_type, is_reviewed) |
 
 ---

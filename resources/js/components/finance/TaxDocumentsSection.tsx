@@ -15,15 +15,28 @@ import type { EmploymentEntity, TaxDocument } from '@/types/finance/tax-document
 interface TaxDocumentsSectionProps {
   selectedYear: number | 'all'
   payslips: fin_payslip[]
+  documents?: TaxDocument[] | undefined
+  employmentEntities?: EmploymentEntity[] | undefined
+  isLoading?: boolean | undefined
+  onDocumentsReload?: (() => void | Promise<void>) | undefined
   onDocumentReviewed?: () => void
   /** Called whenever reviewed W-2 documents change (for Form 1040 data source). */
   onW2DocumentsChange?: (docs: TaxDocument[]) => void
 }
 
-export default function TaxDocumentsSection({ selectedYear, payslips, onDocumentReviewed, onW2DocumentsChange }: TaxDocumentsSectionProps) {
-  const [documents, setDocuments] = useState<TaxDocument[]>([])
-  const [entities, setEntities] = useState<EmploymentEntity[]>([])
-  const [loading, setLoading] = useState(true)
+export default function TaxDocumentsSection({
+  selectedYear,
+  payslips,
+  documents: controlledDocuments,
+  employmentEntities: controlledEntities,
+  isLoading: controlledLoading,
+  onDocumentsReload,
+  onDocumentReviewed,
+  onW2DocumentsChange,
+}: TaxDocumentsSectionProps) {
+  const [documents, setDocuments] = useState<TaxDocument[]>(controlledDocuments ?? [])
+  const [entities, setEntities] = useState<EmploymentEntity[]>(controlledEntities ?? [])
+  const [loading, setLoading] = useState(controlledLoading ?? true)
   const [error, setError] = useState<string | null>(null)
   const [uploadModal, setUploadModal] = useState<{ entityId: number; formType: string } | null>(null)
   const [reviewModalDoc, setReviewModalDoc] = useState<TaxDocument | null>(null)
@@ -53,9 +66,27 @@ export default function TaxDocumentsSection({ selectedYear, payslips, onDocument
   }, [])
 
   useEffect(() => {
+    if (controlledDocuments) setDocuments(controlledDocuments)
+  }, [controlledDocuments])
+
+  useEffect(() => {
+    if (controlledEntities) setEntities(controlledEntities)
+  }, [controlledEntities])
+
+  useEffect(() => {
+    if (controlledLoading !== undefined) setLoading(controlledLoading)
+  }, [controlledLoading])
+
+  useEffect(() => {
+    if (controlledDocuments || controlledEntities) return
     setLoading(true)
     Promise.all([fetchDocuments(), fetchEntities()]).finally(() => setLoading(false))
-  }, [fetchDocuments, fetchEntities])
+  }, [fetchDocuments, fetchEntities, controlledDocuments, controlledEntities])
+
+
+  useEffect(() => {
+    onW2DocumentsChange?.(documents.filter((doc) => doc.is_reviewed))
+  }, [documents, onW2DocumentsChange])
 
   const w2Entities = entities.filter(e => e.type === 'w2')
 
@@ -181,7 +212,11 @@ export default function TaxDocumentsSection({ selectedYear, payslips, onDocument
           employmentEntityId={uploadModal.entityId}
           onSuccess={() => {
             setUploadModal(null)
-            fetchDocuments()
+            if (onDocumentsReload) {
+              void onDocumentsReload()
+            } else {
+              void fetchDocuments()
+            }
           }}
           onCancel={() => setUploadModal(null)}
         />
@@ -197,7 +232,11 @@ export default function TaxDocumentsSection({ selectedYear, payslips, onDocument
           onClose={() => setReviewModalDoc(null)}
           onDocumentReviewed={() => {
             setReviewModalDoc(null)
-            fetchDocuments()
+            if (onDocumentsReload) {
+              void onDocumentsReload()
+            } else {
+              void fetchDocuments()
+            }
             onDocumentReviewed?.()
           }}
         />

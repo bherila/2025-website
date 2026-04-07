@@ -4,17 +4,17 @@ namespace App\Http\Controllers\Finance;
 
 use App\Http\Controllers\Controller;
 use App\Services\Finance\TaxPreviewDataService;
-use Illuminate\Contracts\View\View;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
-class TaxPreviewController extends Controller
+class TaxPreviewDataController extends Controller
 {
     public function __construct(
         private TaxPreviewDataService $taxPreviewDataService,
     ) {}
 
-    public function show(Request $request): View
+    public function index(Request $request): JsonResponse
     {
         $defaultYear = (int) date('Y');
         $yearParam = $request->query('year');
@@ -27,9 +27,8 @@ class TaxPreviewController extends Controller
             }
         }
 
-        return view('finance.tax-preview', [
-            'preload' => $this->taxPreviewDataService->shellForYear((int) Auth::id(), $year),
-            'year' => $year,
-        ]);
+        return response()->json(
+            $this->taxPreviewDataService->datasetForYear((int) Auth::id(), $year),
+        );
     }
 }

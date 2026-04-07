@@ -420,20 +420,20 @@ The following state is persisted in the URL so the browser back button works:
 ## Tax Preview View
 
 **Route**: `GET /finance/tax-preview` (`/finance/schedule-c` redirects here)  
-**Component**: `resources/js/components/finance/TaxPreviewPage.tsx` (orchestrator) + `ScheduleCPreview.tsx` (Schedule C section)  
-**API**: `GET /api/finance/schedule-c` → `FinanceScheduleCController@getSummary`; also `GET /api/payslips?year=YYYY`
+**Components**: `resources/js/components/finance/TaxPreviewPage.tsx`, `TaxPreviewContext.tsx`, `ScheduleCTab.tsx`  
+**API**: `GET /api/finance/tax-preview-data?year=YYYY` (context dataset); supporting endpoints include `GET /api/finance/schedule-c`, `GET /api/finance/tax-documents`, and `GET /api/payslips?year=YYYY`
 
 The Tax Preview view is a comprehensive tax-reporting and planning page. It combines payslip-derived W-2 income with transaction-tagged Schedule C data to produce quarterly federal and state tax estimates.
 
 ### What it Shows
 
-- **Year selector** (top-right) with −/+ navigation buttons to step through years; defaults to the current year. Choosing "All Years" shows all years.
-  - Uses URL query string (`?year=YYYY`) so the browser Back button works correctly
+- **Year selector** (top-right) with −/+ navigation buttons to step through years; defaults to the current year.
+  - Uses URL query string (`?year=YYYY`) and performs a full navigation so the controller + React shell stay in sync
 - **W-2 Income Summary** — when a specific year is selected and payslips exist, shows a table of key W-2 line items derived from payslip data: wages/salary, bonus, RSU vesting, imputed income, federal income tax withheld, state income tax withheld, OASDI, and Medicare.
 - **Federal Taxes** — quarterly cumulative tax estimate table (Q1 / Q2 / Q3 / Q4 (Full Year)). Income = W-2 payslip income + Schedule C net income (income − expenses − allowable home office deduction). Reuses the `TotalsTable` component from the Payslips page.
 - **California State Taxes** — same structure as Federal Taxes, using CA state brackets.
-- **"List transactions in-line" toggle** (inside ScheduleCPreview) — when enabled, each Schedule C line item expands to show individual transactions beneath it; in this mode, Schedule C cards expand to full container width (single column) for readability. Cards are always single-column on mobile/small screens.
-- For each tax year (most recent first) in the Schedule C section:
+- **Tax Preview Context Provider** — `TaxPreviewProvider` centralizes the mutable dataset (payslips, documents, Schedule C, entities, accounts), exposes setters + `refreshAll()`, and prevents duplicate fetches across tabs/components.
+- **Schedule C tab** — `ScheduleCTab` renders per-entity Schedule C blocks plus a Form 8829 home-office section with simplified-vs-regular comparison.
   - **Full-width year header** — e.g., "2024"
   - **Ordinary Income** (shown above Schedule C items) — interest, dividends, other income not tied to an employment entity
   - **Per-entity Schedule C sections** (2–3 column grid on desktop when inline mode is off):
@@ -452,7 +452,7 @@ Amounts are stored as negatives in the database (expenses) but displayed as posi
 
 | Parameter | Description |
 |-----------|-------------|
-| `year` | URL state only (`?year=2024` or `?year=all`) used by the UI; API still returns all years |
+| `year` | URL state only (`?year=2024`) used by the page shell and `/api/finance/tax-preview-data` |
 
 ### API Response Shape
 

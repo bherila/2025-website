@@ -890,16 +890,19 @@ This document may include the K-1 face page, supporting statements, and a multi-
 EXTRACTION RULES:
 
 1. FLAT FIELDS (fields A–O, boxes 1–10, 12, 14, 21):
-   Extract every labeled field. Use null for absent fields. Numbers must be numeric (not strings).
+   Extract every labeled field. Use null for absent fields. For these flat numeric fields,
+   return numbers as JSON numbers (not strings).
    Negative amounts shown in parentheses like (1,234) must be returned as -1234.
    Box 21 (foreign taxes paid or accrued) is a direct numeric field, not a coded box.
 
 2. CODED BOXES (11, 13–20):
    Each code entry becomes a SEPARATE array item even if the same code appears multiple times.
+   The coded-box `value` field must follow the tool schema and be returned as a string,
+   preserving the value shown on the form/supporting statement (for example, "-23167").
    CRITICAL: When a box has multiple sub-items under the same code (e.g., Box 11 Code ZZ
    contains three distinct items: §988 loss, swap loss, PFIC income), create one array entry
-   per sub-item with its individual dollar amount and a descriptive note.
-   Example: three Box 11 ZZ entries with values -23167, -54237, and 3198 respectively.
+   per sub-item with its individual amount/value and a descriptive note.
+   Example: three Box 11 ZZ entries with values "-23167", "-54237", and "3198" respectively.
    The `notes` field must include: (a) what the item is, (b) its tax character
    (ordinary vs. capital), and (c) where it goes on the return (e.g., "Schedule E Part II
    nonpassive" or "Schedule D"). Quote the K-1 footnote verbatim when it specifies treatment.
@@ -937,7 +940,7 @@ EXTRACTION RULES:
    not Schedule D" for swap losses).
 
 8. NORMALIZATION:
-   - All monetary values: numbers, never strings. Parentheses = negative.
+   - Flat monetary fields: JSON numbers. Coded-box `value` fields: strings matching the tool schema. Parentheses = negative.
    - All percentages: store as decimal (e.g., 0.042400 not 4.2400).
    - All dates: YYYY-MM-DD.
    - Partner number / form ID: capture from header if present.

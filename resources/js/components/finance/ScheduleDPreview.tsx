@@ -1,5 +1,7 @@
 'use client'
 
+import currency from 'currency.js'
+
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { Callout, fmtAmt, FormBlock, FormLine, FormSubLine, FormTotalLine, parseFieldVal } from '@/components/finance/tax-preview-primitives'
 import type { FK1StructuredData, K1CodeItem } from '@/types/finance/k1-data'
@@ -48,16 +50,16 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs }: S
         sec1256Sources.push({
           label: `${partnerName} — K-1 Box 11C`,
           amount: n,
-          lt: n * 0.6,
-          st: n * 0.4,
+          lt: currency(n).multiply(0.6).value,
+          st: currency(n).multiply(0.4).value,
         })
       }
     }
   }
 
-  const total6781 = sec1256Sources.reduce((acc, s) => acc + s.amount, 0)
-  const total6781LT = sec1256Sources.reduce((acc, s) => acc + s.lt, 0)
-  const total6781ST = sec1256Sources.reduce((acc, s) => acc + s.st, 0)
+  const total6781 = sec1256Sources.reduce((acc, source) => acc.add(source.amount), currency(0)).value
+  const total6781LT = sec1256Sources.reduce((acc, source) => acc.add(source.lt), currency(0)).value
+  const total6781ST = sec1256Sources.reduce((acc, source) => acc.add(source.st), currency(0)).value
 
   // ── Short-term capital gains/losses ──────────────────────────────────────
   type CapGainLine = { label: string; amount: number; note?: string }
@@ -131,13 +133,13 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs }: S
   }
 
   // ── Totals ────────────────────────────────────────────────────────────────
-  const netST = stLines.reduce((acc, l) => acc + l.amount, 0)
-  const netLT = ltLines.reduce((acc, l) => acc + l.amount, 0)
-  const combined = netST + netLT
+  const netST = stLines.reduce((acc, line) => acc.add(line.amount), currency(0)).value
+  const netLT = ltLines.reduce((acc, line) => acc.add(line.amount), currency(0)).value
+  const combined = currency(netST).add(netLT).value
 
   const annualCapLoss = 3000
   const appliedToReturn = combined < 0 ? Math.max(combined, -annualCapLoss) : 0
-  const carryforward = combined < 0 ? combined - appliedToReturn : 0
+  const carryforward = combined < 0 ? currency(combined).subtract(appliedToReturn).value : 0
 
   return (
     <div className="space-y-5">
@@ -215,7 +217,7 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs }: S
         )}
       </FormBlock>
 
-      {combined < carryforward - 0 && Math.abs(carryforward) > 5000 && (
+      {carryforward < 0 && Math.abs(carryforward) > 5000 && (
         <Callout kind="warn" title="⚠ Large Capital Loss Carryforward">
           <p>
             ~<strong>{fmtAmt(Math.abs(carryforward))}</strong> carries to next year (only $3,000 allowed annually).

@@ -2,63 +2,83 @@
 
 namespace App\Services\Finance;
 
-use App\Http\Controllers\FinanceTool\FinanceScheduleCController;
 use App\Models\Files\FileForTaxDocument;
+use App\Models\FinanceTool\FinAccountLineItems;
+use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinEmploymentEntity;
 use App\Models\FinanceTool\FinPayslips;
-use Illuminate\Http\Request;
 
 class TaxPreviewDataService
 {
+    public function __construct(
+        private ScheduleCSummaryService $scheduleCSummaryService,
+    ) {}
+
     /**
-     * Assemble all cheap-to-load data for the Tax Preview page.
+     * Lightweight shell data safe to preload in Blade.
      *
-     * K-1 documents are NOT included — they carry large parsed_data
-     * with K-3 sections and are fetched client-side on demand.
-     *
-     * @return array<string, mixed>
+     * @return array{year: int, availableYears: int[]}
      */
-    public function forYear(int $userId, int $year): array
+    public function shellForYear(int $userId, int $year): array
     {
         return [
             'year' => $year,
             'availableYears' => $this->availableYears($userId),
-            'payslips' => $this->payslipsForYear($userId, $year),
-            'pendingReviewCount' => $this->pendingReviewCount($userId, $year),
-            'reviewedW2Docs' => $this->reviewedDocs($userId, $year, FileForTaxDocument::W2_FORM_TYPES),
-            'reviewed1099Docs' => $this->reviewedDocs($userId, $year, ['1099_int', '1099_div', '1099_int_c', '1099_div_c', '1099_misc']),
-            'scheduleCData' => $this->scheduleCForYear($userId),
-            'employmentEntities' => $this->entities($userId),
         ];
     }
 
     /**
-     * Merge available years from payslips and Schedule C transactions.
+     * Full mutable Tax Preview dataset served from JSON API and owned by the React context provider.
      *
+     * @return array<string, mixed>
+     */
+    public function datasetForYear(int $userId, int $year): array
+    {
+        $accounts = $this->accounts($userId);
+        $scheduleCData = $this->scheduleCSummaryService->getSummary($userId);
+
+        return [
+            'year' => $year,
+            'availableYears' => $this->availableYears($userId, array_map(static fn (string $scheduleCYear): int => (int) $scheduleCYear, $scheduleCData['available_years'] ?? [])),
+            'payslips' => $this->payslipsForYear($userId, $year),
+            'pendingReviewCount' => $this->pendingReviewCount($userId, $year),
+            'w2Documents' => $this->documentsForYear($userId, $year, FileForTaxDocument::W2_FORM_TYPES),
+            'accountDocuments' => $this->documentsForYear($userId, $year, ['1099_int', '1099_int_c', '1099_div', '1099_div_c', '1099_misc', 'k1']),
+            'scheduleCData' => $scheduleCData,
+            'employmentEntities' => $this->employmentEntities($userId),
+            'accounts' => $accounts,
+            'activeAccountIds' => $this->activeAccountIdsForYear($accounts, $year),
+        ];
+    }
+
+    /**
      * @return int[]
      */
-    private function availableYears(int $userId): array
+    /**
+     * @param  int[]|null  $scheduleCYears
+     * @return int[]
+     */
+    private function availableYears(int $userId, ?array $scheduleCYears = null): array
     {
-        // Payslip years
         $payslipYears = FinPayslips::where('uid', $userId)
             ->where('pay_date', 'like', '20%')
             ->selectRaw('DISTINCT SUBSTRING(pay_date, 1, 4) as year')
             ->pluck('year')
-            ->map(fn ($y) => (int) $y)
+            ->map(fn ($year) => (int) $year)
             ->toArray();
 
-        // Tax document years
         $taxDocYears = FileForTaxDocument::where('user_id', $userId)
             ->select('tax_year')
             ->distinct()
             ->pluck('tax_year')
-            ->map(fn ($y) => (int) $y)
+            ->map(fn ($year) => (int) $year)
             ->toArray();
 
-        $years = array_unique(array_merge($payslipYears, $taxDocYears));
+        $scheduleCYears ??= $this->scheduleCSummaryService->availableYears($userId);
+
+        $years = array_unique(array_merge($payslipYears, $taxDocYears, $scheduleCYears));
         rsort($years);
 
-        // Include current year if not present
         $currentYear = (int) date('Y');
         if (! in_array($currentYear, $years, true)) {
             array_unshift($years, $currentYear);
@@ -104,12 +124,11 @@ class TaxPreviewDataService
      * @param  string[]  $formTypes
      * @return array<int, mixed>
      */
-    private function reviewedDocs(int $userId, int $year, array $formTypes): array
+    private function documentsForYear(int $userId, int $year, array $formTypes): array
     {
         return FileForTaxDocument::where('user_id', $userId)
             ->where('tax_year', $year)
             ->whereIn('form_type', $formTypes)
-            ->where('is_reviewed', true)
             ->with([
                 'uploader:id,name',
                 'employmentEntity:id,display_name',
@@ -121,34 +140,50 @@ class TaxPreviewDataService
     }
 
     /**
-     * Returns Schedule C data (all years). Year filtering is done client-side
-     * since the data is used for carry-forward calculations across years.
-     *
-     * Note: delegates to FinanceScheduleCController which uses Auth::id() internally.
-     * This works because the service is called within the auth middleware context.
-     *
-     * @return array<string, mixed>
+     * @return array<int, mixed>
      */
-    private function scheduleCForYear(int $userId): array
+    private function accounts(int $userId): array
     {
-        $controller = new FinanceScheduleCController;
-        $request = new Request;
-
-        $response = app()->call([$controller, 'getSummary'], ['request' => $request]);
-
-        // The controller returns a JsonResponse; we need the data
-        $content = $response->getContent();
-
-        return json_decode($content, true) ?? [];
+        return FinAccounts::where('acct_owner', $userId)
+            ->whereNull('when_deleted')
+            ->orderBy('when_closed', 'asc')
+            ->orderBy('acct_sort_order', 'asc')
+            ->orderBy('acct_name', 'asc')
+            ->get()
+            ->values()
+            ->toArray();
     }
 
     /**
-     * @return array<int, array{id: int, display_name: string, type: string}>
+     * @param  array<int, array<string, mixed>>  $accounts
+     * @return int[]
      */
-    private function entities(int $userId): array
+    private function activeAccountIdsForYear(array $accounts, int $year): array
+    {
+        $accountIds = array_values(array_filter(array_map(
+            static fn (array $account): ?int => isset($account['acct_id']) ? (int) $account['acct_id'] : null,
+            $accounts,
+        )));
+
+        if ($accountIds === []) {
+            return [];
+        }
+
+        return FinAccountLineItems::whereIn('t_account', $accountIds)
+            ->whereBetween('t_date', ["{$year}-01-01", "{$year}-12-31"])
+            ->distinct()
+            ->pluck('t_account')
+            ->map(fn ($accountId) => (int) $accountId)
+            ->toArray();
+    }
+
+    /**
+     * @return array<int, array{id: int, display_name: string, type: string, is_hidden: bool}>
+     */
+    private function employmentEntities(int $userId): array
     {
         return FinEmploymentEntity::where('user_id', $userId)
-            ->select(['id', 'display_name', 'type'])
+            ->select(['id', 'display_name', 'type', 'is_hidden'])
             ->get()
             ->toArray();
     }

@@ -58,17 +58,10 @@ class TaxPreviewControllerTest extends TestCase
 
         $this->assertArrayHasKey('year', $preload);
         $this->assertArrayHasKey('availableYears', $preload);
-        $this->assertArrayHasKey('payslips', $preload);
-        $this->assertArrayHasKey('pendingReviewCount', $preload);
-        $this->assertArrayHasKey('reviewedW2Docs', $preload);
-        $this->assertArrayHasKey('reviewed1099Docs', $preload);
-        $this->assertArrayHasKey('scheduleCData', $preload);
-        $this->assertArrayHasKey('employmentEntities', $preload);
+        $this->assertCount(2, $preload);
 
         $this->assertEquals(2025, $preload['year']);
         $this->assertIsArray($preload['availableYears']);
-        $this->assertIsArray($preload['payslips']);
-        $this->assertIsInt($preload['pendingReviewCount']);
     }
 
     public function test_tax_preview_page_requires_authentication(): void
@@ -92,6 +85,19 @@ class TaxPreviewControllerTest extends TestCase
         $user = $this->createUser();
 
         $response = $this->actingAs($user)->get('/finance/tax-preview');
+
+        $response->assertStatus(200);
+
+        $preload = $this->extractPreload($response->getContent());
+        $this->assertNotNull($preload);
+        $this->assertEquals((int) date('Y'), $preload['year']);
+    }
+
+    public function test_tax_preview_ignores_non_numeric_year_query_values(): void
+    {
+        $user = $this->createUser();
+
+        $response = $this->actingAs($user)->get('/finance/tax-preview?year=all');
 
         $response->assertStatus(200);
 

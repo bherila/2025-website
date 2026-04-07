@@ -195,11 +195,11 @@ export default function ScheduleCTab({ selectedYear, scheduleCData }: ScheduleCT
         const homeOfficeTotal = sumCategories(entity.schedule_c_home_office)
 
         const priorCF = carryForwardByEntity.get(entityKey) ?? 0
-        const netIncome = incomeTotal - expenseTotal
+        const netIncome = currency(incomeTotal).subtract(expenseTotal).value
         const limit = Math.max(0, netIncome)
-        const totalClaim = homeOfficeTotal + priorCF
+        const totalClaim = currency(homeOfficeTotal).add(priorCF).value
         const allowable = Math.min(totalClaim, limit)
-        const disallowed = totalClaim - allowable
+        const disallowed = currency(totalClaim).subtract(allowable).value
 
         map.set(mapKey, { allowable, disallowed, priorCarryForward: priorCF })
         carryForwardByEntity.set(entityKey, disallowed)
