@@ -1,11 +1,12 @@
 'use client'
 
 import currency from 'currency.js'
-import { CheckCircle, ChevronLeft, ChevronRight, Download, Eye, FileText, Loader2, Plus, Save, Trash2 } from 'lucide-react'
+import { CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Download, Eye, FileText, Loader2, Pencil, Plus, Save, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { isFK1StructuredData, K1ReviewPanel } from '@/components/finance/k1'
+import ManualJsonAttachModal from '@/components/finance/ManualJsonAttachModal'
 import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { Badge } from '@/components/ui/badge'
@@ -307,6 +308,8 @@ function ParsedDataEditor({
   const nonTaxEntries = entries.filter(([k]) => !k.startsWith('box'))
   const taxEntries = entries.filter(([k]) => k.startsWith('box'))
 
+  const [payerInfoOpen, setPayerInfoOpen] = useState(false)
+
   if (entries.length === 0) return <p className="text-sm text-muted-foreground">No extracted data available.</p>
 
   const renderField = ([key, value]: [string, unknown]) => (
@@ -315,7 +318,7 @@ function ParsedDataEditor({
         {key.replace(/_/g, ' ')}
       </label>
       <div className="w-1/2">
-        <Input 
+        <Input
           className={`h-6 text-[11px] font-mono px-1.5 text-right rounded-sm ${readOnly ? 'bg-muted/30 border-transparent text-muted-foreground cursor-default focus-visible:ring-0' : 'bg-background border-muted-foreground/20 focus-visible:ring-1 focus-visible:ring-primary/40'}`}
           value={isNullish(value) ? '' : String(value)}
           onChange={(e) => handleFieldChange(key, e.target.value)}
@@ -330,36 +333,53 @@ function ParsedDataEditor({
 
   return (
     <div className="space-y-3">
-      {/* Add Field dropdown — only in edit mode for supported form types */}
-      {!readOnly && addableFields.length > 0 && (
-        <div className="flex justify-end">
-          <AddFieldDropdown
-            fields={addableFields}
-            onAdd={(key) => {
-              if (!(key in data)) {
-                onChange({ ...data, [key]: null })
-              }
-            }}
-          />
+      {/* Payer / Recipient Info — collapsed by default */}
+      {nonTaxEntries.length > 0 && (
+        <div className="border rounded-lg overflow-hidden">
+          <button
+            type="button"
+            className="w-full flex items-center gap-2 px-3 py-2 bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+            onClick={() => setPayerInfoOpen((o) => !o)}
+          >
+            {payerInfoOpen
+              ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+            <span className="text-xs font-semibold tracking-wide">Payer / Recipient Info</span>
+            {!payerInfoOpen && (
+              <span className="text-[11px] text-muted-foreground truncate ml-1">
+                {String(nonTaxEntries.find(([k]) => k.includes('name') || k.includes('employer'))?.[1] ?? '')}
+              </span>
+            )}
+          </button>
+          {payerInfoOpen && (
+            <div className="p-3 space-y-1.5">
+              {nonTaxEntries.map(renderField)}
+            </div>
+          )}
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Left: Non-tax info (names, TINs, account numbers) */}
-        {nonTaxEntries.length > 0 && (
-          <div className="space-y-1.5">
-            <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60 pb-1">Payer / Recipient Info</div>
-            {nonTaxEntries.map(renderField)}
+      {/* Tax Data — full width */}
+      {taxEntries.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">Tax Data</div>
+            {!readOnly && addableFields.length > 0 && (
+              <AddFieldDropdown
+                fields={addableFields}
+                onAdd={(key) => {
+                  if (!(key in data)) {
+                    onChange({ ...data, [key]: null })
+                  }
+                }}
+              />
+            )}
           </div>
-        )}
-        {/* Right: Tax boxes */}
-        {taxEntries.length > 0 && (
-          <div className="space-y-1.5">
-            <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60 pb-1">Tax Data</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
             {taxEntries.map(renderField)}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -377,6 +397,7 @@ export default function TaxDocumentReviewModal({
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [jsonEditOpen, setJsonEditOpen] = useState(false)
   const [imageViewState, setImageViewState] = useState<{ url: string; filename: string } | null>(null)
   
   // Local editor state for the active document
@@ -475,6 +496,25 @@ export default function TaxDocumentReviewModal({
     }
   }
 
+  const handleJsonEdit = useCallback(async (doc: TaxDocument, parsedData: unknown) => {
+    setSaving(true)
+    try {
+      await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}`, { parsed_data: parsedData })
+      setEditData(parsedData as TaxDocumentParsedData | Record<string, unknown>)
+      setDocuments(prev => prev.map(d => d.id === doc.id ? {
+        ...d,
+        parsed_data: JSON.parse(JSON.stringify(parsedData)),
+      } : d))
+      toast.success('JSON updated')
+      onDocumentReviewed?.()
+    } catch {
+      toast.error('Failed to update JSON')
+    } finally {
+      setSaving(false)
+      setJsonEditOpen(false)
+    }
+  }, [onDocumentReviewed])
+
   const handleDelete = async (doc: TaxDocument) => {
     if (!confirm(`Delete "${doc.original_filename}"? This action cannot be undone.`)) return
     setDeleting(true)
@@ -551,7 +591,7 @@ export default function TaxDocumentReviewModal({
   return (
     <>
     <Dialog open={open} onOpenChange={isOpen => !isOpen && onClose()}>
-      <DialogContent className="w-[90vw] max-w-[90vw] max-h-[90vh] flex flex-col p-4">
+      <DialogContent className="w-[95vw] max-w-[1400px] max-h-[90vh] flex flex-col p-4">
         <DialogHeader className="px-1">
           <div className="flex items-center justify-between gap-4 pr-8">
             <DialogTitle>
@@ -701,17 +741,29 @@ export default function TaxDocumentReviewModal({
             <div className="flex items-center gap-2">
               <Button variant="ghost" onClick={onClose}>Close</Button>
               {activeDoc && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
-                  onClick={() => handleDelete(activeDoc)}
-                  disabled={deleting || activeDoc.is_reviewed}
-                  title={activeDoc.is_reviewed ? 'Reopen for review before deleting' : 'Delete document'}
-                >
-                  {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                  Delete
-                </Button>
+                <>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="gap-1.5 text-muted-foreground hover:text-foreground"
+                    onClick={() => setJsonEditOpen(true)}
+                    title="View / edit the raw JSON for this document"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit JSON
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => handleDelete(activeDoc)}
+                    disabled={deleting || activeDoc.is_reviewed}
+                    title={activeDoc.is_reviewed ? 'Reopen for review before deleting' : 'Delete document'}
+                  >
+                    {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                    Delete
+                  </Button>
+                </>
               )}
             </div>
             {activeDoc && (
@@ -733,6 +785,23 @@ export default function TaxDocumentReviewModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* Edit JSON sub-modal */}
+    {activeDoc && (
+      <ManualJsonAttachModal
+        open={jsonEditOpen}
+        formType={activeDoc.form_type}
+        taxYear={taxYear}
+        accountId={activeDoc.account_id ?? undefined}
+        employmentEntityId={activeDoc.employment_entity_id ?? undefined}
+        initialJson={editData}
+        onJsonReady={async (data) => {
+          await handleJsonEdit(activeDoc, data)
+        }}
+        onSuccess={() => setJsonEditOpen(false)}
+        onBack={() => setJsonEditOpen(false)}
+      />
+    )}
 
     {/* Inline image viewer */}
     <Dialog open={imageViewState !== null} onOpenChange={open => !open && setImageViewState(null)}>

@@ -376,7 +376,7 @@ class TaxDocumentControllerTest extends TestCase
         $this->assertEquals(50000, $doc->parsed_data['box1_wages']);
     }
 
-    public function test_cannot_update_parsed_data_when_reviewed(): void
+    public function test_can_update_parsed_data_when_reviewed(): void
     {
         $user = $this->createUser();
         $doc = $this->createTaxDocument($user->id, ['is_reviewed' => true]);
@@ -385,8 +385,9 @@ class TaxDocumentControllerTest extends TestCase
             'parsed_data' => ['box1_wages' => 50000],
         ]);
 
-        $response->assertStatus(422);
-        $response->assertJsonFragment(['message' => 'Cannot edit parsed data on a reviewed document.']);
+        $response->assertOk();
+        $doc->refresh();
+        $this->assertEquals(50000, $doc->parsed_data['box1_wages']);
     }
 
     public function test_can_review_and_unreview_document(): void

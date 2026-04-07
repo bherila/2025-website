@@ -10,6 +10,7 @@ use App\Http\Controllers\ClientManagement\ClientInvoiceApiController;
 use App\Http\Controllers\ClientManagement\ClientPortalAgreementApiController;
 use App\Http\Controllers\ClientManagement\ClientPortalApiController;
 use App\Http\Controllers\FileController;
+use App\Http\Controllers\Finance\TaxPreviewDataController;
 use App\Http\Controllers\FinanceTool\FinanceApiController;
 use App\Http\Controllers\FinanceTool\FinanceEmploymentEntityController;
 use App\Http\Controllers\FinanceTool\FinanceLotsController;
@@ -294,7 +295,9 @@ Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accoun
 Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accountId}/bills/{billId}/unlink', [UtilityBillLinkingController::class, 'unlinkTransaction']);
 
 // Tax documents (W-2, W-2c, 1099-INT, 1099-INT-C, 1099-DIV, 1099-DIV-C)
+Route::middleware(['web', 'auth'])->get('/finance/tax-preview-data', [TaxPreviewDataController::class, 'index']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents', [TaxDocumentController::class, 'index']);
+Route::middleware(['web', 'auth'])->get('/finance/tax-documents/prompt', [TaxDocumentController::class, 'getPromptInfo']);
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents/request-upload', [TaxDocumentController::class, 'requestUpload']);
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents/manual', [TaxDocumentController::class, 'storeManual']);
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents', [TaxDocumentController::class, 'store']);

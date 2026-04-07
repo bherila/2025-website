@@ -4,6 +4,7 @@ namespace App\Http\Controllers\FinanceTool;
 
 use App\GenAiProcessor\Jobs\ParseImportJob;
 use App\GenAiProcessor\Models\GenAiImportJob;
+use App\GenAiProcessor\Services\GenAiJobDispatcherService;
 use App\Http\Controllers\Controller;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccounts;
@@ -18,9 +19,12 @@ class TaxDocumentController extends Controller
 {
     protected FileStorageService $fileService;
 
-    public function __construct(FileStorageService $fileService)
+    protected GenAiJobDispatcherService $dispatcherService;
+
+    public function __construct(FileStorageService $fileService, GenAiJobDispatcherService $dispatcherService)
     {
         $this->fileService = $fileService;
+        $this->dispatcherService = $dispatcherService;
     }
 
     public function index(Request $request): JsonResponse
@@ -98,6 +102,7 @@ class TaxDocumentController extends Controller
             'employment_entity_id' => 'nullable|integer',
             'account_id' => 'nullable|integer',
             'notes' => 'nullable|string',
+            'parsed_data' => 'nullable|array',
         ]);
 
         $userId = Auth::id();
@@ -137,7 +142,11 @@ class TaxDocumentController extends Controller
             ], 422);
         }
 
-        $doc = DB::transaction(function () use ($request, $userId, $formType, $s3Key, $storedFilename): FileForTaxDocument {
+        // When caller supplies pre-parsed JSON (e.g., user attached JSON from LLM before uploading
+        // the PDF), skip AI processing entirely.
+        $hasParsedData = $request->filled('parsed_data');
+
+        $doc = DB::transaction(function () use ($request, $userId, $formType, $s3Key, $storedFilename, $hasParsedData): FileForTaxDocument {
             $taxDoc = FileForTaxDocument::create([
                 'user_id' => $userId,
                 'tax_year' => $request->tax_year,
@@ -152,36 +161,78 @@ class TaxDocumentController extends Controller
                 'file_hash' => $request->file_hash,
                 'uploaded_by_user_id' => $userId,
                 'notes' => $request->notes,
-                'genai_status' => 'pending',
+                'parsed_data' => $hasParsedData ? $request->parsed_data : null,
+                'genai_status' => $hasParsedData ? 'parsed' : 'pending',
             ]);
 
-            $genaiJob = GenAiImportJob::create([
-                'user_id' => $userId,
-                'job_type' => 'tax_document',
-                'file_hash' => $request->file_hash,
-                'original_filename' => $request->original_filename,
-                's3_path' => $s3Key,
-                'mime_type' => $request->input('mime_type', 'application/pdf'),
-                'file_size_bytes' => $request->file_size_bytes,
-                'context_json' => json_encode([
-                    'tax_year' => (int) $request->tax_year,
-                    'form_type' => $formType,
-                    'tax_document_id' => $taxDoc->id,
-                ]),
-                'status' => 'pending',
-            ]);
+            if (! $hasParsedData) {
+                $genaiJob = GenAiImportJob::create([
+                    'user_id' => $userId,
+                    'job_type' => 'tax_document',
+                    'file_hash' => $request->file_hash,
+                    'original_filename' => $request->original_filename,
+                    's3_path' => $s3Key,
+                    'mime_type' => $request->input('mime_type', 'application/pdf'),
+                    'file_size_bytes' => $request->file_size_bytes,
+                    'context_json' => json_encode([
+                        'tax_year' => (int) $request->tax_year,
+                        'form_type' => $formType,
+                        'tax_document_id' => $taxDoc->id,
+                    ]),
+                    'status' => 'pending',
+                ]);
 
-            $taxDoc->update(['genai_job_id' => $genaiJob->id]);
+                $taxDoc->update(['genai_job_id' => $genaiJob->id]);
+            }
 
             return $taxDoc;
         });
 
-        ParseImportJob::dispatch($doc->genai_job_id);
+        if (! $hasParsedData) {
+            ParseImportJob::dispatch($doc->genai_job_id);
+        }
 
         return response()->json(
             $doc->load(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name']),
             201
         );
+    }
+
+    /**
+     * Return the LLM prompt text and JSON schema for a given form type.
+     *
+     * Used by the "Attach JSON" feature so users can extract data via any external LLM
+     * and paste the resulting JSON back without uploading a PDF.
+     *
+     * Query params:
+     *   form_type  string   – one of the supported form types (w2, 1099_int, 1099_div, 1099_misc, k1)
+     *   tax_year   integer  – the tax year (defaults to current year)
+     */
+    public function getPromptInfo(Request $request): JsonResponse
+    {
+        $formType = (string) ($request->query('form_type') ?? 'w2');
+        $taxYear = is_numeric($request->query('tax_year')) ? (int) $request->query('tax_year') : (int) date('Y');
+
+        if (! in_array($formType, FileForTaxDocument::FORM_TYPES, true)) {
+            return response()->json(['message' => 'Invalid form type.'], 422);
+        }
+
+        // K-1 prompt exists; other form types that don't have a dedicated manual flow
+        // (e.g. w2c, 1099_int_c, 1099_div_c) reuse the base type prompt
+        $effectiveType = match ($formType) {
+            'w2c' => 'w2',
+            '1099_int_c' => '1099_int',
+            '1099_div_c' => '1099_div',
+            default => $formType,
+        };
+
+        try {
+            $info = $this->dispatcherService->getTaxDocumentPromptInfo($effectiveType, $taxYear);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json($info);
     }
 
     /**
@@ -305,14 +356,6 @@ class TaxDocumentController extends Controller
         }
 
         if ($request->has('parsed_data')) {
-            // Only allow editing parsed data if NOT reviewed, OR the request explicitly un-reviews it
-            $isBecomingReviewed = $request->has('is_reviewed') && $request->boolean('is_reviewed');
-            $stayReviewed = $doc->is_reviewed && ! $request->has('is_reviewed');
-
-            if ($isBecomingReviewed || $stayReviewed) {
-                return response()->json(['message' => 'Cannot edit parsed data on a reviewed document.'], 422);
-            }
-
             $doc->parsed_data = $request->parsed_data;
         }
 

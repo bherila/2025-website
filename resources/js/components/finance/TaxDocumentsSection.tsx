@@ -1,6 +1,7 @@
 'use client'
 
-import { CheckCircle, Clock, Eye, Loader2, Upload } from 'lucide-react'
+import currency from 'currency.js'
+import { CheckCircle, ChevronDown, Clock, Eye, Loader2, Plus, Upload } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import TaxDocumentReviewModal from '@/components/finance/TaxDocumentReviewModal'
@@ -8,22 +9,41 @@ import TaxDocumentUploadModal from '@/components/finance/TaxDocumentUploadModal'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
-import type { EmploymentEntity, TaxDocument } from '@/types/finance/tax-document'
+import type { EmploymentEntity, TaxDocument, W2ParsedData } from '@/types/finance/tax-document'
 
 interface TaxDocumentsSectionProps {
   selectedYear: number | 'all'
   payslips: fin_payslip[]
+  documents?: TaxDocument[] | undefined
+  employmentEntities?: EmploymentEntity[] | undefined
+  isLoading?: boolean | undefined
+  onDocumentsReload?: (() => void | Promise<void>) | undefined
   onDocumentReviewed?: () => void
   /** Called whenever reviewed W-2 documents change (for Form 1040 data source). */
   onW2DocumentsChange?: (docs: TaxDocument[]) => void
 }
 
-export default function TaxDocumentsSection({ selectedYear, payslips, onDocumentReviewed, onW2DocumentsChange }: TaxDocumentsSectionProps) {
-  const [documents, setDocuments] = useState<TaxDocument[]>([])
-  const [entities, setEntities] = useState<EmploymentEntity[]>([])
-  const [loading, setLoading] = useState(true)
+export default function TaxDocumentsSection({
+  selectedYear,
+  payslips,
+  documents: controlledDocuments,
+  employmentEntities: controlledEntities,
+  isLoading: controlledLoading,
+  onDocumentsReload,
+  onDocumentReviewed,
+  onW2DocumentsChange,
+}: TaxDocumentsSectionProps) {
+  const [documents, setDocuments] = useState<TaxDocument[]>(controlledDocuments ?? [])
+  const [entities, setEntities] = useState<EmploymentEntity[]>(controlledEntities ?? [])
+  const [loading, setLoading] = useState(controlledLoading ?? true)
   const [error, setError] = useState<string | null>(null)
   const [uploadModal, setUploadModal] = useState<{ entityId: number; formType: string } | null>(null)
   const [reviewModalDoc, setReviewModalDoc] = useState<TaxDocument | null>(null)
@@ -53,9 +73,27 @@ export default function TaxDocumentsSection({ selectedYear, payslips, onDocument
   }, [])
 
   useEffect(() => {
+    if (controlledDocuments) setDocuments(controlledDocuments)
+  }, [controlledDocuments])
+
+  useEffect(() => {
+    if (controlledEntities) setEntities(controlledEntities)
+  }, [controlledEntities])
+
+  useEffect(() => {
+    if (controlledLoading !== undefined) setLoading(controlledLoading)
+  }, [controlledLoading])
+
+  useEffect(() => {
+    if (controlledDocuments || controlledEntities) return
     setLoading(true)
     Promise.all([fetchDocuments(), fetchEntities()]).finally(() => setLoading(false))
-  }, [fetchDocuments, fetchEntities])
+  }, [fetchDocuments, fetchEntities, controlledDocuments, controlledEntities])
+
+
+  useEffect(() => {
+    onW2DocumentsChange?.(documents.filter((doc) => doc.is_reviewed))
+  }, [documents, onW2DocumentsChange])
 
   const w2Entities = entities.filter(e => e.type === 'w2')
 
@@ -96,14 +134,25 @@ export default function TaxDocumentsSection({ selectedYear, payslips, onDocument
             <div className="flex items-center justify-between px-3 py-2 bg-muted/30">
               <span className="font-medium text-sm">{entity.display_name}</span>
               <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setUploadModal({ entityId: entity.id, formType: 'w2' })}
-                >
-                  <Upload className="h-3 w-3 mr-1" />
-                  W-2
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="outline">
+                      <Plus className="h-3 w-3 mr-1" />
+                      Add
+                      <ChevronDown className="h-3 w-3 ml-1" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setUploadModal({ entityId: entity.id, formType: 'w2' })}>
+                      <Upload className="h-3 w-3 mr-2" />
+                      W-2
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setUploadModal({ entityId: entity.id, formType: 'w2c' })}>
+                      <Upload className="h-3 w-3 mr-2" />
+                      W-2C (Corrected)
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
 
@@ -148,7 +197,14 @@ export default function TaxDocumentsSection({ selectedYear, payslips, onDocument
                               onClick={() => setReviewModalDoc(doc)}
                               title={doc.is_reviewed ? 'Reviewed' : 'Review document'}
                             >
-                              {doc.is_reviewed ? (
+                              {doc.is_reviewed && (doc.form_type === 'w2' || doc.form_type === 'w2c') && (doc.parsed_data as W2ParsedData | null)?.box1_wages != null ? (
+                                <>
+                                  <CheckCircle className="h-3.5 w-3.5 shrink-0" />
+                                  <span className="font-mono tabular-nums">
+                                    {currency((doc.parsed_data as W2ParsedData).box1_wages ?? 0).format()}
+                                  </span>
+                                </>
+                              ) : doc.is_reviewed ? (
                                 <>
                                   <CheckCircle className="h-3.5 w-3.5" />
                                   Reviewed
@@ -181,7 +237,11 @@ export default function TaxDocumentsSection({ selectedYear, payslips, onDocument
           employmentEntityId={uploadModal.entityId}
           onSuccess={() => {
             setUploadModal(null)
-            fetchDocuments()
+            if (onDocumentsReload) {
+              void onDocumentsReload()
+            } else {
+              void fetchDocuments()
+            }
           }}
           onCancel={() => setUploadModal(null)}
         />
@@ -197,7 +257,11 @@ export default function TaxDocumentsSection({ selectedYear, payslips, onDocument
           onClose={() => setReviewModalDoc(null)}
           onDocumentReviewed={() => {
             setReviewModalDoc(null)
-            fetchDocuments()
+            if (onDocumentsReload) {
+              void onDocumentsReload()
+            } else {
+              void fetchDocuments()
+            }
             onDocumentReviewed?.()
           }}
         />

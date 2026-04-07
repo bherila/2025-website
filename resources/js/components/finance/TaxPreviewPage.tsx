@@ -2,12 +2,17 @@
 
 import currency from 'currency.js'
 import { ClipboardList } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 
+import ActionItemsTab from '@/components/finance/ActionItemsTab'
 import Form1040Preview from '@/components/finance/Form1040Preview'
+import Form1116Preview from '@/components/finance/Form1116Preview'
+import Form4952Preview from '@/components/finance/Form4952Preview'
+import { isFK1StructuredData } from '@/components/finance/k1'
 import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
 import ScheduleBPreview from '@/components/finance/ScheduleBPreview'
-import ScheduleCPreview from '@/components/finance/ScheduleCPreview'
+import ScheduleCTab from '@/components/finance/ScheduleCTab'
+import ScheduleDPreview from '@/components/finance/ScheduleDPreview'
 import TaxDocumentReviewModal from '@/components/finance/TaxDocumentReviewModal'
 import TaxDocuments1099Section from '@/components/finance/TaxDocuments1099Section'
 import TaxDocumentsSection from '@/components/finance/TaxDocumentsSection'
@@ -16,10 +21,420 @@ import TotalsTable from '@/components/payslip/TotalsTable.client'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { fetchWrapper } from '@/fetchWrapper'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
+import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
+import { TaxPreviewProvider, type TaxPreviewShellData, useTaxPreview } from './TaxPreviewContext'
 import { YearSelectorWithNav } from './YearSelectorWithNav'
+
+// ── Preload interface ─────────────────────────────────────────────────────────
+
+/** Data preloaded server-side in the Blade template <script> tag. */
+export type TaxPreviewPreload = TaxPreviewShellData
+
+// ── Income Overview helpers ───────────────────────────────────────────────────
+
+function parseK1Field(data: FK1StructuredData, box: string): number {
+  const v = data.fields[box]?.value
+  if (!v) return 0
+  const n = parseFloat(v)
+  return isNaN(n) ? 0 : n
+}
+
+function parseK1Codes(data: FK1StructuredData, box: string): number {
+  const items = data.codes[box] ?? []
+
+  return items.reduce((acc, item) => {
+    const n = parseFloat(item.value)
+    return isNaN(n) ? acc : acc.add(n)
+  }, currency(0)).value
+}
+
+function k1NetIncome(data: FK1StructuredData): number {
+  const INCOME_BOXES = ['1', '2', '3', '4', '5', '6a', '6b', '6c', '7', '8', '9a', '9b', '9c', '10']
+  const incomeTotal = INCOME_BOXES.reduce((acc, box) => acc.add(parseK1Field(data, box)), currency(0))
+    .add(parseK1Codes(data, '11'))
+  const box12 = parseK1Field(data, '12')
+  const box21 = parseK1Field(data, '21')
+  const deductionTotal = currency(0)
+    .add(box12 !== 0 ? -Math.abs(box12) : 0)
+    .add(parseK1Codes(data, '13'))
+    .add(box21 !== 0 ? -Math.abs(box21) : 0)
+
+  return incomeTotal.add(deductionTotal).value
+}
+
+function fmtOverview(n: number, precision = 0): string {
+  const abs = currency(Math.abs(n), { precision }).format()
+  return n < 0 ? `(${abs})` : abs
+}
+
+/** Card for the income overview grid. */
+function OverviewCard({
+  label,
+  value,
+  sub,
+}: {
+  label: string
+  value: number | null
+  sub?: string | undefined
+}) {
+  const cls =
+    value === null ? 'text-foreground' : value < 0 ? 'text-destructive' : value > 0 ? 'text-emerald-600 dark:text-emerald-500' : 'text-foreground'
+  return (
+    <div className="rounded-lg border bg-card p-3 space-y-0.5">
+      <div className="text-xs text-muted-foreground font-medium leading-tight">{label}</div>
+      <div className={`text-xl font-bold font-mono tabular-nums ${cls}`}>
+        {value === null ? '—' : fmtOverview(value)}
+      </div>
+      {sub && <div className="text-[11px] text-muted-foreground leading-tight">{sub}</div>}
+    </div>
+  )
+}
+
+interface TaxIncomeOverviewProps {
+  taxYear: number
+  payslips: fin_payslip[]
+  w2GrossIncome: currency
+  income1099: { interestIncome: currency; dividendIncome: currency; qualifiedDividends: currency }
+  reviewedW2Docs: TaxDocument[]
+  reviewed1099Docs: TaxDocument[]
+  reviewedK1Docs: TaxDocument[]
+}
+
+function TaxIncomeOverview({
+  taxYear,
+  payslips,
+  w2GrossIncome,
+  income1099,
+  reviewedW2Docs,
+  reviewed1099Docs,
+  reviewedK1Docs,
+}: TaxIncomeOverviewProps) {
+  // Aggregate K-1 data
+  const k1Parsed = reviewedK1Docs
+    .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
+    .filter((x): x is { doc: TaxDocument; data: FK1StructuredData } => x.data !== null)
+
+  const k1Interest = k1Parsed.reduce((acc, { data }) => acc.add(parseK1Field(data, '5')), currency(0)).value
+  const k1OrdinaryDiv = k1Parsed.reduce((acc, { data }) => acc.add(parseK1Field(data, '6a')), currency(0)).value
+  const k1QualifiedDiv = k1Parsed.reduce((acc, { data }) => acc.add(parseK1Field(data, '6b')), currency(0)).value
+  const k1StCapital = k1Parsed.reduce((acc, { data }) => acc.add(parseK1Field(data, '8')), currency(0)).value
+  const k1LtCapital = k1Parsed.reduce((acc, { data }) => acc
+    .add(parseK1Field(data, '9a'))
+    .add(parseK1Field(data, '9b'))
+    .add(parseK1Field(data, '9c'))
+    .add(parseK1Field(data, '10')), currency(0)).value
+  const k1ForeignTax = k1Parsed.reduce((acc, { data }) => acc.add(parseK1Field(data, '21')), currency(0)).value
+  const k1InvInterest = k1Parsed.reduce((acc, { data }) => {
+    const items = data.codes['13'] ?? []
+
+    const itemTotal = items
+      .filter((item) => item.code === 'G' || item.code === 'H')
+      .reduce((sum, item) => {
+        const n = parseFloat(item.value)
+        return isNaN(n) ? sum : sum.add(n)
+      }, currency(0))
+
+    return acc.add(itemTotal)
+  }, currency(0)).value
+
+  // 1099-DIV foreign tax (box 7)
+  const div1099ForeignTax = reviewed1099Docs
+    .filter((d) => d.form_type === '1099_div' || d.form_type === '1099_div_c')
+    .reduce((acc, d) => {
+      const parsed = d.parsed_data as Record<string, unknown>
+      const value = parsed?.box7_foreign_tax
+      const n = typeof value === 'number' ? value : typeof value === 'string' ? parseFloat(value) : 0
+      return isNaN(n) ? acc : acc.add(n)
+    }, currency(0)).value
+
+  const totalInterest = income1099.interestIncome.add(k1Interest).value
+  const totalOrdinaryDiv = income1099.dividendIncome.add(k1OrdinaryDiv).value
+  const totalQualifiedDiv = income1099.qualifiedDividends.add(k1QualifiedDiv).value
+  const totalForeignTax = currency(k1ForeignTax).add(div1099ForeignTax).value
+  const totalK1Net = k1Parsed.reduce((acc, { data }) => acc.add(k1NetIncome(data)), currency(0)).value
+  const totalInvestmentIncome = currency(totalInterest).add(totalOrdinaryDiv).value
+  const totalCapitalGains = currency(k1StCapital).add(k1LtCapital).value
+
+  const fedWH = payslips.reduce((acc, row) => acc
+    .add(row.ps_fed_tax ?? 0)
+    .add(row.ps_fed_tax_addl ?? 0)
+    .subtract(row.ps_fed_tax_refunded ?? 0), currency(0)).value
+  const addlMedicare = currency(Math.max(0, w2GrossIncome.value - 200000)).multiply(0.009).value
+
+  const hasData = reviewedW2Docs.length + reviewed1099Docs.length + reviewedK1Docs.length > 0
+
+  if (!hasData) return null
+
+  // All-document rows
+  const w2Rows = reviewedW2Docs.map((doc) => {
+    const p = doc.parsed_data as Record<string, unknown>
+    const wages = p?.box1_wages as number | undefined
+    const fedTax = p?.box2_fed_tax as number | undefined
+    return { doc, wages, fedTax }
+  })
+
+  const k1Rows = k1Parsed.map(({ doc, data }) => {
+    const net = k1NetIncome(data)
+    const partnerName = data.fields['B']?.value?.split('\n')[0] ?? null
+    const ein = data.fields['A']?.value ?? null
+    return { doc, net, partnerName, ein }
+  })
+
+  const f1099Rows = reviewed1099Docs.map((doc) => {
+    const p = doc.parsed_data as Record<string, unknown>
+    return { doc, p }
+  })
+
+  return (
+    <div className="space-y-6">
+      {/* Card grid */}
+      <div>
+        <h2 className="text-base font-semibold mb-3">Income &amp; Document Overview — {taxYear}</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          {w2GrossIncome.value > 0 && (
+            <OverviewCard
+              label="W-2 Wages (Box 1)"
+              value={w2GrossIncome.value}
+              sub={reviewedW2Docs[0] ? (reviewedW2Docs[0].parsed_data as Record<string, unknown>)?.employer_name as string | undefined : undefined}
+            />
+          )}
+          {totalInterest !== 0 && (
+            <OverviewCard
+              label="Total Interest Income"
+              value={totalInterest}
+              sub={[k1Interest ? `K-1s ${fmtOverview(k1Interest)}` : null, income1099.interestIncome.value ? `1099 ${income1099.interestIncome.format()}` : null].filter(Boolean).join(' · ') || undefined}
+            />
+          )}
+          {totalOrdinaryDiv !== 0 && (
+            <OverviewCard
+              label="Total Ordinary Dividends"
+              value={totalOrdinaryDiv}
+              sub={[k1OrdinaryDiv ? `K-1s ${fmtOverview(k1OrdinaryDiv)}` : null, income1099.dividendIncome.value ? `1099 ${income1099.dividendIncome.format()}` : null].filter(Boolean).join(' · ') || undefined}
+            />
+          )}
+          {totalQualifiedDiv !== 0 && (
+            <OverviewCard label="Total Qualified Dividends" value={totalQualifiedDiv} sub="Subset of ordinary dividends" />
+          )}
+          {k1StCapital !== 0 && (
+            <OverviewCard label="Net S/T Capital G/(L) — K-1s" value={k1StCapital} sub="From K-1 Box 8" />
+          )}
+          {k1LtCapital !== 0 && (
+            <OverviewCard label="Net L/T Capital G/(L) — K-1s" value={k1LtCapital} sub="From K-1 Boxes 9a/9b/9c/10" />
+          )}
+          {totalForeignTax !== 0 && (
+            <OverviewCard
+              label="Total Foreign Taxes"
+              value={totalForeignTax}
+              sub={[k1ForeignTax ? `K-1 box 21 ${fmtOverview(k1ForeignTax)}` : null, div1099ForeignTax ? `1099-DIV ${fmtOverview(div1099ForeignTax)}` : null].filter(Boolean).join(' · ') || undefined}
+            />
+          )}
+          {k1InvInterest !== 0 && (
+            <OverviewCard label="Investment Interest Exp." value={k1InvInterest} sub="K-1 Box 13G/H" />
+          )}
+        </div>
+      </div>
+
+      {/* Summary of Estimated Tax Positions */}
+      <div>
+        <h2 className="text-base font-semibold mb-3">Summary of Estimated Tax Positions</h2>
+        <div className="border rounded-lg overflow-hidden">
+          <Table className="text-sm">
+            <TableHeader className="bg-muted/20">
+              <TableRow>
+                <TableHead className="text-xs">Item</TableHead>
+                <TableHead className="text-xs text-right">Federal</TableHead>
+                <TableHead className="text-xs">Notes</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {w2GrossIncome.value > 0 && (
+                <TableRow>
+                  <TableCell className="py-2">W-2 Wages</TableCell>
+                  <TableCell className="py-2 text-right font-mono text-emerald-600 dark:text-emerald-500 tabular-nums">{w2GrossIncome.format()}</TableCell>
+                  <TableCell className="py-2 text-xs text-muted-foreground">Box 1 — includes RSU vesting and bonuses</TableCell>
+                </TableRow>
+              )}
+              {totalInvestmentIncome !== 0 && (
+                <TableRow>
+                  <TableCell className="py-2">Net investment income (interest + divs)</TableCell>
+                  <TableCell className="py-2 text-right font-mono tabular-nums text-emerald-600 dark:text-emerald-500">
+                    {fmtOverview(totalInvestmentIncome)}
+                  </TableCell>
+                  <TableCell className="py-2 text-xs text-muted-foreground">Before deductions; subject to NIIT (3.8%)</TableCell>
+                </TableRow>
+              )}
+              {k1Parsed.map(({ doc, data }) => {
+                const net = k1NetIncome(data)
+                const name = (data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership K-1').substring(0, 40)
+                return (
+                  <TableRow key={doc.id}>
+                    <TableCell className="py-2">{name} — K-1</TableCell>
+                    <TableCell className={`py-2 text-right font-mono tabular-nums ${net < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'}`}>
+                      {fmtOverview(net)}
+                    </TableCell>
+                    <TableCell className="py-2 text-xs text-muted-foreground">
+                      {net < 0 ? 'Net loss — Schedule E' : 'Net income — Schedule E'}
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+              {(k1StCapital !== 0 || k1LtCapital !== 0) && (
+                <TableRow>
+                  <TableCell className="py-2">Net capital gain (loss) — K-1s</TableCell>
+                  <TableCell className={`py-2 text-right font-mono tabular-nums ${totalCapitalGains < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'}`}>
+                    {fmtOverview(totalCapitalGains)}
+                  </TableCell>
+                  <TableCell className="py-2 text-xs text-muted-foreground">
+                    S/T {fmtOverview(k1StCapital)} · L/T {fmtOverview(k1LtCapital)}
+                  </TableCell>
+                </TableRow>
+              )}
+              {k1InvInterest !== 0 && (
+                <TableRow>
+                  <TableCell className="py-2">Investment interest deduction (Form 4952)</TableCell>
+                  <TableCell className={`py-2 text-right font-mono tabular-nums ${k1InvInterest < 0 ? 'text-destructive' : ''}`}>
+                    {fmtOverview(k1InvInterest)}
+                  </TableCell>
+                  <TableCell className="py-2 text-xs text-muted-foreground">From K-1 Box 13G/H — flows to Schedule E</TableCell>
+                </TableRow>
+              )}
+              {totalForeignTax !== 0 && (
+                <TableRow>
+                  <TableCell className="py-2">Foreign tax credit (Form 1116)</TableCell>
+                  <TableCell className="py-2 text-right font-mono tabular-nums text-emerald-600 dark:text-emerald-500">
+                    {fmtOverview(totalForeignTax)} credit
+                  </TableCell>
+                  <TableCell className="py-2 text-xs text-muted-foreground">Dollar-for-dollar vs. income tax</TableCell>
+                </TableRow>
+              )}
+              {fedWH > 0 && (
+                <TableRow>
+                  <TableCell className="py-2">Federal withholding (W-2 Box 2)</TableCell>
+                  <TableCell className="py-2 text-right font-mono tabular-nums">
+                    {fmtOverview(fedWH)}
+                  </TableCell>
+                  <TableCell className="py-2 text-xs text-muted-foreground">Already paid — compare to final liability</TableCell>
+                </TableRow>
+              )}
+              {w2GrossIncome.value > 200000 && (
+                <TableRow>
+                  <TableCell className="py-2">Additional Medicare Tax (Form 8959)</TableCell>
+                  <TableCell className="py-2 text-right font-mono tabular-nums text-destructive">
+                    ({fmtOverview(addlMedicare)})
+                  </TableCell>
+                  <TableCell className="py-2 text-xs text-muted-foreground">0.9% on wages over $200K threshold</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+
+      {/* All tax documents table */}
+      <div>
+        <h2 className="text-base font-semibold mb-3">All Tax Documents in Package</h2>
+        <div className="border rounded-lg overflow-hidden">
+          <Table className="text-sm">
+            <TableHeader className="bg-muted/20">
+              <TableRow>
+                <TableHead className="text-xs">Payer / Fund</TableHead>
+                <TableHead className="text-xs">Document</TableHead>
+                <TableHead className="text-xs">Account / EIN</TableHead>
+                <TableHead className="text-xs text-right">Key Amounts</TableHead>
+                <TableHead className="text-xs">Notes</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {/* W-2 section */}
+              {w2Rows.length > 0 && (
+                <>
+                  <TableRow className="bg-muted/20">
+                    <TableCell colSpan={5} className="py-1.5 text-xs font-semibold text-muted-foreground">W-2 Employment Income</TableCell>
+                  </TableRow>
+                  {w2Rows.map(({ doc, wages, fedTax }) => {
+                    const p = doc.parsed_data as Record<string, unknown>
+                    return (
+                      <TableRow key={doc.id}>
+                        <TableCell className="py-2">{(p?.employer_name as string) ?? doc.employment_entity?.display_name ?? '—'}</TableCell>
+                        <TableCell className="py-2">{FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type}</TableCell>
+                        <TableCell className="py-2 font-mono text-xs">{p?.employer_ein as string ?? '—'}</TableCell>
+                        <TableCell className="py-2 text-right font-mono text-xs">
+                          {wages != null && <div className="text-emerald-600 dark:text-emerald-500">{fmtOverview(wages)} wages</div>}
+                          {fedTax != null && <div>{fmtOverview(fedTax)} fed WH</div>}
+                        </TableCell>
+                        <TableCell className="py-2 text-xs text-muted-foreground">{doc.notes ?? '—'}</TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </>
+              )}
+              {/* K-1 section */}
+              {k1Rows.length > 0 && (
+                <>
+                  <TableRow className="bg-muted/20">
+                    <TableCell colSpan={5} className="py-1.5 text-xs font-semibold text-muted-foreground">Partnership K-1s</TableCell>
+                  </TableRow>
+                  {k1Rows.map(({ doc, net, partnerName, ein }) => {
+                    const data = doc.parsed_data as FK1StructuredData
+                    const interest = parseK1Field(data, '5')
+                    const foreignTax = parseK1Field(data, '21')
+                    return (
+                      <TableRow key={doc.id}>
+                        <TableCell className="py-2">{partnerName ?? doc.employment_entity?.display_name ?? '—'}</TableCell>
+                        <TableCell className="py-2">{FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type}</TableCell>
+                        <TableCell className="py-2 font-mono text-xs">{ein ?? '—'}</TableCell>
+                        <TableCell className="py-2 text-right font-mono text-xs">
+                          <div className={net < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'}>
+                            Net {fmtOverview(net)}
+                          </div>
+                          {interest !== 0 && <div>Interest {fmtOverview(interest)}</div>}
+                          {foreignTax !== 0 && <div>Foreign tax {fmtOverview(foreignTax)}</div>}
+                        </TableCell>
+                        <TableCell className="py-2 text-xs text-muted-foreground">{doc.notes ?? '—'}</TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </>
+              )}
+              {/* 1099 section */}
+              {f1099Rows.length > 0 && (
+                <>
+                  <TableRow className="bg-muted/20">
+                    <TableCell colSpan={5} className="py-1.5 text-xs font-semibold text-muted-foreground">Brokerage / 1099 Accounts</TableCell>
+                  </TableRow>
+                  {f1099Rows.map(({ doc, p }) => {
+                    const payer = p?.payer_name as string | undefined
+                    const acct = p?.account_number as string | undefined
+                    const interest = p?.box1_interest as number | undefined
+                    const ordDiv = p?.box1a_ordinary as number | undefined
+                    const foreignTax = (p?.box7_foreign_tax ?? p?.box6_foreign_tax) as number | undefined
+                    return (
+                      <TableRow key={doc.id}>
+                        <TableCell className="py-2">{payer ?? doc.employment_entity?.display_name ?? '—'}</TableCell>
+                        <TableCell className="py-2">{FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type}</TableCell>
+                        <TableCell className="py-2 font-mono text-xs">{acct ?? '—'}</TableCell>
+                        <TableCell className="py-2 text-right font-mono text-xs">
+                          {interest != null && interest !== 0 && <div className="text-emerald-600 dark:text-emerald-500">Interest {fmtOverview(interest)}</div>}
+                          {ordDiv != null && ordDiv !== 0 && <div className="text-emerald-600 dark:text-emerald-500">Ord div {fmtOverview(ordDiv)}</div>}
+                          {foreignTax != null && foreignTax !== 0 && <div>Foreign tax {fmtOverview(foreignTax, 2)}</div>}
+                        </TableCell>
+                        <TableCell className="py-2 text-xs text-muted-foreground">{doc.notes ?? '—'}</TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 /** W-2 income summary table derived from payslips. */
 function W2IncomeSummary({ payslips }: { payslips: fin_payslip[] }) {
@@ -141,197 +556,48 @@ function W2IncomeSummary({ payslips }: { payslips: fin_payslip[] }) {
 
 /**
  * Tax Preview page — comprehensive tax analysis and planning view.
- * Shows W-2 income (from payslips), Federal and State tax estimates,
- * and Schedule C data for each sch_c employment entity.
+ * Mutable tax-form data lives in TaxPreviewContext and is fetched from
+ * /api/finance/tax-preview-data. Blade only preloads lightweight shell data.
  */
-export default function TaxPreviewPage() {
-  const [hadExplicitYearParamOnLoad, setHadExplicitYearParamOnLoad] = useState(false)
-  const [hadInvalidYearParamOnLoad, setHadInvalidYearParamOnLoad] = useState(false)
-  const [availableYears, setAvailableYears] = useState<number[]>([])
-  const [isYearsLoading, setIsYearsLoading] = useState(true)
+function TaxPreviewPageContent() {
+  const {
+    year: selectedYear,
+    availableYears,
+    isLoading,
+    error,
+    payslips,
+    pendingReviewCount,
+    w2Documents,
+    accountDocuments,
+    reviewedW2Docs,
+    reviewed1099Docs,
+    reviewedK1Docs,
+    scheduleCData,
+    scheduleCNetIncome,
+    employmentEntities,
+    accounts,
+    activeAccountIds,
+    income1099,
+    refreshAll,
+  } = useTaxPreview()
 
-  // Review modal
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
-  const [pendingReviewCount, setPendingReviewCount] = useState(0)
 
-  // Read initial year from URL query string, default to current year
-  const [selectedYear, setSelectedYear] = useState<number | 'all'>(() => {
-    try {
-      const params = new URLSearchParams(window.location.search)
-      const y = params.get('year')
-      if (y === 'all') return 'all'
-      const parsed = y ? parseInt(y, 10) : NaN
-      return isNaN(parsed) ? new Date().getFullYear() : parsed
-    } catch {
-      return new Date().getFullYear()
-    }
-  })
+  const handleYearChange = useCallback((year: number | 'all') => {
+    if (typeof year !== 'number') return
 
-  // Payslip data for the selected year (used for W-2 income and tax tables)
-  const [payslips, setPayslips] = useState<fin_payslip[]>([])
-  const [payslipsLoading, setPayslipsLoading] = useState(false)
-
-  // Net Schedule C income for the selected year (emitted by ScheduleCPreview)
-  const [scheduleCNetIncome, setScheduleCNetIncome] = useState({
-    total: 0,
-    byQuarter: {
-      q1: 0,
-      q2: 0,
-      q3: 0,
-      q4: 0,
-    },
-  })
-
-  // 1099 income totals (from confirmed parsed documents)
-  const [income1099, setIncome1099] = useState({
-    interestIncome: currency(0),
-    dividendIncome: currency(0),
-    qualifiedDividends: currency(0),
-  })
-
-  // Reviewed W-2 and 1099 documents for Form 1040 data source drill-down
-  const [reviewedW2Docs, setReviewedW2Docs] = useState<TaxDocument[]>([])
-  const [reviewed1099Docs, setReviewed1099Docs] = useState<TaxDocument[]>([])
-
-  // Refresh trigger — increment to force child sections to reload after a review
-  const [refreshTrigger, setRefreshTrigger] = useState(0)
-
-  const handle1099TotalsChange = useCallback((totals: {
-    interestIncome: currency
-    dividendIncome: currency
-    qualifiedDividends: currency
-  }) => {
-    setIncome1099(totals)
-  }, [])
-
-  const handle1099DocumentsChange = useCallback((docs: TaxDocument[]) => {
-    setReviewed1099Docs(docs)
-  }, [])
-
-  const handleW2DocumentsChange = useCallback((docs: TaxDocument[]) => {
-    setReviewedW2Docs(docs)
-  }, [])
-
-  const setYearInUrl = useCallback((year: number | 'all', mode: 'push' | 'replace' = 'push') => {
     const url = new URL(window.location.href)
     const defaultYear = new Date().getFullYear()
-    if (typeof year === 'number' && year === defaultYear) {
+    if (year === defaultYear) {
       url.searchParams.delete('year')
     } else {
       url.searchParams.set('year', String(year))
     }
-    if (mode === 'replace') {
-      window.history.replaceState(null, '', url.toString())
-      return
-    }
-    window.history.pushState(null, '', url.toString())
+    window.location.href = url.toString()
   }, [])
 
-  useEffect(() => {
-    try {
-      const params = new URLSearchParams(window.location.search)
-      const y = params.get('year')
-      setHadExplicitYearParamOnLoad(y !== null)
-      setHadInvalidYearParamOnLoad(y !== null && y !== 'all' && Number.isNaN(parseInt(y, 10)))
-    } catch {
-      setHadExplicitYearParamOnLoad(false)
-      setHadInvalidYearParamOnLoad(false)
-    }
-  }, [])
-
-  // Push browser history when the user changes year (so Back button works)
-  const handleYearChange = useCallback((year: number | 'all') => {
-    setSelectedYear(year)
-    setYearInUrl(year, 'push')
-  }, [setYearInUrl])
-
-  // Restore selected year when the user navigates with Back / Forward
-  useEffect(() => {
-    const onPopState = () => {
-      const params = new URLSearchParams(window.location.search)
-      const y = params.get('year')
-      if (y === 'all') {
-        setSelectedYear('all')
-      } else {
-        const parsed = y ? parseInt(y, 10) : NaN
-        setSelectedYear(isNaN(parsed) ? new Date().getFullYear() : parsed)
-      }
-    }
-    window.addEventListener('popstate', onPopState)
-    return () => window.removeEventListener('popstate', onPopState)
-  }, [])
-
-  const handleAvailableYearsChange = useCallback((years: number[], isLoading: boolean) => {
-    setAvailableYears(years)
-    setIsYearsLoading(isLoading)
-  }, [])
-
-  const handleScheduleCNetIncomeChange = useCallback((netIncome: {
-    total: number
-    byQuarter: {
-      q1: number
-      q2: number
-      q3: number
-      q4: number
-    }
-  }) => {
-    setScheduleCNetIncome(netIncome)
-  }, [])
-
-  // Normalize invalid year query values so URL always matches the selected state.
-  useEffect(() => {
-    if (!hadInvalidYearParamOnLoad) return
-    setYearInUrl(selectedYear, 'replace')
-  }, [hadInvalidYearParamOnLoad, selectedYear, setYearInUrl])
-
-  // If year wasn't explicitly set in URL, default to newest available year when current year has no data.
-  useEffect(() => {
-    if ((hadExplicitYearParamOnLoad && !hadInvalidYearParamOnLoad) || isYearsLoading || availableYears.length === 0) return
-    if (typeof selectedYear !== 'number') return
-    if (availableYears.includes(selectedYear)) return
-    const newestYear = availableYears[0]
-    if (newestYear === undefined) return
-    setSelectedYear(newestYear)
-    setYearInUrl(newestYear, 'replace')
-  }, [availableYears, hadExplicitYearParamOnLoad, hadInvalidYearParamOnLoad, isYearsLoading, selectedYear, setYearInUrl])
-
-  // Fetch payslips for the selected year
-  useEffect(() => {
-    if (selectedYear === 'all') {
-      setPayslips([])
-      return
-    }
-    let cancelled = false
-    setPayslipsLoading(true)
-    fetchWrapper.get(`/api/payslips?year=${selectedYear}`)
-      .then((data: unknown) => {
-        if (!cancelled) setPayslips(Array.isArray(data) ? data as fin_payslip[] : [])
-      })
-      .catch(() => { if (!cancelled) setPayslips([]) })
-      .finally(() => { if (!cancelled) setPayslipsLoading(false) })
-    return () => { cancelled = true }
-  }, [selectedYear])
-
-  // Fetch count of documents ready for review (parsed but not confirmed)
-  useEffect(() => {
-    if (typeof selectedYear !== 'number') {
-      setPendingReviewCount(0)
-      return
-    }
-    let cancelled = false
-    const params = new URLSearchParams({ year: String(selectedYear), genai_status: 'parsed', is_reviewed: '0' })
-    fetchWrapper.get(`/api/finance/tax-documents?${params.toString()}`)
-      .then((data: unknown) => {
-        if (!cancelled) setPendingReviewCount(Array.isArray(data) ? (data as TaxDocument[]).length : 0)
-      })
-      .catch(() => { if (!cancelled) setPendingReviewCount(0) })
-    return () => { cancelled = true }
-  }, [selectedYear, refreshTrigger])
-
-  // Build quarterly payslip series in a single pass (same logic as PayslipClient)
-  const year = typeof selectedYear === 'number' ? selectedYear : null
+  const year = selectedYear
   const { data, dataThroughQ1, dataThroughQ2, dataThroughQ3 } = (() => {
-    if (!year) return { data: [], dataThroughQ1: [], dataThroughQ2: [], dataThroughQ3: [] }
     const start = `${year}-01-01`
     const end = `${year + 1}-01-01`
     const q1end = `${year}-04-01`
@@ -341,23 +607,25 @@ export default function TaxPreviewPage() {
     const dataThroughQ1: fin_payslip[] = []
     const dataThroughQ2: fin_payslip[] = []
     const dataThroughQ3: fin_payslip[] = []
-    for (const r of payslips) {
-      const pd = r.pay_date!
-      if (pd <= start || pd >= end) continue
-      data.push(r)
-      if (pd < q1end) dataThroughQ1.push(r)
-      if (pd < q2end) dataThroughQ2.push(r)
-      if (pd < q3end) dataThroughQ3.push(r)
+
+    for (const row of payslips) {
+      const payDate = row.pay_date
+      if (!payDate || payDate <= start || payDate >= end) continue
+      data.push(row)
+      if (payDate < q1end) dataThroughQ1.push(row)
+      if (payDate < q2end) dataThroughQ2.push(row)
+      if (payDate < q3end) dataThroughQ3.push(row)
     }
+
     return { data, dataThroughQ1, dataThroughQ2, dataThroughQ3 }
   })()
 
-  const dataSeries = year ? [
+  const dataSeries = [
     ['Q1', dataThroughQ1],
     dataThroughQ2.length > dataThroughQ1.length ? ['Q2', dataThroughQ2] : undefined,
     dataThroughQ3.length > dataThroughQ2.length ? ['Q3', dataThroughQ3] : undefined,
     data.length > dataThroughQ3.length ? ['Q4 (Full Year)', data] : undefined,
-  ].filter(Boolean) as [string, fin_payslip[]][] : []
+  ].filter(Boolean) as [string, fin_payslip[]][]
 
   const scheduleCIncomeBySeries = {
     Q1: scheduleCNetIncome.byQuarter.q1,
@@ -366,24 +634,23 @@ export default function TaxPreviewPage() {
     'Q4 (Full Year)': scheduleCNetIncome.byQuarter.q4,
   }
 
-  const showTaxTables = typeof selectedYear === 'number' && !payslipsLoading && data.length > 0
+  const showTaxTables = !isLoading && data.length > 0
 
-  // Compute W-2 gross income for 1040 preview using currency.js for precise arithmetic
-  const w2GrossIncome = data.reduce((acc, r) => acc
-    .add(r.ps_salary ?? 0)
-    .add(r.earnings_bonus ?? 0)
-    .add(r.earnings_rsu ?? 0)
-    .add(r.ps_vacation_payout ?? 0)
-    .add(r.imp_ltd ?? 0)
-    .add(r.imp_legal ?? 0)
-    .add(r.imp_fitness ?? 0)
-    .add(r.imp_other ?? 0), currency(0))
+  const w2GrossIncome = data.reduce((acc, row) => acc
+    .add(row.ps_salary ?? 0)
+    .add(row.earnings_bonus ?? 0)
+    .add(row.earnings_rsu ?? 0)
+    .add(row.ps_vacation_payout ?? 0)
+    .add(row.imp_ltd ?? 0)
+    .add(row.imp_legal ?? 0)
+    .add(row.imp_fitness ?? 0)
+    .add(row.imp_other ?? 0), currency(0))
 
   return (
     <div>
       <div className="flex items-center gap-4 px-4 pt-4 pb-2 flex-wrap">
         <h1 className="text-2xl font-bold">Tax Preview</h1>
-        {typeof selectedYear === 'number' && pendingReviewCount > 0 && (
+        {pendingReviewCount > 0 && (
           <Button
             variant="outline"
             size="sm"
@@ -401,119 +668,191 @@ export default function TaxPreviewPage() {
           <YearSelectorWithNav
             selectedYear={selectedYear}
             availableYears={availableYears}
-            isLoading={isYearsLoading && availableYears.length === 0}
+            isLoading={isLoading && availableYears.length === 0}
             onYearChange={handleYearChange}
+            includeAll={false}
           />
         </div>
       </div>
 
-      {/* Review modal */}
-      {typeof selectedYear === 'number' && (
-        <TaxDocumentReviewModal
-          open={reviewModalOpen}
-          taxYear={selectedYear}
-          onClose={() => setReviewModalOpen(false)}
-          onDocumentReviewed={() => setRefreshTrigger(t => t + 1)}
-        />
+      {error && (
+        <div className="px-4 pb-2 text-sm text-destructive">{error}</div>
       )}
 
-      {/* Row 1: W-2 Income Summary (1/3) + W-2 Upload & Reconciliation (2/3) */}
-      {showTaxTables && typeof selectedYear === 'number' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 px-4 pb-4">
-          <div className="lg:col-span-1">
-            <W2IncomeSummary payslips={data} />
-          </div>
-          <div className="lg:col-span-2">
-            <TaxDocumentsSection 
-              selectedYear={selectedYear} 
-              payslips={data} 
-              onDocumentReviewed={() => setRefreshTrigger(t => t + 1)}
-              onW2DocumentsChange={handleW2DocumentsChange}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Show W-2 documents section even without payslip data */}
-      {!showTaxTables && typeof selectedYear === 'number' && (
-        <div className="px-4 pb-4">
-          <TaxDocumentsSection 
-            selectedYear={selectedYear} 
-            payslips={data} 
-            onDocumentReviewed={() => setRefreshTrigger(t => t + 1)}
-            onW2DocumentsChange={handleW2DocumentsChange}
-          />
-        </div>
-      )}
-
-      {/* Row 2: Form 1040 Preview */}
-      {typeof selectedYear === 'number' && (
-        <Form1040Preview
-          w2Income={w2GrossIncome}
-          interestIncome={income1099.interestIncome}
-          dividendIncome={income1099.dividendIncome}
-          scheduleCIncome={scheduleCNetIncome.total}
-          selectedYear={selectedYear}
-          w2Documents={reviewedW2Docs}
-          interestDocuments={reviewed1099Docs.filter(d => d.form_type === '1099_int' || d.form_type === '1099_int_c')}
-          dividendDocuments={reviewed1099Docs.filter(d => d.form_type === '1099_div' || d.form_type === '1099_div_c')}
-        />
-      )}
-
-      {/* Row 3: Schedule B Preview (1/3) + 1099 Upload (2/3) */}
-      {typeof selectedYear === 'number' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 px-4 pb-4">
-          <div className="lg:col-span-1">
-            <ScheduleBPreview
-              interestIncome={income1099.interestIncome}
-              dividendIncome={income1099.dividendIncome}
-              qualifiedDividends={income1099.qualifiedDividends}
-              selectedYear={selectedYear}
-            />
-          </div>
-          <div className="lg:col-span-2">
-            <TaxDocuments1099Section
-              selectedYear={selectedYear}
-              onTotalsChange={handle1099TotalsChange}
-              onDocumentsChange={handle1099DocumentsChange}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Federal & State Tax Tables */}
-      {showTaxTables && (
-        <div className="px-4 pb-6">
-          <h2 className="text-lg font-semibold mt-4 mb-2">Federal Taxes</h2>
-          <TotalsTable
-            series={dataSeries}
-            taxConfig={{
-              year: String(selectedYear),
-              state: '',
-              filingStatus: 'Single',
-              standardDeduction: 13850,
-            }}
-            extraIncome={scheduleCIncomeBySeries}
-          />
-          <h2 className="text-lg font-semibold mt-6 mb-2">California State Taxes</h2>
-          <TotalsTable
-            series={dataSeries}
-            taxConfig={{
-              year: String(selectedYear),
-              state: 'CA',
-              filingStatus: 'Single',
-              standardDeduction: 13850,
-            }}
-            extraIncome={scheduleCIncomeBySeries}
-          />
-        </div>
-      )}
-
-      <ScheduleCPreview
-        selectedYear={selectedYear}
-        onAvailableYearsChange={handleAvailableYearsChange}
-        onScheduleCNetIncomeChange={handleScheduleCNetIncomeChange}
+      <TaxDocumentReviewModal
+        open={reviewModalOpen}
+        taxYear={selectedYear}
+        onClose={() => setReviewModalOpen(false)}
+        onDocumentReviewed={() => {
+          setReviewModalOpen(false)
+          void refreshAll()
+        }}
       />
+
+      <Tabs defaultValue="overview" className="px-4 pb-8">
+        <TabsList className="mb-4 flex-wrap">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="schedules">Schedules</TabsTrigger>
+          <TabsTrigger value="capital-gains">Capital Gains</TabsTrigger>
+          <TabsTrigger value="form-1116">Form 1116</TabsTrigger>
+          <TabsTrigger value="schedule-c">Schedule C</TabsTrigger>
+          <TabsTrigger value="estimate">Tax Estimate</TabsTrigger>
+          <TabsTrigger value="action-items">Action Items</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-6 mt-0">
+          <TaxIncomeOverview
+            taxYear={selectedYear}
+            payslips={data}
+            w2GrossIncome={w2GrossIncome}
+            income1099={income1099}
+            reviewedW2Docs={reviewedW2Docs}
+            reviewed1099Docs={reviewed1099Docs}
+            reviewedK1Docs={reviewedK1Docs}
+          />
+
+          {showTaxTables ? (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="lg:col-span-1">
+                <W2IncomeSummary payslips={data} />
+              </div>
+              <div className="lg:col-span-2">
+                <TaxDocumentsSection
+                  selectedYear={selectedYear}
+                  payslips={data}
+                  documents={w2Documents}
+                  employmentEntities={employmentEntities}
+                  isLoading={isLoading}
+                  onDocumentsReload={refreshAll}
+                />
+              </div>
+            </div>
+          ) : (
+            <TaxDocumentsSection
+              selectedYear={selectedYear}
+              payslips={data}
+              documents={w2Documents}
+              employmentEntities={employmentEntities}
+              isLoading={isLoading}
+              onDocumentsReload={refreshAll}
+            />
+          )}
+
+          <TaxDocuments1099Section
+            selectedYear={selectedYear}
+            documents={accountDocuments}
+            accounts={accounts}
+            activeAccountIds={activeAccountIds}
+            isLoading={isLoading}
+            onDocumentsReload={refreshAll}
+          />
+        </TabsContent>
+
+        <TabsContent value="schedules" className="space-y-6 mt-0">
+          <ScheduleBPreview
+            interestIncome={income1099.interestIncome}
+            dividendIncome={income1099.dividendIncome}
+            qualifiedDividends={income1099.qualifiedDividends}
+            selectedYear={selectedYear}
+            reviewedK1Docs={reviewedK1Docs}
+            reviewed1099Docs={reviewed1099Docs}
+          />
+
+          {(reviewedK1Docs.length > 0 || reviewed1099Docs.length > 0) && (
+            <Form4952Preview
+              reviewedK1Docs={reviewedK1Docs}
+              reviewed1099Docs={reviewed1099Docs}
+              income1099={income1099}
+            />
+          )}
+        </TabsContent>
+
+        <TabsContent value="capital-gains" className="mt-0">
+          <ScheduleDPreview
+            reviewedK1Docs={reviewedK1Docs}
+            reviewed1099Docs={reviewed1099Docs}
+            selectedYear={selectedYear}
+          />
+        </TabsContent>
+
+        <TabsContent value="form-1116" className="mt-0">
+          <Form1116Preview
+            reviewedK1Docs={reviewedK1Docs}
+            reviewed1099Docs={reviewed1099Docs}
+            income1099={income1099}
+          />
+        </TabsContent>
+
+        <TabsContent value="schedule-c" className="space-y-6 mt-0">
+          <ScheduleCTab
+            selectedYear={selectedYear}
+            scheduleCData={scheduleCData?.years ?? []}
+          />
+        </TabsContent>
+
+        <TabsContent value="estimate" className="space-y-6 mt-0">
+          <Form1040Preview
+            w2Income={w2GrossIncome}
+            interestIncome={income1099.interestIncome}
+            dividendIncome={income1099.dividendIncome}
+            scheduleCIncome={scheduleCNetIncome.total}
+            selectedYear={selectedYear}
+            w2Documents={reviewedW2Docs}
+            interestDocuments={reviewed1099Docs.filter((doc) => doc.form_type === '1099_int' || doc.form_type === '1099_int_c')}
+            dividendDocuments={reviewed1099Docs.filter((doc) => doc.form_type === '1099_div' || doc.form_type === '1099_div_c')}
+          />
+
+          {showTaxTables && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-base font-semibold mb-2">Federal Taxes</h2>
+                <TotalsTable
+                  series={dataSeries}
+                  taxConfig={{
+                    year: String(selectedYear),
+                    state: '',
+                    filingStatus: 'Single',
+                    standardDeduction: 13850,
+                  }}
+                  extraIncome={scheduleCIncomeBySeries}
+                />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold mb-2">California State Taxes</h2>
+                <TotalsTable
+                  series={dataSeries}
+                  taxConfig={{
+                    year: String(selectedYear),
+                    state: 'CA',
+                    filingStatus: 'Single',
+                    standardDeduction: 13850,
+                  }}
+                  extraIncome={scheduleCIncomeBySeries}
+                />
+              </div>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="action-items" className="mt-0">
+          <ActionItemsTab
+            reviewedK1Docs={reviewedK1Docs}
+            reviewed1099Docs={reviewed1099Docs}
+            reviewedW2Docs={reviewedW2Docs}
+            income1099={income1099}
+            w2GrossIncome={w2GrossIncome}
+            selectedYear={selectedYear}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
+  )
+}
+
+export default function TaxPreviewPage({ initialData }: { initialData?: TaxPreviewPreload | null }) {
+  return (
+    <TaxPreviewProvider initialData={initialData ?? null}>
+      <TaxPreviewPageContent />
+    </TaxPreviewProvider>
   )
 }

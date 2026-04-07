@@ -101,41 +101,65 @@ Marriage/filing status is stored per year as a JSON column (`marriage_status_by_
 
 ## Tax Preview Page
 
-**Routes**: `GET /finance/tax-preview` (canonical), `GET /finance/schedule-c` (301 redirect)
-**Component**: `resources/js/components/finance/TaxPreviewPage.tsx` (orchestrator) + `ScheduleCPreview.tsx` (Schedule C section)
-**Controller**: `app/Http/Controllers/FinanceTool/FinanceScheduleCController.php`
+**Route**: `GET /finance/tax-preview` (canonical), `GET /finance/schedule-c` (301 redirect)
+**Controller**: `app/Http/Controllers/Finance/TaxPreviewController.php` (shell preload only)
+**API Controller**: `app/Http/Controllers/Finance/TaxPreviewDataController.php`
+**Services**: `app/Services/Finance/TaxPreviewDataService.php`, `app/Services/Finance/ScheduleCSummaryService.php`
+**Components**: `resources/js/components/finance/TaxPreviewPage.tsx` + `TaxPreviewContext.tsx`
 
-### Sections (top to bottom)
+### Data Loading Architecture
 
-1. **W-2 Row** — Grid layout (1/3 + 2/3):
-   - Left: W-2 Income Summary from payslips
-   - Right: W-2 Document Upload & Reconciliation (per employment entity, with processing status)
+Year changes are **full page navigations** (`window.location.href = ...`). Blade now preloads only a lightweight shell payload via `<script type="application/json" id="tax-preview-data">`:
 
-2. **Form 1040 Preview** — Key income lines from Form 1040 (wages, interest, dividends, Schedule C, total income)
+**Preloaded shell data** (safe to embed in Blade):
+- `year`
+- `availableYears`
 
-3. **Schedule B & 1099 Row** — Grid layout (1/3 + 2/3):
-   - Left: Schedule B Preview (Part I: Interest, Part II: Dividends) from confirmed 1099 documents
-   - Right: 1099-INT/DIV Upload with processing status badges and "Other 1099" manual entry
+**Mutable tax-preview dataset** (owned by React context and fetched from API):
+- Payslips for the selected year
+- Pending review count
+- W-2 documents
+- Account documents (1099 + K-1)
+- Schedule C data
+- Employment entities
+- Accounts + active-account IDs
 
-4. **Federal Taxes** — Quarterly cumulative tax estimate table (Q1/Q2/Q3/Q4). Income = W-2 payslip income + Schedule C net income (income − expenses − allowable home office). Reuses the `TotalsTable` component from the Payslips page via the `extraIncome` prop.
+The React mini-SPA is wrapped in `TaxPreviewProvider`, which loads `/api/finance/tax-preview-data?year=YYYY`, exposes getters/setters for shared data, derives reviewed document subsets, computes 1099 totals and Schedule C net income, and provides `refreshAll()` for mutation sync after upload/review/edit actions.
 
-5. **California State Taxes** — Same as Federal Taxes but for CA state brackets.
+### Tab Structure
 
-6. **Schedule C Preview** (`ScheduleCPreview` component) — Transaction-tag-based Schedule C summary:
-   - Ordinary Income (interest, dividends, other)
-   - W-2 income tagged via transaction tags
-   - Schedule C sections per entity (income / expenses / home office)
-   - **"List transactions in-line" toggle** — when enabled, Schedule C cards expand to full container width (single column) so inline transaction rows are readable
-   - Cards are always single-column on mobile/small screens (< md breakpoint)
-   - All years loaded at once; year selector filters display client-side
-   - `onScheduleCNetIncomeChange` callback emits net Schedule C income to the parent for tax table calculations
+```
+Overview | Schedules | Capital Gains | Form 1116 | Schedule C | Tax Estimate | Action Items
+```
+
+| Tab | Component | Description |
+|-----|-----------|-------------|
+| Overview | `TaxIncomeOverview` | Income card grid + summary table + W-2 Income Summary + All Tax Documents |
+| Schedules | `ScheduleBPreview` + `Form4952Preview` | Schedule B + Form 4952 |
+| Capital Gains | `ScheduleDPreview` | Form 6781 + Schedule D |
+| Form 1116 | `Form1116Preview` | Passive FTC |
+| Schedule C | `ScheduleCTab` | Self-employment income/expenses + Form 8829 home office |
+| Tax Estimate | `Form1040Preview` + `TotalsTable` | Form 1040 preview + federal/state tax tables |
+| Action Items | `ActionItemsTab` | Resolved/outstanding alerts |
+
+### Schedule C Tab
+
+`ScheduleCTab` (`resources/js/components/finance/ScheduleCTab.tsx`) renders:
+- Per-entity Schedule C income/expense summaries using `FormBlock`/`FormLine` primitives
+- Net profit/loss calculation
+- **Form 8829 — Home Office Deduction**: office/home area inputs, business-use percentage, expense breakdown by Form 8829 line, income limitation, carry-forward
+- **Simplified Method Comparison**: side-by-side comparison of simplified ($5/sqft, max $1,500) vs. regular method
+
+`ScheduleCPreview` (`resources/js/components/finance/ScheduleCPreview.tsx`) still exports the shared Schedule C calculation utilities (`computeScheduleCNetIncome`, `computeHomeOfficeCalcs`) used by the Tax Preview context.
 
 ### API
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
+| `GET` | `/api/finance/tax-preview-data?year=YYYY` | Consolidated mutable Tax Preview dataset for the React context |
 | `GET` | `/api/finance/schedule-c` | Tax data grouped by characteristic and year |
-| `GET` | `/api/payslips?year=YYYY` | Payslip records for the year (W-2 summary and tax tables) |
+| `GET` | `/api/payslips?year=YYYY` | Payslip records for the year (still available for other pages) |
+| `GET` | `/api/finance/tax-documents` | Tax documents with various filters (year, form_type, is_reviewed) |
 
 ---
 
@@ -166,11 +190,14 @@ Marriage/filing status is stored per year as a JSON column (`marriage_status_by_
 ```
 Employment Entity (sch_c)
   └── Tags (with sce_*/scho_*/business_* tax_characteristic)
-        └── Tagged Transactions → Schedule C tax preview
+        └── Tagged Transactions → Schedule C tab + Form 8829 home office
 
 Employment Entity (w2)
   ├── Payslips → W-2 income summary + Federal/State quarterly tax estimates
   └── Tags (with w2_* tax_characteristic) → W-2 income summary (transaction-based)
+
+Tax Documents (W-2, 1099, K-1)
+  └── GenAI extraction → parsed_data → Overview/Schedules/Capital Gains/Form 1116 tabs
 
 Marriage Status (per year on users table)
   └── Filing status for tax year calculations
@@ -291,7 +318,9 @@ When a tax document PDF is uploaded, a GenAI job (`job_type: tax_document`) is a
 ### Processing Status in W-2 Documents Table
 
 The W-2 Documents table shows a combined **Review** column (replaces separate Status + Reviewed columns):
-- **Disabled "Processing" button** (orange) — `genai_status` is `pending` or `processing`
+- **"Processing" button** (orange) — `genai_status` is `pending` or `processing`
+  - For **K-1 documents only**: the button is **clickable** and opens the review modal (to allow deletion if processing is stuck)
+  - For other document types: the button is **disabled** 
 - **Disabled "Failed" button** (red) — `genai_status` is `failed`
 - **"Needs Review" button** — `genai_status` is `parsed` but not yet reviewed
 - **"Reviewed" button** (green) — document has been reviewed and confirmed
@@ -304,8 +333,23 @@ The Review Document modal (`TaxDocumentReviewModal`) provides:
 - **Save Changes** button — only shown when document is not yet reviewed
 - **W-2 Comparison table** — compares W-2 box values against payslips calculations
   - Each "Payslips" amount is clickable → opens a **Data Source** modal showing the individual payslip rows that contributed
+- **Edit JSON button** (pencil icon) in the footer — opens `ManualJsonAttachModal` in edit mode, pre-filled with the current `parsed_data`. Saving posts to `PUT /api/finance/tax-documents/{id}` with updated JSON. Works on both reviewed and unreviewed documents.
 - **Delete button** in the footer — removes the document (disabled when reviewed)
 - **Mark as Reviewed / Reopen for Review** button
+
+### JSON-First Upload Flow
+
+Instead of uploading a PDF and waiting for AI extraction, users can supply pre-parsed JSON before uploading the file:
+
+1. In the **Upload Document** modal, click **"Attach JSON from LLM"**
+2. Paste or write JSON in the editor — the modal validates it against the schema for the selected form type
+3. Click **"Attach JSON"** — the JSON is stored locally in the upload dialog (no API call yet); a green indicator shows "JSON attached — upload the PDF to complete"
+4. Select the PDF file and click **Upload**
+5. The upload API (`POST /api/finance/tax-documents`) receives both the file and `parsed_data`. The backend sets `genai_status = 'parsed'` and skips AI extraction entirely
+
+This flow is ideal for K-1 / K-3 documents where an LLM prompt is used externally.
+
+To remove the attached JSON before uploading, click the **✕** next to the green indicator.
 
 ### W-2 Income Summary
 

@@ -12,7 +12,7 @@ import LinkerPage from '@/components/finance/LinkerPage'
 import ManageTagsPage from '@/components/finance/ManageTagsPage'
 import FinanceAccountStatementsPage from '@/components/finance/statements/FinanceAccountStatementsPage'
 import SummaryClient from '@/components/finance/SummaryClient'
-import TaxPreviewPage from '@/components/finance/TaxPreviewPage'
+import TaxPreviewPage, { type TaxPreviewPreload } from '@/components/finance/TaxPreviewPage'
 import TransactionsPage from '@/components/finance/TransactionsPage'
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -129,16 +129,22 @@ document.addEventListener('DOMContentLoaded', () => {
     root.render(<ManageTagsPage />)
   }
 
+  function readTaxPreviewPreload(): TaxPreviewPreload | null {
+    const el = document.getElementById('tax-preview-data')
+    if (!el?.textContent) return null
+    try { return JSON.parse(el.textContent) as TaxPreviewPreload } catch { return null }
+  }
+
   const scheduleCDiv = document.getElementById('ScheduleCPage')
   if (scheduleCDiv) {
     const root = createRoot(scheduleCDiv)
-    root.render(<TaxPreviewPage />)
+    root.render(<TaxPreviewPage initialData={readTaxPreviewPreload()} />)
   }
 
   const taxPreviewDiv = document.getElementById('TaxPreviewPage')
   if (taxPreviewDiv) {
     const root = createRoot(taxPreviewDiv)
-    root.render(<TaxPreviewPage />)
+    root.render(<TaxPreviewPage initialData={readTaxPreviewPreload()} />)
   }
 
   const configPageDiv = document.getElementById('FinanceConfigPage')

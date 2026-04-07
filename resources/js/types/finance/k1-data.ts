@@ -15,6 +15,8 @@ export interface K1FieldValue {
   confidence?: number
   /** When true, re-extraction will not overwrite this field. */
   manualOverride?: boolean
+  /** Optional note or breakdown explanation for this field (e.g., "Gov't interest $X / Other $Y"). */
+  notes?: string
 }
 
 /** One code-entry inside a coded K-1 box (e.g. Box 11 code A, Box 13 code G). */
