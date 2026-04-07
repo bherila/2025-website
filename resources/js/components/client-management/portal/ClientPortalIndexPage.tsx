@@ -275,6 +275,7 @@ export default function ClientPortalIndexPage({
             <FileList
               files={fileManager.files.length > 0 ? fileManager.files : (initialCompanyFiles ?? [])}
               loading={fileManager.loading && fileManager.files.length === 0}
+              error={fileManager.error}
               onDownload={fileManager.downloadFile}
               onDelete={fileManager.handleDeleteRequest}
               title="Company Files"

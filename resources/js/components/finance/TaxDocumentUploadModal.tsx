@@ -87,6 +87,7 @@ export default function TaxDocumentUploadModal({
   const [phase, setPhase] = useState<UploadPhase>('idle')
   const [uploadProgress, setUploadProgress] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropZoneRef = useRef<HTMLDivElement>(null)
 
@@ -96,6 +97,7 @@ export default function TaxDocumentUploadModal({
       setPhase('idle')
       setUploadProgress(0)
       setIsDragging(false)
+      setError(null)
     }
   }, [open])
 
@@ -103,6 +105,7 @@ export default function TaxDocumentUploadModal({
     async (file: File, overrideFilename?: string) => {
       const filename = overrideFilename ?? file.name
       try {
+        setError(null)
         setPhase('requesting')
         setUploadProgress(0)
 
@@ -153,7 +156,9 @@ export default function TaxDocumentUploadModal({
         onSuccess()
       } catch (err) {
         setPhase('idle')
-        toast.error('Upload failed: ' + (err instanceof Error ? err.message : 'Unknown error'))
+        const message = err instanceof Error ? err.message : 'Unknown error'
+        setError(message)
+        toast.error('Upload failed: ' + message)
       }
     },
     [formType, taxYear, accountId, employmentEntityId, onSuccess],
@@ -308,6 +313,16 @@ export default function TaxDocumentUploadModal({
             className="hidden"
             onChange={handleFileSelected}
           />
+
+          {error && (
+            <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive flex items-start gap-2 border border-destructive/20 animate-in fade-in zoom-in duration-200">
+              <Upload className="h-4 w-4 mt-0.5 shrink-0" />
+              <div className="grid gap-1">
+                <div className="font-medium">Upload Error</div>
+                <div className="text-xs opacity-90 leading-relaxed whitespace-pre-wrap">{error}</div>
+              </div>
+            </div>
+          )}
 
           {/* Create Blank option */}
           {onCreateBlank && !isUploading && (

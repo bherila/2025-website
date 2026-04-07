@@ -20,6 +20,7 @@ export function PayslipImportModal({ onImportSuccess }: PayslipImportModalProps)
   const [files, setFiles] = useState<File[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 })
+  const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [w2Jobs, setW2Jobs] = useState<{ id: number; display_name: string }[]>([])
   const [selectedEntityId, setSelectedEntityId] = useState<number | null>(null)
@@ -43,6 +44,7 @@ export function PayslipImportModal({ onImportSuccess }: PayslipImportModalProps)
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
+      setError(null)
       const newFiles = Array.from(event.target.files)
       const allowedFiles = newFiles.filter(file => {
         const fileType = file.type
@@ -65,6 +67,9 @@ export function PayslipImportModal({ onImportSuccess }: PayslipImportModalProps)
 
   const handleRemoveFile = (fileToRemove: File) => {
     setFiles(files.filter(file => file !== fileToRemove))
+    if (files.length <= 1) {
+      setError(null)
+    }
   }
 
   const handleUpload = async () => {
@@ -74,6 +79,7 @@ export function PayslipImportModal({ onImportSuccess }: PayslipImportModalProps)
     }
 
     setIsUploading(true)
+    setError(null)
     
     // Chunk logic: 5.9 MB per chunk
     const MAX_CHUNK_SIZE_MB = 5.9;
@@ -132,12 +138,16 @@ export function PayslipImportModal({ onImportSuccess }: PayslipImportModalProps)
       } 
       
       if (failCount > 0) {
-        toast.error(`Failed to process ${failCount} files. ${errors.slice(0, 3).join(', ')}`);
+        const errorMessage = `Failed to process ${failCount} files. ${errors.slice(0, 3).join(', ')}`;
+        toast.error(errorMessage);
+        setError(errorMessage);
       }
 
     } catch (error: any) {
       console.error('Upload error:', error)
-      toast.error(error.message || 'An unexpected error occurred during upload.')
+      const message = error.message || 'An unexpected error occurred during upload.';
+      toast.error(message);
+      setError(message);
     } finally {
       setIsUploading(false)
       setUploadProgress({ current: 0, total: 0 });
@@ -212,6 +222,15 @@ export function PayslipImportModal({ onImportSuccess }: PayslipImportModalProps)
               </ul>
             )}
           </div>
+          {error && (
+            <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive flex items-start gap-2 border border-destructive/20 animate-in fade-in zoom-in duration-200">
+              <XCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <div className="grid gap-1">
+                <div className="font-medium">Import Error</div>
+                <div className="text-xs opacity-90 leading-relaxed whitespace-pre-wrap">{error}</div>
+              </div>
+            </div>
+          )}
         </div>
         <DialogFooter>
           {isUploading && (
