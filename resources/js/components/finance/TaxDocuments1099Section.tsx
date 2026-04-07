@@ -260,8 +260,8 @@ export default function TaxDocuments1099Section({
     }
   }
 
-  /** Extract the primary dollar amount from a document for display in the button label. */
-  const getDocDisplayValue = (doc: TaxDocument): string | null => {
+  /** Format the primary taxable amount from a document for display in the review button. */
+  const formatDocumentAmount = (doc: TaxDocument): string | null => {
     if (!doc.parsed_data) return null
     const p = doc.parsed_data as Record<string, unknown>
     if (doc.form_type === '1099_int' || doc.form_type === '1099_int_c') {
@@ -279,11 +279,11 @@ export default function TaxDocuments1099Section({
     return null
   }
 
-  /** Render a single reviewed/processing/failed doc button. */
-  const renderDocButton = (doc: TaxDocument) => {
+  /** Render a review/status button for a single uploaded tax document. */
+  const renderTaxDocumentButton = (doc: TaxDocument) => {
     const isProcessing = doc.genai_status === 'pending' || doc.genai_status === 'processing'
     const isFailed = doc.genai_status === 'failed'
-    const displayValue = getDocDisplayValue(doc)
+    const displayValue = formatDocumentAmount(doc)
     const formLabel = FORM_TYPE_LABELS[doc.form_type as DisplayFormType] ?? doc.form_type
 
     if (isProcessing) {
@@ -335,8 +335,8 @@ export default function TaxDocuments1099Section({
     )
   }
 
-  /** Render all doc buttons for a given account (all form types). */
-  const renderAccountDocButtons = (account: FinAccount) => {
+  /** Render the full document section for an account row (existing docs + add dropdown). */
+  const renderAccountDocuments = (account: FinAccount) => {
     const accountDocs = documents.filter(d => d.account_id === account.acct_id)
 
     // Determine which form types are already uploaded for this account
@@ -348,7 +348,7 @@ export default function TaxDocuments1099Section({
 
     return (
       <div className="flex flex-wrap gap-1 items-center">
-        {accountDocs.map(doc => renderDocButton(doc))}
+        {accountDocs.map(doc => renderTaxDocumentButton(doc))}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 px-2">
@@ -388,7 +388,7 @@ export default function TaxDocuments1099Section({
             {account.acct_name}
           </TableCell>
           <TableCell>
-            {renderAccountDocButtons(account)}
+            {renderAccountDocuments(account)}
           </TableCell>
           <TableCell className="align-middle">
             {accountForeignTax > 0 && (
