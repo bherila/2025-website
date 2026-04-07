@@ -18,6 +18,7 @@ import TotalsTable from '@/components/payslip/TotalsTable.client'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { fetchWrapper } from '@/fetchWrapper'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
@@ -162,7 +163,7 @@ function TaxIncomeOverview({
   })
 
   return (
-    <div className="px-4 pb-4 space-y-6">
+    <div className="space-y-6">
       {/* Card grid */}
       <div>
         <h2 className="text-base font-semibold mb-3">Income &amp; Document Overview — {taxYear}</h2>
@@ -785,6 +786,7 @@ export default function TaxPreviewPage() {
 
   return (
     <div>
+      {/* ── Page header ─────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-4 px-4 pt-4 pb-2 flex-wrap">
         <h1 className="text-2xl font-bold">Tax Preview</h1>
         {typeof selectedYear === 'number' && pendingReviewCount > 0 && (
@@ -811,7 +813,7 @@ export default function TaxPreviewPage() {
         </div>
       </div>
 
-      {/* Review modal */}
+      {/* Review modal (hidden) */}
       {typeof selectedYear === 'number' && (
         <TaxDocumentReviewModal
           open={reviewModalOpen}
@@ -821,125 +823,146 @@ export default function TaxPreviewPage() {
         />
       )}
 
-      {/* Income Overview */}
-      {typeof selectedYear === 'number' && (
-        <TaxIncomeOverview
-          taxYear={selectedYear}
-          payslips={data}
-          w2GrossIncome={w2GrossIncome}
-          income1099={income1099}
-          reviewedW2Docs={reviewedW2Docs}
-          reviewed1099Docs={reviewed1099Docs}
-          reviewedK1Docs={reviewedK1Docs}
-        />
-      )}
+      {/* ── Tabbed content ──────────────────────────────────────────────────── */}
+      <Tabs defaultValue="overview" className="px-4 pb-8">
+        <TabsList className="mb-4">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="documents">Documents</TabsTrigger>
+          <TabsTrigger value="schedules">Schedules</TabsTrigger>
+          <TabsTrigger value="estimate">Tax Estimate</TabsTrigger>
+        </TabsList>
 
-      {/* Row 1: W-2 Income Summary (1/3) + W-2 Upload & Reconciliation (2/3) */}
-      {showTaxTables && typeof selectedYear === 'number' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 px-4 pb-4">
-          <div className="lg:col-span-1">
-            <W2IncomeSummary payslips={data} />
-          </div>
-          <div className="lg:col-span-2">
-            <TaxDocumentsSection 
-              selectedYear={selectedYear} 
-              payslips={data} 
+        {/* ── Overview tab ──────────────────────────────────────────────────── */}
+        <TabsContent value="overview" className="space-y-0 mt-0">
+          {typeof selectedYear === 'number' && (
+            <TaxIncomeOverview
+              taxYear={selectedYear}
+              payslips={data}
+              w2GrossIncome={w2GrossIncome}
+              income1099={income1099}
+              reviewedW2Docs={reviewedW2Docs}
+              reviewed1099Docs={reviewed1099Docs}
+              reviewedK1Docs={reviewedK1Docs}
+            />
+          )}
+        </TabsContent>
+
+        {/* ── Documents tab ─────────────────────────────────────────────────── */}
+        <TabsContent value="documents" className="space-y-6 mt-0">
+          {/* W-2: payslip summary alongside document upload */}
+          {typeof selectedYear === 'number' && showTaxTables && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="lg:col-span-1">
+                <W2IncomeSummary payslips={data} />
+              </div>
+              <div className="lg:col-span-2">
+                <TaxDocumentsSection
+                  selectedYear={selectedYear}
+                  payslips={data}
+                  onDocumentReviewed={() => setRefreshTrigger(t => t + 1)}
+                  onW2DocumentsChange={handleW2DocumentsChange}
+                />
+              </div>
+            </div>
+          )}
+          {typeof selectedYear === 'number' && !showTaxTables && (
+            <TaxDocumentsSection
+              selectedYear={selectedYear}
+              payslips={data}
               onDocumentReviewed={() => setRefreshTrigger(t => t + 1)}
               onW2DocumentsChange={handleW2DocumentsChange}
             />
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* Show W-2 documents section even without payslip data */}
-      {!showTaxTables && typeof selectedYear === 'number' && (
-        <div className="px-4 pb-4">
-          <TaxDocumentsSection 
-            selectedYear={selectedYear} 
-            payslips={data} 
-            onDocumentReviewed={() => setRefreshTrigger(t => t + 1)}
-            onW2DocumentsChange={handleW2DocumentsChange}
+          {/* 1099 documents */}
+          {typeof selectedYear === 'number' && (
+            <TaxDocuments1099Section
+              selectedYear={selectedYear}
+              onTotalsChange={handle1099TotalsChange}
+              onDocumentsChange={handle1099DocumentsChange}
+            />
+          )}
+
+          {/* Schedule C */}
+          <ScheduleCPreview
+            selectedYear={selectedYear}
+            onAvailableYearsChange={handleAvailableYearsChange}
+            onScheduleCNetIncomeChange={handleScheduleCNetIncomeChange}
           />
-        </div>
-      )}
+        </TabsContent>
 
-      {/* Row 2: Form 1040 Preview */}
-      {typeof selectedYear === 'number' && (
-        <Form1040Preview
-          w2Income={w2GrossIncome}
-          interestIncome={income1099.interestIncome}
-          dividendIncome={income1099.dividendIncome}
-          scheduleCIncome={scheduleCNetIncome.total}
-          selectedYear={selectedYear}
-          w2Documents={reviewedW2Docs}
-          interestDocuments={reviewed1099Docs.filter(d => d.form_type === '1099_int' || d.form_type === '1099_int_c')}
-          dividendDocuments={reviewed1099Docs.filter(d => d.form_type === '1099_div' || d.form_type === '1099_div_c')}
-        />
-      )}
-
-      {/* Row 3: Schedule B Preview (1/3) + 1099 Upload (2/3) */}
-      {typeof selectedYear === 'number' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 px-4 pb-4">
-          <div className="lg:col-span-1">
+        {/* ── Schedules tab ─────────────────────────────────────────────────── */}
+        <TabsContent value="schedules" className="space-y-6 mt-0">
+          {/* Schedule B — Interest & Dividends */}
+          {typeof selectedYear === 'number' && (
             <ScheduleBPreview
               interestIncome={income1099.interestIncome}
               dividendIncome={income1099.dividendIncome}
               qualifiedDividends={income1099.qualifiedDividends}
               selectedYear={selectedYear}
             />
-          </div>
-          <div className="lg:col-span-2">
-            <TaxDocuments1099Section
+          )}
+
+          {/* Form 4952 — Investment Interest Expense */}
+          {typeof selectedYear === 'number' &&
+            (reviewedK1Docs.length > 0 || reviewed1099Docs.length > 0) && (
+              <Form4952Preview
+                reviewedK1Docs={reviewedK1Docs}
+                reviewed1099Docs={reviewed1099Docs}
+                income1099={income1099}
+              />
+            )}
+        </TabsContent>
+
+        {/* ── Tax Estimate tab ──────────────────────────────────────────────── */}
+        <TabsContent value="estimate" className="space-y-6 mt-0">
+          {/* Form 1040 preview */}
+          {typeof selectedYear === 'number' && (
+            <Form1040Preview
+              w2Income={w2GrossIncome}
+              interestIncome={income1099.interestIncome}
+              dividendIncome={income1099.dividendIncome}
+              scheduleCIncome={scheduleCNetIncome.total}
               selectedYear={selectedYear}
-              onTotalsChange={handle1099TotalsChange}
-              onDocumentsChange={handle1099DocumentsChange}
+              w2Documents={reviewedW2Docs}
+              interestDocuments={reviewed1099Docs.filter(d => d.form_type === '1099_int' || d.form_type === '1099_int_c')}
+              dividendDocuments={reviewed1099Docs.filter(d => d.form_type === '1099_div' || d.form_type === '1099_div_c')}
             />
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* Form 4952 — Investment Interest Expense */}
-      {typeof selectedYear === 'number' && (reviewedK1Docs.length > 0 || reviewed1099Docs.length > 0) && (
-        <Form4952Preview
-          reviewedK1Docs={reviewedK1Docs}
-          reviewed1099Docs={reviewed1099Docs}
-          income1099={income1099}
-        />
-      )}
-
-      {/* Federal & State Tax Tables */}
-      {showTaxTables && (
-        <div className="px-4 pb-6">
-          <h2 className="text-lg font-semibold mt-4 mb-2">Federal Taxes</h2>
-          <TotalsTable
-            series={dataSeries}
-            taxConfig={{
-              year: String(selectedYear),
-              state: '',
-              filingStatus: 'Single',
-              standardDeduction: 13850,
-            }}
-            extraIncome={scheduleCIncomeBySeries}
-          />
-          <h2 className="text-lg font-semibold mt-6 mb-2">California State Taxes</h2>
-          <TotalsTable
-            series={dataSeries}
-            taxConfig={{
-              year: String(selectedYear),
-              state: 'CA',
-              filingStatus: 'Single',
-              standardDeduction: 13850,
-            }}
-            extraIncome={scheduleCIncomeBySeries}
-          />
-        </div>
-      )}
-
-      <ScheduleCPreview
-        selectedYear={selectedYear}
-        onAvailableYearsChange={handleAvailableYearsChange}
-        onScheduleCNetIncomeChange={handleScheduleCNetIncomeChange}
-      />
+          {/* Federal & California tax tables */}
+          {showTaxTables && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-base font-semibold mb-2">Federal Taxes</h2>
+                <TotalsTable
+                  series={dataSeries}
+                  taxConfig={{
+                    year: String(selectedYear),
+                    state: '',
+                    filingStatus: 'Single',
+                    standardDeduction: 13850,
+                  }}
+                  extraIncome={scheduleCIncomeBySeries}
+                />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold mb-2">California State Taxes</h2>
+                <TotalsTable
+                  series={dataSeries}
+                  taxConfig={{
+                    year: String(selectedYear),
+                    state: 'CA',
+                    filingStatus: 'Single',
+                    standardDeduction: 13850,
+                  }}
+                  extraIncome={scheduleCIncomeBySeries}
+                />
+              </div>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
