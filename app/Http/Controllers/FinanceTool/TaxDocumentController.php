@@ -356,6 +356,14 @@ class TaxDocumentController extends Controller
         }
 
         if ($request->has('parsed_data')) {
+            // Only allow editing parsed data if NOT reviewed, OR the request explicitly un-reviews it
+            $isBecomingReviewed = $request->has('is_reviewed') && $request->boolean('is_reviewed');
+            $stayReviewed = $doc->is_reviewed && ! $request->has('is_reviewed');
+
+            if ($isBecomingReviewed || $stayReviewed) {
+                return response()->json(['message' => 'Cannot edit parsed data on a reviewed document.'], 422);
+            }
+
             $doc->parsed_data = $request->parsed_data;
         }
 
