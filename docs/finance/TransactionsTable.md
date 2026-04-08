@@ -167,6 +167,8 @@ The table displays the following columns (hidden if all data is empty):
 
 ### 3. Filtering
 
+Filter state is managed by the `useTransactionFilters` hook (14 column filter states + memoized `filteredData`). Column visibility is managed by the `useColumnVisibility` hook.
+
 Each column has an inline filter input:
 - Type to filter by substring match
 - Tags support comma-separated filtering
