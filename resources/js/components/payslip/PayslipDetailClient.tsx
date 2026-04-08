@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Loader2, Trash2 } from 'lucide-react'
+import { Code, Loader2, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo,useState } from 'react'
 import { type SubmitHandler,useForm } from 'react-hook-form'
 
@@ -32,6 +32,7 @@ import { parseDate } from '@/lib/DateHelper'
 import FinanceNavbar from '../finance/FinanceNavbar'
 import type { fin_payslip } from './payslipDbCols'
 import { fin_payslip_schema } from './payslipDbCols'
+import PayslipJsonModal from './PayslipJsonModal'
 
 const PayslipFormSection = ({
   title,
@@ -83,6 +84,7 @@ export default function PayrollForm({ initialPayslip }: PayslipDetailClientProps
   const [isDeleting, setIsDeleting] = useState(false)
   const [saveMode, setSaveMode] = useState<'edit' | 'new'>('edit')
   const [apiError, setApiError] = useState<string | null>(null)
+  const [showJsonModal, setShowJsonModal] = useState(false)
   const [w2Jobs, setW2Jobs] = useState<{ id: number; display_name: string }[]>([])
   const [selectedEntityId, setSelectedEntityId] = useState<number | null>(
     initialPayslip?.employment_entity_id ?? null,
@@ -221,6 +223,20 @@ export default function PayrollForm({ initialPayslip }: PayslipDetailClientProps
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+        )}
+
+        {initialPayslip && (
+          <PayslipJsonModal
+            open={showJsonModal}
+            mode="single"
+            initialData={initialPayslip}
+            onSuccess={() => {
+              setShowJsonModal(false)
+              const payYear = parseDate(initialPayslip.pay_date)?.formatYMD()?.slice(0, 4) ?? new Date().getFullYear().toString()
+              window.location.href = `/finance/payslips?year=${payYear}`
+            }}
+            onClose={() => setShowJsonModal(false)}
+          />
         )}
 
         <Form {...form}>
@@ -394,6 +410,16 @@ export default function PayrollForm({ initialPayslip }: PayslipDetailClientProps
               )}
 
               <div className="flex space-x-2">
+                {initialPayslip && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowJsonModal(true)}
+                    className="gap-1.5"
+                  >
+                    <Code className="h-4 w-4" /> Edit as JSON
+                  </Button>
+                )}
                 {initialPayslip && (
                   <Button type="submit" onClick={() => setSaveMode('edit')} disabled={isSubmitting}>
                     {isSubmitting ? (

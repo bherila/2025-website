@@ -1,5 +1,5 @@
 'use client'
-import { FileSpreadsheet,PlusCircle } from 'lucide-react'
+import { Code, FileSpreadsheet,PlusCircle } from 'lucide-react'
 import React, { useEffect,useState } from 'react'
 
 import Container from '@/components/container'
@@ -10,6 +10,7 @@ import FinanceNavbar from '../finance/FinanceNavbar'
 import { cols } from './config/payslipColumnsConfig'
 import type { fin_payslip } from './payslipDbCols'
 import { PayslipImportModal } from './PayslipImportModal' // Import the new dialog
+import PayslipJsonModal from './PayslipJsonModal'
 import { PayslipTable } from './PayslipTable'
 import TotalsTable from './TotalsTable.client'
 
@@ -35,6 +36,7 @@ export default function PayslipClient({ selectedYear: initialSelectedYear, initi
   const [selectedYear, setSelectedYear] = useState(initialSelectedYear);
   const [payslipData, setPayslipData] = useState(initialPayslipData);
   const [availableYears, setAvailableYears] = useState(initialAvailableYears);
+  const [showBulkJsonModal, setShowBulkJsonModal] = useState(false);
 
   useEffect(() => {
     setSelectedYear(initialSelectedYear);
@@ -93,6 +95,9 @@ export default function PayslipClient({ selectedYear: initialSelectedYear, initi
                   <PlusCircle className="mr-2" /> Add Payslip
                 </a>
               </Button>
+              <Button variant="outline" onClick={() => setShowBulkJsonModal(true)} className="gap-1.5">
+                <Code className="h-4 w-4" /> Edit as JSON
+              </Button>
               <Button asChild variant="outline">
                 <a href="/payslip/import/json">Import JSON</a>
               </Button>
@@ -112,6 +117,17 @@ export default function PayslipClient({ selectedYear: initialSelectedYear, initi
             </b>
           </div>
         </div>
+
+        <PayslipJsonModal
+          open={showBulkJsonModal}
+          mode="bulk"
+          initialData={payslipData}
+          onSuccess={async () => {
+            setShowBulkJsonModal(false)
+            await refreshPayslips()
+          }}
+          onClose={() => setShowBulkJsonModal(false)}
+        />
 
         {data.length === 0 ? (
           <EmptyState selectedYear={selectedYear} />

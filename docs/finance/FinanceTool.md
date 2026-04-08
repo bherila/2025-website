@@ -417,6 +417,70 @@ The following state is persisted in the URL so the browser back button works:
 - `?show=cash|stock` — filter type (or omitted for "all")
 - `?view=lots|tag-totals` — active view (or omitted for default transactions view)
 
+## Payslips
+
+**Routes**: `GET /finance/payslips` (list), `GET /finance/payslips/entry` (create/edit)  
+**Components**: `resources/js/components/payslip/PayslipClient.tsx`, `PayslipDetailClient.tsx`, `PayslipTable.tsx`, `TotalsTable.client.tsx`
+
+The Payslips page records each pay stub as a structured payslip entry. All monetary math uses `currency.js`. The data feeds into the Tax Preview W-2 income summary.
+
+### Payslip List Page
+
+- Year selector tabs at the top (year comes from URL `?year=YYYY`).
+- **PayslipTable** — tabular view of all payslips for the year. Inline editing of some fields is supported.
+- **TotalsTable** — quarterly running totals (Q1, Q2, Q3, Q4 YTD) for federal and California state taxes.
+- **Add Payslip** button — navigates to `/finance/payslips/entry?year=YYYY`.
+- **Edit as JSON** button — opens `PayslipJsonModal` in `bulk` mode, showing the entire year's payslips as a JSON array for direct editing. Payslips with a `payslip_id` are updated; items without an id are inserted.
+- **Import** buttons — CSV/TSV import and `PayslipImportModal` for copy-paste imports.
+
+### Payslip Detail Page
+
+- Form fields for all payslip columns (dates, earnings, taxes, deductions, 401k).
+- **W-2 Job selector** — links the payslip to a W-2 employment entity.
+- **Edit as JSON** button — opens `PayslipJsonModal` in `single` mode pre-filled with the current payslip data. The modal shows an LLM prompt (useful for extracting data from a PDF payslip), the expected JSON schema, and a textarea for editing. Saves via `POST /api/payslips`.
+- **Save Edits** / **Save as New** / **Delete** buttons.
+
+### JSON Editing (PayslipJsonModal)
+
+`resources/js/components/payslip/PayslipJsonModal.tsx` is a reusable dialog that handles both single and bulk payslip editing in JSON form.
+
+- **Validation** — uses `fin_payslip_schema` (Zod) for single-item validation and `z.array(fin_payslip_schema)` for bulk arrays. Errors are shown inline.
+- **LLM Prompt** — the modal loads `GET /api/payslips/prompt` to display a copyable prompt + JSON schema reference for pasting into an LLM to extract payslip data from PDFs.
+- **Modes**:
+  - `single` — saves via `POST /api/payslips` (existing single-payslip endpoint)
+  - `bulk` — saves via `POST /api/payslips/bulk` (new bulk upsert endpoint)
+
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/payslips` | List payslips (filter with `?year=YYYY`) |
+| `GET` | `/api/payslips/years` | List years with payslip data |
+| `GET` | `/api/payslips/prompt` | LLM prompt + JSON schema for payslip extraction |
+| `GET` | `/api/payslips/{id}` | Single payslip by ID |
+| `POST` | `/api/payslips` | Create or update a single payslip |
+| `POST` | `/api/payslips/bulk` | Bulk create/update an array of payslips |
+| `DELETE` | `/api/payslips/{id}` | Delete a payslip |
+| `POST` | `/api/payslips/{id}/estimated-status` | Toggle `ps_is_estimated` flag |
+| `POST` | `/api/payslips/import` | CSV/TSV bulk import |
+
+### Payslip Schema
+
+The canonical Zod schema is `fin_payslip_schema` in `resources/js/components/payslip/payslipDbCols.ts`. The TypeScript type `fin_payslip` is inferred from this schema (`z.infer<typeof fin_payslip_schema>`).
+
+Key field groups:
+
+| Group | Fields |
+|-------|--------|
+| Dates | `period_start`, `period_end`, `pay_date` |
+| Earnings | `ps_salary`, `earnings_gross`, `earnings_bonus`, `earnings_rsu`, `earnings_net_pay`, `ps_vacation_payout` |
+| Imputed income | `imp_legal`, `imp_fitness`, `imp_ltd`, `imp_other` |
+| Federal taxes | `ps_oasdi`, `ps_medicare`, `ps_fed_tax`, `ps_fed_tax_addl`, `ps_fed_tax_refunded` |
+| State taxes | `ps_state_tax`, `ps_state_disability`, `ps_state_tax_addl` |
+| Retirement | `ps_401k_pretax`, `ps_401k_aftertax`, `ps_401k_employer` |
+| Pre-tax deductions | `ps_pretax_medical`, `ps_pretax_dental`, `ps_pretax_vision`, `ps_pretax_fsa` |
+| Meta | `ps_is_estimated`, `ps_comment`, `ps_payslip_file_hash`, `employment_entity_id` |
+
 ## Tax Preview View
 
 **Route**: `GET /finance/tax-preview` (`/finance/schedule-c` redirects here)  
@@ -772,7 +836,7 @@ The finance module ships a project-specific **Model Context Protocol (MCP) serve
 
 | Tool | Description |
 |------|-------------|
-| `get_tax_preview` | Full tax preview dataset for a year (W-2s, 1099s, cap gains, Form 1116, Schedule C, action items). Payslip data excluded. |
+| `get_tax_preview` | Full tax preview dataset for a year (W-2s, 1099s, cap gains, Form 1116, Schedule C, action items). For payslip data use `list_payslips`. |
 | `list_tax_documents` | List tax documents filtered by `year`, `form_type`, `is_reviewed` |
 | `get_tax_document` | Single document by ID, including full `parsed_data` |
 | `list_accounts` | Financial accounts grouped into asset / liability / retirement |
@@ -783,6 +847,7 @@ The finance module ships a project-specific **Model Context Protocol (MCP) serve
 | `list_employment_entities` | All employment entities |
 | `list_tags` | Transaction tags with tax characteristics |
 | `get_marriage_status` | Filing status by year |
+| `list_payslips` | Payslips filtered by `year`; returns all fields (earnings, taxes, deductions, 401k) |
 
 ### Available Resources
 
