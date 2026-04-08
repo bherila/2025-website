@@ -11,13 +11,6 @@ return Application::configure(basePath: dirname(__DIR__))
         api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
-        then: function (): void {
-            // MCP transport routes (loaded by laravel/mcp McpServiceProvider as well,
-            // but listed here explicitly so it is clear they are part of the app).
-            if (file_exists(base_path('routes/ai.php'))) {
-                require base_path('routes/ai.php');
-            }
-        },
     )
     ->withCommands([
         __DIR__.'/../app/GenAiProcessor/Console/Commands',
