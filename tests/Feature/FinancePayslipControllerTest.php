@@ -476,6 +476,7 @@ class FinancePayslipControllerTest extends TestCase
 
         $response = $this->actingAs($user)->postJson('/api/payslips/bulk', ['not' => 'an array of payslips']);
         $response->assertStatus(422);
+        $response->assertJsonFragment(['error' => 'Request body must be a JSON array of payslips.']);
     }
 
     public function test_bulk_save_does_not_affect_other_users(): void

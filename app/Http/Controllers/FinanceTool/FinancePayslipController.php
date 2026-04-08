@@ -8,6 +8,7 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 class FinancePayslipController extends Controller
@@ -277,7 +278,7 @@ PROMPT;
 
         $items = $request->json()->all();
 
-        if (! is_array($items)) {
+        if (! is_array($items) || ! array_is_list($items)) {
             return response()->json(['error' => 'Request body must be a JSON array of payslips.'], 422);
         }
 
@@ -336,30 +337,34 @@ PROMPT;
             return response()->json(['errors' => $allErrors], 422);
         }
 
-        $saved = 0;
-        foreach ($validatedItems as [$index, $data]) {
-            if (isset($data['other'])) {
-                $data['other'] = json_encode($data['other']);
-            } else {
-                $data['other'] = null;
-            }
-
-            $payslipId = $data['payslip_id'] ?? null;
-            unset($data['payslip_id']);
-
-            if ($payslipId) {
-                $updated = FinPayslips::where('payslip_id', $payslipId)
-                    ->where('uid', $uid)
-                    ->update($data);
-                if ($updated) {
-                    $saved++;
+        $saved = DB::transaction(function () use ($validatedItems, $uid): int {
+            $count = 0;
+            foreach ($validatedItems as [$index, $data]) {
+                if (isset($data['other'])) {
+                    $data['other'] = json_encode($data['other']);
+                } else {
+                    $data['other'] = null;
                 }
-            } else {
-                $data['uid'] = $uid;
-                FinPayslips::create($data);
-                $saved++;
+
+                $payslipId = $data['payslip_id'] ?? null;
+                unset($data['payslip_id']);
+
+                if ($payslipId) {
+                    $updated = FinPayslips::where('payslip_id', $payslipId)
+                        ->where('uid', $uid)
+                        ->update($data);
+                    if ($updated) {
+                        $count++;
+                    }
+                } else {
+                    $data['uid'] = $uid;
+                    FinPayslips::create($data);
+                    $count++;
+                }
             }
-        }
+
+            return $count;
+        });
 
         return response()->json(['success' => true, 'saved' => $saved]);
     }
