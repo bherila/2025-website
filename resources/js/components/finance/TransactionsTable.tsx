@@ -2,7 +2,7 @@
 import './TransactionsTable.css'
 
 import currency from 'currency.js'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { collectTagsFromRows, type TransactionTag } from '@/components/finance/transactionsTableTags'
 import { useFinanceTags } from '@/components/finance/useFinanceTags'
@@ -24,6 +24,7 @@ import { Table } from '@/components/ui/table'
 import type { AccountLineItem } from '@/data/finance/AccountLineItem'
 import { isDuplicateTransaction } from '@/data/finance/isDuplicateTransaction'
 import { fetchWrapper } from '@/fetchWrapper'
+import { tagBadgeStyle } from '@/lib/finance/tagColorUtils'
 import { cn } from '@/lib/utils'
 
 import TransactionLotsModal from './lots/TransactionLotsModal'
@@ -47,10 +48,10 @@ interface Props {
 
 function PaginationControls({
   currentPage, totalPages, totalRows, pageSize, viewAll,
-  onPageChange, onViewAll
+  onPageChange, onViewAll, onPaginate
 }: {
   currentPage: number; totalPages: number; totalRows: number; pageSize: number; viewAll: boolean;
-  onPageChange: (page: number) => void; onViewAll: () => void
+  onPageChange: (page: number) => void; onViewAll: () => void; onPaginate: () => void
 }) {
   if (totalRows <= pageSize && !viewAll) return null
 
@@ -83,7 +84,7 @@ function PaginationControls({
           </>
         )}
         {viewAll ? (
-          <Button variant="ghost" size="sm" className="h-7 font-mono text-[10px] uppercase tracking-wider" onClick={() => onPageChange(1)}>
+          <Button variant="ghost" size="sm" className="h-7 font-mono text-[10px] uppercase tracking-wider" onClick={onPaginate}>
             Paginate
           </Button>
         ) : (
@@ -121,6 +122,8 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
   const [currentPage, setCurrentPage] = useState(1)
   const [viewAll, setViewAll] = useState(false)
   const [selectedTagId, setSelectedTagId] = useState<string | null>(null)
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<number>>(new Set())
+  const [lastSelectedIndex, setLastSelectedIndex] = useState(-1)
 
   const isDuplicate = (item: AccountLineItem) => {
     if (!duplicates || duplicates.length === 0) return false
@@ -164,33 +167,46 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
     }
   }
 
-  const handleUpdateTransaction = async (_updatedTransaction: Partial<AccountLineItem>): Promise<void> => {
+  const handleUpdateTransaction = useCallback(async (_updatedTransaction: Partial<AccountLineItem>): Promise<void> => {
     if (typeof refreshFn === 'function') {
       await refreshFn()
     }
-  }
+  }, [refreshFn])
 
-  const renderTransactionTags = (row: AccountLineItem) => (
+  const renderTransactionTags = useCallback((row: AccountLineItem) => (
     <div className="flex flex-wrap gap-1">
       {row.tags?.map((tag) => (
         <Badge
           key={tag.tag_id}
           variant="outline"
-          className={cn(
-            "font-mono text-[9px] px-1.5 py-0 rounded-sm cursor-pointer hover:opacity-80 transition-opacity",
-            "border-border bg-surface text-muted-foreground" 
-          )}
-          style={{ borderColor: tag.tag_color, color: tag.tag_color }}
-          onClick={(e) => {
+          className="font-mono text-[9px] px-1.5 py-0 rounded-sm cursor-pointer hover:opacity-80 transition-opacity border-0"
+          style={tagBadgeStyle(tag.tag_color)}
+          onDoubleClick={(e) => {
             e.stopPropagation()
-            setTagFilter(tagFilter === tag.tag_label ? '' : tag.tag_label)
+            // Toggle the tag filter using functional updater to avoid stale closure
+            setTagFilter((prev) => prev === tag.tag_label ? '' : tag.tag_label)
           }}
+          onClick={(e) => e.stopPropagation()}
         >
           {tag.tag_label}
         </Badge>
       ))}
     </div>
-  )
+  ), []) // setTagFilter is a stable useState setter; tag data comes from row prop
+
+  const handleRowClick = (rowId: number, rowIndex: number, e: React.MouseEvent) => {
+    if (e.shiftKey && lastSelectedIndex >= 0) {
+      const start = Math.min(lastSelectedIndex, rowIndex)
+      const end = Math.max(lastSelectedIndex, rowIndex)
+      const rangeIds = new Set(
+        paginatedData.slice(start, end + 1).map((r) => r.t_id).filter((id): id is number => id != null)
+      )
+      setSelectedRowIds(rangeIds)
+    } else {
+      setSelectedRowIds(new Set([rowId]))
+      setLastSelectedIndex(rowIndex)
+    }
+  }
 
   const handleSort = (field: keyof AccountLineItem) => {
     if (field === sortField) {
@@ -303,22 +319,61 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
           <div className="font-mono text-xl font-semibold text-destructive">{totalNegatives.format()}</div>
         </div>
         <div className="bg-card border border-border p-4 rounded-sm shadow-sm">
-          <div className="font-mono text-[10px] tracking-wide uppercase text-muted-foreground mb-1.5">Rows in View</div>
+          <div className="font-mono text-[10px] tracking-wide uppercase text-muted-foreground mb-1.5">Rows Matching Filters</div>
           <div className="font-mono text-xl font-semibold text-foreground">{totalRows.toLocaleString()}</div>
         </div>
       </div>
 
       <PaginationControls
-        currentPage={currentPage}
+        currentPage={safePage}
         totalPages={totalPages}
         totalRows={totalRows}
         pageSize={pageSize}
         viewAll={viewAll}
-        onPageChange={(page) => setCurrentPage(page)}
+        onPageChange={(page) => { setViewAll(false); setCurrentPage(page) }}
         onViewAll={() => setViewAll(true)}
+        onPaginate={() => { setViewAll(false); setCurrentPage(1) }}
       />
 
       <div className="relative w-full overflow-x-auto border border-border rounded-sm bg-card">
+        {enableTagging && (
+          <div className="border-b border-border bg-card px-3 py-2">
+            {sortedData.length > 1000 ? (
+              <Alert variant="destructive" className="bg-destructive/10 border-destructive/20 text-destructive">
+                <AlertDescription className="font-mono text-xs">
+                  Too many items to tag ({sortedData.length.toLocaleString()} transactions). Refine view to &lt; 1,000 items.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-xs font-mono tracking-wide uppercase text-muted-foreground">
+                  Action on {sortedData.length} row{sortedData.length !== 1 ? 's' : ''}:
+                </span>
+                {isLoadingTags ? (
+                  <Spinner size="small" />
+                ) : (
+                  <>
+                    <TagSelect value={selectedTagId} onChange={setSelectedTagId} tags={availableTags} placeholder="Select a tag…" className="w-48 text-xs font-mono" />
+                    <Button size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider" disabled={sortedData.length === 0 || !selectedTagId} onClick={() => selectedTagId && handleApplyTag(Number(selectedTagId))}>
+                      Add
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider" disabled={sortedData.length === 0 || !selectedTagId} onClick={() => selectedTagId && handleRemoveAllTags(Number(selectedTagId))}>
+                      Remove
+                    </Button>
+                    <Button variant="destructive" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider ml-2" disabled={sortedData.length === 0} onClick={() => setRemoveTagsConfirmOpen(true)}>
+                      Clear All
+                    </Button>
+                    <a href="/finance/tags" className="ml-auto">
+                      <Button variant="secondary" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider text-accent">
+                        Manage Tags
+                      </Button>
+                    </a>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         <Table className="w-full text-sm">
           <thead className="bg-muted/30 border-b border-border">
             <tr>
@@ -436,6 +491,15 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
               {!isCashBalanceColumnEmpty && (
                 <th className={cn(thClass, "text-right whitespace-nowrap")} onClick={() => handleSort('t_account_balance')}>
                   <div>Balance {sortField === 't_account_balance' && (sortDirection === 'asc' ? '↑' : '↓')}</div>
+                  <div className="relative mt-1">
+                    <input
+                      className={inputClass}
+                      placeholder="Filter..."
+                      value={cashBalanceFilter}
+                      onChange={(e) => setCashBalanceFilter(e.target.value)}
+                      onClick={e => e.stopPropagation()}
+                    />
+                  </div>
                 </th>
               )}
               
@@ -448,186 +512,199 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
           </thead>
           
           <tbody className="[&_tr:last-child]:border-0 hover:[&>tr]:bg-muted/20">
-            {paginatedData.map((row, i) => (
-              <tr 
-                key={row.t_id + ':' + i} 
-                className={cn("transition-colors", isDuplicate(row) && "bg-destructive/10 hover:bg-destructive/20")}
-                data-transaction-id={row.t_id}
-              >
-                <td className={cn(tdClass, "font-mono text-muted-foreground whitespace-nowrap cursor-pointer hover:text-foreground")} onClick={() => setDateFilter(dateFilter === row.t_date ? '' : (row.t_date || ''))}>
-                  {row.t_date}
-                </td>
-                
-                {!isPostDateColumnEmpty && (
-                  <td className={cn(tdClass, "font-mono text-muted-foreground whitespace-nowrap cursor-pointer hover:text-foreground")} onClick={() => setPostDateFilter(postDateFilter === row.t_date_posted ? '' : (row.t_date_posted || ''))}>
-                    {row.t_date_posted}
-                  </td>
-                )}
-                
-                {!isTypeColumnEmpty && (
-                  <td className={cn(tdClass, "cursor-pointer hover:text-primary")} onClick={() => setTypeFilter(typeFilter === row.t_type ? '' : (row.t_type || ''))}>
-                    {row.t_type}
-                  </td>
-                )}
-                
-                <td className={cn(tdClass, "cursor-pointer hover:text-primary font-medium")} onClick={() => setDescriptionFilter(descriptionFilter === row.t_description ? '' : (row.t_description || ''))}>
-                  {row.t_description}
-                </td>
-                
-                {!isTagsColumnEmpty && <td className={tdClass}>{renderTransactionTags(row)}</td>}
-                
-                {!isSymbolColumnEmpty && (
-                  <td className={cn(tdClass, "font-mono cursor-pointer hover:text-primary")} onClick={() => setSymbolFilter(symbolFilter === row.t_symbol ? '' : (row.t_symbol || ''))}>
-                    {row.t_symbol}
-                  </td>
-                )}
-                
-                {!isQtyColumnEmpty && (
-                  <td className={cn(tdClass, "font-mono tabular-nums text-right cursor-pointer hover:text-primary")} onClick={() => setQtyFilter(qtyFilter === (row.t_qty?.toString() || '0') ? '' : (row.t_qty?.toString() || '0'))}>
-                    {row.t_qty != null ? row.t_qty.toLocaleString() : ''}
-                  </td>
-                )}
-                
-                {!isPriceColumnEmpty && <td className={cn(tdClass, "font-mono tabular-nums text-right")}>{row.t_price != null && Number(row.t_price) !== 0 ? row.t_price : ''}</td>}
-                {!isCommissionColumnEmpty && <td className={cn(tdClass, "font-mono tabular-nums text-right")}>{row.t_commission != null && Number(row.t_commission) !== 0 ? row.t_commission : ''}</td>}
-                {!isFeeColumnEmpty && <td className={cn(tdClass, "font-mono tabular-nums text-right")}>{row.t_fee != null && Number(row.t_fee) !== 0 ? row.t_fee : ''}</td>}
-                
-                <td 
+            {paginatedData.map((row, i) => {
+              // Rows without a t_id (e.g., unsaved preview rows) are never selectable
+              const rowId = row.t_id ?? -i
+              const isRowSelected = rowId >= 0 && selectedRowIds.has(rowId)
+              return (
+                <tr
+                  key={row.t_id != null ? row.t_id : `row-${i}`}
                   className={cn(
-                    tdClass, 
-                    "font-mono tabular-nums text-right font-semibold cursor-pointer hover:opacity-80",
-                    Number(row.t_amt) >= 0 ? "text-success" : "text-destructive"
+                    "transition-colors cursor-pointer",
+                    isDuplicate(row) && "bg-destructive/10 hover:bg-destructive/20",
+                    isRowSelected && !isDuplicate(row) && "bg-primary/10 hover:bg-primary/20",
                   )}
-                  onClick={() => setAmountFilter(amountFilter === (row.t_amt?.toString() || '0') ? '' : (row.t_amt?.toString() || '0'))}
+                  data-transaction-id={row.t_id}
+                  onClick={(e) => {
+                    const target = e.target as HTMLElement
+                    if (target.closest('button') || target.closest('a')) return
+                    if (row.t_id != null) handleRowClick(row.t_id, i, e)
+                  }}
                 >
-                  {row.t_amt || '0'}
-                </td>
-                
-                {!isCategoryColumnEmpty && (
-                  <td className={cn(tdClass, "cursor-pointer hover:text-primary text-xs")} onClick={() => setCategoryFilter(categoryFilter === (row.t_schc_category || '-') ? '' : (row.t_schc_category || '-'))}>
-                    {row.t_schc_category ?? '-'}
+                  <td className={cn(tdClass, "font-mono text-muted-foreground whitespace-nowrap hover:text-foreground")} onDoubleClick={() => setDateFilter(dateFilter === row.t_date ? '' : (row.t_date || ''))}>
+                    {row.t_date}
                   </td>
-                )}
-                
-                {!isCusipColumnEmpty && (
-                  <td className={cn(tdClass, "font-mono text-xs cursor-pointer hover:text-primary")} onClick={() => setCusipFilter(cusipFilter === row.t_cusip ? '' : (row.t_cusip || ''))}>
-                    {row.t_cusip}
+
+                  {!isPostDateColumnEmpty && (
+                    <td className={cn(tdClass, "font-mono text-muted-foreground whitespace-nowrap hover:text-foreground")} onDoubleClick={() => setPostDateFilter(postDateFilter === row.t_date_posted ? '' : (row.t_date_posted || ''))}>
+                      {row.t_date_posted}
+                    </td>
+                  )}
+
+                  {!isTypeColumnEmpty && (
+                    <td className={cn(tdClass, "hover:text-primary")} onDoubleClick={() => setTypeFilter(typeFilter === row.t_type ? '' : (row.t_type || ''))}>
+                      {row.t_type}
+                    </td>
+                  )}
+
+                  <td className={cn(tdClass, "hover:text-primary font-medium")} onDoubleClick={() => setDescriptionFilter(descriptionFilter === row.t_description ? '' : (row.t_description || ''))}>
+                    {row.t_description}
                   </td>
-                )}
-                
-                {!isOptionExpiryColumnEmpty && (
-                  <td className={cn(tdClass, "font-mono text-xs cursor-pointer hover:text-primary")} onClick={() => setOptExpirationFilter(optExpirationFilter === row.opt_expiration?.slice(0, 10) ? '' : (row.opt_expiration?.slice(0, 10) || ''))}>
-                    {row.opt_expiration?.slice(0, 10) ?? ''}
-                  </td>
-                )}
-                
-                {!isOptionTypeColumnEmpty && (
-                  <td className={cn(tdClass, "text-xs cursor-pointer hover:text-primary")} onClick={() => setOptTypeFilter(optTypeFilter === row.opt_type ? '' : (row.opt_type || ''))}>
-                    {row.opt_type}
-                  </td>
-                )}
-                
-                {!isStrikeColumnEmpty && <td className={cn(tdClass, "font-mono text-xs")}>{row.opt_strike != null ? row.opt_strike : ''}</td>}
-                
-                {!isMemoColumnEmpty && (
-                  <td className={cn(tdClass, "text-xs text-muted-foreground max-w-xs truncate text-ellipsis cursor-pointer transition-all")} onClick={() => setMemoFilter(memoFilter === row.t_comment ? '' : (row.t_comment || ''))}>
-                    {row.t_comment}
-                  </td>
-                )}
-                
-                {!isCashBalanceColumnEmpty && (
-                  <td className={cn(tdClass, "font-mono tabular-nums text-right whitespace-nowrap text-muted-foreground")}>
-                    {row.t_account_balance != null ? currency(row.t_account_balance).format() : ''}
-                  </td>
-                )}
-                
-                {!isClientExpenseColumnEmpty && (
-                  <td className={cn(tdClass, "text-center")}>
-                    {row.client_expense?.client_company && (
-                      <a href={`/client/portal/${row.client_expense.client_company.slug}`} className="text-primary hover:underline text-[10px] uppercase font-semibold">
-                        {row.client_expense.client_company.company_name}
-                      </a>
+
+                  {!isTagsColumnEmpty && <td className={tdClass}>{renderTransactionTags(row)}</td>}
+
+                  {!isSymbolColumnEmpty && (
+                    <td className={cn(tdClass, "font-mono hover:text-primary")} onDoubleClick={() => setSymbolFilter(symbolFilter === row.t_symbol ? '' : (row.t_symbol || ''))}>
+                      {row.t_symbol}
+                    </td>
+                  )}
+
+                  {!isQtyColumnEmpty && (
+                    <td className={cn(tdClass, "font-mono tabular-nums text-right hover:text-primary")} onDoubleClick={() => setQtyFilter(qtyFilter === (row.t_qty?.toString() || '0') ? '' : (row.t_qty?.toString() || '0'))}>
+                      {row.t_qty != null ? row.t_qty.toLocaleString() : ''}
+                    </td>
+                  )}
+
+                  {!isPriceColumnEmpty && <td className={cn(tdClass, "font-mono tabular-nums text-right")}>{row.t_price != null && Number(row.t_price) !== 0 ? row.t_price : ''}</td>}
+                  {!isCommissionColumnEmpty && <td className={cn(tdClass, "font-mono tabular-nums text-right")}>{row.t_commission != null && Number(row.t_commission) !== 0 ? row.t_commission : ''}</td>}
+                  {!isFeeColumnEmpty && <td className={cn(tdClass, "font-mono tabular-nums text-right")}>{row.t_fee != null && Number(row.t_fee) !== 0 ? row.t_fee : ''}</td>}
+
+                  <td
+                    className={cn(
+                      tdClass,
+                      "font-mono tabular-nums text-right font-semibold hover:opacity-80",
+                      Number(row.t_amt) >= 0 ? "text-success" : "text-destructive"
                     )}
+                    onDoubleClick={() => setAmountFilter(amountFilter === (row.t_amt?.toString() || '0') ? '' : (row.t_amt?.toString() || '0'))}
+                  >
+                    {row.t_amt || '0'}
                   </td>
-                )}
-                
-                {enableLinking && (
+
+                  {!isCategoryColumnEmpty && (
+                    <td className={cn(tdClass, "hover:text-primary text-xs")} onDoubleClick={() => setCategoryFilter(categoryFilter === (row.t_schc_category || '-') ? '' : (row.t_schc_category || '-'))}>
+                      {row.t_schc_category ?? '-'}
+                    </td>
+                  )}
+
+                  {!isCusipColumnEmpty && (
+                    <td className={cn(tdClass, "font-mono text-xs hover:text-primary")} onDoubleClick={() => setCusipFilter(cusipFilter === row.t_cusip ? '' : (row.t_cusip || ''))}>
+                      {row.t_cusip}
+                    </td>
+                  )}
+
+                  {!isOptionExpiryColumnEmpty && (
+                    <td className={cn(tdClass, "font-mono text-xs hover:text-primary")} onDoubleClick={() => setOptExpirationFilter(optExpirationFilter === row.opt_expiration?.slice(0, 10) ? '' : (row.opt_expiration?.slice(0, 10) || ''))}>
+                      {row.opt_expiration?.slice(0, 10) ?? ''}
+                    </td>
+                  )}
+
+                  {!isOptionTypeColumnEmpty && (
+                    <td className={cn(tdClass, "text-xs hover:text-primary")} onDoubleClick={() => setOptTypeFilter(optTypeFilter === row.opt_type ? '' : (row.opt_type || ''))}>
+                      {row.opt_type}
+                    </td>
+                  )}
+
+                  {!isStrikeColumnEmpty && <td className={cn(tdClass, "font-mono text-xs")}>{row.opt_strike != null ? row.opt_strike : ''}</td>}
+
+                  {!isMemoColumnEmpty && (
+                    <td className={cn(tdClass, "text-xs text-muted-foreground max-w-xs truncate text-ellipsis transition-all")} onDoubleClick={() => setMemoFilter(memoFilter === row.t_comment ? '' : (row.t_comment || ''))}>
+                      {row.t_comment}
+                    </td>
+                  )}
+
+                  {!isCashBalanceColumnEmpty && (
+                    <td className={cn(tdClass, "font-mono tabular-nums text-right whitespace-nowrap text-muted-foreground")}>
+                      {row.t_account_balance != null ? currency(row.t_account_balance).format() : ''}
+                    </td>
+                  )}
+
+                  {!isClientExpenseColumnEmpty && (
+                    <td className={cn(tdClass, "text-center")}>
+                      {row.client_expense?.client_company && (
+                        <a href={`/client/portal/${row.client_expense.client_company.slug}`} className="text-primary hover:underline text-[10px] uppercase font-semibold">
+                          {row.client_expense.client_company.company_name}
+                        </a>
+                      )}
+                    </td>
+                  )}
+
+                  {enableLinking && (
+                    <td className={cn(tdClass, "text-center")}>
+                      <Button variant={hasLinks(row) ? "default" : "outline"} size="sm" className={cn("h-6 px-2 text-[10px]", hasLinks(row) && "bg-success hover:bg-success/80 text-success-foreground border-success")} onClick={(e) => { e.stopPropagation(); setLinkTransaction(row) }}>
+                        🔗
+                      </Button>
+                    </td>
+                  )}
+
+                  {accountId && (
+                    <td className={cn(tdClass, "text-center")}>
+                      {row.t_symbol && (row.t_type?.toUpperCase() === 'SELL' || row.t_type?.toUpperCase() === 'BUY' || (row.t_qty && Number(row.t_qty) !== 0)) && (
+                        <Button variant="outline" size="sm" className="h-6 px-2 text-[10px]" onClick={(e) => { e.stopPropagation(); setLotsTransaction(row) }}>
+                          📦
+                        </Button>
+                      )}
+                    </td>
+                  )}
+
                   <td className={cn(tdClass, "text-center")}>
-                    <Button variant={hasLinks(row) ? "default" : "outline"} size="sm" className={cn("h-6 px-2 text-[10px]", hasLinks(row) && "bg-success hover:bg-success/80 text-success-foreground border-success")} onClick={() => setLinkTransaction(row)}>
-                      🔗
+                    <Button variant="secondary" size="sm" className="h-6 px-2 text-[10px] font-mono uppercase tracking-wider" onClick={(e) => { e.stopPropagation(); setSelectedTransaction(row) }}>
+                      Details
                     </Button>
                   </td>
-                )}
-                
-                {accountId && (
-                  <td className={cn(tdClass, "text-center")}>
-                    {row.t_symbol && (row.t_type?.toUpperCase() === 'SELL' || row.t_type?.toUpperCase() === 'BUY' || (row.t_qty && Number(row.t_qty) !== 0)) && (
-                      <Button variant="outline" size="sm" className="h-6 px-2 text-[10px]" onClick={() => setLotsTransaction(row)}>
-                        📦
-                      </Button>
-                    )}
-                  </td>
-                )}
-                
-                <td className={cn(tdClass, "text-center")}>
-                  <Button variant="secondary" size="sm" className="h-6 px-2 text-[10px] font-mono uppercase tracking-wider" onClick={() => setSelectedTransaction(row)}>
-                    Details
-                  </Button>
-                </td>
-                
-                {onDeleteTransaction && (
-                  <td className={cn(tdClass, "text-center")}>
-                    <button onClick={() => setDeleteConfirmTransaction(row)} className="text-muted-foreground hover:text-destructive transition-colors">
-                      🗑️
-                    </button>
-                  </td>
-                )}
-              </tr>
-            ))}
+
+                  {onDeleteTransaction && (
+                    <td className={cn(tdClass, "text-center")}>
+                      <button onClick={(e) => { e.stopPropagation(); setDeleteConfirmTransaction(row) }} className="text-muted-foreground hover:text-destructive transition-colors">
+                        🗑️
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              )
+            })}
           </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-border bg-muted/30 font-semibold text-sm">
+              <td className="py-2 px-2 font-mono text-muted-foreground text-xs uppercase tracking-wide" colSpan={
+                1 +
+                (isPostDateColumnEmpty ? 0 : 1) +
+                (isTypeColumnEmpty ? 0 : 1) +
+                1 + // description
+                (isTagsColumnEmpty ? 0 : 1) +
+                (isSymbolColumnEmpty ? 0 : 1) +
+                (isQtyColumnEmpty ? 0 : 1) +
+                (isPriceColumnEmpty ? 0 : 1) +
+                (isCommissionColumnEmpty ? 0 : 1) +
+                (isFeeColumnEmpty ? 0 : 1)
+              }>
+                {totalRows.toLocaleString()} row{totalRows !== 1 ? 's' : ''}
+              </td>
+              <td className="py-2 px-2 font-mono tabular-nums text-right">
+                <div className={cn("text-sm", totalAmount.value >= 0 ? "text-success" : "text-destructive")}>
+                  {totalAmount.format()} net
+                </div>
+                <div className="text-[10px] text-muted-foreground">
+                  <span className="text-success">{totalPositives.format()}</span>
+                  {' / '}
+                  <span className="text-destructive">{totalNegatives.format()}</span>
+                </div>
+              </td>
+              {!isCategoryColumnEmpty && <td />}
+              {!isCusipColumnEmpty && <td />}
+              {!isOptionExpiryColumnEmpty && <td />}
+              {!isOptionTypeColumnEmpty && <td />}
+              {!isStrikeColumnEmpty && <td />}
+              {!isMemoColumnEmpty && <td />}
+              {!isCashBalanceColumnEmpty && <td />}
+              {!isClientExpenseColumnEmpty && <td />}
+              {enableLinking && <td />}
+              {accountId && <td />}
+              <td />
+              {onDeleteTransaction && <td />}
+            </tr>
+          </tfoot>
         </Table>
       </div>
-
-      {enableTagging && (
-        <div className="mt-6 mb-8">
-          {sortedData.length > 1000 ? (
-            <Alert variant="destructive" className="bg-destructive/10 border-destructive/20 text-destructive">
-              <AlertDescription className="font-mono text-xs">
-                Too many items to tag ({sortedData.length.toLocaleString()} transactions). Refine view to &lt; 1,000 items.
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <div className="p-4 border border-border bg-card rounded-sm flex flex-wrap items-center gap-3 shadow-sm">
-              <span className="text-xs font-mono tracking-wide uppercase text-muted-foreground">
-                Action on {sortedData.length} row{sortedData.length !== 1 ? 's' : ''}:
-              </span>
-              {isLoadingTags ? (
-                <Spinner size="small" />
-              ) : (
-                <>
-                  <TagSelect value={selectedTagId} onChange={setSelectedTagId} tags={availableTags} placeholder="Select a tag…" className="w-48 text-xs font-mono" />
-                  <Button size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider" disabled={sortedData.length === 0 || !selectedTagId} onClick={() => selectedTagId && handleApplyTag(Number(selectedTagId))}>
-                    Add
-                  </Button>
-                  <Button variant="outline" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider" disabled={sortedData.length === 0 || !selectedTagId} onClick={() => selectedTagId && handleRemoveAllTags(Number(selectedTagId))}>
-                    Remove
-                  </Button>
-                  <Button variant="destructive" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider ml-2" disabled={sortedData.length === 0} onClick={() => setRemoveTagsConfirmOpen(true)}>
-                    Clear All
-                  </Button>
-                  <a href="/finance/tags" className="ml-auto">
-                    <Button variant="secondary" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider text-accent">
-                      Manage Tags
-                    </Button>
-                  </a>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Dialogs and Modals remain identical structurally */}
       <AlertDialog open={removeTagsConfirmOpen} onOpenChange={setRemoveTagsConfirmOpen}>
         <AlertDialogContent className="border-border bg-card">
           <AlertDialogHeader>
