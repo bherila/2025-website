@@ -372,6 +372,19 @@ The Duplicates tab (`/finance/{id}/duplicates`) provides:
 - **Mark as Not Duplicate**: When all items in a group are unchecked and submitted, both transactions are marked as "not duplicate" to prevent future flagging
 - Bulk delete selected duplicates
 
+## Row Selection
+
+TransactionsTable supports row selection for batch operations. Selection state is managed by the `useRowSelection` hook (`resources/js/components/finance/useRowSelection.ts`).
+
+| Interaction | Behavior |
+|---|---|
+| **Click** | Select row; toggle off if already sole selection |
+| **Ctrl/Cmd+Click** | Toggle individual row in/out of multi-selection |
+| **Shift+Click** | Range select from anchor to clicked row |
+| **Shift+Ctrl/Cmd+Click** | Add range to existing selection |
+
+Selected rows are highlighted with `bg-primary/15`. The tagging toolbar shows the count of selected rows and a "✕ Clear" button when a selection is active.
+
 ## Transaction Tagging
 
 Tags can be applied to transactions for categorization:
@@ -392,19 +405,6 @@ Tag fetch endpoints return a consistent JSON envelope:
 Both `TransactionsTable` and `ManageTagsPage` use the shared hook `resources/js/components/finance/useFinanceTags.ts` to consume this contract.
 
 **Important**: The `fallbackTags` option uses a `useRef` internally so that passing a default `[]` literal does **not** cause an infinite re-render loop. Do not include `fallbackTags` in `useCallback` dependencies.
-
-### Row Selection
-
-TransactionsTable supports row selection for batch operations. Selection state is managed by the `useRowSelection` hook (`resources/js/components/finance/useRowSelection.ts`).
-
-| Interaction | Behavior |
-|---|---|
-| **Click** | Select row; toggle off if already sole selection |
-| **Ctrl/Cmd+Click** | Toggle individual row in/out of multi-selection |
-| **Shift+Click** | Range select from anchor to clicked row |
-| **Shift+Ctrl/Cmd+Click** | Add range to existing selection |
-
-Selected rows are highlighted with `bg-primary/15`. The tagging toolbar shows the count of selected rows and a "✕ Clear" button when a selection is active.
 
 ### Tagging Limit
 
