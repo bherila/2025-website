@@ -151,12 +151,17 @@ Tags can be applied and removed in multiple places:
 
 ### TransactionsTable (single-account or all-accounts view)
 
-When `enableTagging` is `true`:
+Tagging is implemented in the extracted `TransactionsTaggingToolbar` component. When `enableTagging` is `true`:
+
 1. Use the filter inputs to narrow visible transactions.
-2. Click **Apply Tag** → choose a tag from the available tag buttons.
-3. The tag is applied to all currently-filtered transactions (limit: 1,000 per batch).
-4. Click **Remove all tags** to soft-delete all tags from the currently-filtered transactions (a confirmation dialog is shown first).
-5. When more than 1,000 transactions match the filter, the apply and remove buttons are disabled and a warning is shown.
+2. Optionally **select specific rows** (click, Shift+click, Ctrl/Cmd+click) to limit the scope of tag operations.
+3. Choose a tag from the **TagSelect** dropdown, then click **Add** to apply the tag, or **Remove** to remove it.
+4. Tag operations are **selection-aware**:
+   - When rows are selected → operates on the selected rows only (toolbar shows "Action on N selected rows")
+   - When no rows are selected → operates on all filtered rows (toolbar shows "Action on N rows")
+5. Click **Clear All** to remove all tags from the effective transactions (a confirmation dialog is shown first).
+6. When more than 1,000 transactions are in scope, the buttons are disabled and a warning is shown.
+7. A **✕ Clear** button appears in the toolbar when rows are selected, allowing quick deselection.
 
 ### Transaction Details Modal
 
