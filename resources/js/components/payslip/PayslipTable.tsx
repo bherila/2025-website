@@ -37,7 +37,7 @@ function fmtShort(val: number | null | undefined): string | null {
 // ─── Sub-text helper ─────────────────────────────────────────────────────────
 
 function SubText({ children }: { children: ReactNode }) {
-  return <span className="block text-[10px] text-muted-foreground mt-0.5 leading-tight">{children}</span>
+  return <span className="block text-[10px] text-gray-400 mt-0.5 leading-tight">{children}</span>
 }
 
 // ─── Tag badges ──────────────────────────────────────────────────────────────
@@ -45,10 +45,10 @@ function SubText({ children }: { children: ReactNode }) {
 type TagVariant = 'rsu' | 'bonus' | 'earn' | 'deduct' | 'estimated'
 
 const TAG_CLASSES: Record<TagVariant, string> = {
-  rsu: 'bg-blue-950/60 text-blue-300 border border-blue-800/50',
-  bonus: 'bg-yellow-950/60 text-warning border border-yellow-800/50 dark:border-yellow-700/40',
+  rsu: 'bg-blue-950/60 text-blue-200 border border-blue-800/50',
+  bonus: 'bg-yellow-950/60 text-yellow-300 border border-yellow-800/50 dark:border-yellow-700/40',
   earn: 'bg-success/10 text-success border border-success/20',
-  deduct: 'bg-muted text-muted-foreground border border-border',
+  deduct: 'bg-gray-800/60 text-gray-300 border border-gray-700/50',
   estimated: 'bg-warning/10 text-warning border border-warning/20',
 }
 
@@ -232,7 +232,7 @@ export function PayslipTable({ data, onRowEdited }: Props) {
             return (
               <TableRow
                 key={rid}
-                className={`border-border transition-colors hover:bg-muted/40 ${isEstimated ? 'opacity-70' : ''}`}
+                className={`border-border transition-colors hover:bg-muted/40 ${isEstimated ? 'bg-yellow-950/20' : ''}`}
               >
                 {/* Pay Date / Period */}
                 <TableCell className="py-2 px-3 align-top whitespace-nowrap">
@@ -254,9 +254,9 @@ export function PayslipTable({ data, onRowEdited }: Props) {
                   {isRsu && <Tag variant="rsu">RSU VEST</Tag>}
                   {isBonus && <Tag variant="bonus">ANNUAL BONUS</Tag>}
                   {row.ps_comment ? (
-                    <span className="text-muted-foreground italic">{row.ps_comment}</span>
+                    <span className="text-gray-400 italic">{row.ps_comment}</span>
                   ) : !isRsu && !isBonus ? (
-                    <span className="text-muted-foreground">—</span>
+                    <span className="text-gray-500">—</span>
                   ) : null}
                 </TableCell>
 
@@ -306,7 +306,7 @@ export function PayslipTable({ data, onRowEdited }: Props) {
                       <span className="text-destructive">{ficaTotal.format()}</span>
                     </WithYTD>
                   ) : (
-                    <span className="text-muted-foreground">—</span>
+                    <span className="text-gray-500">—</span>
                   )}
                   {ficaTotal.value > 0 && (
                     <SubText>
@@ -318,9 +318,9 @@ export function PayslipTable({ data, onRowEdited }: Props) {
                 {/* Pre-Tax Deductions */}
                 <TableCell className="py-2 px-3 text-right align-top">
                   {pretaxTotal.value > 0 ? (
-                    <span className="text-muted-foreground">{deductTags}</span>
+                    <span className="text-gray-300">{deductTags}</span>
                   ) : (
-                    <span className="text-muted-foreground">—</span>
+                    <span className="text-gray-500">—</span>
                   )}
                   {benefitsTotal.value > 0 && (
                     <SubText>M/D/V/FSA {fmtShort(benefitsTotal.value)}</SubText>

@@ -26,6 +26,7 @@ Route::get('/login', function () {
 
 Route::post('/login', [LoginController::class, 'login']);
 Route::post('/login/dev', [LoginController::class, 'devLogin'])->name('login.dev');
+Route::post('/login/dev-by-id', [LoginController::class, 'devLoginById'])->name('login.dev.by-id');
 
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index']);

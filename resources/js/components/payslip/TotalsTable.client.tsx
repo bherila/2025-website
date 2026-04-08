@@ -263,10 +263,10 @@ export default function TotalsTable({
             </TableRow>
 
             {/* Total Tax — subtotal row */}
-            <TableRow className="border-t-2 border-border bg-success/5 hover:bg-success/10">
-              <Td className="font-semibold text-success">Total Tax</Td>
+            <TableRow className="border-t-2 border-border bg-primary/5 hover:bg-primary/10">
+              <Td className="font-semibold text-primary">Total Tax</Td>
               {allTotals.map(({ label, totals }) => (
-                <Td key={label} right className="font-semibold text-success">
+                <Td key={label} right className="font-semibold text-primary">
                   {fmtCurrency(totals.totalTax)}
                 </Td>
               ))}

@@ -1,5 +1,5 @@
 'use client'
-import { Code, FileSpreadsheet, PlusCircle } from 'lucide-react'
+import { Code, PlusCircle } from 'lucide-react'
 import React, { useEffect, useState } from 'react'
 
 import Container from '@/components/container'
@@ -102,14 +102,6 @@ export default function PayslipClient({
             </Button>
             <Button variant="outline" size="sm" onClick={() => setShowBulkJsonModal(true)} className="gap-1.5">
               <Code className="h-3.5 w-3.5" /> Edit as JSON
-            </Button>
-            <Button asChild variant="outline" size="sm">
-              <a href="/payslip/import/json">Import JSON</a>
-            </Button>
-            <Button asChild variant="outline" size="sm">
-              <a href="/payslip/import/tsv">
-                <FileSpreadsheet className="h-3.5 w-3.5" /> Import TSV
-              </a>
             </Button>
             <PayslipImportModal onImportSuccess={refreshPayslips} />
           </div>

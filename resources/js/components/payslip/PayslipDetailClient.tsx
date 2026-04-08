@@ -198,7 +198,7 @@ export default function PayrollForm({ initialPayslip }: PayslipDetailClientProps
         }
       />
 
-      <div className="container mt-6 pb-12 max-w-4xl">
+      <div className="container mx-auto mt-6 pb-12 max-w-4xl">
         {/* ── Page title ──────────────────────────────────────────────────── */}
         <div className="mb-6 pb-4 border-b border-border">
           <h1 className="font-mono text-sm font-semibold uppercase tracking-widest text-primary">

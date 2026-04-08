@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\LoginAuditLog;
 use App\Models\User;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -86,6 +87,38 @@ class LoginController extends Controller
         // Update last login date
         $user->update(['last_login_date' => now()]);
         $this->logAudit($request, $user, $email, true, 'dev');
+
+        return redirect()->intended('/');
+    }
+
+    /**
+     * Development-only login by user ID.
+     * Only works on localhost.
+     */
+    public function devLoginById(Request $request): RedirectResponse
+    {
+        if (! $this->isLocalhost()) {
+            abort(403, 'Dev login is only available on localhost');
+        }
+
+        $request->validate([
+            'user_id' => 'required|integer',
+        ]);
+
+        $user = User::find($request->input('user_id'));
+
+        if (! $user) {
+            return back()->withErrors(['email' => 'User not found']);
+        }
+
+        if (! $user->canLogin()) {
+            return back()->withErrors(['email' => 'Your account is disabled. Please contact an administrator.']);
+        }
+
+        Auth::login($user);
+        $request->session()->regenerate();
+        $user->update(['last_login_date' => now()]);
+        $this->logAudit($request, $user, $user->email, true, 'dev');
 
         return redirect()->intended('/');
     }
