@@ -52,7 +52,8 @@ class ListTransactions extends Tool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'account_id' => $schema->integer()->description('Account ID; omit or pass null for all accounts')->nullable(),            'year' => $schema->integer()->description('Filter to a specific tax year')->nullable(),
+            'account_id' => $schema->integer()->description('Account ID; omit or pass null for all accounts')->nullable(),
+            'year' => $schema->integer()->description('Filter to a specific tax year')->nullable(),
             'tag' => $schema->string()->description('Filter by tag label')->nullable(),
             'limit' => $schema->integer()->description('Maximum number of results (default 100, max 500)')->nullable(),
         ];

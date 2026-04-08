@@ -99,12 +99,13 @@ class UserApiController extends Controller
     /**
      * Generate (or regenerate) the MCP API key for the authenticated user.
      * Returns the new key once — it is not stored in the session or retrievable again.
+     * Only a SHA-256 hash of the key is persisted in the database.
      */
     public function generateMcpApiKey(): JsonResponse
     {
         $user = Auth::user();
-        $newKey = bin2hex(random_bytes(32)); // 64-character hex string
-        $user->update(['mcp_api_key' => $newKey]);
+        $newKey = bin2hex(random_bytes(32)); // 64-character hex string (raw token)
+        $user->update(['mcp_api_key' => hash('sha256', $newKey)]);
         Cache::forget("user_data_{$user->id}");
 
         return response()->json([

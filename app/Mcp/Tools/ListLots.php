@@ -19,7 +19,7 @@ class ListLots extends Tool
         $uid = Auth::id();
         $accountId = $request->input('account_id');
 
-        if ($accountId) {
+        if ($accountId !== null) {
             $accountIds = FinAccounts::where('acct_owner', $uid)
                 ->where('acct_id', (int) $accountId)
                 ->pluck('acct_id');

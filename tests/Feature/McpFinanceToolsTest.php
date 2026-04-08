@@ -46,34 +46,38 @@ class McpFinanceToolsTest extends TestCase
         $response = $this->actingAs($user)->postJson('/api/user/generate-mcp-api-key');
         $response->assertStatus(200);
 
-        $key = $response->json('mcp_api_key');
+        $rawKey = $response->json('mcp_api_key');
         $user->refresh();
 
-        $this->assertSame($key, $user->getAttributes()['mcp_api_key']);
+        // The database must store the SHA-256 hash, not the raw key.
+        $this->assertSame(hash('sha256', $rawKey), $user->getAttributes()['mcp_api_key']);
     }
 
     public function test_regenerate_mcp_api_key_invalidates_old_key(): void
     {
         $user = $this->createUser();
 
-        $first = $this->actingAs($user)->postJson('/api/user/generate-mcp-api-key')->json('mcp_api_key');
-        $second = $this->actingAs($user)->postJson('/api/user/generate-mcp-api-key')->json('mcp_api_key');
+        $firstRaw = $this->actingAs($user)->postJson('/api/user/generate-mcp-api-key')->json('mcp_api_key');
+        $secondRaw = $this->actingAs($user)->postJson('/api/user/generate-mcp-api-key')->json('mcp_api_key');
 
-        $this->assertNotSame($first, $second);
+        // The raw tokens returned must be different.
+        $this->assertNotSame($firstRaw, $secondRaw);
 
+        // The database should contain only the hash of the second key.
         $user->refresh();
-        $this->assertSame($second, $user->getAttributes()['mcp_api_key']);
+        $this->assertSame(hash('sha256', $secondRaw), $user->getAttributes()['mcp_api_key']);
     }
 
     public function test_mcp_api_key_is_hidden_from_user_serialization(): void
     {
-        $user = $this->createUser(['mcp_api_key' => 'secret-token-value']);
+        $rawToken = 'secret-token-value';
+        $user = $this->createUser(['mcp_api_key' => hash('sha256', $rawToken)]);
 
         $response = $this->actingAs($user)->getJson('/api/user');
         $response->assertStatus(200);
 
-        // mcp_api_key must not appear; has_mcp_api_key should
-        $response->assertJsonMissing(['mcp_api_key' => 'secret-token-value']);
+        // mcp_api_key must not appear in any form; has_mcp_api_key should be true
+        $response->assertJsonMissing(['mcp_api_key']);
         $response->assertJsonFragment(['has_mcp_api_key' => true]);
     }
 
@@ -106,7 +110,8 @@ class McpFinanceToolsTest extends TestCase
 
     public function test_mcp_http_endpoint_accepts_valid_bearer_token(): void
     {
-        $user = $this->createUser(['mcp_api_key' => 'valid-test-token-12345678901234567890']);
+        $rawToken = 'valid-test-token-12345678901234567890';
+        $user = $this->createUser(['mcp_api_key' => hash('sha256', $rawToken)]);
 
         // Sending a minimal JSON-RPC ping — the server will respond but we just want
         // to confirm the auth middleware does NOT return 401.
@@ -115,7 +120,7 @@ class McpFinanceToolsTest extends TestCase
             'id' => 1,
             'method' => 'tools/list',
         ], [
-            'Authorization' => 'Bearer valid-test-token-12345678901234567890',
+            'Authorization' => "Bearer {$rawToken}",
         ]);
 
         // Auth passed — should not be 401 (may be 200 or other MCP protocol response)

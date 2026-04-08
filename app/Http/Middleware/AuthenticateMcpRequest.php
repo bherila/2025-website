@@ -11,10 +11,10 @@ use Symfony\Component\HttpFoundation\Response;
 /**
  * Middleware that authenticates MCP requests via a Bearer token.
  *
- * The token is matched against the `mcp_api_key` column on the `users` table.
- * When a match is found, the corresponding user is logged in for the duration
- * of the request so that all finance model scopes (which filter by `auth()->id()`)
- * work correctly.
+ * Only a SHA-256 hash of the raw token is persisted in `mcp_api_key`, so a
+ * database leak of this column cannot be used to impersonate a user directly.
+ * When a valid hash match is found, Auth::setUser() sets the user for the
+ * current request only (stateless — no session cookie is written).
  *
  * Usage: Apply this middleware to the MCP transport route in routes/ai.php.
  */
@@ -28,13 +28,15 @@ class AuthenticateMcpRequest
             return response()->json(['error' => 'Unauthorized – Bearer token required'], 401);
         }
 
-        $user = User::where('mcp_api_key', $token)->first();
+        // Only the SHA-256 hash of the raw token is stored; hash before lookup.
+        $user = User::where('mcp_api_key', hash('sha256', $token))->first();
 
         if (! $user) {
             return response()->json(['error' => 'Unauthorized – invalid MCP API key'], 401);
         }
 
-        Auth::login($user);
+        // setUser is stateless — no session/cookie side-effects.
+        Auth::setUser($user);
 
         return $next($request);
     }
