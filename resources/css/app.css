@@ -7,6 +7,7 @@
   --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif,
     'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
   --font-hyperlegible: 'Atkinson Hyperlegible Next Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
@@ -26,6 +27,12 @@
 
   --color-destructive: hsl(var(--destructive));
   --color-destructive-foreground: hsl(var(--destructive-foreground));
+  
+  --color-success: hsl(var(--success));
+  --color-success-foreground: hsl(var(--success-foreground));
+
+  --color-warning: hsl(var(--warning));
+  --color-warning-foreground: hsl(var(--warning-foreground));
 
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
@@ -39,9 +46,8 @@
 
   --color-info: hsl(var(--info));
   --color-info-foreground: hsl(var(--info-foreground));
-  --color-info-border: hsl(var(--info-border));
 
-  --color-table-border: var(--table-border);
+  --color-table-border: hsl(var(--table-border));
 }
 
 /* ----------------------------- */
@@ -49,40 +55,45 @@
 /* ----------------------------- */
 
 :root {
-  --background: 0 0% 97%;
-  --foreground: 0 0% 10%;
+  --background: 0 0% 96%;        /* #f5f5f5 */
+  --foreground: 0 0% 10%;        /* #1a1a1a */
   --navbar: 0 0% 92%;
 
-  --primary: 240 5.9% 10%;
+  --primary: 39 40% 45%;         /* Darker Gold for contrast */
   --primary-foreground: 0 0% 98%;
 
-  --secondary: 240 4.8% 94%;
-  --secondary-foreground: 240 5.9% 10%;
+  --secondary: 0 0% 90%;         /* #e5e5e5 */
+  --secondary-foreground: 0 0% 10%;
 
-  --muted: 240 4.8% 93%;
-  --muted-foreground: 240 3.8% 46%;
+  --muted: 0 0% 92%;             
+  --muted-foreground: 0 0% 40%;  /* #666666 */
 
-  --accent: 240 4.8% 93%;
-  --accent-foreground: 240 5.9% 10%;
+  --accent: 39 40% 92%;          /* Soft gold background */
+  --accent-foreground: 39 50% 30%;
 
-  --destructive: 0 84% 55%;
+  --destructive: 0 65% 45%;      /* Darker Red */
   --destructive-foreground: 0 0% 98%;
 
-  --border: 240 5.9% 85%;
-  --input: 240 5.9% 85%;
-  --ring: 240 5% 60%;
+  --success: 147 40% 38%;        /* Darker Green */
+  --success-foreground: 0 0% 98%;
+
+  --warning: 46 65% 40%;         /* Darker Yellow/Amber */
+  --warning-foreground: 0 0% 98%;
+
+  --info: 155 35% 40%;           /* Darker Teal */
+  --info-foreground: 0 0% 98%;
+
+  --border: 0 0% 85%;
+  --input: 0 0% 85%;
+  --ring: 39 40% 45%;
 
   --card: 0 0% 100%;
-  --card-foreground: 240 10% 3.9%;
+  --card-foreground: 0 0% 10%;
 
   --popover: 0 0% 100%;
   --popover-foreground: 0 0% 10%;
 
-  --info: 210 100% 96%;
-  --info-foreground: 210 92% 35%;
-  --info-border: 210 92% 85%;
-
-  --table-border: #ccc;
+  --table-border: 0 0% 85%;
 }
 
 /* ----------------------------- */
@@ -90,40 +101,45 @@
 /* ----------------------------- */
 
 .dark {
-  --background: 0 0% 6%;
-  --foreground: 0 0% 96%;
-  --navbar: 0 0% 10%;
+  --background: 0 0% 6%;         /* #0f0f0f */
+  --foreground: 0 0% 91%;        /* #e8e8e8 */
+  --navbar: 0 0% 9%;             /* #171717 */
 
-  --primary: 0 0% 98%;
-  --primary-foreground: 240 5.9% 10%;
+  --primary: 39 45% 61%;         /* #c8a96e - The signature Gold */
+  --primary-foreground: 0 0% 10%;
 
-  --secondary: 240 3.7% 16%;
-  --secondary-foreground: 0 0% 98%;
+  --secondary: 0 0% 12%;         /* #1f1f1f */
+  --secondary-foreground: 0 0% 91%;
 
-  --muted: 240 3.7% 16%;
-  --muted-foreground: 240 5% 65%;
+  --muted: 0 0% 12%;
+  --muted-foreground: 0 0% 53%;  /* #888888 */
 
-  --accent: 240 3.7% 16%;
-  --accent-foreground: 0 0% 98%;
+  --accent: 39 45% 15%;          /* Faint gold background for active states */
+  --accent-foreground: 39 45% 61%;
 
-  --destructive: 0 72% 50%;
-  --destructive-foreground: 0 0% 98%;
+  --destructive: 0 67% 62%;      /* #e05a5a - Red */
+  --destructive-foreground: 0 0% 10%;
 
-  --border: 240 3.7% 20%;
-  --input: 240 3.7% 20%;
-  --ring: 240 4.9% 84%;
+  --success: 147 31% 51%;        /* #5aaa7e - Green */
+  --success-foreground: 0 0% 10%;
 
-  --card: 240 10% 4%;
-  --card-foreground: 0 0% 98%;
+  --warning: 46 62% 56%;         /* #d4b44a - Yellow */
+  --warning-foreground: 0 0% 10%;
 
-  --popover: 0 0% 6%;
-  --popover-foreground: 0 0% 96%;
+  --info: 155 31% 61%;           /* #7eb8a0 - Teal */
+  --info-foreground: 0 0% 10%;
 
-  --info: 215 25% 12%;
-  --info-foreground: 210 100% 80%;
-  --info-border: 215 25% 22%;
+  --border: 0 0% 16%;            /* #2a2a2a */
+  --input: 0 0% 16%;
+  --ring: 39 45% 61%;
 
-  --table-border: #333;
+  --card: 0 0% 9%;               /* #171717 */
+  --card-foreground: 0 0% 91%;
+
+  --popover: 0 0% 9%;
+  --popover-foreground: 0 0% 91%;
+
+  --table-border: 0 0% 20%;      /* #333333 */
 }
 
 /* ----------------------------- */
@@ -136,7 +152,7 @@
   }
 
   .site-header {
-    @apply bg-navbar;
+    @apply bg-navbar border-b border-border;
   }
 
   p,
@@ -155,6 +171,6 @@
   tr,
   th,
   td {
-    border-color: var(--table-border);
+    border-color: hsl(var(--table-border));
   }
 }
