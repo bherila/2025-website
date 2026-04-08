@@ -359,4 +359,158 @@ class FinancePayslipControllerTest extends TestCase
         $response = $this->actingAs($user)->postJson("/api/payslips/{$payslipId}/estimated-status", []);
         $response->assertStatus(422);
     }
+
+    // -------------------------------------------------------------------------
+    // GET /api/payslips/prompt
+    // -------------------------------------------------------------------------
+
+    public function test_get_prompt_requires_auth(): void
+    {
+        $response = $this->getJson('/api/payslips/prompt');
+        $response->assertStatus(401);
+    }
+
+    public function test_get_prompt_returns_prompt_and_schema(): void
+    {
+        $user = $this->createUser();
+        $response = $this->actingAs($user)->getJson('/api/payslips/prompt');
+        $response->assertOk();
+        $response->assertJsonStructure(['prompt', 'json_schema', 'form_label']);
+        $this->assertNotEmpty($response->json('prompt'));
+        $this->assertIsArray($response->json('json_schema'));
+        $this->assertSame('Payslip', $response->json('form_label'));
+    }
+
+    // -------------------------------------------------------------------------
+    // POST /api/payslips/bulk
+    // -------------------------------------------------------------------------
+
+    public function test_bulk_save_requires_auth(): void
+    {
+        $response = $this->postJson('/api/payslips/bulk', []);
+        $response->assertStatus(401);
+    }
+
+    public function test_bulk_save_inserts_new_payslips(): void
+    {
+        $user = $this->createUser();
+
+        $payload = [
+            [
+                'period_start' => '2025-01-01',
+                'period_end' => '2025-01-15',
+                'pay_date' => '2025-01-20',
+                'earnings_gross' => 5000,
+                'earnings_net_pay' => 4000,
+            ],
+            [
+                'period_start' => '2025-02-01',
+                'period_end' => '2025-02-15',
+                'pay_date' => '2025-02-20',
+                'earnings_gross' => 5200,
+                'earnings_net_pay' => 4200,
+            ],
+        ];
+
+        $response = $this->actingAs($user)->postJson('/api/payslips/bulk', $payload);
+        $response->assertOk();
+        $response->assertJson(['success' => true, 'saved' => 2]);
+
+        $this->assertDatabaseHas('fin_payslip', [
+            'uid' => $user->id,
+            'pay_date' => '2025-01-20',
+        ]);
+        $this->assertDatabaseHas('fin_payslip', [
+            'uid' => $user->id,
+            'pay_date' => '2025-02-20',
+        ]);
+    }
+
+    public function test_bulk_save_updates_existing_payslips(): void
+    {
+        $user = $this->createUser();
+
+        $payslipId = DB::table('fin_payslip')->insertGetId([
+            'uid' => $user->id,
+            'period_start' => '2025-03-01',
+            'period_end' => '2025-03-15',
+            'pay_date' => '2025-03-20',
+            'earnings_gross' => 5000,
+        ]);
+
+        $payload = [[
+            'payslip_id' => $payslipId,
+            'period_start' => '2025-03-01',
+            'period_end' => '2025-03-15',
+            'pay_date' => '2025-03-20',
+            'earnings_gross' => 6000,
+        ]];
+
+        $response = $this->actingAs($user)->postJson('/api/payslips/bulk', $payload);
+        $response->assertOk();
+        $response->assertJson(['success' => true, 'saved' => 1]);
+
+        $this->assertDatabaseHas('fin_payslip', [
+            'payslip_id' => $payslipId,
+            'earnings_gross' => 6000,
+        ]);
+    }
+
+    public function test_bulk_save_rejects_invalid_items(): void
+    {
+        $user = $this->createUser();
+
+        $payload = [[
+            // Missing required period_start, period_end, pay_date
+            'earnings_gross' => 5000,
+        ]];
+
+        $response = $this->actingAs($user)->postJson('/api/payslips/bulk', $payload);
+        $response->assertStatus(422);
+        $response->assertJsonStructure(['errors']);
+    }
+
+    public function test_bulk_save_rejects_non_array_body(): void
+    {
+        $user = $this->createUser();
+
+        $response = $this->actingAs($user)->postJson('/api/payslips/bulk', ['not' => 'an array of payslips']);
+        $response->assertStatus(422);
+        $response->assertJsonFragment(['error' => 'Request body must be a JSON array of payslips.']);
+    }
+
+    public function test_bulk_save_does_not_affect_other_users(): void
+    {
+        $user1 = $this->createUser();
+        $user2 = $this->createUser();
+
+        $payslipId = DB::table('fin_payslip')->insertGetId([
+            'uid' => $user2->id,
+            'period_start' => '2025-04-01',
+            'period_end' => '2025-04-15',
+            'pay_date' => '2025-04-20',
+            'earnings_gross' => 5000,
+        ]);
+
+        // user1 tries to update user2's payslip
+        $payload = [[
+            'payslip_id' => $payslipId,
+            'period_start' => '2025-04-01',
+            'period_end' => '2025-04-15',
+            'pay_date' => '2025-04-20',
+            'earnings_gross' => 9999,
+        ]];
+
+        // Should succeed (no error) but should not have updated the record
+        $response = $this->actingAs($user1)->postJson('/api/payslips/bulk', $payload);
+        $response->assertOk();
+        // saved=0 because the WHERE uid check prevents update
+        $response->assertJson(['saved' => 0]);
+
+        // Record should still have original value
+        $this->assertDatabaseHas('fin_payslip', [
+            'payslip_id' => $payslipId,
+            'earnings_gross' => 5000,
+        ]);
+    }
 }

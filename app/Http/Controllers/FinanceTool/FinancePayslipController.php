@@ -4,23 +4,26 @@ namespace App\Http\Controllers\FinanceTool;
 
 use App\Http\Controllers\Controller;
 use App\Models\FinanceTool\FinPayslips;
+use Illuminate\Contracts\View\View;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 class FinancePayslipController extends Controller
 {
-    public function index()
+    public function index(): View
     {
         return view('payslip');
     }
 
-    public function entry()
+    public function entry(): View
     {
         return view('payslip-entry');
     }
 
-    public function fetchPayslipYears()
+    public function fetchPayslipYears(): JsonResponse
     {
         try {
             $uid = Auth::id();
@@ -47,7 +50,7 @@ class FinancePayslipController extends Controller
         }
     }
 
-    public function fetchPayslips(Request $request)
+    public function fetchPayslips(Request $request): JsonResponse
     {
         $uid = Auth::id();
         $year = $request->query('year', date('Y'));
@@ -76,7 +79,7 @@ class FinancePayslipController extends Controller
         return response()->json($data);
     }
 
-    public function savePayslip(Request $request)
+    public function savePayslip(Request $request): JsonResponse
     {
         $uid = Auth::id();
 
@@ -145,7 +148,7 @@ class FinancePayslipController extends Controller
         return response()->json(['success' => true]);
     }
 
-    public function deletePayslip(Request $request, $payslip_id)
+    public function deletePayslip(Request $request, $payslip_id): JsonResponse
     {
         $uid = Auth::id();
 
@@ -156,7 +159,7 @@ class FinancePayslipController extends Controller
         return response()->json(['success' => true]);
     }
 
-    public function fetchPayslipById(Request $request, $payslip_id)
+    public function fetchPayslipById(Request $request, $payslip_id): JsonResponse
     {
         $uid = Auth::id();
 
@@ -172,7 +175,7 @@ class FinancePayslipController extends Controller
         return response()->json($payslip);
     }
 
-    public function updatePayslipEstimatedStatus(Request $request, $payslip_id)
+    public function updatePayslipEstimatedStatus(Request $request, $payslip_id): JsonResponse
     {
         $uid = Auth::id();
 
@@ -191,5 +194,178 @@ class FinancePayslipController extends Controller
             ->update(['ps_is_estimated' => $validatedData['ps_is_estimated']]);
 
         return response()->json(['success' => true]);
+    }
+
+    /**
+     * Return the LLM prompt and JSON schema for a payslip.
+     * GET /api/payslips/prompt
+     */
+    public function getPrompt(Request $request): JsonResponse
+    {
+        $schema = [
+            'type' => 'object',
+            'description' => 'A single payslip record',
+            'properties' => [
+                'payslip_id' => ['type' => 'integer', 'description' => 'Existing payslip ID (omit when creating a new payslip)'],
+                'period_start' => ['type' => 'string', 'description' => 'Pay period start date (YYYY-MM-DD)'],
+                'period_end' => ['type' => 'string', 'description' => 'Pay period end date (YYYY-MM-DD)'],
+                'pay_date' => ['type' => 'string', 'description' => 'Date the payment was issued (YYYY-MM-DD)'],
+                'employment_entity_id' => ['type' => 'integer', 'nullable' => true, 'description' => 'ID of the W-2 employment entity'],
+                'ps_salary' => ['type' => 'number', 'description' => 'Base salary / regular pay for this period'],
+                'earnings_gross' => ['type' => 'number', 'description' => 'Total gross earnings (wages box)'],
+                'earnings_bonus' => ['type' => 'number', 'description' => 'Bonus amount'],
+                'earnings_rsu' => ['type' => 'number', 'description' => 'RSU / equity income included in gross'],
+                'earnings_net_pay' => ['type' => 'number', 'description' => 'Net take-home pay after all deductions'],
+                'ps_vacation_payout' => ['type' => 'number', 'description' => 'Vacation cash-out / payout'],
+                'imp_legal' => ['type' => 'number', 'description' => 'Imputed income: legal plan'],
+                'imp_fitness' => ['type' => 'number', 'description' => 'Imputed income: fitness / gym'],
+                'imp_ltd' => ['type' => 'number', 'description' => 'Imputed income: long-term disability'],
+                'imp_other' => ['type' => 'number', 'description' => 'Other imputed income'],
+                'ps_oasdi' => ['type' => 'number', 'description' => 'Social Security (OASDI) tax withheld'],
+                'ps_medicare' => ['type' => 'number', 'description' => 'Medicare tax withheld'],
+                'ps_fed_tax' => ['type' => 'number', 'description' => 'Federal income tax withheld'],
+                'ps_fed_tax_addl' => ['type' => 'number', 'description' => 'Additional federal withholding'],
+                'ps_fed_tax_refunded' => ['type' => 'number', 'description' => 'Federal tax refunded on this payslip'],
+                'ps_state_tax' => ['type' => 'number', 'description' => 'State income tax withheld'],
+                'ps_state_disability' => ['type' => 'number', 'description' => 'State disability insurance (SDI/SUI)'],
+                'ps_state_tax_addl' => ['type' => 'number', 'description' => 'Additional state withholding'],
+                'ps_401k_pretax' => ['type' => 'number', 'description' => 'Pre-tax 401(k) employee contribution'],
+                'ps_401k_aftertax' => ['type' => 'number', 'description' => 'After-tax (Roth) 401(k) employee contribution'],
+                'ps_401k_employer' => ['type' => 'number', 'description' => 'Employer 401(k) match'],
+                'ps_pretax_medical' => ['type' => 'number', 'description' => 'Pre-tax medical insurance premium'],
+                'ps_pretax_dental' => ['type' => 'number', 'description' => 'Pre-tax dental insurance premium'],
+                'ps_pretax_vision' => ['type' => 'number', 'description' => 'Pre-tax vision insurance premium'],
+                'ps_pretax_fsa' => ['type' => 'number', 'description' => 'Pre-tax FSA contribution'],
+                'ps_is_estimated' => ['type' => 'boolean', 'description' => 'True if these values are estimates'],
+                'ps_comment' => ['type' => 'string', 'nullable' => true, 'description' => 'Optional notes'],
+            ],
+            'required' => ['period_start', 'period_end', 'pay_date'],
+        ];
+
+        $prompt = <<<'PROMPT'
+You are a payroll data extraction assistant. Extract all payroll information from the provided payslip document and return it as a JSON object matching the schema below.
+
+Guidelines:
+- All monetary values should be plain numbers (no currency symbols or commas).
+- Dates must be in YYYY-MM-DD format.
+- Omit fields that are not present on the payslip rather than returning 0.
+- earnings_gross should be the total gross pay (before deductions) including salary, bonus, RSU, and other earnings.
+- ps_salary should be only the base/regular salary component (not including bonus, RSU, etc.).
+- Include all withholding taxes and deductions shown on the payslip.
+- If a value is labeled "YTD" (year-to-date) rather than "current", skip it — only capture the current-period amounts.
+
+Return only a valid JSON object with no additional text or explanation.
+PROMPT;
+
+        return response()->json([
+            'prompt' => trim($prompt),
+            'json_schema' => $schema,
+            'form_label' => 'Payslip',
+        ]);
+    }
+
+    /**
+     * Bulk save (upsert) an array of payslips.
+     * POST /api/payslips/bulk
+     *
+     * Accepts a JSON array of payslip objects. Each item is validated with the
+     * same rules as savePayslip(). Items with a payslip_id are updated; items
+     * without are inserted.
+     */
+    public function bulkSave(Request $request): JsonResponse
+    {
+        $uid = Auth::id();
+
+        $items = $request->json()->all();
+
+        if (! is_array($items) || ! array_is_list($items)) {
+            return response()->json(['error' => 'Request body must be a JSON array of payslips.'], 422);
+        }
+
+        $payslipRules = [
+            'payslip_id' => 'nullable|integer',
+            'period_start' => 'required|date_format:Y-m-d',
+            'period_end' => 'required|date_format:Y-m-d',
+            'pay_date' => 'required|date_format:Y-m-d',
+            'earnings_gross' => 'numeric|nullable',
+            'earnings_bonus' => 'numeric|nullable',
+            'earnings_net_pay' => 'numeric|nullable',
+            'earnings_rsu' => 'numeric|nullable',
+            'imp_other' => 'numeric|nullable',
+            'imp_legal' => 'numeric|nullable',
+            'imp_fitness' => 'numeric|nullable',
+            'imp_ltd' => 'numeric|nullable',
+            'ps_oasdi' => 'numeric|nullable',
+            'ps_medicare' => 'numeric|nullable',
+            'ps_fed_tax' => 'numeric|nullable',
+            'ps_fed_tax_addl' => 'numeric|nullable',
+            'ps_state_tax' => 'numeric|nullable',
+            'ps_state_tax_addl' => 'numeric|nullable',
+            'ps_state_disability' => 'numeric|nullable',
+            'ps_401k_pretax' => 'numeric|nullable',
+            'ps_401k_aftertax' => 'numeric|nullable',
+            'ps_401k_employer' => 'numeric|nullable',
+            'ps_fed_tax_refunded' => 'numeric|nullable',
+            'ps_payslip_file_hash' => 'string|nullable',
+            'ps_is_estimated' => 'boolean',
+            'ps_comment' => 'string|nullable',
+            'ps_pretax_medical' => 'numeric|nullable',
+            'ps_pretax_fsa' => 'numeric|nullable',
+            'ps_salary' => 'numeric|nullable',
+            'ps_vacation_payout' => 'numeric|nullable',
+            'ps_pretax_dental' => 'numeric|nullable',
+            'ps_pretax_vision' => 'numeric|nullable',
+            'other' => 'nullable',
+            'employment_entity_id' => 'nullable|integer|exists:fin_employment_entity,id',
+        ];
+
+        $allErrors = [];
+        $validatedItems = [];
+
+        foreach ($items as $index => $item) {
+            $validator = Validator::make(is_array($item) ? $item : [], $payslipRules);
+            if ($validator->fails()) {
+                foreach ($validator->errors()->toArray() as $field => $messages) {
+                    $allErrors["[{$index}].{$field}"] = $messages;
+                }
+            } else {
+                $validatedItems[] = [$index, $validator->validated()];
+            }
+        }
+
+        if (! empty($allErrors)) {
+            return response()->json(['errors' => $allErrors], 422);
+        }
+
+        $saved = DB::transaction(function () use ($validatedItems, $uid): int {
+            $count = 0;
+            foreach ($validatedItems as [$index, $data]) {
+                if (isset($data['other'])) {
+                    $data['other'] = json_encode($data['other']);
+                } else {
+                    $data['other'] = null;
+                }
+
+                $payslipId = $data['payslip_id'] ?? null;
+                unset($data['payslip_id']);
+
+                if ($payslipId) {
+                    $updated = FinPayslips::where('payslip_id', $payslipId)
+                        ->where('uid', $uid)
+                        ->update($data);
+                    if ($updated) {
+                        $count++;
+                    }
+                } else {
+                    $data['uid'] = $uid;
+                    FinPayslips::create($data);
+                    $count++;
+                }
+            }
+
+            return $count;
+        });
+
+        return response()->json(['success' => true, 'saved' => $saved]);
     }
 }

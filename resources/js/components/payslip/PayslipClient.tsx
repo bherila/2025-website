@@ -1,15 +1,15 @@
 'use client'
-import { FileSpreadsheet,PlusCircle } from 'lucide-react'
-import React, { useEffect,useState } from 'react'
+import { Code, FileSpreadsheet, PlusCircle } from 'lucide-react'
+import React, { useEffect, useState } from 'react'
 
 import Container from '@/components/container'
 import { Button } from '@/components/ui/button'
-import { fetchPayslips, fetchPayslipYears,savePayslip } from '@/lib/api'
+import { fetchPayslips, fetchPayslipYears, savePayslip } from '@/lib/api'
 
 import FinanceNavbar from '../finance/FinanceNavbar'
-import { cols } from './config/payslipColumnsConfig'
 import type { fin_payslip } from './payslipDbCols'
-import { PayslipImportModal } from './PayslipImportModal' // Import the new dialog
+import { PayslipImportModal } from './PayslipImportModal'
+import PayslipJsonModal from './PayslipJsonModal'
 import { PayslipTable } from './PayslipTable'
 import TotalsTable from './TotalsTable.client'
 
@@ -19,53 +19,50 @@ interface PayslipClientProps {
   initialYears: string[]
 }
 
-// Define EmptyState outside of render
 const EmptyState = ({ selectedYear }: { selectedYear: string }) => (
-  <div className="flex flex-col items-center justify-center space-y-4 py-16 text-center">
-    <div className="text-muted-foreground">No payslips found for the selected year</div>
-    <Button asChild>
+  <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
+    <p className="font-mono text-sm text-muted-foreground">No payslips found for {selectedYear}</p>
+    <Button asChild size="sm">
       <a href={`/finance/payslips/entry?year=${selectedYear}`}>
-        <PlusCircle className="mr-2" /> Add Payslip
+        <PlusCircle className="mr-2 h-4 w-4" /> Add Payslip
       </a>
     </Button>
   </div>
 )
 
-export default function PayslipClient({ selectedYear: initialSelectedYear, initialData: initialPayslipData, initialYears: initialAvailableYears }: PayslipClientProps): React.ReactElement {
-  const [selectedYear, setSelectedYear] = useState(initialSelectedYear);
-  const [payslipData, setPayslipData] = useState(initialPayslipData);
-  const [availableYears, setAvailableYears] = useState(initialAvailableYears);
+export default function PayslipClient({
+  selectedYear: initialSelectedYear,
+  initialData: initialPayslipData,
+  initialYears: initialAvailableYears,
+}: PayslipClientProps): React.ReactElement {
+  const [selectedYear, setSelectedYear] = useState(initialSelectedYear)
+  const [payslipData, setPayslipData] = useState(initialPayslipData)
+  const [availableYears, setAvailableYears] = useState(initialAvailableYears)
+  const [showBulkJsonModal, setShowBulkJsonModal] = useState(false)
 
   useEffect(() => {
-    setSelectedYear(initialSelectedYear);
-    setPayslipData(initialPayslipData);
-    setAvailableYears(initialAvailableYears);
-  }, [initialSelectedYear, initialPayslipData, initialAvailableYears]);
+    setSelectedYear(initialSelectedYear)
+    setPayslipData(initialPayslipData)
+    setAvailableYears(initialAvailableYears)
+  }, [initialSelectedYear, initialPayslipData, initialAvailableYears])
 
   const refreshPayslips = async () => {
-    const newPayslipData = await fetchPayslips(selectedYear);
-    const newAvailableYears = await fetchPayslipYears();
-    setPayslipData(newPayslipData);
-    setAvailableYears(newAvailableYears);
-  };
+    const [newData, newYears] = await Promise.all([fetchPayslips(selectedYear), fetchPayslipYears()])
+    setPayslipData(newData)
+    setAvailableYears(newYears)
+  }
 
   const editRow = async (row: fin_payslip) => {
     await savePayslip(row)
-    refreshPayslips(); // Refresh data after editing
+    refreshPayslips()
   }
 
   const data = payslipData.filter(
-    (r: fin_payslip) => r.pay_date! > `${selectedYear}-01-01` && r.pay_date! < `${selectedYear + 1}-01-01`,
+    (r) => r.pay_date! >= `${selectedYear}-01-01` && r.pay_date! <= `${selectedYear}-12-31`,
   )
-  const dataThroughQ1 = payslipData.filter(
-    (r: fin_payslip) => r.pay_date! > `${selectedYear}-01-01` && r.pay_date! < `${selectedYear}-04-01`,
-  )
-  const dataThroughQ2 = payslipData.filter(
-    (r: fin_payslip) => r.pay_date! > `${selectedYear}-01-01` && r.pay_date! < `${selectedYear}-07-01`,
-  )
-  const dataThroughQ3 = payslipData.filter(
-    (r: fin_payslip) => r.pay_date! > `${selectedYear}-01-01` && r.pay_date! < `${selectedYear}-10-01`,
-  )
+  const dataThroughQ1 = data.filter((r) => r.pay_date! < `${selectedYear}-04-01`)
+  const dataThroughQ2 = data.filter((r) => r.pay_date! < `${selectedYear}-07-01`)
+  const dataThroughQ3 = data.filter((r) => r.pay_date! < `${selectedYear}-10-01`)
   const dataSeries = [
     ['Q1', dataThroughQ1],
     dataThroughQ2.length > dataThroughQ1.length ? ['Q2', dataThroughQ2] : undefined,
@@ -77,68 +74,93 @@ export default function PayslipClient({ selectedYear: initialSelectedYear, initi
     <>
       <FinanceNavbar activeSection="payslips" />
       <Container fluid>
-        <div className="w-full my-2">
-          <div className="flex justify-between items-center px-4">
-            <div className="flex gap-2 items-center">
-              <span>Tax Year:</span>
-              {availableYears.map((year) => (
-                <Button asChild key={year} variant={year === selectedYear ? 'default' : 'outline'}>
-                  <a href={`?year=${year}`}>{year}</a>
-                </Button>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <Button asChild variant="outline">
-                <a href={`/finance/payslips/entry?year=${selectedYear}`}>
-                  <PlusCircle className="mr-2" /> Add Payslip
-                </a>
-              </Button>
-              <Button asChild variant="outline">
-                <a href="/payslip/import/json">Import JSON</a>
-              </Button>
-              <Button asChild variant="outline">
-                <a href="/payslip/import/tsv">
-                  <FileSpreadsheet className="mr-2" /> Import TSV
-                </a>
-              </Button>
-              <PayslipImportModal onImportSuccess={refreshPayslips} />
-            </div>
+        {/* ── Header bar ─────────────────────────────────────────────────── */}
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-border">
+          {/* Year tabs */}
+          <div className="flex items-center gap-0 border border-border rounded-md overflow-hidden">
+            {availableYears.map((year) => (
+              <a
+                key={year}
+                href={`?year=${year}`}
+                className={`font-mono text-xs px-3 py-1.5 border-r border-border last:border-r-0 transition-colors ${
+                  year === selectedYear
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                }`}
+              >
+                {year}
+              </a>
+            ))}
           </div>
 
-          <div className="px-4 mt-2">
-            Tax period:{' '}
-            <b>
-              {selectedYear}-01-01 through {selectedYear}-12-31
-            </b>
+          {/* Action buttons */}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild size="sm">
+              <a href={`/finance/payslips/entry?year=${selectedYear}`}>
+                <PlusCircle className="h-3.5 w-3.5" /> Add
+              </a>
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setShowBulkJsonModal(true)} className="gap-1.5">
+              <Code className="h-3.5 w-3.5" /> Edit as JSON
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <a href="/payslip/import/json">Import JSON</a>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <a href="/payslip/import/tsv">
+                <FileSpreadsheet className="h-3.5 w-3.5" /> Import TSV
+              </a>
+            </Button>
+            <PayslipImportModal onImportSuccess={refreshPayslips} />
           </div>
         </div>
+
+        {/* ── Section title ────────────────────────────────────────────────── */}
+        <div className="px-4 py-3">
+          <h2 className="font-mono text-xs font-semibold uppercase tracking-widest text-primary">
+            {selectedYear} Payslip Ledger
+          </h2>
+          <p className="font-mono text-[10px] text-muted-foreground mt-0.5">
+            {selectedYear}-01-01 — {selectedYear}-12-31
+          </p>
+        </div>
+
+        <PayslipJsonModal
+          open={showBulkJsonModal}
+          mode="bulk"
+          initialData={payslipData}
+          onSuccess={async () => {
+            setShowBulkJsonModal(false)
+            await refreshPayslips()
+          }}
+          onClose={() => setShowBulkJsonModal(false)}
+        />
 
         {data.length === 0 ? (
           <EmptyState selectedYear={selectedYear} />
         ) : (
           <>
-            <PayslipTable data={data} cols={cols} onRowEdited={editRow} />
-            <div className="mt-4">
-              <h2 className="text-lg font-semibold mx-2 mt-6 mb-2">Federal Taxes</h2>
-              <TotalsTable
-                series={dataSeries}
-                taxConfig={{
-                  year: selectedYear,
-                  state: '',
-                  filingStatus: 'Single',
-                  standardDeduction: 13850,
-                }}
-              />
-              <h2 className="text-lg font-semibold mx-2 mt-6 mb-2">California State Taxes</h2>
-              <TotalsTable
-                series={dataSeries}
-                taxConfig={{
-                  year: selectedYear,
-                  state: 'CA',
-                  filingStatus: 'Single',
-                  standardDeduction: 13850,
-                }}
-              />
+            <PayslipTable data={data} onRowEdited={editRow} />
+
+            <div className="mt-8 px-4 pb-8 space-y-8">
+              <div>
+                <h3 className="font-mono text-xs font-semibold uppercase tracking-widest text-primary mb-3 pb-2 border-b border-border">
+                  Federal Tax Summary
+                </h3>
+                <TotalsTable
+                  series={dataSeries}
+                  taxConfig={{ year: selectedYear, state: '', filingStatus: 'Single', standardDeduction: 13850 }}
+                />
+              </div>
+              <div>
+                <h3 className="font-mono text-xs font-semibold uppercase tracking-widest text-primary mb-3 pb-2 border-b border-border">
+                  California State Tax Summary
+                </h3>
+                <TotalsTable
+                  series={dataSeries}
+                  taxConfig={{ year: selectedYear, state: 'CA', filingStatus: 'Single', standardDeduction: 13850 }}
+                />
+              </div>
             </div>
           </>
         )}

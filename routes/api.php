@@ -99,8 +99,10 @@ Route::middleware(['web', 'auth'])->post('/finance/{account_id}/update-flags', [
 Route::middleware(['web', 'auth'])->delete('/finance/{account_id}', [FinanceApiController::class, 'deleteAccount']);
 
 Route::middleware(['web', 'auth'])->get('/payslips/years', [FinancePayslipController::class, 'fetchPayslipYears']);
+Route::middleware(['web', 'auth'])->get('/payslips/prompt', [FinancePayslipController::class, 'getPrompt']);
 Route::middleware(['web', 'auth'])->get('/payslips', [FinancePayslipController::class, 'fetchPayslips']);
 Route::middleware(['web', 'auth'])->post('/payslips', [FinancePayslipController::class, 'savePayslip']);
+Route::middleware(['web', 'auth'])->post('/payslips/bulk', [FinancePayslipController::class, 'bulkSave']);
 Route::middleware(['web', 'auth'])->post('/payslips/import', [FinancePayslipImportController::class, 'import']);
 Route::middleware(['web', 'auth'])->delete('/payslips/{payslip_id}', [FinancePayslipController::class, 'deletePayslip']);
 Route::middleware(['web', 'auth'])->get('/payslips/{payslip_id}', [FinancePayslipController::class, 'fetchPayslipById']);

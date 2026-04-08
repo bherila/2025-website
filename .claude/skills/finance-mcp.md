@@ -4,7 +4,7 @@ description: Query live finance tool and tax management data via the project MCP
 ---
 
 Use the `get_tax_preview`, `list_tax_documents`, `list_transactions`, `list_lots`,
-`get_schedule_c`, and related MCP tools to answer questions about the user's
+`get_schedule_c`, `list_payslips`, and related MCP tools to answer questions about the user's
 finance and tax data without guessing from source code.
 
 Always prefer these tools over `database-query` when the question is about
@@ -14,7 +14,7 @@ user-facing data rather than schema structure.
 
 | Tool | Description |
 |------|-------------|
-| `get_tax_preview` | Full tax preview dataset for a year (W-2s, 1099s, cap gains, Form 1116, Schedule C, action items) |
+| `get_tax_preview` | Full tax preview dataset for a year (W-2s, 1099s, cap gains, Form 1116, Schedule C, action items). For payslip data use `list_payslips`. |
 | `list_tax_documents` | List tax documents filtered by year, form_type, is_reviewed |
 | `get_tax_document` | Single tax document with full parsed_data |
 | `list_accounts` | Financial accounts grouped by type |
@@ -25,6 +25,7 @@ user-facing data rather than schema structure.
 | `list_employment_entities` | W-2 employers and Schedule C businesses |
 | `list_tags` | Transaction tags with tax characteristics |
 | `get_marriage_status` | Filing status by year |
+| `list_payslips` | Payslips filtered by year; returns all fields (earnings, taxes, deductions, 401k) |
 
 ## Available Resources
 

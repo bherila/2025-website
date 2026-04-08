@@ -13,6 +13,7 @@ use App\Mcp\Tools\GetTaxPreview;
 use App\Mcp\Tools\ListAccounts;
 use App\Mcp\Tools\ListEmploymentEntities;
 use App\Mcp\Tools\ListLots;
+use App\Mcp\Tools\ListPayslips;
 use App\Mcp\Tools\ListTags;
 use App\Mcp\Tools\ListTaxDocuments;
 use App\Mcp\Tools\ListTransactions;
@@ -26,8 +27,7 @@ use Laravel\Mcp\Server\Attributes\Version;
 #[Instructions(
     'This MCP server exposes live finance tool and tax management data. '.
     'Use the tools to query tax previews, tax documents, accounts, transactions, lots, '.
-    'Schedule C summaries, employment entities, tags, and marriage status. '.
-    'Payslip data is intentionally excluded. '.
+    'Schedule C summaries, employment entities, tags, marriage status, and payslips. '.
     'Always prefer these tools over database-query when the question is about user-facing financial data.'
 )]
 class Finance extends Server
@@ -44,6 +44,7 @@ class Finance extends Server
         ListEmploymentEntities::class,
         ListTags::class,
         GetMarriageStatus::class,
+        ListPayslips::class,
     ];
 
     protected array $resources = [
