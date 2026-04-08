@@ -234,7 +234,7 @@ export default function ClientPortalNav({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className={`gap-1${currentPage === 'project' ? ' bg-accent text-accent-foreground' : ''}`}
+                    className={cn('gap-1', currentPage === 'project' && 'bg-accent text-accent-foreground')}
                   >
                     <FolderOpen className="h-4 w-4" />
                     {currentProject ? currentProject.name : 'Tasks'}

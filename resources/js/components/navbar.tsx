@@ -26,11 +26,11 @@ function safeHref(href: string): string {
   if (href.startsWith('/') && !href.startsWith('//')) {
     return href;
   }
-  // Allow safe absolute protocols only
+  // Allow safe absolute protocols only; return the re-serialized URL to prevent encoding tricks
   try {
     const url = new URL(href);
     if (url.protocol === 'https:' || url.protocol === 'http:') {
-      return href;
+      return url.href;
     }
   } catch {
     // Invalid URL - fall through to return '#'
