@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
@@ -10,7 +11,7 @@ use Illuminate\Validation\Rule;
 
 class UserApiController extends Controller
 {
-    public function getUser()
+    public function getUser(): JsonResponse
     {
         $user = Auth::user();
         if (! $user) {
@@ -19,17 +20,22 @@ class UserApiController extends Controller
 
         $userId = $user->id;
 
-        return Cache::remember("user_data_{$userId}", 60, function () use ($user) {
+        /** @var array<string, mixed> $userData */
+        $userData = Cache::remember("user_data_{$userId}", 60, function () use ($user) {
             $userArray = $user->toArray();
             if (! empty($userArray['gemini_api_key'])) {
                 $userArray['gemini_api_key'] = substr($userArray['gemini_api_key'], -4);
             }
+            // Indicate whether an MCP API key has been set (never expose the actual key here)
+            $userArray['has_mcp_api_key'] = ! empty($user->getAttributes()['mcp_api_key']);
 
             return $userArray;
         });
+
+        return response()->json($userData);
     }
 
-    public function updateEmail(Request $request)
+    public function updateEmail(Request $request): JsonResponse
     {
         $request->validate([
             'email' => ['required', 'email', Rule::unique('users')->ignore(Auth::id())],
@@ -42,7 +48,7 @@ class UserApiController extends Controller
         return response()->json(['message' => 'Email updated successfully']);
     }
 
-    public function updatePassword(Request $request)
+    public function updatePassword(Request $request): JsonResponse
     {
         $request->validate([
             'current_password' => 'required',
@@ -60,7 +66,7 @@ class UserApiController extends Controller
         return response()->json(['message' => 'Password updated successfully']);
     }
 
-    public function updateApiKey(Request $request)
+    public function updateApiKey(Request $request): JsonResponse
     {
         $request->validate([
             'gemini_api_key' => 'nullable|string',
@@ -73,7 +79,7 @@ class UserApiController extends Controller
         return response()->json(['message' => $request->gemini_api_key ? 'API key updated successfully' : 'API key cleared successfully']);
     }
 
-    public function updateGenAiQuota(Request $request)
+    public function updateGenAiQuota(Request $request): JsonResponse
     {
         $request->validate([
             'genai_daily_quota_limit' => 'nullable|integer|min:1|max:10000',
@@ -87,6 +93,24 @@ class UserApiController extends Controller
 
         return response()->json([
             'message' => $limit ? "Daily quota limit set to {$limit}" : 'Daily quota limit reset to system default',
+        ]);
+    }
+
+    /**
+     * Generate (or regenerate) the MCP API key for the authenticated user.
+     * Returns the new key once — it is not stored in the session or retrievable again.
+     * Only a SHA-256 hash of the key is persisted in the database.
+     */
+    public function generateMcpApiKey(): JsonResponse
+    {
+        $user = Auth::user();
+        $newKey = bin2hex(random_bytes(32)); // 64-character hex string (raw token)
+        $user->update(['mcp_api_key' => hash('sha256', $newKey)]);
+        Cache::forget("user_data_{$user->id}");
+
+        return response()->json([
+            'message' => 'MCP API key generated. Copy it now — it will not be shown again.',
+            'mcp_api_key' => $newKey,
         ]);
     }
 }

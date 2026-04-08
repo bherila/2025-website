@@ -6,6 +6,7 @@ import { Spinner } from './components/ui/spinner';
 import { ApiKeySection } from './user/api-key';
 import { GenAiQuotaSection } from './user/genai-quota';
 import { LoginAuditSection } from './user/login-audit-section';
+import { McpApiKeySection } from './user/mcp-api-key';
 import { PasskeySection } from './user/passkey-section';
 import { UpdateEmailSection } from './user/update-email';
 import { UpdatePasswordSection } from './user/update-password';
@@ -16,6 +17,7 @@ interface User {
   email: string;
   gemini_api_key: string | null;
   genai_daily_quota_limit: number | null;
+  has_mcp_api_key: boolean;
 }
 
 const MyAccount: React.FC = () => {
@@ -86,6 +88,13 @@ const MyAccount: React.FC = () => {
 
       <GenAiQuotaSection
         currentLimit={user?.genai_daily_quota_limit ?? null}
+        onSuccess={setSuccess}
+        onError={(field, message) => setErrors({ [field]: message })}
+        onUserUpdate={fetchUserData}
+      />
+
+      <McpApiKeySection
+        hasMcpApiKey={user?.has_mcp_api_key ?? false}
         onSuccess={setSuccess}
         onError={(field, message) => setErrors({ [field]: message })}
         onUserUpdate={fetchUserData}

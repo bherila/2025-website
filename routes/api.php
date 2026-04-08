@@ -136,6 +136,7 @@ Route::middleware(['web', 'auth'])->post('/finance/lots/save-assignment', [Finan
 
 Route::middleware(['web', 'auth'])->post('/user/update-api-key', [UserApiController::class, 'updateApiKey']);
 Route::middleware(['web', 'auth'])->post('/user/update-genai-quota', [UserApiController::class, 'updateGenAiQuota']);
+Route::middleware(['web', 'auth'])->post('/user/generate-mcp-api-key', [UserApiController::class, 'generateMcpApiKey']);
 
 // Passkey (WebAuthn) routes
 Route::middleware(['web', 'auth'])->get('/passkeys', [PasskeyController::class, 'index']);

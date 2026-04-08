@@ -25,6 +25,7 @@ class User extends Authenticatable
         'email',
         'password',
         'gemini_api_key',
+        'mcp_api_key',
         'genai_daily_quota_limit',
         'user_role',
         'last_login_date',
@@ -39,6 +40,7 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'mcp_api_key',
     ];
 
     /**
