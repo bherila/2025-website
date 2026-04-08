@@ -1,50 +1,3 @@
-.transactions-table-container {
-  max-height: 400px;
-  overflow-y: auto;
-  border: 1px solid #ccc;
-  margin-top: 1rem;
-}
-
-.transactions-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.transactions-table th,
-.transactions-table td {
-  border: 1px solid #ddd;
-  padding: 8px;
-  text-align: left;
-}
-
-.transactions-table th {
-  background-color: #f2f2f2;
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-
-/* Apply Atkinson Hyperlegible Next to the transactions table wrapper */
-.finance-transactions-table {
-  font-family: 'Atkinson Hyperlegible Next Variable', ui-sans-serif, system-ui, sans-serif;
-  font-size: 0.875rem;
-}
-
-.finance-transactions-table th,
-.finance-transactions-table td {
-  padding: 4px 6px;
-  white-space: nowrap;
-}
-
-.finance-transactions-table th {
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-.duplicate-row {
-  background-color: #ff8888;
-}
-
 .highlight-transaction {
   animation: highlight-fade 3s ease-out;
 }
@@ -56,4 +9,10 @@
   100% {
     background-color: transparent;
   }
+}
+
+/* Prevent text selection when shift-clicking rows */
+.transactions-table-scroll tbody tr {
+  user-select: none;
+  -webkit-user-select: none;
 }

@@ -1,35 +1,19 @@
 'use client'
 
-import { Download, Plus, Settings, Upload } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { z } from 'zod'
 
 import { useFinanceTags } from '@/components/finance/useFinanceTags'
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
-import { importUrl, maintenanceUrl } from '@/lib/financeRouteBuilder'
+import { importUrl } from '@/lib/financeRouteBuilder'
 
 import NewTransactionModal from './NewTransactionModal'
+import { exportToCSV, exportToJSON } from './transactionExport'
+import { type FilterType,TransactionsPageToolbar } from './TransactionsPageToolbar'
 import TransactionsTable from './TransactionsTable'
-import { YearSelectorWithNav } from './YearSelectorWithNav'
-
-type FilterType = 'all' | 'cash' | 'stock'
 
 interface TransactionsPageProps {
   accountId: number | 'all'
@@ -62,7 +46,6 @@ export default function TransactionsPage({ accountId, initialAvailableYears = []
   const [fetchKey, setFetchKey] = useState(0)
   const [showNewTransactionModal, setShowNewTransactionModal] = useState(false)
 
-  // Available years: start with server-provided, then refresh from API
   const [availableYears, setAvailableYears] = useState<number[]>(initialAvailableYears)
 
   const [selectedYear, setSelectedYear] = useState<string>(() => {
@@ -81,7 +64,6 @@ export default function TransactionsPage({ accountId, initialAvailableYears = []
 
   const { tags: availableTags } = useFinanceTags({ enabled: true })
 
-  // Fetch available years from the API
   useEffect(() => {
     const fetchYears = async () => {
       try {
@@ -91,7 +73,6 @@ export default function TransactionsPage({ accountId, initialAvailableYears = []
         const years = await fetchWrapper.get(endpoint)
         const parsedYears = z.array(z.number()).parse(years)
         setAvailableYears(parsedYears)
-        // Default to current year if available
         const currentYear = new Date().getFullYear()
         setSelectedYear((prev) => {
           if (prev !== 'all') return prev
@@ -121,7 +102,6 @@ export default function TransactionsPage({ accountId, initialAvailableYears = []
     setUrlParams({ tag: tag === 'all' ? '' : tag })
   }
 
-  // Fetch transactions
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -147,7 +127,6 @@ export default function TransactionsPage({ accountId, initialAvailableYears = []
     fetchData()
   }, [accountId, isAllAccounts, selectedYear, filter, selectedTag, fetchKey])
 
-  // Handle URL hash to scroll to specific transaction
   const highlightTransactionId = useMemo(() => {
     if (typeof window === 'undefined') return undefined
     const hash = window.location.hash
@@ -186,176 +165,32 @@ export default function TransactionsPage({ accountId, initialAvailableYears = []
 
   const handleRefresh = useCallback(() => setFetchKey((k) => k + 1), [])
 
-  // Export functions
-  const exportToCSV = useCallback(() => {
-    if (!data || data.length === 0) return
-    const headers = ['Date', 'Type', 'Description', 'Symbol', 'Amount', 'Qty', 'Price', 'Commission', 'Fee', 'Memo']
-    const csvContent = [
-      headers.join(','),
-      ...data.map((t) =>
-        [
-          t.t_date || '',
-          `"${(t.t_type || '').replace(/"/g, '""')}"`,
-          `"${(t.t_description || '').replace(/"/g, '""')}"`,
-          t.t_symbol || '',
-          t.t_amt || '',
-          t.t_qty || '',
-          t.t_price || '',
-          t.t_commission || '',
-          t.t_fee || '',
-          `"${(t.t_comment || '').replace(/"/g, '""')}"`,
-        ].join(','),
-      ),
-    ].join('\n')
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `transactions_${accountId}_${selectedYear}.csv`
-    link.click()
-    URL.revokeObjectURL(link.href)
+  const handleExportCSV = useCallback(() => {
+    if (data) exportToCSV(data, accountId, selectedYear)
   }, [data, accountId, selectedYear])
 
-  const exportToJSON = useCallback(() => {
-    if (!data || data.length === 0) return
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `transactions_${accountId}_${selectedYear}.json`
-    link.click()
-    URL.revokeObjectURL(link.href)
+  const handleExportJSON = useCallback(() => {
+    if (data) exportToJSON(data, accountId, selectedYear)
   }, [data, accountId, selectedYear])
 
-  const disabledTooltip = 'Select an account to import or modify that account.'
-
-  // Toolbar with filters (left) and action buttons (right)
   const toolbar = (
-    <div className="flex items-center gap-4 mb-4 flex-wrap px-8">
-      <YearSelectorWithNav
-        selectedYear={selectedYear === 'all' ? 'all' : parseInt(selectedYear, 10)}
-        availableYears={availableYears}
-        onYearChange={(year) => handleYearChange(String(year))}
-      />
-
-      <Select value={selectedTag} onValueChange={handleTagChange}>
-        <SelectTrigger className="w-44">
-          <SelectValue placeholder="Select tag" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All Tags</SelectItem>
-          {availableTags.map((tag) => (
-            <SelectItem key={tag.tag_id} value={tag.tag_label}>
-              {tag.tag_label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      <Select value={filter} onValueChange={(v) => handleFilterChange(v as FilterType)}>
-        <SelectTrigger className="w-36">
-          <SelectValue placeholder="Show" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">Cash + Stock</SelectItem>
-          <SelectItem value="cash">Cash Only</SelectItem>
-          <SelectItem value="stock">Stock Only</SelectItem>
-        </SelectContent>
-      </Select>
-
-      <div className="ml-auto flex items-center gap-2">
-        {isLoading && (
-          <div className="flex items-center gap-2 mr-2">
-            <Skeleton className="h-4 w-4 rounded-full" />
-            <Skeleton className="h-4 w-16" />
-          </div>
-        )}
-
-        {/* Import button */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={isAllAccounts}
-                asChild={!isAllAccounts}
-              >
-                {isAllAccounts ? (
-                  <span className="flex items-center gap-1">
-                    <Upload className="h-4 w-4" />
-                    Import
-                  </span>
-                ) : (
-                  <a href={importUrl(accountId as number)} className="flex items-center gap-1">
-                    <Upload className="h-4 w-4" />
-                    Import
-                  </a>
-                )}
-              </Button>
-            </span>
-          </TooltipTrigger>
-          {isAllAccounts && <TooltipContent>{disabledTooltip}</TooltipContent>}
-        </Tooltip>
-
-        {/* Export button — next to Import */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" disabled={!data || data.length === 0}>
-              <Download className="h-4 w-4 mr-1" />
-              Export
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem onClick={exportToCSV}>Export as CSV</DropdownMenuItem>
-            <DropdownMenuItem onClick={exportToJSON}>Export as JSON</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        {/* Maintenance button */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={isAllAccounts}
-                asChild={!isAllAccounts}
-              >
-                {isAllAccounts ? (
-                  <span className="flex items-center gap-1">
-                    <Settings className="h-4 w-4" />
-                    Maintenance
-                  </span>
-                ) : (
-                  <a href={maintenanceUrl(accountId as number)} className="flex items-center gap-1">
-                    <Settings className="h-4 w-4" />
-                    Maintenance
-                  </a>
-                )}
-              </Button>
-            </span>
-          </TooltipTrigger>
-          {isAllAccounts && <TooltipContent>{disabledTooltip}</TooltipContent>}
-        </Tooltip>
-
-        {/* New Transaction button */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={isAllAccounts}
-                onClick={isAllAccounts ? undefined : () => setShowNewTransactionModal(true)}
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                New Transaction
-              </Button>
-            </span>
-          </TooltipTrigger>
-          {isAllAccounts && <TooltipContent>{disabledTooltip}</TooltipContent>}
-        </Tooltip>
-      </div>
-    </div>
+    <TransactionsPageToolbar
+      accountId={accountId}
+      isAllAccounts={isAllAccounts}
+      selectedYear={selectedYear}
+      availableYears={availableYears}
+      onYearChange={handleYearChange}
+      filter={filter}
+      onFilterChange={handleFilterChange}
+      selectedTag={selectedTag}
+      availableTags={availableTags}
+      onTagChange={handleTagChange}
+      data={data}
+      isLoading={isLoading}
+      onExportCSV={handleExportCSV}
+      onExportJSON={handleExportJSON}
+      onNewTransaction={() => setShowNewTransactionModal(true)}
+    />
   )
 
   if (isLoading && !data) {

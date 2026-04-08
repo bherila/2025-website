@@ -1,0 +1,108 @@
+import { useState } from 'react'
+
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
+
+import { TagSelect } from './rules_engine/TagSelect'
+import type { FinanceTag } from './useFinanceTags'
+
+interface TransactionsTaggingToolbarProps {
+  effectiveCount: number
+  isSelection: boolean
+  onApplyTag: (tagId: number) => Promise<void>
+  onRemoveTag: (tagId: number) => Promise<void>
+  onRemoveAllTags: () => Promise<void>
+  availableTags: FinanceTag[]
+  isLoadingTags: boolean
+  onClearSelection: () => void
+}
+
+export function TransactionsTaggingToolbar({
+  effectiveCount, isSelection, onApplyTag, onRemoveTag, onRemoveAllTags,
+  availableTags, isLoadingTags, onClearSelection,
+}: TransactionsTaggingToolbarProps) {
+  const [selectedTagId, setSelectedTagId] = useState<string | null>(null)
+  const [removeTagsConfirmOpen, setRemoveTagsConfirmOpen] = useState(false)
+
+  if (effectiveCount > 1000) {
+    return (
+      <div className="border-b border-border bg-card px-3 py-2">
+        <Alert variant="destructive" className="bg-destructive/10 border-destructive/20 text-destructive">
+          <AlertDescription className="font-mono text-xs">
+            Too many items to tag ({effectiveCount.toLocaleString()} transactions). Refine view to &lt; 1,000 items.
+          </AlertDescription>
+        </Alert>
+      </div>
+    )
+  }
+
+  const label = isSelection
+    ? `Action on ${effectiveCount} selected row${effectiveCount !== 1 ? 's' : ''}`
+    : `Action on ${effectiveCount} row${effectiveCount !== 1 ? 's' : ''}`
+
+  return (
+    <>
+      <div className="border-b border-border bg-card px-3 py-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs font-mono tracking-wide uppercase text-muted-foreground">
+            {label}:
+          </span>
+          {isSelection && (
+            <Button variant="ghost" size="sm" className="h-7 font-mono text-[10px] uppercase tracking-wider text-muted-foreground" onClick={onClearSelection}>
+              ✕ Clear
+            </Button>
+          )}
+          {isLoadingTags ? (
+            <Spinner size="small" />
+          ) : (
+            <>
+              <TagSelect value={selectedTagId} onChange={setSelectedTagId} tags={availableTags} placeholder="Select a tag…" className="w-48 text-xs font-mono" />
+              <Button size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider" disabled={effectiveCount === 0 || !selectedTagId} onClick={() => selectedTagId && onApplyTag(Number(selectedTagId))}>
+                Add
+              </Button>
+              <Button variant="outline" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider" disabled={effectiveCount === 0 || !selectedTagId} onClick={() => selectedTagId && onRemoveTag(Number(selectedTagId))}>
+                Remove
+              </Button>
+              <Button variant="destructive" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider ml-2" disabled={effectiveCount === 0} onClick={() => setRemoveTagsConfirmOpen(true)}>
+                Clear All
+              </Button>
+              <a href="/finance/tags" className="ml-auto">
+                <Button variant="secondary" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider text-accent">
+                  Manage Tags
+                </Button>
+              </a>
+            </>
+          )}
+        </div>
+      </div>
+
+      <AlertDialog open={removeTagsConfirmOpen} onOpenChange={setRemoveTagsConfirmOpen}>
+        <AlertDialogContent className="border-border bg-card">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-mono text-accent">Remove all tags</AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">
+              This will remove all tags from the {effectiveCount} {isSelection ? 'selected ' : ''}transaction{effectiveCount !== 1 ? 's' : ''}. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-border hover:bg-muted/50">Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={async () => { setRemoveTagsConfirmOpen(false); await onRemoveAllTags() }}>
+              Confirm Removal
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
