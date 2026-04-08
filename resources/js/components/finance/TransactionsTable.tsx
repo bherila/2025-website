@@ -2,7 +2,7 @@
 import './TransactionsTable.css'
 
 import currency from 'currency.js'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { collectTagsFromRows, type TransactionTag } from '@/components/finance/transactionsTableTags'
 import { useFinanceTags } from '@/components/finance/useFinanceTags'
@@ -24,9 +24,9 @@ import { Table } from '@/components/ui/table'
 import type { AccountLineItem } from '@/data/finance/AccountLineItem'
 import { isDuplicateTransaction } from '@/data/finance/isDuplicateTransaction'
 import { fetchWrapper } from '@/fetchWrapper'
+import { tagBadgeStyle } from '@/lib/finance/tagColorUtils'
 import { cn } from '@/lib/utils'
 
-import { ClearFilterButton } from './ClearFilterButton'
 import TransactionLotsModal from './lots/TransactionLotsModal'
 import { TagSelect } from './rules_engine/TagSelect'
 import TransactionDetailsModal from './TransactionDetailsModal'
@@ -42,55 +42,53 @@ interface Props {
   duplicates?: AccountLineItem[] | undefined
   enableLinking?: boolean | undefined
   accountId?: number | undefined
-  /** Override the default page size (default: 5000) */
   pageSize?: number | undefined
-  /** Transaction ID to scroll to (triggers page auto-selection) */
   highlightTransactionId?: number | undefined
 }
 
-function PaginationControls({ 
-  currentPage, totalPages, totalRows, pageSize, viewAll, 
-  onPageChange, onViewAll 
-}: { 
+function PaginationControls({
+  currentPage, totalPages, totalRows, pageSize, viewAll,
+  onPageChange, onViewAll, onPaginate
+}: {
   currentPage: number; totalPages: number; totalRows: number; pageSize: number; viewAll: boolean;
-  onPageChange: (page: number) => void; onViewAll: () => void
+  onPageChange: (page: number) => void; onViewAll: () => void; onPaginate: () => void
 }) {
   if (totalRows <= pageSize && !viewAll) return null
-  
+
   const startRow = viewAll ? 1 : (currentPage - 1) * pageSize + 1
   const endRow = viewAll ? totalRows : Math.min(currentPage * pageSize, totalRows)
 
   return (
-    <div className="flex items-center justify-between px-2 py-2 text-sm text-muted-foreground">
+    <div className="flex items-center justify-between px-1 py-3 text-xs font-mono text-muted-foreground border-b border-border mb-4">
       <span>
-        Showing {startRow.toLocaleString()}–{endRow.toLocaleString()} of {totalRows.toLocaleString()} rows
+        SHOWING {startRow.toLocaleString()}–{endRow.toLocaleString()} OF {totalRows.toLocaleString()} ROWS
       </span>
       <div className="flex items-center gap-2">
         {!viewAll && totalPages > 1 && (
           <>
-            <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => onPageChange(1)}>
+            <Button variant="outline" size="sm" className="h-7 px-2 font-mono text-[10px]" disabled={currentPage <= 1} onClick={() => onPageChange(1)}>
               ««
             </Button>
-            <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => onPageChange(currentPage - 1)}>
+            <Button variant="outline" size="sm" className="h-7 px-2 font-mono text-[10px]" disabled={currentPage <= 1} onClick={() => onPageChange(currentPage - 1)}>
               «
             </Button>
-            <span className="px-2">
+            <span className="px-2 uppercase tracking-wider">
               Page {currentPage} of {totalPages}
             </span>
-            <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => onPageChange(currentPage + 1)}>
+            <Button variant="outline" size="sm" className="h-7 px-2 font-mono text-[10px]" disabled={currentPage >= totalPages} onClick={() => onPageChange(currentPage + 1)}>
               »
             </Button>
-            <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => onPageChange(totalPages)}>
+            <Button variant="outline" size="sm" className="h-7 px-2 font-mono text-[10px]" disabled={currentPage >= totalPages} onClick={() => onPageChange(totalPages)}>
               »»
             </Button>
           </>
         )}
         {viewAll ? (
-          <Button variant="ghost" size="sm" onClick={() => onPageChange(1)}>
+          <Button variant="ghost" size="sm" className="h-7 font-mono text-[10px] uppercase tracking-wider" onClick={onPaginate}>
             Paginate
           </Button>
         ) : (
-          <Button variant="ghost" size="sm" onClick={onViewAll}>
+          <Button variant="ghost" size="sm" className="h-7 font-mono text-[10px] uppercase tracking-wider" onClick={onViewAll}>
             View All
           </Button>
         )}
@@ -124,11 +122,11 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
   const [currentPage, setCurrentPage] = useState(1)
   const [viewAll, setViewAll] = useState(false)
   const [selectedTagId, setSelectedTagId] = useState<string | null>(null)
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<number>>(new Set())
+  const [lastSelectedIndex, setLastSelectedIndex] = useState(-1)
 
   const isDuplicate = (item: AccountLineItem) => {
-    if (!duplicates || duplicates.length === 0) {
-      return false
-    }
+    if (!duplicates || duplicates.length === 0) return false
     return isDuplicateTransaction(item, duplicates)
   }
 
@@ -139,10 +137,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
   }
 
   const tagsFromRows: TransactionTag[] = useMemo(() => collectTagsFromRows(data), [data])
-  const {
-    tags: availableTags,
-    isLoading: isLoadingTags,
-  } = useFinanceTags({
+  const { tags: availableTags, isLoading: isLoadingTags } = useFinanceTags({
     enabled: enableTagging,
     fallbackTags: tagsFromRows,
   })
@@ -152,9 +147,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
     if (!transactionIds) return
     try {
       await fetchWrapper.post('/api/finance/tags/apply', { tag_id: tagId, transaction_ids: transactionIds })
-      if (typeof refreshFn === 'function') {
-        refreshFn()
-      }
+      if (typeof refreshFn === 'function') refreshFn()
     } catch (error) {
       console.error('Failed to apply tag:', error)
     }
@@ -168,35 +161,52 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
       const payload: Record<string, unknown> = { transaction_ids: transactionIds }
       if (tagId != null) payload.tag_id = tagId
       await fetchWrapper.post('/api/finance/tags/remove', payload)
-      if (typeof refreshFn === 'function') {
-        refreshFn()
-      }
+      if (typeof refreshFn === 'function') refreshFn()
     } catch (error) {
       console.error('Failed to remove tags:', error)
     }
   }
 
-  const renderTransactionTags = (row: AccountLineItem) => (
-    <div className="flex gap-1">
+  const handleUpdateTransaction = useCallback(async (_updatedTransaction: Partial<AccountLineItem>): Promise<void> => {
+    if (typeof refreshFn === 'function') {
+      await refreshFn()
+    }
+  }, [refreshFn])
+
+  const renderTransactionTags = useCallback((row: AccountLineItem) => (
+    <div className="flex flex-wrap gap-1">
       {row.tags?.map((tag) => (
         <Badge
           key={tag.tag_id}
           variant="outline"
-          className={`bg-${tag.tag_color}-200 text-${tag.tag_color}-800 dark:bg-${tag.tag_color}-800 dark:text-${tag.tag_color}-200 cursor-pointer hover:opacity-80`}
-          onClick={(e) => {
+          className="font-mono text-[9px] px-1.5 py-0 rounded-sm cursor-pointer hover:opacity-80 transition-opacity border-0"
+          style={tagBadgeStyle(tag.tag_color)}
+          onDoubleClick={(e) => {
             e.stopPropagation()
-            if (tagFilter === tag.tag_label) {
-              setTagFilter('')
-            } else {
-              setTagFilter(tag.tag_label)
-            }
+            // Toggle the tag filter using functional updater to avoid stale closure
+            setTagFilter((prev) => prev === tag.tag_label ? '' : tag.tag_label)
           }}
+          onClick={(e) => e.stopPropagation()}
         >
           {tag.tag_label}
         </Badge>
       ))}
     </div>
-  )
+  ), []) // setTagFilter is a stable useState setter; tag data comes from row prop
+
+  const handleRowClick = (rowId: number, rowIndex: number, e: React.MouseEvent) => {
+    if (e.shiftKey && lastSelectedIndex >= 0) {
+      const start = Math.min(lastSelectedIndex, rowIndex)
+      const end = Math.max(lastSelectedIndex, rowIndex)
+      const rangeIds = new Set(
+        paginatedData.slice(start, end + 1).map((r) => r.t_id).filter((id): id is number => id != null)
+      )
+      setSelectedRowIds(rangeIds)
+    } else {
+      setSelectedRowIds(new Set([rowId]))
+      setLastSelectedIndex(rowIndex)
+    }
+  }
 
   const handleSort = (field: keyof AccountLineItem) => {
     if (field === sortField) {
@@ -207,13 +217,11 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
     }
   }
 
+  // Column visibility checks
   const isCategoryColumnEmpty = useMemo(() => data.every((row) => !row.t_schc_category), [data])
   const isQtyColumnEmpty = useMemo(() => data.every((row) => !row.t_qty || Number(row.t_qty) === 0), [data])
   const isPriceColumnEmpty = useMemo(() => data.every((row) => !row.t_price || Number(row.t_price) === 0), [data])
-  const isCommissionColumnEmpty = useMemo(
-    () => data.every((row) => !row.t_commission || Number(row.t_commission) === 0),
-    [data],
-  )
+  const isCommissionColumnEmpty = useMemo(() => data.every((row) => !row.t_commission || Number(row.t_commission) === 0), [data])
   const isFeeColumnEmpty = useMemo(() => data.every((row) => !row.t_fee || Number(row.t_fee) === 0), [data])
   const isTypeColumnEmpty = useMemo(() => data.every((row) => !row.t_type), [data])
   const isMemoColumnEmpty = useMemo(() => data.every((row) => !row.t_comment), [data])
@@ -227,8 +235,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
   const isCashBalanceColumnEmpty = useMemo(() => data.every((row) => !row.t_account_balance), [data])
   const isClientExpenseColumnEmpty = useMemo(() => data.every((row) => !row.client_expense), [data])
 
-  const filteredData = data.filter(
-    (row) =>
+  const filteredData = data.filter(row =>
       (!dateFilter || row.t_date?.includes(dateFilter)) &&
       (!descriptionFilter || row.t_description?.toLowerCase().includes(descriptionFilter.toLowerCase())) &&
       (!typeFilter || (row.t_type || '-').toLowerCase().includes(typeFilter.toLowerCase())) &&
@@ -239,27 +246,13 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
       (!optTypeFilter || row.opt_type?.toLowerCase().includes(optTypeFilter.toLowerCase())) &&
       (!memoFilter || (row.t_comment || '-').toLowerCase().includes(memoFilter.toLowerCase())) &&
       (!tagFilter ||
-        (row.tags &&
-          row.tags.some((tag) =>
-            tagFilter
-              .toLowerCase()
-              .split(',')
-              .map((t) => t.trim())
-              .some((filterPart) => tag.tag_label.toLowerCase().includes(filterPart)),
-          ))) &&
-      (!amountFilter ||
-        (row.t_amt || '0')
-          .toString()
-          .includes(amountFilter)) &&
-      (!qtyFilter ||
-        (row.t_qty || '0')
-          .toString()
-          .includes(qtyFilter)) &&
+        (row.tags && row.tags.some((tag) =>
+            tagFilter.toLowerCase().split(',').map((t) => t.trim()).some((filterPart) => tag.tag_label.toLowerCase().includes(filterPart))
+        ))) &&
+      (!amountFilter || (row.t_amt || '0').toString().includes(amountFilter)) &&
+      (!qtyFilter || (row.t_qty || '0').toString().includes(qtyFilter)) &&
       (!postDateFilter || row.t_date_posted?.includes(postDateFilter)) &&
-      (!cashBalanceFilter ||
-        (row.t_account_balance || '0')
-          .toString()
-          .includes(cashBalanceFilter)),
+      (!cashBalanceFilter || (row.t_account_balance || '0').toString().includes(cashBalanceFilter))
   )
 
   const sortedData = [...filteredData].sort((a, b) => {
@@ -271,11 +264,9 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
     return aVal < bVal ? -direction : direction
   })
 
-  // Pagination: compute total pages and the visible slice
   const totalRows = sortedData.length
   const totalPages = viewAll ? 1 : Math.max(1, Math.ceil(totalRows / pageSize))
 
-  // Auto-select page when highlightTransactionId is set
   useEffect(() => {
     if (highlightTransactionId && !viewAll) {
       const idx = sortedData.findIndex(r => r.t_id === highlightTransactionId)
@@ -286,19 +277,16 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
     }
   }, [highlightTransactionId, sortedData, pageSize, viewAll])
 
-  // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1)
   }, [descriptionFilter, typeFilter, categoryFilter, symbolFilter, cusipFilter, optExpirationFilter, optTypeFilter, dateFilter, memoFilter, tagFilter, amountFilter, qtyFilter, postDateFilter, cashBalanceFilter])
 
-  // Clamp page
   const safePage = Math.min(currentPage, totalPages)
   const paginatedData = viewAll ? sortedData : sortedData.slice((safePage - 1) * pageSize, safePage * pageSize)
 
-  // Totals are computed from all filtered+sorted data (not just the current page)
   const [totalAmount, totalPositives, totalNegatives] = sortedData.reduce(
     ([total, positives, negatives], row) => {
-        const amount = currency(row.t_amt || '0');
+        const amount = currency(row.t_amt || '0')
         return [
             total.add(amount),
             amount.value > 0 ? positives.add(amount) : positives,
@@ -308,742 +296,458 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
     [currency(0), currency(0), currency(0)],
   )
 
-  const handleUpdateTransaction = async () => {
-    if (typeof refreshFn === 'function') {
-      refreshFn()
-    }
-  }
-
-  const handlePageChange = (page: number) => {
-    setViewAll(false)
-    setCurrentPage(page)
-  }
-
-  const handleViewAll = () => {
-    setViewAll(true)
-  }
-
-  const paginationControls = (
-    <PaginationControls
-      currentPage={safePage}
-      totalPages={totalPages}
-      totalRows={totalRows}
-      pageSize={pageSize}
-      viewAll={viewAll}
-      onPageChange={handlePageChange}
-      onViewAll={handleViewAll}
-    />
-  )
+  const thClass = "text-left py-3 px-2 text-[10px] tracking-widest uppercase text-muted-foreground font-medium align-bottom whitespace-nowrap cursor-pointer hover:text-foreground transition-colors"
+  const tdClass = "py-2 px-2 border-b border-table-border align-top"
+  const inputClass = "bg-background/50 border border-border text-foreground text-xs rounded px-2 py-1 w-full mt-1 focus:ring-1 focus:ring-ring outline-none font-mono"
 
   return (
     <>
-      {paginationControls}
-      <Table className="finance-transactions-table">
-        <thead>
-          <tr>
-            <th className="clickable dateCol" onClick={() => handleSort('t_date')}>
-              Date {sortField === 't_date' && (sortDirection === 'asc' ? '↑' : '↓')}
-            </th>
-            {!isPostDateColumnEmpty && (
-              <th className="clickable dateCol" onClick={() => handleSort('t_date_posted')}>
-                Post Date {sortField === 't_date_posted' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </th>
-            )}
-            {!isTypeColumnEmpty && (
-              <th className="clickable" onClick={() => handleSort('t_type')}>
-                Type {sortField === 't_type' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </th>
-            )}
-            <th className="clickable descriptionCol" onClick={() => handleSort('t_description')}>
-              Description {sortField === 't_description' && (sortDirection === 'asc' ? '↑' : '↓')}
-            </th>
-            {!isTagsColumnEmpty && <th>Tags</th>}
-            {!isSymbolColumnEmpty && (
-              <th className="clickable" onClick={() => handleSort('t_symbol')}>
-                Symbol {sortField === 't_symbol' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </th>
-            )}
-            {!isQtyColumnEmpty && (
-              <th className="clickable text-right pr-1" onClick={() => handleSort('t_qty')}>
-                Qty {sortField === 't_qty' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </th>
-            )}
-            {!isPriceColumnEmpty && (
-              <th className="clickable text-right pr-1" onClick={() => handleSort('t_price')}>
-                Price {sortField === 't_price' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </th>
-            )}
-            {!isCommissionColumnEmpty && (
-              <th className="clickable text-right pr-1" onClick={() => handleSort('t_commission')}>
-                Comm. {sortField === 't_commission' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </th>
-            )}
-            {!isFeeColumnEmpty && (
-              <th className="clickable text-right pr-1" onClick={() => handleSort('t_fee')}>
-                Fee {sortField === 't_fee' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </th>
-            )}
-            <th className="clickable text-right pr-1" onClick={() => handleSort('t_amt')}>
-              Amount {sortField === 't_amt' && (sortDirection === 'asc' ? '↑' : '↓')}
-            </th>
-            {!isCategoryColumnEmpty && (
-              <th className="clickable" onClick={() => handleSort('t_schc_category')}>
-                Category {sortField === 't_schc_category' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </th>
-            )}
-            {!isCusipColumnEmpty && (
-              <th className="clickable" onClick={() => handleSort('t_cusip')}>
-                CUSIP {sortField === 't_cusip' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </th>
-            )}
-            {!isOptionExpiryColumnEmpty && (
-              <th className="clickable" onClick={() => handleSort('opt_expiration')}>
-                Option Expiry {sortField === 'opt_expiration' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </th>
-            )}
-            {!isOptionTypeColumnEmpty && (
-              <th className="clickable" onClick={() => handleSort('opt_type')}>
-                Option Type {sortField === 'opt_type' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </th>
-            )}
-            {!isStrikeColumnEmpty && (
-              <th className="clickable" onClick={() => handleSort('opt_strike')}>
-                Strike {sortField === 'opt_strike' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </th>
-            )}
-            {!isMemoColumnEmpty && (
-              <th className="clickable" onClick={() => handleSort('t_comment')} style={{ width: '200px' }}>
-                Memo {sortField === 't_comment' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </th>
-            )}
-            {!isCashBalanceColumnEmpty && (
-              <th className="clickable text-right" onClick={() => handleSort('t_account_balance')}>
-                Cash Balance {sortField === 't_account_balance' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </th>
-            )}
-            {!isClientExpenseColumnEmpty && (
-              <th className="text-center">Client</th>
-            )}
-            {enableLinking && <th className="text-center">Link</th>}
-            {accountId && <th className="text-center">Lots</th>}
-            <th className="text-center">Details</th>
-            {onDeleteTransaction && <th className="text-center">🗑️</th>}
-          </tr>
-          <tr>
-            <th className="position-relative dateCol">
-              <input
-                style={{ width: '100%', maxWidth: '150px' }}
-                type="text"
-                placeholder="Filter date..."
-                value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value)}
-              />
-              {dateFilter && <ClearFilterButton onClick={() => setDateFilter('')} ariaLabel="Clear date filter" />}
-            </th>
-            {!isPostDateColumnEmpty && (
-              <th className="position-relative dateCol">
-                <input
-                  style={{ width: '100%', maxWidth: '150px' }}
-                  type="text"
-                  placeholder="Filter post date..."
-                  value={postDateFilter}
-                  onChange={(e) => setPostDateFilter(e.target.value)}
-                />
-                {postDateFilter && (
-                  <ClearFilterButton onClick={() => setPostDateFilter('')} ariaLabel="Clear post date filter" />
-                )}
-              </th>
-            )}
-            {!isTypeColumnEmpty && (
-              <th className="position-relative">
-                <input
-                  style={{ width: '100%', maxWidth: '150px' }}
-                  type="text"
-                  placeholder="Filter type..."
-                  value={typeFilter}
-                  onChange={(e) => setTypeFilter(e.target.value)}
-                />
-                {typeFilter && <ClearFilterButton onClick={() => setTypeFilter('')} ariaLabel="Clear type filter" />}
-              </th>
-            )}
-            <th className="position-relative descriptionCol">
-              <input
-                style={{ width: '100%', maxWidth: '150px' }}
-                type="text"
-                placeholder="Filter description..."
-                value={descriptionFilter}
-                onChange={(e) => setDescriptionFilter(e.target.value)}
-              />
-              {descriptionFilter && (
-                <ClearFilterButton onClick={() => setDescriptionFilter('')} ariaLabel="Clear description filter" />
-              )}
-            </th>
-            {!isTagsColumnEmpty && (
-              <th className="position-relative">
-                <input
-                  style={{ width: '100%', maxWidth: '150px' }}
-                  type="text"
-                  placeholder="Filter tags..."
-                  value={tagFilter}
-                  onChange={(e) => setTagFilter(e.target.value)}
-                />
-                {tagFilter && <ClearFilterButton onClick={() => setTagFilter('')} ariaLabel="Clear tag filter" />}
-              </th>
-            )}
-            {!isSymbolColumnEmpty && (
-              <th className="position-relative" style={{ width: '100px' }}>
-                <input
-                  style={{ width: '100%', maxWidth: '150px' }}
-                  type="text"
-                  placeholder="Filter symbol..."
-                  value={symbolFilter}
-                  onChange={(e) => setSymbolFilter(e.target.value)}
-                />
-                {symbolFilter && <ClearFilterButton onClick={() => setSymbolFilter('')} ariaLabel="Clear symbol filter" />}
-              </th>
-            )}
-            {!isQtyColumnEmpty && (
-              <th className="position-relative" style={{ width: '80px' }}>
-                <input
-                  style={{ width: '100%', maxWidth: '150px' }}
-                  type="text"
-                  placeholder="Filter qty..."
-                  value={qtyFilter}
-                  onChange={(e) => setQtyFilter(e.target.value)}
-                />
-                {qtyFilter && <ClearFilterButton onClick={() => setQtyFilter('')} ariaLabel="Clear qty filter" />}
-              </th>
-            )}
-            {!isPriceColumnEmpty && <th></th>}
-            {!isCommissionColumnEmpty && <th></th>}
-            {!isFeeColumnEmpty && <th></th>}
-            <th className="position-relative" style={{ width: '100px' }}>
-              <input
-                style={{ width: '100%', maxWidth: '150px' }}
-                type="text"
-                placeholder="Filter amount..."
-                value={amountFilter}
-                onChange={(e) => setAmountFilter(e.target.value)}
-              />
-              {amountFilter && <ClearFilterButton onClick={() => setAmountFilter('')} ariaLabel="Clear amount filter" />}
-            </th>
-            {!isCategoryColumnEmpty && (
-              <th className="position-relative" style={{ width: '140px' }}>
-                <input
-                  style={{ width: '100%', maxWidth: '150px' }}
-                  type="text"
-                  placeholder="Filter category..."
-                  value={categoryFilter}
-                  onChange={(e) => setCategoryFilter(e.target.value)}
-                />
-                {categoryFilter && (
-                  <ClearFilterButton onClick={() => setCategoryFilter('')} ariaLabel="Clear category filter" />
-                )}
-              </th>
-            )}
-            {!isCusipColumnEmpty && (
-              <th className="position-relative" style={{ width: '100px' }}>
-                <input
-                  style={{ width: '100%', maxWidth: '150px' }}
-                  type="text"
-                  placeholder="Filter CUSIP..."
-                  value={cusipFilter}
-                  onChange={(e) => setCusipFilter(e.target.value)}
-                />
-                {cusipFilter && <ClearFilterButton onClick={() => setCusipFilter('')} ariaLabel="Clear CUSIP filter" />}
-              </th>
-            )}
-            {!isOptionExpiryColumnEmpty && (
-              <th className="position-relative" style={{ width: '100px' }}>
-                <input
-                  style={{ width: '100%', maxWidth: '150px' }}
-                  type="text"
-                  placeholder="Filter option expiry..."
-                  value={optExpirationFilter}
-                  onChange={(e) => setOptExpirationFilter(e.target.value)}
-                />
-                {optExpirationFilter && (
-                  <ClearFilterButton onClick={() => setOptExpirationFilter('')} ariaLabel="Clear option expiry filter" />
-                )}
-              </th>
-            )}
-            {!isOptionTypeColumnEmpty && (
-              <th className="position-relative" style={{ width: '100px' }}>
-                <input
-                  style={{ width: '100%', maxWidth: '150px' }}
-                  type="text"
-                  placeholder="Filter option type..."
-                  value={optTypeFilter}
-                  onChange={(e) => setOptTypeFilter(e.target.value)}
-                />
-                {optTypeFilter && (
-                  <ClearFilterButton onClick={() => setOptTypeFilter('')} ariaLabel="Clear option type filter" />
-                )}
-              </th>
-            )}
-            {!isStrikeColumnEmpty && <th></th>}
-            {!isMemoColumnEmpty && (
-              <th className="position-relative" style={{ width: '200px' }}>
-                <input
-                  style={{ width: '100%', maxWidth: '200px' }}
-                  type="text"
-                  placeholder="Filter memo..."
-                  value={memoFilter}
-                  onChange={(e) => setMemoFilter(e.target.value)}
-                />
-                {memoFilter && <ClearFilterButton onClick={() => setMemoFilter('')} ariaLabel="Clear memo filter" />}
-              </th>
-            )}
-            {!isCashBalanceColumnEmpty && (
-              <th className="position-relative" style={{ width: '100px' }}>
-                <input
-                  style={{ width: '100%', maxWidth: '150px' }}
-                  type="text"
-                  placeholder="Filter balance..."
-                  value={cashBalanceFilter}
-                  onChange={(e) => setCashBalanceFilter(e.target.value)}
-                />
-                {cashBalanceFilter && <ClearFilterButton onClick={() => setCashBalanceFilter('')} ariaLabel="Clear balance filter" />}
-              </th>
-            )}
-            {!isClientExpenseColumnEmpty && <th></th>}
-            {enableLinking && <th></th>}
-            {accountId && <th></th>}
-            <th></th>
-            {onDeleteTransaction && <th></th>}
-          </tr>
-        </thead>
-        <tbody>
-          {paginatedData.map((row, i) => (
-            <tr 
-              key={row.t_id + ':' + i} 
-              className={cn({ 'duplicate-row': isDuplicate(row) })}
-              data-transaction-id={row.t_id}
-            >
-              <td
-                className="dateCol"
-                onClick={() => {
-                  const formattedDate = row.t_date
-                  if (dateFilter === formattedDate) {
-                    setDateFilter('')
-                  } else {
-                    setDateFilter(formattedDate || '')
-                  }
-                }}
-              >
-                {row.t_date}
-              </td>
-              {!isPostDateColumnEmpty && (
-                <td
-                  className="dateCol"
-                  onClick={() => {
-                    const formattedPostDate = row.t_date_posted
-                    if (postDateFilter === formattedPostDate) {
-                      setPostDateFilter('')
-                    } else {
-                      setPostDateFilter(formattedPostDate || '')
-                    }
-                  }}
-                >
-                  {row.t_date_posted}
-                </td>
-              )}
-              {!isTypeColumnEmpty && (
-                <td
-                  onClick={() => {
-                    if (typeFilter === row.t_type) {
-                      setTypeFilter('')
-                    } else {
-                      setTypeFilter(row.t_type || '')
-                    }
-                  }}
-                  className="typeCol clickable"
-                >
-                  {row.t_type}
-                </td>
-              )}
-              <td
-                onClick={() => {
-                  if (descriptionFilter === row.t_description) {
-                    setDescriptionFilter('')
-                  } else {
-                    setDescriptionFilter(row.t_description || '')
-                  }
-                }}
-                className="descriptionCol clickable"
-              >
-                {row.t_description}
-              </td>
-              {!isTagsColumnEmpty && <td className="tagsCol">{renderTransactionTags(row)}</td>}
-              {!isSymbolColumnEmpty && (
-                <td
-                  className={'numericCol'}
-                  onClick={() => {
-                    if (symbolFilter === row.t_symbol) {
-                      setSymbolFilter('')
-                    } else {
-                      setSymbolFilter(row.t_symbol || '')
-                    }
-                  }}
-                >
-                  {row.t_symbol}
-                </td>
-              )}
-              {!isQtyColumnEmpty && (
-                <td
-                  className={'numericCol text-right clickable'}
-                  onClick={() => {
-                    const qty = row.t_qty?.toString() || '0';
-                    if (qtyFilter === qty) {
-                      setQtyFilter('')
-                    } else {
-                      setQtyFilter(qty)
-                    }
-                  }}
-                >
-                  {row.t_qty != null ? row.t_qty.toLocaleString() : ''}
-                </td>
-              )}
-              {!isPriceColumnEmpty && (
-                <td className={'numericCol text-right pr-1'}>
-                  {row.t_price != null && Number(row.t_price) !== 0 ? row.t_price : ''}
-                </td>
-              )}
-              {!isCommissionColumnEmpty && (
-                <td className={'numericCol text-right pr-1'}>
-                  {row.t_commission != null && Number(row.t_commission) !== 0 ? row.t_commission : ''}
-                </td>
-              )}
-              {!isFeeColumnEmpty && (
-                <td className={'numericCol text-right pr-1'}>
-                  {row.t_fee != null && Number(row.t_fee) !== 0 ? row.t_fee : ''}
-                </td>
-              )}
-              <td
-                className={'numericCol clickable text-right pr-1'}
-                style={{
-                  color: Number(row.t_amt) >= 0 ? 'green' : 'red',
-                  whiteSpace: 'nowrap',
-                }}
-                onClick={() => {
-                  const amt = row.t_amt?.toString() || '0';
-                  if (amountFilter === amt) {
-                    setAmountFilter('')
-                  } else {
-                    setAmountFilter(amt)
-                  }
-                }}
-              >
-                {row.t_amt || '0'}
-              </td>
-              {!isCategoryColumnEmpty && (
-                <td
-                  onClick={() => {
-                    if (categoryFilter === (row.t_schc_category || '-')) {
-                      setCategoryFilter('')
-                    } else {
-                      setCategoryFilter(row.t_schc_category || '-')
-                    }
-                  }}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {row.t_schc_category ?? '-'}
-                </td>
-              )}
-              {!isCusipColumnEmpty && (
-                <td
-                  style={{ width: '100px', cursor: 'pointer' }}
-                  onClick={() => {
-                    if (cusipFilter === row.t_cusip) {
-                      setCusipFilter('')
-                    } else {
-                      setCusipFilter(row.t_cusip || '')
-                    }
-                  }}
-                >
-                  {row.t_cusip}
-                </td>
-              )}
-              {!isOptionExpiryColumnEmpty && (
-                <td
-                  className={'numericCol'}
-                  onClick={() => {
-                    const formattedExpiry = row.opt_expiration?.slice(0, 10)
-                    if (optExpirationFilter === formattedExpiry) {
-                      setOptExpirationFilter('')
-                    } else {
-                      setOptExpirationFilter(formattedExpiry || '')
-                    }
-                  }}
-                >
-                  {row.opt_expiration?.slice(0, 10) ?? ''}
-                </td>
-              )}
-              {!isOptionTypeColumnEmpty && (
-                <td
-                  className={'numericCol'}
-                  onClick={() => {
-                    if (optTypeFilter === row.opt_type) {
-                      setOptTypeFilter('')
-                    } else {
-                      setOptTypeFilter(row.opt_type || '')
-                    }
-                  }}
-                >
-                  {row.opt_type}
-                </td>
-              )}
-              {!isStrikeColumnEmpty && (
-                <td className={'numericCol'}>
-                  {row.opt_strike != null ? row.opt_strike : ''}
-                </td>
-              )}
-              {!isMemoColumnEmpty && <td>{row.t_comment}</td>}
-              {!isCashBalanceColumnEmpty && (
-                <td className={'numericCol text-right'}>
-                  {row.t_account_balance != null ? currency(row.t_account_balance).format() : ''}
-                </td>
-              )}
-              {!isClientExpenseColumnEmpty && (
-                <td className="text-center">
-                  {row.client_expense?.client_company && (
-                    <a
-                      href={`/client/portal/${row.client_expense.client_company.slug}`}
-                      className="text-blue-600 hover:underline text-xs inline-flex items-center gap-1"
-                      title={`Billed to ${row.client_expense.client_company.company_name}`}
-                    >
-                      {row.client_expense.client_company.company_name}
-                    </a>
-                  )}
-                </td>
-              )}
-              {enableLinking && (
-                <td>
-                  <Button 
-                    variant={hasLinks(row) ? "default" : "outline"} 
-                    size="sm" 
-                    onClick={() => setLinkTransaction(row)}
-                    className={hasLinks(row) ? "bg-green-600 hover:bg-green-700 text-white" : ""}
-                    title={hasLinks(row) ? "View linked transactions" : "Link transaction"}
-                  >
-                    🔗
-                  </Button>
-                </td>
-              )}
-              {accountId && (
-                <td>
-                  {row.t_symbol && (row.t_type === 'Sell' || row.t_type === 'Buy' || row.t_type === 'SELL' || row.t_type === 'BUY' || (row.t_qty && Number(row.t_qty) !== 0)) && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setLotsTransaction(row)}
-                      title="View/Edit Lots"
-                    >
-                      📦
-                    </Button>
-                  )}
-                </td>
-              )}
-              <td>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => setSelectedTransaction(row)}
-                >
-                  Details
-                </Button>
-              </td>
-              {onDeleteTransaction && (
-                <td style={{ textAlign: 'center' }}>
-                  <button
-                    onClick={() => setDeleteConfirmTransaction(row)}
-                    className="btn btn-link p-0"
-                    aria-label="Delete transaction"
-                  >
-                    🗑️
-                  </button>
-                </td>
-              )}
-            </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr>
-            <TotalCell />
-            {!isPostDateColumnEmpty && <TotalCell />}
-            {!isTypeColumnEmpty && <TotalCell />}
-            <TotalCell />
-            {!isTagsColumnEmpty && <TotalCell />}
-            {!isSymbolColumnEmpty && <TotalCell />}
-            {!isQtyColumnEmpty && <TotalCell />}
-            {!isPriceColumnEmpty && <TotalCell />}
-            {!isCommissionColumnEmpty && <TotalCell />}
-            {!isFeeColumnEmpty && <TotalCell />}
-            <td className="totalCell numericCol text-right">
-              <strong>
-                {totalPositives.format()} (Credits) <br />
-                {totalNegatives.format()} (Debits) <br />= {totalAmount.format()} (Net)
-              </strong>
-            </td>
-            {!isCategoryColumnEmpty && <TotalCell />}
-            {!isCusipColumnEmpty && <TotalCell />}
-            {!isOptionExpiryColumnEmpty && <TotalCell />}
-            {!isOptionTypeColumnEmpty && <TotalCell />}
-            {!isStrikeColumnEmpty && <TotalCell />}
-            {!isMemoColumnEmpty && <TotalCell />}
-            {!isCashBalanceColumnEmpty && <TotalCell />}
-            {!isClientExpenseColumnEmpty && <TotalCell />}
-            {enableLinking && <TotalCell />}
-            {accountId && <TotalCell />}
-            <TotalCell />
-            {onDeleteTransaction && <TotalCell />}
-          </tr>
-        </tfoot>
-      </Table>
-
-      {paginationControls}
-
-      {enableTagging && (
-        <div className="mt-4">
-          {sortedData.length > 1000 ? (
-            <Alert variant="destructive">
-              <AlertDescription>
-                There are too many items to tag ({sortedData.length.toLocaleString()} transactions). Please refine your
-                view to fewer than 1,000 items before applying tags.
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <div className="p-4 border rounded flex flex-wrap items-center gap-3">
-              <span className="text-sm">Tag {sortedData.length} transaction{sortedData.length !== 1 ? 's' : ''} in view:</span>
-              {isLoadingTags ? (
-                <Spinner size="small" />
-              ) : (
-                <>
-                  <TagSelect
-                    value={selectedTagId}
-                    onChange={setSelectedTagId}
-                    tags={availableTags}
-                    placeholder="Select a tag…"
-                    className="w-48"
-                  />
-                  <Button
-                    size="sm"
-                    disabled={sortedData.length === 0 || !selectedTagId}
-                    onClick={() => {
-                      if (selectedTagId) void handleApplyTag(Number(selectedTagId))
-                    }}
-                  >
-                    Add Tag
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={sortedData.length === 0 || !selectedTagId}
-                    onClick={() => {
-                      if (selectedTagId) void handleRemoveAllTags(Number(selectedTagId))
-                    }}
-                  >
-                    Remove Tag
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    disabled={sortedData.length === 0}
-                    onClick={() => setRemoveTagsConfirmOpen(true)}
-                  >
-                    Remove All Tags
-                  </Button>
-                  <a href="/finance/tags" className="ml-auto">
-                    <Button variant="secondary" size="sm">
-                      Manage Tags
-                    </Button>
-                  </a>
-                </>
-              )}
-            </div>
-          )}
+      {/* Summary Card Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        <div className="bg-card border border-border p-4 rounded-sm shadow-sm">
+          <div className="font-mono text-[10px] tracking-wide uppercase text-muted-foreground mb-1.5">Net Amount</div>
+          <div className={cn("font-mono text-xl font-semibold", totalAmount.value >= 0 ? "text-success" : "text-destructive")}>
+            {totalAmount.format()}
+          </div>
         </div>
-      )}
+        <div className="bg-card border border-border p-4 rounded-sm shadow-sm">
+          <div className="font-mono text-[10px] tracking-wide uppercase text-muted-foreground mb-1.5">Total Credits</div>
+          <div className="font-mono text-xl font-semibold text-success">{totalPositives.format()}</div>
+        </div>
+        <div className="bg-card border border-border p-4 rounded-sm shadow-sm">
+          <div className="font-mono text-[10px] tracking-wide uppercase text-muted-foreground mb-1.5">Total Debits</div>
+          <div className="font-mono text-xl font-semibold text-destructive">{totalNegatives.format()}</div>
+        </div>
+        <div className="bg-card border border-border p-4 rounded-sm shadow-sm">
+          <div className="font-mono text-[10px] tracking-wide uppercase text-muted-foreground mb-1.5">Rows Matching Filters</div>
+          <div className="font-mono text-xl font-semibold text-foreground">{totalRows.toLocaleString()}</div>
+        </div>
+      </div>
 
+      <PaginationControls
+        currentPage={safePage}
+        totalPages={totalPages}
+        totalRows={totalRows}
+        pageSize={pageSize}
+        viewAll={viewAll}
+        onPageChange={(page) => { setViewAll(false); setCurrentPage(page) }}
+        onViewAll={() => setViewAll(true)}
+        onPaginate={() => { setViewAll(false); setCurrentPage(1) }}
+      />
+
+      <div className="relative w-full overflow-x-auto border border-border rounded-sm bg-card">
+        {enableTagging && (
+          <div className="border-b border-border bg-card px-3 py-2">
+            {sortedData.length > 1000 ? (
+              <Alert variant="destructive" className="bg-destructive/10 border-destructive/20 text-destructive">
+                <AlertDescription className="font-mono text-xs">
+                  Too many items to tag ({sortedData.length.toLocaleString()} transactions). Refine view to &lt; 1,000 items.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-xs font-mono tracking-wide uppercase text-muted-foreground">
+                  Action on {sortedData.length} row{sortedData.length !== 1 ? 's' : ''}:
+                </span>
+                {isLoadingTags ? (
+                  <Spinner size="small" />
+                ) : (
+                  <>
+                    <TagSelect value={selectedTagId} onChange={setSelectedTagId} tags={availableTags} placeholder="Select a tag…" className="w-48 text-xs font-mono" />
+                    <Button size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider" disabled={sortedData.length === 0 || !selectedTagId} onClick={() => selectedTagId && handleApplyTag(Number(selectedTagId))}>
+                      Add
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider" disabled={sortedData.length === 0 || !selectedTagId} onClick={() => selectedTagId && handleRemoveAllTags(Number(selectedTagId))}>
+                      Remove
+                    </Button>
+                    <Button variant="destructive" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider ml-2" disabled={sortedData.length === 0} onClick={() => setRemoveTagsConfirmOpen(true)}>
+                      Clear All
+                    </Button>
+                    <a href="/finance/tags" className="ml-auto">
+                      <Button variant="secondary" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider text-accent">
+                        Manage Tags
+                      </Button>
+                    </a>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+        <Table className="w-full text-sm">
+          <thead className="bg-muted/30 border-b border-border">
+            <tr>
+              <th className={thClass} onClick={() => handleSort('t_date')}>
+                <div>Date {sortField === 't_date' && (sortDirection === 'asc' ? '↑' : '↓')}</div>
+                <div className="relative mt-1">
+                  <input className={inputClass} placeholder="Filter..." value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} onClick={e => e.stopPropagation()} />
+                </div>
+              </th>
+              
+              {!isPostDateColumnEmpty && (
+                <th className={thClass} onClick={() => handleSort('t_date_posted')}>
+                  <div>Post Date {sortField === 't_date_posted' && (sortDirection === 'asc' ? '↑' : '↓')}</div>
+                  <div className="relative mt-1">
+                    <input className={inputClass} placeholder="Filter..." value={postDateFilter} onChange={(e) => setPostDateFilter(e.target.value)} onClick={e => e.stopPropagation()} />
+                  </div>
+                </th>
+              )}
+              
+              {!isTypeColumnEmpty && (
+                <th className={thClass} onClick={() => handleSort('t_type')}>
+                  <div>Type {sortField === 't_type' && (sortDirection === 'asc' ? '↑' : '↓')}</div>
+                  <div className="relative mt-1">
+                    <input className={inputClass} placeholder="Filter..." value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} onClick={e => e.stopPropagation()} />
+                  </div>
+                </th>
+              )}
+              
+              <th className={thClass} onClick={() => handleSort('t_description')}>
+                <div>Description {sortField === 't_description' && (sortDirection === 'asc' ? '↑' : '↓')}</div>
+                <div className="relative mt-1">
+                  <input className={inputClass} placeholder="Filter..." value={descriptionFilter} onChange={(e) => setDescriptionFilter(e.target.value)} onClick={e => e.stopPropagation()} />
+                </div>
+              </th>
+              
+              {!isTagsColumnEmpty && (
+                <th className={cn(thClass, "cursor-default")}>
+                  <div>Tags</div>
+                  <div className="relative mt-1">
+                    <input className={inputClass} placeholder="Filter..." value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} onClick={e => e.stopPropagation()} />
+                  </div>
+                </th>
+              )}
+              
+              {!isSymbolColumnEmpty && (
+                <th className={thClass} onClick={() => handleSort('t_symbol')}>
+                  <div>Symbol {sortField === 't_symbol' && (sortDirection === 'asc' ? '↑' : '↓')}</div>
+                  <div className="relative mt-1">
+                    <input className={inputClass} placeholder="Filter..." value={symbolFilter} onChange={(e) => setSymbolFilter(e.target.value)} onClick={e => e.stopPropagation()} />
+                  </div>
+                </th>
+              )}
+              
+              {!isQtyColumnEmpty && (
+                <th className={cn(thClass, "text-right")} onClick={() => handleSort('t_qty')}>
+                  <div>Qty {sortField === 't_qty' && (sortDirection === 'asc' ? '↑' : '↓')}</div>
+                  <div className="relative mt-1">
+                    <input className={inputClass} placeholder="Filter..." value={qtyFilter} onChange={(e) => setQtyFilter(e.target.value)} onClick={e => e.stopPropagation()} />
+                  </div>
+                </th>
+              )}
+              
+              {!isPriceColumnEmpty && <th className={cn(thClass, "text-right")} onClick={() => handleSort('t_price')}>Price</th>}
+              {!isCommissionColumnEmpty && <th className={cn(thClass, "text-right")} onClick={() => handleSort('t_commission')}>Comm.</th>}
+              {!isFeeColumnEmpty && <th className={cn(thClass, "text-right")} onClick={() => handleSort('t_fee')}>Fee</th>}
+              
+              <th className={cn(thClass, "text-right")} onClick={() => handleSort('t_amt')}>
+                <div>Amount {sortField === 't_amt' && (sortDirection === 'asc' ? '↑' : '↓')}</div>
+                <div className="relative mt-1">
+                  <input className={inputClass} placeholder="Filter..." value={amountFilter} onChange={(e) => setAmountFilter(e.target.value)} onClick={e => e.stopPropagation()} />
+                </div>
+              </th>
+              
+              {!isCategoryColumnEmpty && (
+                <th className={thClass} onClick={() => handleSort('t_schc_category')}>
+                  <div>Category {sortField === 't_schc_category' && (sortDirection === 'asc' ? '↑' : '↓')}</div>
+                  <div className="relative mt-1">
+                    <input className={inputClass} placeholder="Filter..." value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} onClick={e => e.stopPropagation()} />
+                  </div>
+                </th>
+              )}
+              
+              {!isCusipColumnEmpty && (
+                <th className={thClass} onClick={() => handleSort('t_cusip')}>
+                  <div>CUSIP {sortField === 't_cusip' && (sortDirection === 'asc' ? '↑' : '↓')}</div>
+                  <div className="relative mt-1">
+                    <input className={inputClass} placeholder="Filter..." value={cusipFilter} onChange={(e) => setCusipFilter(e.target.value)} onClick={e => e.stopPropagation()} />
+                  </div>
+                </th>
+              )}
+              
+              {!isOptionExpiryColumnEmpty && (
+                <th className={thClass} onClick={() => handleSort('opt_expiration')}>
+                  <div>Expiry {sortField === 'opt_expiration' && (sortDirection === 'asc' ? '↑' : '↓')}</div>
+                </th>
+              )}
+              
+              {!isOptionTypeColumnEmpty && (
+                <th className={thClass} onClick={() => handleSort('opt_type')}>
+                  <div>Opt Type {sortField === 'opt_type' && (sortDirection === 'asc' ? '↑' : '↓')}</div>
+                </th>
+              )}
+              
+              {!isStrikeColumnEmpty && <th className={thClass} onClick={() => handleSort('opt_strike')}>Strike</th>}
+              
+              {!isMemoColumnEmpty && (
+                <th className={thClass} onClick={() => handleSort('t_comment')}>
+                  <div>Memo {sortField === 't_comment' && (sortDirection === 'asc' ? '↑' : '↓')}</div>
+                  <div className="relative mt-1">
+                    <input className={inputClass} placeholder="Filter..." value={memoFilter} onChange={(e) => setMemoFilter(e.target.value)} onClick={e => e.stopPropagation()} />
+                  </div>
+                </th>
+              )}
+              
+              {!isCashBalanceColumnEmpty && (
+                <th className={cn(thClass, "text-right whitespace-nowrap")} onClick={() => handleSort('t_account_balance')}>
+                  <div>Balance {sortField === 't_account_balance' && (sortDirection === 'asc' ? '↑' : '↓')}</div>
+                  <div className="relative mt-1">
+                    <input
+                      className={inputClass}
+                      placeholder="Filter..."
+                      value={cashBalanceFilter}
+                      onChange={(e) => setCashBalanceFilter(e.target.value)}
+                      onClick={e => e.stopPropagation()}
+                    />
+                  </div>
+                </th>
+              )}
+              
+              {!isClientExpenseColumnEmpty && <th className={cn(thClass, "text-center cursor-default")}>Client</th>}
+              {enableLinking && <th className={cn(thClass, "text-center cursor-default")}>Link</th>}
+              {accountId && <th className={cn(thClass, "text-center cursor-default")}>Lots</th>}
+              <th className={cn(thClass, "text-center cursor-default")}>Details</th>
+              {onDeleteTransaction && <th className={cn(thClass, "text-center cursor-default")}>🗑️</th>}
+            </tr>
+          </thead>
+          
+          <tbody className="[&_tr:last-child]:border-0 hover:[&>tr]:bg-muted/20">
+            {paginatedData.map((row, i) => {
+              // Rows without a t_id (e.g., unsaved preview rows) are never selectable
+              const rowId = row.t_id ?? -i
+              const isRowSelected = rowId >= 0 && selectedRowIds.has(rowId)
+              return (
+                <tr
+                  key={row.t_id != null ? row.t_id : `row-${i}`}
+                  className={cn(
+                    "transition-colors cursor-pointer",
+                    isDuplicate(row) && "bg-destructive/10 hover:bg-destructive/20",
+                    isRowSelected && !isDuplicate(row) && "bg-primary/10 hover:bg-primary/20",
+                  )}
+                  data-transaction-id={row.t_id}
+                  onClick={(e) => {
+                    const target = e.target as HTMLElement
+                    if (target.closest('button') || target.closest('a')) return
+                    if (row.t_id != null) handleRowClick(row.t_id, i, e)
+                  }}
+                >
+                  <td className={cn(tdClass, "font-mono text-muted-foreground whitespace-nowrap hover:text-foreground")} onDoubleClick={() => setDateFilter(dateFilter === row.t_date ? '' : (row.t_date || ''))}>
+                    {row.t_date}
+                  </td>
+
+                  {!isPostDateColumnEmpty && (
+                    <td className={cn(tdClass, "font-mono text-muted-foreground whitespace-nowrap hover:text-foreground")} onDoubleClick={() => setPostDateFilter(postDateFilter === row.t_date_posted ? '' : (row.t_date_posted || ''))}>
+                      {row.t_date_posted}
+                    </td>
+                  )}
+
+                  {!isTypeColumnEmpty && (
+                    <td className={cn(tdClass, "hover:text-primary")} onDoubleClick={() => setTypeFilter(typeFilter === row.t_type ? '' : (row.t_type || ''))}>
+                      {row.t_type}
+                    </td>
+                  )}
+
+                  <td className={cn(tdClass, "hover:text-primary font-medium")} onDoubleClick={() => setDescriptionFilter(descriptionFilter === row.t_description ? '' : (row.t_description || ''))}>
+                    {row.t_description}
+                  </td>
+
+                  {!isTagsColumnEmpty && <td className={tdClass}>{renderTransactionTags(row)}</td>}
+
+                  {!isSymbolColumnEmpty && (
+                    <td className={cn(tdClass, "font-mono hover:text-primary")} onDoubleClick={() => setSymbolFilter(symbolFilter === row.t_symbol ? '' : (row.t_symbol || ''))}>
+                      {row.t_symbol}
+                    </td>
+                  )}
+
+                  {!isQtyColumnEmpty && (
+                    <td className={cn(tdClass, "font-mono tabular-nums text-right hover:text-primary")} onDoubleClick={() => setQtyFilter(qtyFilter === (row.t_qty?.toString() || '0') ? '' : (row.t_qty?.toString() || '0'))}>
+                      {row.t_qty != null ? row.t_qty.toLocaleString() : ''}
+                    </td>
+                  )}
+
+                  {!isPriceColumnEmpty && <td className={cn(tdClass, "font-mono tabular-nums text-right")}>{row.t_price != null && Number(row.t_price) !== 0 ? row.t_price : ''}</td>}
+                  {!isCommissionColumnEmpty && <td className={cn(tdClass, "font-mono tabular-nums text-right")}>{row.t_commission != null && Number(row.t_commission) !== 0 ? row.t_commission : ''}</td>}
+                  {!isFeeColumnEmpty && <td className={cn(tdClass, "font-mono tabular-nums text-right")}>{row.t_fee != null && Number(row.t_fee) !== 0 ? row.t_fee : ''}</td>}
+
+                  <td
+                    className={cn(
+                      tdClass,
+                      "font-mono tabular-nums text-right font-semibold hover:opacity-80",
+                      Number(row.t_amt) >= 0 ? "text-success" : "text-destructive"
+                    )}
+                    onDoubleClick={() => setAmountFilter(amountFilter === (row.t_amt?.toString() || '0') ? '' : (row.t_amt?.toString() || '0'))}
+                  >
+                    {row.t_amt || '0'}
+                  </td>
+
+                  {!isCategoryColumnEmpty && (
+                    <td className={cn(tdClass, "hover:text-primary text-xs")} onDoubleClick={() => setCategoryFilter(categoryFilter === (row.t_schc_category || '-') ? '' : (row.t_schc_category || '-'))}>
+                      {row.t_schc_category ?? '-'}
+                    </td>
+                  )}
+
+                  {!isCusipColumnEmpty && (
+                    <td className={cn(tdClass, "font-mono text-xs hover:text-primary")} onDoubleClick={() => setCusipFilter(cusipFilter === row.t_cusip ? '' : (row.t_cusip || ''))}>
+                      {row.t_cusip}
+                    </td>
+                  )}
+
+                  {!isOptionExpiryColumnEmpty && (
+                    <td className={cn(tdClass, "font-mono text-xs hover:text-primary")} onDoubleClick={() => setOptExpirationFilter(optExpirationFilter === row.opt_expiration?.slice(0, 10) ? '' : (row.opt_expiration?.slice(0, 10) || ''))}>
+                      {row.opt_expiration?.slice(0, 10) ?? ''}
+                    </td>
+                  )}
+
+                  {!isOptionTypeColumnEmpty && (
+                    <td className={cn(tdClass, "text-xs hover:text-primary")} onDoubleClick={() => setOptTypeFilter(optTypeFilter === row.opt_type ? '' : (row.opt_type || ''))}>
+                      {row.opt_type}
+                    </td>
+                  )}
+
+                  {!isStrikeColumnEmpty && <td className={cn(tdClass, "font-mono text-xs")}>{row.opt_strike != null ? row.opt_strike : ''}</td>}
+
+                  {!isMemoColumnEmpty && (
+                    <td className={cn(tdClass, "text-xs text-muted-foreground max-w-xs truncate text-ellipsis transition-all")} onDoubleClick={() => setMemoFilter(memoFilter === row.t_comment ? '' : (row.t_comment || ''))}>
+                      {row.t_comment}
+                    </td>
+                  )}
+
+                  {!isCashBalanceColumnEmpty && (
+                    <td className={cn(tdClass, "font-mono tabular-nums text-right whitespace-nowrap text-muted-foreground")}>
+                      {row.t_account_balance != null ? currency(row.t_account_balance).format() : ''}
+                    </td>
+                  )}
+
+                  {!isClientExpenseColumnEmpty && (
+                    <td className={cn(tdClass, "text-center")}>
+                      {row.client_expense?.client_company && (
+                        <a href={`/client/portal/${row.client_expense.client_company.slug}`} className="text-primary hover:underline text-[10px] uppercase font-semibold">
+                          {row.client_expense.client_company.company_name}
+                        </a>
+                      )}
+                    </td>
+                  )}
+
+                  {enableLinking && (
+                    <td className={cn(tdClass, "text-center")}>
+                      <Button variant={hasLinks(row) ? "default" : "outline"} size="sm" className={cn("h-6 px-2 text-[10px]", hasLinks(row) && "bg-success hover:bg-success/80 text-success-foreground border-success")} onClick={(e) => { e.stopPropagation(); setLinkTransaction(row) }}>
+                        🔗
+                      </Button>
+                    </td>
+                  )}
+
+                  {accountId && (
+                    <td className={cn(tdClass, "text-center")}>
+                      {row.t_symbol && (row.t_type?.toUpperCase() === 'SELL' || row.t_type?.toUpperCase() === 'BUY' || (row.t_qty && Number(row.t_qty) !== 0)) && (
+                        <Button variant="outline" size="sm" className="h-6 px-2 text-[10px]" onClick={(e) => { e.stopPropagation(); setLotsTransaction(row) }}>
+                          📦
+                        </Button>
+                      )}
+                    </td>
+                  )}
+
+                  <td className={cn(tdClass, "text-center")}>
+                    <Button variant="secondary" size="sm" className="h-6 px-2 text-[10px] font-mono uppercase tracking-wider" onClick={(e) => { e.stopPropagation(); setSelectedTransaction(row) }}>
+                      Details
+                    </Button>
+                  </td>
+
+                  {onDeleteTransaction && (
+                    <td className={cn(tdClass, "text-center")}>
+                      <button onClick={(e) => { e.stopPropagation(); setDeleteConfirmTransaction(row) }} className="text-muted-foreground hover:text-destructive transition-colors">
+                        🗑️
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              )
+            })}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-border bg-muted/30 font-semibold text-sm">
+              <td className="py-2 px-2 font-mono text-muted-foreground text-xs uppercase tracking-wide" colSpan={
+                1 +
+                (isPostDateColumnEmpty ? 0 : 1) +
+                (isTypeColumnEmpty ? 0 : 1) +
+                1 + // description
+                (isTagsColumnEmpty ? 0 : 1) +
+                (isSymbolColumnEmpty ? 0 : 1) +
+                (isQtyColumnEmpty ? 0 : 1) +
+                (isPriceColumnEmpty ? 0 : 1) +
+                (isCommissionColumnEmpty ? 0 : 1) +
+                (isFeeColumnEmpty ? 0 : 1)
+              }>
+                {totalRows.toLocaleString()} row{totalRows !== 1 ? 's' : ''}
+              </td>
+              <td className="py-2 px-2 font-mono tabular-nums text-right">
+                <div className={cn("text-sm", totalAmount.value >= 0 ? "text-success" : "text-destructive")}>
+                  {totalAmount.format()} net
+                </div>
+                <div className="text-[10px] text-muted-foreground">
+                  <span className="text-success">{totalPositives.format()}</span>
+                  {' / '}
+                  <span className="text-destructive">{totalNegatives.format()}</span>
+                </div>
+              </td>
+              {!isCategoryColumnEmpty && <td />}
+              {!isCusipColumnEmpty && <td />}
+              {!isOptionExpiryColumnEmpty && <td />}
+              {!isOptionTypeColumnEmpty && <td />}
+              {!isStrikeColumnEmpty && <td />}
+              {!isMemoColumnEmpty && <td />}
+              {!isCashBalanceColumnEmpty && <td />}
+              {!isClientExpenseColumnEmpty && <td />}
+              {enableLinking && <td />}
+              {accountId && <td />}
+              <td />
+              {onDeleteTransaction && <td />}
+            </tr>
+          </tfoot>
+        </Table>
+      </div>
       <AlertDialog open={removeTagsConfirmOpen} onOpenChange={setRemoveTagsConfirmOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="border-border bg-card">
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove all tags</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will remove all tags from the {sortedData.length} transaction{sortedData.length !== 1 ? 's' : ''} currently in the view. This action cannot be undone.
+            <AlertDialogTitle className="font-mono text-accent">Remove all tags</AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">
+              This will remove all tags from the {sortedData.length} transaction{sortedData.length !== 1 ? 's' : ''} currently in view. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={async () => {
-                setRemoveTagsConfirmOpen(false)
-                await handleRemoveAllTags()
-              }}
-            >
-              Remove all tags
+            <AlertDialogCancel className="border-border hover:bg-muted/50">Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={async () => { setRemoveTagsConfirmOpen(false); await handleRemoveAllTags(); }}>
+              Confirm Removal
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {selectedTransaction && (
-        <TransactionDetailsModal
-          transaction={selectedTransaction}
-          isOpen={!!selectedTransaction}
-          onClose={() => setSelectedTransaction(null)}
-          onSave={handleUpdateTransaction}
-        />
-      )}
-
-      {linkTransaction && (
-        <TransactionLinkModal
-          transaction={linkTransaction}
-          isOpen={!!linkTransaction}
-          onClose={() => setLinkTransaction(null)}
-          onLinkChanged={() => {
-            if (typeof refreshFn === 'function') {
-              refreshFn()
-            }
-          }}
-        />
-      )}
-
-      {lotsTransaction && accountId && (
-        <TransactionLotsModal
-          accountId={accountId}
-          transactionId={lotsTransaction.t_id!}
-          isOpen={!!lotsTransaction}
-          onClose={() => setLotsTransaction(null)}
-        />
-      )}
+      {selectedTransaction && <TransactionDetailsModal transaction={selectedTransaction} isOpen={!!selectedTransaction} onClose={() => setSelectedTransaction(null)} onSave={handleUpdateTransaction} />}
+      {linkTransaction && <TransactionLinkModal transaction={linkTransaction} isOpen={!!linkTransaction} onClose={() => setLinkTransaction(null)} onLinkChanged={() => refreshFn && refreshFn()} />}
+      {lotsTransaction && accountId && <TransactionLotsModal accountId={accountId} transactionId={lotsTransaction.t_id!} isOpen={!!lotsTransaction} onClose={() => setLotsTransaction(null)} />}
 
       <AlertDialog open={!!deleteConfirmTransaction} onOpenChange={() => setDeleteConfirmTransaction(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="border-border bg-card">
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Transaction?</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogTitle className="font-mono text-destructive">Delete Transaction?</AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">
               Are you sure you want to delete this transaction? This action cannot be undone.
               {deleteConfirmTransaction && (
-                <div className="mt-3 p-3 bg-gray-100 dark:bg-gray-800 rounded text-sm">
-                  <p><strong>Date:</strong> {deleteConfirmTransaction.t_date}</p>
-                  <p><strong>Description:</strong> {deleteConfirmTransaction.t_description}</p>
-                  <p><strong>Amount:</strong> {currency(deleteConfirmTransaction.t_amt || 0).format()}</p>
+                <div className="mt-4 p-3 bg-surface border border-border rounded-sm text-sm font-mono text-foreground space-y-1">
+                  <p><span className="text-muted-foreground uppercase text-[10px] tracking-wider inline-block w-24">Date:</span> {deleteConfirmTransaction.t_date}</p>
+                  <p><span className="text-muted-foreground uppercase text-[10px] tracking-wider inline-block w-24">Description:</span> {deleteConfirmTransaction.t_description}</p>
+                  <p><span className="text-muted-foreground uppercase text-[10px] tracking-wider inline-block w-24">Amount:</span> <span className={Number(deleteConfirmTransaction.t_amt) >= 0 ? "text-success" : "text-destructive"}>{currency(deleteConfirmTransaction.t_amt || 0).format()}</span></p>
                 </div>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-red-600 hover:bg-red-700"
-              onClick={() => {
+            <AlertDialogCancel className="border-border hover:bg-muted/50">Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => {
                 if (deleteConfirmTransaction && onDeleteTransaction) {
-                  onDeleteTransaction(deleteConfirmTransaction.t_id?.toString() || '')
-                  setDeleteConfirmTransaction(null)
+                  onDeleteTransaction(deleteConfirmTransaction.t_id?.toString() || ''); setDeleteConfirmTransaction(null);
                 }
-              }}
-            >
+              }}>
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1052,10 +756,3 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
     </>
   )
 }
-
-const TotalCell = ({ children, label }: { children?: any; label?: string }) => (
-  <td className="totalCell">
-    {children}
-    {label ? <strong>{label}</strong> : null}
-  </td>
-)

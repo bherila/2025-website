@@ -66,9 +66,9 @@ describe('TransactionsTable Tag Application', () => {
     const workOption = await screen.findByRole('option', { name: /work/i })
     fireEvent.click(workOption)
 
-    // Click the "Add Tag" button to apply the tag
-    const addTagButton = screen.getByRole('button', { name: /add tag/i })
-    fireEvent.click(addTagButton)
+    // Click the "Add" button to apply the tag
+    const addButton = screen.getByRole('button', { name: /add/i })
+    fireEvent.click(addButton)
 
     await waitFor(() => {
       expect(fetchWrapper.post).toHaveBeenCalledWith(
