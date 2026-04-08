@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
+import currency from 'currency.js'
 import { Code, Loader2, Plus, Trash2 } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import { type SubmitHandler, useForm } from 'react-hook-form'
@@ -243,7 +244,7 @@ function DepositsSection({ payslipId, netPay }: { payslipId: number; netPay?: nu
   }, [load])
 
   const handleSave = async () => {
-    if (!newRow.bank_name || !newRow.amount) return
+    if (!newRow.bank_name || !Number.isFinite(newRow.amount)) return
     try {
       await fetchWrapper.post(`/api/payslips/${payslipId}/deposits`, newRow)
       setIsAdding(false)
@@ -263,7 +264,7 @@ function DepositsSection({ payslipId, netPay }: { payslipId: number; netPay?: nu
     }
   }
 
-  const total = rows.reduce((sum, r) => sum + (r.amount as number ?? 0), 0)
+  const total = rows.reduce((sum, r) => sum.add(currency(r.amount as string | number, { errorOnInvalid: false }).intValue), currency(0))
 
   return (
     <div className="border border-border rounded-sm bg-card">
@@ -281,7 +282,7 @@ function DepositsSection({ payslipId, netPay }: { payslipId: number; netPay?: nu
           <div key={row.id} className="grid grid-cols-4 gap-2 items-center font-mono text-xs">
             <span className="col-span-1 truncate">{row.bank_name}</span>
             <span className="text-muted-foreground">···{row.account_last4}</span>
-            <span className="text-right">${(row.amount as number)?.toFixed(2)}</span>
+            <span className="text-right">${currency(row.amount as string | number, { errorOnInvalid: false }).format()}</span>
             <Button
               type="button"
               variant="ghost"
@@ -296,9 +297,9 @@ function DepositsSection({ payslipId, netPay }: { payslipId: number; netPay?: nu
         {rows.length > 0 && (
           <div className="flex justify-between pt-1 border-t border-border font-mono text-xs text-muted-foreground">
             <span>Total deposits</span>
-            <span className={netPay && Math.abs(total - netPay) > 0.01 ? 'text-warning' : 'text-success'}>
-              ${total.toFixed(2)}
-              {netPay ? ` / $${netPay.toFixed(2)} net` : ''}
+            <span className={netPay && Math.abs(total.intValue - (netPay as number) * 100) > 2 ? 'text-warning' : 'text-success'}>
+              ${total.format()}
+              {netPay ? ` / ${currency(netPay as number).format()} net` : ''}
             </span>
           </div>
         )}

@@ -563,13 +563,8 @@ PROMPT;
             $arr['other'] = json_decode($arr['other'], true);
         }
 
-        // Rename snake_case relation key (Laravel appends _data suffix automatically)
-        if (isset($arr['state_data'])) {
-            // already correct key
-        } elseif (isset($arr['state_datas'])) {
-            $arr['state_data'] = $arr['state_datas'];
-            unset($arr['state_datas']);
-        }
+        // Laravel automatically serializes 'stateData' relation as 'state_data'
+        // No manual transformation needed
 
         return $arr;
     }
