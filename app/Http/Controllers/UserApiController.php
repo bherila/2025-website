@@ -11,7 +11,7 @@ use Illuminate\Validation\Rule;
 
 class UserApiController extends Controller
 {
-    public function getUser(): mixed
+    public function getUser(): JsonResponse
     {
         $user = Auth::user();
         if (! $user) {
@@ -20,7 +20,8 @@ class UserApiController extends Controller
 
         $userId = $user->id;
 
-        return Cache::remember("user_data_{$userId}", 60, function () use ($user) {
+        /** @var array<string, mixed> $userData */
+        $userData = Cache::remember("user_data_{$userId}", 60, function () use ($user) {
             $userArray = $user->toArray();
             if (! empty($userArray['gemini_api_key'])) {
                 $userArray['gemini_api_key'] = substr($userArray['gemini_api_key'], -4);
@@ -30,6 +31,8 @@ class UserApiController extends Controller
 
             return $userArray;
         });
+
+        return response()->json($userData);
     }
 
     public function updateEmail(Request $request): JsonResponse

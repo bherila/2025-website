@@ -28,8 +28,11 @@ class GetAccountSummary extends Tool
             ->whereNull('when_deleted');
 
         $year = $request->input('year');
-        if ($year !== null && $year !== 'all') {
-            $lineItemsQuery->whereYear('t_date', (int) $year);
+        // Normalize: treat 'all' or non-numeric values as no year filter
+        $yearFilter = (is_numeric($year) && (int) $year > 0) ? (int) $year : null;
+
+        if ($yearFilter !== null) {
+            $lineItemsQuery->whereYear('t_date', $yearFilter);
         }
 
         $totals = [
@@ -42,8 +45,8 @@ class GetAccountSummary extends Tool
             ->whereNull('when_deleted')
             ->whereNotNull('t_symbol');
 
-        if ($year !== null && $year !== 'all') {
-            $symbolQuery->whereYear('t_date', (int) $year);
+        if ($yearFilter !== null) {
+            $symbolQuery->whereYear('t_date', $yearFilter);
         }
 
         $symbolSummary = $symbolQuery
