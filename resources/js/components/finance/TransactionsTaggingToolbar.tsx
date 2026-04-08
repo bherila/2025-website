@@ -49,7 +49,7 @@ export function TransactionsTaggingToolbar({
 
   const label = isSelection
     ? `Action on ${effectiveCount} selected row${effectiveCount !== 1 ? 's' : ''}`
-    : `Action on ${effectiveCount} row${effectiveCount !== 1 ? 's' : ''}`
+    : `Action on all ${effectiveCount} matching row${effectiveCount !== 1 ? 's' : ''}`
 
   return (
     <>
@@ -92,7 +92,7 @@ export function TransactionsTaggingToolbar({
           <AlertDialogHeader>
             <AlertDialogTitle className="font-mono text-accent">Remove all tags</AlertDialogTitle>
             <AlertDialogDescription className="text-muted-foreground">
-              This will remove all tags from the {effectiveCount} {isSelection ? 'selected ' : ''}transaction{effectiveCount !== 1 ? 's' : ''}. This cannot be undone.
+              This will remove all tags from the {effectiveCount} {isSelection ? 'selected ' : 'matching '}transaction{effectiveCount !== 1 ? 's' : ''}. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
