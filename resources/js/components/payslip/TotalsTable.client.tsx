@@ -37,13 +37,23 @@ function totalFedWH(data: fin_payslip[]) {
 }
 
 function totalStateWH(data: fin_payslip[]) {
+  return data.reduce((acc, row) => {
+    const state = row.state_data?.[0]
+    return acc.add((state?.state_tax as number) ?? 0).add((state?.state_tax_addl as number) ?? 0)
+  }, currency(0))
+}
+
+function totalRetirementSavings(data: fin_payslip[]) {
   return data.reduce(
-    (acc, row) => acc.add(row.ps_state_tax ?? 0).add(row.ps_state_tax_addl ?? 0),
+    (acc, row) =>
+      acc
+        .add(row.ps_401k_pretax ?? 0)
+        .add(row.ps_401k_aftertax ?? 0)
+        .add(row.ps_401k_employer ?? 0),
     currency(0),
   )
 }
 
-// ─── Formatters ──────────────────────────────────────────────────────────────
 
 function fmtCurrency(val: currency | number): string {
   return currency(val).format()
@@ -178,10 +188,12 @@ export default function TotalsTable({
 
   // Summary cards use the last (full-year) series
   const last = allTotals[allTotals.length - 1]?.totals
+  const lastData = series[series.length - 1]?.[1] ?? []
+  const retirementSavings = totalRetirementSavings(lastData)
 
   // ── Summary cards ────────────────────────────────────────────────────────
   const summaryCards = last ? (
-    <div className="grid grid-cols-2 gap-3 mb-5 sm:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 mb-5 sm:grid-cols-4 lg:grid-cols-5">
       <SummaryCard
         label="Full Year Est. Income"
         value={fmtCurrency(last.income)}
@@ -213,6 +225,14 @@ export default function TotalsTable({
           value={fmtCurrency(last.taxDue.value)}
           sub="Underpayment"
           valueClass="text-destructive"
+        />
+      )}
+      {retirementSavings.value > 0 && (
+        <SummaryCard
+          label="Retirement Savings"
+          value={fmtCurrency(retirementSavings)}
+          sub="Pre-tax + Roth + Employer"
+          valueClass="text-info"
         />
       )}
     </div>

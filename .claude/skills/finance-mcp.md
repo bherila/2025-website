@@ -25,7 +25,7 @@ user-facing data rather than schema structure.
 | `list_employment_entities` | W-2 employers and Schedule C businesses |
 | `list_tags` | Transaction tags with tax characteristics |
 | `get_marriage_status` | Filing status by year |
-| `list_payslips` | Payslips filtered by year; returns all fields (earnings, taxes, deductions, 401k) |
+| `list_payslips` | Payslips filtered by year (or `has_rsu` / `has_bonus`); includes RSU tax offsets, taxable wage bases, PTO balances, per-state tax data (`state_data`), deposit splits (`deposits`), and catch-all `other` |
 
 ## Available Resources
 

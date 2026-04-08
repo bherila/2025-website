@@ -197,10 +197,10 @@ export function PayslipTable({ data, onRowEdited }: Props) {
             const fedTotal = currency(row.ps_fed_tax ?? 0)
               .add(row.ps_fed_tax_addl ?? 0)
               .subtract(row.ps_fed_tax_refunded ?? 0)
-            const stateTotal = currency(row.ps_state_tax ?? 0).add(row.ps_state_tax_addl ?? 0)
+            const stateTotal = currency((row.state_data?.[0]?.state_tax as number) ?? 0).add((row.state_data?.[0]?.state_tax_addl as number) ?? 0)
             const ficaTotal = currency(row.ps_oasdi ?? 0)
               .add(row.ps_medicare ?? 0)
-              .add(row.ps_state_disability ?? 0)
+              .add((row.state_data?.[0]?.state_disability as number) ?? 0)
             // ps_401k_aftertax (Roth) is not a pre-tax deduction; excluded from this column total
             const pretaxTotal = currency(row.ps_401k_pretax ?? 0)
               .add(row.ps_pretax_medical ?? 0)
@@ -288,14 +288,12 @@ export function PayslipTable({ data, onRowEdited }: Props) {
                 {/* CA State Tax */}
                 <TableCell className="py-2 px-3 text-right align-top">
                   {stateTotal.value > 0 ? (
-                    <WithYTD row={row} field="ps_state_tax" allData={data}>
-                      <span className="text-destructive">{stateTotal.format()}</span>
-                    </WithYTD>
+                    <span className="text-destructive">{stateTotal.format()}</span>
                   ) : (
                     <span className="text-muted-foreground">—</span>
                   )}
-                  {(row.ps_state_tax_addl ?? 0) > 0 && (
-                    <SubText>Incl. +{fmt(row.ps_state_tax_addl)} addl</SubText>
+                  {((row.state_data?.[0]?.state_tax_addl as number) ?? 0) > 0 && (
+                    <SubText>Incl. +{fmt(row.state_data?.[0]?.state_tax_addl as number)} addl</SubText>
                   )}
                 </TableCell>
 
@@ -310,7 +308,7 @@ export function PayslipTable({ data, onRowEdited }: Props) {
                   )}
                   {ficaTotal.value > 0 && (
                     <SubText>
-                      O:{fmtShort(row.ps_oasdi) ?? '—'} / M:{fmtShort(row.ps_medicare) ?? '—'} / S:{fmtShort(row.ps_state_disability) ?? '—'}
+                      O:{fmtShort(row.ps_oasdi) ?? '—'} / M:{fmtShort(row.ps_medicare) ?? '—'} / S:{fmtShort((row.state_data?.[0]?.state_disability as number) ?? undefined) ?? '—'}
                     </SubText>
                   )}
                 </TableCell>

@@ -107,6 +107,14 @@ Route::middleware(['web', 'auth'])->post('/payslips/import', [FinancePayslipImpo
 Route::middleware(['web', 'auth'])->delete('/payslips/{payslip_id}', [FinancePayslipController::class, 'deletePayslip']);
 Route::middleware(['web', 'auth'])->get('/payslips/{payslip_id}', [FinancePayslipController::class, 'fetchPayslipById']);
 Route::middleware(['web', 'auth'])->post('/payslips/{payslip_id}/estimated-status', [FinancePayslipController::class, 'updatePayslipEstimatedStatus']);
+// Deposits sub-resource
+Route::middleware(['web', 'auth'])->get('/payslips/{payslip_id}/deposits', [FinancePayslipController::class, 'fetchDeposits']);
+Route::middleware(['web', 'auth'])->post('/payslips/{payslip_id}/deposits', [FinancePayslipController::class, 'saveDeposit']);
+Route::middleware(['web', 'auth'])->delete('/payslips/{payslip_id}/deposits/{deposit_id}', [FinancePayslipController::class, 'deleteDeposit']);
+// State data sub-resource
+Route::middleware(['web', 'auth'])->get('/payslips/{payslip_id}/state-data', [FinancePayslipController::class, 'fetchStateData']);
+Route::middleware(['web', 'auth'])->post('/payslips/{payslip_id}/state-data', [FinancePayslipController::class, 'saveStateData']);
+Route::middleware(['web', 'auth'])->delete('/payslips/{payslip_id}/state-data/{state_data_id}', [FinancePayslipController::class, 'deleteStateData']);
 
 Route::middleware(['web', 'auth'])->get('/user', [UserApiController::class, 'getUser']);
 
