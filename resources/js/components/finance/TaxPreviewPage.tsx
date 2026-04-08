@@ -457,6 +457,13 @@ function W2IncomeSummary({ payslips }: { payslips: fin_payslip[] }) {
       .add(r.imp_legal ?? 0)
       .add(r.imp_fitness ?? 0)
       .add(r.imp_other ?? 0)
+  // Pre-tax deductions reduce W-2 Box 1 wages (401k pre-tax, medical, dental, vision, FSA)
+  const pretaxDeductionsGetter = (r: fin_payslip) =>
+    currency(r.ps_401k_pretax ?? 0)
+      .add(r.ps_pretax_medical ?? 0)
+      .add(r.ps_pretax_dental ?? 0)
+      .add(r.ps_pretax_vision ?? 0)
+      .add(r.ps_pretax_fsa ?? 0)
   const fedWHGetter = (r: fin_payslip) =>
     currency(r.ps_fed_tax ?? 0)
       .add(r.ps_fed_tax_addl ?? 0)
@@ -472,7 +479,9 @@ function W2IncomeSummary({ payslips }: { payslips: fin_payslip[] }) {
   const rsu = sum(rsuGetter)
   const vacationPayout = sum(vacationGetter)
   const imputed = sum(imputedGetter)
-  const gross = wages.add(bonus).add(rsu).add(vacationPayout).add(imputed)
+  const pretaxDeductions = sum(pretaxDeductionsGetter)
+  // W-2 Box 1 wages = salary + bonus + RSU + vacation + imputed income - pre-tax deductions
+  const gross = wages.add(bonus).add(rsu).add(vacationPayout).add(imputed).subtract(pretaxDeductions)
 
   const fedWH = sum(fedWHGetter)
   const stateWH = sum(stateWHGetter)
@@ -481,7 +490,12 @@ function W2IncomeSummary({ payslips }: { payslips: fin_payslip[] }) {
   const sdi = sum(sdiGetter)
 
   const grossGetter = (r: fin_payslip) =>
-    wagesGetter(r).add(bonusGetter(r)).add(rsuGetter(r)).add(vacationGetter(r)).add(imputedGetter(r))
+    wagesGetter(r)
+      .add(bonusGetter(r))
+      .add(rsuGetter(r))
+      .add(vacationGetter(r))
+      .add(imputedGetter(r))
+      .subtract(pretaxDeductionsGetter(r))
 
   const rows = [
     { label: 'Wages / Salary', value: wages, getter: wagesGetter },
@@ -489,7 +503,8 @@ function W2IncomeSummary({ payslips }: { payslips: fin_payslip[] }) {
     rsu.value > 0 ? { label: 'RSU Vesting', value: rsu, getter: rsuGetter } : null,
     vacationPayout.value > 0 ? { label: 'Vacation Payout', value: vacationPayout, getter: vacationGetter } : null,
     imputed.value > 0 ? { label: 'Imputed Income (benefits)', value: imputed, getter: imputedGetter } : null,
-    { label: 'Total Gross W-2 Income', value: gross, bold: true, getter: grossGetter },
+    pretaxDeductions.value > 0 ? { label: 'Pre-tax Deductions (401k, benefits)', value: pretaxDeductions.multiply(-1), getter: (r: fin_payslip) => pretaxDeductionsGetter(r).multiply(-1) } : null,
+    { label: 'Total Gross W-2 Income (Box 1)', value: gross, bold: true, getter: grossGetter },
     { label: '', value: null, getter: null },
     { label: 'Federal Income Tax Withheld', value: fedWH, getter: fedWHGetter },
     { label: 'State Income Tax Withheld', value: stateWH, getter: stateWHGetter },
@@ -636,6 +651,7 @@ function TaxPreviewPageContent() {
 
   const showTaxTables = !isLoading && data.length > 0
 
+  // W-2 Box 1 wages = salary + bonus + RSU + vacation + imputed income - pre-tax deductions
   const w2GrossIncome = data.reduce((acc, row) => acc
     .add(row.ps_salary ?? 0)
     .add(row.earnings_bonus ?? 0)
@@ -644,7 +660,12 @@ function TaxPreviewPageContent() {
     .add(row.imp_ltd ?? 0)
     .add(row.imp_legal ?? 0)
     .add(row.imp_fitness ?? 0)
-    .add(row.imp_other ?? 0), currency(0))
+    .add(row.imp_other ?? 0)
+    .subtract(row.ps_401k_pretax ?? 0)
+    .subtract(row.ps_pretax_medical ?? 0)
+    .subtract(row.ps_pretax_dental ?? 0)
+    .subtract(row.ps_pretax_vision ?? 0)
+    .subtract(row.ps_pretax_fsa ?? 0), currency(0))
 
   return (
     <div>
