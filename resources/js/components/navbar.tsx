@@ -20,10 +20,20 @@ function applyTheme(mode: ThemeMode) {
   root.classList.toggle('dark', isDark);
 }
 
-/** Sanitize hrefs to prevent javascript: or data: URLs from being rendered. */
+/** Sanitize hrefs to prevent javascript:, data:, or protocol-relative URLs from being rendered. */
 function safeHref(href: string): string {
-  if (href.startsWith('/') || href.startsWith('https://') || href.startsWith('http://')) {
+  // Allow relative paths (but not protocol-relative //)
+  if (href.startsWith('/') && !href.startsWith('//')) {
     return href;
+  }
+  // Allow safe absolute protocols only; return the re-serialized URL to prevent encoding tricks
+  try {
+    const url = new URL(href);
+    if (url.protocol === 'https:' || url.protocol === 'http:') {
+      return url.href;
+    }
+  } catch {
+    // Invalid URL - fall through to return '#'
   }
   return '#';
 }
@@ -31,11 +41,11 @@ function safeHref(href: string): string {
 /** Renders the children of a dropdown (links, groups, dividers). */
 function DropdownChildren({ items, mobile = false }: { items: NavDropdownChild[]; mobile?: boolean }) {
   const linkCls = mobile
-    ? 'block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm text-gray-900 dark:text-[#E5E5E5]'
-    : 'block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-gray-900 dark:text-[#E5E5E5]';
+    ? 'block px-3 py-2 rounded hover:bg-accent hover:text-accent-foreground text-sm text-popover-foreground'
+    : 'block px-3 py-2 rounded hover:bg-accent hover:text-accent-foreground text-popover-foreground';
   const groupCls = mobile
-    ? 'px-3 py-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]'
-    : 'px-2 py-1 text-xs uppercase tracking-wide text-gray-500 dark:text-[#A1A09A]';
+    ? 'px-3 py-1 text-xs uppercase tracking-wide text-muted-foreground'
+    : 'px-2 py-1 text-xs uppercase tracking-wide text-muted-foreground';
 
   return (
     <>
@@ -55,7 +65,7 @@ function DropdownChildren({ items, mobile = false }: { items: NavDropdownChild[]
           );
         }
         // divider
-        return <div key={i} className='my-1 border-t border-gray-100 dark:border-[#3E3E3A]' />;
+        return <div key={i} className='my-1 border-t border-border' />;
       })}
     </>
   );
@@ -80,19 +90,19 @@ function DesktopDropdown({ item }: { item: NavItemDropdown }) {
     <li ref={ref} className='relative'>
       <button
         type='button'
-        className='inline-flex items-center gap-1 hover:underline underline-offset-4 text-gray-900 dark:text-[#E5E5E5]'
+        className='inline-flex items-center gap-1 hover:underline underline-offset-4 text-navbar-foreground'
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup='menu'
         id={`${menuId}-button`}
       >
-        {item.label} <ChevronDown className='w-4 h-4 text-gray-500 dark:text-[#A1A09A]' aria-hidden='true' />
+        {item.label} <ChevronDown className='w-4 h-4 text-muted-foreground' aria-hidden='true' />
       </button>
       {open && (
         <div
           role='menu'
           aria-labelledby={`${menuId}-button`}
-          className='absolute z-50 mt-2 w-64 rounded-md border border-gray-200 dark:border-[#3E3E3A] bg-white dark:bg-[#161615] shadow-[0_10px_30px_rgba(0,0,0,0.08)] p-2'
+          className='absolute z-50 mt-2 w-64 rounded-md border border-border bg-popover text-popover-foreground shadow-[0_10px_30px_rgba(0,0,0,0.08)] p-2'
         >
           <DropdownChildren items={item.items} />
         </div>
@@ -110,7 +120,7 @@ function MobileDropdown({ item }: { item: NavItemDropdown }) {
     <div>
       <button
         type='button'
-        className='w-full flex items-center justify-between px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base'
+        className='w-full flex items-center justify-between px-3 py-2 rounded hover:bg-accent hover:text-accent-foreground text-base text-foreground'
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-controls={menuId}
@@ -185,7 +195,7 @@ export default function Navbar({ authenticated, navItems = [], currentUser }: Na
           <button
             type='button'
             onClick={() => setMobileMenuOpen((v) => !v)}
-            className='md:hidden p-2 hover:bg-gray-100 dark:hover:bg-[#1f1f1e] rounded-md'
+            className='md:hidden p-2 hover:bg-accent rounded-md text-foreground'
             aria-label='Toggle menu'
             aria-expanded={mobileMenuOpen}
             aria-controls='mobile-menu'
@@ -193,7 +203,7 @@ export default function Navbar({ authenticated, navItems = [], currentUser }: Na
             {mobileMenuOpen ? <X className='w-5 h-5' /> : <Menu className='w-5 h-5' />}
           </button>
           <a href='/' className='select-none'>
-            <h1 className='text-lg font-semibold tracking-tight'>Ben Herila</h1>
+            <h1 className='text-lg font-semibold tracking-tight text-primary'>Ben Herila</h1>
           </a>
         </div>
         <ul className='hidden md:flex items-center gap-4 text-sm print:hidden'>
@@ -201,7 +211,7 @@ export default function Navbar({ authenticated, navItems = [], currentUser }: Na
             if (item.type === 'link') {
               return (
                 <li key={i}>
-                  <a className='hover:underline underline-offset-4' href={safeHref(item.href)}>
+                  <a className='hover:underline underline-offset-4 text-navbar-foreground' href={safeHref(item.href)}>
                     {item.label}
                   </a>
                 </li>
@@ -217,14 +227,14 @@ export default function Navbar({ authenticated, navItems = [], currentUser }: Na
         <div
           id='mobile-menu'
           ref={mobileMenuRef}
-          className='md:hidden fixed inset-0 top-[60px] z-40 bg-white dark:bg-[#161615] overflow-y-auto'
+          className='md:hidden fixed inset-0 top-[60px] z-40 bg-background overflow-y-auto'
           role='menu'
         >
           <div className='px-4 py-2 space-y-1'>
             {navItems.map((item, i) => {
               if (item.type === 'link') {
                 return (
-                  <a key={i} className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base' href={safeHref(item.href)}>
+                  <a key={i} className='block px-3 py-2 rounded hover:bg-accent hover:text-accent-foreground text-base text-foreground' href={safeHref(item.href)}>
                     {item.label}
                   </a>
                 );
@@ -234,12 +244,12 @@ export default function Navbar({ authenticated, navItems = [], currentUser }: Na
 
             {/* Account section in mobile menu */}
             {authenticated && (
-              <div className='pt-2 border-t border-gray-100 dark:border-[#3E3E3A]'>
-                <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base' href='/dashboard'>
+              <div className='pt-2 border-t border-border'>
+                <a className='block px-3 py-2 rounded hover:bg-accent hover:text-accent-foreground text-base text-foreground' href='/dashboard'>
                   User Settings
                 </a>
                 <a
-                  className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base text-red-600 dark:text-red-400'
+                  className='block px-3 py-2 rounded hover:bg-accent hover:text-accent-foreground text-base text-destructive'
                   href='/logout'
                   onClick={handleLogout}
                 >
@@ -249,8 +259,8 @@ export default function Navbar({ authenticated, navItems = [], currentUser }: Na
             )}
 
             {!authenticated && (
-              <div className='pt-2 border-t border-gray-100 dark:border-[#3E3E3A]'>
-                <a className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-base' href='/login'>
+              <div className='pt-2 border-t border-border'>
+                <a className='block px-3 py-2 rounded hover:bg-accent hover:text-accent-foreground text-base text-foreground' href='/login'>
                   Sign in
                 </a>
               </div>
@@ -262,11 +272,11 @@ export default function Navbar({ authenticated, navItems = [], currentUser }: Na
       {/* Right: Theme toggle + external link + auth */}
       <div className='flex items-center gap-3 print:hidden'>
         {/* Tri-state theme toggle */}
-        <div className='inline-flex items-center overflow-hidden rounded-md border border-gray-200 dark:border-[#3E3E3A]' role='group' aria-label='Color theme'>
+        <div className='inline-flex items-center overflow-hidden rounded-md border border-border' role='group' aria-label='Color theme'>
           <button
             type='button'
             onClick={() => setTheme('system')}
-            className={`px-2 py-1.5 transition-colors ${theme === 'system' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-gray-100 dark:hover:bg-[#1f1f1e]'}`}
+            className={`px-2 py-1.5 transition-colors ${theme === 'system' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'}`}
             title='System'
             aria-pressed={theme === 'system'}
             aria-label='Use system theme'
@@ -276,7 +286,7 @@ export default function Navbar({ authenticated, navItems = [], currentUser }: Na
           <button
             type='button'
             onClick={() => setTheme('dark')}
-            className={`px-2 py-1.5 transition-colors ${theme === 'dark' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-gray-100 dark:hover:bg-[#1f1f1e]'}`}
+            className={`px-2 py-1.5 transition-colors ${theme === 'dark' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'}`}
             title='Dark'
             aria-pressed={theme === 'dark'}
             aria-label='Use dark theme'
@@ -286,7 +296,7 @@ export default function Navbar({ authenticated, navItems = [], currentUser }: Na
           <button
             type='button'
             onClick={() => setTheme('light')}
-            className={`px-2 py-1.5 transition-colors ${theme === 'light' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-gray-100 dark:hover:bg-[#1f1f1e]'}`}
+            className={`px-2 py-1.5 transition-colors ${theme === 'light' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'}`}
             title='Light'
             aria-pressed={theme === 'light'}
             aria-label='Use light theme'
@@ -299,7 +309,7 @@ export default function Navbar({ authenticated, navItems = [], currentUser }: Na
           href='https://ac.bherila.net'
           target='_blank'
           rel="nofollow noopener noreferrer"
-          className='hidden sm:inline-block px-3 py-1.5 rounded border border-gray-200 dark:border-[#3E3E3A] hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm'
+          className='hidden sm:inline-block px-3 py-1.5 rounded border border-border hover:bg-accent text-sm text-navbar-foreground'
         >
           ActiveCollab
         </a>
@@ -309,7 +319,7 @@ export default function Navbar({ authenticated, navItems = [], currentUser }: Na
             <button
               type='button'
               onClick={() => setUserMenuOpen((v) => !v)}
-              className='inline-flex items-center gap-2 px-3 py-1.5 rounded border border-gray-200 dark:border-[#3E3E3A] hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm text-gray-900 dark:text-[#E5E5E5]'
+              className='inline-flex items-center gap-2 px-3 py-1.5 rounded border border-border hover:bg-accent text-sm text-navbar-foreground'
               aria-expanded={userMenuOpen}
               aria-haspopup='menu'
             >
@@ -317,25 +327,25 @@ export default function Navbar({ authenticated, navItems = [], currentUser }: Na
                 {initials || 'U'}
               </div>
               <span className='hidden sm:inline'>{currentUser?.name ?? 'My Account'}</span>
-              <ChevronDown className={`w-4 h-4 transition-transform text-gray-500 dark:text-[#A1A09A] ${userMenuOpen ? 'rotate-180' : ''}`} aria-hidden='true' />
+              <ChevronDown className={`w-4 h-4 transition-transform text-muted-foreground ${userMenuOpen ? 'rotate-180' : ''}`} aria-hidden='true' />
             </button>
 
             {userMenuOpen && (
               <div
                 role='menu'
-                className='absolute right-0 z-50 mt-2 w-48 rounded-md border border-gray-200 dark:border-[#3E3E3A] bg-white dark:bg-[#161615] shadow-[0_10px_30px_rgba(0,0,0,0.08)] p-2'
+                className='absolute right-0 z-50 mt-2 w-48 rounded-md border border-border bg-popover text-popover-foreground shadow-[0_10px_30px_rgba(0,0,0,0.08)] p-2'
               >
                 <a
                   role='menuitem'
-                  className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm text-gray-900 dark:text-[#E5E5E5]'
+                  className='block px-3 py-2 rounded hover:bg-accent hover:text-accent-foreground text-sm text-popover-foreground'
                   href='/dashboard'
                 >
                   User Settings
                 </a>
-                <div className='my-1 border-t border-gray-100 dark:border-[#3E3E3A]' />
+                <div className='my-1 border-t border-border' />
                 <a
                   role='menuitem'
-                  className='block px-3 py-2 rounded hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm text-red-600 dark:text-red-400'
+                  className='block px-3 py-2 rounded hover:bg-accent hover:text-accent-foreground text-sm text-destructive'
                   href='/logout'
                   onClick={handleLogout}
                 >
@@ -353,7 +363,7 @@ export default function Navbar({ authenticated, navItems = [], currentUser }: Na
             )}
           </div>
         ) : (
-          <a href='/login' className='px-3 py-1.5 rounded border border-gray-200 dark:border-[#3E3E3A] hover:bg-gray-50 dark:hover:bg-[#1f1f1e] text-sm'>Sign in</a>
+          <a href='/login' className='px-3 py-1.5 rounded border border-border hover:bg-accent text-sm text-navbar-foreground'>Sign in</a>
         )}
       </div>
     </nav>

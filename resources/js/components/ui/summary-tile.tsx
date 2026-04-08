@@ -15,18 +15,17 @@ interface SummaryTileProps {
 const themeStyles: Record<SummaryTileKind, string> = {
   default: 'bg-muted/30 border-border',
 
-  // Option A: darker text colors in light mode
   green:
-    'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/10 dark:border-green-800/50 dark:text-green-400',
+    'bg-success/10 border-success/30 text-success',
 
   blue:
-    'bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-900/10 dark:border-blue-800/50 dark:text-blue-400',
+    'bg-info/10 border-info/30 text-info',
 
   red:
-    'bg-red-50 border-red-200 text-red-800 dark:bg-red-900/10 dark:border-red-800/50 dark:text-red-400',
+    'bg-destructive/10 border-destructive/30 text-destructive',
 
   yellow:
-    'bg-yellow-50 border-yellow-200 text-yellow-800 dark:bg-yellow-900/10 dark:border-yellow-800/50 dark:text-yellow-400'
+    'bg-warning/10 border-warning/30 text-warning',
 }
 
 export default function SummaryTile({
