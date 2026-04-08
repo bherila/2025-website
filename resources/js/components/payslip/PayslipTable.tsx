@@ -3,7 +3,7 @@
 import currency from 'currency.js'
 import _ from 'lodash'
 import { Edit } from 'lucide-react'
-import { useState } from 'react'
+import { type ReactNode, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -36,7 +36,7 @@ function fmtShort(val: number | null | undefined): string | null {
 
 // ─── Sub-text helper ─────────────────────────────────────────────────────────
 
-function SubText({ children }: { children: React.ReactNode }) {
+function SubText({ children }: { children: ReactNode }) {
   return <span className="block text-[10px] text-muted-foreground mt-0.5 leading-tight">{children}</span>
 }
 
@@ -52,7 +52,7 @@ const TAG_CLASSES: Record<TagVariant, string> = {
   estimated: 'bg-warning/10 text-warning border border-warning/20',
 }
 
-function Tag({ variant, children }: { variant: TagVariant; children: React.ReactNode }) {
+function Tag({ variant, children }: { variant: TagVariant; children: ReactNode }) {
   return (
     <span
       className={`inline-block font-mono text-[9px] px-1.5 py-0.5 rounded-[2px] mr-1 mb-0.5 align-middle whitespace-nowrap leading-tight ${TAG_CLASSES[variant]}`}
@@ -71,7 +71,7 @@ function AmountCell({
 }: {
   value: number | null | undefined
   variant?: 'pos' | 'neg' | 'accent' | 'default'
-  sub?: React.ReactNode
+  sub?: ReactNode
 }) {
   if (!value) return <span className="text-muted-foreground">—</span>
 
@@ -103,7 +103,7 @@ function WithYTD({
   row: fin_payslip
   field: keyof fin_payslip
   allData: fin_payslip[]
-  children: React.ReactNode
+  children: ReactNode
 }) {
   const ytd = allData
     .filter((d) => d.pay_date! <= row.pay_date!)
@@ -158,7 +158,7 @@ export function PayslipTable({ data, onRowEdited }: Props) {
   const sorted = _.orderBy(data, 'pay_date', 'asc')
 
   // Column header sub-text
-  const Th = ({ right, children, sub }: { right?: boolean; children: React.ReactNode; sub?: string }) => (
+  const Th = ({ right, children, sub }: { right?: boolean; children: ReactNode; sub?: string }) => (
     <TableHead
       className={`font-mono text-[10px] tracking-wide uppercase text-muted-foreground py-2.5 px-3 ${right ? 'text-right' : ''}`}
     >
@@ -178,7 +178,7 @@ export function PayslipTable({ data, onRowEdited }: Props) {
             <Th right sub="Base + Addl">Federal Tax</Th>
             <Th right sub="Base + Addl">CA State Tax</Th>
             <Th right sub="OASDI / Med / SDI">FICA &amp; SDI</Th>
-            <Th right sub="401k &amp; Benefits">Pre-Tax Ded.</Th>
+            <Th right sub="Pre-tax 401k + Benefits">Deductions</Th>
             <Th right>Net Pay</Th>
             <Th>Est?</Th>
             {onRowEdited && <Th>Edit</Th>}
@@ -201,15 +201,15 @@ export function PayslipTable({ data, onRowEdited }: Props) {
             const ficaTotal = currency(row.ps_oasdi ?? 0)
               .add(row.ps_medicare ?? 0)
               .add(row.ps_state_disability ?? 0)
+            // ps_401k_aftertax (Roth) is not a pre-tax deduction; excluded from this column total
             const pretaxTotal = currency(row.ps_401k_pretax ?? 0)
-              .add(row.ps_401k_aftertax ?? 0)
               .add(row.ps_pretax_medical ?? 0)
               .add(row.ps_pretax_dental ?? 0)
               .add(row.ps_pretax_vision ?? 0)
               .add(row.ps_pretax_fsa ?? 0)
 
             // ── Supplemental tags in gross cell ──────────────────────────
-            const suppTags: React.ReactNode[] = []
+            const suppTags: ReactNode[] = []
             if (isRsu && row.earnings_rsu) suppTags.push(<Tag key="rsu" variant="rsu">RSU {fmtShort(row.earnings_rsu)}</Tag>)
             if (isBonus && row.earnings_bonus) suppTags.push(<Tag key="bonus" variant="bonus">BONUS {fmtShort(row.earnings_bonus)}</Tag>)
             if (!isRsu && !isBonus) {
@@ -221,7 +221,7 @@ export function PayslipTable({ data, onRowEdited }: Props) {
             }
 
             // ── Pre-tax deduction tags ────────────────────────────────────
-            const deductTags: React.ReactNode[] = []
+            const deductTags: ReactNode[] = []
             if (row.ps_401k_pretax) deductTags.push(<Tag key="pre" variant="deduct">401k PRE {fmtShort(row.ps_401k_pretax)}</Tag>)
             if (row.ps_401k_aftertax) deductTags.push(<Tag key="post" variant="deduct">401k POST {fmtShort(row.ps_401k_aftertax)}</Tag>)
             const benefitsTotal = currency(row.ps_pretax_medical ?? 0)

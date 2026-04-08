@@ -1,5 +1,6 @@
 'use client'
 import currency from 'currency.js'
+import type { ReactNode } from 'react'
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { calculateTax } from '@/lib/tax/taxBracket'
@@ -122,7 +123,7 @@ function Td({
   right,
   className = '',
 }: {
-  children: React.ReactNode
+  children: ReactNode
   right?: boolean
   className?: string
 }) {
@@ -135,7 +136,7 @@ function Td({
   )
 }
 
-function Th({ children, right }: { children: React.ReactNode; right?: boolean }) {
+function Th({ children, right }: { children: ReactNode; right?: boolean }) {
   return (
     <TableHead
       className={`font-mono text-[10px] uppercase tracking-wide text-muted-foreground py-2 px-3 ${right ? 'text-right' : ''}`}

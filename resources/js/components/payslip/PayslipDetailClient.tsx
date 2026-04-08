@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Code, Loader2, Trash2 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import { type SubmitHandler, useForm } from 'react-hook-form'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -41,7 +41,7 @@ function FormSection({
   children,
 }: {
   title: string
-  children: React.ReactNode
+  children: ReactNode
 }) {
   return (
     <div className="border border-border rounded-sm bg-card">
