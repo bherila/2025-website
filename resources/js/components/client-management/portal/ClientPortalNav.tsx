@@ -178,8 +178,9 @@ export default function ClientPortalNav({
             <div className="flex items-center gap-1">
               {/* Home link */}
               <Button
-                variant={currentPage === 'home' ? 'secondary' : 'ghost'}
+                variant="ghost"
                 size="sm"
+                className={currentPage === 'home' ? 'bg-accent text-accent-foreground' : ''}
                 asChild
               >
                 <a href={`/client/portal/${slug}`}>
@@ -190,8 +191,9 @@ export default function ClientPortalNav({
 
               {/* Time Records */}
               <Button
-                variant={currentPage === 'time' ? 'secondary' : 'ghost'}
+                variant="ghost"
                 size="sm"
+                className={currentPage === 'time' ? 'bg-accent text-accent-foreground' : ''}
                 asChild
               >
                 <a href={`/client/portal/${slug}/time`}>
@@ -202,8 +204,9 @@ export default function ClientPortalNav({
 
               {/* Expenses */}
               <Button
-                variant={currentPage === 'expenses' ? 'secondary' : 'ghost'}
+                variant="ghost"
                 size="sm"
+                className={currentPage === 'expenses' ? 'bg-accent text-accent-foreground' : ''}
                 asChild
               >
                 <a href={`/client/portal/${slug}/expenses`}>
@@ -214,8 +217,9 @@ export default function ClientPortalNav({
 
               {/* Invoices */}
               <Button
-                variant={currentPage === 'invoices' || currentPage === 'invoice' ? 'secondary' : 'ghost'}
+                variant="ghost"
                 size="sm"
+                className={currentPage === 'invoices' || currentPage === 'invoice' ? 'bg-accent text-accent-foreground' : ''}
                 asChild
               >
                 <a href={`/client/portal/${slug}/invoices`}>
@@ -228,9 +232,9 @@ export default function ClientPortalNav({
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
-                    variant={currentPage === 'project' ? 'secondary' : 'ghost'}
+                    variant="ghost"
                     size="sm"
-                    className="gap-1"
+                    className={`gap-1${currentPage === 'project' ? ' bg-accent text-accent-foreground' : ''}`}
                   >
                     <FolderOpen className="h-4 w-4" />
                     {currentProject ? currentProject.name : 'Tasks'}
