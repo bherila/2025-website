@@ -375,9 +375,9 @@ class FinancePayslipControllerTest extends TestCase
         $user = $this->createUser();
         $response = $this->actingAs($user)->getJson('/api/payslips/prompt');
         $response->assertOk();
-        $response->assertJsonStructure(['prompt', 'json_schema', 'form_label']);
+        $response->assertJsonStructure(['prompt', 'tools', 'tool_choice', 'form_label']);
         $this->assertNotEmpty($response->json('prompt'));
-        $this->assertIsArray($response->json('json_schema'));
+        $this->assertIsArray($response->json('tools'));
         $this->assertSame('Payslip', $response->json('form_label'));
     }
 
@@ -512,5 +512,284 @@ class FinancePayslipControllerTest extends TestCase
             'payslip_id' => $payslipId,
             'earnings_gross' => 5000,
         ]);
+    }
+
+    // -------------------------------------------------------------------------
+    // GET /api/payslips/prompt — Claude tool calling format
+    // -------------------------------------------------------------------------
+
+    public function test_get_prompt_returns_tools_array(): void
+    {
+        $user = $this->createUser();
+        $response = $this->actingAs($user)->getJson('/api/payslips/prompt');
+        $response->assertOk();
+        $response->assertJsonStructure(['prompt', 'tools', 'tool_choice', 'form_label']);
+        $this->assertNotEmpty($response->json('prompt'));
+        $this->assertIsArray($response->json('tools'));
+        $this->assertCount(1, $response->json('tools'));
+        $this->assertSame('extract_payslip', $response->json('tools.0.name'));
+        $this->assertSame('Payslip', $response->json('form_label'));
+    }
+
+    public function test_get_prompt_tool_has_state_data_array(): void
+    {
+        $user = $this->createUser();
+        $response = $this->actingAs($user)->getJson('/api/payslips/prompt');
+        $response->assertOk();
+
+        $properties = $response->json('tools.0.input_schema.properties');
+        $this->assertArrayHasKey('state_data', $properties);
+        $this->assertSame('array', $properties['state_data']['type']);
+    }
+
+    public function test_get_prompt_tool_does_not_have_flat_state_columns(): void
+    {
+        $user = $this->createUser();
+        $response = $this->actingAs($user)->getJson('/api/payslips/prompt');
+        $response->assertOk();
+
+        $properties = $response->json('tools.0.input_schema.properties');
+        $this->assertArrayNotHasKey('ps_state_tax', $properties);
+        $this->assertArrayNotHasKey('ps_state_tax_addl', $properties);
+        $this->assertArrayNotHasKey('ps_state_disability', $properties);
+    }
+
+    // -------------------------------------------------------------------------
+    // New fields accepted by savePayslip
+    // -------------------------------------------------------------------------
+
+    public function test_save_payslip_accepts_new_fields(): void
+    {
+        $user = $this->createUser();
+        $response = $this->actingAs($user)->postJson('/api/payslips', [
+            'period_start' => '2025-06-01',
+            'period_end' => '2025-06-15',
+            'pay_date' => '2025-06-20',
+            'earnings_net_pay' => 7000,
+            'earnings_dividend_equivalent' => 569.70,
+            'ps_rsu_tax_offset' => 213418.91,
+            'ps_rsu_excess_refund' => 1543.81,
+            'taxable_wages_oasdi' => 10609.55,
+            'taxable_wages_medicare' => 10609.55,
+            'taxable_wages_federal' => 7940.83,
+            'imp_life_choice' => 12.80,
+            'pto_accrued' => 6.47,
+            'pto_used' => 8.0,
+            'pto_available' => 235.17,
+            'pto_statutory_available' => 72.0,
+            'hours_worked' => 80.0,
+        ]);
+
+        $response->assertOk();
+        $response->assertJson(['success' => true]);
+
+        $this->assertDatabaseHas('fin_payslip', [
+            'uid' => $user->id,
+            'pay_date' => '2025-06-20',
+        ]);
+    }
+
+    public function test_save_payslip_stores_and_returns_other_as_json(): void
+    {
+        $user = $this->createUser();
+        $response = $this->actingAs($user)->postJson('/api/payslips', [
+            'period_start' => '2025-07-01',
+            'period_end' => '2025-07-15',
+            'pay_date' => '2025-07-20',
+            'earnings_net_pay' => 5000,
+            'other' => ['custom_field' => 'value', 'amount' => 42],
+        ]);
+
+        $response->assertOk();
+
+        $payslipId = DB::table('fin_payslip')
+            ->where('uid', $user->id)
+            ->where('pay_date', '2025-07-20')
+            ->value('payslip_id');
+
+        $fetchResponse = $this->actingAs($user)->getJson("/api/payslips/{$payslipId}");
+        $fetchResponse->assertOk();
+
+        // The other field should be returned as a JSON object (not a string)
+        $other = $fetchResponse->json('other');
+        $this->assertIsArray($other);
+        $this->assertSame('value', $other['custom_field']);
+        $this->assertSame(42, $other['amount']);
+    }
+
+    // -------------------------------------------------------------------------
+    // Deposit CRUD — /api/payslips/{id}/deposits
+    // -------------------------------------------------------------------------
+
+    public function test_fetch_deposits_requires_auth(): void
+    {
+        $response = $this->getJson('/api/payslips/1/deposits');
+        $response->assertStatus(401);
+    }
+
+    public function test_save_deposit_and_fetch(): void
+    {
+        $user = $this->createUser();
+        $payslipId = DB::table('fin_payslip')->insertGetId([
+            'uid' => $user->id,
+            'period_start' => '2025-08-01',
+            'period_end' => '2025-08-15',
+            'pay_date' => '2025-08-20',
+            'earnings_net_pay' => 7000,
+        ]);
+
+        $response = $this->actingAs($user)->postJson("/api/payslips/{$payslipId}/deposits", [
+            'bank_name' => 'Chase',
+            'account_last4' => '1234',
+            'amount' => 7000,
+        ]);
+        $response->assertOk();
+        $response->assertJson(['success' => true]);
+
+        $fetchResponse = $this->actingAs($user)->getJson("/api/payslips/{$payslipId}/deposits");
+        $fetchResponse->assertOk();
+        $this->assertCount(1, $fetchResponse->json());
+        $this->assertSame('Chase', $fetchResponse->json('0.bank_name'));
+    }
+
+    public function test_delete_deposit(): void
+    {
+        $user = $this->createUser();
+        $payslipId = DB::table('fin_payslip')->insertGetId([
+            'uid' => $user->id,
+            'period_start' => '2025-09-01',
+            'period_end' => '2025-09-15',
+            'pay_date' => '2025-09-20',
+            'earnings_net_pay' => 5000,
+        ]);
+
+        $depositId = DB::table('fin_payslip_deposits')->insertGetId([
+            'payslip_id' => $payslipId,
+            'bank_name' => 'BofA',
+            'account_last4' => '5678',
+            'amount' => 5000,
+        ]);
+
+        $response = $this->actingAs($user)->deleteJson("/api/payslips/{$payslipId}/deposits/{$depositId}");
+        $response->assertOk();
+        $response->assertJson(['success' => true]);
+
+        $this->assertDatabaseMissing('fin_payslip_deposits', ['id' => $depositId]);
+    }
+
+    public function test_deposit_cascade_deleted_with_payslip(): void
+    {
+        $user = $this->createUser();
+        $payslipId = DB::table('fin_payslip')->insertGetId([
+            'uid' => $user->id,
+            'period_start' => '2025-10-01',
+            'period_end' => '2025-10-15',
+            'pay_date' => '2025-10-20',
+            'earnings_net_pay' => 5000,
+        ]);
+
+        DB::table('fin_payslip_deposits')->insert([
+            'payslip_id' => $payslipId,
+            'bank_name' => 'Wells Fargo',
+            'account_last4' => '9012',
+            'amount' => 5000,
+        ]);
+
+        $this->actingAs($user)->deleteJson("/api/payslips/{$payslipId}");
+
+        $this->assertDatabaseMissing('fin_payslip_deposits', ['payslip_id' => $payslipId]);
+    }
+
+    // -------------------------------------------------------------------------
+    // State data CRUD — /api/payslips/{id}/state-data
+    // -------------------------------------------------------------------------
+
+    public function test_fetch_state_data_requires_auth(): void
+    {
+        $response = $this->getJson('/api/payslips/1/state-data');
+        $response->assertStatus(401);
+    }
+
+    public function test_save_state_data_and_fetch(): void
+    {
+        $user = $this->createUser();
+        $payslipId = DB::table('fin_payslip')->insertGetId([
+            'uid' => $user->id,
+            'period_start' => '2025-11-01',
+            'period_end' => '2025-11-15',
+            'pay_date' => '2025-11-20',
+            'earnings_net_pay' => 6000,
+        ]);
+
+        $response = $this->actingAs($user)->postJson("/api/payslips/{$payslipId}/state-data", [
+            'state_code' => 'CA',
+            'taxable_wages' => 10000,
+            'state_tax' => 800,
+            'state_tax_addl' => 50,
+            'state_disability' => 100,
+        ]);
+        $response->assertOk();
+        $response->assertJson(['success' => true]);
+
+        $fetchResponse = $this->actingAs($user)->getJson("/api/payslips/{$payslipId}/state-data");
+        $fetchResponse->assertOk();
+        $this->assertCount(1, $fetchResponse->json());
+        $this->assertSame('CA', $fetchResponse->json('0.state_code'));
+        $this->assertEquals(800, $fetchResponse->json('0.state_tax'));
+    }
+
+    public function test_state_data_cascade_deleted_with_payslip(): void
+    {
+        $user = $this->createUser();
+        $payslipId = DB::table('fin_payslip')->insertGetId([
+            'uid' => $user->id,
+            'period_start' => '2025-12-01',
+            'period_end' => '2025-12-15',
+            'pay_date' => '2025-12-20',
+            'earnings_net_pay' => 6000,
+        ]);
+
+        DB::table('fin_payslip_state_data')->insert([
+            'payslip_id' => $payslipId,
+            'state_code' => 'CA',
+            'state_tax' => 800,
+        ]);
+
+        $this->actingAs($user)->deleteJson("/api/payslips/{$payslipId}");
+
+        $this->assertDatabaseMissing('fin_payslip_state_data', ['payslip_id' => $payslipId]);
+    }
+
+    public function test_payslip_response_includes_state_data_and_deposits(): void
+    {
+        $user = $this->createUser();
+        $payslipId = DB::table('fin_payslip')->insertGetId([
+            'uid' => $user->id,
+            'period_start' => '2026-01-01',
+            'period_end' => '2026-01-15',
+            'pay_date' => '2026-01-20',
+            'earnings_net_pay' => 7000,
+        ]);
+
+        DB::table('fin_payslip_state_data')->insert([
+            'payslip_id' => $payslipId,
+            'state_code' => 'CA',
+            'state_tax' => 900,
+        ]);
+
+        DB::table('fin_payslip_deposits')->insert([
+            'payslip_id' => $payslipId,
+            'bank_name' => 'Citibank',
+            'account_last4' => '3456',
+            'amount' => 7000,
+        ]);
+
+        $response = $this->actingAs($user)->getJson("/api/payslips/{$payslipId}");
+        $response->assertOk();
+        $response->assertJsonStructure(['state_data', 'deposits']);
+        $this->assertNotEmpty($response->json('state_data'));
+        $this->assertNotEmpty($response->json('deposits'));
+        $this->assertSame('CA', $response->json('state_data.0.state_code'));
+        $this->assertSame('Citibank', $response->json('deposits.0.bank_name'));
     }
 }

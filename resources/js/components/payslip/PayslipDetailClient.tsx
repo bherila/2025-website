@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Code, Loader2, Trash2 } from 'lucide-react'
+import { Code, Loader2, Plus, Trash2 } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import { type SubmitHandler, useForm } from 'react-hook-form'
 
@@ -30,7 +30,7 @@ import { deletePayslip, savePayslip } from '@/lib/api'
 import { parseDate } from '@/lib/DateHelper'
 
 import FinanceNavbar from '../finance/FinanceNavbar'
-import type { fin_payslip } from './payslipDbCols'
+import type { fin_payslip, fin_payslip_deposit, fin_payslip_state_data } from './payslipDbCols'
 import { fin_payslip_schema } from './payslipDbCols'
 import PayslipJsonModal from './PayslipJsonModal'
 
@@ -82,6 +82,263 @@ function NumericField({ label, field, control }: { label: string; field: string;
         </FormItem>
       )}
     />
+  )
+}
+
+// ─── State data sub-component ─────────────────────────────────────────────────
+
+interface NewStateDataRow {
+  state_code?: string
+  taxable_wages?: number
+  state_tax?: number
+  state_tax_addl?: number
+  state_disability?: number
+}
+
+function StateDataSection({ payslipId }: { payslipId: number }) {
+  const [rows, setRows] = useState<fin_payslip_state_data[]>([])
+  const [isAdding, setIsAdding] = useState(false)
+  const [newRow, setNewRow] = useState<NewStateDataRow>({ state_code: 'CA' })
+
+  const load = useCallback(async () => {
+    try {
+      const data = (await fetchWrapper.get(`/api/payslips/${payslipId}/state-data`)) as fin_payslip_state_data[]
+      setRows(data)
+    } catch {
+      // non-critical
+    }
+  }, [payslipId])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const handleSave = async () => {
+    try {
+      await fetchWrapper.post(`/api/payslips/${payslipId}/state-data`, newRow)
+      setIsAdding(false)
+      setNewRow({ state_code: 'CA' })
+      load()
+    } catch {
+      // ignore
+    }
+  }
+
+  const handleDelete = async (id: number) => {
+    try {
+      await fetchWrapper.delete(`/api/payslips/${payslipId}/state-data/${id}`, undefined)
+      load()
+    } catch {
+      // ignore
+    }
+  }
+
+  return (
+    <div className="border border-border rounded-sm bg-card">
+      <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
+        <h3 className="font-mono text-[10px] font-semibold uppercase tracking-widest text-primary">State Tax Data</h3>
+        <Button type="button" variant="ghost" size="sm" className="h-6 px-2 gap-1" onClick={() => setIsAdding(true)}>
+          <Plus className="h-3 w-3" /> Add
+        </Button>
+      </div>
+      <div className="p-4 space-y-2">
+        {rows.length === 0 && !isAdding && (
+          <p className="font-mono text-[10px] text-muted-foreground">No state tax data recorded.</p>
+        )}
+        {rows.map((row) => (
+          <div key={row.id} className="grid grid-cols-5 gap-2 items-center font-mono text-xs">
+            <span className="text-muted-foreground col-span-1">{row.state_code}</span>
+            <span>{row.taxable_wages ? `Wages: ${row.taxable_wages}` : '—'}</span>
+            <span>{row.state_tax ? `Tax: ${row.state_tax}` : '—'}</span>
+            <span>{row.state_disability ? `SDI: ${row.state_disability}` : '—'}</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 text-destructive"
+              onClick={() => row.id && handleDelete(row.id)}
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
+        ))}
+        {isAdding && (
+          <div className="grid grid-cols-5 gap-2 items-end">
+            <Input
+              className="h-7 font-mono text-xs"
+              placeholder="CA"
+              maxLength={2}
+              value={newRow.state_code ?? ''}
+              onChange={(e) => setNewRow((p) => ({ ...p, state_code: e.target.value.toUpperCase() }))}
+            />
+            <Input
+              type="number"
+              className="h-7 font-mono text-xs"
+              placeholder="Taxable wages"
+              value={newRow.taxable_wages ?? ''}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value)
+                setNewRow((p) => ({ ...p, taxable_wages: isNaN(v) ? undefined : v } as NewStateDataRow))
+              }}
+            />
+            <Input
+              type="number"
+              className="h-7 font-mono text-xs"
+              placeholder="State tax"
+              value={newRow.state_tax ?? ''}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value)
+                setNewRow((p) => ({ ...p, state_tax: isNaN(v) ? undefined : v } as NewStateDataRow))
+              }}
+            />
+            <Input
+              type="number"
+              className="h-7 font-mono text-xs"
+              placeholder="SDI"
+              value={newRow.state_disability ?? ''}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value)
+                setNewRow((p) => ({ ...p, state_disability: isNaN(v) ? undefined : v } as NewStateDataRow))
+              }}
+            />
+            <div className="flex gap-1">
+              <Button type="button" size="sm" className="h-7 px-2" onClick={handleSave}>
+                Save
+              </Button>
+              <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => setIsAdding(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Deposits sub-component ───────────────────────────────────────────────────
+
+interface NewDepositRow {
+  bank_name?: string
+  account_last4?: string
+  amount?: number
+}
+
+function DepositsSection({ payslipId, netPay }: { payslipId: number; netPay?: number }) {
+  const [rows, setRows] = useState<fin_payslip_deposit[]>([])
+  const [isAdding, setIsAdding] = useState(false)
+  const [newRow, setNewRow] = useState<NewDepositRow>({})
+
+  const load = useCallback(async () => {
+    try {
+      const data = (await fetchWrapper.get(`/api/payslips/${payslipId}/deposits`)) as fin_payslip_deposit[]
+      setRows(data)
+    } catch {
+      // non-critical
+    }
+  }, [payslipId])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const handleSave = async () => {
+    if (!newRow.bank_name || !newRow.amount) return
+    try {
+      await fetchWrapper.post(`/api/payslips/${payslipId}/deposits`, newRow)
+      setIsAdding(false)
+      setNewRow({})
+      load()
+    } catch {
+      // ignore
+    }
+  }
+
+  const handleDelete = async (id: number) => {
+    try {
+      await fetchWrapper.delete(`/api/payslips/${payslipId}/deposits/${id}`, undefined)
+      load()
+    } catch {
+      // ignore
+    }
+  }
+
+  const total = rows.reduce((sum, r) => sum + (r.amount as number ?? 0), 0)
+
+  return (
+    <div className="border border-border rounded-sm bg-card">
+      <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
+        <h3 className="font-mono text-[10px] font-semibold uppercase tracking-widest text-primary">Bank Deposits</h3>
+        <Button type="button" variant="ghost" size="sm" className="h-6 px-2 gap-1" onClick={() => setIsAdding(true)}>
+          <Plus className="h-3 w-3" /> Add
+        </Button>
+      </div>
+      <div className="p-4 space-y-2">
+        {rows.length === 0 && !isAdding && (
+          <p className="font-mono text-[10px] text-muted-foreground">No deposit splits recorded.</p>
+        )}
+        {rows.map((row) => (
+          <div key={row.id} className="grid grid-cols-4 gap-2 items-center font-mono text-xs">
+            <span className="col-span-1 truncate">{row.bank_name}</span>
+            <span className="text-muted-foreground">···{row.account_last4}</span>
+            <span className="text-right">${(row.amount as number)?.toFixed(2)}</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 text-destructive"
+              onClick={() => row.id && handleDelete(row.id)}
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
+        ))}
+        {rows.length > 0 && (
+          <div className="flex justify-between pt-1 border-t border-border font-mono text-xs text-muted-foreground">
+            <span>Total deposits</span>
+            <span className={netPay && Math.abs(total - netPay) > 0.01 ? 'text-warning' : 'text-success'}>
+              ${total.toFixed(2)}
+              {netPay ? ` / $${netPay.toFixed(2)} net` : ''}
+            </span>
+          </div>
+        )}
+        {isAdding && (
+          <div className="grid grid-cols-4 gap-2 items-end">
+            <Input
+              className="h-7 font-mono text-xs"
+              placeholder="Bank name"
+              value={newRow.bank_name ?? ''}
+              onChange={(e) => setNewRow((p) => ({ ...p, bank_name: e.target.value }))}
+            />
+            <Input
+              className="h-7 font-mono text-xs"
+              placeholder="Last 4"
+              maxLength={4}
+              value={newRow.account_last4 ?? ''}
+              onChange={(e) => setNewRow((p) => ({ ...p, account_last4: e.target.value }))}
+            />
+            <Input
+              type="number"
+              className="h-7 font-mono text-xs"
+              placeholder="Amount"
+              value={newRow.amount ?? ''}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value)
+                setNewRow((p) => ({ ...p, amount: isNaN(v) ? undefined : v } as NewDepositRow))
+              }}
+            />
+            <div className="flex gap-1">
+              <Button type="button" size="sm" className="h-7 px-2" onClick={handleSave}>
+                Save
+              </Button>
+              <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => setIsAdding(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -353,6 +610,7 @@ export default function PayrollForm({ initialPayslip }: PayslipDetailClientProps
                 <NumericField label="Gross Earnings" field="earnings_gross" control={form.control} />
                 <NumericField label="Bonus" field="earnings_bonus" control={form.control} />
                 <NumericField label="RSU Vesting" field="earnings_rsu" control={form.control} />
+                <NumericField label="Dividend Equiv." field="earnings_dividend_equivalent" control={form.control} />
                 <NumericField label="Net Pay" field="earnings_net_pay" control={form.control} />
                 <NumericField label="Vacation Payout" field="ps_vacation_payout" control={form.control} />
               </FormSection>
@@ -361,6 +619,7 @@ export default function PayrollForm({ initialPayslip }: PayslipDetailClientProps
                 <NumericField label="Legal Plan" field="imp_legal" control={form.control} />
                 <NumericField label="Fitness / Gym" field="imp_fitness" control={form.control} />
                 <NumericField label="LTD" field="imp_ltd" control={form.control} />
+                <NumericField label="Life@ Choice" field="imp_life_choice" control={form.control} />
                 <NumericField label="Other" field="imp_other" control={form.control} />
               </FormSection>
 
@@ -372,10 +631,15 @@ export default function PayrollForm({ initialPayslip }: PayslipDetailClientProps
                 <NumericField label="Federal Tax Refunded" field="ps_fed_tax_refunded" control={form.control} />
               </FormSection>
 
-              <FormSection title="State Taxes">
-                <NumericField label="State Income Tax" field="ps_state_tax" control={form.control} />
-                <NumericField label="SDI" field="ps_state_disability" control={form.control} />
-                <NumericField label="Additional State WH" field="ps_state_tax_addl" control={form.control} />
+              <FormSection title="Taxable Wage Bases">
+                <NumericField label="OASDI Taxable Wages" field="taxable_wages_oasdi" control={form.control} />
+                <NumericField label="Medicare Taxable Wages" field="taxable_wages_medicare" control={form.control} />
+                <NumericField label="Federal Taxable Wages" field="taxable_wages_federal" control={form.control} />
+              </FormSection>
+
+              <FormSection title="RSU Post-Tax Offsets">
+                <NumericField label="RSU Tax Offset" field="ps_rsu_tax_offset" control={form.control} />
+                <NumericField label="RSU Excess Refund" field="ps_rsu_excess_refund" control={form.control} />
               </FormSection>
 
               <FormSection title="Retirement">
@@ -390,7 +654,42 @@ export default function PayrollForm({ initialPayslip }: PayslipDetailClientProps
                 <NumericField label="Vision" field="ps_pretax_vision" control={form.control} />
                 <NumericField label="FSA" field="ps_pretax_fsa" control={form.control} />
               </FormSection>
+
+              <FormSection title="PTO &amp; Hours">
+                <NumericField label="Hours Worked" field="hours_worked" control={form.control} />
+                <NumericField label="PTO Accrued" field="pto_accrued" control={form.control} />
+                <NumericField label="PTO Used" field="pto_used" control={form.control} />
+                <NumericField label="PTO Available" field="pto_available" control={form.control} />
+                <NumericField label="Statutory PTO Available" field="pto_statutory_available" control={form.control} />
+              </FormSection>
             </div>
+
+            {/* ── State tax data & deposits (edit mode only) ──────────────── */}
+            {initialPayslip?.payslip_id && (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <StateDataSection payslipId={initialPayslip.payslip_id} />
+                <DepositsSection
+                  payslipId={initialPayslip.payslip_id}
+                  {...(initialPayslip.earnings_net_pay != null
+                    ? { netPay: initialPayslip.earnings_net_pay as number }
+                    : {})}
+                />
+              </div>
+            )}
+
+            {/* ── Other (catch-all JSON viewer) ───────────────────────────── */}
+            {initialPayslip?.other && Object.keys(initialPayslip.other).length > 0 && (
+              <div className="border border-border rounded-sm bg-card">
+                <div className="px-4 py-2.5 border-b border-border">
+                  <h3 className="font-mono text-[10px] font-semibold uppercase tracking-widest text-primary">
+                    Unrecognised Fields (other)
+                  </h3>
+                </div>
+                <pre className="p-4 font-mono text-[10px] text-muted-foreground overflow-x-auto whitespace-pre-wrap">
+                  {JSON.stringify(initialPayslip.other, null, 2)}
+                </pre>
+              </div>
+            )}
 
             {hasYearChanged && (
               <Alert variant="destructive">

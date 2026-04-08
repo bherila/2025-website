@@ -469,10 +469,10 @@ function W2IncomeSummary({ payslips }: { payslips: fin_payslip[] }) {
       .add(r.ps_fed_tax_addl ?? 0)
       .subtract(r.ps_fed_tax_refunded ?? 0)
   const stateWHGetter = (r: fin_payslip) =>
-    currency(r.ps_state_tax ?? 0).add(r.ps_state_tax_addl ?? 0)
+    currency((r.state_data?.[0]?.state_tax as number) ?? 0).add((r.state_data?.[0]?.state_tax_addl as number) ?? 0)
   const oasdiGetter = (r: fin_payslip) => currency(r.ps_oasdi ?? 0)
   const medicareGetter = (r: fin_payslip) => currency(r.ps_medicare ?? 0)
-  const sdiGetter = (r: fin_payslip) => currency(r.ps_state_disability ?? 0)
+  const sdiGetter = (r: fin_payslip) => currency((r.state_data?.[0]?.state_disability as number) ?? 0)
 
   const wages = sum(wagesGetter)
   const bonus = sum(bonusGetter)
