@@ -43,7 +43,7 @@ export function TransactionsTaggingToolbar({
       <div className="border-b border-border bg-card px-3 py-2">
         <Alert variant="destructive" className="bg-destructive/10 border-destructive/20 text-destructive">
           <AlertDescription className="font-mono text-xs">
-            Too many items to tag ({effectiveCount.toLocaleString()} transactions). Refine view to &lt; 1,000 items.
+            Too many items for batch actions ({effectiveCount.toLocaleString()} transactions). Refine view to &lt; 1,000 items.
           </AlertDescription>
         </Alert>
       </div>
