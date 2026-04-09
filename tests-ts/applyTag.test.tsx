@@ -58,8 +58,11 @@ describe('TransactionsTable Tag Application', () => {
       />
     )
 
-    // Find the TagSelect combobox (it has role="combobox")
-    const selectTrigger = screen.getByRole('combobox')
+    // Find the TagSelect combobox using its Radix UI data-slot attribute
+    // (the PaginationControls native <select> also has role="combobox" in ARIA)
+    const allComboboxes = screen.getAllByRole('combobox')
+    const selectTrigger = allComboboxes.find((el) => el.getAttribute('data-slot') === 'select-trigger') as HTMLElement
+    expect(selectTrigger).toBeTruthy()
     fireEvent.click(selectTrigger)
 
     // Now the dropdown options should be visible - find and click "Work"

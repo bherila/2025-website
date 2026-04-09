@@ -28,11 +28,13 @@ Any `children` (e.g., account-specific tabs) are rendered below the bar.
 
 Single unified component that handles both single-account and all-accounts views. It replaces the former `AllAccountsTransactionsContent` (all-accounts inline component) and `FinanceAccountTransactionsPage` (single-account component).
 
+The page toolbar is implemented as the extracted `TransactionsPageToolbar` component. Export logic is in the extracted `transactionExport.ts` utility module.
+
 Features provided in both views:
 - **Year Selector**: Fetched from API (`/api/finance/{accountId}/transaction-years` or `/api/finance/all/transaction-years`). Defaults to current year when available.
 - **Tag Selector**: Filter transactions by tag (All Tags is default).
 - **Cash/Stock Filter**: Toggle between Cash + Stock, Cash Only, and Stock Only.
-- **Export**: CSV and JSON download buttons.
+- **Export**: CSV and JSON download buttons (via `exportToCSV` / `exportToJSON` utilities).
 - **Full TransactionsTable features**: editing, tagging, viewing details, lot details (all columns).
 
 When a **single account** is selected:
@@ -65,10 +67,26 @@ The year selector uses URL query strings for shareable, bookmarkable links:
 
 ## Component Location
 
+### Core
 - **Frontend Component**: `resources/js/components/finance/TransactionsTable.tsx`
 - **CSS Styles**: `resources/js/components/finance/TransactionsTable.css`
 - **Primary Usage**: `resources/js/components/finance/TransactionsPage.tsx`
 - **Type Definitions**: `resources/js/data/finance/AccountLineItem.ts`
+
+### Extracted Components
+- **PaginationControls**: `resources/js/components/finance/PaginationControls.tsx` — Pagination UI with page size dropdown
+- **TransactionsSummaryCards**: `resources/js/components/finance/TransactionsSummaryCards.tsx` — 4-card summary grid (Net/Credits/Debits/Rows)
+- **TransactionsTaggingToolbar**: `resources/js/components/finance/TransactionsTaggingToolbar.tsx` — Selection-aware tagging toolbar with confirm dialog
+- **DeleteTransactionDialog**: `resources/js/components/finance/DeleteTransactionDialog.tsx` — Delete confirmation AlertDialog
+- **TransactionsPageToolbar**: `resources/js/components/finance/TransactionsPageToolbar.tsx` — Toolbar with year/tag/filter selectors and action buttons
+
+### Extracted Hooks
+- **useRowSelection**: `resources/js/components/finance/useRowSelection.ts` — Row selection with click, shift, ctrl/cmd logic
+- **useTransactionFilters**: `resources/js/components/finance/useTransactionFilters.ts` — 14 column filter states + memoized `filteredData`
+- **useColumnVisibility**: `resources/js/components/finance/useColumnVisibility.ts` — 16 column-empty checks as one memoized hook
+
+### Extracted Utilities
+- **transactionExport**: `resources/js/components/finance/transactionExport.ts` — Pure CSV/JSON export functions
 
 ---
 
@@ -83,30 +101,35 @@ The year selector uses URL query strings for shareable, bookmarkable links:
 | `duplicates` | `AccountLineItem[]` | optional | Array of existing transactions for duplicate detection |
 | `enableLinking` | `boolean` | `false` | Enable transaction linking functionality |
 | `accountId` | `number` | optional | Account ID for lot management features |
-| `pageSize` | `number` | `5000` | Number of rows per page (pagination) |
+| `pageSize` | `number` | `100` | Number of rows per page (pagination) |
 | `highlightTransactionId` | `number` | optional | Transaction ID to auto-scroll to (triggers page auto-selection) |
 
 ---
 
 ## Pagination
 
-TransactionsTable supports client-side pagination to optimize DOM performance with large datasets.
+TransactionsTable supports client-side pagination to optimize DOM performance with large datasets. The pagination controls and `<thead>` are sticky, remaining visible while scrolling the table body.
 
 ### Behavior
-- **Default page size**: 5,000 rows
+- **Default page size**: 100 rows (changed from 5,000 to improve initial render performance)
+- **User-controllable page size**: Dropdown selector with options: 25, 50, 100, 250, or Show All
 - **Filtering**: Operates across the entire in-memory dataset (not just the current page)
 - **Totals**: Computed from all filtered data, not just the current page
-- **Controls**: Displayed at both the top and bottom of the table
+- **Memoization**: `filteredData`, `sortedData`, `paginatedData`, and totals are all memoized with `useMemo` to prevent unnecessary recalculations
+- **Controls**: Displayed at the top of the table (sticky)
 - **Page changes**: Do not trigger browser scrolling
-- **View All**: A button allows bypassing pagination for the current session
+- **View All**: Dropdown option allows bypassing pagination for the current session
 - **Go to transaction**: When `highlightTransactionId` is set, the correct page is automatically selected
 
 ### Pagination Controls
+
+Implemented as the extracted `PaginationControls` component:
+
 - First page (`««`), Previous (`«`), Next (`»`), Last (`»»`)
 - Current page indicator (e.g., "Page 3 of 12")
-- Row range display (e.g., "Showing 10,001–15,000 of 52,413 rows")
-- "View All" button to disable pagination
-- "Paginate" button to re-enable pagination from View All mode
+- Row range display (e.g., "SHOWING 1–100 OF 2,413 ROWS")
+- **Page size dropdown**: Select from 25, 50, 100, 250, or "Show all"
+- Selecting a new page size resets to page 1
 
 ---
 
@@ -144,6 +167,8 @@ The table displays the following columns (hidden if all data is empty):
 
 ### 3. Filtering
 
+Filter state is managed by the `useTransactionFilters` hook (14 column filter states + memoized `filteredData`). Column visibility is managed by the `useColumnVisibility` hook.
+
 Each column has an inline filter input:
 - Type to filter by substring match
 - Tags support comma-separated filtering
@@ -175,20 +200,46 @@ Click "Details" button to open `TransactionDetailsModal`:
 
 ### 7. Delete Confirmation
 
+Implemented as the extracted `DeleteTransactionDialog` component.
+
 When clicking the 🗑️ delete button:
 - A confirmation dialog is displayed
 - Shows transaction date, description, and amount
 - User must confirm before deletion occurs
 - Action is irreversible
 
-### 8. Tagging
+### 8. Row Selection
+
+Rows can be selected for batch operations (e.g., tagging). Selection state is managed by the `useRowSelection` hook.
+
+| Interaction | Behavior |
+|---|---|
+| **Click** | Select row; toggle off if already sole selection |
+| **Ctrl/Cmd+Click** | Toggle individual row in/out of multi-selection |
+| **Shift+Click** | Range select from anchor to clicked row |
+| **Shift+Ctrl/Cmd+Click** | Add range to existing selection |
+
+- Selected rows are highlighted with `bg-primary/15` (hover: `bg-primary/25`)
+- Selection is tracked by transaction ID (`t_id`), so it persists across re-sorts
+- Clicking buttons/links inside a row does not trigger selection
+- `user-select: none` on table rows prevents text selection during shift-clicks
+
+### 9. Tagging (Selection-Aware)
+
+Implemented as the extracted `TransactionsTaggingToolbar` component.
 
 When `enableTagging` is true:
 - Tags are displayed as colored badges
-- "Apply Tag" button to apply tags to filtered transactions
+- Tag actions operate on **selected rows** when a selection exists, falling back to all filtered rows when none are selected
+- The toolbar label reflects the scope: "Action on N selected rows" vs "Action on all N matching rows"
+- A "✕ Clear" button appears when rows are selected
+- "Add" button applies the selected tag to effective rows
+- "Remove" button removes the selected tag from effective rows
+- "Clear All" button removes all tags (with confirmation dialog)
 - Fetches available tags via the shared `useFinanceTags` hook (`resources/js/components/finance/useFinanceTags.ts`)
 - Tag API response contract is a stable JSON envelope: `{ "data": Tag[] }`
 - "Manage Tags" button links to `/finance/tags` for tag CRUD
+- When more than 1,000 rows are in scope, tagging is disabled with a warning message
 
 ---
 

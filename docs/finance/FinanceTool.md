@@ -372,11 +372,25 @@ The Duplicates tab (`/finance/{id}/duplicates`) provides:
 - **Mark as Not Duplicate**: When all items in a group are unchecked and submitted, both transactions are marked as "not duplicate" to prevent future flagging
 - Bulk delete selected duplicates
 
+## Row Selection
+
+TransactionsTable supports row selection for batch operations. Selection state is managed by the `useRowSelection` hook (`resources/js/components/finance/useRowSelection.ts`).
+
+| Interaction | Behavior |
+|---|---|
+| **Click** | Select row; toggle off if already sole selection |
+| **Ctrl/Cmd+Click** | Toggle individual row in/out of multi-selection |
+| **Shift+Click** | Range select from anchor to clicked row |
+| **Shift+Ctrl/Cmd+Click** | Add range to existing selection |
+
+Selected rows are highlighted with `bg-primary/15`. The tagging toolbar shows the count of selected rows and a "✕ Clear" button when a selection is active.
+
 ## Transaction Tagging
 
 Tags can be applied to transactions for categorization:
 - Tags have a label and color
-- Bulk apply tags to all currently-filtered transactions (up to 1,000 items)
+- **Selection-aware**: When rows are selected (via click/shift/ctrl), tag operations apply only to the selected rows. When no rows are selected, they apply to all currently-filtered transactions (up to 1,000 items)
+- The tagging toolbar is implemented as the extracted `TransactionsTaggingToolbar` component
 - Manage tags at `/finance/tags`
 
 ### Tag API Response Contract
@@ -394,7 +408,7 @@ Both `TransactionsTable` and `ManageTagsPage` use the shared hook `resources/js/
 
 ### Tagging Limit
 
-When more than 1,000 transactions are shown in the filtered view, the tagging apply buttons are disabled and a warning `Alert` is displayed. Users must refine their filters to fewer than 1,000 transactions before applying tags.
+When more than 1,000 transactions are in scope (selected or filtered), the tagging apply buttons are disabled and a warning `Alert` is displayed. Users must refine their filters or selection to fewer than 1,000 transactions before applying tags.
 
 ### Totals by Tag
 
