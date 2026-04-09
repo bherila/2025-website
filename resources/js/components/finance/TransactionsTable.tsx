@@ -61,6 +61,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
   const [currentPage, setCurrentPage] = useState(1)
   const [viewAll, setViewAll] = useState(false)
   const [currentPageSize, setCurrentPageSize] = useState(pageSize)
+  const [focusedRowIndex, setFocusedRowIndex] = useState<number>(-1)
 
   const {
     isCategoryColumnEmpty, isQtyColumnEmpty, isPriceColumnEmpty,
@@ -256,6 +257,93 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
     }
   }, [selectedRowIds, sortedData, clearSelection, refreshFn])
 
+  // Keyboard navigation handler
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const totalDisplayedRows = displayData.length
+    if (totalDisplayedRows === 0) return
+
+    // Arrow Down: Move focus/selection down
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      const newIndex = Math.min(focusedRowIndex + 1, totalDisplayedRows - 1)
+      setFocusedRowIndex(newIndex)
+      const row = displayData[newIndex]
+      if (row?.t_id != null) {
+        if (e.shiftKey) {
+          // Shift+Arrow: extend selection range
+          handleRowClick(row.t_id, newIndex, { shiftKey: true, ctrlKey: false, metaKey: false } as React.MouseEvent)
+        } else {
+          // Regular arrow: move single selection
+          handleRowClick(row.t_id, newIndex, { shiftKey: false, ctrlKey: false, metaKey: false } as React.MouseEvent)
+        }
+      }
+      // Scroll into view if virtual scrolling
+      if (useVirtualScroll) {
+        virtualizer.scrollToIndex(newIndex, { align: 'auto' })
+      }
+    }
+    // Arrow Up: Move focus/selection up
+    else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      const newIndex = Math.max(focusedRowIndex - 1, 0)
+      setFocusedRowIndex(newIndex)
+      const row = displayData[newIndex]
+      if (row?.t_id != null) {
+        if (e.shiftKey) {
+          handleRowClick(row.t_id, newIndex, { shiftKey: true, ctrlKey: false, metaKey: false } as React.MouseEvent)
+        } else {
+          handleRowClick(row.t_id, newIndex, { shiftKey: false, ctrlKey: false, metaKey: false } as React.MouseEvent)
+        }
+      }
+      if (useVirtualScroll) {
+        virtualizer.scrollToIndex(newIndex, { align: 'auto' })
+      }
+    }
+    // Ctrl+A / Cmd+A: Select all visible rows
+    else if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+      e.preventDefault()
+      displayData.forEach((row, idx) => {
+        if (row?.t_id != null) {
+          handleRowClick(row.t_id, idx, { shiftKey: false, ctrlKey: true, metaKey: false } as React.MouseEvent)
+        }
+      })
+    }
+    // Escape: Clear selection
+    else if (e.key === 'Escape') {
+      e.preventDefault()
+      clearSelection()
+      setFocusedRowIndex(-1)
+    }
+    // Enter: Open transaction details for focused/selected row
+    else if (e.key === 'Enter') {
+      e.preventDefault()
+      let targetRow: AccountLineItem | null = null
+      if (selectedRowIds.size === 1) {
+        const selectedId = Array.from(selectedRowIds)[0]
+        targetRow = displayData.find(r => r.t_id === selectedId) || null
+      } else if (focusedRowIndex >= 0 && focusedRowIndex < displayData.length) {
+        targetRow = displayData[focusedRowIndex] || null
+      }
+      if (targetRow) {
+        setSelectedTransaction(targetRow)
+      }
+    }
+    // Delete or Backspace: Trigger delete for selected rows
+    else if ((e.key === 'Delete' || e.key === 'Backspace') && onDeleteTransaction) {
+      e.preventDefault()
+      if (selectedRowIds.size === 1) {
+        const selectedId = Array.from(selectedRowIds)[0]
+        const targetRow = displayData.find(r => r.t_id === selectedId)
+        if (targetRow) {
+          setDeleteConfirmTransaction(targetRow)
+        }
+      } else if (selectedRowIds.size > 1) {
+        // Trigger batch delete
+        handleBatchDelete()
+      }
+    }
+  }, [focusedRowIndex, displayData, selectedRowIds, handleRowClick, clearSelection, useVirtualScroll, virtualizer, onDeleteTransaction, handleBatchDelete, setSelectedTransaction, setDeleteConfirmTransaction])
+
   // Pagination callbacks
   const handlePageChange = useCallback((page: number) => {
     setViewAll(false)
@@ -312,8 +400,12 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
       <div
         ref={tableContainerRef}
         className="transactions-table-scroll relative w-full overflow-auto max-h-[calc(100vh-14rem)] border border-border rounded-b-sm bg-card"
+        onKeyDown={handleKeyDown}
+        tabIndex={0}
+        role="application"
+        aria-label="Transactions table with keyboard navigation"
       >
-        <table className="w-full text-sm">
+        <table className="w-full text-sm" role="grid" aria-rowcount={sortedData.length}>
           <thead className="sticky top-0 z-10 bg-card border-b border-border shadow-sm">
             <tr>
               <th className={thClass} onClick={() => handleSort('t_date')}>
@@ -456,6 +548,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
               if (!row) return null
               const rowId = row.t_id ?? -i
               const isRowSelected = rowId >= 0 && selectedRowIds.has(rowId)
+              const isFocused = i === focusedRowIndex
               return (
                 <tr
                   key={row.t_id != null ? row.t_id : `row-${i}`}
@@ -470,12 +563,19 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                     "transition-colors cursor-pointer hover:bg-muted/20",
                     isDuplicate(row) && "bg-destructive/10 hover:bg-destructive/20",
                     isRowSelected && !isDuplicate(row) && "bg-primary/15 hover:bg-primary/25",
+                    isFocused && "outline outline-2 outline-ring outline-offset-[-2px]",
                   )}
                   data-transaction-id={row.t_id}
+                  role="row"
+                  aria-selected={isRowSelected}
+                  aria-rowindex={i + 1}
                   onClick={(e) => {
                     const target = e.target as HTMLElement
                     if (target.closest('button') || target.closest('a')) return
-                    if (row.t_id != null) handleRowClick(row.t_id, i, e)
+                    if (row.t_id != null) {
+                      handleRowClick(row.t_id, i, e)
+                      setFocusedRowIndex(i)
+                    }
                   }}
                 >
                   <td className={cn(tdClass, "font-mono text-muted-foreground whitespace-nowrap hover:text-foreground")} onDoubleClick={() => setDateFilter(dateFilter === row.t_date ? '' : (row.t_date || ''))}>
