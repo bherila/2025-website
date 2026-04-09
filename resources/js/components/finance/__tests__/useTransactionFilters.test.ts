@@ -32,7 +32,7 @@ function makeRow(overrides: Partial<AccountLineItem> = {}): AccountLineItem {
 // with representative data.
 
 // Extract the filter logic by importing and calling renderHook:
-import { renderHook, act } from '@testing-library/react'
+import { act,renderHook } from '@testing-library/react'
 
 describe('useTransactionFilters', () => {
   it('initial state: all data passes through', () => {

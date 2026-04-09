@@ -1,10 +1,10 @@
-import type { AccountLineItem } from '@/data/finance/AccountLineItem'
-
-import { useColumnVisibility } from '../useColumnVisibility'
-
 // renderHook is not needed here — useColumnVisibility is a pure useMemo hook.
 // We call it via renderHook to stay close to real usage.
 import { renderHook } from '@testing-library/react'
+
+import type { AccountLineItem } from '@/data/finance/AccountLineItem'
+
+import { useColumnVisibility } from '../useColumnVisibility'
 
 function makeRow(overrides: Partial<AccountLineItem> = {}): AccountLineItem {
   return {
