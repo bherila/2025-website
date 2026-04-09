@@ -19,6 +19,7 @@ import { DeleteTransactionDialog } from './DeleteTransactionDialog'
 import TransactionLotsModal from './lots/TransactionLotsModal'
 import { PaginationControls, type PaginationControlsProps } from './PaginationControls'
 import TransactionDetailsModal from './TransactionDetailsModal'
+import { exportToCSV, exportToJSON } from './transactionExport'
 import TransactionLinkModal from './TransactionLinkModal'
 import { TransactionsSummaryCards } from './TransactionsSummaryCards'
 import { TransactionsTaggingToolbar } from './TransactionsTaggingToolbar'
@@ -257,6 +258,25 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
     }
   }, [selectedRowIds, sortedData, clearSelection, refreshFn])
 
+  // Export handlers - export selected rows or all filtered rows
+  const handleExportCSV = useCallback(() => {
+    const dataToExport = selectedRowIds.size > 0
+      ? sortedData.filter(row => row.t_id != null && selectedRowIds.has(row.t_id))
+      : sortedData
+    const suffix = selectedRowIds.size > 0 ? 'selected' : 'filtered'
+    const timestamp = new Date().toISOString().split('T')[0]
+    exportToCSV(dataToExport, accountId || 'all', `${suffix}_${timestamp}`)
+  }, [selectedRowIds, sortedData, accountId])
+
+  const handleExportJSON = useCallback(() => {
+    const dataToExport = selectedRowIds.size > 0
+      ? sortedData.filter(row => row.t_id != null && selectedRowIds.has(row.t_id))
+      : sortedData
+    const suffix = selectedRowIds.size > 0 ? 'selected' : 'filtered'
+    const timestamp = new Date().toISOString().split('T')[0]
+    exportToJSON(dataToExport, accountId || 'all', `${suffix}_${timestamp}`)
+  }, [selectedRowIds, sortedData, accountId])
+
   // Keyboard navigation handler
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     const totalDisplayedRows = displayData.length
@@ -392,6 +412,8 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
             isLoadingTags={isLoadingTags}
             onClearSelection={clearSelection}
             {...(onDeleteTransaction ? { onBatchDelete: handleBatchDelete } : {})}
+            onExportCSV={handleExportCSV}
+            onExportJSON={handleExportJSON}
           />
         )}
       </div>

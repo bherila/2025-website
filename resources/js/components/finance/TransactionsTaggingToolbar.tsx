@@ -12,6 +12,12 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Spinner } from '@/components/ui/spinner'
 
 import { TagSelect } from './rules_engine/TagSelect'
@@ -28,11 +34,15 @@ interface TransactionsTaggingToolbarProps {
   onClearSelection: () => void
   /** Optional batch-delete handler; if provided a Delete button is shown */
   onBatchDelete?: () => Promise<void>
+  /** Optional export handlers for CSV/JSON */
+  onExportCSV?: () => void
+  onExportJSON?: () => void
 }
 
 export function TransactionsTaggingToolbar({
   effectiveCount, isSelection, onApplyTag, onRemoveTag, onRemoveAllTags,
   availableTags, isLoadingTags, onClearSelection, onBatchDelete,
+  onExportCSV, onExportJSON,
 }: TransactionsTaggingToolbarProps) {
   const [selectedTagId, setSelectedTagId] = useState<string | null>(null)
   const [removeTagsConfirmOpen, setRemoveTagsConfirmOpen] = useState(false)
@@ -84,6 +94,27 @@ export function TransactionsTaggingToolbar({
                 <Button variant="destructive" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider ml-2" disabled={effectiveCount === 0} onClick={() => setBatchDeleteConfirmOpen(true)}>
                   Delete
                 </Button>
+              )}
+              {(onExportCSV || onExportJSON) && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider ml-2" disabled={effectiveCount === 0}>
+                      Export ▾
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="bg-card border-border">
+                    {onExportCSV && (
+                      <DropdownMenuItem onClick={onExportCSV} className="font-mono text-xs cursor-pointer hover:bg-muted">
+                        📄 Export as CSV
+                      </DropdownMenuItem>
+                    )}
+                    {onExportJSON && (
+                      <DropdownMenuItem onClick={onExportJSON} className="font-mono text-xs cursor-pointer hover:bg-muted">
+                        📋 Export as JSON
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
               <Button asChild variant="secondary" size="sm" className="ml-auto h-8 font-mono text-[10px] uppercase tracking-wider text-accent">
                 <a href="/finance/tags">Manage Tags</a>
