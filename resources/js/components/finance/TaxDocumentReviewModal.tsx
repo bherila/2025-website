@@ -591,7 +591,7 @@ export default function TaxDocumentReviewModal({
   return (
     <>
     <Dialog open={open} onOpenChange={isOpen => !isOpen && onClose()}>
-      <DialogContent className="w-[95vw] max-w-[1400px] max-h-[90vh] flex flex-col p-4">
+      <DialogContent className="w-[95vw] max-w-[1800px] max-h-[90vh] flex flex-col p-4">
         <DialogHeader className="px-1">
           <div className="flex items-center justify-between gap-4 pr-8">
             <DialogTitle>
