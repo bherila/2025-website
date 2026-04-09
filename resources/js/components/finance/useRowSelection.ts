@@ -1,10 +1,11 @@
+import type { MouseEvent } from 'react'
 import { useCallback, useRef, useState } from 'react'
 
 import type { AccountLineItem } from '@/data/finance/AccountLineItem'
 
 interface RowSelectionResult {
   selectedRowIds: Set<number>
-  handleRowClick: (rowId: number, rowIndex: number, e: React.MouseEvent) => void
+  handleRowClick: (rowId: number, rowIndex: number, e: MouseEvent) => void
   clearSelection: () => void
 }
 
@@ -12,7 +13,7 @@ export function useRowSelection(paginatedData: AccountLineItem[]): RowSelectionR
   const [selectedRowIds, setSelectedRowIds] = useState<Set<number>>(new Set())
   const anchorIndexRef = useRef<number>(-1)
 
-  const handleRowClick = useCallback((rowId: number, rowIndex: number, e: React.MouseEvent) => {
+  const handleRowClick = useCallback((rowId: number, rowIndex: number, e: MouseEvent) => {
     const isMultiKey = e.ctrlKey || e.metaKey
 
     if (e.shiftKey && anchorIndexRef.current >= 0) {

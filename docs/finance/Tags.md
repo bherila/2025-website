@@ -158,7 +158,7 @@ Tagging is implemented in the extracted `TransactionsTaggingToolbar` component. 
 3. Choose a tag from the **TagSelect** dropdown, then click **Add** to apply the tag, or **Remove** to remove it.
 4. Tag operations are **selection-aware**:
    - When rows are selected → operates on the selected rows only (toolbar shows "Action on N selected rows")
-   - When no rows are selected → operates on all filtered rows (toolbar shows "Action on N rows")
+   - When no rows are selected → operates on all filtered rows (toolbar shows "Action on all N matching rows")
 5. Click **Clear All** to remove all tags from the effective transactions (a confirmation dialog is shown first).
 6. When more than 1,000 transactions are in scope, the buttons are disabled and a warning is shown.
 7. A **✕ Clear** button appears in the toolbar when rows are selected, allowing quick deselection.

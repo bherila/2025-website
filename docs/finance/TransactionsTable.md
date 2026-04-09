@@ -231,7 +231,7 @@ Implemented as the extracted `TransactionsTaggingToolbar` component.
 When `enableTagging` is true:
 - Tags are displayed as colored badges
 - Tag actions operate on **selected rows** when a selection exists, falling back to all filtered rows when none are selected
-- The toolbar label reflects the scope: "Action on N selected rows" vs "Action on N rows"
+- The toolbar label reflects the scope: "Action on N selected rows" vs "Action on all N matching rows"
 - A "✕ Clear" button appears when rows are selected
 - "Add" button applies the selected tag to effective rows
 - "Remove" button removes the selected tag from effective rows

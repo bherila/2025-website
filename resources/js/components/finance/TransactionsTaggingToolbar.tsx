@@ -77,11 +77,9 @@ export function TransactionsTaggingToolbar({
               <Button variant="destructive" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider ml-2" disabled={effectiveCount === 0} onClick={() => setRemoveTagsConfirmOpen(true)}>
                 Clear All
               </Button>
-              <a href="/finance/tags" className="ml-auto">
-                <Button variant="secondary" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider text-accent">
-                  Manage Tags
-                </Button>
-              </a>
+              <Button asChild variant="secondary" size="sm" className="ml-auto h-8 font-mono text-[10px] uppercase tracking-wider text-accent">
+                <a href="/finance/tags">Manage Tags</a>
+              </Button>
             </>
           )}
         </div>

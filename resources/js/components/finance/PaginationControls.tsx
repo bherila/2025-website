@@ -46,6 +46,7 @@ export function PaginationControls({
           </>
         )}
         <select
+          aria-label="Rows per page"
           className="h-7 px-2 font-mono text-[10px] uppercase tracking-wider bg-background border border-border rounded text-foreground cursor-pointer"
           value={viewAll ? 'all' : pageSize.toString()}
           onChange={(e) => {
