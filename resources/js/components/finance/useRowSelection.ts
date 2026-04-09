@@ -7,6 +7,7 @@ interface RowSelectionResult {
   selectedRowIds: Set<number>
   handleRowClick: (rowId: number, rowIndex: number, e: MouseEvent) => void
   clearSelection: () => void
+  selectAll: () => void
 }
 
 export function useRowSelection(paginatedData: AccountLineItem[]): RowSelectionResult {
@@ -61,5 +62,12 @@ export function useRowSelection(paginatedData: AccountLineItem[]): RowSelectionR
     anchorIndexRef.current = -1
   }, [])
 
-  return { selectedRowIds, handleRowClick, clearSelection }
+  const selectAll = useCallback(() => {
+    const allIds = paginatedData
+      .map((r) => r.t_id)
+      .filter((id): id is number => id != null)
+    setSelectedRowIds(new Set(allIds))
+  }, [paginatedData])
+
+  return { selectedRowIds, handleRowClick, clearSelection, selectAll }
 }

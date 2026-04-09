@@ -180,6 +180,19 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
     enabled: useVirtualScroll,
   })
 
+  // Handle highlightTransactionId for virtual scrolling
+  const highlightedTransactionIndex = useMemo(() => {
+    if (!highlightTransactionId) return -1
+    return sortedData.findIndex((row) => row.t_id === highlightTransactionId)
+  }, [sortedData, highlightTransactionId])
+
+  useEffect(() => {
+    if (!useVirtualScroll) return
+    if (highlightedTransactionIndex < 0) return
+
+    virtualizer.scrollToIndex(highlightedTransactionIndex, { align: 'center' })
+  }, [useVirtualScroll, highlightedTransactionIndex, virtualizer])
+
   // Data to render: virtual scroll uses sortedData, pagination uses paginatedData
   const displayData = useVirtualScroll ? sortedData : paginatedData
 
@@ -202,7 +215,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
   const totalNegatives = totals.negatives
 
   // Row selection
-  const { selectedRowIds, handleRowClick, clearSelection } = useRowSelection(displayData)
+  const { selectedRowIds, handleRowClick, clearSelection, selectAll } = useRowSelection(displayData)
 
   // Selection-aware transaction IDs for tagging
   const effectiveTransactionIds = useMemo(() => {
@@ -286,6 +299,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
     selectedRowIds,
     handleRowClick,
     clearSelection,
+    selectAll,
     useVirtualScroll,
     virtualizer,
     onDeleteTransaction,
@@ -354,7 +368,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
         className="transactions-table-scroll relative w-full overflow-auto max-h-[calc(100vh-14rem)] border border-border rounded-b-sm bg-card"
         onKeyDown={handleKeyDown}
         tabIndex={0}
-        role="application"
+        role="region"
         aria-label="Transactions table with keyboard navigation"
       >
         <table className="w-full text-sm" role="grid" aria-rowcount={sortedData.length}>
@@ -501,6 +515,8 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
               const rowId = row.t_id ?? -i
               const isRowSelected = rowId >= 0 && selectedRowIds.has(rowId)
               const isFocused = i === focusedRowIndex
+              // Calculate correct aria-rowindex: global index for virtual scroll, page offset + index for pagination
+              const ariaRowIndex = useVirtualScroll ? i + 1 : ((safePage - 1) * currentPageSize) + i + 1
               return (
                 <tr
                   key={row.t_id != null ? row.t_id : `row-${i}`}
@@ -520,7 +536,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                   data-transaction-id={row.t_id}
                   role="row"
                   aria-selected={isRowSelected}
-                  aria-rowindex={i + 1}
+                  aria-rowindex={ariaRowIndex}
                   onClick={(e) => {
                     const target = e.target as HTMLElement
                     if (target.closest('button') || target.closest('a')) return

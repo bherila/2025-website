@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react'
+import type { KeyboardEvent } from 'react'
 
 import { makeRows } from '@/__tests__/utils/testDataFactory'
 
@@ -14,7 +15,7 @@ describe('useKeyboardNavigation', () => {
   const createMockEvent = (
     key: string,
     options: { shiftKey?: boolean; ctrlKey?: boolean; metaKey?: boolean } = {}
-  ): React.KeyboardEvent => ({
+  ): KeyboardEvent => ({
     key,
     shiftKey: options.shiftKey || false,
     ctrlKey: options.ctrlKey || false,
@@ -39,6 +40,7 @@ describe('useKeyboardNavigation', () => {
         selectedRowIds: new Set(),
         handleRowClick,
         clearSelection: jest.fn(),
+        selectAll: jest.fn(),
         useVirtualScroll: false,
         virtualizer: mockVirtualizer,
         onDeleteTransaction: undefined,
@@ -73,6 +75,7 @@ describe('useKeyboardNavigation', () => {
         selectedRowIds: new Set(),
         handleRowClick,
         clearSelection: jest.fn(),
+        selectAll: jest.fn(),
         useVirtualScroll: false,
         virtualizer: mockVirtualizer,
         onDeleteTransaction: undefined,
@@ -107,6 +110,7 @@ describe('useKeyboardNavigation', () => {
         selectedRowIds: new Set([2]),
         handleRowClick,
         clearSelection: jest.fn(),
+        selectAll: jest.fn(),
         useVirtualScroll: false,
         virtualizer: mockVirtualizer,
         onDeleteTransaction: undefined,
@@ -140,6 +144,7 @@ describe('useKeyboardNavigation', () => {
         selectedRowIds: new Set(),
         handleRowClick,
         clearSelection: jest.fn(),
+        selectAll: jest.fn(),
         useVirtualScroll: true,
         virtualizer: mockVirtualizer,
         onDeleteTransaction: undefined,
@@ -159,15 +164,16 @@ describe('useKeyboardNavigation', () => {
 
   it('selects all with Ctrl+A', () => {
     const rows = makeRows(3)
-    const handleRowClick = jest.fn()
+    const selectAll = jest.fn()
     const { result } = renderHook(() =>
       useKeyboardNavigation({
         focusedRowIndex: 0,
         setFocusedRowIndex: jest.fn(),
         displayData: rows,
         selectedRowIds: new Set(),
-        handleRowClick,
+        handleRowClick: jest.fn(),
         clearSelection: jest.fn(),
+        selectAll,
         useVirtualScroll: false,
         virtualizer: mockVirtualizer,
         onDeleteTransaction: undefined,
@@ -182,25 +188,21 @@ describe('useKeyboardNavigation', () => {
       result.current.handleKeyDown(event)
     })
 
-    expect(handleRowClick).toHaveBeenCalledTimes(3)
-    expect(handleRowClick).toHaveBeenCalledWith(
-      1,
-      0,
-      expect.objectContaining({ shiftKey: false, ctrlKey: true, metaKey: false })
-    )
+    expect(selectAll).toHaveBeenCalledTimes(1)
   })
 
   it('selects all with Cmd+A (Mac)', () => {
     const rows = makeRows(2)
-    const handleRowClick = jest.fn()
+    const selectAll = jest.fn()
     const { result } = renderHook(() =>
       useKeyboardNavigation({
         focusedRowIndex: 0,
         setFocusedRowIndex: jest.fn(),
         displayData: rows,
         selectedRowIds: new Set(),
-        handleRowClick,
+        handleRowClick: jest.fn(),
         clearSelection: jest.fn(),
+        selectAll,
         useVirtualScroll: false,
         virtualizer: mockVirtualizer,
         onDeleteTransaction: undefined,
@@ -215,7 +217,7 @@ describe('useKeyboardNavigation', () => {
       result.current.handleKeyDown(event)
     })
 
-    expect(handleRowClick).toHaveBeenCalledTimes(2)
+    expect(selectAll).toHaveBeenCalledTimes(1)
   })
 
   it('clears selection with Escape', () => {
@@ -230,6 +232,7 @@ describe('useKeyboardNavigation', () => {
         selectedRowIds: new Set([1, 2]),
         handleRowClick: jest.fn(),
         clearSelection,
+        selectAll: jest.fn(),
         useVirtualScroll: false,
         virtualizer: mockVirtualizer,
         onDeleteTransaction: undefined,
@@ -259,6 +262,7 @@ describe('useKeyboardNavigation', () => {
         selectedRowIds: new Set([2]),
         handleRowClick: jest.fn(),
         clearSelection: jest.fn(),
+        selectAll: jest.fn(),
         useVirtualScroll: false,
         virtualizer: mockVirtualizer,
         onDeleteTransaction: undefined,
@@ -289,6 +293,7 @@ describe('useKeyboardNavigation', () => {
         selectedRowIds: new Set(),
         handleRowClick: jest.fn(),
         clearSelection: jest.fn(),
+        selectAll: jest.fn(),
         useVirtualScroll: false,
         virtualizer: mockVirtualizer,
         onDeleteTransaction: undefined,
@@ -319,6 +324,7 @@ describe('useKeyboardNavigation', () => {
         selectedRowIds: new Set([2]),
         handleRowClick: jest.fn(),
         clearSelection: jest.fn(),
+        selectAll: jest.fn(),
         useVirtualScroll: false,
         virtualizer: mockVirtualizer,
         onDeleteTransaction: jest.fn(),
@@ -349,6 +355,7 @@ describe('useKeyboardNavigation', () => {
         selectedRowIds: new Set([1, 2, 3]),
         handleRowClick: jest.fn(),
         clearSelection: jest.fn(),
+        selectAll: jest.fn(),
         useVirtualScroll: false,
         virtualizer: mockVirtualizer,
         onDeleteTransaction: jest.fn(),
@@ -377,6 +384,7 @@ describe('useKeyboardNavigation', () => {
         selectedRowIds: new Set([2]),
         handleRowClick: jest.fn(),
         clearSelection: jest.fn(),
+        selectAll: jest.fn(),
         useVirtualScroll: false,
         virtualizer: mockVirtualizer,
         onDeleteTransaction: jest.fn(),
@@ -407,6 +415,7 @@ describe('useKeyboardNavigation', () => {
         selectedRowIds: new Set([1, 2]),
         handleRowClick: jest.fn(),
         clearSelection: jest.fn(),
+        selectAll: jest.fn(),
         useVirtualScroll: false,
         virtualizer: mockVirtualizer,
         onDeleteTransaction: undefined,
@@ -435,6 +444,7 @@ describe('useKeyboardNavigation', () => {
         selectedRowIds: new Set(),
         handleRowClick,
         clearSelection: jest.fn(),
+        selectAll: jest.fn(),
         useVirtualScroll: false,
         virtualizer: mockVirtualizer,
         onDeleteTransaction: undefined,
@@ -463,6 +473,7 @@ describe('useKeyboardNavigation', () => {
         selectedRowIds: new Set(),
         handleRowClick: jest.fn(),
         clearSelection: jest.fn(),
+        selectAll: jest.fn(),
         useVirtualScroll: false,
         virtualizer: mockVirtualizer,
         onDeleteTransaction: jest.fn(),

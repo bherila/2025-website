@@ -1,4 +1,5 @@
 import type { Virtualizer } from '@tanstack/react-virtual'
+import type { KeyboardEvent, MouseEvent } from 'react'
 import { useCallback } from 'react'
 
 import type { AccountLineItem } from '@/data/finance/AccountLineItem'
@@ -8,8 +9,9 @@ interface UseKeyboardNavigationParams {
   setFocusedRowIndex: (index: number) => void
   displayData: AccountLineItem[]
   selectedRowIds: Set<number>
-  handleRowClick: (rowId: number, index: number, e: React.MouseEvent) => void
+  handleRowClick: (rowId: number, index: number, e: MouseEvent) => void
   clearSelection: () => void
+  selectAll: () => void
   useVirtualScroll: boolean
   virtualizer: Virtualizer<HTMLDivElement, Element>
   onDeleteTransaction?: ((transactionId: string) => Promise<void>) | undefined
@@ -29,6 +31,7 @@ export function useKeyboardNavigation({
   selectedRowIds,
   handleRowClick,
   clearSelection,
+  selectAll,
   useVirtualScroll,
   virtualizer,
   onDeleteTransaction,
@@ -37,7 +40,7 @@ export function useKeyboardNavigation({
   setDeleteConfirmTransaction,
 }: UseKeyboardNavigationParams) {
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
+    (e: KeyboardEvent) => {
       const totalDisplayedRows = displayData.length
       if (totalDisplayedRows === 0) return
 
@@ -45,6 +48,8 @@ export function useKeyboardNavigation({
       if (e.key === 'ArrowDown') {
         e.preventDefault()
         const newIndex = Math.min(focusedRowIndex + 1, totalDisplayedRows - 1)
+        // Guard against no-op movement at boundary
+        if (newIndex === focusedRowIndex) return
         setFocusedRowIndex(newIndex)
         const row = displayData[newIndex]
         if (row?.t_id != null) {
@@ -54,14 +59,14 @@ export function useKeyboardNavigation({
               shiftKey: true,
               ctrlKey: false,
               metaKey: false,
-            } as React.MouseEvent)
+            } as MouseEvent)
           } else {
             // Regular arrow: move single selection
             handleRowClick(row.t_id, newIndex, {
               shiftKey: false,
               ctrlKey: false,
               metaKey: false,
-            } as React.MouseEvent)
+            } as MouseEvent)
           }
         }
         // Scroll into view if virtual scrolling
@@ -73,6 +78,8 @@ export function useKeyboardNavigation({
       else if (e.key === 'ArrowUp') {
         e.preventDefault()
         const newIndex = Math.max(focusedRowIndex - 1, 0)
+        // Guard against no-op movement at boundary
+        if (newIndex === focusedRowIndex) return
         setFocusedRowIndex(newIndex)
         const row = displayData[newIndex]
         if (row?.t_id != null) {
@@ -81,13 +88,13 @@ export function useKeyboardNavigation({
               shiftKey: true,
               ctrlKey: false,
               metaKey: false,
-            } as React.MouseEvent)
+            } as MouseEvent)
           } else {
             handleRowClick(row.t_id, newIndex, {
               shiftKey: false,
               ctrlKey: false,
               metaKey: false,
-            } as React.MouseEvent)
+            } as MouseEvent)
           }
         }
         if (useVirtualScroll) {
@@ -97,15 +104,7 @@ export function useKeyboardNavigation({
       // Ctrl+A / Cmd+A: Select all visible rows
       else if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
         e.preventDefault()
-        displayData.forEach((row, idx) => {
-          if (row?.t_id != null) {
-            handleRowClick(row.t_id, idx, {
-              shiftKey: false,
-              ctrlKey: true,
-              metaKey: false,
-            } as React.MouseEvent)
-          }
-        })
+        selectAll()
       }
       // Escape: Clear selection
       else if (e.key === 'Escape') {
@@ -148,6 +147,7 @@ export function useKeyboardNavigation({
       selectedRowIds,
       handleRowClick,
       clearSelection,
+      selectAll,
       useVirtualScroll,
       virtualizer,
       onDeleteTransaction,
