@@ -62,8 +62,31 @@ function makeRows(count: number): AccountLineItem[] {
     t_id: i + 1,
     t_date: '2024-01-01',
     t_description: `Row ${i + 1}`,
-    t_amt: '100',
-  } as AccountLineItem))
+    t_amt: 100,
+    t_schc_category: undefined,
+    t_qty: 0,
+    t_price: undefined,
+    t_commission: undefined,
+    t_fee: undefined,
+    t_type: undefined,
+    t_comment: undefined,
+    t_cusip: undefined,
+    t_symbol: undefined,
+    opt_expiration: undefined,
+    opt_type: undefined,
+    opt_strike: undefined,
+    tags: [],
+    t_date_posted: undefined,
+    t_account_balance: undefined,
+    client_expense: undefined,
+    t_method: undefined,
+    t_source: undefined,
+    t_origin: undefined,
+    t_from: undefined,
+    t_to: undefined,
+    t_interest_rate: undefined,
+    t_harvested_amount: undefined,
+  }))
 }
 
 describe('buildCacheKey', () => {

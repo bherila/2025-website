@@ -12,24 +12,24 @@ function makeRow(overrides: Partial<AccountLineItem> = {}): AccountLineItem {
     t_date: '2024-01-01',
     t_description: 'Test',
     t_amt: '0',
-    t_schc_category: null,
-    t_qty: null,
-    t_price: null,
-    t_commission: null,
-    t_fee: null,
-    t_type: null,
-    t_comment: null,
-    t_cusip: null,
-    t_symbol: null,
-    opt_expiration: null,
-    opt_type: null,
-    opt_strike: null,
+    t_schc_category: undefined,
+    t_qty: undefined,
+    t_price: undefined,
+    t_commission: undefined,
+    t_fee: undefined,
+    t_type: undefined,
+    t_comment: undefined,
+    t_cusip: undefined,
+    t_symbol: undefined,
+    opt_expiration: undefined,
+    opt_type: undefined,
+    opt_strike: undefined,
     tags: [],
-    t_date_posted: null,
-    t_account_balance: null,
-    client_expense: null,
+    t_date_posted: undefined,
+    t_account_balance: undefined,
+    client_expense: undefined,
     ...overrides,
-  } as unknown as AccountLineItem
+  } as AccountLineItem
 }
 
 describe('useColumnVisibility', () => {
@@ -74,7 +74,7 @@ describe('useColumnVisibility', () => {
 
   it('tags column not empty when at least one row has tags', () => {
     const rows = [
-      makeRow({ tags: [{ tag_id: 1, tag_label: 'business', tag_color: null }] }),
+      makeRow({ tags: [{ tag_id: 1, tag_label: 'business', tag_userid: '1', tag_color: 'blue' }] }),
       makeRow(),
     ]
     const { result } = renderHook(() => useColumnVisibility(rows))
@@ -82,7 +82,7 @@ describe('useColumnVisibility', () => {
   })
 
   it('qty column not empty when at least one row has non-zero qty', () => {
-    const rows = [makeRow({ t_qty: '5' }), makeRow()]
+    const rows = [makeRow({ t_qty: 5 }), makeRow()]
     const { result } = renderHook(() => useColumnVisibility(rows))
     expect(result.current.isQtyColumnEmpty).toBe(false)
   })
