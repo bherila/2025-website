@@ -1,8 +1,9 @@
 'use client'
 import './TransactionsTable.css'
 
+import { useVirtualizer } from '@tanstack/react-virtual'
 import currency from 'currency.js'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { collectTagsFromRows, type TransactionTag } from '@/components/finance/transactionsTableTags'
 import { useFinanceTags } from '@/components/finance/useFinanceTags'
@@ -37,9 +38,10 @@ interface Props {
   accountId?: number | undefined
   pageSize?: number | undefined
   highlightTransactionId?: number | undefined
+  useVirtualScroll?: boolean | undefined
 }
 
-export default function TransactionsTable({ data, onDeleteTransaction, enableTagging = false, refreshFn, duplicates, enableLinking = false, accountId, pageSize = DEFAULT_PAGE_SIZE, highlightTransactionId }: Props) {
+export default function TransactionsTable({ data, onDeleteTransaction, enableTagging = false, refreshFn, duplicates, enableLinking = false, accountId, pageSize = DEFAULT_PAGE_SIZE, highlightTransactionId, useVirtualScroll = true }: Props) {
   const [sortField, setSortField] = useState<keyof AccountLineItem>('t_date')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
   const {
@@ -165,6 +167,19 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
     return sortedData.slice(start, start + currentPageSize)
   }, [sortedData, safePage, currentPageSize, viewAll])
 
+  // Virtual scrolling setup
+  const tableContainerRef = useRef<HTMLDivElement>(null)
+  const virtualizer = useVirtualizer({
+    count: sortedData.length,
+    getScrollElement: () => tableContainerRef.current,
+    estimateSize: () => 36, // Fixed row height in pixels (matches table row)
+    overscan: 10, // Render 10 extra rows above/below viewport
+    enabled: useVirtualScroll,
+  })
+
+  // Data to render: virtual scroll uses sortedData, pagination uses paginatedData
+  const displayData = useVirtualScroll ? sortedData : paginatedData
+
   const totals = useMemo(() => {
     let total = currency(0)
     let positives = currency(0)
@@ -177,14 +192,14 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
     }
     return { total, positives, negatives }
   }, [sortedData])
-   
+
 
   const totalAmount = totals.total
   const totalPositives = totals.positives
   const totalNegatives = totals.negatives
 
   // Row selection
-  const { selectedRowIds, handleRowClick, clearSelection } = useRowSelection(paginatedData)
+  const { selectedRowIds, handleRowClick, clearSelection } = useRowSelection(displayData)
 
   // Selection-aware transaction IDs for tagging
   const effectiveTransactionIds = useMemo(() => {
@@ -276,7 +291,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
 
       {/* Sticky zone: pagination + tagging toolbar */}
       <div className="sticky top-0 z-20 bg-background border-x border-t border-border rounded-t-sm">
-        <PaginationControls {...paginationProps} />
+        {!useVirtualScroll && <PaginationControls {...paginationProps} />}
 
         {enableTagging && (
           <TransactionsTaggingToolbar
@@ -294,7 +309,10 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
       </div>
 
       {/* Scrollable table container */}
-      <div className="transactions-table-scroll relative w-full overflow-auto max-h-[calc(100vh-14rem)] border border-border rounded-b-sm bg-card">
+      <div
+        ref={tableContainerRef}
+        className="transactions-table-scroll relative w-full overflow-auto max-h-[calc(100vh-14rem)] border border-border rounded-b-sm bg-card"
+      >
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10 bg-card border-b border-border shadow-sm">
             <tr>
@@ -432,13 +450,22 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
             </tr>
           </thead>
           
-          <tbody className="[&_tr:last-child]:border-0">
-            {paginatedData.map((row, i) => {
+          <tbody className="[&_tr:last-child]:border-0" style={useVirtualScroll ? { position: 'relative', height: `${virtualizer.getTotalSize()}px` } : undefined}>
+            {(useVirtualScroll ? virtualizer.getVirtualItems().map(virtualRow => ({ ...virtualRow, row: sortedData[virtualRow.index] })) : paginatedData.map((row, i) => ({ index: i, size: 0, start: 0, key: i, row }))).map((item) => {
+              const { row, index: i } = item
+              if (!row) return null
               const rowId = row.t_id ?? -i
               const isRowSelected = rowId >= 0 && selectedRowIds.has(rowId)
               return (
                 <tr
                   key={row.t_id != null ? row.t_id : `row-${i}`}
+                  style={useVirtualScroll ? {
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${item.start}px)`,
+                  } : undefined}
                   className={cn(
                     "transition-colors cursor-pointer hover:bg-muted/20",
                     isDuplicate(row) && "bg-destructive/10 hover:bg-destructive/20",
@@ -627,7 +654,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
       </div>
 
       {/* Bottom pagination for convenience */}
-      <PaginationControls {...paginationProps} />
+      {!useVirtualScroll && <PaginationControls {...paginationProps} />}
 
       {selectedTransaction && <TransactionDetailsModal transaction={selectedTransaction} isOpen={!!selectedTransaction} onClose={() => setSelectedTransaction(null)} onSave={handleUpdateTransaction} />}
       {linkTransaction && <TransactionLinkModal transaction={linkTransaction} isOpen={!!linkTransaction} onClose={() => setLinkTransaction(null)} onLinkChanged={() => refreshFn && refreshFn()} />}
