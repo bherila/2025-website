@@ -1,50 +1,8 @@
-import type { AccountLineItem } from '@/data/finance/AccountLineItem'
+import { act, renderHook } from '@testing-library/react'
+
+import { makeRow } from '@/__tests__/utils/testDataFactory'
 
 import { useTransactionFilters } from '../useTransactionFilters'
-
-// A helper to invoke the hook in isolation (no render needed for pure logic).
-// We call the exported function directly and exercise the returned filteredData.
-
-function makeRow(overrides: Partial<AccountLineItem> = {}): AccountLineItem {
-  return {
-    t_id: 1,
-    t_date: '2024-03-15',
-    t_description: 'Test transaction',
-    t_type: 'BUY',
-    t_amt: '100.00',
-    t_symbol: 'AAPL',
-    t_cusip: 'ABC123',
-    t_qty: 10,
-    t_price: undefined,
-    t_commission: undefined,
-    t_fee: undefined,
-    t_comment: 'memo text',
-    t_schc_category: 'Office',
-    opt_expiration: '2024-12-20',
-    opt_type: 'call',
-    opt_strike: '0',
-    t_date_posted: '2024-03-16',
-    t_account_balance: 5000,
-    tags: [],
-    client_expense: undefined,
-    t_method: undefined,
-    t_source: undefined,
-    t_origin: undefined,
-    t_from: undefined,
-    t_to: undefined,
-    t_interest_rate: undefined,
-    t_harvested_amount: undefined,
-    ...overrides,
-  } as AccountLineItem
-}
-
-// We exercise the filtering logic directly rather than via renderHook, because
-// useTransactionFilters returns a memoized filteredData that depends on state
-// setters. Instead we test the filter predicates by calling the module's logic
-// with representative data.
-
-// Extract the filter logic by importing and calling renderHook:
-import { act,renderHook } from '@testing-library/react'
 
 describe('useTransactionFilters', () => {
   it('initial state: all data passes through', () => {

@@ -29,7 +29,7 @@ class FinanceBatchOperationsApiControllerTest extends TestCase
         for ($i = 1; $i <= $count; $i++) {
             FinAccountLineItems::create([
                 't_account' => $account->acct_id,
-                't_date' => '2024-01-0' . $i,
+                't_date' => '2024-01-0'.$i,
                 't_amt' => $i * 100,
                 't_description' => "Transaction $i",
                 't_type' => 'BUY',
@@ -232,5 +232,44 @@ class FinanceBatchOperationsApiControllerTest extends TestCase
             'fields' => ['t_type' => 'SELL'],
         ]);
         $response->assertStatus(422);
+    }
+
+    public function test_batch_update_can_set_all_whitelisted_fields(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccountWithTransactions($user->id, 1);
+        $id = FinAccountLineItems::where('t_account', $account->acct_id)->value('t_id');
+
+        $response = $this->actingAs($user)->postJson('/api/finance/transactions/batch-update', [
+            't_ids' => [$id],
+            'fields' => [
+                't_date' => '2024-12-25',
+                't_type' => 'SELL',
+                't_amt' => 1500.50,
+                't_comment' => 'Updated comment',
+                't_description' => 'Updated description',
+                't_qty' => 25,
+                't_price' => 60.02,
+                't_commission' => 5.00,
+                't_fee' => 2.50,
+                't_symbol' => 'MSFT',
+                't_schc_category' => 'Office',
+            ],
+        ]);
+
+        $response->assertOk()->assertJson(['success' => true, 'updated' => 1]);
+
+        $transaction = FinAccountLineItems::find($id);
+        $this->assertEquals('2024-12-25', $transaction->t_date);
+        $this->assertEquals('SELL', $transaction->t_type);
+        $this->assertEquals(1500.50, $transaction->t_amt);
+        $this->assertEquals('Updated comment', $transaction->t_comment);
+        $this->assertEquals('Updated description', $transaction->t_description);
+        $this->assertEquals(25, $transaction->t_qty);
+        $this->assertEquals(60.02, $transaction->t_price);
+        $this->assertEquals(5.00, $transaction->t_commission);
+        $this->assertEquals(2.50, $transaction->t_fee);
+        $this->assertEquals('MSFT', $transaction->t_symbol);
+        $this->assertEquals('Office', $transaction->t_schc_category);
     }
 }

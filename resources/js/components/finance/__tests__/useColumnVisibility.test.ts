@@ -2,35 +2,9 @@
 // We call it via renderHook to stay close to real usage.
 import { renderHook } from '@testing-library/react'
 
-import type { AccountLineItem } from '@/data/finance/AccountLineItem'
+import { makeRow } from '@/__tests__/utils/testDataFactory'
 
 import { useColumnVisibility } from '../useColumnVisibility'
-
-function makeRow(overrides: Partial<AccountLineItem> = {}): AccountLineItem {
-  return {
-    t_id: 1,
-    t_date: '2024-01-01',
-    t_description: 'Test',
-    t_amt: '0',
-    t_schc_category: undefined,
-    t_qty: undefined,
-    t_price: undefined,
-    t_commission: undefined,
-    t_fee: undefined,
-    t_type: undefined,
-    t_comment: undefined,
-    t_cusip: undefined,
-    t_symbol: undefined,
-    opt_expiration: undefined,
-    opt_type: undefined,
-    opt_strike: undefined,
-    tags: [],
-    t_date_posted: undefined,
-    t_account_balance: undefined,
-    client_expense: undefined,
-    ...overrides,
-  } as AccountLineItem
-}
 
 describe('useColumnVisibility', () => {
   it('all columns empty when all rows have null/zero values', () => {
