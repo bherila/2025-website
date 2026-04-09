@@ -55,3 +55,28 @@ Whenever rendering numerical data, trends, or statuses, map them strictly to the
 * Info (Darker Teal): HSL(155 35% 40%) (`--info`)
 * Success (Darker Green): HSL(147 40% 38%) (`--success`)
 * Destructive (Darker Red): HSL(0 65% 45%) (`--destructive`)
+
+### Dialog/Modal Width Constraints
+
+**CRITICAL:** The `DialogContent` component in `components/ui/dialog.tsx` has `sm:max-w-lg` (512px) by default. This constraint takes precedence over width settings.
+
+**To make a dialog wider:**
+
+1. **Use responsive max-width override:** `sm:max-w-[Npx]` where N is your desired width
+   ```tsx
+   <DialogContent className="sm:max-w-[1800px] ...">
+   ```
+
+2. **Use !important if needed:** `sm:!max-w-[Npx]` to force override
+   ```tsx
+   <DialogContent className="sm:!max-w-[1400px] ...">
+   ```
+
+3. **Common patterns:**
+   - Financial data modals: `sm:max-w-[1800px]` (wide, uses most of screen)
+   - Form modals: `sm:max-w-[800px]` (medium width)
+   - Confirmation dialogs: Use default `sm:max-w-lg` (512px)
+
+**Why:** CSS `max-width` constraints take precedence over `width`. The base component's `sm:max-w-lg` applies at the `sm` breakpoint (640px) and above, so you must override with a matching or higher specificity class like `sm:max-w-[...]`.
+
+**Reference:** [shadcn-ui/ui#1870](https://github.com/shadcn-ui/ui/issues/1870#issuecomment-3400436709)
