@@ -111,7 +111,10 @@ export default function TransactionDetailsModal({ transaction, isOpen, onClose, 
         t_symbol: symbol || null,
       }
 
-      await fetchWrapper.post(`/api/finance/transactions/${transaction.t_id}/update`, updatedFields);
+      await fetchWrapper.post('/api/finance/transactions/batch-update', {
+        t_ids: [transaction.t_id],
+        fields: updatedFields,
+      });
 
       // Call optional onSave prop if provided
       if (onSave) {

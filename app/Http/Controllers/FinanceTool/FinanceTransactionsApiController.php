@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -205,89 +206,6 @@ class FinanceTransactionsApiController extends Controller
     }
 
     /**
-     * Update a transaction with multiple fields
-     */
-    public function updateTransaction(Request $request, $transaction_id)
-    {
-        $uid = Auth::id();
-
-        $request->validate([
-            't_date' => 'nullable|date',
-            't_type' => 'nullable|string|max:50',
-            't_amt' => 'nullable|numeric',
-            't_comment' => 'nullable|string|max:255',
-            't_description' => 'nullable|string|max:255',
-            't_qty' => 'nullable|numeric',
-            't_price' => 'nullable|numeric',
-            't_commission' => 'nullable|numeric',
-            't_fee' => 'nullable|numeric',
-            't_symbol' => 'nullable|string|max:20',
-            't_memo' => 'nullable|string|max:1000',
-        ]);
-
-        $lineItem = FinAccountLineItems::where('t_id', $transaction_id)
-            ->whereHas('account', function ($query) use ($uid) {
-                $query->where('acct_owner', $uid);
-            })
-            ->firstOrFail();
-
-        $updateData = array_filter([
-            't_date' => $request->t_date,
-            't_type' => $request->t_type,
-            't_amt' => $request->t_amt,
-            't_comment' => $request->t_comment,
-            't_description' => $request->t_description,
-            't_qty' => $request->t_qty,
-            't_price' => $request->t_price,
-            't_commission' => $request->t_commission,
-            't_fee' => $request->t_fee,
-            't_symbol' => $request->t_symbol,
-            't_memo' => $request->t_memo,
-        ], function ($value) {
-            return $value !== null;
-        });
-
-        // Allow setting values to null/0 explicitly
-        if ($request->has('t_date')) {
-            $updateData['t_date'] = $request->t_date;
-        }
-        if ($request->has('t_type')) {
-            $updateData['t_type'] = $request->t_type;
-        }
-        if ($request->has('t_amt')) {
-            $updateData['t_amt'] = $request->t_amt ?? 0;
-        }
-        if ($request->has('t_comment')) {
-            $updateData['t_comment'] = $request->t_comment;
-        }
-        if ($request->has('t_description')) {
-            $updateData['t_description'] = $request->t_description;
-        }
-        if ($request->has('t_qty')) {
-            $updateData['t_qty'] = $request->t_qty ?? 0;
-        }
-        if ($request->has('t_price')) {
-            $updateData['t_price'] = $request->t_price ?? 0;
-        }
-        if ($request->has('t_commission')) {
-            $updateData['t_commission'] = $request->t_commission ?? 0;
-        }
-        if ($request->has('t_fee')) {
-            $updateData['t_fee'] = $request->t_fee ?? 0;
-        }
-        if ($request->has('t_symbol')) {
-            $updateData['t_symbol'] = $request->t_symbol;
-        }
-        if ($request->has('t_memo')) {
-            $updateData['t_memo'] = $request->t_memo;
-        }
-
-        $lineItem->update($updateData);
-
-        return response()->json(['success' => true]);
-    }
-
-    /**
      * Get available years for transactions in one or all accounts.
      * Pass account_id = 'all' (or omit to use the default) to retrieve years across all accounts.
      */
@@ -385,5 +303,101 @@ class FinanceTransactionsApiController extends Controller
         }
 
         return $itemArray;
+    }
+
+    /**
+     * Batch-delete multiple transactions at once.
+     *
+     * POST /api/finance/transactions/batch-delete
+     * Body: { "t_ids": [1, 2, 3, ...] }
+     *
+     * Only transactions belonging to the authenticated user are deleted.
+     * Returns the count of deleted rows.
+     */
+    public function batchDelete(Request $request): JsonResponse
+    {
+        $request->validate([
+            't_ids' => 'required|array|min:1|max:1000',
+            't_ids.*' => 'required|integer',
+        ]);
+
+        $uid = Auth::id();
+
+        // Collect all account IDs owned by this user
+        $userAccountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
+
+        $tIds = $request->input('t_ids');
+
+        // Unlink lots referencing these transactions
+        FinAccountLot::whereIn('open_t_id', $tIds)->update(['open_t_id' => null]);
+        FinAccountLot::whereIn('close_t_id', $tIds)->update(['close_t_id' => null]);
+
+        $deleted = FinAccountLineItems::whereIn('t_id', $tIds)
+            ->whereIn('t_account', $userAccountIds)
+            ->delete();
+
+        return response()->json(['success' => true, 'deleted' => $deleted]);
+    }
+
+    /**
+     * Batch-update a subset of fields on multiple transactions.
+     *
+     * POST /api/finance/transactions/batch-update
+     * Body: { "t_ids": [1, 2, 3], "fields": { "t_schc_category": "Office", ... } }
+     *
+     * Allowed fields: t_date, t_type, t_amt, t_comment, t_description, t_qty, t_price, t_commission, t_fee, t_symbol, t_schc_category
+     * Only transactions belonging to the authenticated user are updated.
+     */
+    public function batchUpdate(Request $request): JsonResponse
+    {
+        $request->validate([
+            't_ids' => 'required|array|min:1|max:1000',
+            't_ids.*' => 'required|integer',
+            'fields' => 'required|array|min:1',
+            'fields.t_date' => 'nullable|date',
+            'fields.t_type' => 'nullable|string|max:50',
+            'fields.t_amt' => 'nullable|numeric',
+            'fields.t_comment' => 'nullable|string|max:255',
+            'fields.t_description' => 'nullable|string|max:255',
+            'fields.t_qty' => 'nullable|numeric',
+            'fields.t_price' => 'nullable|numeric',
+            'fields.t_commission' => 'nullable|numeric',
+            'fields.t_fee' => 'nullable|numeric',
+            'fields.t_symbol' => 'nullable|string|max:20',
+            'fields.t_schc_category' => 'nullable|string|max:255',
+        ]);
+
+        $uid = Auth::id();
+
+        $userAccountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
+
+        $tIds = $request->input('t_ids');
+        $rawFields = $request->input('fields');
+
+        // Only allow a safe whitelist of fields to be batch-updated
+        $allowed = [
+            't_date',
+            't_type',
+            't_amt',
+            't_comment',
+            't_description',
+            't_qty',
+            't_price',
+            't_commission',
+            't_fee',
+            't_symbol',
+            't_schc_category',
+        ];
+        $fields = array_intersect_key($rawFields, array_flip($allowed));
+
+        if (empty($fields)) {
+            return response()->json(['error' => 'No updatable fields provided.'], 422);
+        }
+
+        $updated = FinAccountLineItems::whereIn('t_id', $tIds)
+            ->whereIn('t_account', $userAccountIds)
+            ->update($fields);
+
+        return response()->json(['success' => true, 'updated' => $updated]);
     }
 }

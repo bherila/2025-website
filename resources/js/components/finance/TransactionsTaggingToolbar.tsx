@@ -26,21 +26,24 @@ interface TransactionsTaggingToolbarProps {
   availableTags: FinanceTag[]
   isLoadingTags: boolean
   onClearSelection: () => void
+  /** Optional batch-delete handler; if provided a Delete button is shown */
+  onBatchDelete?: () => Promise<void>
 }
 
 export function TransactionsTaggingToolbar({
   effectiveCount, isSelection, onApplyTag, onRemoveTag, onRemoveAllTags,
-  availableTags, isLoadingTags, onClearSelection,
+  availableTags, isLoadingTags, onClearSelection, onBatchDelete,
 }: TransactionsTaggingToolbarProps) {
   const [selectedTagId, setSelectedTagId] = useState<string | null>(null)
   const [removeTagsConfirmOpen, setRemoveTagsConfirmOpen] = useState(false)
+  const [batchDeleteConfirmOpen, setBatchDeleteConfirmOpen] = useState(false)
 
   if (effectiveCount > 1000) {
     return (
       <div className="border-b border-border bg-card px-3 py-2">
         <Alert variant="destructive" className="bg-destructive/10 border-destructive/20 text-destructive">
           <AlertDescription className="font-mono text-xs">
-            Too many items to tag ({effectiveCount.toLocaleString()} transactions). Refine view to &lt; 1,000 items.
+            Too many items for batch actions ({effectiveCount.toLocaleString()} transactions). Refine view to &lt; 1,000 items.
           </AlertDescription>
         </Alert>
       </div>
@@ -77,6 +80,11 @@ export function TransactionsTaggingToolbar({
               <Button variant="destructive" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider ml-2" disabled={effectiveCount === 0} onClick={() => setRemoveTagsConfirmOpen(true)}>
                 Clear All
               </Button>
+              {onBatchDelete && (
+                <Button variant="destructive" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider ml-2" disabled={effectiveCount === 0} onClick={() => setBatchDeleteConfirmOpen(true)}>
+                  Delete
+                </Button>
+              )}
               <Button asChild variant="secondary" size="sm" className="ml-auto h-8 font-mono text-[10px] uppercase tracking-wider text-accent">
                 <a href="/finance/tags">Manage Tags</a>
               </Button>
@@ -101,6 +109,25 @@ export function TransactionsTaggingToolbar({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {onBatchDelete && (
+        <AlertDialog open={batchDeleteConfirmOpen} onOpenChange={setBatchDeleteConfirmOpen}>
+          <AlertDialogContent className="border-border bg-card">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="font-mono text-accent">Delete transactions</AlertDialogTitle>
+              <AlertDialogDescription className="text-muted-foreground">
+                This will permanently delete {effectiveCount} {isSelection ? 'selected ' : 'matching '}transaction{effectiveCount !== 1 ? 's' : ''}. This cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="border-border hover:bg-muted/50">Cancel</AlertDialogCancel>
+              <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={async () => { setBatchDeleteConfirmOpen(false); await onBatchDelete() }}>
+                Confirm Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </>
   )
 }

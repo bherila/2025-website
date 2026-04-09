@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
 import { importUrl } from '@/lib/financeRouteBuilder'
+import { buildCacheKey, getCachedTransactions, setCachedTransactions } from '@/services/transactionCache'
 
 import NewTransactionModal from './NewTransactionModal'
 import { exportToCSV, exportToJSON } from './transactionExport'
@@ -18,6 +19,8 @@ import TransactionsTable from './TransactionsTable'
 interface TransactionsPageProps {
   accountId: number | 'all'
   initialAvailableYears?: number[]
+  /** Current authenticated user ID — used as part of the IndexedDB cache key */
+  userId?: number
 }
 
 function getUrlParam(key: string): string | null {
@@ -38,7 +41,7 @@ function setUrlParams(updates: Record<string, string>) {
   window.history.replaceState(null, '', `?${params.toString()}`)
 }
 
-export default function TransactionsPage({ accountId, initialAvailableYears = [] }: TransactionsPageProps) {
+export default function TransactionsPage({ accountId, initialAvailableYears = [], userId }: TransactionsPageProps) {
   const isAllAccounts = accountId === 'all'
 
   const [data, setData] = useState<AccountLineItem[] | null>(null)
@@ -106,6 +109,22 @@ export default function TransactionsPage({ accountId, initialAvailableYears = []
     const fetchData = async () => {
       try {
         setIsLoading(true)
+
+        // Build cache key (only cache single-account views with a specific year,
+        // since "all accounts" or "all years" queries are too broad to cache simply)
+        const canUseCache = !isAllAccounts && selectedYear !== 'all' && filter === 'all' && selectedTag === 'all' && userId != null
+        const cacheKey = canUseCache ? buildCacheKey(userId!, accountId, selectedYear) : null
+
+        // 1. Show cached data immediately if available
+        if (cacheKey) {
+          const cached = await getCachedTransactions(cacheKey)
+          if (cached) {
+            setData(cached.transactions)
+            setIsLoading(false)
+          }
+        }
+
+        // 2. Always fetch fresh data from the API
         const params = new URLSearchParams()
         if (selectedYear !== 'all') params.append('year', selectedYear)
         if (filter !== 'all') params.append('filter', filter)
@@ -116,7 +135,13 @@ export default function TransactionsPage({ accountId, initialAvailableYears = []
           : `/api/finance/${accountId}/line_items${queryString}`
         const fetchedData = await fetchWrapper.get(endpoint)
         const parsedData = z.array(AccountLineItemSchema).parse(fetchedData)
-        setData(parsedData.filter(Boolean))
+        const filtered = parsedData.filter(Boolean)
+        setData(filtered)
+
+        // 3. Persist fresh data to cache
+        if (cacheKey) {
+          await setCachedTransactions(cacheKey, filtered)
+        }
       } catch (error) {
         console.error('Error fetching transactions:', error)
         setData([])
@@ -125,7 +150,7 @@ export default function TransactionsPage({ accountId, initialAvailableYears = []
       }
     }
     fetchData()
-  }, [accountId, isAllAccounts, selectedYear, filter, selectedTag, fetchKey])
+  }, [accountId, isAllAccounts, selectedYear, filter, selectedTag, fetchKey, userId])
 
   const highlightTransactionId = useMemo(() => {
     if (typeof window === 'undefined') return undefined
