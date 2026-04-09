@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -385,5 +386,78 @@ class FinanceTransactionsApiController extends Controller
         }
 
         return $itemArray;
+    }
+
+    /**
+     * Batch-delete multiple transactions at once.
+     *
+     * POST /api/finance/transactions/batch-delete
+     * Body: { "t_ids": [1, 2, 3, ...] }
+     *
+     * Only transactions belonging to the authenticated user are deleted.
+     * Returns the count of deleted rows.
+     */
+    public function batchDelete(Request $request): JsonResponse
+    {
+        $request->validate([
+            't_ids' => 'required|array|min:1|max:1000',
+            't_ids.*' => 'required|integer',
+        ]);
+
+        $uid = Auth::id();
+
+        // Collect all account IDs owned by this user
+        $userAccountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
+
+        $tIds = $request->input('t_ids');
+
+        // Unlink lots referencing these transactions
+        FinAccountLot::whereIn('open_t_id', $tIds)->update(['open_t_id' => null]);
+        FinAccountLot::whereIn('close_t_id', $tIds)->update(['close_t_id' => null]);
+
+        $deleted = FinAccountLineItems::whereIn('t_id', $tIds)
+            ->whereIn('t_account', $userAccountIds)
+            ->delete();
+
+        return response()->json(['success' => true, 'deleted' => $deleted]);
+    }
+
+    /**
+     * Batch-update a subset of fields on multiple transactions.
+     *
+     * POST /api/finance/transactions/batch-update
+     * Body: { "t_ids": [1, 2, 3], "fields": { "t_schc_category": "Office", ... } }
+     *
+     * Allowed fields: t_type, t_schc_category, t_comment
+     * Only transactions belonging to the authenticated user are updated.
+     */
+    public function batchUpdate(Request $request): JsonResponse
+    {
+        $request->validate([
+            't_ids' => 'required|array|min:1|max:1000',
+            't_ids.*' => 'required|integer',
+            'fields' => 'required|array|min:1',
+        ]);
+
+        $uid = Auth::id();
+
+        $userAccountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
+
+        $tIds = $request->input('t_ids');
+        $rawFields = $request->input('fields');
+
+        // Only allow a safe whitelist of fields to be batch-updated
+        $allowed = ['t_type', 't_schc_category', 't_comment'];
+        $fields = array_intersect_key($rawFields, array_flip($allowed));
+
+        if (empty($fields)) {
+            return response()->json(['error' => 'No updatable fields provided.'], 422);
+        }
+
+        $updated = FinAccountLineItems::whereIn('t_id', $tIds)
+            ->whereIn('t_account', $userAccountIds)
+            ->update($fields);
+
+        return response()->json(['success' => true, 'updated' => $updated]);
     }
 }

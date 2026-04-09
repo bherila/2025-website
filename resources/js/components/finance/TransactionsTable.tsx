@@ -227,6 +227,20 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
     }
   }, [effectiveTransactionIds, refreshFn])
 
+  const handleBatchDelete = useCallback(async () => {
+    const ids = selectedRowIds.size > 0
+      ? Array.from(selectedRowIds)
+      : sortedData.map((r) => r.t_id).filter((id): id is number => id != null)
+    if (ids.length === 0) return
+    try {
+      await fetchWrapper.post('/api/finance/transactions/batch-delete', { t_ids: ids })
+      clearSelection()
+      if (typeof refreshFn === 'function') refreshFn()
+    } catch (error) {
+      console.error('Failed to batch delete:', error)
+    }
+  }, [selectedRowIds, sortedData, clearSelection, refreshFn])
+
   // Pagination callbacks
   const handlePageChange = useCallback((page: number) => {
     setViewAll(false)
@@ -274,6 +288,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
             availableTags={availableTags}
             isLoadingTags={isLoadingTags}
             onClearSelection={clearSelection}
+            {...(onDeleteTransaction ? { onBatchDelete: handleBatchDelete } : {})}
           />
         )}
       </div>

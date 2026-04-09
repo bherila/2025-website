@@ -83,6 +83,8 @@ Route::middleware(['web', 'auth'])->get('/finance/marriage-status', [FinanceEmpl
 Route::middleware(['web', 'auth'])->post('/finance/marriage-status', [FinanceEmploymentEntityController::class, 'updateMarriageStatus']);
 
 Route::middleware(['web', 'auth'])->post('/finance/transactions/{transaction_id}/update', [FinanceTransactionsApiController::class, 'updateTransaction']);
+Route::middleware(['web', 'auth'])->post('/finance/transactions/batch-delete', [FinanceTransactionsApiController::class, 'batchDelete']);
+Route::middleware(['web', 'auth'])->post('/finance/transactions/batch-update', [FinanceTransactionsApiController::class, 'batchUpdate']);
 Route::middleware(['web', 'auth'])->get('/finance/transactions/{transaction_id}/links', [FinanceTransactionLinkingApiController::class, 'getTransactionLinks']);
 Route::middleware(['web', 'auth'])->get('/finance/transactions/{transaction_id}/linkable', [FinanceTransactionLinkingApiController::class, 'findLinkableTransactions']);
 Route::middleware(['web', 'auth'])->post('/finance/transactions/link', [FinanceTransactionLinkingApiController::class, 'linkTransactions']);
