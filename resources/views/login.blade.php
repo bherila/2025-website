@@ -58,8 +58,8 @@
             <div class="mt-4" id="passkey-login-mount"></div>
         </div>
 
-        {{-- Dev login section (localhost only) --}}
-        @if(config('app.env') === 'local' || str_contains(config('app.url', ''), 'localhost') || str_contains(config('app.url', ''), '127.0.0.1'))
+        {{-- Dev login section (local environment only) --}}
+        @if(app()->environment('local'))
         <div class="mt-4">
             <div class="relative mb-4">
                 <div class="absolute inset-0 flex items-center">
