@@ -51,10 +51,7 @@ CREATE TABLE `users`(
   `last_login_date` TEXT,
   `created_at` TEXT,
   `updated_at` TEXT,
-  `gemini_api_key` TEXT,
-  `genai_daily_quota_limit` INTEGER DEFAULT NULL
-  ,
-  "marriage_status_by_year" text
+  `gemini_api_key` TEXT
 );
 CREATE INDEX `users_user_role_index` ON `users`(`user_role`);
 CREATE TABLE `client_companies`(
@@ -206,6 +203,31 @@ CREATE TABLE `client_projects`(
 CREATE INDEX `client_projects_client_company_id_index` ON `client_projects`(
   `client_company_id`
 );
+CREATE TABLE `client_tasks`(
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `project_id` INTEGER NOT NULL,
+  `name` TEXT NOT NULL,
+  `description` TEXT,
+  `due_date` TEXT,
+  `completed_at` TEXT,
+  `assignee_user_id` INTEGER,
+  `creator_user_id` INTEGER,
+  `is_high_priority` INTEGER NOT NULL DEFAULT 0,
+  `is_hidden_from_clients` INTEGER NOT NULL DEFAULT 0,
+  `created_at` TEXT,
+  `updated_at` TEXT,
+  `deleted_at` TEXT,
+  FOREIGN KEY(`project_id`) REFERENCES `client_projects`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY(`assignee_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
+  FOREIGN KEY(`creator_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
+);
+CREATE INDEX `client_tasks_project_id_index` ON `client_tasks`(`project_id`);
+CREATE INDEX `client_tasks_assignee_user_id_index` ON `client_tasks`(
+  `assignee_user_id`
+);
+CREATE INDEX `client_tasks_completed_at_index` ON `client_tasks`(
+  `completed_at`
+);
 CREATE TABLE `client_time_entries`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `project_id` INTEGER NOT NULL,
@@ -348,7 +370,6 @@ CREATE INDEX `files_for_client_companies_client_company_id_index` ON `files_for_
 CREATE TABLE `files_for_fin_accounts`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `acct_id` INTEGER NOT NULL,
-  `file_hash` TEXT,
   `statement_id` INTEGER,
   `original_filename` TEXT NOT NULL,
   `stored_filename` TEXT NOT NULL,
@@ -367,9 +388,6 @@ CREATE INDEX `files_for_fin_accounts_acct_id_index` ON `files_for_fin_accounts`(
 );
 CREATE INDEX `files_for_fin_accounts_statement_id_index` ON `files_for_fin_accounts`(
   `statement_id`
-);
-CREATE INDEX `files_for_fin_accounts_file_hash_index` ON `files_for_fin_accounts`(
-  `file_hash`
 );
 CREATE TABLE `files_for_projects`(
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -420,7 +438,6 @@ CREATE TABLE `fin_accounts`(
   `when_closed` TEXT,
   `created_at` TEXT,
   `updated_at` TEXT,
-  "acct_number" varchar,
   UNIQUE(`acct_owner`, `acct_name`)
 );
 CREATE TABLE `fin_account_line_items`(
@@ -490,7 +507,6 @@ CREATE TABLE `fin_account_tag`(
   `when_added` TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `when_deleted` TEXT,
   "tax_characteristic" varchar check("tax_characteristic" in('sce_advertising', 'sce_car_truck', 'sce_commissions_fees', 'sce_contract_labor', 'sce_depletion', 'sce_depreciation', 'sce_employee_benefits', 'sce_insurance', 'sce_interest_mortgage', 'sce_interest_other', 'sce_legal_professional', 'sce_office_expenses', 'sce_pension', 'sce_rent_vehicles', 'sce_rent_property', 'sce_repairs_maintenance', 'sce_supplies', 'sce_taxes_licenses', 'sce_travel', 'sce_meals', 'sce_utilities', 'sce_wages', 'sce_other', 'scho_rent', 'scho_mortgage_interest', 'scho_real_estate_taxes', 'scho_insurance', 'scho_utilities', 'scho_repairs_maintenance', 'scho_security', 'scho_depreciation', 'scho_cleaning', 'scho_hoa', 'scho_casualty_losses')),
-  employment_entity_id INTEGER NULL REFERENCES fin_employment_entity(id) ON DELETE SET NULL,
   UNIQUE(`tag_userid`, `tag_label`)
 );
 CREATE TABLE `fin_account_line_item_tag_map`(
@@ -555,7 +571,6 @@ CREATE TABLE `fin_payslip`(
   `created_at` TEXT,
   `updated_at` TEXT,
   `deleted_at` TEXT,
-  employment_entity_id INTEGER NULL REFERENCES fin_employment_entity(id) ON DELETE SET NULL,
   UNIQUE(`uid`, `period_start`, `period_end`, `pay_date`)
 );
 CREATE TABLE `fin_payslip_uploads`(
@@ -568,17 +583,11 @@ CREATE TABLE `fin_statements`(
   `statement_id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `acct_id` INTEGER NOT NULL,
   `balance` TEXT NOT NULL,
-  `cost_basis` DECIMAL(15,4) NOT NULL DEFAULT 0,
-  `is_cost_basis_override` BOOLEAN NOT NULL DEFAULT 0,
-  `genai_job_id` INTEGER NULL,
   `statement_opening_date` TEXT,
   `statement_closing_date` TEXT,
   FOREIGN KEY(`acct_id`) REFERENCES `fin_accounts`(`acct_id`)
 );
 CREATE INDEX `fin_statements_acct_id_index` ON `fin_statements`(`acct_id`);
-CREATE INDEX `fin_statements_genai_job_id_index` ON `fin_statements`(
-  `genai_job_id`
-);
 CREATE TABLE `fin_statement_cash_report`(
   `cash_id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `statement_id` INTEGER NOT NULL,
@@ -938,307 +947,6 @@ CREATE TABLE `vxcv_links`(
   `uniqueid` TEXT PRIMARY KEY NOT NULL,
   `url` TEXT NOT NULL
 );
-CREATE TABLE `fin_transaction_non_duplicate_pairs`(
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `t_id_1` INTEGER NOT NULL,
-  `t_id_2` INTEGER NOT NULL,
-  `created_at` TEXT,
-  UNIQUE(`t_id_1`, `t_id_2`),
-  FOREIGN KEY(`t_id_1`) REFERENCES `fin_account_line_items`(`t_id`) ON DELETE CASCADE,
-  FOREIGN KEY(`t_id_2`) REFERENCES `fin_account_line_items`(`t_id`) ON DELETE CASCADE
-);
-CREATE TABLE `webauthn_credentials`(
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `user_id` INTEGER NOT NULL,
-  `credential_id` TEXT NOT NULL,
-  `public_key` TEXT NOT NULL,
-  `counter` INTEGER NOT NULL DEFAULT 0,
-  `aaguid` TEXT,
-  `name` TEXT NOT NULL DEFAULT 'Passkey',
-  `transports` TEXT,
-  `created_at` TEXT,
-  `updated_at` TEXT,
-  FOREIGN KEY(`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
-);
-CREATE INDEX `webauthn_credentials_user_id_index` ON `webauthn_credentials`(
-  `user_id`
-);
-CREATE TABLE `login_audit_log`(
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `user_id` INTEGER,
-  `email` TEXT,
-  `user_agent` TEXT,
-  `success` INTEGER NOT NULL DEFAULT 0,
-  `method` TEXT NOT NULL DEFAULT 'password',
-  `is_suspicious` INTEGER NOT NULL DEFAULT 0,
-  `created_at` TEXT,
-  `updated_at` TEXT,
-  "ip_address" blob,
-  FOREIGN KEY(`user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
-);
-CREATE INDEX `login_audit_log_user_id_index` ON `login_audit_log`(`user_id`);
-CREATE INDEX `login_audit_log_created_at_index` ON `login_audit_log`(
-  `created_at`
-);
-CREATE TABLE `genai_import_jobs`(
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `user_id` INTEGER NOT NULL,
-  `acct_id` INTEGER,
-  `job_type` TEXT NOT NULL,
-  `file_hash` TEXT NOT NULL,
-  `original_filename` TEXT NOT NULL,
-  `s3_path` TEXT NOT NULL,
-  `mime_type` TEXT,
-  `file_size_bytes` INTEGER NOT NULL,
-  `context_json` TEXT,
-  `status` TEXT NOT NULL DEFAULT 'pending',
-  `error_message` TEXT,
-  `retry_count` INTEGER NOT NULL DEFAULT 0,
-  `scheduled_for` TEXT,
-  `parsed_at` TEXT,
-  `created_at` TEXT,
-  `updated_at` TEXT,
-  FOREIGN KEY(`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
-  FOREIGN KEY(`acct_id`) REFERENCES `fin_accounts`(`acct_id`) ON DELETE SET NULL
-);
-CREATE INDEX `genai_import_jobs_user_id_status_index` ON `genai_import_jobs`(
-  `user_id`,
-  `status`
-);
-CREATE INDEX `genai_import_jobs_file_hash_index` ON `genai_import_jobs`(
-  `file_hash`
-);
-CREATE INDEX `genai_import_jobs_scheduled_for_status_index` ON `genai_import_jobs`(
-  `scheduled_for`,
-  `status`
-);
-CREATE TABLE `genai_import_results`(
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `job_id` INTEGER NOT NULL,
-  `result_index` INTEGER NOT NULL,
-  `result_json` TEXT NOT NULL,
-  `status` TEXT NOT NULL DEFAULT 'pending_review',
-  `imported_at` TEXT,
-  `created_at` TEXT,
-  `updated_at` TEXT,
-  FOREIGN KEY(`job_id`) REFERENCES `genai_import_jobs`(`id`) ON DELETE CASCADE
-);
-CREATE INDEX `genai_import_results_job_id_result_index_index` ON `genai_import_results`(
-  `job_id`,
-  `result_index`
-);
-CREATE TABLE `genai_daily_quota`(
-  `usage_date` TEXT PRIMARY KEY NOT NULL,
-  `request_count` INTEGER NOT NULL DEFAULT 0,
-  `updated_at` TEXT
-);
-CREATE TABLE IF NOT EXISTS "client_tasks"(
-  "id" integer primary key autoincrement,
-  "project_id" integer not null,
-  "name" text not null,
-  "description" text,
-  "due_date" text,
-  "completed_at" text,
-  "assignee_user_id" integer,
-  "creator_user_id" integer,
-  "is_high_priority" integer not null default(0),
-  "is_hidden_from_clients" integer not null default(0),
-  "created_at" text,
-  "updated_at" text,
-  "deleted_at" text,
-  "milestone_price" numeric not null default '0',
-  "client_invoice_line_id" integer,
-  foreign key("creator_user_id") references users("id") on delete set null on update no action,
-  foreign key("assignee_user_id") references users("id") on delete set null on update no action,
-  foreign key("project_id") references client_projects("id") on delete cascade on update no action,
-  foreign key("client_invoice_line_id") references "client_invoice_lines"("client_invoice_line_id") on delete set null
-);
-CREATE INDEX "client_tasks_assignee_user_id_index" on "client_tasks"(
-  "assignee_user_id"
-);
-CREATE INDEX "client_tasks_completed_at_index" on "client_tasks"(
-  "completed_at"
-);
-CREATE INDEX "client_tasks_project_id_index" on "client_tasks"("project_id");
-CREATE TABLE IF NOT EXISTS "fin_rules"(
-  "id" integer primary key autoincrement not null,
-  "user_id" integer not null,
-  "order" integer not null,
-  "title" varchar not null,
-  "is_disabled" tinyint(1) not null default '0',
-  "stop_processing_if_match" tinyint(1) not null default '0',
-  "created_at" datetime,
-  "updated_at" datetime,
-  "deleted_at" datetime,
-  foreign key("user_id") references "users"("id")
-);
-CREATE INDEX "fin_rules_user_id_index" on "fin_rules"("user_id");
-CREATE TABLE IF NOT EXISTS "fin_rule_conditions"(
-  "id" integer primary key autoincrement not null,
-  "rule_id" integer not null,
-  "type" varchar not null,
-  "operator" varchar not null,
-  "value" varchar,
-  "value_extra" varchar,
-  "created_at" datetime,
-  "updated_at" datetime,
-  foreign key("rule_id") references "fin_rules"("id") on delete cascade
-);
-CREATE INDEX "fin_rule_conditions_rule_id_index" on "fin_rule_conditions"(
-  "rule_id"
-);
-CREATE TABLE IF NOT EXISTS "fin_rule_actions"(
-  "id" integer primary key autoincrement not null,
-  "rule_id" integer not null,
-  "type" varchar not null,
-  "target" varchar,
-  "payload" varchar,
-  "order" integer not null,
-  "created_at" datetime,
-  "updated_at" datetime,
-  foreign key("rule_id") references "fin_rules"("id") on delete cascade
-);
-CREATE INDEX "fin_rule_actions_rule_id_index" on "fin_rule_actions"("rule_id");
-CREATE TABLE IF NOT EXISTS "fin_rule_logs"(
-  "id" integer primary key autoincrement not null,
-  "user_id" integer not null,
-  "rule_id" integer not null,
-  "transaction_id" integer not null,
-  "is_manual_run" tinyint(1) not null default '0',
-  "action_summary" varchar,
-  "error" text,
-  "error_details" text,
-  "processing_time_mtime" integer,
-  "created_at" datetime,
-  "updated_at" datetime
-);
-CREATE INDEX "fin_rule_logs_user_id_index" on "fin_rule_logs"("user_id");
-CREATE INDEX "fin_rule_logs_rule_id_index" on "fin_rule_logs"("rule_id");
-CREATE INDEX "fin_rule_logs_transaction_id_index" on "fin_rule_logs"(
-  "transaction_id"
-);
-CREATE TABLE IF NOT EXISTS "fin_employment_entity"(
-  "id" integer primary key autoincrement not null,
-  "user_id" integer not null,
-  "display_name" varchar not null,
-  "start_date" date not null,
-  "end_date" date,
-  "is_current" tinyint(1) not null default '1',
-  "ein" varchar,
-  "address" text,
-  "type" varchar check("type" in('sch_c', 'w2', 'hobby')) not null,
-  "sic_code" integer,
-  "is_spouse" tinyint(1) not null default '0',
-  "created_at" datetime,
-  "updated_at" datetime,
-  is_hidden INTEGER NOT NULL DEFAULT 0,
-  foreign key("user_id") references "users"("id") on delete cascade
-);
-CREATE INDEX "fin_employment_entity_user_id_index" on "fin_employment_entity"(
-  "user_id"
-);
-CREATE TABLE IF NOT EXISTS "vantage_jobs"(
-  "id" integer primary key autoincrement not null,
-  "uuid" varchar not null,
-  "job_class" varchar not null,
-  "queue" varchar,
-  "connection" varchar,
-  "attempt" integer not null default '0',
-  "retries" integer not null default '0',
-  "retried_from_id" integer,
-  "status" varchar check("status" in('processing', 'processed', 'failed')) not null,
-  "duration_ms" integer,
-  "exception_class" varchar,
-  "exception_message" text,
-  "stack" text,
-  "payload" text,
-  "job_tags" text,
-  "started_at" datetime,
-  "finished_at" datetime,
-  "created_at" datetime,
-  "updated_at" datetime,
-  "memory_start_bytes" integer,
-  "memory_end_bytes" integer,
-  "memory_peak_start_bytes" integer,
-  "memory_peak_end_bytes" integer,
-  "memory_peak_delta_bytes" integer,
-  "cpu_user_ms" integer,
-  "cpu_sys_ms" integer
-);
-CREATE INDEX "queue_job_runs_uuid_index" on "vantage_jobs"("uuid");
-CREATE INDEX "queue_job_runs_job_class_index" on "vantage_jobs"("job_class");
-CREATE INDEX "queue_job_runs_queue_index" on "vantage_jobs"("queue");
-CREATE INDEX "queue_job_runs_connection_index" on "vantage_jobs"("connection");
-CREATE INDEX "queue_job_runs_status_index" on "vantage_jobs"("status");
-CREATE INDEX "queue_job_runs_duration_ms_index" on "vantage_jobs"(
-  "duration_ms"
-);
-CREATE INDEX "queue_job_runs_exception_class_index" on "vantage_jobs"(
-  "exception_class"
-);
-CREATE INDEX "queue_job_runs_started_at_index" on "vantage_jobs"("started_at");
-CREATE INDEX "queue_job_runs_finished_at_index" on "vantage_jobs"(
-  "finished_at"
-);
-CREATE INDEX "idx_vantage_jobs_created_at" on "vantage_jobs"("created_at");
-CREATE INDEX "idx_vantage_jobs_status" on "vantage_jobs"("status");
-CREATE INDEX "idx_vantage_jobs_created_status" on "vantage_jobs"(
-  "created_at",
-  "status"
-);
-CREATE INDEX "idx_vantage_jobs_job_class" on "vantage_jobs"("job_class");
-CREATE INDEX "idx_vantage_jobs_exception_class" on "vantage_jobs"(
-  "exception_class"
-);
-CREATE INDEX "idx_vantage_jobs_queue" on "vantage_jobs"("queue");
-CREATE INDEX "idx_vantage_jobs_retried_from" on "vantage_jobs"(
-  "retried_from_id"
-);
-CREATE TABLE IF NOT EXISTS "vantage_job_tags"(
-  "id" integer primary key autoincrement not null,
-  "job_id" integer not null,
-  "tag" varchar not null,
-  "created_at" datetime,
-  foreign key("job_id") references "vantage_jobs"("id") on delete cascade
-);
-CREATE INDEX "idx_vantage_job_tags_tag_created" on "vantage_job_tags"(
-  "tag",
-  "created_at"
-);
-CREATE INDEX "idx_vantage_job_tags_job_id" on "vantage_job_tags"("job_id");
-CREATE INDEX "vantage_job_tags_tag_index" on "vantage_job_tags"("tag");
-CREATE TABLE `fin_tax_documents`(
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `user_id` INTEGER NOT NULL,
-  `tax_year` INTEGER NOT NULL,
-  `form_type` TEXT NOT NULL CHECK(`form_type` IN('w2', 'w2c', '1099_int', '1099_int_c', '1099_div', '1099_div_c')),
-  `employment_entity_id` INTEGER NULL REFERENCES fin_employment_entity(id) ON DELETE SET NULL,
-  `account_id` INTEGER NULL REFERENCES fin_accounts(acct_id) ON DELETE SET NULL,
-  `original_filename` TEXT NOT NULL,
-  `stored_filename` TEXT NOT NULL,
-  `s3_path` TEXT NOT NULL,
-  `mime_type` TEXT NOT NULL DEFAULT 'application/pdf',
-  `file_size_bytes` INTEGER NOT NULL,
-  `file_hash` TEXT NOT NULL,
-  `uploaded_by_user_id` INTEGER NULL,
-  `notes` TEXT NULL,
-  `is_reconciled` INTEGER NOT NULL DEFAULT 0,
-  `genai_job_id` INTEGER NULL,
-  `genai_status` TEXT NULL,
-  `parsed_data` TEXT NULL,
-  `is_confirmed` INTEGER NOT NULL DEFAULT 0,
-  `download_history` TEXT NULL,
-  `created_at` TEXT,
-  `updated_at` TEXT,
-  `deleted_at` TEXT,
-  FOREIGN KEY(`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
-);
-CREATE INDEX `fin_tax_documents_user_id_index` ON `fin_tax_documents`(`user_id`);
-CREATE INDEX `fin_tax_documents_tax_year_index` ON `fin_tax_documents`(`tax_year`);
-CREATE INDEX `fin_tax_documents_employment_entity_id_index` ON `fin_tax_documents`(`employment_entity_id`);
-CREATE INDEX `fin_tax_documents_account_id_index` ON `fin_tax_documents`(`account_id`);
-CREATE INDEX `fin_tax_documents_form_type_index` ON `fin_tax_documents`(`form_type`);
-CREATE INDEX `fin_tax_documents_genai_job_id_index` ON `fin_tax_documents`(`genai_job_id`);
 
 INSERT INTO migrations VALUES(1,'0001_01_01_000000_create_schema_baseline',1);
 INSERT INTO migrations VALUES(2,'2026_03_05_000000_create_fin_account_lots_table',2);
@@ -1249,33 +957,3 @@ INSERT INTO migrations VALUES(6,'2026_01_29_031451_change_quantity_column_to_var
 INSERT INTO migrations VALUES(7,'2026_02_05_062520_add_catch_up_threshold_hours_to_client_agreements_table',3);
 INSERT INTO migrations VALUES(8,'2026_02_07_000000_add_starting_balances_to_client_invoices',3);
 INSERT INTO migrations VALUES(9,'2026_03_13_083906_add_tax_characteristic_to_fin_account_tag_table',3);
-INSERT INTO migrations VALUES(10,'2026_03_22_063625_create_fin_transaction_non_duplicate_pairs_table',4);
-INSERT INTO migrations VALUES(11,'2026_03_22_100000_create_webauthn_and_audit_tables',5);
-INSERT INTO migrations VALUES(12,'2026_03_23_000001_create_genai_import_jobs_table',6);
-INSERT INTO migrations VALUES(13,'2026_03_23_000002_create_genai_import_results_table',6);
-INSERT INTO migrations VALUES(14,'2026_03_23_000003_create_genai_daily_quota_table',6);
-INSERT INTO migrations VALUES(15,'2024_01_01_000001_create_queue_monitor_jobs_table',7);
-INSERT INTO migrations VALUES(16,'2024_01_01_000002_create_queue_monitor_controls_table',7);
-INSERT INTO migrations VALUES(17,'2024_01_01_000003_create_queue_monitor_metrics_table',7);
-INSERT INTO migrations VALUES(18,'2026_03_14_000001_add_income_tax_characteristics_to_fin_account_tag',8);
-INSERT INTO migrations VALUES(19,'2026_03_15_000001_add_account_number_to_fin_accounts',8);
-INSERT INTO migrations VALUES(20,'2026_03_17_000001_add_milestone_price_and_invoice_line_to_client_tasks',8);
-INSERT INTO migrations VALUES(21,'2026_03_18_000001_create_fin_rules_tables',8);
-INSERT INTO migrations VALUES(22,'2026_03_19_004809_create_fin_employment_entity_table',8);
-INSERT INTO migrations VALUES(23,'2026_03_19_004817_add_employment_entity_id_to_fin_payslip_table',8);
-INSERT INTO migrations VALUES(24,'2026_03_19_004822_add_employment_entity_id_to_fin_account_tag_table',8);
-INSERT INTO migrations VALUES(25,'2026_03_19_004826_add_new_tax_characteristics_to_fin_account_tag',8);
-INSERT INTO migrations VALUES(26,'2026_03_19_004831_add_marriage_status_by_year_to_users_table',8);
-INSERT INTO migrations VALUES(27,'2026_03_19_100000_add_w2_tax_characteristics_to_fin_account_tag',8);
-INSERT INTO migrations VALUES(28,'2026_03_20_074224_add_cost_basis_to_fin_statements_table',8);
-INSERT INTO migrations VALUES(29,'2026_03_21_000001_add_is_hidden_to_fin_employment_entity_table',8);
-INSERT INTO migrations VALUES(30,'2026_03_23_000004_add_genai_daily_quota_limit_to_users_table',8);
-INSERT INTO migrations VALUES(31,'2026_03_25_000001_add_genai_job_id_to_fin_statements',8);
-INSERT INTO migrations VALUES(32,'2026_03_30_000001_convert_ip_address_to_binary_in_login_audit_log',8);
-INSERT INTO migrations VALUES(33,'2025_09_23_000000_create_queue_job_runs_table',9);
-INSERT INTO migrations VALUES(34,'2025_10_29_000001_add_performance_telemetry_to_queue_job_runs_table',9);
-INSERT INTO migrations VALUES(35,'2025_11_30_000002_rename_queue_job_runs_to_vantage_jobs',9);
-INSERT INTO migrations VALUES(36,'2025_11_30_000003_add_performance_indexes_to_vantage_jobs',9);
-INSERT INTO migrations VALUES(37,'2025_12_12_000004_create_vantage_job_tags_table',9);
-INSERT INTO migrations VALUES(38,'2026_04_03_020007_drop_queue_monitor_tables',9);
-INSERT INTO migrations VALUES(39,'2026_04_03_100000_create_fin_tax_documents_table',10);

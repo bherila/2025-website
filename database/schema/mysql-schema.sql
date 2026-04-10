@@ -698,21 +698,25 @@ CREATE TABLE `fin_payslip` (
   `earnings_bonus` decimal(10,4) DEFAULT NULL,
   `earnings_net_pay` decimal(10,4) NOT NULL DEFAULT 0.0000,
   `earnings_rsu` decimal(10,4) DEFAULT NULL,
+  `earnings_dividend_equivalent` decimal(12,4) DEFAULT NULL,
   `imp_other` decimal(10,4) DEFAULT NULL,
+  `imp_life_choice` decimal(12,4) DEFAULT NULL,
   `imp_legal` decimal(10,4) NOT NULL DEFAULT 0.0000,
   `imp_fitness` decimal(10,4) NOT NULL DEFAULT 0.0000,
   `imp_ltd` decimal(10,4) NOT NULL DEFAULT 0.0000,
   `ps_oasdi` decimal(10,4) DEFAULT NULL,
   `ps_medicare` decimal(10,4) DEFAULT NULL,
+  `taxable_wages_oasdi` decimal(12,4) DEFAULT NULL,
+  `taxable_wages_medicare` decimal(12,4) DEFAULT NULL,
+  `taxable_wages_federal` decimal(12,4) DEFAULT NULL,
   `ps_fed_tax` decimal(10,4) DEFAULT NULL,
   `ps_fed_tax_addl` decimal(10,4) DEFAULT NULL,
-  `ps_state_tax` decimal(10,4) DEFAULT NULL,
-  `ps_state_tax_addl` decimal(10,4) DEFAULT NULL,
-  `ps_state_disability` decimal(10,4) DEFAULT NULL,
   `ps_401k_pretax` decimal(10,4) DEFAULT NULL,
   `ps_401k_aftertax` decimal(10,4) DEFAULT NULL,
-  `ps_401k_employer` decimal(6,2) DEFAULT NULL,
+  `ps_401k_employer` decimal(12,4) DEFAULT NULL,
   `ps_fed_tax_refunded` decimal(10,4) DEFAULT NULL,
+  `ps_rsu_tax_offset` decimal(12,4) DEFAULT NULL,
+  `ps_rsu_excess_refund` decimal(12,4) DEFAULT NULL,
   `ps_payslip_file_hash` varchar(50) DEFAULT NULL,
   `ps_is_estimated` tinyint(1) NOT NULL DEFAULT 1,
   `ps_comment` varchar(1000) DEFAULT NULL,
@@ -720,6 +724,11 @@ CREATE TABLE `fin_payslip` (
   `ps_pretax_fsa` decimal(10,4) NOT NULL DEFAULT 0.0000,
   `ps_salary` decimal(10,4) NOT NULL DEFAULT 0.0000,
   `ps_vacation_payout` decimal(10,4) NOT NULL DEFAULT 0.0000,
+  `pto_accrued` decimal(8,2) DEFAULT NULL,
+  `pto_used` decimal(8,2) DEFAULT NULL,
+  `pto_available` decimal(8,2) DEFAULT NULL,
+  `pto_statutory_available` decimal(8,2) DEFAULT NULL,
+  `hours_worked` decimal(8,2) DEFAULT NULL,
   `ps_pretax_dental` decimal(10,4) NOT NULL DEFAULT 0.0000,
   `ps_pretax_vision` decimal(10,4) NOT NULL DEFAULT 0.0000,
   `other` mediumtext DEFAULT NULL,
@@ -730,6 +739,40 @@ CREATE TABLE `fin_payslip` (
   UNIQUE KEY `fin_payslip_uid_period_start_period_end_pay_date_unique` (`uid`,`period_start`,`period_end`,`pay_date`),
   KEY `fin_payslip_employment_entity_id_foreign` (`employment_entity_id`),
   CONSTRAINT `fin_payslip_employment_entity_id_foreign` FOREIGN KEY (`employment_entity_id`) REFERENCES `fin_employment_entity` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_payslip_deposits`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_payslip_deposits` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `payslip_id` bigint(20) unsigned NOT NULL,
+  `bank_name` varchar(100) NOT NULL,
+  `account_last4` varchar(4) DEFAULT NULL,
+  `amount` decimal(12,4) NOT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `fin_payslip_deposits_payslip_id_index` (`payslip_id`),
+  CONSTRAINT `fin_payslip_deposits_payslip_id_foreign` FOREIGN KEY (`payslip_id`) REFERENCES `fin_payslip` (`payslip_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_payslip_state_data`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_payslip_state_data` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `payslip_id` bigint(20) unsigned NOT NULL,
+  `state_code` char(2) NOT NULL,
+  `taxable_wages` decimal(12,4) DEFAULT NULL,
+  `state_tax` decimal(12,4) DEFAULT NULL,
+  `state_tax_addl` decimal(12,4) DEFAULT NULL,
+  `state_disability` decimal(12,4) DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `fin_payslip_state_data_payslip_id_index` (`payslip_id`),
+  CONSTRAINT `fin_payslip_state_data_payslip_id_foreign` FOREIGN KEY (`payslip_id`) REFERENCES `fin_payslip` (`payslip_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_payslip_uploads`;
@@ -971,12 +1014,12 @@ CREATE TABLE `fin_tax_documents` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `user_id` bigint(20) unsigned NOT NULL,
   `tax_year` int(11) NOT NULL,
-  `form_type` enum('w2','w2c','1099_int','1099_int_c','1099_div','1099_div_c','1099_misc','k1','1116') NOT NULL,
+  `form_type` varchar(50) NOT NULL,
   `employment_entity_id` bigint(20) unsigned DEFAULT NULL,
   `account_id` bigint(20) unsigned DEFAULT NULL,
-  `original_filename` varchar(255) NOT NULL,
-  `stored_filename` varchar(255) NOT NULL,
-  `s3_path` varchar(255) NOT NULL,
+  `original_filename` varchar(255) DEFAULT NULL,
+  `stored_filename` varchar(255) DEFAULT NULL,
+  `s3_path` varchar(255) DEFAULT NULL,
   `mime_type` varchar(255) NOT NULL DEFAULT 'application/pdf',
   `file_size_bytes` int(11) NOT NULL,
   `file_hash` varchar(255) NOT NULL,
@@ -1331,10 +1374,12 @@ CREATE TABLE `users` (
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   `gemini_api_key` varchar(255) DEFAULT NULL,
+  `mcp_api_key` varchar(128) DEFAULT NULL,
   `genai_daily_quota_limit` int(10) unsigned DEFAULT NULL COMMENT 'Per-user GenAI daily quota limit. NULL = use system default.',
   `marriage_status_by_year` text DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `users_email_unique` (`email`),
+  UNIQUE KEY `users_mcp_api_key_unique` (`mcp_api_key`),
   KEY `users_user_role_index` (`user_role`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -1601,3 +1646,10 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (85,'2026_04_04_110
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (86,'2026_04_05_021043_combine_tax_document_flags',51);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (87,'2026_04_05_100000_add_k1_to_fin_tax_documents_form_type',52);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (88,'2026_04_06_000001_add_1116_to_fin_tax_documents_form_type',53);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (89,'2026_04_08_013016_add_mcp_api_key_to_users_table',54);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (90,'2026_04_08_100001_add_new_fields_to_fin_payslip',55);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (91,'2026_04_08_100002_create_fin_payslip_state_data_and_drop_flat_cols',55);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (92,'2026_04_08_100003_create_fin_payslip_deposits_table',55);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (93,'2026_04_10_100046_add_1099_nec_and_1099_r_to_fin_tax_documents_form_type',56);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (94,'2026_04_10_200000_add_broker_form_types_to_fin_tax_documents',57);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (95,'2026_04_10_200001_make_tax_document_file_fields_nullable',57);
