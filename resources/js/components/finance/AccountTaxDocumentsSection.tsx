@@ -1,7 +1,7 @@
 'use client'
 
 import { CheckCircle, Clock, Download, Eye, Loader2, Trash2, Upload } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import TaxDocumentReviewModal from '@/components/finance/TaxDocumentReviewModal'
@@ -12,6 +12,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { fetchWrapper } from '@/fetchWrapper'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import { ACCOUNT_FORM_TYPES_1099, FORM_TYPE_LABELS } from '@/types/finance/tax-document'
+
+const IN_FLIGHT_STATUSES = new Set(['pending', 'processing'])
+const POLLING_INTERVAL_MS = 5_000
 
 interface AccountTaxDocumentsSectionProps {
   accountId: number
@@ -26,6 +29,7 @@ export default function AccountTaxDocumentsSection({ accountId, selectedYear }: 
   const [error, setError] = useState<string | null>(null)
   const [uploadModalState, setUploadModalState] = useState<{ formType: string } | null>(null)
   const [reviewDoc, setReviewDoc] = useState<TaxDocument | null>(null)
+  const hasLoadedOnce = useRef(false)
 
   const availableYears = Array.from({ length: currentYear - 2018 }, (_, i) => currentYear - i)
 
@@ -43,9 +47,20 @@ export default function AccountTaxDocumentsSection({ accountId, selectedYear }: 
   }, [accountId, year])
 
   useEffect(() => {
-    setLoading(true)
-    fetchDocuments().finally(() => setLoading(false))
+    if (!hasLoadedOnce.current) setLoading(true)
+    fetchDocuments().finally(() => {
+      hasLoadedOnce.current = true
+      setLoading(false)
+    })
   }, [fetchDocuments])
+
+  // Poll every 5 s while any document is still being processed by the AI.
+  useEffect(() => {
+    const hasInFlight = documents.some(d => IN_FLIGHT_STATUSES.has(d.genai_status ?? ''))
+    if (!hasInFlight) return
+    const id = setInterval(() => void fetchDocuments(), POLLING_INTERVAL_MS)
+    return () => clearInterval(id)
+  }, [documents, fetchDocuments])
 
   const handleDownload = async (doc: TaxDocument) => {
     if (!doc.s3_path) return
