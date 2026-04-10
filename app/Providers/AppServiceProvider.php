@@ -8,6 +8,7 @@ use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
 use Spatie\Csp\AddCspHeaders;
 
@@ -26,6 +27,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Configure Vite to use the same CSP nonce as Spatie's laravel-csp
+        if (config('csp.nonce_enabled', true)) {
+            Vite::useCspNonce(app('csp-nonce'));
+        }
+
         // Register login event listener
         Event::listen(Login::class, UpdateLastLoginDate::class);
 
