@@ -1,6 +1,7 @@
 'use client'
 
 import currency from 'currency.js'
+import { ChevronRight } from 'lucide-react'
 
 // ── Value helpers ─────────────────────────────────────────────────────────────
 
@@ -59,6 +60,7 @@ export function FormLine({
       <span className={`font-mono tabular-nums text-[13px] shrink-0 ${cls}`}>
         {raw ?? (n === null ? '—' : fmtAmt(n))}
       </span>
+      {onClick && <ChevronRight size={14} className="text-muted-foreground shrink-0" />}
     </div>
   )
 }

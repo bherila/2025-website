@@ -1,8 +1,10 @@
 'use client'
 
 import currency from 'currency.js'
+import { ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 
+import { TAX_TABS } from '@/components/finance/tax-tab-ids'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -11,6 +13,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { cn } from '@/lib/utils'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import type { F1099DivParsedData, F1099IntParsedData, W2ParsedData } from '@/types/finance/tax-document'
 
@@ -32,6 +35,8 @@ interface Form1040PreviewProps {
   interestDocuments?: TaxDocument[]
   /** Confirmed/reviewed 1099-DIV documents for dividend income drill-down. */
   dividendDocuments?: TaxDocument[]
+  /** Called when the user clicks a 1040 line with a linked schedule tab. */
+  onNavigate?: (tab: string) => void
 }
 
 interface LineItem {
@@ -41,6 +46,8 @@ interface LineItem {
   bold?: boolean
   refSchedule?: string
   sources?: DataSource[]
+  /** Tab to navigate to when the row is clicked (requires onNavigate prop). */
+  navTab?: string
 }
 
 interface DataSourceModalState {
@@ -58,6 +65,7 @@ export default function Form1040Preview({
   w2Documents,
   interestDocuments,
   dividendDocuments,
+  onNavigate,
 }: Form1040PreviewProps) {
   const [dataSourceModal, setDataSourceModal] = useState<DataSourceModalState | null>(null)
 
@@ -119,6 +127,7 @@ export default function Form1040Preview({
       value: interestIncome,
       refSchedule: 'Schedule B',
       sources: interestSources,
+      navTab: TAX_TABS.schedules,
     },
     {
       line: '3b',
@@ -126,6 +135,15 @@ export default function Form1040Preview({
       value: dividendIncome,
       refSchedule: 'Schedule B',
       sources: dividendSources,
+      navTab: TAX_TABS.schedules,
+    },
+    {
+      line: '7',
+      label: 'Capital gain or loss',
+      value: null,
+      refSchedule: 'Schedule D',
+      // Always shown as a navigation link to Schedule D; value populated when capital-gains data is wired in.
+      navTab: TAX_TABS.capitalGains,
     },
     ...(scheduleCIncome !== 0
       ? [{
@@ -134,6 +152,7 @@ export default function Form1040Preview({
           value: currency(scheduleCIncome),
           refSchedule: 'Schedule C',
           sources: [{ label: 'Schedule C net income', amount: currency(scheduleCIncome) }],
+          navTab: TAX_TABS.scheduleC,
         }]
       : []),
     {
@@ -147,6 +166,14 @@ export default function Form1040Preview({
         { label: 'Ordinary dividends (Line 3b)', amount: dividendIncome },
         ...(scheduleCIncome !== 0 ? [{ label: 'Schedule C income (Line 8)', amount: currency(scheduleCIncome) }] : []),
       ],
+    },
+    {
+      line: '20',
+      label: 'Foreign tax credit',
+      value: null,
+      refSchedule: 'Schedule 3',
+      // Always shown as a navigation link to Form 1116; value populated when foreign-tax data is wired in.
+      navTab: TAX_TABS.form1116,
     },
   ]
 
@@ -164,13 +191,25 @@ export default function Form1040Preview({
           </TableHeader>
           <TableBody>
             {lines.map(item => (
-              <TableRow key={item.line} className={item.bold ? 'font-semibold bg-muted/30' : ''}>
+              <TableRow
+                key={item.line}
+                className={cn(
+                  item.bold && 'font-semibold bg-muted/30',
+                  item.navTab && onNavigate && 'cursor-pointer hover:bg-muted/20 transition-colors',
+                )}
+                onClick={item.navTab && onNavigate ? () => { onNavigate(item.navTab!) } : undefined}
+              >
                 <TableCell className="text-sm font-mono">{item.line}</TableCell>
                 <TableCell className="text-sm">
-                  {item.label}
-                  {item.refSchedule && (
-                    <span className="ml-1 text-xs text-muted-foreground">({item.refSchedule})</span>
-                  )}
+                  <span className="flex items-center gap-1">
+                    <span>{item.label}</span>
+                    {item.refSchedule && (
+                      <span className="text-xs text-muted-foreground">({item.refSchedule})</span>
+                    )}
+                    {item.navTab && onNavigate && (
+                      <ChevronRight size={14} className="text-muted-foreground shrink-0" />
+                    )}
+                  </span>
                 </TableCell>
                 <TableCell className="text-right text-sm font-mono">
                   {item.value !== null ? (
@@ -179,7 +218,7 @@ export default function Form1040Preview({
                         variant="ghost"
                         size="sm"
                         className="h-auto p-0 font-mono text-sm underline decoration-dotted hover:text-primary"
-                        onClick={() => setDataSourceModal({ line: item.line, label: item.label, sources: item.sources! })}
+                        onClick={(e) => { e.stopPropagation(); setDataSourceModal({ line: item.line, label: item.label, sources: item.sources! }) }}
                         title="View data sources"
                       >
                         {item.value.format()}
