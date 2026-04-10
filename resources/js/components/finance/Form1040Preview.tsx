@@ -4,6 +4,7 @@ import currency from 'currency.js'
 import { ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 
+import { TAX_TABS } from '@/components/finance/tax-tab-ids'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -12,6 +13,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { cn } from '@/lib/utils'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import type { F1099DivParsedData, F1099IntParsedData, W2ParsedData } from '@/types/finance/tax-document'
 
@@ -125,7 +127,7 @@ export default function Form1040Preview({
       value: interestIncome,
       refSchedule: 'Schedule B',
       sources: interestSources,
-      navTab: 'schedules',
+      navTab: TAX_TABS.schedules,
     },
     {
       line: '3b',
@@ -133,14 +135,15 @@ export default function Form1040Preview({
       value: dividendIncome,
       refSchedule: 'Schedule B',
       sources: dividendSources,
-      navTab: 'schedules',
+      navTab: TAX_TABS.schedules,
     },
     {
       line: '7',
       label: 'Capital gain or loss',
       value: null,
       refSchedule: 'Schedule D',
-      navTab: 'capital-gains',
+      // Always shown as a navigation link to Schedule D; value populated when capital-gains data is wired in.
+      navTab: TAX_TABS.capitalGains,
     },
     ...(scheduleCIncome !== 0
       ? [{
@@ -149,7 +152,7 @@ export default function Form1040Preview({
           value: currency(scheduleCIncome),
           refSchedule: 'Schedule C',
           sources: [{ label: 'Schedule C net income', amount: currency(scheduleCIncome) }],
-          navTab: 'schedule-c',
+          navTab: TAX_TABS.scheduleC,
         }]
       : []),
     {
@@ -169,7 +172,8 @@ export default function Form1040Preview({
       label: 'Foreign tax credit',
       value: null,
       refSchedule: 'Schedule 3',
-      navTab: 'form-1116',
+      // Always shown as a navigation link to Form 1116; value populated when foreign-tax data is wired in.
+      navTab: TAX_TABS.form1116,
     },
   ]
 
@@ -189,8 +193,11 @@ export default function Form1040Preview({
             {lines.map(item => (
               <TableRow
                 key={item.line}
-                className={`${item.bold ? 'font-semibold bg-muted/30' : ''} ${item.navTab && onNavigate ? 'cursor-pointer hover:bg-muted/20 transition-colors' : ''}`}
-                onClick={item.navTab && onNavigate ? () => { onNavigate(item.navTab ?? '') } : undefined}
+                className={cn(
+                  item.bold && 'font-semibold bg-muted/30',
+                  item.navTab && onNavigate && 'cursor-pointer hover:bg-muted/20 transition-colors',
+                )}
+                onClick={item.navTab && onNavigate ? () => { onNavigate(item.navTab!) } : undefined}
               >
                 <TableCell className="text-sm font-mono">{item.line}</TableCell>
                 <TableCell className="text-sm">

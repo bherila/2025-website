@@ -26,6 +26,7 @@ import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
+import { TAX_TABS } from './tax-tab-ids'
 import { TaxPreviewProvider, type TaxPreviewShellData, useTaxPreview } from './TaxPreviewContext'
 import { YearSelectorWithNav } from './YearSelectorWithNav'
 
@@ -597,7 +598,7 @@ function TaxPreviewPageContent() {
   } = useTaxPreview()
 
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState('overview')
+  const [activeTab, setActiveTab] = useState<string>(TAX_TABS.overview)
 
   const handleYearChange = useCallback((year: number | 'all') => {
     if (typeof year !== 'number') return
@@ -713,16 +714,16 @@ function TaxPreviewPageContent() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="px-4 pb-8">
         <TabsList className="mb-4 flex-wrap">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="schedules">Schedules</TabsTrigger>
-          <TabsTrigger value="capital-gains">Capital Gains</TabsTrigger>
-          <TabsTrigger value="form-1116">Form 1116</TabsTrigger>
-          <TabsTrigger value="schedule-c">Schedule C</TabsTrigger>
-          <TabsTrigger value="estimate">Tax Estimate</TabsTrigger>
-          <TabsTrigger value="action-items">Action Items</TabsTrigger>
+          <TabsTrigger value={TAX_TABS.overview}>Overview</TabsTrigger>
+          <TabsTrigger value={TAX_TABS.schedules}>Schedules</TabsTrigger>
+          <TabsTrigger value={TAX_TABS.capitalGains}>Capital Gains</TabsTrigger>
+          <TabsTrigger value={TAX_TABS.form1116}>Form 1116</TabsTrigger>
+          <TabsTrigger value={TAX_TABS.scheduleC}>Schedule C</TabsTrigger>
+          <TabsTrigger value={TAX_TABS.estimate}>Tax Estimate</TabsTrigger>
+          <TabsTrigger value={TAX_TABS.actionItems}>Action Items</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="space-y-6 mt-0">
+        <TabsContent value={TAX_TABS.overview} className="space-y-6 mt-0">
           <TaxIncomeOverview
             taxYear={selectedYear}
             payslips={data}
@@ -770,7 +771,7 @@ function TaxPreviewPageContent() {
           />
         </TabsContent>
 
-        <TabsContent value="schedules" className="space-y-6 mt-0">
+        <TabsContent value={TAX_TABS.schedules} className="space-y-6 mt-0">
           <ScheduleBPreview
             interestIncome={income1099.interestIncome}
             dividendIncome={income1099.dividendIncome}
@@ -789,7 +790,7 @@ function TaxPreviewPageContent() {
           )}
         </TabsContent>
 
-        <TabsContent value="capital-gains" className="mt-0">
+        <TabsContent value={TAX_TABS.capitalGains} className="mt-0">
           <ScheduleDPreview
             reviewedK1Docs={reviewedK1Docs}
             reviewed1099Docs={reviewed1099Docs}
@@ -797,7 +798,7 @@ function TaxPreviewPageContent() {
           />
         </TabsContent>
 
-        <TabsContent value="form-1116" className="mt-0">
+        <TabsContent value={TAX_TABS.form1116} className="mt-0">
           <Form1116Preview
             reviewedK1Docs={reviewedK1Docs}
             reviewed1099Docs={reviewed1099Docs}
@@ -805,14 +806,14 @@ function TaxPreviewPageContent() {
           />
         </TabsContent>
 
-        <TabsContent value="schedule-c" className="space-y-6 mt-0">
+        <TabsContent value={TAX_TABS.scheduleC} className="space-y-6 mt-0">
           <ScheduleCTab
             selectedYear={selectedYear}
             scheduleCData={scheduleCData?.years ?? []}
           />
         </TabsContent>
 
-        <TabsContent value="estimate" className="space-y-6 mt-0">
+        <TabsContent value={TAX_TABS.estimate} className="space-y-6 mt-0">
           <Form1040Preview
             w2Income={w2GrossIncome}
             interestIncome={income1099.interestIncome}
@@ -857,7 +858,7 @@ function TaxPreviewPageContent() {
           )}
         </TabsContent>
 
-        <TabsContent value="action-items" className="mt-0">
+        <TabsContent value={TAX_TABS.actionItems} className="mt-0">
           <ActionItemsTab
             reviewedK1Docs={reviewedK1Docs}
             reviewed1099Docs={reviewed1099Docs}
