@@ -119,7 +119,7 @@ describe('Form1040Preview navigation', () => {
 
     // The interest income button (Line 2b) has the drill-down modal handler.
     // Clicking it should NOT propagate to the row's onNavigate handler.
-    const amountButton = screen.getAllByTitle('View data sources')[0]
+    const amountButton = screen.getAllByTitle('View data sources')[0]!
     fireEvent.click(amountButton)
 
     expect(onNavigate).not.toHaveBeenCalled()
