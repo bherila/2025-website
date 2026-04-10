@@ -807,23 +807,22 @@ export interface Form8582 {
 // COMPLETE TAX RETURN WRAPPER
 // ============================================================================
 
+import type { BrokerConsolidated1099Statement } from './tax-return-broker-statements'
 import type { ScheduleK1Form1065 } from './tax-return-k1'
 import type {
-  TaxSummary,
-  TaxHistoryReport,
-  FederalCarryoverWorksheet,
   CapitalLossCarryoverSmartWorksheet,
-  Form8582ModifiedAGIWorksheet,
-  ScheduleSEAdjustmentsWorksheet,
-  ScheduleBSmartWorksheet,
-  ForeignTaxCreditComputationWorksheet,
-  EstimatedTaxPaymentOptions,
-  ScheduleCTwoYearComparison,
-  PersonOnReturnWorksheet,
   CompareToUSAverages,
+  EstimatedTaxPaymentOptions,
+  FederalCarryoverWorksheet,
+  ForeignTaxCreditComputationWorksheet,
+  Form8582ModifiedAGIWorksheet,
+  PersonOnReturnWorksheet,
+  ScheduleBSmartWorksheet,
+  ScheduleCTwoYearComparison,
+  ScheduleSEAdjustmentsWorksheet,
+  TaxHistoryReport,
+  TaxSummary,
 } from './tax-return-worksheets'
-
-import type { BrokerConsolidated1099Statement } from './tax-return-broker-statements'
 export type { BrokerConsolidated1099Statement }
 
 export interface CompleteTaxReturn {
