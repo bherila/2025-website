@@ -52,7 +52,7 @@
         $__clientCompanies->count() > 0 ? ['type' => 'dropdown', 'label' => 'Client Portal', 'items' => $__clientPortalItems] : null,
       ]));
     @endphp
-    <script id="app-initial-data" type="application/json">
+    <script id="app-initial-data" type="application/json" @cspNonce>
       {!! json_encode([
         'appName' => config('app.name', 'Ben Herila'),
         'appUrl' => config('app.url', ''),
@@ -70,7 +70,7 @@
       ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!}
     </script>
     @stack('data-head')
-    <script>
+    <script @cspNonce>
       (function() {
         try {
           var theme = localStorage.getItem('theme') || 'system';
@@ -82,7 +82,7 @@
     </script>
     @vite(['resources/css/app.css', 'resources/js/instrument.ts', 'resources/js/navbar.tsx', 'resources/js/back-to-top.tsx'])
     @stack('head')
-    <script>(_=>{let a})()</script>
+    <script @cspNonce>(_=>{let a})()</script>
   </head>
   <body class="min-h-screen flex flex-col">
     <header class="site-header border-b border-gray-200 dark:border-[#3E3E3A] h-14">
