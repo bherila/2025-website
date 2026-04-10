@@ -537,4 +537,84 @@ class TaxDocumentControllerTest extends TestCase
             'is_reviewed' => 1,
         ]);
     }
+
+    public function test_can_store_1099_b_document(): void
+    {
+        $user = $this->createUser();
+        $this->actingAs($user);
+        $account = $this->createFinAccount($user->id);
+
+        $response = $this->postJson('/api/finance/tax-documents', [
+            's3_key' => "tax_docs/{$user->id}/2024.01.01 abc12 1099-b-2024.pdf",
+            'original_filename' => '1099-b-2024.pdf',
+            'form_type' => '1099_b',
+            'tax_year' => 2024,
+            'file_size_bytes' => 102400,
+            'file_hash' => str_repeat('p', 64),
+            'account_id' => $account->acct_id,
+        ]);
+
+        $response->assertStatus(201);
+        $response->assertJsonFragment(['form_type' => '1099_b', 'tax_year' => 2024]);
+    }
+
+    public function test_can_store_broker_1099_document(): void
+    {
+        $user = $this->createUser();
+        $this->actingAs($user);
+        $account = $this->createFinAccount($user->id);
+
+        $response = $this->postJson('/api/finance/tax-documents', [
+            's3_key' => "tax_docs/{$user->id}/2024.01.01 abc12 broker-1099-2024.pdf",
+            'original_filename' => 'broker-1099-2024.pdf',
+            'form_type' => 'broker_1099',
+            'tax_year' => 2024,
+            'file_size_bytes' => 102400,
+            'file_hash' => str_repeat('q', 64),
+            'account_id' => $account->acct_id,
+        ]);
+
+        $response->assertStatus(201);
+        $response->assertJsonFragment(['form_type' => 'broker_1099', 'tax_year' => 2024]);
+    }
+
+    public function test_can_store_1099_nec_document(): void
+    {
+        $user = $this->createUser();
+        $this->actingAs($user);
+        $account = $this->createFinAccount($user->id);
+
+        $response = $this->postJson('/api/finance/tax-documents', [
+            's3_key' => "tax_docs/{$user->id}/2024.01.01 abc12 1099-nec-2024.pdf",
+            'original_filename' => '1099-nec-2024.pdf',
+            'form_type' => '1099_nec',
+            'tax_year' => 2024,
+            'file_size_bytes' => 102400,
+            'file_hash' => str_repeat('r', 64),
+            'account_id' => $account->acct_id,
+        ]);
+
+        $response->assertStatus(201);
+        $response->assertJsonFragment(['form_type' => '1099_nec', 'tax_year' => 2024]);
+    }
+
+    public function test_can_store_1099_r_document(): void
+    {
+        $user = $this->createUser();
+        $this->actingAs($user);
+        $account = $this->createFinAccount($user->id);
+
+        $response = $this->postJson('/api/finance/tax-documents', [
+            's3_key' => "tax_docs/{$user->id}/2024.01.01 abc12 1099-r-2024.pdf",
+            'original_filename' => '1099-r-2024.pdf',
+            'form_type' => '1099_r',
+            'tax_year' => 2024,
+            'file_size_bytes' => 102400,
+            'file_hash' => str_repeat('s', 64),
+            'account_id' => $account->acct_id,
+        ]);
+
+        $response->assertStatus(201);
+        $response->assertJsonFragment(['form_type' => '1099_r', 'tax_year' => 2024]);
+    }
 }

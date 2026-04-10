@@ -474,7 +474,7 @@ export default function TaxDocumentReviewModal({
         download_url: string
       }
       if (doc.mime_type?.startsWith('image/')) {
-        setImageViewState({ url: result.view_url, filename: doc.original_filename })
+        setImageViewState({ url: result.view_url, filename: doc.original_filename ?? '' })
       } else {
         window.open(result.view_url, '_blank', 'noopener,noreferrer')
       }
