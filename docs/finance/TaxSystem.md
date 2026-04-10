@@ -233,7 +233,7 @@ This helps with local QA and screenshot generation for the Tax Preview and tags 
 
 ### Overview
 
-The `fin_tax_documents` table stores uploaded tax form PDFs (W-2, W-2c, 1099-INT, 1099-INT-C, 1099-DIV, 1099-DIV-C, 1099-MISC, K-1) for each user. Documents are stored in S3 and referenced by their path. Uploaded PDFs are automatically processed by the GenAI system to extract structured field data (e.g., W-2 box values, 1099 amounts, K-1 pass-through data).
+The `fin_tax_documents` table stores uploaded tax form PDFs (W-2, W-2c, 1099-INT, 1099-INT-C, 1099-DIV, 1099-DIV-C, 1099-MISC, 1099-NEC, 1099-R, K-1, Form 1116) for each user. Documents are stored in S3 and referenced by their path. Uploaded PDFs are automatically processed by the GenAI system to extract structured field data (e.g., W-2 box values, 1099 amounts, K-1 pass-through data).
 
 ### Table Schema
 
@@ -242,7 +242,7 @@ The `fin_tax_documents` table stores uploaded tax form PDFs (W-2, W-2c, 1099-INT
 | `id` | PK | Auto-increment |
 | `user_id` | FK → users | Owner of the document |
 | `tax_year` | integer | Tax year (e.g., 2024) |
-| `form_type` | enum | `w2`, `w2c`, `1099_int`, `1099_int_c`, `1099_div`, `1099_div_c`, `1099_misc`, `k1` |
+| `form_type` | enum | `w2`, `w2c`, `1099_int`, `1099_int_c`, `1099_div`, `1099_div_c`, `1099_misc`, `1099_nec`, `1099_r`, `k1`, `1116` |
 | `employment_entity_id` | FK → fin_employment_entity (nullable) | Set for W-2 form types |
 | `account_id` | FK → fin_accounts.acct_id (nullable) | Set for 1099/K-1 form types |
 | `original_filename` | string | User's original filename |
@@ -265,9 +265,9 @@ The `fin_tax_documents` table stores uploaded tax form PDFs (W-2, W-2c, 1099-INT
 Uses `HasFileStorage`, `SerializesDatesAsLocal`, and `SoftDeletes` traits.
 
 Form type constants:
-- `FORM_TYPES` — all valid form type strings (includes `k1`)
+- `FORM_TYPES` — all valid form type strings (includes `k1`, `1099_nec`, `1099_r`, `1116`)
 - `W2_FORM_TYPES` — `['w2', 'w2c']` (require `employment_entity_id`)
-- `ACCOUNT_FORM_TYPES` — `['1099_int', '1099_int_c', '1099_div', '1099_div_c', '1099_misc', 'k1']` (require `account_id`)
+- `ACCOUNT_FORM_TYPES` — `['1099_int', '1099_int_c', '1099_div', '1099_div_c', '1099_misc', '1099_nec', '1099_r', 'k1']` (require `account_id`)
 
 ### Controller: `App\Http\Controllers\FinanceTool\TaxDocumentController`
 
@@ -311,6 +311,8 @@ When a tax document PDF is uploaded, a GenAI job (`job_type: tax_document`) is a
    - **1099-INT**: Interest income, penalties, savings bonds, foreign tax, bond premiums
    - **1099-DIV**: Ordinary/qualified dividends, capital gains, foreign tax, liquidation distributions
    - **1099-MISC**: Rents, royalties, other income, federal tax withheld
+   - **1099-NEC**: Nonemployee compensation, federal tax withheld
+   - **1099-R**: Retirement/pension distributions, taxable amount, distribution codes
    - **K-1 / K-3**: Full pass-through entity data (see K-1 section below)
 4. **Results stored** → Parsed JSON saved to `parsed_data` column, `genai_status` → `parsed`
 5. **User review** → User can view/edit extracted fields, then mark as reviewed
@@ -544,9 +546,34 @@ The Tax Preview page (`TaxPreviewPage.tsx`) uses a structured grid layout:
 
 ### Shared Types
 
-TypeScript types are defined in `resources/js/types/finance/tax-document.ts`:
+TypeScript types are spread across several files in `resources/js/types/finance/`:
+
+**`tax-document.ts`** — re-exports all tax types; primary import target for components:
 - `TaxDocument` interface — API response shape
 - `EmploymentEntity` interface
-- `W2ParsedData`, `F1099IntParsedData`, `F1099DivParsedData`, `F1099MiscParsedData`, `FK1ParsedData` — per-form parsed data interfaces
-- `FORM_TYPE_LABELS` — display labels for form types (`k1` → `'K-1 / K-3'`)
-- `W2_FORM_TYPES`, `ACCOUNT_FORM_TYPES_1099` — form type groupings (includes `k1`)
+- `W2ParsedData`, `F1099IntParsedData`, `F1099DivParsedData`, `F1099MiscParsedData`, `F1099NecParsedData`, `Form1099RParsedData`, `FK1ParsedData` — per-form parsed data interfaces
+- `TaxDocumentParsedData` — union of all parsed data shapes
+- `FORM_TYPE_LABELS` — display labels for form types
+- `W2_FORM_TYPES`, `ACCOUNT_FORM_TYPES_1099` — form type groupings
+
+**`tax-return-forms.ts`** — full Form 1040 type system:
+- `CompleteTaxReturn` — top-level container (Form 1040 + all schedules + `brokerStatements`)
+- `Form1040`, `Form1040Income`, `Form1040Credits`, `Form1040Filing`
+- `Schedule1`–`Schedule3`, `ScheduleA`–`ScheduleE`
+- `Form8949`, `Form1116`, `Form4952`, `Form6781`, `Form8582`, `Form8829`, `Form8959`, `Form8960`, `Form8995A`
+
+**`tax-return-broker-statements.ts`** — consolidated broker 1099 types:
+- `BrokerConsolidated1099Statement` — per-account consolidated 1099 (DIV/INT/MISC/B summary + supplemental)
+- `Form1099BCategory` — Form 8949 box-level capital gain summary (boxes A–F)
+- `ForeignIncomeSummaryEntry`, `BrokerSupplementalInfo`
+
+**`tax-return-k1.ts`** — Schedule K-1 (Form 1065) TypeScript types:
+- `ScheduleK1Form1065`, `K1PartnershipInfo`, `K1PartnerInfo`
+- Coded box types: `K1Box11OtherIncome`, `K1Box13OtherDeductions`, `K1Box19Distributions`, `K1Box20OtherInformation`
+- `K1PassiveActivityWorksheet`, `K1QBIDeductionInfo`, `K1AdditionalInfoWorksheet`
+- `ScheduleK3ForeignTransactions`
+
+**`tax-return-worksheets.ts`** — TurboTax worksheet types:
+- `TaxSummary`, `TaxHistoryReport`, `FederalCarryoverWorksheet`, `CapitalLossCarryoverSmartWorksheet`
+- `ScheduleBSmartWorksheet`, `ForeignTaxCreditComputationWorksheet`, `SALTDeductionSmartWorksheet`
+- `EstimatedTaxPaymentOptions`, `PersonOnReturnWorksheet`, `ScheduleCTwoYearComparison`

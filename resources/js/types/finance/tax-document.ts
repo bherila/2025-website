@@ -2,6 +2,87 @@
 
 export type { FK1StructuredData } from '@/types/finance/k1-data'
 export { isFK1StructuredData } from '@/types/finance/k1-data'
+export type {
+  CapitalAssetTransaction,
+  CompleteTaxReturn,
+  Form1040,
+  Form1040Credits,
+  Form1040Filing,
+  Form1040Income,
+  Form1116,
+  Form1116IncomeCategory,
+  Form4952,
+  Form6781,
+  Form8582,
+  Form8829,
+  Form8949,
+  Form8959,
+  Form8959PartI,
+  Form8959PartII,
+  Form8960,
+  Form8960PartI,
+  Form8960PartII,
+  Form8995A,
+  PartnershipIncome,
+  PassiveActivityLoss,
+  Schedule1,
+  Schedule1PartI,
+  Schedule1PartII,
+  Schedule2,
+  Schedule2PartI,
+  Schedule2PartII,
+  Schedule3,
+  Schedule3NonrefundableCredits,
+  Schedule3RefundableCredits,
+  ScheduleA,
+  ScheduleAInterestPaid,
+  ScheduleAMedicalAndDental,
+  ScheduleATaxesPaid,
+  ScheduleB,
+  ScheduleBInterestIncome,
+  ScheduleBOrdinaryDividends,
+  ScheduleC,
+  ScheduleCBusiness,
+  ScheduleCExpenseItem,
+  ScheduleCExpenses,
+  ScheduleCIncome,
+  ScheduleD,
+  ScheduleE,
+  Section1256Contract,
+} from '@/types/finance/tax-return-forms'
+export type {
+  K1AdditionalInfoWorksheet,
+  K1Box11OtherIncome,
+  K1Box13OtherDeductions,
+  K1Box19Distributions,
+  K1Box20OtherInformation,
+  K1PartnerInfo,
+  K1PartnershipInfo,
+  K1PassiveActivityWorksheet,
+  K1QBIDeductionInfo,
+  K1QBIStatementAInfo,
+  K1ScheduleEEntry,
+  ScheduleK1Form1065,
+  ScheduleK3ForeignTransactions,
+} from '@/types/finance/tax-return-k1'
+export type {
+  CapitalLossCarryoverSmartWorksheet,
+  CompareToUSAverages,
+  DividendIncomeEntry,
+  EstimatedTaxPaymentOptions,
+  FederalCarryoverWorksheet,
+  ForeignTaxCreditCarryoverEntry,
+  ForeignTaxCreditComputationWorksheet,
+  Form8582ModifiedAGIWorksheet,
+  InterestIncomeEntry,
+  PersonOnReturnWorksheet,
+  SALTDeductionSmartWorksheet,
+  ScheduleBSmartWorksheet,
+  ScheduleCTwoYearComparison,
+  ScheduleSEAdjustmentsWorksheet,
+  TaxHistoryReport,
+  TaxSummary,
+} from '@/types/finance/tax-return-worksheets'
 
 /** Parsed field values from W-2: all box values. */
 export interface W2ParsedData {
@@ -83,6 +164,51 @@ export interface F1099DivParsedData {
   account_number?: string | null
 }
 
+/** Parsed field values from 1099-NEC. */
+export interface F1099NecParsedData {
+  payer_name?: string | null
+  payer_tin?: string | null
+  recipient_name?: string | null
+  recipient_tin_last4?: string | null
+  account_number?: string | null
+  box1_nonemployeeComp?: number | null
+  box2_directSalesIndicator?: boolean | null
+  box4_fed_tax?: number | null
+  box5_state_tax?: number | null
+  box6_state?: string | null
+  box7_state_income?: number | null
+}
+
+/** Parsed field values from 1099-R: distributions from pensions, annuities, retirement plans. */
+export interface Form1099RParsedData {
+  payer_name?: string | null
+  payer_tin?: string | null
+  recipient_name?: string | null
+  recipient_tin_last4?: string | null
+  account_number?: string | null
+  box1_gross_distribution?: number | null
+  box2a_taxable_amount?: number | null
+  box2b_taxable_not_determined?: boolean | null
+  box2b_total_distribution?: boolean | null
+  box3_capital_gain?: number | null
+  box4_fed_tax?: number | null
+  box5_employee_contributions?: number | null
+  box6_net_unrealized_appreciation?: number | null
+  /** Distribution code(s) — e.g. "G" for direct rollover */
+  box7_distribution_code?: string | null
+  box7_ira_sep_simple?: boolean | null
+  box8_other?: number | null
+  box9a_percentage?: number | null
+  box9b_employee_contributions?: number | null
+  box10_amount_allocable_irr?: number | null
+  box11_first_year_roth?: number | null
+  box12_fatca?: boolean | null
+  box13_date_payment?: string | null
+  box14_state_tax?: number | null
+  box15_state?: string | null
+  box16_state_distribution?: number | null
+}
+
 /** Parsed field values from 1099-MISC. */
 export interface F1099MiscParsedData {
   payer_name?: string | null
@@ -146,7 +272,7 @@ export interface FK1ParsedData {
 import type { FK1StructuredData as _FK1StructuredData } from './k1-data'
 
 /** Union of all possible parsed_data shapes. */
-export type TaxDocumentParsedData = W2ParsedData | F1099IntParsedData | F1099DivParsedData | F1099MiscParsedData | FK1ParsedData | _FK1StructuredData
+export type TaxDocumentParsedData = W2ParsedData | F1099IntParsedData | F1099DivParsedData | F1099MiscParsedData | F1099NecParsedData | Form1099RParsedData | FK1ParsedData | _FK1StructuredData
 
 export interface TaxDocument {
   id: number
@@ -190,8 +316,17 @@ export const FORM_TYPE_LABELS: Record<string, string> = {
   '1099_div': '1099-DIV',
   '1099_div_c': '1099-DIV-C',
   '1099_misc': '1099-MISC',
+  '1099_nec': '1099-NEC',
+  '1099_r': 'Form 1099-R',
   k1: 'K-1 / K-3',
 }
 
 export const W2_FORM_TYPES = ['w2', 'w2c'] as const
-export const ACCOUNT_FORM_TYPES_1099 = ['1099_int', '1099_div', '1099_misc', 'k1'] as const
+export const ACCOUNT_FORM_TYPES_1099 = ['1099_int', '1099_div', '1099_misc', '1099_nec', 'k1'] as const
+
+export type {
+  BrokerConsolidated1099Statement,
+  BrokerSupplementalInfo,
+  ForeignIncomeSummaryEntry,
+  Form1099BCategory,
+} from '@/types/finance/tax-return-broker-statements'
