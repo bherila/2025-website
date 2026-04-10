@@ -281,9 +281,9 @@ export interface TaxDocument {
   form_type: string
   employment_entity_id: number | null
   account_id: number | null
-  original_filename: string
-  stored_filename: string
-  s3_path: string
+  original_filename: string | null
+  stored_filename: string | null
+  s3_path: string | null
   mime_type: string
   file_size_bytes: number
   file_hash: string
@@ -318,11 +318,13 @@ export const FORM_TYPE_LABELS: Record<string, string> = {
   '1099_misc': '1099-MISC',
   '1099_nec': '1099-NEC',
   '1099_r': 'Form 1099-R',
+  '1099_b': '1099-B',
+  broker_1099: 'Broker 1099',
   k1: 'K-1 / K-3',
 }
 
 export const W2_FORM_TYPES = ['w2', 'w2c'] as const
-export const ACCOUNT_FORM_TYPES_1099 = ['1099_int', '1099_div', '1099_misc', '1099_nec', 'k1'] as const
+export const ACCOUNT_FORM_TYPES_1099 = ['1099_int', '1099_div', '1099_misc', '1099_nec', '1099_r', '1099_b', 'broker_1099', 'k1'] as const
 
 export type {
   BrokerConsolidated1099Statement,

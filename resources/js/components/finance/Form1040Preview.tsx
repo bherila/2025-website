@@ -83,7 +83,7 @@ export default function Form1040Preview({
   // Build data sources for W-2 line
   const w2Sources: DataSource[] = reviewedW2Docs.length > 0
     ? reviewedW2Docs.map(d => ({
-        label: (d.parsed_data as W2ParsedData)?.employer_name ?? d.employment_entity?.display_name ?? d.original_filename,
+        label: (d.parsed_data as W2ParsedData)?.employer_name ?? d.employment_entity?.display_name ?? d.original_filename ?? '',
         amount: currency((d.parsed_data as W2ParsedData)?.box1_wages ?? 0),
         note: 'W-2 Box 1',
       }))
@@ -93,7 +93,7 @@ export default function Form1040Preview({
   const reviewedIntDocs = (interestDocuments ?? []).filter(d => d.is_reviewed && d.parsed_data)
   const interestSources: DataSource[] = reviewedIntDocs.length > 0
     ? reviewedIntDocs.map(d => ({
-        label: (d.parsed_data as F1099IntParsedData)?.payer_name ?? d.account?.acct_name ?? d.original_filename,
+        label: (d.parsed_data as F1099IntParsedData)?.payer_name ?? d.account?.acct_name ?? d.original_filename ?? '',
         amount: currency((d.parsed_data as F1099IntParsedData)?.box1_interest ?? 0),
         note: '1099-INT Box 1',
       }))
@@ -103,7 +103,7 @@ export default function Form1040Preview({
   const reviewedDivDocs = (dividendDocuments ?? []).filter(d => d.is_reviewed && d.parsed_data)
   const dividendSources: DataSource[] = reviewedDivDocs.length > 0
     ? reviewedDivDocs.map(d => ({
-        label: (d.parsed_data as F1099DivParsedData)?.payer_name ?? d.account?.acct_name ?? d.original_filename,
+        label: (d.parsed_data as F1099DivParsedData)?.payer_name ?? d.account?.acct_name ?? d.original_filename ?? '',
         amount: currency((d.parsed_data as F1099DivParsedData)?.box1a_ordinary ?? 0),
         note: '1099-DIV Box 1a',
       }))
