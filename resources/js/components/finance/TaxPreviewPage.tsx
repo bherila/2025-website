@@ -597,6 +597,7 @@ function TaxPreviewPageContent() {
   } = useTaxPreview()
 
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState('overview')
 
   const handleYearChange = useCallback((year: number | 'all') => {
     if (typeof year !== 'number') return
@@ -710,7 +711,7 @@ function TaxPreviewPageContent() {
         }}
       />
 
-      <Tabs defaultValue="overview" className="px-4 pb-8">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="px-4 pb-8">
         <TabsList className="mb-4 flex-wrap">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="schedules">Schedules</TabsTrigger>
@@ -821,6 +822,7 @@ function TaxPreviewPageContent() {
             w2Documents={reviewedW2Docs}
             interestDocuments={reviewed1099Docs.filter((doc) => doc.form_type === '1099_int' || doc.form_type === '1099_int_c')}
             dividendDocuments={reviewed1099Docs.filter((doc) => doc.form_type === '1099_div' || doc.form_type === '1099_div_c')}
+            onNavigate={setActiveTab}
           />
 
           {showTaxTables && (
