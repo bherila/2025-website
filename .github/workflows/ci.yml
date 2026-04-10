@@ -32,17 +32,17 @@ jobs:
       - name: Install Node dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Run pnpm type-check (TypeScript)
+        run: pnpm run type-check
+
+      - name: Run pnpm lint (ESLint)
+        run: pnpm run lint
+
       - name: Build frontend
         run: pnpm run build
 
       - name: Run pnpm tests (Jest)
         run: pnpm run test
-
-      - name: Run pnpm lint (ESLint)
-        run: pnpm run lint
-
-      - name: Run pnpm type-check (TypeScript)
-        run: pnpm run type-check
 
       - name: Run PHPUnit
         run: vendor/bin/phpunit --configuration phpunit.xml
