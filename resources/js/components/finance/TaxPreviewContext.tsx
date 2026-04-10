@@ -2,12 +2,14 @@
 
 import currency from 'currency.js'
 import type { Dispatch, ReactNode, SetStateAction } from 'react'
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { toast } from 'sonner'
 
 import { computeScheduleCNetIncome } from '@/components/finance/ScheduleCPreview'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { fetchWrapper } from '@/fetchWrapper'
 import type { EmploymentEntity, F1099DivParsedData, F1099IntParsedData, TaxDocument } from '@/types/finance/tax-document'
+import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
 import type { ScheduleCResponse, YearData } from './ScheduleCPreview'
 
@@ -72,6 +74,9 @@ interface TaxPreviewContextValue {
 
 const TaxPreviewContext = createContext<TaxPreviewContextValue | null>(null)
 
+const IN_FLIGHT_STATUSES = new Set(['pending', 'processing'])
+const POLLING_INTERVAL_MS = 5_000
+
 function buildEmptyScheduleCNetIncome() {
   return { total: 0, byQuarter: { q1: 0, q2: 0, q3: 0, q4: 0 } }
 }
@@ -87,6 +92,8 @@ export function TaxPreviewProvider({
   const [availableYears, setAvailableYears] = useState<number[]>(initialData?.availableYears ?? [])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const hasLoadedOnce = useRef(false)
+  const prevDocStatusRef = useRef<Map<number, string>>(new Map())
   const [payslips, setPayslips] = useState<fin_payslip[]>([])
   const [pendingReviewCount, setPendingReviewCount] = useState(0)
   const [w2Documents, setW2Documents] = useState<TaxDocument[]>([])
@@ -97,7 +104,9 @@ export function TaxPreviewProvider({
   const [activeAccountIds, setActiveAccountIds] = useState<number[]>([])
 
   const refreshAll = useCallback(async () => {
-    setIsLoading(true)
+    if (!hasLoadedOnce.current) {
+      setIsLoading(true)
+    }
     try {
       const response = (await fetchWrapper.get(`/api/finance/tax-preview-data?year=${year}`)) as TaxPreviewDataset
       setAvailableYears(response.availableYears ?? [])
@@ -113,6 +122,7 @@ export function TaxPreviewProvider({
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load tax preview data')
     } finally {
+      hasLoadedOnce.current = true
       setIsLoading(false)
     }
   }, [year])
@@ -120,6 +130,38 @@ export function TaxPreviewProvider({
   useEffect(() => {
     void refreshAll()
   }, [refreshAll])
+
+  const allDocuments = useMemo(
+    () => [...w2Documents, ...accountDocuments],
+    [w2Documents, accountDocuments],
+  )
+
+  // Fire a toast when any document transitions from in-flight → parsed.
+  useEffect(() => {
+    const prev = prevDocStatusRef.current
+    for (const doc of allDocuments) {
+      const prevStatus = prev.get(doc.id)
+      if (prevStatus && IN_FLIGHT_STATUSES.has(prevStatus) && doc.genai_status === 'parsed') {
+        const label = FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type
+        toast.success(`${label} is ready to review`, {
+          description: doc.original_filename ?? undefined,
+        })
+      }
+    }
+    const next = new Map<number, string>()
+    for (const doc of allDocuments) {
+      if (doc.genai_status) next.set(doc.id, doc.genai_status)
+    }
+    prevDocStatusRef.current = next
+  }, [allDocuments])
+
+  // Poll every 5 s while any document is still being processed by the AI.
+  useEffect(() => {
+    const hasInFlight = allDocuments.some(d => IN_FLIGHT_STATUSES.has(d.genai_status ?? ''))
+    if (!hasInFlight) return
+    const id = setInterval(() => void refreshAll(), POLLING_INTERVAL_MS)
+    return () => clearInterval(id)
+  }, [allDocuments, refreshAll])
 
   const reviewedW2Docs = useMemo(
     () => w2Documents.filter((doc) => doc.is_reviewed),
