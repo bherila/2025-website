@@ -254,4 +254,36 @@ describe('AccountTaxDocumentsSection', () => {
     render(<AccountTaxDocumentsSection accountId={1} selectedYear={2024} />)
     await waitFor(() => expect(screen.getByText(/No 1099 documents for 2024/)).toBeTruthy())
   })
+
+  it('registers a 5 s setInterval when a document is in-flight after upload', async () => {
+    const doc = makeDoc(1, { genai_status: 'pending' })
+    mockGet.mockResolvedValue([doc])
+
+    const spy = jest.spyOn(globalThis, 'setInterval')
+    render(<AccountTaxDocumentsSection accountId={1} selectedYear={2024} />)
+
+    await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.any(Function), 5_000))
+    spy.mockRestore()
+  })
+
+  it('stops polling once all documents leave in-flight state', async () => {
+    const pending = makeDoc(1, { genai_status: 'pending' })
+    const parsed = makeDoc(1, { genai_status: null })
+    mockGet
+      .mockResolvedValueOnce([pending])
+      .mockResolvedValue([parsed])
+
+    const clearSpy = jest.spyOn(globalThis, 'clearInterval')
+    const { rerender } = render(<AccountTaxDocumentsSection accountId={1} selectedYear={2024} />)
+
+    // Wait for initial load with pending doc
+    await waitFor(() => expect(screen.getByText('Processing')).toBeTruthy())
+
+    // Simulate the poll completing — re-render with parsed doc
+    mockGet.mockResolvedValue([parsed])
+    rerender(<AccountTaxDocumentsSection accountId={1} selectedYear={2024} />)
+
+    await waitFor(() => expect(clearSpy).toHaveBeenCalled())
+    clearSpy.mockRestore()
+  })
 })
