@@ -17,7 +17,6 @@ class FinanceTransactionTaggingApiController extends Controller
         $uid = Auth::id();
 
         $tags = FinAccountTag::where('tag_userid', $uid)
-            ->whereNull('when_deleted')
             ->get(['tag_id', 'tag_label', 'tag_color', 'tax_characteristic', 'employment_entity_id']);
 
         $includeCounts = $request->get('include_counts') === 'true';
@@ -27,7 +26,6 @@ class FinanceTransactionTaggingApiController extends Controller
             $tags = $tags->map(function ($tag) use ($includeCounts, $includeTotals) {
                 // Fetch active transaction IDs once (shared by counts and totals)
                 $tIds = FinAccountLineItemTagMap::where('tag_id', $tag->tag_id)
-                    ->whereNull('when_deleted')
                     ->pluck('t_id');
 
                 if ($includeCounts) {
@@ -72,7 +70,6 @@ class FinanceTransactionTaggingApiController extends Controller
         // Check for duplicate tag label for this user
         $existingTag = FinAccountTag::where('tag_userid', $uid)
             ->where('tag_label', $request->tag_label)
-            ->whereNull('when_deleted')
             ->first();
 
         if ($existingTag) {
@@ -106,14 +103,12 @@ class FinanceTransactionTaggingApiController extends Controller
 
         $tag = FinAccountTag::where('tag_id', $tag_id)
             ->where('tag_userid', $uid)
-            ->whereNull('when_deleted')
             ->firstOrFail();
 
         // Check for duplicate tag label (excluding current tag)
         $existingTag = FinAccountTag::where('tag_userid', $uid)
             ->where('tag_label', $request->tag_label)
             ->where('tag_id', '!=', $tag_id)
-            ->whereNull('when_deleted')
             ->first();
 
         if ($existingTag) {
@@ -136,15 +131,10 @@ class FinanceTransactionTaggingApiController extends Controller
 
         $tag = FinAccountTag::where('tag_id', $tag_id)
             ->where('tag_userid', $uid)
-            ->whereNull('when_deleted')
             ->firstOrFail();
 
-        // Soft delete the tag
-        $tag->update(['when_deleted' => now()]);
-
-        // Also soft delete all tag mappings
-        FinAccountLineItemTagMap::where('tag_id', $tag_id)
-            ->update(['when_deleted' => now()]);
+        // Hard delete the tag; FK CASCADE removes all tag mappings automatically.
+        $tag->delete();
 
         return response()->json(['success' => true]);
     }
@@ -176,19 +166,17 @@ class FinanceTransactionTaggingApiController extends Controller
 
         // Only remove tags that belong to this user (via fin_account_tag)
         $userTagIds = FinAccountTag::where('tag_userid', $uid)
-            ->whereNull('when_deleted')
             ->pluck('tag_id');
 
         $query = FinAccountLineItemTagMap::whereIn('t_id', $transaction_ids)
-            ->whereIn('tag_id', $userTagIds)
-            ->whereNull('when_deleted');
+            ->whereIn('tag_id', $userTagIds);
 
         // If a specific tag_id is provided, only remove that tag
         if ($request->filled('tag_id')) {
             $query->where('tag_id', $request->integer('tag_id'));
         }
 
-        $query->update(['when_deleted' => now()]);
+        $query->delete();
 
         return response()->json(['success' => true]);
     }
@@ -236,15 +224,10 @@ class FinanceTransactionTaggingApiController extends Controller
         }
 
         foreach ($transaction_ids as $transaction_id) {
-            FinAccountLineItemTagMap::updateOrCreate(
-                [
-                    't_id' => $transaction_id,
-                    'tag_id' => $tag->tag_id,
-                ],
-                [
-                    'when_deleted' => null,
-                ]
-            );
+            FinAccountLineItemTagMap::firstOrCreate([
+                't_id' => $transaction_id,
+                'tag_id' => $tag->tag_id,
+            ]);
         }
 
         return response()->json(['success' => true]);

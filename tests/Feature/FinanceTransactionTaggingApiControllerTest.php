@@ -117,7 +117,7 @@ class FinanceTransactionTaggingApiControllerTest extends TestCase
         $this->assertEqualsWithDelta(-125.00, $totals['all'], 0.001);
     }
 
-    public function test_get_user_tags_totals_excludes_soft_deleted_mappings(): void
+    public function test_get_user_tags_totals_counts_active_mappings_only(): void
     {
         $user = $this->createUser();
         $this->actingAs($user);
@@ -141,25 +141,14 @@ class FinanceTransactionTaggingApiControllerTest extends TestCase
             't_amt' => -100.00,
             't_description' => 'Store A',
         ]);
-        $t2 = FinAccountLineItems::create([
-            't_account' => $acct->acct_id,
-            't_date' => '2023-04-01',
-            't_amt' => -200.00,
-            't_description' => 'Store B (soft-deleted mapping)',
-        ]);
 
+        // Only map t1 — t2 is intentionally not tagged
         FinAccountLineItemTagMap::create(['t_id' => $t1->t_id, 'tag_id' => $tag->tag_id]);
-        FinAccountLineItemTagMap::create([
-            't_id' => $t2->t_id,
-            'tag_id' => $tag->tag_id,
-            'when_deleted' => now(),
-        ]);
 
         $response = $this->actingAs($user)->getJson('/api/finance/tags?totals=true');
 
         $response->assertOk();
         $totals = $response->json('data.0.totals');
-        // Only the non-deleted mapping should count
         $this->assertEqualsWithDelta(-100.00, $totals['all'], 0.001);
     }
 
@@ -295,16 +284,14 @@ class FinanceTransactionTaggingApiControllerTest extends TestCase
 
         $response->assertOk()->assertJson(['success' => true]);
 
-        // Tag should be soft-deleted (when_deleted is set)
-        $this->assertNotNull(FinAccountTag::find($tag->tag_id)->when_deleted);
+        // Tag should be hard-deleted
+        $this->assertNull(FinAccountTag::find($tag->tag_id));
 
-        // Tag mapping should also be soft-deleted
-        $this->assertNotNull(
-            FinAccountLineItemTagMap::where('t_id', $t->t_id)
-                ->where('tag_id', $tag->tag_id)
-                ->first()
-                ->when_deleted
-        );
+        // Tag mapping should also be deleted (via FK CASCADE)
+        $this->assertDatabaseMissing('fin_account_line_item_tag_map', [
+            't_id' => $t->t_id,
+            'tag_id' => $tag->tag_id,
+        ]);
     }
 
     public function test_apply_tag_route_not_found_on_get(): void
@@ -346,13 +333,9 @@ class FinanceTransactionTaggingApiControllerTest extends TestCase
 
         $response->assertOk()->assertJson(['success' => true]);
 
-        // Both tag mappings should be soft-deleted
-        $this->assertNotNull(
-            FinAccountLineItemTagMap::where('t_id', $t->t_id)->where('tag_id', $tag1->tag_id)->first()->when_deleted
-        );
-        $this->assertNotNull(
-            FinAccountLineItemTagMap::where('t_id', $t->t_id)->where('tag_id', $tag2->tag_id)->first()->when_deleted
-        );
+        // Both tag mappings should be hard-deleted
+        $this->assertDatabaseMissing('fin_account_line_item_tag_map', ['t_id' => $t->t_id, 'tag_id' => $tag1->tag_id]);
+        $this->assertDatabaseMissing('fin_account_line_item_tag_map', ['t_id' => $t->t_id, 'tag_id' => $tag2->tag_id]);
     }
 
     public function test_remove_specific_tag_from_transaction(): void
@@ -384,13 +367,9 @@ class FinanceTransactionTaggingApiControllerTest extends TestCase
 
         $response->assertOk()->assertJson(['success' => true]);
 
-        // Only tag2 should be soft-deleted
-        $this->assertNull(
-            FinAccountLineItemTagMap::where('t_id', $t->t_id)->where('tag_id', $tag1->tag_id)->first()->when_deleted
-        );
-        $this->assertNotNull(
-            FinAccountLineItemTagMap::where('t_id', $t->t_id)->where('tag_id', $tag2->tag_id)->first()->when_deleted
-        );
+        // Only tag2 should be deleted; tag1 should still exist
+        $this->assertDatabaseHas('fin_account_line_item_tag_map', ['t_id' => $t->t_id, 'tag_id' => $tag1->tag_id]);
+        $this->assertDatabaseMissing('fin_account_line_item_tag_map', ['t_id' => $t->t_id, 'tag_id' => $tag2->tag_id]);
     }
 
     public function test_remove_tags_only_affects_own_tags(): void
@@ -420,13 +399,9 @@ class FinanceTransactionTaggingApiControllerTest extends TestCase
             'transaction_ids' => (string) $t->t_id,
         ]);
 
-        // User's tag should be soft-deleted
-        $this->assertNotNull(
-            FinAccountLineItemTagMap::where('t_id', $t->t_id)->where('tag_id', $userTag->tag_id)->first()->when_deleted
-        );
-        // Other user's tag should NOT be soft-deleted
-        $this->assertNull(
-            FinAccountLineItemTagMap::where('t_id', $t->t_id)->where('tag_id', $otherTag->tag_id)->first()->when_deleted
-        );
+        // User's tag should be hard-deleted
+        $this->assertDatabaseMissing('fin_account_line_item_tag_map', ['t_id' => $t->t_id, 'tag_id' => $userTag->tag_id]);
+        // Other user's tag should NOT be deleted
+        $this->assertDatabaseHas('fin_account_line_item_tag_map', ['t_id' => $t->t_id, 'tag_id' => $otherTag->tag_id]);
     }
 }

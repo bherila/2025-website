@@ -202,22 +202,25 @@ class FileStorageService
     }
 
     /**
-     * Delete a file record and its S3 file.
+     * Delete a file record and its S3 object.
+     *
+     * The explicit S3 deletion here covers file models that still use SoftDeletes
+     * (e.g. FileForProject, FileForTask) and would only soft-delete the DB row,
+     * leaving the S3 object orphaned without this call.
+     *
+     * Finance file models (FileForTaxDocument, FileForFinAccount) also dispatch
+     * DeleteS3Object via their booted() deleting event — the double attempt is
+     * safe since Storage::delete() on a non-existent key is a no-op.
      *
      * @param  Model  $fileModel  The file model to delete
-     * @param  bool  $forceDelete  Whether to hard delete (default: soft delete)
      * @return bool Whether the deletion was successful
      */
-    public function deleteFileRecord(Model $fileModel, bool $forceDelete = false): bool
+    public function deleteFileRecord(Model $fileModel): bool
     {
-        // Delete from S3
-        $this->deleteFile($fileModel->s3_path);
-
-        // Delete the record
-        if ($forceDelete) {
-            return $fileModel->forceDelete();
+        if (! empty($fileModel->s3_path)) {
+            $this->deleteFile($fileModel->s3_path);
         }
 
-        return $fileModel->delete();
+        return (bool) $fileModel->delete();
     }
 }

@@ -15,7 +15,6 @@ class ScheduleCSummaryService
     public function getSummary(int $userId, ?int $yearFilter = null): array
     {
         $tags = FinAccountTag::where('tag_userid', $userId)
-            ->whereNull('when_deleted')
             ->whereNotNull('tax_characteristic')
             ->where('tax_characteristic', '!=', '')
             ->where('tax_characteristic', '!=', 'none')
@@ -43,8 +42,7 @@ class ScheduleCSummaryService
         // Fetch available years using a lightweight distinct query
         $availableYears = DB::table('fin_account_line_items as li')
             ->join('fin_account_line_item_tag_map as tm', function ($join) {
-                $join->on('li.t_id', '=', 'tm.t_id')
-                    ->whereNull('tm.when_deleted');
+                $join->on('li.t_id', '=', 'tm.t_id');
             })
             ->join('fin_account_tag as t', function ($join) use ($tagIds) {
                 $join->on('tm.tag_id', '=', 't.tag_id')
@@ -59,8 +57,7 @@ class ScheduleCSummaryService
 
         $query = DB::table('fin_account_line_items as li')
             ->join('fin_account_line_item_tag_map as tm', function ($join) {
-                $join->on('li.t_id', '=', 'tm.t_id')
-                    ->whereNull('tm.when_deleted');
+                $join->on('li.t_id', '=', 'tm.t_id');
             })
             ->join('fin_account_tag as t', function ($join) use ($tagIds) {
                 $join->on('tm.tag_id', '=', 't.tag_id')
@@ -177,7 +174,6 @@ class ScheduleCSummaryService
     public function availableYears(int $userId): array
     {
         $tags = FinAccountTag::where('tag_userid', $userId)
-            ->whereNull('when_deleted')
             ->whereNotNull('tax_characteristic')
             ->where('tax_characteristic', '!=', '')
             ->where('tax_characteristic', '!=', 'none')
@@ -189,8 +185,7 @@ class ScheduleCSummaryService
 
         return DB::table('fin_account_line_items as li')
             ->join('fin_account_line_item_tag_map as tm', function ($join) {
-                $join->on('li.t_id', '=', 'tm.t_id')
-                    ->whereNull('tm.when_deleted');
+                $join->on('li.t_id', '=', 'tm.t_id');
             })
             ->join('fin_account_tag as t', function ($join) use ($tags) {
                 $join->on('tm.tag_id', '=', 't.tag_id')

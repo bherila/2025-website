@@ -18,7 +18,6 @@ class ListAccounts extends Tool
         $uid = Auth::id();
 
         $accounts = FinAccounts::where('acct_owner', $uid)
-            ->whereNull('when_deleted')
             ->orderBy('when_closed', 'asc')
             ->orderBy('acct_sort_order', 'asc')
             ->orderBy('acct_name', 'asc')

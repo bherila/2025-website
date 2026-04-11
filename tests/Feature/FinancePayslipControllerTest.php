@@ -284,7 +284,6 @@ class FinancePayslipControllerTest extends TestCase
 
         $this->assertDatabaseMissing('fin_payslip', [
             'payslip_id' => $payslipId,
-            'deleted_at' => null,
         ]);
     }
 
@@ -306,7 +305,6 @@ class FinancePayslipControllerTest extends TestCase
         // Payslip should still exist for user2
         $this->assertDatabaseHas('fin_payslip', [
             'payslip_id' => $payslipId,
-            'deleted_at' => null,
         ]);
     }
 

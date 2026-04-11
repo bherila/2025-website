@@ -17,6 +17,5 @@ class FinAccountLineItemTagMap extends Model
     protected $fillable = [
         't_id',
         'tag_id',
-        'when_deleted',
     ];
 }

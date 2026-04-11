@@ -21,7 +21,6 @@ class FinAccounts extends Model
         'acct_is_retirement',
         'acct_sort_order',
         'when_closed',
-        'when_deleted',
     ];
 
     protected function casts(): array
@@ -31,7 +30,6 @@ class FinAccounts extends Model
             'acct_is_debt' => 'boolean',
             'acct_is_retirement' => 'boolean',
             'when_closed' => 'datetime',
-            'when_deleted' => 'datetime',
         ];
     }
 

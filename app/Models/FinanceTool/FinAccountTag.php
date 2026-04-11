@@ -119,7 +119,6 @@ class FinAccountTag extends Model
         'tag_color',
         'tax_characteristic',
         'employment_entity_id',
-        'when_deleted',
     ];
 
     public function user()

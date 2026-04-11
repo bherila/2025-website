@@ -17,7 +17,6 @@ class Accounts extends Resource
     public function handle(Request $request): Response
     {
         $accounts = FinAccounts::where('acct_owner', Auth::id())
-            ->whereNull('when_deleted')
             ->orderBy('acct_sort_order', 'asc')
             ->orderBy('acct_name', 'asc')
             ->get();

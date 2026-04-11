@@ -19,13 +19,12 @@ Tags are stored in the `fin_account_tag` table:
 | `tax_characteristic` | ENUM / TEXT | Optional tax category code (see below) |
 | `employment_entity_id` | BIGINT NULL | FK to `fin_employment_entity` for Schedule C tags |
 | `when_added` | TIMESTAMP | Creation timestamp |
-| `when_deleted` | TIMESTAMP NULL | Soft-delete timestamp |
 
 **Note on `tax_characteristic` column type:**
 - **MySQL**: stored as a native `ENUM` — the database itself rejects invalid values.
 - **SQLite** (used in tests): stored as `TEXT` with a `CHECK` constraint that enforces the same allowed values.
 
-Tags are applied to transactions via the `fin_account_line_item_tag_map` join table (many-to-many, soft-delete aware).
+Tags are applied to transactions via the `fin_account_line_item_tag_map` join table (many-to-many).
 
 ---
 
@@ -187,7 +186,7 @@ The All Transactions page (`/finance/account/all/transactions`) supports filteri
 | `GET` | `/api/finance/tags?totals=true` | Include per-tag year-by-year totals |
 | `POST` | `/api/finance/tags` | Create a new tag |
 | `PUT` | `/api/finance/tags/{id}` | Update a tag (label, color, tax_characteristic) |
-| `DELETE` | `/api/finance/tags/{id}` | Soft-delete a tag |
+| `DELETE` | `/api/finance/tags/{id}` | Delete a tag |
 | `POST` | `/api/finance/tags/apply` | Bulk apply a tag to a list of transaction IDs |
 | `POST` | `/api/finance/tags/remove` | Bulk remove all of the user's tags from a list of transaction IDs |
 
@@ -268,7 +267,7 @@ The Schedule C view aggregates all tagged transactions by their `tax_characteris
 - `available_years` always reflects all years that have data, regardless of the `?year` filter.
 - Years in the `years` array are sorted **most recent first**.
 - Only years with at least one tagged transaction (matching the optional year filter) appear in `years`.
-- Tags with `tax_characteristic = null` (or soft-deleted tags/mappings) are excluded.
+- Tags with `tax_characteristic = null` are excluded.
 - Multiple transactions across multiple tags pointing to the same `tax_characteristic` value are aggregated into a single total; individual transactions are included in the `transactions` array.
 
 ### Schedule C Navigation
@@ -292,7 +291,7 @@ php artisan test --filter=FinanceScheduleCControllerTest
 - Expense totals grouped correctly by year (multi-year)
 - Home office totals returned correctly
 - Multiple tags with the same `tax_characteristic` are aggregated
-- Soft-deleted tag mappings excluded from totals
+- Deleted tag mappings excluded from totals
 - Cross-user isolation (other users' transactions not included)
 - Unauthenticated request returns 401
 - Correct JSON structure including `transactions` sub-array

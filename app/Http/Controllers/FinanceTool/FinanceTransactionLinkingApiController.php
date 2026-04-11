@@ -41,7 +41,6 @@ class FinanceTransactionLinkingApiController extends Controller
             ->orWhere(function ($query) use ($t_id_1, $t_id_2) {
                 $query->where('parent_t_id', $t_id_2)->where('child_t_id', $t_id_1);
             })
-            ->whereNull('when_deleted')
             ->first();
     }
 
@@ -223,7 +222,7 @@ class FinanceTransactionLinkingApiController extends Controller
             ], 400);
         }
 
-        $link->update(['when_deleted' => now()]);
+        $link->delete();
 
         return response()->json(['success' => true]);
     }
@@ -310,7 +309,6 @@ class FinanceTransactionLinkingApiController extends Controller
         $query = FinAccountLineItems::where('t_account', $account_id)
             ->whereDoesntHave('parentTransactions')
             ->whereDoesntHave('childTransactions')
-            ->whereNull('when_deleted')
             ->whereNull('opt_type')
             ->where(function ($q) {
                 // Exclude Assignment trades (option assignments)
@@ -349,7 +347,6 @@ class FinanceTransactionLinkingApiController extends Controller
             ->where('t_account', '!=', $account_id)
             ->whereDoesntHave('parentTransactions')
             ->whereDoesntHave('childTransactions')
-            ->whereNull('when_deleted')
             ->whereNull('opt_type')
             ->where(function ($q) {
                 // Exclude Assignment trades (option assignments)

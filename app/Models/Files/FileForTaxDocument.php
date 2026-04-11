@@ -3,17 +3,17 @@
 namespace App\Models\Files;
 
 use App\GenAiProcessor\Models\GenAiImportJob;
+use App\Jobs\DeleteS3Object;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinEmploymentEntity;
 use App\Traits\HasFileStorage;
 use App\Traits\SerializesDatesAsLocal;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class FileForTaxDocument extends Model
 {
-    use HasFileStorage, SerializesDatesAsLocal, SoftDeletes;
+    use HasFileStorage, SerializesDatesAsLocal;
 
     protected $table = 'fin_tax_documents';
 
@@ -72,5 +72,16 @@ class FileForTaxDocument extends Model
     public static function generateS3Path(int $userId, string $storedFilename): string
     {
         return "tax_docs/{$userId}/{$storedFilename}";
+    }
+
+    protected static function booted(): void
+    {
+        // NOTE: this event does not fire for bulk deletes (Model::where()->delete()).
+        // Any code that bulk-deletes rows from this table must dispatch DeleteS3Object manually.
+        static::deleting(function (self $doc): void {
+            if ($doc->s3_path) {
+                DeleteS3Object::dispatch($doc->s3_path);
+            }
+        });
     }
 }

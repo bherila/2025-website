@@ -462,7 +462,6 @@ class FinanceStatementControllerTest extends TestCase
         // Total: 2 file records for this file_hash (one per account)
         $count = DB::table('files_for_fin_accounts')
             ->where('file_hash', $fileHash)
-            ->whereNull('deleted_at')
             ->count();
         $this->assertEquals(2, $count);
     }

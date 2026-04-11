@@ -4,12 +4,9 @@ namespace App\Models\FinanceTool;
 
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class FinRule extends Model
 {
-    use SoftDeletes;
-
     protected $table = 'fin_rules';
 
     protected $fillable = [

@@ -164,7 +164,7 @@ class FinanceScheduleCControllerTest extends TestCase
         $this->assertEqualsWithDelta(90.00, $meals['total'], 0.001);
     }
 
-    public function test_excludes_soft_deleted_tag_mappings(): void
+    public function test_excludes_untagged_transactions(): void
     {
         $user = $this->createUser();
         $this->actingAs($user);
@@ -173,16 +173,11 @@ class FinanceScheduleCControllerTest extends TestCase
         $tag = $this->createTagWithChar($user->id, 'Travel', 'sce_travel');
 
         $t1 = $this->createTransaction($acct->acct_id, '2024-01-01', -500.00, 'Flight');
-        $t2 = $this->createTransaction($acct->acct_id, '2024-02-01', -100.00, 'Train (deleted)');
+        // t2 is intentionally not tagged
+        $this->createTransaction($acct->acct_id, '2024-02-01', -100.00, 'Train (untagged)');
 
-        // Active mapping
+        // Only map t1
         $this->applyTag($t1->t_id, $tag->tag_id);
-        // Soft-deleted mapping
-        FinAccountLineItemTagMap::create([
-            't_id' => $t2->t_id,
-            'tag_id' => $tag->tag_id,
-            'when_deleted' => now(),
-        ]);
 
         $response = $this->actingAs($user)->getJson('/api/finance/schedule-c');
 
@@ -192,7 +187,7 @@ class FinanceScheduleCControllerTest extends TestCase
 
         $travel = $years[0]['entities'][0]['schedule_c_expense']['sce_travel'] ?? null;
         $this->assertNotNull($travel);
-        // Only $500 flight should be counted (not the deleted $100 train)
+        // Only $500 flight should be counted (not the untagged $100 train)
         $this->assertEqualsWithDelta(500.00, $travel['total'], 0.001);
     }
 

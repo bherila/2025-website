@@ -45,7 +45,6 @@ class FinanceTransactionsDedupeApiController extends Controller
         // Step 1: Identify candidate duplicate groups using SQL GROUP BY
         // We omit t_account_balance to catch duplicates imported with different running balances
         $candidateQuery = FinAccountLineItems::where('t_account', $account->acct_id)
-            ->whereNull('when_deleted')
             ->select('t_date', 't_qty', 't_amt', 't_symbol')
             ->groupBy('t_date', 't_qty', 't_amt', 't_symbol')
             ->havingRaw('COUNT(*) > 1');
@@ -66,7 +65,6 @@ class FinanceTransactionsDedupeApiController extends Controller
 
         // Step 2: Fetch all transactions that match the candidate criteria
         $query = FinAccountLineItems::where('t_account', $account->acct_id)
-            ->whereNull('when_deleted')
             ->with(['tags', 'parentTransactions:t_id']);
 
         if ($year) {
