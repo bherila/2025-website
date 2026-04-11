@@ -4,7 +4,6 @@ namespace App\Jobs;
 
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
@@ -17,10 +16,14 @@ use Illuminate\Support\Facades\Storage;
  * NOTE: this job is NOT dispatched for bulk deletes (e.g. Model::where()->delete()
  * or DB::table()->delete()), which bypass Eloquent model events. Any code that
  * bulk-deletes rows from file-backed tables must dispatch this job manually.
+ *
+ * Illuminate\Foundation\Queue\Queueable already pulls in Dispatchable,
+ * InteractsWithQueue, and SerializesModels — dispatch() is available without
+ * adding those traits explicitly.
  */
 class DeleteS3Object implements ShouldQueue
 {
-    use InteractsWithQueue, Queueable;
+    use Queueable;
 
     /** Retry up to 5 times before marking the job as failed. */
     public int $tries = 5;

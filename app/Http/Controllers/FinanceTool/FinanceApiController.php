@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\FinanceTool;
 
 use App\Http\Controllers\Controller;
+use App\Models\Files\FileForFinAccount;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
 use Illuminate\Http\JsonResponse;
@@ -463,6 +464,13 @@ class FinanceApiController extends Controller
 
         DB::transaction(function () use ($account) {
             FinAccountLineItems::where('t_account', $account->acct_id)->delete();
+
+            // Delete file records individually so each model's booted() deleting
+            // event fires and dispatches DeleteS3Object. A plain $account->delete()
+            // would cascade at the DB level, bypassing those Eloquent events.
+            FileForFinAccount::where('acct_id', $account->acct_id)->each(function (FileForFinAccount $file): void {
+                $file->delete();
+            });
 
             $account->delete();
         });
