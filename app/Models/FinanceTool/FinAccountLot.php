@@ -2,6 +2,7 @@
 
 namespace App\Models\FinanceTool;
 
+use App\Models\Files\FileForTaxDocument;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -27,6 +28,7 @@ class FinAccountLot extends Model
         'statement_id',
         'open_t_id',
         'close_t_id',
+        'tax_document_id',
     ];
 
     protected $casts = [
@@ -58,5 +60,10 @@ class FinAccountLot extends Model
     public function closeTransaction(): BelongsTo
     {
         return $this->belongsTo(FinAccountLineItems::class, 'close_t_id', 't_id');
+    }
+
+    public function taxDocument(): BelongsTo
+    {
+        return $this->belongsTo(FileForTaxDocument::class, 'tax_document_id', 'id');
     }
 }

@@ -2,7 +2,7 @@
 
 import currency from 'currency.js'
 import { Calculator, CheckCircle, ChevronDown, Clock, Eye, Loader2, Plus, Upload } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { type JSX, useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import MultiAccountImportModal from '@/components/finance/MultiAccountImportModal'
@@ -33,7 +33,7 @@ import {
   extractForeignTaxFromK1,
   WorksheetModal,
 } from '@/finance/1116'
-import type { F1099DivParsedData, F1099IntParsedData, FK1StructuredData, TaxDocument } from '@/types/finance/tax-document'
+import type { F1099DivParsedData, F1099IntParsedData, FK1StructuredData, TaxDocument, TaxDocumentAccountLink } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS, isFK1StructuredData } from '@/types/finance/tax-document'
 
 export interface FinAccount {
@@ -78,6 +78,9 @@ interface UploadModalState {
 }
 
 const DISPLAY_FORM_TYPES = ['1099_int', '1099_div', '1099_misc', 'k1'] as const
+// Form types shown as individual upload options in the per-account Add dropdown.
+// 'broker_1099' is intentionally omitted here — it is handled by the "Consolidated 1099" entry
+// which routes through the MultiAccountImportModal with a preselected account.
 type DisplayFormType = (typeof DISPLAY_FORM_TYPES)[number]
 
 export default function TaxDocuments1099Section({
@@ -97,6 +100,8 @@ export default function TaxDocuments1099Section({
   const [error, setError] = useState<string | null>(null)
   const [uploadModal, setUploadModal] = useState<UploadModalState | null>(null)
   const [multiAccountImportOpen, setMultiAccountImportOpen] = useState(false)
+  // When set, opens the multi-account import modal pre-seeded for a specific account.
+  const [consolidatedUploadAccountId, setConsolidatedUploadAccountId] = useState<number | null>(null)
   const [manualEntry, setManualEntry] = useState<ManualEntryState | null>(null)
   const [manualSaving, setManualSaving] = useState(false)
   const [reviewModalDoc, setReviewModalDoc] = useState<TaxDocument | null>(null)
@@ -148,7 +153,7 @@ export default function TaxDocuments1099Section({
   const fetchDocuments = useCallback(async () => {
     try {
       const params = new URLSearchParams({
-        form_type: '1099_int,1099_int_c,1099_div,1099_div_c,1099_misc,k1',
+        form_type: '1099_int,1099_int_c,1099_div,1099_div_c,1099_misc,1099_b,broker_1099,k1',
         year: String(selectedYear),
       })
       const data = await fetchWrapper.get(`/api/finance/tax-documents?${params.toString()}`)
@@ -285,19 +290,30 @@ export default function TaxDocuments1099Section({
     return null
   }
 
-  /** Render a review/status button for a single uploaded tax document. */
-  const renderTaxDocumentButton = (doc: TaxDocument) => {
+  /**
+   * Render a review/status button for a tax document.
+   *
+   * When `link` is provided (canonical join-table row), its `form_type` and `is_reviewed`
+   * override the parent document's values — this is the correct path for broker_1099 docs
+   * that expose multiple per-form links (1099-DIV, 1099-INT, 1099-B) for the same account.
+   * Clicking always opens the parent document's review modal.
+   */
+  const renderTaxDocumentButton = (doc: TaxDocument, link?: TaxDocumentAccountLink) => {
     const isProcessing = doc.genai_status === 'pending' || doc.genai_status === 'processing'
     const isFailed = doc.genai_status === 'failed'
-    const displayValue = formatDocumentAmount(doc)
-    const formLabel = FORM_TYPE_LABELS[doc.form_type as DisplayFormType] ?? doc.form_type
+    // Use per-link form_type and is_reviewed when a link is provided.
+    const effectiveFormType = link ? link.form_type : doc.form_type
+    const effectiveReviewed = link ? link.is_reviewed : doc.is_reviewed
+    const displayValue = link ? null : formatDocumentAmount(doc) // amounts only for standalone docs
+    const formLabel = FORM_TYPE_LABELS[effectiveFormType] ?? effectiveFormType
+    const key = link ? `link-${link.id}` : `doc-${doc.id}`
 
     if (isProcessing) {
       // For K-1 documents, allow opening the modal even during processing (e.g., to delete)
-      if (doc.form_type === 'k1') {
+      if (effectiveFormType === 'k1') {
         return (
           <Button
-            key={doc.id}
+            key={key}
             size="sm"
             variant="outline"
             className="gap-1 h-7 text-xs border-orange-300 text-orange-600 hover:bg-orange-50 px-2"
@@ -310,7 +326,7 @@ export default function TaxDocuments1099Section({
         )
       }
       return (
-        <Button key={doc.id} size="sm" variant="outline" disabled className="gap-1 h-7 text-xs border-orange-300 text-orange-600 px-2">
+        <Button key={key} size="sm" variant="outline" disabled className="gap-1 h-7 text-xs border-orange-300 text-orange-600 px-2">
           <Clock className="h-3 w-3 animate-pulse" />
           {formLabel} — Processing
         </Button>
@@ -318,31 +334,31 @@ export default function TaxDocuments1099Section({
     }
     if (isFailed) {
       return (
-        <Button key={doc.id} size="sm" variant="outline" disabled className="gap-1 h-7 text-xs border-destructive text-destructive px-2">
+        <Button key={key} size="sm" variant="outline" disabled className="gap-1 h-7 text-xs border-destructive text-destructive px-2">
           {formLabel} — Failed
         </Button>
       )
     }
     // show value (or "Needs Review") in button; style based on reviewed status
-    const btnClass = doc.is_reviewed
+    const btnClass = effectiveReviewed
       ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:text-green-800 dark:bg-green-950 dark:border-green-800 dark:text-green-400'
       : 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100 hover:text-amber-900 dark:bg-amber-950 dark:border-amber-800 dark:text-amber-400'
 
     return (
       <Button
-        key={doc.id}
+        key={key}
         size="sm"
         variant="outline"
         className={`gap-1 h-7 text-xs px-2 ${btnClass}`}
         onClick={() => setReviewModalDoc(doc)}
-        title={doc.is_reviewed ? `${formLabel} — Reviewed` : `${formLabel} — Needs Review`}
+        title={effectiveReviewed ? `${formLabel} — Reviewed` : `${formLabel} — Needs Review`}
       >
-        {doc.form_type !== 'k1' && displayValue != null ? (
+        {effectiveFormType !== 'k1' && displayValue != null ? (
           <>
-            {doc.is_reviewed && <CheckCircle className="h-3 w-3 shrink-0" />}
+            {effectiveReviewed && <CheckCircle className="h-3 w-3 shrink-0" />}
             <span className="font-mono tabular-nums">{formLabel}: {displayValue}</span>
           </>
-        ) : doc.is_reviewed ? (
+        ) : effectiveReviewed ? (
           <>
             <CheckCircle className="h-3 w-3" />
             {formLabel} ✓
@@ -359,23 +375,38 @@ export default function TaxDocuments1099Section({
 
   /** Render the full document section for an account row (existing docs + add dropdown). */
   const renderAccountDocuments = (account: FinAccount) => {
-    // Use the join table as the canonical source; fall back to legacy account_id for
-    // any documents that pre-date the join table migration and have no account_links yet.
-    const accountDocs = documents.filter(d =>
-      (d.account_links ?? []).some(l => l.account_id === account.acct_id) ||
-      ((!d.account_links || d.account_links.length === 0) && d.account_id === account.acct_id),
-    )
+    // Collect all per-link buttons: one button per (document, account_link) pair where
+    // the link's account_id matches this account. This correctly handles consolidated
+    // broker_1099 documents that expose separate 1099-DIV, 1099-INT, 1099-B links
+    // for the same account — each gets its own button with the correct form_type/reviewed state.
+    const accountLinkButtons: JSX.Element[] = []
+    const uploadedFormTypes = new Set<string>()
 
-    // Determine which form types are already uploaded for this account
-    const uploadedFormTypes = new Set(accountDocs.map(d => {
-      if (d.form_type === '1099_int_c') return '1099_int'
-      if (d.form_type === '1099_div_c') return '1099_div'
-      return d.form_type
-    }))
+    for (const doc of documents) {
+      const links = doc.account_links ?? []
+      if (links.length > 0) {
+        for (const link of links) {
+          if (link.account_id !== account.acct_id) continue
+          accountLinkButtons.push(renderTaxDocumentButton(doc, link))
+          // Normalize corrected forms back to their base type for the "already uploaded" check.
+          const baseType = link.form_type === '1099_int_c' ? '1099_int'
+            : link.form_type === '1099_div_c' ? '1099_div'
+            : link.form_type
+          uploadedFormTypes.add(baseType)
+        }
+      } else if (doc.account_id === account.acct_id) {
+        // Legacy path: document predates the join table and has no account_links.
+        accountLinkButtons.push(renderTaxDocumentButton(doc))
+        const baseType = doc.form_type === '1099_int_c' ? '1099_int'
+          : doc.form_type === '1099_div_c' ? '1099_div'
+          : doc.form_type
+        uploadedFormTypes.add(baseType)
+      }
+    }
 
     return (
       <div className="flex flex-wrap gap-1 items-center">
-        {accountDocs.map(doc => renderTaxDocumentButton(doc))}
+        {accountLinkButtons}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 px-2">
@@ -395,6 +426,13 @@ export default function TaxDocuments1099Section({
                 {uploadedFormTypes.has(ft) && <span className="ml-2 text-xs text-muted-foreground">(add another)</span>}
               </DropdownMenuItem>
             ))}
+            <DropdownMenuItem
+              onClick={() => setConsolidatedUploadAccountId(account.acct_id)}
+            >
+              <Upload className="h-3 w-3 mr-2" />
+              Consolidated 1099 (Broker)
+              {uploadedFormTypes.has('broker_1099') && <span className="ml-2 text-xs text-muted-foreground">(add another)</span>}
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -620,7 +658,7 @@ export default function TaxDocuments1099Section({
 
       {/* Inline image viewer */}
 
-      {/* Multi-account consolidated PDF import */}
+      {/* Multi-account consolidated PDF import (from header button) */}
       <MultiAccountImportModal
         open={multiAccountImportOpen}
         taxYear={selectedYear}
@@ -635,6 +673,25 @@ export default function TaxDocuments1099Section({
           }
         }}
       />
+
+      {/* Consolidated 1099 import triggered from per-account Add dropdown */}
+      {consolidatedUploadAccountId !== null && (
+        <MultiAccountImportModal
+          open
+          taxYear={selectedYear}
+          accounts={accounts}
+          preselectedAccountId={consolidatedUploadAccountId}
+          onClose={() => setConsolidatedUploadAccountId(null)}
+          onSuccess={() => {
+            setConsolidatedUploadAccountId(null)
+            if (onDocumentsReload) {
+              onDocumentsReload()
+            } else {
+              fetchDocuments()
+            }
+          }}
+        />
+      )}
 
       {/* Form 1116 Worksheet modal */}
       <WorksheetModal

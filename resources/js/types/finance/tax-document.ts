@@ -271,8 +271,46 @@ export interface FK1ParsedData {
 
 import type { FK1StructuredData as _FK1StructuredData } from './k1-data'
 
+/**
+ * One individual transaction lot from a 1099-B section.
+ * Extracted by the AI during broker_1099 / tax_form_multi_account_import processing
+ * and stored in parsed_data[n].transactions for 1099_b entries.
+ * These are upserted into fin_account_lots and fin_account_line_items automatically.
+ */
+export interface BrokerTransaction1099B {
+  symbol: string | null
+  description: string
+  cusip: string | null
+  quantity: number
+  /** "YYYY-MM-DD" or "various" for aggregated lots */
+  purchase_date: string
+  sale_date: string
+  proceeds: number
+  cost_basis: number
+  accrued_market_discount: number | null
+  wash_sale_disallowed: number
+  realized_gain_loss: number
+  /** true = short-term, false = long-term, null = undetermined */
+  is_short_term: boolean | null
+  /** IRS Form 8949 box: A/B/C (short-term) or D/E/F (long-term) */
+  form_8949_box: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | null
+  is_covered: boolean
+  additional_info: string | null
+}
+
+/** parsed_data shape for a 1099-B account_link entry from a consolidated broker import. */
+export interface Broker1099BParsedData {
+  payer_name: string | null
+  payer_tin: string | null
+  total_proceeds: number | null
+  total_cost_basis: number | null
+  total_wash_sale_disallowed: number | null
+  total_realized_gain_loss: number | null
+  transactions: BrokerTransaction1099B[]
+}
+
 /** Union of all possible parsed_data shapes. */
-export type TaxDocumentParsedData = W2ParsedData | F1099IntParsedData | F1099DivParsedData | F1099MiscParsedData | F1099NecParsedData | Form1099RParsedData | FK1ParsedData | _FK1StructuredData
+export type TaxDocumentParsedData = W2ParsedData | F1099IntParsedData | F1099DivParsedData | F1099MiscParsedData | F1099NecParsedData | Form1099RParsedData | FK1ParsedData | _FK1StructuredData | Broker1099BParsedData
 
 /** One row from fin_tax_document_accounts — links a PDF to a specific account. */
 export interface TaxDocumentAccountLink {

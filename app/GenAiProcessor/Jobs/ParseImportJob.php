@@ -8,6 +8,8 @@ use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Models\GenAiImportResult;
 use App\GenAiProcessor\Services\GenAiJobDispatcherService;
 use App\Models\Files\FileForTaxDocument;
+use App\Models\FinanceTool\FinAccountLineItems;
+use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use Illuminate\Bus\Queueable;
@@ -463,6 +465,9 @@ class ParseImportJob implements ShouldQueue
         // Normalise the AI output: wrap a bare object in an array.
         $entries = isset($data[0]) ? $data : [$data];
 
+        // Delete all existing lots linked to this document so re-processing is idempotent.
+        FinAccountLot::where('tax_document_id', $taxDoc->id)->delete();
+
         foreach ($entries as $entry) {
             $accountId = $this->matchAccount($entry, $userAccounts);
 
@@ -485,12 +490,148 @@ class ParseImportJob implements ShouldQueue
                 'tax_year' => $taxYear,
                 'is_reviewed' => false,
             ]);
+
+            // For 1099-B entries with a resolved account, import individual lot transactions.
+            if ($formType === '1099_b' && $accountId !== null) {
+                $transactions = $entry['parsed_data']['transactions'] ?? [];
+                if (is_array($transactions) && ! empty($transactions)) {
+                    $this->upsertLotsFromBroker($accountId, $transactions, $taxDoc->id);
+                }
+            }
         }
 
         $taxDoc->update([
             'parsed_data' => $entries,
             'genai_status' => 'parsed',
         ]);
+    }
+
+    /**
+     * Upsert 1099-B transaction lots into fin_account_lots and fin_account_line_items.
+     *
+     * Lots are keyed by tax_document_id, so re-processing is idempotent:
+     * existing lots for this document were deleted before this method is called.
+     *
+     * @param  array<array<string,mixed>>  $transactions  Normalized lot entries from the AI
+     */
+    private function upsertLotsFromBroker(int $accountId, array $transactions, int $taxDocumentId): void
+    {
+        $now = now()->toDateTimeString();
+
+        foreach ($transactions as $tx) {
+            if (! is_array($tx)) {
+                continue;
+            }
+
+            $symbol = is_string($tx['symbol'] ?? null) ? trim($tx['symbol']) : null;
+            $description = is_string($tx['description'] ?? null) ? trim($tx['description']) : ($symbol ?? 'Unknown');
+            $quantity = is_numeric($tx['quantity'] ?? null) ? (float) $tx['quantity'] : null;
+            $saleDate = $this->normalizeDateOrNull($tx['sale_date'] ?? null);
+            $proceeds = is_numeric($tx['proceeds'] ?? null) ? (float) $tx['proceeds'] : null;
+            $costBasis = is_numeric($tx['cost_basis'] ?? null) ? (float) $tx['cost_basis'] : null;
+            $realizedGainLoss = is_numeric($tx['realized_gain_loss'] ?? null) ? (float) $tx['realized_gain_loss'] : null;
+            $washSaleDisallowed = is_numeric($tx['wash_sale_disallowed'] ?? null) ? (float) $tx['wash_sale_disallowed'] : 0.0;
+            $cusip = is_string($tx['cusip'] ?? null) && trim($tx['cusip']) !== '' ? trim($tx['cusip']) : null;
+
+            $purchaseDateRaw = $tx['purchase_date'] ?? null;
+            $purchaseDateNormalized = $this->normalizeDateOrNull($purchaseDateRaw);
+
+            // Determine is_short_term from the form_8949_box or explicit field.
+            $isShortTerm = null;
+            if (isset($tx['is_short_term'])) {
+                $isShortTerm = (bool) $tx['is_short_term'];
+            } elseif (isset($tx['form_8949_box'])) {
+                $box = strtoupper(trim((string) $tx['form_8949_box']));
+                if (in_array($box, ['A', 'B', 'C'], true)) {
+                    $isShortTerm = true;
+                } elseif (in_array($box, ['D', 'E', 'F'], true)) {
+                    $isShortTerm = false;
+                }
+            }
+
+            // Skip rows missing required fields.
+            if ($quantity === null || $saleDate === null || $proceeds === null || $costBasis === null) {
+                continue;
+            }
+
+            // Insert the closed lot.
+            $lot = FinAccountLot::create([
+                'acct_id' => $accountId,
+                'symbol' => $symbol ?? $description,
+                'description' => $description,
+                'quantity' => $quantity,
+                'purchase_date' => $purchaseDateNormalized ?? $saleDate, // fallback to sale date if "various"
+                'cost_basis' => $costBasis,
+                'cost_per_unit' => $quantity > 0 ? round($costBasis / $quantity, 8) : null,
+                'sale_date' => $saleDate,
+                'proceeds' => $proceeds,
+                'realized_gain_loss' => $realizedGainLoss ?? ($proceeds - $costBasis + $washSaleDisallowed),
+                'is_short_term' => $isShortTerm,
+                'lot_source' => '1099b',
+                'tax_document_id' => $taxDocumentId,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+            // Create a matching sell line item in fin_account_line_items.
+            // Only create if no matching sell transaction already exists (by date/symbol/qty/amount).
+            $existingSell = FinAccountLineItems::where('t_account', $accountId)
+                ->where('t_date', $saleDate)
+                ->where('t_symbol', $symbol ?? $description)
+                ->where('t_qty', -abs($quantity))
+                ->where('t_amt', -abs($proceeds))
+                ->exists();
+
+            if (! $existingSell) {
+                $sellItem = FinAccountLineItems::create([
+                    't_account' => $accountId,
+                    't_date' => $saleDate,
+                    't_type' => 'Sell',
+                    't_description' => $description,
+                    't_symbol' => $symbol ?? $description,
+                    't_cusip' => $cusip,
+                    't_qty' => -abs($quantity),
+                    't_price' => $quantity > 0 ? round($proceeds / $quantity, 6) : null,
+                    't_amt' => -abs($proceeds),
+                    't_basis' => $costBasis,
+                    't_realized_pl' => $realizedGainLoss ?? ($proceeds - $costBasis + $washSaleDisallowed),
+                    't_source' => '1099b',
+                ]);
+
+                // Link the lot to the sell transaction.
+                $lot->update(['close_t_id' => $sellItem->t_id]);
+            }
+        }
+    }
+
+    /**
+     * Parse a date string to "YYYY-MM-DD" or null.
+     * Returns null for "various", empty strings, or unparseable values.
+     */
+    private function normalizeDateOrNull(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $trimmed = trim($value);
+        if ($trimmed === '' || strtolower($trimmed) === 'various') {
+            return null;
+        }
+
+        // Already in YYYY-MM-DD
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $trimmed)) {
+            return $trimmed;
+        }
+
+        // Try PHP date parsing for common formats (MM/DD/YYYY, M/D/YY, etc.)
+        try {
+            $date = new \DateTime($trimmed);
+
+            return $date->format('Y-m-d');
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**

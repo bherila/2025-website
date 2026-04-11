@@ -36,6 +36,12 @@ interface MultiAccountImportModalProps {
   accounts: FinAccount[]
   onClose: () => void
   onSuccess: () => void
+  /**
+   * When set, the modal is operating in "single-account consolidated" mode.
+   * The specified account is pre-assigned to all detected form/link rows, and the
+   * title reflects the source account. The user can still reassign individual rows.
+   */
+  preselectedAccountId?: number | null
 }
 
 type Phase = 'upload' | 'polling' | 'assign' | 'done'
@@ -58,6 +64,7 @@ export default function MultiAccountImportModal({
   accounts,
   onClose,
   onSuccess,
+  preselectedAccountId = null,
 }: MultiAccountImportModalProps) {
   const [phase, setPhase] = useState<Phase>('upload')
   const [uploading, setUploading] = useState(false)
@@ -100,6 +107,8 @@ export default function MultiAccountImportModal({
           const parsed = Array.isArray(doc.parsed_data) ? (doc.parsed_data as Record<string, unknown>[]) : []
           const enriched: ParsedLink[] = doc.account_links.map((link, idx) => ({
             ...link,
+            // In single-account mode, apply the preselected account to any unresolved rows.
+            account_id: link.account_id ?? (preselectedAccountId ?? null),
             ai_identifier: (parsed[idx]?.account_identifier as string | undefined) ?? undefined,
             ai_account_name: (parsed[idx]?.account_name as string | undefined) ?? undefined,
           }))
@@ -130,7 +139,7 @@ export default function MultiAccountImportModal({
         }
       }
     },
-    [],
+    [preselectedAccountId],
   )
 
   const handleFileSelect = async (file: File) => {
@@ -162,8 +171,16 @@ export default function MultiAccountImportModal({
         .map(b => b.toString(16).padStart(2, '0'))
         .join('')
 
-      // Step 4: create the multi-account import job
-      const accountHints = accounts.map(a => ({
+      // Step 4: create the multi-account import job.
+      // In single-account mode, put the preselected account first so server-side matching
+      // prioritises it. Pass all other accounts as additional context hints.
+      const preselected = preselectedAccountId != null
+        ? accounts.find(a => a.acct_id === preselectedAccountId)
+        : null
+      const orderedAccounts = preselected
+        ? [preselected, ...accounts.filter(a => a.acct_id !== preselectedAccountId)]
+        : accounts
+      const accountHints = orderedAccounts.map(a => ({
         name: a.acct_name,
         last4: a.acct_number ? a.acct_number.slice(-4) : undefined,
       }))
@@ -228,14 +245,19 @@ export default function MultiAccountImportModal({
     <Dialog open={open} onOpenChange={open => !open && handleClose()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Multi-Account Import — {taxYear}</DialogTitle>
+          <DialogTitle>
+            {preselectedAccountId != null
+              ? `Import Consolidated 1099 — ${accounts.find(a => a.acct_id === preselectedAccountId)?.acct_name ?? 'Account'} — ${taxYear}`
+              : `Multi-Account Import — ${taxYear}`}
+          </DialogTitle>
         </DialogHeader>
 
         {phase === 'upload' && (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Upload a consolidated brokerage PDF (e.g. Fidelity Tax Reporting Statement) that contains
-              forms for multiple accounts. The AI will detect each account/form combination automatically.
+              {preselectedAccountId != null
+                ? 'Upload a consolidated brokerage PDF (e.g. Fidelity Tax Reporting Statement, Wealthfront 1099) for this account. The AI will detect each form type (1099-DIV, 1099-INT, 1099-B, etc.) automatically and import the transaction lots.'
+                : 'Upload a consolidated brokerage PDF (e.g. Fidelity Tax Reporting Statement) that contains forms for multiple accounts. The AI will detect each account/form combination automatically.'}
             </p>
             <div
               className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:bg-muted/30 transition-colors"
