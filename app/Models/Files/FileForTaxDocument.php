@@ -19,10 +19,28 @@ class FileForTaxDocument extends Model
 
     protected $table = 'fin_tax_documents';
 
+    /**
+     * All valid form_type values for fin_tax_documents.
+     *
+     * Two categories:
+     *   - Container type: `broker_1099` — used for consolidated brokerage PDFs that contain
+     *     multiple sub-forms (1099-DIV, 1099-INT, 1099-B) per account. The individual form
+     *     types are stored on fin_tax_document_accounts rows, not on the parent document.
+     *   - Leaf types: all others — represent a single standalone IRS form.
+     *
+     * When adding a new form type, update this constant AND ACCOUNT_FORM_TYPES (if account-linked)
+     * AND the TypeScript FORM_TYPE_LABELS / ACCOUNT_FORM_TYPES_1099 in tax-document.ts.
+     */
     public const FORM_TYPES = ['w2', 'w2c', '1099_int', '1099_int_c', '1099_div', '1099_div_c', '1099_misc', '1099_nec', '1099_r', '1099_b', 'broker_1099', 'k1', '1116'];
 
+    /** W-2 family form types (linked to employment entities, not accounts). */
     public const W2_FORM_TYPES = ['w2', 'w2c'];
 
+    /**
+     * Form types linked to financial accounts (not employment entities).
+     * Includes `broker_1099` — consolidated PDFs are account-linked even though
+     * their per-form data lives on fin_tax_document_accounts rows.
+     */
     public const ACCOUNT_FORM_TYPES = ['1099_int', '1099_int_c', '1099_div', '1099_div_c', '1099_misc', '1099_nec', '1099_r', '1099_b', 'broker_1099', 'k1', '1116'];
 
     protected $fillable = [
