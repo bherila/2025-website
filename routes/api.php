@@ -306,18 +306,23 @@ Route::middleware(['web', 'auth'])->get('/utility-bill-tracker/accounts/{account
 Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accountId}/bills/{billId}/link', [UtilityBillLinkingController::class, 'linkTransaction']);
 Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accountId}/bills/{billId}/unlink', [UtilityBillLinkingController::class, 'unlinkTransaction']);
 
-// Tax documents (W-2, W-2c, 1099-INT, 1099-INT-C, 1099-DIV, 1099-DIV-C)
+// Tax documents (W-2, W-2c, 1099-INT, 1099-INT-C, 1099-DIV, 1099-DIV-C, broker 1099, K-1, etc.)
 Route::middleware(['web', 'auth'])->get('/finance/tax-preview-data', [TaxPreviewDataController::class, 'index']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents', [TaxDocumentController::class, 'index']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents/prompt', [TaxDocumentController::class, 'getPromptInfo']);
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents/request-upload', [TaxDocumentController::class, 'requestUpload']);
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents/manual', [TaxDocumentController::class, 'storeManual']);
+Route::middleware(['web', 'auth'])->post('/finance/tax-documents/multi-account', [TaxDocumentController::class, 'storeMultiAccount']);
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents', [TaxDocumentController::class, 'store']);
+Route::middleware(['web', 'auth'])->get('/finance/tax-documents/all-reviewed', [TaxDocumentController::class, 'getAllReviewed']);
+Route::middleware(['web', 'auth'])->get('/finance/tax-documents/{id}', [TaxDocumentController::class, 'show']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents/{id}/download', [TaxDocumentController::class, 'download']);
 Route::middleware(['web', 'auth'])->delete('/finance/tax-documents/{id}', [TaxDocumentController::class, 'destroy']);
-Route::middleware(['web', 'auth'])->get('/finance/tax-documents/all-reviewed', [TaxDocumentController::class, 'getAllReviewed']);
 Route::middleware(['web', 'auth'])->put('/finance/tax-documents/{id}', [TaxDocumentController::class, 'update']);
 Route::middleware(['web', 'auth'])->put('/finance/tax-documents/{id}/mark-reviewed', [TaxDocumentController::class, 'markReviewed']);
+Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/accounts', [TaxDocumentController::class, 'confirmAccountLinks']);
+Route::middleware(['web', 'auth'])->patch('/finance/tax-documents/{id}/accounts/{linkId}', [TaxDocumentController::class, 'updateAccountLink']);
+Route::middleware(['web', 'auth'])->delete('/finance/tax-documents/{id}/accounts/{linkId}', [TaxDocumentController::class, 'destroyAccountLink']);
 
 // GenAI Import routes
 Route::middleware(['web', 'auth'])->post('/genai/import/request-upload', [GenAiImportController::class, 'requestUpload']);

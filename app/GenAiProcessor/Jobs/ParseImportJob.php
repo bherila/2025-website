@@ -8,8 +8,13 @@ use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Models\GenAiImportResult;
 use App\GenAiProcessor\Services\GenAiJobDispatcherService;
 use App\Models\Files\FileForTaxDocument;
+use App\Models\FinanceTool\FinAccountLineItems;
+use App\Models\FinanceTool\FinAccountLot;
+use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\TaxDocumentAccount;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
@@ -320,6 +325,9 @@ class ParseImportJob implements ShouldQueue
             case 'tax_document':
                 $this->createTaxDocumentResults($job, $data);
                 break;
+            case 'tax_form_multi_account_import':
+                $this->createMultiAccountTaxDocumentResults($job, $data);
+                break;
         }
     }
 
@@ -372,7 +380,7 @@ class ParseImportJob implements ShouldQueue
      */
     private function markLinkedTaxDocumentFailed(GenAiImportJob $job): void
     {
-        if ($job->job_type !== 'tax_document') {
+        if (! in_array($job->job_type, ['tax_document', 'tax_form_multi_account_import'])) {
             return;
         }
 
@@ -415,6 +423,282 @@ class ParseImportJob implements ShouldQueue
                 ]);
             }
         }
+    }
+
+    /**
+     * Handle results for a tax_form_multi_account_import job.
+     *
+     * The AI returns a JSON array — one element per account/form pair. Each element has:
+     *   account_identifier, account_name, form_type, tax_year, parsed_data
+     *
+     * This method:
+     * 1. Stores the full array on the parent fin_tax_documents.parsed_data.
+     * 2. Attempts server-side account matching (last-4 suffix, then name overlap).
+     * 3. Creates one fin_tax_document_accounts row per detected account/form pair.
+     *    Rows with no match have account_id = null; the user resolves them in the UI.
+     */
+    private function createMultiAccountTaxDocumentResults(GenAiImportJob $job, array $data): void
+    {
+        GenAiImportResult::create([
+            'job_id' => $job->id,
+            'result_index' => 0,
+            'result_json' => json_encode($data),
+            'status' => 'pending_review',
+        ]);
+
+        $context = $job->getContextArray();
+        $taxDocId = $context['tax_document_id'] ?? null;
+        if (! $taxDocId) {
+            return;
+        }
+
+        $taxDoc = FileForTaxDocument::find($taxDocId);
+        if (! $taxDoc || $taxDoc->genai_job_id !== $job->id) {
+            return;
+        }
+
+        // Load all accounts for this user for matching.
+        $userAccounts = FinAccounts::withoutGlobalScopes()
+            ->where('acct_owner', $taxDoc->user_id)
+            ->get(['acct_id', 'acct_name', 'acct_number']);
+
+        // Normalise the AI output: wrap a bare object in an array.
+        $entries = isset($data[0]) ? $data : [$data];
+
+        // Delete all existing lots linked to this document so re-processing is idempotent.
+        FinAccountLot::where('tax_document_id', $taxDoc->id)->delete();
+
+        foreach ($entries as $entry) {
+            $accountId = $this->matchAccount($entry, $userAccounts);
+
+            // Normalize form_type: validate against allowed set, fallback to 'broker_1099'.
+            $rawFormType = trim((string) ($entry['form_type'] ?? ''));
+            $formType = in_array($rawFormType, FileForTaxDocument::FORM_TYPES, true)
+                ? $rawFormType
+                : 'broker_1099';
+
+            // Normalize tax_year: clamp to a sane range.
+            $taxYear = (int) ($entry['tax_year'] ?? $context['tax_year'] ?? date('Y'));
+            if ($taxYear < 1900 || $taxYear > 2100) {
+                $taxYear = (int) ($context['tax_year'] ?? date('Y'));
+            }
+
+            TaxDocumentAccount::create([
+                'tax_document_id' => $taxDoc->id,
+                'account_id' => $accountId,
+                'form_type' => $formType,
+                'tax_year' => $taxYear,
+                'is_reviewed' => false,
+            ]);
+
+            // For 1099-B entries with a resolved account, import individual lot transactions.
+            if ($formType === '1099_b' && $accountId !== null) {
+                $transactions = $entry['parsed_data']['transactions'] ?? [];
+                if (is_array($transactions) && ! empty($transactions)) {
+                    $this->upsertLotsFromBroker($accountId, $transactions, $taxDoc->id);
+                }
+            }
+        }
+
+        $taxDoc->update([
+            'parsed_data' => $entries,
+            'genai_status' => 'parsed',
+        ]);
+    }
+
+    /**
+     * Upsert 1099-B transaction lots into fin_account_lots and fin_account_line_items.
+     *
+     * Lots are keyed by tax_document_id, so re-processing is idempotent:
+     * existing lots for this document were deleted before this method is called.
+     *
+     * @param  array<array<string,mixed>>  $transactions  Normalized lot entries from the AI
+     */
+    private function upsertLotsFromBroker(int $accountId, array $transactions, int $taxDocumentId): void
+    {
+        $now = now()->toDateTimeString();
+
+        foreach ($transactions as $tx) {
+            if (! is_array($tx)) {
+                continue;
+            }
+
+            $symbol = is_string($tx['symbol'] ?? null) ? trim($tx['symbol']) : null;
+            $description = is_string($tx['description'] ?? null) ? trim($tx['description']) : ($symbol ?? 'Unknown');
+            $quantity = is_numeric($tx['quantity'] ?? null) ? (float) $tx['quantity'] : null;
+            $saleDate = $this->normalizeDateOrNull($tx['sale_date'] ?? null);
+            $proceeds = is_numeric($tx['proceeds'] ?? null) ? (float) $tx['proceeds'] : null;
+            $costBasis = is_numeric($tx['cost_basis'] ?? null) ? (float) $tx['cost_basis'] : null;
+            $realizedGainLoss = is_numeric($tx['realized_gain_loss'] ?? null) ? (float) $tx['realized_gain_loss'] : null;
+            $washSaleDisallowed = is_numeric($tx['wash_sale_disallowed'] ?? null) ? (float) $tx['wash_sale_disallowed'] : 0.0;
+            $cusip = is_string($tx['cusip'] ?? null) && trim($tx['cusip']) !== '' ? trim($tx['cusip']) : null;
+
+            $purchaseDateRaw = $tx['purchase_date'] ?? null;
+            $purchaseDateNormalized = $this->normalizeDateOrNull($purchaseDateRaw);
+
+            // Determine is_short_term from the form_8949_box or explicit field.
+            $isShortTerm = null;
+            if (isset($tx['is_short_term'])) {
+                $isShortTerm = (bool) $tx['is_short_term'];
+            } elseif (isset($tx['form_8949_box'])) {
+                $box = strtoupper(trim((string) $tx['form_8949_box']));
+                if (in_array($box, ['A', 'B', 'C'], true)) {
+                    $isShortTerm = true;
+                } elseif (in_array($box, ['D', 'E', 'F'], true)) {
+                    $isShortTerm = false;
+                }
+            }
+
+            // Skip rows missing required fields.
+            if ($quantity === null || $saleDate === null || $proceeds === null || $costBasis === null) {
+                continue;
+            }
+
+            // Insert the closed lot.
+            $lot = FinAccountLot::create([
+                'acct_id' => $accountId,
+                'symbol' => $symbol ?? $description,
+                'description' => $description,
+                'quantity' => $quantity,
+                'purchase_date' => $purchaseDateNormalized ?? $saleDate, // fallback to sale date if "various"
+                'cost_basis' => $costBasis,
+                'cost_per_unit' => $quantity > 0 ? round($costBasis / $quantity, 8) : null,
+                'sale_date' => $saleDate,
+                'proceeds' => $proceeds,
+                'realized_gain_loss' => $realizedGainLoss ?? ($proceeds - $costBasis + $washSaleDisallowed),
+                'is_short_term' => $isShortTerm,
+                'lot_source' => '1099b',
+                'tax_document_id' => $taxDocumentId,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+            // Create a matching sell line item in fin_account_line_items.
+            // Only create if no matching sell transaction already exists (by date/symbol/qty/amount).
+            $existingSell = FinAccountLineItems::where('t_account', $accountId)
+                ->where('t_date', $saleDate)
+                ->where('t_symbol', $symbol ?? $description)
+                ->where('t_qty', -abs($quantity))
+                ->where('t_amt', -abs($proceeds))
+                ->exists();
+
+            if (! $existingSell) {
+                $sellItem = FinAccountLineItems::create([
+                    't_account' => $accountId,
+                    't_date' => $saleDate,
+                    't_type' => 'Sell',
+                    't_description' => $description,
+                    't_symbol' => $symbol ?? $description,
+                    't_cusip' => $cusip,
+                    't_qty' => -abs($quantity),
+                    't_price' => $quantity > 0 ? round($proceeds / $quantity, 6) : null,
+                    't_amt' => -abs($proceeds),
+                    't_basis' => $costBasis,
+                    't_realized_pl' => $realizedGainLoss ?? ($proceeds - $costBasis + $washSaleDisallowed),
+                    't_source' => '1099b',
+                ]);
+
+                // Link the lot to the sell transaction.
+                $lot->update(['close_t_id' => $sellItem->t_id]);
+            }
+        }
+    }
+
+    /**
+     * Parse a date string to "YYYY-MM-DD" or null.
+     * Returns null for "various", empty strings, or unparseable values.
+     */
+    private function normalizeDateOrNull(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $trimmed = trim($value);
+        if ($trimmed === '' || strtolower($trimmed) === 'various') {
+            return null;
+        }
+
+        // Already in YYYY-MM-DD
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $trimmed)) {
+            return $trimmed;
+        }
+
+        // Try PHP date parsing for common formats (MM/DD/YYYY, M/D/YY, etc.)
+        try {
+            $date = new \DateTime($trimmed);
+
+            return $date->format('Y-m-d');
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Try to match an AI-detected account entry to a fin_accounts row.
+     *
+     * Matching strategy (mirrors accountMatcher.ts):
+     * 1. Exact match on acct_number.
+     * 2. Last-4 suffix match; if unique → return it.
+     * 3. Name word-overlap disambiguation among last-4 candidates.
+     * 4. Returns null if no confident match.
+     *
+     * @param  array<string,mixed>  $entry
+     * @param  Collection  $accounts
+     */
+    private function matchAccount(array $entry, $accounts): ?int
+    {
+        $identifier = trim((string) ($entry['account_identifier'] ?? ''));
+        $aiName = strtolower(trim((string) ($entry['account_name'] ?? '')));
+
+        if ($identifier === '') {
+            return null;
+        }
+
+        // 1. Exact match on stored account number.
+        foreach ($accounts as $acct) {
+            if ($acct->acct_number && $acct->acct_number === $identifier) {
+                return $acct->acct_id;
+            }
+        }
+
+        // 2. Last-4 suffix match.
+        $last4 = preg_replace('/\D/', '', $identifier);
+        $last4 = $last4 !== '' ? substr($last4, -4) : '';
+
+        $candidates = $last4 !== ''
+            ? $accounts->filter(function ($acct) use ($last4): bool {
+                $stored = preg_replace('/\D/', '', (string) ($acct->acct_number ?? ''));
+
+                return $stored !== '' && str_ends_with($stored, $last4);
+            })
+            : collect();
+
+        if ($candidates->count() === 1) {
+            return $candidates->first()->acct_id;
+        }
+
+        // 3. Name word-overlap disambiguation among last-4 candidates (or all if no last4).
+        $pool = $candidates->isNotEmpty() ? $candidates : $accounts;
+
+        if ($aiName === '') {
+            return null;
+        }
+
+        $aiWords = array_filter(preg_split('/\s+/', $aiName) ?: []);
+        $bestScore = 0;
+        $bestId = null;
+
+        foreach ($pool as $acct) {
+            $acctWords = array_filter(preg_split('/\s+/', strtolower($acct->acct_name)) ?: []);
+            $overlap = count(array_intersect($aiWords, $acctWords));
+            if ($overlap > $bestScore) {
+                $bestScore = $overlap;
+                $bestId = $acct->acct_id;
+            }
+        }
+
+        return $bestScore > 0 ? $bestId : null;
     }
 }
 

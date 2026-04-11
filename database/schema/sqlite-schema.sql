@@ -359,8 +359,7 @@ CREATE TABLE `files_for_fin_accounts`(
   `download_history` TEXT,
   `created_at` TEXT,
   `updated_at` TEXT,
-  `deleted_at` TEXT,
-  file_hash TEXT NULL,
+  "file_hash" varchar,
   FOREIGN KEY(`uploaded_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
 );
 CREATE INDEX `files_for_fin_accounts_acct_id_index` ON `files_for_fin_accounts`(
@@ -409,7 +408,6 @@ CREATE TABLE `fin_accounts`(
   `acct_id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `acct_owner` TEXT NOT NULL,
   `acct_name` TEXT NOT NULL,
-  `when_deleted` TEXT,
   `acct_last_balance` TEXT NOT NULL DEFAULT '0',
   `acct_last_balance_date` TEXT,
   `acct_sort_order` INTEGER NOT NULL DEFAULT 0,
@@ -453,7 +451,6 @@ CREATE TABLE `fin_account_line_items`(
   `listing_exch` TEXT,
   `multiplier` INTEGER,
   `when_added` TEXT,
-  `when_deleted` TEXT,
   `t_harvested_amount` REAL,
   `t_is_not_duplicate` INTEGER NOT NULL DEFAULT 0,
   `t_date_posted` TEXT,
@@ -469,7 +466,6 @@ CREATE TABLE `fin_account_line_item_links`(
   `parent_t_id` INTEGER NOT NULL,
   `child_t_id` INTEGER NOT NULL,
   `when_added` TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `when_deleted` TEXT,
   UNIQUE(`parent_t_id`, `child_t_id`),
   FOREIGN KEY(`parent_t_id`) REFERENCES `fin_account_line_items`(`t_id`) ON DELETE CASCADE,
   FOREIGN KEY(`child_t_id`) REFERENCES `fin_account_line_items`(`t_id`) ON DELETE CASCADE
@@ -485,7 +481,6 @@ CREATE TABLE `fin_account_line_item_tag_map`(
   `t_id` INTEGER NOT NULL,
   `tag_id` INTEGER NOT NULL,
   `when_added` TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `when_deleted` TEXT,
   UNIQUE(`t_id`, `tag_id`),
   FOREIGN KEY(`t_id`) REFERENCES `fin_account_line_items`(`t_id`) ON DELETE CASCADE,
   FOREIGN KEY(`tag_id`) REFERENCES `fin_account_tag`(`tag_id`) ON DELETE CASCADE
@@ -823,41 +818,6 @@ CREATE INDEX `utility_bill_utility_account_id_index` ON `utility_bill`(
   `utility_account_id`
 );
 CREATE INDEX `utility_bill_t_id_index` ON `utility_bill`(`t_id`);
-CREATE TABLE `fin_account_lots`(
-  `lot_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-  `acct_id` INTEGER NOT NULL,
-  `symbol` TEXT NOT NULL,
-  `description` TEXT,
-  `quantity` REAL NOT NULL,
-  `purchase_date` TEXT NOT NULL,
-  `cost_basis` REAL NOT NULL,
-  `cost_per_unit` REAL,
-  `sale_date` TEXT,
-  `proceeds` REAL,
-  `realized_gain_loss` REAL,
-  `is_short_term` INTEGER,
-  `lot_source` TEXT,
-  `statement_id` INTEGER,
-  `open_t_id` INTEGER,
-  `close_t_id` INTEGER,
-  `created_at` TEXT,
-  `updated_at` TEXT,
-  FOREIGN KEY(`acct_id`) REFERENCES `fin_accounts`(`acct_id`) ON DELETE CASCADE,
-  FOREIGN KEY(`statement_id`) REFERENCES `fin_statements`(`statement_id`) ON DELETE SET NULL,
-  FOREIGN KEY(`open_t_id`) REFERENCES `fin_account_line_items`(`t_id`) ON DELETE SET NULL,
-  FOREIGN KEY(`close_t_id`) REFERENCES `fin_account_line_items`(`t_id`) ON DELETE SET NULL
-);
-CREATE INDEX `fin_account_lots_acct_id_index` ON `fin_account_lots`(`acct_id`);
-CREATE INDEX `fin_account_lots_symbol_index` ON `fin_account_lots`(`symbol`);
-CREATE INDEX `fin_account_lots_sale_date_index` ON `fin_account_lots`(
-  `sale_date`
-);
-CREATE INDEX `fin_account_lots_open_t_id_index` ON `fin_account_lots`(
-  `open_t_id`
-);
-CREATE INDEX `fin_account_lots_close_t_id_index` ON `fin_account_lots`(
-  `close_t_id`
-);
 CREATE TABLE `verification`(
   `id` TEXT PRIMARY KEY NOT NULL,
   `identifier` TEXT NOT NULL,
@@ -988,7 +948,6 @@ CREATE TABLE IF NOT EXISTS "fin_rules"(
   "stop_processing_if_match" tinyint(1) not null default '0',
   "created_at" datetime,
   "updated_at" datetime,
-  "deleted_at" datetime,
   foreign key("user_id") references "users"("id")
 );
 CREATE INDEX "fin_rules_user_id_index" on "fin_rules"("user_id");
@@ -1162,7 +1121,6 @@ CREATE TABLE IF NOT EXISTS "fin_account_tag"(
   `tag_color` TEXT NOT NULL,
   `tag_label` TEXT NOT NULL,
   `when_added` TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `when_deleted` TEXT,
   `tax_characteristic` varchar check(`tax_characteristic` IN('business_income','business_returns','sce_advertising','sce_car_truck','sce_commissions_fees','sce_contract_labor','sce_depletion','sce_depreciation','sce_employee_benefits','sce_insurance','sce_interest_mortgage','sce_interest_other','sce_legal_professional','sce_office_expenses','sce_pension','sce_rent_vehicles','sce_rent_property','sce_repairs_maintenance','sce_supplies','sce_taxes_licenses','sce_travel','sce_meals','sce_utilities','sce_wages','sce_other','scho_rent','scho_mortgage_interest','scho_real_estate_taxes','scho_insurance','scho_utilities','scho_repairs_maintenance','scho_security','scho_depreciation','scho_cleaning','scho_hoa','scho_casualty_losses','interest','ordinary_dividend','qualified_dividend','other_ordinary_income','w2_wages','w2_other_comp','us_government_interest')),
   `employment_entity_id` INTEGER NULL REFERENCES fin_employment_entity(id) ON DELETE SET NULL,
   UNIQUE(`tag_userid`, `tag_label`)
@@ -1229,7 +1187,6 @@ CREATE TABLE IF NOT EXISTS "fin_payslip"(
   `other` TEXT,
   `created_at` TEXT,
   `updated_at` TEXT,
-  `deleted_at` TEXT,
   `employment_entity_id` INTEGER NULL REFERENCES fin_employment_entity(id) ON DELETE SET NULL,
   UNIQUE(`uid`, `period_start`, `period_end`, `pay_date`)
 );
@@ -1268,7 +1225,6 @@ CREATE TABLE IF NOT EXISTS "fin_tax_documents"(
   `download_history` TEXT NULL,
   `created_at` TEXT,
   `updated_at` TEXT,
-  `deleted_at` TEXT,
   FOREIGN KEY(`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
 );
 CREATE INDEX `fin_tax_documents_user_id_index` ON `fin_tax_documents`(
@@ -1289,10 +1245,75 @@ CREATE INDEX `fin_tax_documents_form_type_index` ON `fin_tax_documents`(
 CREATE INDEX `fin_tax_documents_genai_job_id_index` ON `fin_tax_documents`(
   `genai_job_id`
 );
+CREATE TABLE IF NOT EXISTS "fin_tax_document_accounts"(
+  "id" integer primary key autoincrement not null,
+  "tax_document_id" integer not null,
+  "account_id" integer,
+  "form_type" varchar not null,
+  "tax_year" integer not null,
+  "is_reviewed" tinyint(1) not null default '0',
+  "notes" text,
+  "created_at" datetime,
+  "updated_at" datetime,
+  foreign key("tax_document_id") references "fin_tax_documents"("id") on delete cascade,
+  foreign key("account_id") references "fin_accounts"("acct_id") on delete set null
+);
+CREATE INDEX "fin_tax_document_accounts_tax_document_id_index" on "fin_tax_document_accounts"(
+  "tax_document_id"
+);
+CREATE INDEX "fin_tax_document_accounts_account_id_index" on "fin_tax_document_accounts"(
+  "account_id"
+);
+CREATE INDEX "fin_tax_document_accounts_account_id_tax_year_index" on "fin_tax_document_accounts"(
+  "account_id",
+  "tax_year"
+);
+CREATE TABLE IF NOT EXISTS "fin_account_lots"(
+  "lot_id" integer primary key autoincrement not null,
+  "acct_id" integer not null,
+  "symbol" text not null,
+  "description" text,
+  "quantity" real not null,
+  "purchase_date" text not null,
+  "cost_basis" real not null,
+  "cost_per_unit" real,
+  "sale_date" text,
+  "proceeds" real,
+  "realized_gain_loss" real,
+  "is_short_term" integer,
+  "lot_source" text,
+  "statement_id" integer,
+  "open_t_id" integer,
+  "close_t_id" integer,
+  "created_at" text,
+  "updated_at" text,
+  "tax_document_id" integer,
+  foreign key("close_t_id") references fin_account_line_items("t_id") on delete set null on update no action,
+  foreign key("open_t_id") references fin_account_line_items("t_id") on delete set null on update no action,
+  foreign key("statement_id") references fin_statements("statement_id") on delete set null on update no action,
+  foreign key("acct_id") references fin_accounts("acct_id") on delete cascade on update no action,
+  foreign key("tax_document_id") references "fin_tax_documents"("id") on delete set null
+);
+CREATE INDEX "fin_account_lots_acct_id_index" on "fin_account_lots"("acct_id");
+CREATE INDEX "fin_account_lots_close_t_id_index" on "fin_account_lots"(
+  "close_t_id"
+);
+CREATE INDEX "fin_account_lots_open_t_id_index" on "fin_account_lots"(
+  "open_t_id"
+);
+CREATE INDEX "fin_account_lots_sale_date_index" on "fin_account_lots"(
+  "sale_date"
+);
+CREATE INDEX "fin_account_lots_symbol_index" on "fin_account_lots"("symbol");
+CREATE INDEX "fin_account_lots_tax_document_id_index" on "fin_account_lots"(
+  "tax_document_id"
+);
+CREATE INDEX "files_for_fin_accounts_file_hash_index" on "files_for_fin_accounts"(
+  "file_hash"
+);
 
 INSERT INTO migrations VALUES(1,'0001_01_01_000000_create_schema_baseline',1);
 INSERT INTO migrations VALUES(2,'2026_03_05_000000_create_fin_account_lots_table',2);
-INSERT INTO migrations VALUES(3,'2026_03_05_001906_add_hash_and_statement_id_to_finance_tables',2);
 INSERT INTO migrations VALUES(4,'2026_03_05_100000_add_transaction_ids_to_fin_account_lots',2);
 INSERT INTO migrations VALUES(5,'2026_01_28_220930_update_client_invoice_lines_table',3);
 INSERT INTO migrations VALUES(6,'2026_01_29_031451_change_quantity_column_to_varchar_in_client_invoice_lines',3);
@@ -1340,3 +1361,7 @@ INSERT INTO migrations VALUES(47,'2026_04_08_100003_create_fin_payslip_deposits_
 INSERT INTO migrations VALUES(48,'2026_04_10_100046_add_1099_nec_and_1099_r_to_fin_tax_documents_form_type',4);
 INSERT INTO migrations VALUES(49,'2026_04_10_200000_add_broker_form_types_to_fin_tax_documents',4);
 INSERT INTO migrations VALUES(50,'2026_04_10_200001_make_tax_document_file_fields_nullable',4);
+INSERT INTO migrations VALUES(51,'2026_04_11_000001_convert_finance_domain_to_hard_delete',4);
+INSERT INTO migrations VALUES(52,'2026_04_11_062652_create_fin_tax_document_accounts_table',4);
+INSERT INTO migrations VALUES(53,'2026_04_11_192648_add_tax_document_id_to_fin_account_lots',4);
+INSERT INTO migrations VALUES(54,'2026_03_05_001906_add_hash_and_statement_id_to_finance_tables',2);
