@@ -503,8 +503,8 @@ class TaxDocumentControllerTest extends TestCase
         ]);
 
         $response->assertStatus(201);
-        $response->assertJsonFragment(['account_id' => $account->acct_id]);
-        $this->assertDatabaseHas('fin_tax_documents', [
+        // account_id is stored on the join table, not the parent row.
+        $this->assertDatabaseHas('fin_tax_document_accounts', [
             'form_type' => '1099_int',
             'account_id' => $account->acct_id,
         ]);

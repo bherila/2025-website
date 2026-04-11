@@ -319,6 +319,10 @@ export interface TaxDocumentAccountLink {
   account_id: number | null
   form_type: string
   tax_year: number
+  /** AI-detected account identifier stored on the join row (e.g. last-4 digits). */
+  ai_identifier: string | null
+  /** AI-detected account name stored on the join row. */
+  ai_account_name: string | null
   is_reviewed: boolean
   notes: string | null
   account: { acct_id: number; acct_name: string } | null

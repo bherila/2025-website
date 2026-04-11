@@ -44,7 +44,7 @@ interface MultiAccountImportModalProps {
   preselectedAccountId?: number | null
 }
 
-type Phase = 'upload' | 'polling' | 'assign' | 'done'
+type Phase = 'upload' | 'polling' | 'assign'
 
 interface ParsedLink {
   /** Matches a TaxDocumentAccountLink once the job finishes */
@@ -52,9 +52,10 @@ interface ParsedLink {
   account_id: number | null
   form_type: string
   tax_year: number
-  /** AI-detected account identifier (for display / matching hint) */
-  ai_identifier: string | undefined
-  ai_account_name: string | undefined
+  /** AI-detected account identifier — stored directly on the join row. */
+  ai_identifier: string | null
+  /** AI-detected account name — stored directly on the join row. */
+  ai_account_name: string | null
   account: { acct_id: number; acct_name: string } | null
 }
 
@@ -99,18 +100,15 @@ export default function MultiAccountImportModal({
           id: number
           genai_status: string | null
           account_links: TaxDocumentAccountLink[]
-          parsed_data: unknown
         }
 
         if (doc.genai_status === 'parsed') {
           // Build editable link list from the join table rows.
-          const parsed = Array.isArray(doc.parsed_data) ? (doc.parsed_data as Record<string, unknown>[]) : []
-          const enriched: ParsedLink[] = doc.account_links.map((link, idx) => ({
+          // ai_identifier and ai_account_name are now stored directly on each link row.
+          const enriched: ParsedLink[] = doc.account_links.map(link => ({
             ...link,
             // In single-account mode, apply the preselected account to any unresolved rows.
             account_id: link.account_id ?? (preselectedAccountId ?? null),
-            ai_identifier: (parsed[idx]?.account_identifier as string | undefined) ?? undefined,
-            ai_account_name: (parsed[idx]?.account_name as string | undefined) ?? undefined,
           }))
           setLinks(enriched)
           setPhase('assign')
@@ -229,6 +227,8 @@ export default function MultiAccountImportModal({
           account_id: l.account_id,
           form_type: l.form_type,
           tax_year: l.tax_year,
+          ai_identifier: l.ai_identifier ?? undefined,
+          ai_account_name: l.ai_account_name ?? undefined,
         })),
       })
       toast.success('Multi-account import confirmed')
@@ -385,7 +385,7 @@ export default function MultiAccountImportModal({
 
         <DialogFooter>
           <Button variant="outline" onClick={handleClose} disabled={confirming}>
-            {phase === 'done' ? 'Close' : 'Cancel'}
+            Cancel
           </Button>
           {phase === 'assign' && (
             <Button onClick={handleConfirm} disabled={confirming}>
