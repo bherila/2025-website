@@ -157,6 +157,20 @@ class K1LegacyTransformerTest extends TestCase
         $this->assertSame('legacy_migration', $result['extraction']['source']);
     }
 
+    public function test_transform_preserves_letter_only_codes_in_unknown_bucket(): void
+    {
+        // "AE" in other_coded_items has no box-number prefix, so it can't be mapped
+        // to a specific codes[] key. It must land in codes["_unknown"] rather than
+        // being silently dropped.
+        $result = K1LegacyTransformer::transform($this->legacySample());
+
+        $this->assertArrayHasKey('_unknown', $result['codes'], 'Letter-only codes must be preserved in _unknown bucket');
+        $unknownCodes = $result['codes']['_unknown'];
+        $this->assertCount(1, $unknownCodes);
+        $this->assertSame('AE', $unknownCodes[0]['code']);
+        $this->assertSame('1049', $unknownCodes[0]['value']);
+    }
+
     public function test_transform_is_idempotent_via_is_legacy_guard(): void
     {
         $legacy = $this->legacySample();

@@ -3,13 +3,19 @@
 namespace App\Services\Finance;
 
 /**
- * Transforms legacy flat-format K-1 parsed_data records to the canonical
- * schemaVersion "2026.1" FK1StructuredData shape.
+ * Transforms legacy flat-format K-1 parsed_data records into the canonical
+ * structured FK1 data shape used by the application.
  *
  * Legacy records lack a `schemaVersion` key and use named flat keys like
  * `box1_ordinary_income`, `partner_name`, `other_coded_items`, etc.
- * New records (produced by GenAiJobDispatcherService::coerceK1Args) carry
- * `schemaVersion: "2026.1"` with `fields` and `codes` dicts.
+ * This transformer migrates those records into the canonical `fields`/`codes`
+ * structure while intentionally emitting `schemaVersion: "1.0"` so migrated
+ * records remain distinguishable from AI-generated records, which carry
+ * `schemaVersion: "2026.1"` via GenAiJobDispatcherService::coerceK1Args.
+ *
+ * Both "1.0" and "2026.1" records use the same `fields`/`codes` shape and
+ * are treated as canonical by all readers. Any code reading K-1 `parsed_data`
+ * should call isLegacy() + transform() defensively before accessing fields/codes.
  *
  * Usage:
  *   if (K1LegacyTransformer::isLegacy($parsedData)) {
@@ -102,6 +108,12 @@ class K1LegacyTransformer
             } elseif ($rawCode !== '' && (is_numeric($rawCode) || preg_match('/^\d+[a-z]$/', $rawCode))) {
                 // Plain box number — treat as field value
                 $fields[$rawCode] = ['value' => $amount];
+            } elseif ($rawCode !== '') {
+                // Letter-only or unrecognised code (e.g. "AE" without a box-number prefix).
+                // Rather than silently dropping data, preserve it under a reserved key so
+                // downstream readers can inspect or report on it. legacyFields is the
+                // authoritative recovery path.
+                $codes['_unknown'][] = ['code' => $rawCode, 'value' => $amount, 'notes' => $desc];
             }
         }
 
