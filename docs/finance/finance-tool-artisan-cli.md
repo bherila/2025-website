@@ -107,12 +107,14 @@ Insert transactions from a JSON payload read from stdin.
 cat transactions.json | php artisan finance:import-transactions
   [--account=ACCT_ID]
   [--dry-run]
+  [--schema]
   [--format=table|json]
 ```
 
 **Options**
 - `--account` — default account ID if not specified per-row in the payload
 - `--dry-run` — validate and display what would be inserted; do not commit
+- `--schema` — print the expected JSON input schema to stdout and exit (useful for LLM context)
 - `--format` — output format for the result summary (default: `table`)
 
 **Input JSON format (stdin):**
@@ -204,6 +206,19 @@ FinAccounts::withoutGlobalScopes()
 
 `finance:import-transactions` should check for existing transactions with matching `(t_account, t_date, t_type, t_amt, t_symbol)` before inserting to avoid double-importing the same data. The `t_is_not_duplicate` flag should be set appropriately.
 
+### `--help` and `--schema`
+
+All Artisan commands expose `--help` / `-h` for free via Symfony Console — it prints the command description, arguments, and options. No custom work is needed.
+
+Import commands (`finance:import-transactions`, `finance:tax-import`) additionally expose `--schema`, which prints the expected JSON input format to stdout and exits immediately. This is intended for LLM context injection:
+
+```bash
+# Teach Claude the expected format before generating import data
+php artisan finance:import-transactions --schema
+```
+
+The schema is defined as a constant on the command class (not duplicated in docs). `BaseFinanceCommand` provides `emitSchema(array $schema): never` to handle output and exit consistently.
+
 ### Base class
 
 All commands extend `App\Console\Commands\Finance\BaseFinanceCommand`, which provides:
@@ -217,6 +232,7 @@ All commands extend `App\Console\Commands\Finance\BaseFinanceCommand`, which pro
 | `outputJson($data)` | Pretty-printed JSON to stdout |
 | `readJsonFromStdin()` | Read + decode JSON payload from stdin |
 | `validateFormat()` | Validate `--format` option value |
+| `emitSchema($schema)` | Print JSON schema to stdout and exit (for `--schema` flag) |
 
 ---
 
@@ -238,3 +254,5 @@ cat /tmp/missing.json | php artisan finance:import-transactions --account=5
 ```
 
 This complements the GenAI-based PDF import tools in the UI, giving power users a scriptable, auditable path that doesn't require a browser session.
+
+**Out of scope for the CLI:** Uploading documents (PDFs, statements) must go through the web UI and the background job system (`ParseImportJob`). The CLI operates only on already-parsed structured data.
