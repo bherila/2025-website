@@ -19,7 +19,8 @@
 ```bash
 # Setup
 composer install && pnpm install
-cp .env.example .env && php artisan key:generate && php artisan migrate --database=sqlite
+cp .env.example .env && php artisan key:generate
+# Then ask the user before running migrations — see Database Migrations rule below
 
 # Development (preferred — runs all services concurrently)
 composer dev
@@ -293,8 +294,12 @@ protected function isAccessible(User $user, ?string $path = null): bool
 - Avoid `DB::`; prefer `Model::query()`. Generate code that leverages Laravel's ORM capabilities rather than bypassing them.
 - Generate code that prevents N+1 query problems by using eager loading.
 - Use Laravel's query builder for very complex database operations.
-- Update the schema dump via `php artisan schema:dump --database=sqlite` after migrations and do **NOT** use the `--prune` flag.
-- **ALWAYS pass `--database=sqlite` to every `migrate` and `schema:dump` command** — the `.env` may point to a staging/production MySQL host. Omitting this flag risks running migrations against real data shared with other developers.
+- **NEVER run `php artisan migrate` or `php artisan schema:dump` unless the user explicitly requests it.**
+- When the user explicitly asks to run migrations or dump the schema, **always** pass `--database=sqlite --no-interaction`. The `.env` may point to a staging/production MySQL host; omitting this flag risks running against real data.
+  ```bash
+  php artisan migrate --database=sqlite --no-interaction
+  php artisan schema:dump --database=sqlite  # never --prune
+  ```
 
 ### Model Creation
 

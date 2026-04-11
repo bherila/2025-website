@@ -91,10 +91,13 @@ The base `TestCase` class provides helper methods:
 
 ## Schema Management
 
-When you add new migrations to production:
-1. Run migrations on MySQL: `php artisan migrate`
-2. Dump the new schema: `php artisan schema:dump` (**NEVER** use the `--prune` flag, as we must keep all migrations)
-3. Update `database/schema/sqlite-schema.sql` with equivalent SQLite syntax if needed.
+**NEVER run migrations or schema dumps unless the user explicitly requests it.**
+
+When the user explicitly asks to run migrations or update the schema dump:
+1. Run migrations against SQLite only: `php artisan migrate --database=sqlite --no-interaction`
+2. Dump the schema against SQLite only: `php artisan schema:dump --database=sqlite` (**NEVER** use `--prune`)
+
+Always pass `--database=sqlite` explicitly — the `.env` may point to a staging/production MySQL host, and omitting this flag risks running against real data.
 
 ## Troubleshooting
 
