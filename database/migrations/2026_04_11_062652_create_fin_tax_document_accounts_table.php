@@ -10,8 +10,9 @@ use Illuminate\Support\Facades\Schema;
  * fin_tax_documents.account_id rows so no data is lost.
  *
  * After this migration:
- * - All document–account associations are canonical on fin_tax_document_accounts.
- * - fin_tax_documents.account_id is a legacy column; app code no longer reads or writes it.
+ * - fin_tax_document_accounts is the canonical source for document–account associations.
+ * - fin_tax_documents.account_id is kept as a legacy column for backwards compatibility;
+ *   single-account store/storeManual still write it alongside creating a join row.
  * - is_reviewed and notes are backfilled to the join row per existing data.
  */
 return new class extends Migration
@@ -37,6 +38,10 @@ return new class extends Migration
                 ->references('acct_id')
                 ->on('fin_accounts')
                 ->nullOnDelete();
+
+            $table->index('tax_document_id');
+            $table->index('account_id');
+            $table->index(['account_id', 'tax_year']);
         });
 
         // Backfill: seed one join row per existing document that already has account_id set.

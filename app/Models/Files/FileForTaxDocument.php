@@ -74,7 +74,7 @@ class FileForTaxDocument extends Model
     /** Account links — canonical source of truth for which accounts this document belongs to. */
     public function accountLinks(): HasMany
     {
-        return $this->hasMany(TaxDocumentAccount::class, 'tax_document_id');
+        return $this->hasMany(TaxDocumentAccount::class, 'tax_document_id')->orderBy('id');
     }
 
     public static function generateS3Path(int $userId, string $storedFilename): string

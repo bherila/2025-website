@@ -314,10 +314,10 @@ Route::middleware(['web', 'auth'])->post('/finance/tax-documents/request-upload'
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents/manual', [TaxDocumentController::class, 'storeManual']);
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents/multi-account', [TaxDocumentController::class, 'storeMultiAccount']);
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents', [TaxDocumentController::class, 'store']);
+Route::middleware(['web', 'auth'])->get('/finance/tax-documents/all-reviewed', [TaxDocumentController::class, 'getAllReviewed']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents/{id}', [TaxDocumentController::class, 'show']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents/{id}/download', [TaxDocumentController::class, 'download']);
 Route::middleware(['web', 'auth'])->delete('/finance/tax-documents/{id}', [TaxDocumentController::class, 'destroy']);
-Route::middleware(['web', 'auth'])->get('/finance/tax-documents/all-reviewed', [TaxDocumentController::class, 'getAllReviewed']);
 Route::middleware(['web', 'auth'])->put('/finance/tax-documents/{id}', [TaxDocumentController::class, 'update']);
 Route::middleware(['web', 'auth'])->put('/finance/tax-documents/{id}/mark-reviewed', [TaxDocumentController::class, 'markReviewed']);
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/accounts', [TaxDocumentController::class, 'confirmAccountLinks']);

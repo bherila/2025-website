@@ -466,11 +466,23 @@ class ParseImportJob implements ShouldQueue
         foreach ($entries as $entry) {
             $accountId = $this->matchAccount($entry, $userAccounts);
 
+            // Normalize form_type: validate against allowed set, fallback to 'broker_1099'.
+            $rawFormType = trim((string) ($entry['form_type'] ?? ''));
+            $formType = in_array($rawFormType, FileForTaxDocument::FORM_TYPES, true)
+                ? $rawFormType
+                : 'broker_1099';
+
+            // Normalize tax_year: clamp to a sane range.
+            $taxYear = (int) ($entry['tax_year'] ?? $context['tax_year'] ?? date('Y'));
+            if ($taxYear < 1900 || $taxYear > 2100) {
+                $taxYear = (int) ($context['tax_year'] ?? date('Y'));
+            }
+
             TaxDocumentAccount::create([
                 'tax_document_id' => $taxDoc->id,
                 'account_id' => $accountId,
-                'form_type' => $entry['form_type'] ?? 'broker_1099',
-                'tax_year' => (int) ($entry['tax_year'] ?? $context['tax_year'] ?? date('Y')),
+                'form_type' => $formType,
+                'tax_year' => $taxYear,
                 'is_reviewed' => false,
             ]);
         }

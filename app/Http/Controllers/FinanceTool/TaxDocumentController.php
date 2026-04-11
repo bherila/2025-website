@@ -307,7 +307,7 @@ class TaxDocumentController extends Controller
 
         $request->validate([
             'links' => 'required|array|min:1',
-            'links.*.account_id' => 'nullable|integer',
+            'links.*.account_id' => 'nullable|integer|min:1',
             'links.*.form_type' => 'required|string|in:'.implode(',', FileForTaxDocument::FORM_TYPES),
             'links.*.tax_year' => 'required|integer|min:1900|max:2100',
         ]);
@@ -317,7 +317,7 @@ class TaxDocumentController extends Controller
         DB::transaction(function () use ($doc, $request, $userId): void {
             // Verify ownership of any provided account_id values.
             foreach ($request->links as $link) {
-                if (! empty($link['account_id'])) {
+                if (($link['account_id'] ?? null) !== null) {
                     FinAccounts::withoutGlobalScopes()
                         ->where('acct_id', $link['account_id'])
                         ->where('acct_owner', $userId)
@@ -359,12 +359,12 @@ class TaxDocumentController extends Controller
             ->firstOrFail();
 
         $request->validate([
-            'account_id' => 'nullable|integer',
+            'account_id' => 'nullable|integer|min:1',
             'is_reviewed' => 'nullable|boolean',
             'notes' => 'nullable|string',
         ]);
 
-        if ($request->has('account_id') && ! empty($request->account_id)) {
+        if ($request->has('account_id') && $request->account_id !== null) {
             FinAccounts::withoutGlobalScopes()
                 ->where('acct_id', $request->account_id)
                 ->where('acct_owner', Auth::id())
@@ -401,15 +401,24 @@ class TaxDocumentController extends Controller
             ->where('tax_document_id', $doc->id)
             ->firstOrFail();
 
-        DB::transaction(function () use ($doc, $link): void {
+        $deleteDoc = false;
+
+        DB::transaction(function () use ($doc, $link, &$deleteDoc): void {
             $link->delete();
 
             $remaining = TaxDocumentAccount::where('tax_document_id', $doc->id)->count();
             if ($remaining === 0) {
-                // Last link removed — clean up the parent document and its S3 file.
-                $this->fileService->deleteFileRecord($doc);
+                // Last link removed — delete the parent document DB row inside the transaction.
+                $doc->delete();
+                $deleteDoc = true;
             }
         });
+
+        // Defer S3 deletion until after the DB transaction has committed to avoid
+        // leaving the DB row intact but the S3 object already deleted on rollback.
+        if ($deleteDoc && $doc->s3_path) {
+            $this->fileService->deleteFile($doc->s3_path);
+        }
 
         return response()->json(['success' => true]);
     }
@@ -594,12 +603,15 @@ class TaxDocumentController extends Controller
 
         $doc->save();
 
-        // Write-through: keep single account link in sync for single-account documents.
+        // Write-through: keep account links in sync for notes/review state.
         if ($request->has('notes') || $request->has('is_reviewed')) {
-            $updates = array_filter([
-                'notes' => $request->has('notes') ? $request->notes : null,
-                'is_reviewed' => $request->has('is_reviewed') ? $request->boolean('is_reviewed') : null,
-            ], fn ($v) => $v !== null);
+            $updates = [];
+            if ($request->has('notes')) {
+                $updates['notes'] = $request->notes;
+            }
+            if ($request->has('is_reviewed')) {
+                $updates['is_reviewed'] = $request->boolean('is_reviewed');
+            }
             if (! empty($updates)) {
                 $doc->accountLinks()->update($updates);
             }
