@@ -158,7 +158,6 @@ class TaxDocumentController extends Controller
                 'tax_year' => $request->tax_year,
                 'form_type' => $formType,
                 'employment_entity_id' => $request->employment_entity_id,
-                'account_id' => $request->account_id,
                 'original_filename' => $request->original_filename,
                 'stored_filename' => $storedFilename,
                 's3_path' => $s3Key,
@@ -310,6 +309,8 @@ class TaxDocumentController extends Controller
             'links.*.account_id' => 'nullable|integer|min:1',
             'links.*.form_type' => 'required|string|in:'.implode(',', FileForTaxDocument::FORM_TYPES),
             'links.*.tax_year' => 'required|integer|min:1900|max:2100',
+            'links.*.ai_identifier' => 'nullable|string|max:100',
+            'links.*.ai_account_name' => 'nullable|string|max:255',
         ]);
 
         $userId = Auth::id();
@@ -334,6 +335,8 @@ class TaxDocumentController extends Controller
                     'account_id' => $link['account_id'] ?? null,
                     'form_type' => $link['form_type'],
                     'tax_year' => $link['tax_year'],
+                    'ai_identifier' => $link['ai_identifier'] ?? null,
+                    'ai_account_name' => $link['ai_account_name'] ?? null,
                     'is_reviewed' => false,
                 ]);
             }
@@ -497,9 +500,6 @@ class TaxDocumentController extends Controller
                 'form_type' => $formType,
                 'employment_entity_id' => in_array($formType, FileForTaxDocument::W2_FORM_TYPES, true)
                     ? $request->employment_entity_id
-                    : null,
-                'account_id' => in_array($formType, FileForTaxDocument::ACCOUNT_FORM_TYPES, true)
-                    ? $request->account_id
                     : null,
                 'original_filename' => 'Manual entry',
                 'stored_filename' => 'manual-entry',

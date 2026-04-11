@@ -483,11 +483,18 @@ class ParseImportJob implements ShouldQueue
                 $taxYear = (int) ($context['tax_year'] ?? date('Y'));
             }
 
+            // Store the AI-detected account identifier and name directly on the join row
+            // so the UI can display them without positional index correlation with parsed_data.
+            $aiIdentifier = is_string($entry['account_identifier'] ?? null) ? trim($entry['account_identifier']) : null;
+            $aiAccountName = is_string($entry['account_name'] ?? null) ? trim($entry['account_name']) : null;
+
             TaxDocumentAccount::create([
                 'tax_document_id' => $taxDoc->id,
                 'account_id' => $accountId,
                 'form_type' => $formType,
                 'tax_year' => $taxYear,
+                'ai_identifier' => $aiIdentifier ?: null,
+                'ai_account_name' => $aiAccountName ?: null,
                 'is_reviewed' => false,
             ]);
 
