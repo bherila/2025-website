@@ -16,7 +16,6 @@ class ListTags extends Tool
     public function handle(Request $request): Response
     {
         $tags = FinAccountTag::where('tag_userid', Auth::id())
-            ->whereNull('when_deleted')
             ->get(['tag_id', 'tag_label', 'tag_color', 'tax_characteristic', 'employment_entity_id']);
 
         return Response::json($tags);

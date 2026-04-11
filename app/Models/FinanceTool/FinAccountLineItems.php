@@ -54,8 +54,7 @@ class FinAccountLineItems extends Model
 
     public function tags()
     {
-        return $this->belongsToMany(FinAccountTag::class, 'fin_account_line_item_tag_map', 't_id', 'tag_id')
-            ->wherePivotNull('when_deleted');
+        return $this->belongsToMany(FinAccountTag::class, 'fin_account_line_item_tag_map', 't_id', 'tag_id');
     }
 
     /**
@@ -63,8 +62,7 @@ class FinAccountLineItems extends Model
      */
     public function childLinks()
     {
-        return $this->hasMany(FinAccountLineItemLink::class, 'parent_t_id', 't_id')
-            ->whereNull('when_deleted');
+        return $this->hasMany(FinAccountLineItemLink::class, 'parent_t_id', 't_id');
     }
 
     /**
@@ -72,8 +70,7 @@ class FinAccountLineItems extends Model
      */
     public function parentLinks()
     {
-        return $this->hasMany(FinAccountLineItemLink::class, 'child_t_id', 't_id')
-            ->whereNull('when_deleted');
+        return $this->hasMany(FinAccountLineItemLink::class, 'child_t_id', 't_id');
     }
 
     /**
@@ -88,7 +85,7 @@ class FinAccountLineItems extends Model
             'child_t_id',
             't_id',
             't_id'
-        )->wherePivotNull('when_deleted');
+        );
     }
 
     /**
@@ -103,7 +100,7 @@ class FinAccountLineItems extends Model
             'parent_t_id',
             't_id',
             't_id'
-        )->wherePivotNull('when_deleted');
+        );
     }
 
     /**

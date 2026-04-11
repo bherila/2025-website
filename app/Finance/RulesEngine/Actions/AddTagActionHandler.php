@@ -14,9 +14,8 @@ class AddTagActionHandler implements RuleActionHandlerInterface
     {
         $tagId = (int) $action->target;
 
-        FinAccountLineItemTagMap::updateOrCreate(
+        FinAccountLineItemTagMap::firstOrCreate(
             ['t_id' => $tx->t_id, 'tag_id' => $tagId],
-            ['when_deleted' => null],
         );
 
         return new ActionResult(applied: true, summary: "Added tag {$tagId}");

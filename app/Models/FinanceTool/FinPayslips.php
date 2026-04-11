@@ -6,7 +6,6 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Canonical fillable/casts list — keep in sync with payslipDbCols.ts (Zod schema).
@@ -15,8 +14,6 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  */
 class FinPayslips extends Model
 {
-    use SoftDeletes;
-
     protected $table = 'fin_payslip';
 
     protected $primaryKey = 'payslip_id';
@@ -137,8 +134,7 @@ class FinPayslips extends Model
     protected static function booted(): void
     {
         static::deleting(function (FinPayslips $payslip): void {
-            // Hard-delete child records when the payslip is deleted (including soft-delete).
-            // Child tables do not have SoftDeletes, so FK CASCADE may not fire on soft-delete.
+            // Hard-delete child records via model events so that any observers fire.
             $payslip->deposits()->delete();
             $payslip->stateData()->delete();
         });

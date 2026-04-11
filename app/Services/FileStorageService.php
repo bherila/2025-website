@@ -202,22 +202,14 @@ class FileStorageService
     }
 
     /**
-     * Delete a file record and its S3 file.
+     * Delete a file record. The S3 object is cleaned up asynchronously via the
+     * model's deleting event (DeleteS3Object job).
      *
      * @param  Model  $fileModel  The file model to delete
-     * @param  bool  $forceDelete  Whether to hard delete (default: soft delete)
      * @return bool Whether the deletion was successful
      */
-    public function deleteFileRecord(Model $fileModel, bool $forceDelete = false): bool
+    public function deleteFileRecord(Model $fileModel): bool
     {
-        // Delete from S3
-        $this->deleteFile($fileModel->s3_path);
-
-        // Delete the record
-        if ($forceDelete) {
-            return $fileModel->forceDelete();
-        }
-
-        return $fileModel->delete();
+        return (bool) $fileModel->delete();
     }
 }

@@ -14,12 +14,10 @@ class FinAccountLineItemLink extends Model
         'parent_t_id',
         'child_t_id',
         'when_added',
-        'when_deleted',
     ];
 
     protected $casts = [
         'when_added' => 'datetime',
-        'when_deleted' => 'datetime',
     ];
 
     /**

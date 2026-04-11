@@ -16,7 +16,7 @@ class RemoveTagActionHandler implements RuleActionHandlerInterface
 
         FinAccountLineItemTagMap::where('t_id', $tx->t_id)
             ->where('tag_id', $tagId)
-            ->update(['when_deleted' => now()]);
+            ->delete();
 
         return new ActionResult(applied: true, summary: "Removed tag {$tagId}");
     }

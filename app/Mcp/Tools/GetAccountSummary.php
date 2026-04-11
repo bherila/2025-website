@@ -24,8 +24,7 @@ class GetAccountSummary extends Tool
             ->where('acct_owner', $uid)
             ->firstOrFail();
 
-        $lineItemsQuery = FinAccountLineItems::where('t_account', $accountId)
-            ->whereNull('when_deleted');
+        $lineItemsQuery = FinAccountLineItems::where('t_account', $accountId);
 
         $year = $request->input('year');
         // Normalize: treat 'all' or non-numeric values as no year filter
@@ -42,7 +41,6 @@ class GetAccountSummary extends Tool
         ];
 
         $symbolQuery = FinAccountLineItems::where('t_account', $accountId)
-            ->whereNull('when_deleted')
             ->whereNotNull('t_symbol');
 
         if ($yearFilter !== null) {

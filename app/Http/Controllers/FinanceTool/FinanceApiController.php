@@ -18,7 +18,6 @@ class FinanceApiController extends Controller
         $uid = Auth::id();
 
         $accounts = FinAccounts::where('acct_owner', $uid)
-            ->whereNull('when_deleted')
             ->orderBy('when_closed', 'asc')
             ->orderBy('acct_sort_order', 'asc')
             ->orderBy('acct_name', 'asc')
@@ -114,7 +113,6 @@ class FinanceApiController extends Controller
         $uid = Auth::id();
 
         $accounts = FinAccounts::where('acct_owner', $uid)
-            ->whereNull('when_deleted')
             ->whereNull('when_closed')
             ->get();
 
@@ -194,7 +192,6 @@ class FinanceApiController extends Controller
         // Fetch all relevant transactions in ascending date order
         $transactions = DB::table('fin_account_line_items')
             ->where('t_account', $account->acct_id)
-            ->whereNull('when_deleted')
             ->whereIn('t_type', ['Deposit', 'Withdrawal', 'Transfer'])
             ->orderBy('t_date', 'asc')
             ->orderBy('t_id', 'asc')
@@ -284,8 +281,7 @@ class FinanceApiController extends Controller
         $uid = Auth::id();
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
 
-        $lineItemsQuery = FinAccountLineItems::where('t_account', $account_id)
-            ->whereNull('when_deleted');
+        $lineItemsQuery = FinAccountLineItems::where('t_account', $account_id);
 
         // Filter by year if provided
         if ($request->has('year') && $request->year !== 'all') {
@@ -300,7 +296,6 @@ class FinanceApiController extends Controller
         ];
 
         $symbolQuery = FinAccountLineItems::where('t_account', $account_id)
-            ->whereNull('when_deleted')
             ->whereNotNull('t_symbol');
 
         if ($request->has('year') && $request->year !== 'all') {
@@ -315,8 +310,7 @@ class FinanceApiController extends Controller
             ->get()
             ->toArray();
 
-        $monthQuery = FinAccountLineItems::where('t_account', $account_id)
-            ->whereNull('when_deleted');
+        $monthQuery = FinAccountLineItems::where('t_account', $account_id);
 
         if ($request->has('year') && $request->year !== 'all') {
             $year = intval($request->year);
@@ -468,10 +462,9 @@ class FinanceApiController extends Controller
             ->firstOrFail();
 
         DB::transaction(function () use ($account) {
-            FinAccountLineItems::where('t_account', $account->acct_id)
-                ->update(['when_deleted' => now()]);
+            FinAccountLineItems::where('t_account', $account->acct_id)->delete();
 
-            $account->update(['when_deleted' => now()]);
+            $account->delete();
         });
 
         return response()->json(['success' => true]);

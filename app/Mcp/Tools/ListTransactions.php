@@ -31,7 +31,6 @@ class ListTransactions extends Tool
         }
 
         $query->with(['tags'])
-            ->whereNull('when_deleted')
             ->orderBy('t_date', 'desc');
 
         if ($request->has('year')) {
@@ -40,7 +39,7 @@ class ListTransactions extends Tool
 
         if ($request->has('tag')) {
             $tagLabel = $request->input('tag');
-            $query->whereHas('tags', fn ($q) => $q->where('fin_account_tag.tag_label', $tagLabel)->whereNull('fin_account_tag.when_deleted'));
+            $query->whereHas('tags', fn ($q) => $q->where('fin_account_tag.tag_label', $tagLabel));
         }
 
         return Response::json($query->limit($limit)->get());

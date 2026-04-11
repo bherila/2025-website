@@ -13,8 +13,7 @@ class RemoveAllTagsActionHandler implements RuleActionHandlerInterface
     public function apply(FinAccountLineItems $tx, FinRuleAction $action, User $user): ActionResult
     {
         $affected = FinAccountLineItemTagMap::where('t_id', $tx->t_id)
-            ->whereNull('when_deleted')
-            ->update(['when_deleted' => now()]);
+            ->delete();
 
         return new ActionResult(applied: true, summary: "Removed all tags ({$affected} cleared)");
     }

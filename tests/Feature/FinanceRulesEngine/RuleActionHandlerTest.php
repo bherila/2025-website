@@ -16,7 +16,6 @@ use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinAccountTag;
 use App\Models\FinanceTool\FinRuleAction;
 use App\Models\User;
-use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class RuleActionHandlerTest extends TestCase
@@ -96,46 +95,35 @@ class RuleActionHandlerTest extends TestCase
         $this->assertEquals(1, $count);
     }
 
-    public function test_add_tag_restores_soft_deleted_mapping(): void
+    public function test_add_tag_restores_after_hard_delete(): void
     {
-        // The FinAccountLineItemTagMap model declares a composite PK which
-        // causes Eloquent's updateOrCreate to throw when an existing row
-        // needs to be updated. Verify the handler at least attempts to
-        // restore the mapping (it will use updateOrCreate under the hood).
-        // In production (MySQL) this works; in SQLite tests the composite
-        // PK model prevents the save. We test the intent by verifying
-        // the handler call completes or throws a known framework error.
+        // With hard deletes, adding a tag after removing it should create a fresh mapping.
         $tx = $this->createTransaction();
         $tag = $this->createTag();
 
-        DB::table('fin_account_line_item_tag_map')->insert([
+        // Create then remove (hard delete) the mapping
+        FinAccountLineItemTagMap::create([
             't_id' => $tx->t_id,
             'tag_id' => $tag->tag_id,
-            'when_deleted' => now()->toDateTimeString(),
         ]);
+        FinAccountLineItemTagMap::where('t_id', $tx->t_id)->where('tag_id', $tag->tag_id)->delete();
 
+        // Now re-add the tag
         $action = $this->makeAction(['type' => 'add_tag', 'target' => (string) $tag->tag_id]);
         $handler = new AddTagActionHandler;
+        $handler->apply($tx, $action, $this->user);
 
-        try {
-            $handler->apply($tx, $action, $this->user);
-
-            // If it succeeds, the mapping should be restored
-            $mapping = FinAccountLineItemTagMap::where('t_id', $tx->t_id)
-                ->where('tag_id', $tag->tag_id)
-                ->first();
-            $this->assertNull($mapping->when_deleted);
-        } catch (\TypeError $e) {
-            // Known limitation: composite PK model can't save via Eloquent
-            $this->assertStringContainsString('Cannot access offset of type array', $e->getMessage());
-        }
+        $count = FinAccountLineItemTagMap::where('t_id', $tx->t_id)
+            ->where('tag_id', $tag->tag_id)
+            ->count();
+        $this->assertEquals(1, $count);
     }
 
     // -------------------------------------------------------------------------
     // RemoveTagActionHandler
     // -------------------------------------------------------------------------
 
-    public function test_remove_tag_soft_deletes_mapping(): void
+    public function test_remove_tag_hard_deletes_mapping(): void
     {
         $tx = $this->createTransaction();
         $tag = $this->createTag();
@@ -150,10 +138,10 @@ class RuleActionHandlerTest extends TestCase
         $result = $handler->apply($tx, $action, $this->user);
 
         $this->assertTrue($result->applied);
-        $mapping = FinAccountLineItemTagMap::where('t_id', $tx->t_id)
-            ->where('tag_id', $tag->tag_id)
-            ->first();
-        $this->assertNotNull($mapping->when_deleted);
+        $this->assertDatabaseMissing('fin_account_line_item_tag_map', [
+            't_id' => $tx->t_id,
+            'tag_id' => $tag->tag_id,
+        ]);
     }
 
     public function test_remove_tag_no_error_when_mapping_absent(): void
@@ -173,7 +161,7 @@ class RuleActionHandlerTest extends TestCase
     // RemoveAllTagsActionHandler
     // -------------------------------------------------------------------------
 
-    public function test_remove_all_tags_soft_deletes_all(): void
+    public function test_remove_all_tags_hard_deletes_all(): void
     {
         $tx = $this->createTransaction();
         $tag1 = $this->createTag('Tag A');
@@ -187,21 +175,13 @@ class RuleActionHandlerTest extends TestCase
         $result = $handler->apply($tx, $action, $this->user);
 
         $this->assertTrue($result->applied);
-        $active = FinAccountLineItemTagMap::where('t_id', $tx->t_id)
-            ->whereNull('when_deleted')
-            ->count();
-        $this->assertEquals(0, $active);
+        $remaining = FinAccountLineItemTagMap::where('t_id', $tx->t_id)->count();
+        $this->assertEquals(0, $remaining);
     }
 
-    public function test_remove_all_tags_ignores_already_deleted(): void
+    public function test_remove_all_tags_no_error_when_none_present(): void
     {
         $tx = $this->createTransaction();
-        $tag = $this->createTag();
-        FinAccountLineItemTagMap::create([
-            't_id' => $tx->t_id,
-            'tag_id' => $tag->tag_id,
-            'when_deleted' => now(),
-        ]);
 
         $action = $this->makeAction(['type' => 'remove_all_tags']);
         $handler = new RemoveAllTagsActionHandler;

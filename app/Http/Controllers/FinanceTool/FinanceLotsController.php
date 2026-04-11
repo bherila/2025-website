@@ -204,7 +204,6 @@ class FinanceLotsController extends Controller
         ]);
 
         $transactions = FinAccountLineItems::where('t_account', $account->acct_id)
-            ->whereNull('when_deleted')
             ->whereIn('t_date', $validated['dates'])
             ->select('t_id', 't_date', 't_type', 't_description', 't_symbol', 't_qty', 't_amt', 't_price')
             ->orderBy('t_date')
@@ -506,7 +505,6 @@ class FinanceLotsController extends Controller
         $accountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
 
         $query = FinAccountLineItems::whereIn('t_account', $accountIds)
-            ->whereNull('when_deleted')
             ->where('t_symbol', 'LIKE', $validated['symbol'])
             ->select('t_id', 't_account', 't_date', 't_type', 't_description', 't_symbol', 't_qty', 't_amt', 't_price')
             ->orderBy('t_date')
