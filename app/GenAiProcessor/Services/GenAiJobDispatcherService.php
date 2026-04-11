@@ -219,6 +219,7 @@ PROMPT;
             'finance_payslip' => $this->buildPayslipPrompt($context),
             'utility_bill' => $this->buildUtilityBillPrompt($context),
             'tax_document' => $this->buildTaxDocumentPrompt($context),
+            'tax_form_multi_account_import' => $this->buildMultiAccountTaxImportPrompt($context),
             default => throw new \InvalidArgumentException("Unknown job type: {$jobType}"),
         };
     }
@@ -297,6 +298,17 @@ PROMPT;
             return $this->extractTaxDocumentGenerateContentData($responseBody);
         }
 
+        if ($jobType === 'tax_form_multi_account_import') {
+            // Expects a JSON array of per-account entries from the model.
+            $jsonText = $this->extractTextParts($responseBody);
+            if ($jsonText === '') {
+                return null;
+            }
+            $data = json_decode($jsonText, true);
+
+            return json_last_error() === JSON_ERROR_NONE ? $data : null;
+        }
+
         $jsonText = $this->extractTextParts($responseBody);
         if ($jsonText === '') {
             return null;
@@ -324,6 +336,7 @@ PROMPT;
             'finance_payslip' => ['employment_entity_id', 'file_count'],
             'utility_bill' => ['account_type', 'utility_account_id', 'file_count'],
             'tax_document' => ['tax_year', 'form_type', 'tax_document_id'],
+            'tax_form_multi_account_import' => ['tax_document_id', 'tax_year', 'accounts'],
             default => throw new \InvalidArgumentException("Unknown job type: {$jobType}"),
         };
 
@@ -915,6 +928,40 @@ Return ONLY the JSON array.
 PROMPT;
 
         return $basePrompt;
+    }
+
+    private function buildMultiAccountTaxImportPrompt(array $context): string
+    {
+        $taxYear = (int) ($context['tax_year'] ?? date('Y'));
+        $accounts = $context['accounts'] ?? [];
+
+        $accountHints = '';
+        if (! empty($accounts)) {
+            $lines = array_map(
+                fn ($a) => '  - Name: '.($a['name'] ?? 'unknown').', Last 4: '.($a['last4'] ?? 'unknown'),
+                $accounts
+            );
+            $accountHints = "\n\nKnown accounts for matching (use last 4 digits and name as hints):\n".implode("\n", $lines);
+        }
+
+        return <<<PROMPT
+You are processing a consolidated brokerage tax statement (e.g. Fidelity Tax Reporting Statement) for tax year {$taxYear}.
+
+This PDF may contain forms for multiple accounts (1099-DIV, 1099-INT, 1099-MISC, 1099-B, etc.) across one or more brokerage accounts.{$accountHints}
+
+Return a JSON **array** where each element represents one account/form combination. Each element must have these fields:
+- `account_identifier`: The full or partial account number found in the PDF (string, e.g. "...1234")
+- `account_name`: The brokerage/account name found in the PDF (string, e.g. "Fidelity Brokerage")
+- `form_type`: One of: 1099_int, 1099_div, 1099_misc, 1099_b, broker_1099, k1 (string)
+- `tax_year`: The tax year this form covers (integer)
+- `parsed_data`: An object containing the extracted form fields relevant to that form type
+
+For `parsed_data`, extract the same fields as you would for a standalone form of that type (box values, payer name, etc.).
+
+If the PDF is a consolidated 1099 that covers multiple form types for the same account, create one element per form type per account.
+
+Return ONLY the JSON array, no other text.
+PROMPT;
     }
 
     private function buildTaxDocumentPrompt(array $context): string

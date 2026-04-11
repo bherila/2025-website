@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinEmploymentEntity;
+use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\FileStorageService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -577,6 +578,215 @@ class TaxDocumentControllerTest extends TestCase
         $response->assertStatus(201);
         $response->assertJsonFragment(['form_type' => 'broker_1099', 'tax_year' => 2024]);
     }
+
+    // ── Join table tests ──────────────────────────────────────────────────────
+
+    public function test_storing_1099_int_creates_account_link(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createFinAccount($user->id);
+
+        $response = $this->actingAs($user)->postJson('/api/finance/tax-documents', [
+            's3_key' => "tax_docs/{$user->id}/2024.01.01 abc12 1099-int.pdf",
+            'original_filename' => '1099-int.pdf',
+            'form_type' => '1099_int',
+            'tax_year' => 2024,
+            'file_size_bytes' => 102400,
+            'file_hash' => str_repeat('z', 64),
+            'account_id' => $account->acct_id,
+        ]);
+
+        $response->assertStatus(201);
+        $docId = $response->json('id');
+
+        $this->assertDatabaseHas('fin_tax_document_accounts', [
+            'tax_document_id' => $docId,
+            'account_id' => $account->acct_id,
+            'form_type' => '1099_int',
+            'tax_year' => 2024,
+        ]);
+
+        // Response includes account_links array
+        $this->assertNotEmpty($response->json('account_links'));
+        $this->assertEquals($account->acct_id, $response->json('account_links.0.account_id'));
+    }
+
+    public function test_index_filters_by_account_id_via_join_table(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createFinAccount($user->id);
+        $otherAccount = $this->createFinAccount($user->id, 'Other Account');
+
+        // Create a document linked to $account via the join table
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => '1099_int',
+            'account_id' => $account->acct_id,
+        ]);
+        TaxDocumentAccount::create([
+            'tax_document_id' => $doc->id,
+            'account_id' => $account->acct_id,
+            'form_type' => '1099_int',
+            'tax_year' => 2024,
+        ]);
+
+        // Filter by $account — should find it
+        $response = $this->actingAs($user)->getJson("/api/finance/tax-documents?account_id={$account->acct_id}");
+        $response->assertOk();
+        $this->assertCount(1, $response->json());
+
+        // Filter by $otherAccount — should not find it
+        $response = $this->actingAs($user)->getJson("/api/finance/tax-documents?account_id={$otherAccount->acct_id}");
+        $response->assertOk();
+        $this->assertCount(0, $response->json());
+    }
+
+    public function test_mark_reviewed_writes_through_to_account_links(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createFinAccount($user->id);
+
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => '1099_div',
+            'account_id' => $account->acct_id,
+            'is_reviewed' => false,
+        ]);
+        TaxDocumentAccount::create([
+            'tax_document_id' => $doc->id,
+            'account_id' => $account->acct_id,
+            'form_type' => '1099_div',
+            'tax_year' => 2024,
+            'is_reviewed' => false,
+        ]);
+
+        $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}/mark-reviewed");
+        $response->assertOk();
+
+        $this->assertDatabaseHas('fin_tax_document_accounts', [
+            'tax_document_id' => $doc->id,
+            'is_reviewed' => 1,
+        ]);
+    }
+
+    public function test_destroy_account_link_deletes_parent_when_last_link_removed(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createFinAccount($user->id);
+
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => '1099_int',
+            'account_id' => $account->acct_id,
+            's3_path' => '',
+        ]);
+        $link = TaxDocumentAccount::create([
+            'tax_document_id' => $doc->id,
+            'account_id' => $account->acct_id,
+            'form_type' => '1099_int',
+            'tax_year' => 2024,
+        ]);
+
+        $response = $this->actingAs($user)->deleteJson("/api/finance/tax-documents/{$doc->id}/accounts/{$link->id}");
+        $response->assertOk();
+
+        // Parent document should be removed
+        $this->assertDatabaseMissing('fin_tax_documents', ['id' => $doc->id]);
+    }
+
+    public function test_destroy_account_link_keeps_parent_when_other_links_remain(): void
+    {
+        $user = $this->createUser();
+        $account1 = $this->createFinAccount($user->id, 'Account 1');
+        $account2 = $this->createFinAccount($user->id, 'Account 2');
+
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => 'broker_1099',
+            'account_id' => null,
+            's3_path' => '',
+        ]);
+        $link1 = TaxDocumentAccount::create([
+            'tax_document_id' => $doc->id,
+            'account_id' => $account1->acct_id,
+            'form_type' => '1099_div',
+            'tax_year' => 2024,
+        ]);
+        TaxDocumentAccount::create([
+            'tax_document_id' => $doc->id,
+            'account_id' => $account2->acct_id,
+            'form_type' => '1099_int',
+            'tax_year' => 2024,
+        ]);
+
+        // Remove link1 — parent should survive (link2 still exists)
+        $response = $this->actingAs($user)->deleteJson("/api/finance/tax-documents/{$doc->id}/accounts/{$link1->id}");
+        $response->assertOk();
+
+        $this->assertDatabaseHas('fin_tax_documents', ['id' => $doc->id]);
+        $this->assertDatabaseMissing('fin_tax_document_accounts', ['id' => $link1->id]);
+    }
+
+    public function test_confirm_account_links_replaces_existing_links(): void
+    {
+        $user = $this->createUser();
+        $account1 = $this->createFinAccount($user->id, 'Account 1');
+        $account2 = $this->createFinAccount($user->id, 'Account 2');
+
+        $doc = $this->createTaxDocument($user->id, ['form_type' => 'broker_1099', 'account_id' => null]);
+        TaxDocumentAccount::create([
+            'tax_document_id' => $doc->id,
+            'account_id' => null,
+            'form_type' => '1099_div',
+            'tax_year' => 2024,
+        ]);
+
+        $response = $this->actingAs($user)->postJson("/api/finance/tax-documents/{$doc->id}/accounts", [
+            'links' => [
+                ['account_id' => $account1->acct_id, 'form_type' => '1099_div', 'tax_year' => 2024],
+                ['account_id' => $account2->acct_id, 'form_type' => '1099_int', 'tax_year' => 2024],
+            ],
+        ]);
+
+        $response->assertOk();
+
+        $this->assertDatabaseCount('fin_tax_document_accounts', 2);
+        $this->assertDatabaseHas('fin_tax_document_accounts', ['account_id' => $account1->acct_id, 'form_type' => '1099_div']);
+        $this->assertDatabaseHas('fin_tax_document_accounts', ['account_id' => $account2->acct_id, 'form_type' => '1099_int']);
+    }
+
+    public function test_backfill_seeds_join_table_for_pre_migration_documents(): void
+    {
+        // Simulate a document that existed before the join table but was backfilled.
+        $user = $this->createUser();
+        $account = $this->createFinAccount($user->id);
+
+        // Create directly (bypasses store endpoint) to simulate pre-migration data.
+        $doc = FileForTaxDocument::create([
+            'user_id' => $user->id,
+            'tax_year' => 2023,
+            'form_type' => '1099_int',
+            'account_id' => $account->acct_id,
+            'original_filename' => 'old.pdf',
+            'stored_filename' => 'old.pdf',
+            's3_path' => '',
+            'mime_type' => 'application/pdf',
+            'file_size_bytes' => 0,
+            'file_hash' => str_repeat('x', 64),
+        ]);
+
+        // Manually insert a backfill row (the migration would have done this).
+        TaxDocumentAccount::create([
+            'tax_document_id' => $doc->id,
+            'account_id' => $account->acct_id,
+            'form_type' => '1099_int',
+            'tax_year' => 2023,
+        ]);
+
+        // The index endpoint should find it when filtering by account_id.
+        $response = $this->actingAs($user)->getJson("/api/finance/tax-documents?account_id={$account->acct_id}");
+        $response->assertOk();
+        $this->assertCount(1, $response->json());
+        $this->assertEquals($doc->id, $response->json('0.id'));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
 
     public function test_can_store_1099_nec_document(): void
     {

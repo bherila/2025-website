@@ -5,6 +5,7 @@ import { Calculator, CheckCircle, ChevronDown, Clock, Eye, Loader2, Plus, Upload
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
+import MultiAccountImportModal from '@/components/finance/MultiAccountImportModal'
 import TaxDocumentReviewModal from '@/components/finance/TaxDocumentReviewModal'
 import TaxDocumentUploadModal from '@/components/finance/TaxDocumentUploadModal'
 import { Button } from '@/components/ui/button'
@@ -95,6 +96,7 @@ export default function TaxDocuments1099Section({
   const [loading, setLoading] = useState(controlledLoading ?? true)
   const [error, setError] = useState<string | null>(null)
   const [uploadModal, setUploadModal] = useState<UploadModalState | null>(null)
+  const [multiAccountImportOpen, setMultiAccountImportOpen] = useState(false)
   const [manualEntry, setManualEntry] = useState<ManualEntryState | null>(null)
   const [manualSaving, setManualSaving] = useState(false)
   const [reviewModalDoc, setReviewModalDoc] = useState<TaxDocument | null>(null)
@@ -127,14 +129,16 @@ export default function TaxDocuments1099Section({
     for (const doc of documents) {
       if (!doc.is_reviewed || !doc.parsed_data) continue
       const pd = doc.parsed_data as Record<string, unknown>
+      // Use the first resolved account link for the accountId; fall back to legacy field.
+      const accountId = doc.account_links?.find(l => l.account_id != null)?.account_id ?? doc.account_id
       if (doc.form_type === 'k1' && isFK1StructuredData(pd)) {
-        const s = extractForeignTaxFromK1(pd as FK1StructuredData, doc.account_id)
+        const s = extractForeignTaxFromK1(pd as FK1StructuredData, accountId)
         if (s) summaries.push(s)
       } else if (doc.form_type === '1099_div' || doc.form_type === '1099_div_c') {
-        const s = extractForeignTaxFrom1099Div(pd, doc.account_id)
+        const s = extractForeignTaxFrom1099Div(pd, accountId)
         if (s) summaries.push(s)
       } else if (doc.form_type === '1099_int' || doc.form_type === '1099_int_c') {
-        const s = extractForeignTaxFrom1099Int(pd, doc.account_id)
+        const s = extractForeignTaxFrom1099Int(pd, accountId)
         if (s) summaries.push(s)
       }
     }
@@ -211,8 +215,10 @@ export default function TaxDocuments1099Section({
     return () => clearTimeout(timer)
   }, [documents, fetchDocuments])
 
-  // Accounts with at least one 1099/k-1 document should be promoted to the active section
-  const accountsWithDocs = new Set(documents.map(d => d.account_id).filter(Boolean) as number[])
+  // Accounts with at least one 1099/k-1 document (via join table) should be promoted to active section.
+  const accountsWithDocs = new Set(
+    documents.flatMap(d => (d.account_links ?? []).map(l => l.account_id)).filter(Boolean) as number[],
+  )
 
   /** Split accounts: active = has transactions OR has 1099 docs; inactive = neither */
   const activeAccounts = accounts.filter(
@@ -353,7 +359,12 @@ export default function TaxDocuments1099Section({
 
   /** Render the full document section for an account row (existing docs + add dropdown). */
   const renderAccountDocuments = (account: FinAccount) => {
-    const accountDocs = documents.filter(d => d.account_id === account.acct_id)
+    // Use the join table as the canonical source; fall back to legacy account_id for
+    // any documents that pre-date the join table migration and have no account_links yet.
+    const accountDocs = documents.filter(d =>
+      (d.account_links ?? []).some(l => l.account_id === account.acct_id) ||
+      ((!d.account_links || d.account_links.length === 0) && d.account_id === account.acct_id),
+    )
 
     // Determine which form types are already uploaded for this account
     const uploadedFormTypes = new Set(accountDocs.map(d => {
@@ -421,17 +432,29 @@ export default function TaxDocuments1099Section({
     <div>
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-base font-semibold">Account Documents</h3>
-        {foreignTaxSummaries.length > 0 && (
+        <div className="flex items-center gap-2">
+          {foreignTaxSummaries.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1"
+              onClick={() => setWorksheetOpen(true)}
+            >
+              <Calculator className="h-3 w-3" />
+              1116 Worksheet
+            </Button>
+          )}
           <Button
             size="sm"
             variant="outline"
             className="h-7 text-xs gap-1"
-            onClick={() => setWorksheetOpen(true)}
+            onClick={() => setMultiAccountImportOpen(true)}
+            title="Import a consolidated brokerage PDF that covers multiple accounts"
           >
-            <Calculator className="h-3 w-3" />
-            1116 Worksheet
+            <Upload className="h-3 w-3" />
+            Multi-Account Import
           </Button>
-        )}
+        </div>
       </div>
 
       {loading ? (
@@ -596,6 +619,22 @@ export default function TaxDocuments1099Section({
       </Dialog>
 
       {/* Inline image viewer */}
+
+      {/* Multi-account consolidated PDF import */}
+      <MultiAccountImportModal
+        open={multiAccountImportOpen}
+        taxYear={selectedYear}
+        accounts={accounts}
+        onClose={() => setMultiAccountImportOpen(false)}
+        onSuccess={() => {
+          setMultiAccountImportOpen(false)
+          if (onDocumentsReload) {
+            onDocumentsReload()
+          } else {
+            fetchDocuments()
+          }
+        }}
+      />
 
       {/* Form 1116 Worksheet modal */}
       <WorksheetModal

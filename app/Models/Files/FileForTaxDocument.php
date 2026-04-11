@@ -6,10 +6,12 @@ use App\GenAiProcessor\Models\GenAiImportJob;
 use App\Jobs\DeleteS3Object;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinEmploymentEntity;
+use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Traits\HasFileStorage;
 use App\Traits\SerializesDatesAsLocal;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class FileForTaxDocument extends Model
 {
@@ -67,6 +69,12 @@ class FileForTaxDocument extends Model
     public function genaiJob(): BelongsTo
     {
         return $this->belongsTo(GenAiImportJob::class, 'genai_job_id');
+    }
+
+    /** Account links — canonical source of truth for which accounts this document belongs to. */
+    public function accountLinks(): HasMany
+    {
+        return $this->hasMany(TaxDocumentAccount::class, 'tax_document_id');
     }
 
     public static function generateS3Path(int $userId, string $storedFilename): string

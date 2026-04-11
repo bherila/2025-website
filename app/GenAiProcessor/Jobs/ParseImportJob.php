@@ -8,8 +8,11 @@ use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Models\GenAiImportResult;
 use App\GenAiProcessor\Services\GenAiJobDispatcherService;
 use App\Models\Files\FileForTaxDocument;
+use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\TaxDocumentAccount;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
@@ -320,6 +323,9 @@ class ParseImportJob implements ShouldQueue
             case 'tax_document':
                 $this->createTaxDocumentResults($job, $data);
                 break;
+            case 'tax_form_multi_account_import':
+                $this->createMultiAccountTaxDocumentResults($job, $data);
+                break;
         }
     }
 
@@ -372,7 +378,7 @@ class ParseImportJob implements ShouldQueue
      */
     private function markLinkedTaxDocumentFailed(GenAiImportJob $job): void
     {
-        if ($job->job_type !== 'tax_document') {
+        if (! in_array($job->job_type, ['tax_document', 'tax_form_multi_account_import'])) {
             return;
         }
 
@@ -415,6 +421,131 @@ class ParseImportJob implements ShouldQueue
                 ]);
             }
         }
+    }
+
+    /**
+     * Handle results for a tax_form_multi_account_import job.
+     *
+     * The AI returns a JSON array — one element per account/form pair. Each element has:
+     *   account_identifier, account_name, form_type, tax_year, parsed_data
+     *
+     * This method:
+     * 1. Stores the full array on the parent fin_tax_documents.parsed_data.
+     * 2. Attempts server-side account matching (last-4 suffix, then name overlap).
+     * 3. Creates one fin_tax_document_accounts row per detected account/form pair.
+     *    Rows with no match have account_id = null; the user resolves them in the UI.
+     */
+    private function createMultiAccountTaxDocumentResults(GenAiImportJob $job, array $data): void
+    {
+        GenAiImportResult::create([
+            'job_id' => $job->id,
+            'result_index' => 0,
+            'result_json' => json_encode($data),
+            'status' => 'pending_review',
+        ]);
+
+        $context = $job->getContextArray();
+        $taxDocId = $context['tax_document_id'] ?? null;
+        if (! $taxDocId) {
+            return;
+        }
+
+        $taxDoc = FileForTaxDocument::find($taxDocId);
+        if (! $taxDoc || $taxDoc->genai_job_id !== $job->id) {
+            return;
+        }
+
+        // Load all accounts for this user for matching.
+        $userAccounts = FinAccounts::withoutGlobalScopes()
+            ->where('acct_owner', $taxDoc->user_id)
+            ->get(['acct_id', 'acct_name', 'acct_number']);
+
+        // Normalise the AI output: wrap a bare object in an array.
+        $entries = isset($data[0]) ? $data : [$data];
+
+        foreach ($entries as $entry) {
+            $accountId = $this->matchAccount($entry, $userAccounts);
+
+            TaxDocumentAccount::create([
+                'tax_document_id' => $taxDoc->id,
+                'account_id' => $accountId,
+                'form_type' => $entry['form_type'] ?? 'broker_1099',
+                'tax_year' => (int) ($entry['tax_year'] ?? $context['tax_year'] ?? date('Y')),
+                'is_reviewed' => false,
+            ]);
+        }
+
+        $taxDoc->update([
+            'parsed_data' => $entries,
+            'genai_status' => 'parsed',
+        ]);
+    }
+
+    /**
+     * Try to match an AI-detected account entry to a fin_accounts row.
+     *
+     * Matching strategy (mirrors accountMatcher.ts):
+     * 1. Exact match on acct_number.
+     * 2. Last-4 suffix match; if unique → return it.
+     * 3. Name word-overlap disambiguation among last-4 candidates.
+     * 4. Returns null if no confident match.
+     *
+     * @param  array<string,mixed>  $entry
+     * @param  Collection  $accounts
+     */
+    private function matchAccount(array $entry, $accounts): ?int
+    {
+        $identifier = trim((string) ($entry['account_identifier'] ?? ''));
+        $aiName = strtolower(trim((string) ($entry['account_name'] ?? '')));
+
+        if ($identifier === '') {
+            return null;
+        }
+
+        // 1. Exact match on stored account number.
+        foreach ($accounts as $acct) {
+            if ($acct->acct_number && $acct->acct_number === $identifier) {
+                return $acct->acct_id;
+            }
+        }
+
+        // 2. Last-4 suffix match.
+        $last4 = preg_replace('/\D/', '', $identifier);
+        $last4 = $last4 !== '' ? substr($last4, -4) : '';
+
+        $candidates = $last4 !== ''
+            ? $accounts->filter(function ($acct) use ($last4): bool {
+                $stored = preg_replace('/\D/', '', (string) ($acct->acct_number ?? ''));
+
+                return $stored !== '' && str_ends_with($stored, $last4);
+            })
+            : collect();
+
+        if ($candidates->count() === 1) {
+            return $candidates->first()->acct_id;
+        }
+
+        // 3. Name word-overlap disambiguation among last-4 candidates (or all if no last4).
+        $pool = $candidates->isNotEmpty() ? $candidates : $accounts;
+
+        if ($aiName === '') {
+            return null;
+        }
+
+        $aiWords = array_filter(preg_split('/\s+/', $aiName) ?: []);
+        $bestScore = 0;
+        $bestId = null;
+
+        foreach ($pool as $acct) {
+            $acctWords = array_filter(preg_split('/\s+/', strtolower($acct->acct_name)) ?: []);
+            $overlap = count(array_intersect($aiWords, $acctWords));
+            if ($overlap > $bestScore) {
+                $bestScore = $overlap;
+                $bestId = $acct->acct_id;
+            }
+        }
+
+        return $bestScore > 0 ? $bestId : null;
     }
 }
 

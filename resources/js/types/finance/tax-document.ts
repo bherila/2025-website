@@ -274,12 +274,27 @@ import type { FK1StructuredData as _FK1StructuredData } from './k1-data'
 /** Union of all possible parsed_data shapes. */
 export type TaxDocumentParsedData = W2ParsedData | F1099IntParsedData | F1099DivParsedData | F1099MiscParsedData | F1099NecParsedData | Form1099RParsedData | FK1ParsedData | _FK1StructuredData
 
+/** One row from fin_tax_document_accounts — links a PDF to a specific account. */
+export interface TaxDocumentAccountLink {
+  id: number
+  tax_document_id: number
+  account_id: number | null
+  form_type: string
+  tax_year: number
+  is_reviewed: boolean
+  notes: string | null
+  account: { acct_id: number; acct_name: string } | null
+  created_at: string
+  updated_at: string
+}
+
 export interface TaxDocument {
   id: number
   user_id: number
   tax_year: number
   form_type: string
   employment_entity_id: number | null
+  /** @deprecated Legacy column. Use accountLinks for account associations. */
   account_id: number | null
   original_filename: string | null
   stored_filename: string | null
@@ -296,7 +311,10 @@ export interface TaxDocument {
   parsed_data: TaxDocumentParsedData | null
   uploader: { id: number; name: string } | null
   employment_entity: { id: number; display_name: string } | null
+  /** @deprecated Legacy eager-load. Use accountLinks instead. */
   account: { acct_id: number; acct_name: string } | null
+  /** Canonical account associations — one per account/form pair for this PDF. */
+  account_links: TaxDocumentAccountLink[]
   created_at: string
   updated_at: string
 }
