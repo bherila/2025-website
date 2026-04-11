@@ -44,6 +44,9 @@ jobs:
       - name: Run pnpm tests (Jest)
         run: pnpm run test
 
+      - name: Check MySQL identifier lengths in migrations
+        run: python3 scripts/check-migration-identifiers.py
+
       - name: Run PHPUnit
         run: vendor/bin/phpunit --configuration phpunit.xml
 
