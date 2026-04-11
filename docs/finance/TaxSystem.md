@@ -242,7 +242,7 @@ The `fin_tax_documents` table stores uploaded tax form PDFs (W-2, W-2c, 1099-INT
 | `id` | PK | Auto-increment |
 | `user_id` | FK → users | Owner of the document |
 | `tax_year` | integer | Tax year (e.g., 2024) |
-| `form_type` | enum | `w2`, `w2c`, `1099_int`, `1099_int_c`, `1099_div`, `1099_div_c`, `1099_misc`, `1099_nec`, `1099_r`, `k1`, `1116` |
+| `form_type` | TEXT NOT NULL | `w2`, `w2c`, `1099_int`, `1099_int_c`, `1099_div`, `1099_div_c`, `1099_misc`, `1099_nec`, `1099_r`, `1099_b`, `broker_1099`, `k1`, `1116` |
 | `employment_entity_id` | FK → fin_employment_entity (nullable) | Set for W-2 form types |
 | `account_id` | FK → fin_accounts.acct_id (nullable) | Set for 1099/K-1 form types |
 | `original_filename` | string | User's original filename |
@@ -258,16 +258,15 @@ The `fin_tax_documents` table stores uploaded tax form PDFs (W-2, W-2c, 1099-INT
 | `genai_status` | string (nullable) | Processing status: `pending`, `processing`, `parsed`, `failed` |
 | `parsed_data` | json (nullable) | Structured data extracted from the PDF (box values). For K-1, stored as a flexible JSON blob. |
 | `download_history` | json | Track who downloaded and when |
-| `deleted_at` | timestamp | Soft delete timestamp |
 
 ### Model: `App\Models\Files\FileForTaxDocument`
 
-Uses `HasFileStorage`, `SerializesDatesAsLocal`, and `SoftDeletes` traits.
+Uses `HasFileStorage` and `SerializesDatesAsLocal` traits. Records are **hard-deleted** (no soft-delete). The `booted()` deleting event dispatches `DeleteS3Object` to remove the S3 file asynchronously when a record is deleted via Eloquent. Bulk deletes (`Model::where()->delete()`) bypass Eloquent events and must dispatch `DeleteS3Object` manually.
 
 Form type constants:
-- `FORM_TYPES` — all valid form type strings (includes `k1`, `1099_nec`, `1099_r`, `1116`)
+- `FORM_TYPES` — all valid form type strings
 - `W2_FORM_TYPES` — `['w2', 'w2c']` (require `employment_entity_id`)
-- `ACCOUNT_FORM_TYPES` — `['1099_int', '1099_int_c', '1099_div', '1099_div_c', '1099_misc', '1099_nec', '1099_r', 'k1']` (require `account_id`)
+- `ACCOUNT_FORM_TYPES` — `['1099_int', '1099_int_c', '1099_div', '1099_div_c', '1099_misc', '1099_nec', '1099_r', '1099_b', 'broker_1099', 'k1', '1116']` (require `account_id`)
 
 ### Controller: `App\Http\Controllers\FinanceTool\TaxDocumentController`
 
@@ -280,7 +279,7 @@ Form type constants:
 | POST | `/api/finance/tax-documents` | Confirm upload, create DB record, dispatch GenAI job. Returns 201. |
 | POST | `/api/finance/tax-documents/manual` | Create a manual entry (no PDF) with pre-filled parsed_data |
 | GET | `/api/finance/tax-documents/{id}/download` | Get signed download URLs. Returns `{ view_url, download_url, filename }` |
-| DELETE | `/api/finance/tax-documents/{id}` | Soft-delete document and remove from S3 |
+| DELETE | `/api/finance/tax-documents/{id}` | Delete document and remove from S3 |
 | PUT | `/api/finance/tax-documents/{id}` | Update notes, parsed_data, is_reviewed |
 | PUT | `/api/finance/tax-documents/{id}/mark-reviewed` | Mark document as reviewed (also saves notes/parsed_data) |
 

@@ -409,13 +409,3 @@ resources/js/components/admin/
 └── AdminGenAiJobsPage.tsx             # Admin jobs management UI
 ```
 
----
-
-## Legacy Synchronous Import
-
-The original synchronous import controllers (`FinanceGeminiImportController`, `FinancePayslipImportController`, `UtilityBillImportController`) remain active by default. When the `GEMINI_USE_QUEUE` environment variable is set to `true`, the `FinanceGeminiImportController::parseDocument` endpoint returns a `410 Gone` response directing clients to the new async flow.
-
-To migrate to the async flow:
-1. Set `GEMINI_USE_QUEUE=true` in `.env`
-2. Update frontend components to use `useGenAiFileUpload` and `useGenAiJobPolling` hooks
-3. Once all UI is migrated, remove the legacy endpoints
