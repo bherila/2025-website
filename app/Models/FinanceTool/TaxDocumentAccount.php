@@ -22,6 +22,8 @@ class TaxDocumentAccount extends Model
         'account_id',
         'form_type',
         'tax_year',
+        'ai_identifier',
+        'ai_account_name',
         'is_reviewed',
         'notes',
     ];
