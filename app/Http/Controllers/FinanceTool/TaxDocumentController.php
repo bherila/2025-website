@@ -316,13 +316,17 @@ class TaxDocumentController extends Controller
         $userId = Auth::id();
 
         DB::transaction(function () use ($doc, $request, $userId): void {
-            // Verify ownership of any provided account_id values.
-            foreach ($request->links as $link) {
-                if (($link['account_id'] ?? null) !== null) {
-                    FinAccounts::withoutGlobalScopes()
-                        ->where('acct_id', $link['account_id'])
-                        ->where('acct_owner', $userId)
-                        ->firstOrFail();
+            // Verify ownership of all non-null account_ids in a single query.
+            $requestedIds = array_values(array_unique(array_filter(
+                array_column($request->links, 'account_id')
+            )));
+            if (! empty($requestedIds)) {
+                $validCount = FinAccounts::withoutGlobalScopes()
+                    ->where('acct_owner', $userId)
+                    ->whereIn('acct_id', $requestedIds)
+                    ->count();
+                if ($validCount !== count($requestedIds)) {
+                    abort(403, 'One or more accounts do not belong to you.');
                 }
             }
 

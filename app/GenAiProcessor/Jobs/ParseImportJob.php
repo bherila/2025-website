@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -465,56 +466,63 @@ class ParseImportJob implements ShouldQueue
         // Normalise the AI output: wrap a bare object in an array.
         $entries = isset($data[0]) ? $data : [$data];
 
-        // Delete all existing lots linked to this document so re-processing is idempotent.
-        FinAccountLot::where('tax_document_id', $taxDoc->id)->delete();
+        // Wrap lot deletion, link creation, and parent update in a transaction so a
+        // mid-loop failure leaves the document in a consistent state (no partial imports).
+        DB::transaction(function () use ($taxDoc, $entries, $userAccounts, $context): void {
+            // Delete all existing lots linked to this document so re-processing is idempotent.
+            FinAccountLot::where('tax_document_id', $taxDoc->id)->delete();
 
-        foreach ($entries as $entry) {
-            $accountId = $this->matchAccount($entry, $userAccounts);
+            // Also clear existing account links so re-processing replaces them cleanly.
+            $taxDoc->accountLinks()->delete();
 
-            // Normalize form_type: validate against allowed set, fallback to 'broker_1099'.
-            $rawFormType = trim((string) ($entry['form_type'] ?? ''));
-            $formType = in_array($rawFormType, FileForTaxDocument::FORM_TYPES, true)
-                ? $rawFormType
-                : 'broker_1099';
+            foreach ($entries as $entry) {
+                $accountId = $this->matchAccount($entry, $userAccounts);
 
-            // Normalize tax_year: clamp to a sane range.
-            $taxYear = (int) ($entry['tax_year'] ?? $context['tax_year'] ?? date('Y'));
-            if ($taxYear < 1900 || $taxYear > 2100) {
-                $taxYear = (int) ($context['tax_year'] ?? date('Y'));
-            }
+                // Normalize form_type: validate against allowed set, fallback to 'broker_1099'.
+                $rawFormType = trim((string) ($entry['form_type'] ?? ''));
+                $formType = in_array($rawFormType, FileForTaxDocument::FORM_TYPES, true)
+                    ? $rawFormType
+                    : 'broker_1099';
 
-            // Store the AI-detected account identifier and name directly on the join row
-            // so the UI can display them without positional index correlation with parsed_data.
-            $aiIdentifier = is_string($entry['account_identifier'] ?? null)
-                ? (trim($entry['account_identifier']) ?: null)
-                : null;
-            $aiAccountName = is_string($entry['account_name'] ?? null)
-                ? (trim($entry['account_name']) ?: null)
-                : null;
+                // Normalize tax_year: clamp to a sane range.
+                $taxYear = (int) ($entry['tax_year'] ?? $context['tax_year'] ?? date('Y'));
+                if ($taxYear < 1900 || $taxYear > 2100) {
+                    $taxYear = (int) ($context['tax_year'] ?? date('Y'));
+                }
 
-            TaxDocumentAccount::create([
-                'tax_document_id' => $taxDoc->id,
-                'account_id' => $accountId,
-                'form_type' => $formType,
-                'tax_year' => $taxYear,
-                'ai_identifier' => $aiIdentifier,
-                'ai_account_name' => $aiAccountName,
-                'is_reviewed' => false,
-            ]);
+                // Store the AI-detected account identifier and name directly on the join row
+                // so the UI can display them without positional index correlation with parsed_data.
+                $aiIdentifier = is_string($entry['account_identifier'] ?? null)
+                    ? (trim($entry['account_identifier']) ?: null)
+                    : null;
+                $aiAccountName = is_string($entry['account_name'] ?? null)
+                    ? (trim($entry['account_name']) ?: null)
+                    : null;
 
-            // For 1099-B entries with a resolved account, import individual lot transactions.
-            if ($formType === '1099_b' && $accountId !== null) {
-                $transactions = $entry['parsed_data']['transactions'] ?? [];
-                if (is_array($transactions) && ! empty($transactions)) {
-                    $this->upsertLotsFromBroker($accountId, $transactions, $taxDoc->id);
+                TaxDocumentAccount::create([
+                    'tax_document_id' => $taxDoc->id,
+                    'account_id' => $accountId,
+                    'form_type' => $formType,
+                    'tax_year' => $taxYear,
+                    'ai_identifier' => $aiIdentifier,
+                    'ai_account_name' => $aiAccountName,
+                    'is_reviewed' => false,
+                ]);
+
+                // For 1099-B entries with a resolved account, import individual lot transactions.
+                if ($formType === '1099_b' && $accountId !== null) {
+                    $transactions = $entry['parsed_data']['transactions'] ?? [];
+                    if (is_array($transactions) && ! empty($transactions)) {
+                        $this->upsertLotsFromBroker($accountId, $transactions, $taxDoc->id);
+                    }
                 }
             }
-        }
 
-        $taxDoc->update([
-            'parsed_data' => $entries,
-            'genai_status' => 'parsed',
-        ]);
+            $taxDoc->update([
+                'parsed_data' => $entries,
+                'genai_status' => 'parsed',
+            ]);
+        });
     }
 
     /**
@@ -655,9 +663,8 @@ class ParseImportJob implements ShouldQueue
      * 4. Returns null if no confident match.
      *
      * @param  array<string,mixed>  $entry
-     * @param  Collection  $accounts
      */
-    private function matchAccount(array $entry, $accounts): ?int
+    private function matchAccount(array $entry, Collection $accounts): ?int
     {
         $identifier = trim((string) ($entry['account_identifier'] ?? ''));
         $aiName = strtolower(trim((string) ($entry['account_name'] ?? '')));
