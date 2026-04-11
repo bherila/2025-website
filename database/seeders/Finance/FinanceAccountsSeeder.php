@@ -62,5 +62,21 @@ class FinanceAccountsSeeder extends Seeder
                 'updated_at' => $now,
             ],
         );
+
+        // IRA account — used for cross-account wash-sale test scenarios
+        DB::table('fin_accounts')->updateOrInsert(
+            ['acct_owner' => $user->id, 'acct_name' => 'Demo IRA'],
+            [
+                'acct_number' => '1000004444',
+                'acct_last_balance' => 48200.00,
+                'acct_last_balance_date' => '2026-03-01',
+                'acct_is_debt' => 0,
+                'acct_is_retirement' => 1,
+                'acct_sort_order' => 4,
+                'when_closed' => null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+        );
     }
 }

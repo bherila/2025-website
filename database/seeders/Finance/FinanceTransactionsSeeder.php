@@ -18,12 +18,13 @@ class FinanceTransactionsSeeder extends Seeder
 
         $accounts = DB::table('fin_accounts')
             ->where('acct_owner', $user->id)
-            ->whereIn('acct_name', ['Demo Checking', 'Demo Savings', 'Demo Brokerage'])
+            ->whereIn('acct_name', ['Demo Checking', 'Demo Savings', 'Demo Brokerage', 'Demo IRA'])
             ->pluck('acct_id', 'acct_name');
 
         $checkingId = (int) ($accounts['Demo Checking'] ?? 0);
         $savingsId = (int) ($accounts['Demo Savings'] ?? 0);
         $brokerageId = (int) ($accounts['Demo Brokerage'] ?? 0);
+        $iraId = (int) ($accounts['Demo IRA'] ?? 0);
 
         if ($checkingId === 0 || $savingsId === 0 || $brokerageId === 0) {
             return;
@@ -71,7 +72,27 @@ class FinanceTransactionsSeeder extends Seeder
             ['t_account' => $brokerageId, 't_date' => '2026-01-08', 't_type' => 'Reinvest', 't_amt' => -3000.00, 't_symbol' => 'VOO', 't_qty' => 10, 't_price' => 300.00, 't_commission' => 0, 't_fee' => 0, 't_method' => 'REINVEST', 't_description' => 'REINVEST 10 VOO @ 300.00', 't_comment' => 'Dividend reinvestment buy', 't_source' => 'demo-seeder', 't_origin' => 'manual'],
             ['t_account' => $brokerageId, 't_date' => '2026-03-15', 't_type' => 'Sell', 't_amt' => 2800.00, 't_symbol' => 'VOO', 't_qty' => -10, 't_price' => 280.00, 't_commission' => 0, 't_fee' => 0, 't_method' => 'SELL', 't_description' => 'SELL 10 VOO @ 280.00', 't_comment' => 'Loss sale', 't_source' => 'demo-seeder', 't_origin' => 'manual'],
             ['t_account' => $brokerageId, 't_date' => '2026-03-20', 't_type' => 'Reinvest', 't_amt' => -2900.00, 't_symbol' => 'VOO', 't_qty' => 10, 't_price' => 290.00, 't_commission' => 0, 't_fee' => 0, 't_method' => 'REINVEST', 't_description' => 'REINVEST 10 VOO @ 290.00', 't_comment' => 'Replacement reinvestment lot', 't_source' => 'demo-seeder', 't_origin' => 'manual'],
+
+            // --- Backward-looking wash sale (BACKX) ---
+            // The replacement purchase happens BEFORE the loss sale, within 30 days.
+            // Jan 1: buy original lot. Jan 10: buy ADDITIONAL shares (the backward replacement).
+            // Jan 20: sell the ORIGINAL lot at a loss → disallowed because the Jan 10 purchase
+            // is within the 30-day window BEFORE the loss sale date.
+            ['t_account' => $brokerageId, 't_date' => '2026-01-01', 't_type' => 'Buy', 't_amt' => -5000.00, 't_symbol' => 'BACKX', 't_qty' => 50, 't_price' => 100.00, 't_commission' => 0, 't_fee' => 0, 't_method' => 'BUY', 't_description' => 'BUY 50 BACKX @ 100.00', 't_comment' => 'Original lot — will be sold at a loss', 't_source' => 'demo-seeder', 't_origin' => 'manual'],
+            ['t_account' => $brokerageId, 't_date' => '2026-01-10', 't_type' => 'Buy', 't_amt' => -4250.00, 't_symbol' => 'BACKX', 't_qty' => 50, 't_price' => 85.00, 't_commission' => 0, 't_fee' => 0, 't_method' => 'BUY', 't_description' => 'BUY 50 BACKX @ 85.00', 't_comment' => 'Backward replacement purchase (within 30 days BEFORE loss sale)', 't_source' => 'demo-seeder', 't_origin' => 'manual'],
+            ['t_account' => $brokerageId, 't_date' => '2026-01-20', 't_type' => 'Sell', 't_amt' => 3750.00, 't_symbol' => 'BACKX', 't_qty' => -50, 't_price' => 75.00, 't_commission' => 0, 't_fee' => 0, 't_method' => 'SELL', 't_description' => 'SELL 50 BACKX @ 75.00', 't_comment' => 'Loss sale ($1250 loss) — backward wash disallowed due to Jan 10 buy', 't_source' => 'demo-seeder', 't_origin' => 'manual'],
         ];
+
+        // --- Cross-account wash sale (CROSSX) — only if Demo IRA account exists ---
+        // Same user, different accounts. Brokerage sells CROSSX at a loss; IRA buys
+        // CROSSX within 30 days. IRS wash-sale rules apply across accounts for the same taxpayer.
+        if ($iraId !== 0) {
+            $rows = array_merge($rows, [
+                ['t_account' => $brokerageId, 't_date' => '2026-02-01', 't_type' => 'Buy', 't_amt' => -4000.00, 't_symbol' => 'CROSSX', 't_qty' => 40, 't_price' => 100.00, 't_commission' => 0, 't_fee' => 0, 't_method' => 'BUY', 't_description' => 'BUY 40 CROSSX @ 100.00', 't_comment' => 'Cross-account wash — original lot in brokerage', 't_source' => 'demo-seeder', 't_origin' => 'manual'],
+                ['t_account' => $brokerageId, 't_date' => '2026-02-20', 't_type' => 'Sell', 't_amt' => 3200.00, 't_symbol' => 'CROSSX', 't_qty' => -40, 't_price' => 80.00, 't_commission' => 0, 't_fee' => 0, 't_method' => 'SELL', 't_description' => 'SELL 40 CROSSX @ 80.00', 't_comment' => 'Loss sale ($800 loss) in brokerage — wash triggered by IRA repurchase', 't_source' => 'demo-seeder', 't_origin' => 'manual'],
+                ['t_account' => $iraId, 't_date' => '2026-03-01', 't_type' => 'Buy', 't_amt' => -3400.00, 't_symbol' => 'CROSSX', 't_qty' => 40, 't_price' => 85.00, 't_commission' => 0, 't_fee' => 0, 't_method' => 'BUY', 't_description' => 'BUY 40 CROSSX @ 85.00', 't_comment' => 'Cross-account wash replacement — IRA purchase within 30 days of brokerage loss', 't_source' => 'demo-seeder', 't_origin' => 'manual'],
+            ]);
+        }
 
         foreach ($rows as $row) {
             DB::table('fin_account_line_items')->updateOrInsert(
