@@ -56,6 +56,8 @@ class FileForFinAccount extends Model
 
     protected static function booted(): void
     {
+        // NOTE: this event does not fire for bulk deletes (Model::where()->delete()).
+        // Any code that bulk-deletes rows from this table must dispatch DeleteS3Object manually.
         static::deleting(function (self $file): void {
             if ($file->s3_path) {
                 DeleteS3Object::dispatch($file->s3_path);

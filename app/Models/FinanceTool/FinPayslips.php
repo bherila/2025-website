@@ -134,7 +134,8 @@ class FinPayslips extends Model
     protected static function booted(): void
     {
         static::deleting(function (FinPayslips $payslip): void {
-            // Hard-delete child records via model events so that any observers fire.
+            // Explicitly delete child records so that any future model observers on those models fire.
+            // (DB-level CASCADE would also remove them but would bypass Eloquent events.)
             $payslip->deposits()->delete();
             $payslip->stateData()->delete();
         });
