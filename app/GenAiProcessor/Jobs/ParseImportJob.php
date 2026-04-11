@@ -485,16 +485,20 @@ class ParseImportJob implements ShouldQueue
 
             // Store the AI-detected account identifier and name directly on the join row
             // so the UI can display them without positional index correlation with parsed_data.
-            $aiIdentifier = is_string($entry['account_identifier'] ?? null) ? trim($entry['account_identifier']) : null;
-            $aiAccountName = is_string($entry['account_name'] ?? null) ? trim($entry['account_name']) : null;
+            $aiIdentifier = is_string($entry['account_identifier'] ?? null)
+                ? (trim($entry['account_identifier']) ?: null)
+                : null;
+            $aiAccountName = is_string($entry['account_name'] ?? null)
+                ? (trim($entry['account_name']) ?: null)
+                : null;
 
             TaxDocumentAccount::create([
                 'tax_document_id' => $taxDoc->id,
                 'account_id' => $accountId,
                 'form_type' => $formType,
                 'tax_year' => $taxYear,
-                'ai_identifier' => $aiIdentifier ?: null,
-                'ai_account_name' => $aiAccountName ?: null,
+                'ai_identifier' => $aiIdentifier,
+                'ai_account_name' => $aiAccountName,
                 'is_reviewed' => false,
             ]);
 
