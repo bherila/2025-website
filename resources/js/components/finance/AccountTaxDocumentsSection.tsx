@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
-import type { TaxDocument } from '@/types/finance/tax-document'
+import type { TaxDocument, TaxDocumentAccountLink } from '@/types/finance/tax-document'
 import { ACCOUNT_FORM_TYPES_1099, FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
 const IN_FLIGHT_STATUSES = new Set(['pending', 'processing'])
@@ -29,6 +29,7 @@ export default function AccountTaxDocumentsSection({ accountId, selectedYear }: 
   const [error, setError] = useState<string | null>(null)
   const [uploadModalState, setUploadModalState] = useState<{ formType: string } | null>(null)
   const [reviewDoc, setReviewDoc] = useState<TaxDocument | null>(null)
+  const [reviewLink, setReviewLink] = useState<TaxDocumentAccountLink | null>(null)
   const hasLoadedOnce = useRef(false)
 
   const availableYears = Array.from({ length: currentYear - 2018 }, (_, i) => currentYear - i)
@@ -159,7 +160,14 @@ export default function AccountTaxDocumentsSection({ accountId, selectedYear }: 
                           size="sm"
                           variant="outline"
                           className={`gap-1.5 h-8 ${doc.is_reviewed ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:text-green-800' : 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100 hover:text-amber-900'}`}
-                          onClick={() => setReviewDoc(doc)}
+                          onClick={() => {
+                            // For broker_1099 docs, find the matching link for this account.
+                            const link = doc.form_type === 'broker_1099'
+                              ? (doc.account_links ?? []).find(l => l.account_id === accountId) ?? null
+                              : null
+                            setReviewDoc(doc)
+                            setReviewLink(link)
+                          }}
                           title={doc.is_reviewed ? 'Reviewed' : 'Review document'}
                         >
                           {doc.is_reviewed ? (
@@ -221,9 +229,11 @@ export default function AccountTaxDocumentsSection({ accountId, selectedYear }: 
           open
           taxYear={year}
           document={reviewDoc}
-          onClose={() => setReviewDoc(null)}
+          accountLink={reviewLink ?? undefined}
+          onClose={() => { setReviewDoc(null); setReviewLink(null) }}
           onDocumentReviewed={() => {
             setReviewDoc(null)
+            setReviewLink(null)
             void fetchDocuments()
           }}
         />

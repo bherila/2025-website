@@ -11,6 +11,7 @@ export const fetchWrapper = {
   get,
   post,
   put,
+  patch,
   delete: _delete,
 }
 
@@ -29,6 +30,16 @@ function post(url: string, body: any) {
     headers: isFormData ? { 'X-CSRF-TOKEN': getCsrfToken() || '' } : { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() || '' },
     credentials: 'include' as RequestCredentials,
     body: isFormData ? body : JSON.stringify(body),
+  }
+  return fetch(url, requestOptions).then(handleResponse)
+}
+
+function patch(url: string, body: any) {
+  const requestOptions: RequestInit = {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() || '' },
+    credentials: 'include' as RequestCredentials,
+    body: JSON.stringify(body),
   }
   return fetch(url, requestOptions).then(handleResponse)
 }
