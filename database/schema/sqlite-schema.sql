@@ -1255,6 +1255,8 @@ CREATE TABLE IF NOT EXISTS "fin_tax_document_accounts"(
   "notes" text,
   "created_at" datetime,
   "updated_at" datetime,
+  "ai_identifier" varchar,
+  "ai_account_name" varchar,
   foreign key("tax_document_id") references "fin_tax_documents"("id") on delete cascade,
   foreign key("account_id") references "fin_accounts"("acct_id") on delete set null
 );
@@ -1365,3 +1367,5 @@ INSERT INTO migrations VALUES(51,'2026_04_11_000001_convert_finance_domain_to_ha
 INSERT INTO migrations VALUES(52,'2026_04_11_062652_create_fin_tax_document_accounts_table',4);
 INSERT INTO migrations VALUES(53,'2026_04_11_192648_add_tax_document_id_to_fin_account_lots',4);
 INSERT INTO migrations VALUES(54,'2026_03_05_001906_add_hash_and_statement_id_to_finance_tables',2);
+INSERT INTO migrations VALUES(55,'2026_04_11_210000_add_ai_fields_to_fin_tax_document_accounts',5);
+INSERT INTO migrations VALUES(56,'2026_04_11_231927_normalize_legacy_k1_schema_version',5);
