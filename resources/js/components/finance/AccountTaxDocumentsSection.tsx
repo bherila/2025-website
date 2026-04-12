@@ -155,18 +155,36 @@ export default function AccountTaxDocumentsSection({ accountId, selectedYear }: 
                         <Button size="sm" variant="outline" disabled className="gap-1.5 h-8 border-destructive text-destructive">
                           Failed
                         </Button>
+                      ) : doc.form_type === 'broker_1099' ? (
+                        // For consolidated broker PDFs, render one button per matching account link
+                        // so every form type (1099-DIV, 1099-INT, 1099-B, …) can be reviewed independently.
+                        <div className="flex flex-wrap gap-1">
+                          {(doc.account_links ?? [])
+                            .filter(l => l.account_id === accountId)
+                            .map(link => (
+                              <Button
+                                key={link.id}
+                                size="sm"
+                                variant="outline"
+                                className={`gap-1.5 h-8 ${link.is_reviewed ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:text-green-800' : 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100 hover:text-amber-900'}`}
+                                onClick={() => openReview(doc, link)}
+                                title={link.is_reviewed ? 'Reviewed' : 'Review document'}
+                              >
+                                {link.is_reviewed ? (
+                                  <CheckCircle className="h-3.5 w-3.5" />
+                                ) : (
+                                  <Eye className="h-3.5 w-3.5" />
+                                )}
+                                {FORM_TYPE_LABELS[link.form_type] ?? link.form_type}
+                              </Button>
+                            ))}
+                        </div>
                       ) : (
                         <Button
                           size="sm"
                           variant="outline"
                           className={`gap-1.5 h-8 ${doc.is_reviewed ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:text-green-800' : 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100 hover:text-amber-900'}`}
-                          onClick={() => {
-                            // For broker_1099 docs, find the matching link for this account.
-                            const link = doc.form_type === 'broker_1099'
-                              ? (doc.account_links ?? []).find(l => l.account_id === accountId) ?? null
-                              : null
-                            openReview(doc, link)
-                          }}
+                          onClick={() => openReview(doc, null)}
                           title={doc.is_reviewed ? 'Reviewed' : 'Review document'}
                         >
                           {doc.is_reviewed ? (

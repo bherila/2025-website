@@ -9,32 +9,45 @@ import type { MultiAccountParsedEntry, TaxDocument, TaxDocumentAccountLink } fro
 
 /**
  * Find the account link that corresponds to a parsed_data entry.
- * Matches on form_type, and additionally on ai_identifier when available.
+ *
+ * When only one link shares the form_type it is returned unconditionally.
+ * When multiple links share the form_type, ai_identifier is required to match
+ * (both sides must be non-empty); returns undefined when the match is ambiguous.
  */
 export function findMatchingLink(
   entry: MultiAccountParsedEntry,
   links: TaxDocumentAccountLink[],
 ): TaxDocumentAccountLink | undefined {
-  return links.find(
-    l =>
-      l.form_type === entry.form_type &&
-      (l.ai_identifier != null ? l.ai_identifier === entry.account_identifier : true),
+  const candidates = links.filter(l => l.form_type === entry.form_type)
+  if (candidates.length === 1) return candidates[0]
+  if (candidates.length === 0) return undefined
+  // Multiple candidates — require ai_identifier to match (only when both sides are non-empty).
+  const identified = candidates.filter(
+    l => l.ai_identifier && entry.account_identifier && l.ai_identifier === entry.account_identifier,
   )
+  return identified.length === 1 ? identified[0] : undefined
 }
 
 /**
  * Find the parsed_data entry that corresponds to an account link.
  * Inverse of findMatchingLink.
+ *
+ * When only one entry shares the form_type it is returned unconditionally.
+ * When multiple entries share the form_type, ai_identifier is required to match
+ * (both sides must be non-empty); returns undefined when the match is ambiguous.
  */
 export function findMatchingEntry(
   link: TaxDocumentAccountLink,
   entries: MultiAccountParsedEntry[],
 ): MultiAccountParsedEntry | undefined {
-  return entries.find(
-    e =>
-      e.form_type === link.form_type &&
-      (link.ai_identifier != null ? e.account_identifier === link.ai_identifier : true),
+  const candidates = entries.filter(e => e.form_type === link.form_type)
+  if (candidates.length === 1) return candidates[0]
+  if (candidates.length === 0) return undefined
+  // Multiple candidates — require ai_identifier to match (only when both sides are non-empty).
+  const identified = candidates.filter(
+    e => link.ai_identifier && e.account_identifier && e.account_identifier === link.ai_identifier,
   )
+  return identified.length === 1 ? identified[0] : undefined
 }
 
 /**
@@ -63,11 +76,8 @@ export function patchLinkParsedDataInArray(
 ): MultiAccountParsedEntry[] {
   if (!Array.isArray(doc.parsed_data)) return []
   const entries = [...(doc.parsed_data as unknown as MultiAccountParsedEntry[])]
-  const idx = entries.findIndex(
-    e =>
-      e.form_type === link.form_type &&
-      (link.ai_identifier != null ? e.account_identifier === link.ai_identifier : true),
-  )
+  const match = findMatchingEntry(link, entries)
+  const idx = match ? entries.indexOf(match) : -1
   if (idx >= 0) {
     const existing = entries[idx]!
     entries[idx] = {

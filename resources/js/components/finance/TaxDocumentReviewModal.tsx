@@ -516,12 +516,29 @@ export default function TaxDocumentReviewModal({
   const handleJsonEdit = useCallback(async (doc: TaxDocument, parsedData: unknown) => {
     setSaving(true)
     try {
-      await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}`, { parsed_data: parsedData })
-      setEditData(parsedData as TaxDocumentParsedData | Record<string, unknown>)
-      setDocuments(prev => prev.map(d => d.id === doc.id ? {
-        ...d,
-        parsed_data: JSON.parse(JSON.stringify(parsedData)),
-      } : d))
+      if (isLinkReview && propAccountLink) {
+        // Per-link mode: patch only the specific array entry, not the whole parsed_data array.
+        if (!Array.isArray(doc.parsed_data)) {
+          toast.error('Unable to save: document parsed data is not an array')
+          return
+        }
+        const existingLinkParsedData = extractLinkParsedData(doc, propAccountLink)
+        if (existingLinkParsedData == null) {
+          toast.error('Unable to save: account entry was not found in document parsed data')
+          return
+        }
+        const updatedArray = patchLinkParsedDataInArray(doc, propAccountLink, parsedData as Record<string, unknown>)
+        await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}`, { parsed_data: updatedArray })
+        setEditData(parsedData as TaxDocumentParsedData | Record<string, unknown>)
+        setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, parsed_data: updatedArray as typeof d.parsed_data } : d))
+      } else {
+        await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}`, { parsed_data: parsedData })
+        setEditData(parsedData as TaxDocumentParsedData | Record<string, unknown>)
+        setDocuments(prev => prev.map(d => d.id === doc.id ? {
+          ...d,
+          parsed_data: JSON.parse(JSON.stringify(parsedData)),
+        } : d))
+      }
       toast.success('JSON updated')
       onDocumentReviewed?.()
     } catch {
@@ -530,7 +547,7 @@ export default function TaxDocumentReviewModal({
       setSaving(false)
       setJsonEditOpen(false)
     }
-  }, [onDocumentReviewed])
+  }, [onDocumentReviewed, isLinkReview, propAccountLink])
 
   const handleDelete = async (doc: TaxDocument) => {
     if (!confirm(`Delete "${doc.original_filename}"? This action cannot be undone.`)) return

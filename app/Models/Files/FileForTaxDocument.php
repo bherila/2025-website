@@ -128,7 +128,8 @@ class FileForTaxDocument extends Model
 
     /**
      * Write-through: propagate notes and/or is_reviewed from the parent document
-     * to all account link rows. Only updates non-empty fields.
+     * to all account link rows. All provided keys are written as-is, including
+     * null/empty values.
      *
      * @param  array<string, mixed>  $updates  Keys: 'notes', 'is_reviewed'
      */
