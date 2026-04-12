@@ -396,6 +396,54 @@ class ParseImportJob1099BTest extends TestCase
         ]);
     }
 
+    public function test_create_multi_account_results_skips_entry_with_unrecognized_form_type(): void
+    {
+        $user = $this->createUser();
+        $this->makeAccount($user->id, 'Fidelity', 'X65-385336');
+
+        $taxDoc = $this->makeTaxDoc($user->id, 0);
+        $genaiJob = $this->makeGenAiJob($user->id, $taxDoc->id);
+        $taxDoc->update(['genai_job_id' => $genaiJob->id]);
+
+        $data = [
+            [
+                'account_identifier' => 'X65-385336',
+                'account_name' => 'Fidelity',
+                'form_type' => 'not_a_real_form',
+                'tax_year' => 2024,
+                'parsed_data' => [],
+            ],
+            [
+                'account_identifier' => 'X65-385336',
+                'account_name' => 'Fidelity',
+                'form_type' => '1099_div',
+                'tax_year' => 2024,
+                'parsed_data' => ['box1a_ordinary' => 50.0],
+            ],
+        ];
+
+        \Log::shouldReceive('error')
+            ->once()
+            ->with('ParseImportJob: unrecognized form_type from AI, skipping entry', \Mockery::subset([
+                'raw_form_type' => 'not_a_real_form',
+            ]));
+
+        $jobInstance = new ParseImportJob($genaiJob->id);
+        $ref = new ReflectionMethod($jobInstance, 'createMultiAccountTaxDocumentResults');
+        $ref->setAccessible(true);
+        $ref->invoke($jobInstance, $genaiJob, $data);
+
+        // Only the valid entry was persisted — the bad entry is silently dropped
+        $this->assertDatabaseCount('fin_tax_document_accounts', 1);
+        $this->assertDatabaseHas('fin_tax_document_accounts', [
+            'tax_document_id' => $taxDoc->id,
+            'form_type' => '1099_div',
+        ]);
+        $this->assertDatabaseMissing('fin_tax_document_accounts', [
+            'form_type' => 'broker_1099',
+        ]);
+    }
+
     public function test_create_multi_account_results_is_idempotent_on_reprocess(): void
     {
         $user = $this->createUser();
