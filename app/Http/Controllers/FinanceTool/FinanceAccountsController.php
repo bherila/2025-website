@@ -3,18 +3,17 @@
 namespace App\Http\Controllers\FinanceTool;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\FinanceTool\Concerns\QueriesUserAccounts;
 use App\Models\FinanceTool\FinAccountLineItems;
-use App\Models\FinanceTool\FinAccounts;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 
 class FinanceAccountsController extends Controller
 {
+    use QueriesUserAccounts;
+
     public function showAllTransactions()
     {
-        $uid = Auth::id();
-        $accountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
-        $years = FinAccountLineItems::whereIn('t_account', $accountIds)
+        $years = FinAccountLineItems::whereIn('t_account', $this->getUserAccountIds())
             ->whereNotNull('t_date')
             ->pluck('t_date')
             ->map(fn ($date) => (int) substr((string) $date, 0, 4))
@@ -29,9 +28,7 @@ class FinanceAccountsController extends Controller
 
     public function showAllLots()
     {
-        $uid = Auth::id();
-        $accountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
-        $years = FinAccountLineItems::whereIn('t_account', $accountIds)
+        $years = FinAccountLineItems::whereIn('t_account', $this->getUserAccountIds())
             ->whereNotNull('t_date')
             ->pluck('t_date')
             ->map(fn ($date) => (int) substr((string) $date, 0, 4))
@@ -58,31 +55,14 @@ class FinanceAccountsController extends Controller
 
     public function show(Request $request, $account_id)
     {
-        $uid = Auth::id();
-
-        $account = FinAccounts::where('acct_id', $account_id)
-            ->where('acct_owner', $uid)
-            ->first();
-
-        if (! $account) {
-            abort(404, 'Account not found');
-        }
+        $account = $this->resolveOwnedAccount($account_id);
 
         return view('finance.transactions', ['account_id' => $account_id, 'accountName' => $account->acct_name]);
     }
 
     public function summary(Request $request, $account_id)
     {
-        $uid = Auth::id();
-
-        $account = FinAccounts::where('acct_id', $account_id)
-            ->where('acct_owner', $uid)
-            ->first();
-
-        if (! $account) {
-            abort(404, 'Account not found');
-        }
-
+        $account = $this->resolveOwnedAccount($account_id);
         $accountName = $account->acct_name;
 
         return view('finance.summary', compact('account_id', 'accountName'));
@@ -90,45 +70,21 @@ class FinanceAccountsController extends Controller
 
     public function statements(Request $request, $account_id)
     {
-        $uid = Auth::id();
-
-        $account = FinAccounts::where('acct_id', $account_id)
-            ->where('acct_owner', $uid)
-            ->first();
-
-        if (! $account) {
-            abort(404, 'Account not found');
-        }
+        $account = $this->resolveOwnedAccount($account_id);
 
         return view('finance.statements', ['account_id' => $account_id, 'accountName' => $account->acct_name]);
     }
 
     public function lots(Request $request, $account_id)
     {
-        $uid = Auth::id();
-
-        $account = FinAccounts::where('acct_id', $account_id)
-            ->where('acct_owner', $uid)
-            ->first();
-
-        if (! $account) {
-            abort(404, 'Account not found');
-        }
+        $account = $this->resolveOwnedAccount($account_id);
 
         return view('finance.lots', ['account_id' => $account_id, 'accountName' => $account->acct_name]);
     }
 
     public function maintenance(Request $request, $account_id)
     {
-        $uid = Auth::id();
-
-        $account = FinAccounts::where('acct_id', $account_id)
-            ->where('acct_owner', $uid)
-            ->first();
-
-        if (! $account) {
-            abort(404, 'Account not found');
-        }
+        $account = $this->resolveOwnedAccount($account_id);
 
         return view('finance.maintenance', [
             'account_id' => $account_id,
@@ -142,45 +98,21 @@ class FinanceAccountsController extends Controller
 
     public function showImportTransactionsPage(Request $request, $account_id)
     {
-        $uid = Auth::id();
-
-        $account = FinAccounts::where('acct_id', $account_id)
-            ->where('acct_owner', $uid)
-            ->first();
-
-        if (! $account) {
-            abort(404, 'Account not found');
-        }
+        $account = $this->resolveOwnedAccount($account_id);
 
         return view('finance.import-transactions', ['account_id' => $account_id, 'accountName' => $account->acct_name]);
     }
 
     public function duplicates(Request $request, $account_id)
     {
-        $uid = Auth::id();
-
-        $account = FinAccounts::where('acct_id', $account_id)
-            ->where('acct_owner', $uid)
-            ->first();
-
-        if (! $account) {
-            abort(404, 'Account not found');
-        }
+        $account = $this->resolveOwnedAccount($account_id);
 
         return view('finance.duplicates', ['account_id' => $account_id, 'accountName' => $account->acct_name]);
     }
 
     public function linker(Request $request, $account_id)
     {
-        $uid = Auth::id();
-
-        $account = FinAccounts::where('acct_id', $account_id)
-            ->where('acct_owner', $uid)
-            ->first();
-
-        if (! $account) {
-            abort(404, 'Account not found');
-        }
+        $account = $this->resolveOwnedAccount($account_id);
 
         return view('finance.linker', ['account_id' => $account_id, 'accountName' => $account->acct_name]);
     }
