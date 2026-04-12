@@ -10,7 +10,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
-import type { TaxDocument, TaxDocumentAccountLink } from '@/types/finance/tax-document'
+import { useReviewModal } from '@/hooks/useReviewModal'
+import type { TaxDocument } from '@/types/finance/tax-document'
 import { ACCOUNT_FORM_TYPES_1099, FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
 const IN_FLIGHT_STATUSES = new Set(['pending', 'processing'])
@@ -28,8 +29,7 @@ export default function AccountTaxDocumentsSection({ accountId, selectedYear }: 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [uploadModalState, setUploadModalState] = useState<{ formType: string } | null>(null)
-  const [reviewDoc, setReviewDoc] = useState<TaxDocument | null>(null)
-  const [reviewLink, setReviewLink] = useState<TaxDocumentAccountLink | null>(null)
+  const { reviewDoc, reviewLink, openReview, closeReview } = useReviewModal()
   const hasLoadedOnce = useRef(false)
 
   const availableYears = Array.from({ length: currentYear - 2018 }, (_, i) => currentYear - i)
@@ -165,8 +165,7 @@ export default function AccountTaxDocumentsSection({ accountId, selectedYear }: 
                             const link = doc.form_type === 'broker_1099'
                               ? (doc.account_links ?? []).find(l => l.account_id === accountId) ?? null
                               : null
-                            setReviewDoc(doc)
-                            setReviewLink(link)
+                            openReview(doc, link)
                           }}
                           title={doc.is_reviewed ? 'Reviewed' : 'Review document'}
                         >
@@ -230,10 +229,9 @@ export default function AccountTaxDocumentsSection({ accountId, selectedYear }: 
           taxYear={year}
           document={reviewDoc}
           accountLink={reviewLink ?? undefined}
-          onClose={() => { setReviewDoc(null); setReviewLink(null) }}
+          onClose={closeReview}
           onDocumentReviewed={() => {
-            setReviewDoc(null)
-            setReviewLink(null)
+            closeReview()
             void fetchDocuments()
           }}
         />

@@ -33,7 +33,9 @@ import {
   extractForeignTaxFromK1,
   WorksheetModal,
 } from '@/finance/1116'
-import type { F1099DivParsedData, F1099IntParsedData, FK1StructuredData, MultiAccountParsedEntry, TaxDocument, TaxDocumentAccountLink } from '@/types/finance/tax-document'
+import { useReviewModal } from '@/hooks/useReviewModal'
+import { hasReviewedContent, iterateReviewedBrokerEntries } from '@/lib/finance/taxDocumentUtils'
+import type { F1099DivParsedData, F1099IntParsedData, FK1StructuredData, TaxDocument, TaxDocumentAccountLink } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS, isFK1StructuredData } from '@/types/finance/tax-document'
 
 export interface FinAccount {
@@ -104,8 +106,7 @@ export default function TaxDocuments1099Section({
   const [consolidatedUploadAccountId, setConsolidatedUploadAccountId] = useState<number | null>(null)
   const [manualEntry, setManualEntry] = useState<ManualEntryState | null>(null)
   const [manualSaving, setManualSaving] = useState(false)
-  const [reviewModalDoc, setReviewModalDoc] = useState<TaxDocument | null>(null)
-  const [reviewModalLink, setReviewModalLink] = useState<TaxDocumentAccountLink | null>(null)
+  const { reviewDoc: reviewModalDoc, reviewLink: reviewModalLink, openReview: openReviewModal, closeReview: closeReviewModal } = useReviewModal()
   const [worksheetOpen, setWorksheetOpen] = useState(false)
 
   useEffect(() => {
@@ -116,18 +117,10 @@ export default function TaxDocuments1099Section({
     for (const doc of documents) {
       if (!doc.parsed_data) continue
 
-      if (doc.form_type === 'broker_1099' && Array.isArray(doc.parsed_data)) {
+      if (doc.form_type === 'broker_1099') {
         // Multi-account consolidated PDF: iterate per-entry, respect per-link review state.
-        const entries = doc.parsed_data as unknown as MultiAccountParsedEntry[]
-        const links = doc.account_links ?? []
-        for (const entry of entries) {
-          // Find the matching link to check per-link review state.
-          const link = links.find(
-            l => l.form_type === entry.form_type && (l.ai_identifier != null ? l.ai_identifier === entry.account_identifier : true),
-          )
-          if (!link?.is_reviewed) continue
-          const pd = entry.parsed_data as Record<string, unknown> | null
-          if (!pd) continue
+        for (const [entry] of iterateReviewedBrokerEntries(doc)) {
+          const pd = entry.parsed_data as Record<string, unknown>
           if (entry.form_type === '1099_int' || entry.form_type === '1099_int_c') {
             interestIncome = interestIncome.add((pd as F1099IntParsedData).box1_interest ?? 0)
           }
@@ -151,10 +144,7 @@ export default function TaxDocuments1099Section({
     }
 
     onTotalsChange?.({ interestIncome, dividendIncome, qualifiedDividends })
-    // Include docs where any link or the parent is reviewed.
-    onDocumentsChange?.(documents.filter((doc) =>
-      doc.is_reviewed || (doc.account_links ?? []).some(l => l.is_reviewed),
-    ))
+    onDocumentsChange?.(documents.filter(hasReviewedContent))
   }, [documents, onDocumentsChange, onTotalsChange])
 
   /** Collect foreign tax summaries from all reviewed documents. */
@@ -163,22 +153,15 @@ export default function TaxDocuments1099Section({
     for (const doc of documents) {
       if (!doc.parsed_data) continue
 
-      if (doc.form_type === 'broker_1099' && Array.isArray(doc.parsed_data)) {
+      if (doc.form_type === 'broker_1099') {
         // Multi-account: iterate per-entry and respect per-link review state.
-        const entries = doc.parsed_data as unknown as MultiAccountParsedEntry[]
-        const links = doc.account_links ?? []
-        for (const entry of entries) {
-          const link = links.find(
-            l => l.form_type === entry.form_type && (l.ai_identifier != null ? l.ai_identifier === entry.account_identifier : true),
-          )
-          if (!link?.is_reviewed || !entry.parsed_data) continue
+        for (const [entry, link] of iterateReviewedBrokerEntries(doc)) {
           const pd = entry.parsed_data as Record<string, unknown>
-          const accountId = link.account_id
           if (entry.form_type === '1099_div' || entry.form_type === '1099_div_c') {
-            const s = extractForeignTaxFrom1099Div(pd, accountId)
+            const s = extractForeignTaxFrom1099Div(pd, link.account_id)
             if (s) summaries.push(s)
           } else if (entry.form_type === '1099_int' || entry.form_type === '1099_int_c') {
-            const s = extractForeignTaxFrom1099Int(pd, accountId)
+            const s = extractForeignTaxFrom1099Int(pd, link.account_id)
             if (s) summaries.push(s)
           }
         }
@@ -350,11 +333,6 @@ export default function TaxDocuments1099Section({
    * that expose multiple per-form links (1099-DIV, 1099-INT, 1099-B) for the same account.
    * Clicking always opens the parent document's review modal.
    */
-  const openReviewModal = (doc: TaxDocument, link?: TaxDocumentAccountLink) => {
-    setReviewModalDoc(doc)
-    setReviewModalLink(link ?? null)
-  }
-
   const renderTaxDocumentButton = (doc: TaxDocument, link?: TaxDocumentAccountLink) => {
     const isProcessing = doc.genai_status === 'pending' || doc.genai_status === 'processing'
     const isFailed = doc.genai_status === 'failed'
@@ -631,10 +609,9 @@ export default function TaxDocuments1099Section({
           taxYear={selectedYear}
           document={reviewModalDoc}
           accountLink={reviewModalLink ?? undefined}
-          onClose={() => { setReviewModalDoc(null); setReviewModalLink(null) }}
+          onClose={closeReviewModal}
           onDocumentReviewed={() => {
-            setReviewModalDoc(null)
-            setReviewModalLink(null)
+            closeReviewModal()
             fetchDocuments()
           }}
         />

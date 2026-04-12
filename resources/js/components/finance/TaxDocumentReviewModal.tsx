@@ -31,7 +31,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { fetchWrapper } from '@/fetchWrapper'
 import { F1116ReviewPanel, isF1116Data } from '@/finance/1116'
-import type { MultiAccountParsedEntry, TaxDocument, TaxDocumentAccountLink, TaxDocumentParsedData, W2ParsedData } from '@/types/finance/tax-document'
+import { extractLinkParsedData, patchLinkParsedDataInArray } from '@/lib/finance/taxDocumentUtils'
+import type { TaxDocument, TaxDocumentAccountLink, TaxDocumentParsedData, W2ParsedData } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
 interface TaxDocumentReviewModalProps {
@@ -384,59 +385,6 @@ function ParsedDataEditor({
       )}
     </div>
   )
-}
-
-/**
- * For a broker_1099 / multi-account document whose parsed_data is an array of
- * MultiAccountParsedEntry objects, extract the matching entry's inner parsed_data
- * for the given account link.
- */
-function extractLinkParsedData(
-  doc: TaxDocument,
-  link: TaxDocumentAccountLink,
-): Record<string, unknown> | null {
-  if (!Array.isArray(doc.parsed_data)) return null
-  const entries = doc.parsed_data as unknown as MultiAccountParsedEntry[]
-  // Match by AI-detected identifier and form_type.
-  const match = entries.find(
-    e =>
-      e.form_type === link.form_type &&
-      (link.ai_identifier != null
-        ? e.account_identifier === link.ai_identifier
-        : true),
-  )
-  return (match?.parsed_data as Record<string, unknown>) ?? null
-}
-
-/**
- * Patch an individual account link's parsed_data back into the parent document's
- * parsed_data array, returning the updated array.
- */
-function patchLinkParsedDataInArray(
-  doc: TaxDocument,
-  link: TaxDocumentAccountLink,
-  updatedEntry: Record<string, unknown>,
-): MultiAccountParsedEntry[] {
-  if (!Array.isArray(doc.parsed_data)) return []
-  const entries = [...(doc.parsed_data as unknown as MultiAccountParsedEntry[])]
-  const idx = entries.findIndex(
-    e =>
-      e.form_type === link.form_type &&
-      (link.ai_identifier != null
-        ? e.account_identifier === link.ai_identifier
-        : true),
-  )
-  if (idx >= 0) {
-    const existing = entries[idx]!
-    entries[idx] = {
-      account_identifier: existing.account_identifier,
-      account_name: existing.account_name,
-      form_type: existing.form_type,
-      tax_year: existing.tax_year,
-      parsed_data: updatedEntry,
-    }
-  }
-  return entries
 }
 
 export default function TaxDocumentReviewModal({
