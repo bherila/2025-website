@@ -3,30 +3,27 @@
 namespace App\Http\Controllers\FinanceTool;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\FinanceTool\Concerns\QueriesUserAccounts;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
-use App\Models\FinanceTool\FinAccounts;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 
 class FinanceTransactionsApiController extends Controller
 {
+    use QueriesUserAccounts;
+
     /**
      * Get line items (transactions) for one or all accounts.
      * Pass account_id = 'all' (or null) to retrieve transactions across all accounts.
      */
     public function getLineItems(Request $request, $account_id = null)
     {
-        $uid = Auth::id();
-
         if ($account_id && $account_id !== 'all') {
-            $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+            $account = $this->resolveOwnedAccount($account_id);
             $query = FinAccountLineItems::where('t_account', $account->acct_id);
         } else {
-            // Get all account IDs for this user
-            $accountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
-            $query = FinAccountLineItems::whereIn('t_account', $accountIds);
+            $query = FinAccountLineItems::whereIn('t_account', $this->getUserAccountIds());
         }
 
         $query->with(['tags', 'parentTransactions.account', 'childTransactions.account', 'clientExpense.clientCompany'])
@@ -87,8 +84,7 @@ class FinanceTransactionsApiController extends Controller
      */
     public function deleteLineItem(Request $request, $account_id)
     {
-        $uid = Auth::id();
-        $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+        $account = $this->resolveOwnedAccount($account_id);
 
         $request->validate([
             't_id' => 'required|integer',
@@ -110,8 +106,7 @@ class FinanceTransactionsApiController extends Controller
      */
     public function importLineItems(Request $request, $account_id)
     {
-        $uid = Auth::id();
-        $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+        $account = $this->resolveOwnedAccount($account_id);
 
         $data = $request->json()->all();
         // Check if we have a top-level statement_id or if it's per item
@@ -167,8 +162,7 @@ class FinanceTransactionsApiController extends Controller
      */
     public function createTransaction(Request $request, $account_id)
     {
-        $uid = Auth::id();
-        $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+        $account = $this->resolveOwnedAccount($account_id);
 
         $request->validate([
             't_date' => 'required|date',
@@ -210,13 +204,10 @@ class FinanceTransactionsApiController extends Controller
      */
     public function getTransactionYears(Request $request, $account_id = 'all')
     {
-        $uid = Auth::id();
-
         if ($account_id === 'all') {
-            $accountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
-            $query = FinAccountLineItems::whereIn('t_account', $accountIds)->whereNotNull('t_date');
+            $query = FinAccountLineItems::whereIn('t_account', $this->getUserAccountIds())->whereNotNull('t_date');
         } else {
-            $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+            $account = $this->resolveOwnedAccount($account_id);
             $query = FinAccountLineItems::where('t_account', $account->acct_id)->whereNotNull('t_date');
         }
 
@@ -320,10 +311,7 @@ class FinanceTransactionsApiController extends Controller
             't_ids.*' => 'required|integer',
         ]);
 
-        $uid = Auth::id();
-
-        // Collect all account IDs owned by this user
-        $userAccountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
+        $userAccountIds = $this->getUserAccountIds();
 
         $tIds = $request->input('t_ids');
 
@@ -366,9 +354,7 @@ class FinanceTransactionsApiController extends Controller
             'fields.t_schc_category' => 'nullable|string|max:255',
         ]);
 
-        $uid = Auth::id();
-
-        $userAccountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
+        $userAccountIds = $this->getUserAccountIds();
 
         $tIds = $request->input('t_ids');
         $rawFields = $request->input('fields');

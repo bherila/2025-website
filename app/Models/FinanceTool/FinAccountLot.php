@@ -66,4 +66,29 @@ class FinAccountLot extends Model
     {
         return $this->belongsTo(FileForTaxDocument::class, 'tax_document_id', 'id');
     }
+
+    /**
+     * Compute the is_short_term and realized_gain_loss derived fields for a lot.
+     *
+     * Returns null for both values when the lot is still open (no sale_date).
+     * realized_gain_loss is null when proceeds is not provided.
+     *
+     * @return array{is_short_term: bool|null, realized_gain_loss: float|null}
+     */
+    public static function computeMetrics(
+        string $purchaseDate,
+        ?string $saleDate,
+        ?float $proceeds,
+        float $costBasis,
+    ): array {
+        if (! $saleDate) {
+            return ['is_short_term' => null, 'realized_gain_loss' => null];
+        }
+
+        $diff = (new \DateTime($purchaseDate))->diff(new \DateTime($saleDate));
+        $isShortTerm = $diff->days <= 365;
+        $realizedGainLoss = $proceeds !== null ? $proceeds - $costBasis : null;
+
+        return ['is_short_term' => $isShortTerm, 'realized_gain_loss' => $realizedGainLoss];
+    }
 }

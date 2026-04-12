@@ -3,16 +3,18 @@
 namespace App\Http\Controllers\FinanceTool;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\FinanceTool\Concerns\QueriesUserAccounts;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class FinanceLotsController extends Controller
 {
+    use QueriesUserAccounts;
+
     /**
      * List all lots for the current user (across all accounts).
      * Used by Form 1116 worksheet for adjusted basis discovery.
@@ -24,8 +26,7 @@ class FinanceLotsController extends Controller
      */
     public function showAllLots(Request $request): JsonResponse
     {
-        $uid = Auth::id();
-        $accountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
+        $accountIds = $this->getUserAccountIds();
 
         $query = FinAccountLot::whereIn('acct_id', $accountIds)
             ->select(['acct_id', 'cost_basis', 'purchase_date', 'sale_date']);
@@ -61,8 +62,7 @@ class FinanceLotsController extends Controller
      */
     public function index(Request $request, $account_id)
     {
-        $uid = Auth::id();
-        $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+        $account = $this->resolveOwnedAccount($account_id);
 
         $query = FinAccountLot::where('acct_id', $account->acct_id);
 
@@ -136,8 +136,7 @@ class FinanceLotsController extends Controller
      */
     public function store(Request $request, $account_id)
     {
-        $uid = Auth::id();
-        $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+        $account = $this->resolveOwnedAccount($account_id);
 
         $validated = $request->validate([
             'symbol' => 'required|string|max:50',
@@ -153,19 +152,13 @@ class FinanceLotsController extends Controller
         ]);
 
         // Compute derived fields
-        $isShortTerm = null;
-        $realizedGainLoss = null;
-
-        if (! empty($validated['sale_date'])) {
-            $purchaseDate = new \DateTime($validated['purchase_date']);
-            $saleDate = new \DateTime($validated['sale_date']);
-            $diff = $purchaseDate->diff($saleDate);
-            $isShortTerm = $diff->days <= 365;
-
-            if (isset($validated['proceeds'])) {
-                $realizedGainLoss = $validated['proceeds'] - $validated['cost_basis'];
-            }
-        }
+        ['is_short_term' => $isShortTerm, 'realized_gain_loss' => $realizedGainLoss] =
+            FinAccountLot::computeMetrics(
+                $validated['purchase_date'],
+                $validated['sale_date'] ?? null,
+                isset($validated['proceeds']) ? (float) $validated['proceeds'] : null,
+                (float) $validated['cost_basis'],
+            );
 
         $lot = FinAccountLot::create([
             'acct_id' => $account->acct_id,
@@ -195,8 +188,7 @@ class FinanceLotsController extends Controller
      */
     public function searchTransactions(Request $request, $account_id)
     {
-        $uid = Auth::id();
-        $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+        $account = $this->resolveOwnedAccount($account_id);
 
         $validated = $request->validate([
             'dates' => 'required|array',
@@ -218,8 +210,7 @@ class FinanceLotsController extends Controller
      */
     public function importLots(Request $request, $account_id)
     {
-        $uid = Auth::id();
-        $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+        $account = $this->resolveOwnedAccount($account_id);
 
         $validated = $request->validate([
             'lots' => 'required|array|min:1',
@@ -275,15 +266,15 @@ class FinanceLotsController extends Controller
                     $isShortTerm = $lotData['is_short_term'] ?? null;
                     $realizedGainLoss = $lotData['realized_gain_loss'] ?? null;
 
-                    if (! empty($lotData['sale_date']) && $isShortTerm === null) {
-                        $purchaseDate = new \DateTime($lotData['purchase_date']);
-                        $saleDate = new \DateTime($lotData['sale_date']);
-                        $diff = $purchaseDate->diff($saleDate);
-                        $isShortTerm = $diff->days <= 365;
-                    }
-
-                    if (! empty($lotData['sale_date']) && $realizedGainLoss === null && isset($lotData['proceeds'])) {
-                        $realizedGainLoss = $lotData['proceeds'] - $lotData['cost_basis'];
+                    if (! empty($lotData['sale_date'])) {
+                        $metrics = FinAccountLot::computeMetrics(
+                            $lotData['purchase_date'],
+                            $lotData['sale_date'],
+                            isset($lotData['proceeds']) ? (float) $lotData['proceeds'] : null,
+                            (float) $lotData['cost_basis'],
+                        );
+                        $isShortTerm ??= $metrics['is_short_term'];
+                        $realizedGainLoss ??= $metrics['realized_gain_loss'];
                     }
 
                     FinAccountLot::create([
@@ -325,8 +316,7 @@ class FinanceLotsController extends Controller
      */
     public function lotsByTransaction(Request $request, $account_id, $t_id)
     {
-        $uid = Auth::id();
-        $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+        $account = $this->resolveOwnedAccount($account_id);
 
         $lots = FinAccountLot::where('acct_id', $account->acct_id)
             ->where(function ($q) use ($t_id) {
@@ -350,8 +340,7 @@ class FinanceLotsController extends Controller
      */
     public function saveAnalyzedLots(Request $request, $account_id)
     {
-        $uid = Auth::id();
-        $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+        $account = $this->resolveOwnedAccount($account_id);
 
         $validated = $request->validate([
             'lots' => 'required|array|min:1',
@@ -380,14 +369,15 @@ class FinanceLotsController extends Controller
                 $isShortTerm = $lotData['is_short_term'] ?? null;
                 $realizedGainLoss = $lotData['realized_gain_loss'] ?? null;
 
-                if (! empty($lotData['sale_date']) && $isShortTerm === null) {
-                    $purchaseDate = new \DateTime($lotData['purchase_date']);
-                    $saleDate = new \DateTime($lotData['sale_date']);
-                    $isShortTerm = $purchaseDate->diff($saleDate)->days <= 365;
-                }
-
-                if (! empty($lotData['sale_date']) && $realizedGainLoss === null && isset($lotData['proceeds'])) {
-                    $realizedGainLoss = $lotData['proceeds'] - $lotData['cost_basis'];
+                if (! empty($lotData['sale_date'])) {
+                    $metrics = FinAccountLot::computeMetrics(
+                        $lotData['purchase_date'],
+                        $lotData['sale_date'],
+                        isset($lotData['proceeds']) ? (float) $lotData['proceeds'] : null,
+                        (float) $lotData['cost_basis'],
+                    );
+                    $isShortTerm ??= $metrics['is_short_term'];
+                    $realizedGainLoss ??= $metrics['realized_gain_loss'];
                 }
 
                 FinAccountLot::create([
@@ -429,8 +419,7 @@ class FinanceLotsController extends Controller
      */
     public function updateLot(Request $request, $account_id, $lot_id)
     {
-        $uid = Auth::id();
-        $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+        $account = $this->resolveOwnedAccount($account_id);
 
         $lot = FinAccountLot::where('lot_id', $lot_id)
             ->where('acct_id', $account->acct_id)
@@ -473,8 +462,7 @@ class FinanceLotsController extends Controller
      */
     public function deleteLot(Request $request, $account_id, $lot_id)
     {
-        $uid = Auth::id();
-        $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+        $account = $this->resolveOwnedAccount($account_id);
 
         $lot = FinAccountLot::where('lot_id', $lot_id)
             ->where('acct_id', $account->acct_id)
@@ -495,14 +483,12 @@ class FinanceLotsController extends Controller
      */
     public function searchOpeningTransactions(Request $request)
     {
-        $uid = Auth::id();
-
         $validated = $request->validate([
             'symbol' => 'required|string|max:20',
             'type' => 'nullable|string|in:buy,sell',
         ]);
 
-        $accountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
+        $accountIds = $this->getUserAccountIds();
 
         $query = FinAccountLineItems::whereIn('t_account', $accountIds)
             ->where('t_symbol', 'LIKE', $validated['symbol'])
@@ -532,7 +518,7 @@ class FinanceLotsController extends Controller
         $transactions = $query->limit(200)->get();
 
         // Enrich with account name
-        $accounts = FinAccounts::where('acct_owner', $uid)->pluck('acct_name', 'acct_id');
+        $accounts = FinAccounts::whereIn('acct_id', $accountIds)->pluck('acct_name', 'acct_id');
         $transactions->transform(function ($t) use ($accounts) {
             $t->acct_name = $accounts[$t->t_account] ?? null;
 
@@ -548,8 +534,6 @@ class FinanceLotsController extends Controller
      */
     public function saveLotAssignment(Request $request)
     {
-        $uid = Auth::id();
-
         $validated = $request->validate([
             'assignments' => 'required|array|min:1',
             'assignments.*.close_t_id' => 'required|integer',
@@ -563,7 +547,7 @@ class FinanceLotsController extends Controller
         ]);
 
         // Verify all transactions belong to this user
-        $accountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
+        $accountIds = $this->getUserAccountIds();
 
         $created = 0;
         DB::beginTransaction();
