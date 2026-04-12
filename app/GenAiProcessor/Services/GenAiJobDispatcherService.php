@@ -952,7 +952,7 @@ This PDF may contain forms for multiple accounts (1099-DIV, 1099-INT, 1099-MISC,
 Return a JSON **array** where each element represents one account/form combination. Each element must have these fields:
 - `account_identifier`: The full or partial account number found in the PDF (string, e.g. "...1234" or "8W163GBF")
 - `account_name`: The brokerage/account name found in the PDF (string, e.g. "Fidelity Brokerage")
-- `form_type`: One of: 1099_int, 1099_div, 1099_misc, 1099_b, broker_1099, k1 (string)
+- `form_type`: The specific IRS form type found in this section. Use one of: 1099_int, 1099_div, 1099_misc, 1099_b, k1 (string). Do NOT use "broker_1099" — that is the container type for the uploaded PDF, not a form type you should return.
 - `tax_year`: The tax year this form covers (integer)
 - `parsed_data`: An object containing the extracted form fields relevant to that form type (see below)
 

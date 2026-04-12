@@ -10,7 +10,7 @@ use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Tool;
 
-#[Description('List tax documents (W-2, 1099-INT, 1099-DIV, 1099-MISC, K-1, Form 1116) for the authenticated user. Supports filtering by year, form type, and review status.')]
+#[Description('List tax documents (W-2, 1099-INT, 1099-DIV, 1099-MISC, 1099-B, 1099-NEC, 1099-R, broker_1099 consolidated statements, K-1, Form 1116) for the authenticated user. Supports filtering by year, form type, and review status.')]
 class ListTaxDocuments extends Tool
 {
     public function handle(Request $request): Response
@@ -49,7 +49,7 @@ class ListTaxDocuments extends Tool
     {
         return [
             'year' => $schema->integer()->description('Filter by tax year (e.g. 2024)')->nullable(),
-            'form_type' => $schema->string()->description('Comma-separated form type(s): w2, 1099_int, 1099_div, 1099_misc, k1, 1116')->nullable(),
+            'form_type' => $schema->string()->description('Comma-separated form type(s): w2, w2c, 1099_int, 1099_int_c, 1099_div, 1099_div_c, 1099_misc, 1099_nec, 1099_r, 1099_b, broker_1099, k1, 1116. Use broker_1099 for consolidated brokerage statements.')->nullable(),
             'is_reviewed' => $schema->boolean()->description('Filter to reviewed (true) or unreviewed (false) documents')->nullable(),
         ];
     }

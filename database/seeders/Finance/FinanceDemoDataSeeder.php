@@ -14,6 +14,7 @@ class FinanceDemoDataSeeder extends Seeder
             FinanceTagsSeeder::class,
             FinanceTransactionsSeeder::class,
             FinanceTagMappingsSeeder::class,
+            FinanceTaxDocumentsSeeder::class,
         ]);
     }
 }

@@ -64,8 +64,11 @@ function validateParsedData(data: unknown, formType: string): string[] {
       }
       break
     case 'k1': {
-      if (obj['schemaVersion'] !== '2026.1') {
-        errors.push('Missing or wrong schemaVersion — must be "2026.1"')
+      // "2026.1" = AI-generated via coerceK1Args; "1.0" = migrated legacy record.
+      // Both use the same fields/codes structure and are treated as canonical.
+      const canonicalVersions = ['2026.1', '1.0']
+      if (!canonicalVersions.includes(obj['schemaVersion'] as string)) {
+        errors.push('Missing or wrong schemaVersion — must be "2026.1" (AI-generated) or "1.0" (migrated legacy)')
       }
       const fields = obj['fields']
       if (!fields || typeof fields !== 'object' || Array.isArray(fields)) {
