@@ -163,9 +163,12 @@ class FinanceImportTransactionsCommand extends BaseFinanceCommand
                 }
             }
 
-            // Validate t_date format (YYYY-MM-DD)
-            if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $row['t_date'])) {
-                $errors[] = "Row {$index}: t_date must be in YYYY-MM-DD format, got '{$row['t_date']}'.";
+            // Validate t_date format and calendar validity (YYYY-MM-DD)
+            $dateStr = (string) $row['t_date'];
+            $parsedDate = \DateTime::createFromFormat('Y-m-d', $dateStr);
+            $dateParseErrors = \DateTime::getLastErrors();
+            if ($parsedDate === false || ($dateParseErrors && ($dateParseErrors['error_count'] > 0 || $dateParseErrors['warning_count'] > 0))) {
+                $errors[] = "Row {$index}: t_date must be a valid date in YYYY-MM-DD format, got '{$dateStr}'.";
 
                 continue;
             }
@@ -199,7 +202,8 @@ class FinanceImportTransactionsCommand extends BaseFinanceCommand
             return 1;
         }
 
-        // Batch deduplication: pre-fetch existing tuples per account to avoid N+1 queries.
+        // Batch deduplication: pre-fetch existing tuples per account, scoped to the date
+        // range of rows being imported, to avoid loading entire account history into memory.
         $toInsert = [];
         $skipped = [];
 
@@ -207,9 +211,18 @@ class FinanceImportTransactionsCommand extends BaseFinanceCommand
         $existingByAccount = [];
         $accountIdsInBatch = array_unique(array_column($validRows, 't_account'));
 
+        // Build a per-account date range from the incoming batch to limit the pre-fetch query
+        /** @var array<int, list<string>> $datesByAccount */
+        $datesByAccount = [];
+        foreach ($validRows as $row) {
+            $datesByAccount[(int) $row['t_account']][] = $row['t_date'];
+        }
+
         foreach ($accountIdsInBatch as $acctId) {
+            $accountDates = $datesByAccount[$acctId] ?? [];
             $existing = FinAccountLineItems::query()
                 ->where('t_account', $acctId)
+                ->whereBetween('t_date', [min($accountDates), max($accountDates)])
                 ->get(['t_date', 't_type', 't_amt', 't_symbol']);
 
             foreach ($existing as $ex) {

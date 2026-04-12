@@ -211,6 +211,19 @@ class FinanceImportTransactionsCommandTest extends TestCase
             ->assertExitCode(1);
     }
 
+    public function test_rejects_calendar_invalid_date(): void
+    {
+        $this->withPayload([
+            'account_id' => $this->checkingId,
+            'transactions' => [
+                ['t_date' => '2026-02-30', 't_type' => 'deposit', 't_amt' => 100.00],
+            ],
+        ]);
+
+        $this->artisan('finance:import-transactions')
+            ->assertExitCode(1);
+    }
+
     public function test_rejects_non_numeric_amount(): void
     {
         $this->withPayload([
