@@ -434,7 +434,7 @@ class TaxDocumentControllerTest extends TestCase
         $user = $this->createUser();
         $doc = $this->createTaxDocument($user->id, [
             'genai_status' => 'parsed',
-            'parsed_data' => json_encode(['box1_wages' => 50000]),
+            'parsed_data' => ['box1_wages' => 50000],
             'is_reviewed' => true,
         ]);
 
