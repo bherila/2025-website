@@ -36,6 +36,34 @@ class TaxDocumentAccount extends Model
         ];
     }
 
+    /**
+     * Create a canonical account link row.
+     *
+     * All code that creates fin_tax_document_accounts rows should use this factory
+     * so that column defaults and required fields are managed in one place.
+     */
+    public static function createLink(
+        int $taxDocumentId,
+        ?int $accountId,
+        string $formType,
+        int $taxYear,
+        bool $isReviewed = false,
+        ?string $notes = null,
+        ?string $aiIdentifier = null,
+        ?string $aiAccountName = null,
+    ): static {
+        return static::create([
+            'tax_document_id' => $taxDocumentId,
+            'account_id' => $accountId,
+            'form_type' => $formType,
+            'tax_year' => $taxYear,
+            'is_reviewed' => $isReviewed,
+            'notes' => $notes,
+            'ai_identifier' => $aiIdentifier,
+            'ai_account_name' => $aiAccountName,
+        ]);
+    }
+
     public function document(): BelongsTo
     {
         return $this->belongsTo(FileForTaxDocument::class, 'tax_document_id');
