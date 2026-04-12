@@ -478,19 +478,19 @@ class ParseImportJob implements ShouldQueue
                 $accountId = $this->matchAccount($entry, $userAccounts);
 
                 // Normalize form_type: validate against allowed set.
-                // broker_1099 is the container type for consolidated PDFs; if the AI returns
-                // an unrecognized form_type, fall back to broker_1099 but log a warning so
-                // the issue is diagnosable rather than silently swallowed.
+                // broker_1099 is the container type for the uploaded PDF — sub-entries returned
+                // by the AI should never carry that type. If the AI returns an unrecognized
+                // form_type, skip the entry entirely rather than creating a misleading record.
                 $rawFormType = trim((string) ($entry['form_type'] ?? ''));
-                if (in_array($rawFormType, FileForTaxDocument::FORM_TYPES, true)) {
-                    $formType = $rawFormType;
-                } else {
-                    $formType = 'broker_1099';
-                    \Log::warning('ParseImportJob: unrecognized form_type from AI, falling back to broker_1099', [
+                if (! in_array($rawFormType, FileForTaxDocument::FORM_TYPES, true)) {
+                    \Log::error('ParseImportJob: unrecognized form_type from AI, skipping entry', [
                         'tax_document_id' => $taxDoc->id,
                         'raw_form_type' => $rawFormType,
                     ]);
+
+                    continue;
                 }
+                $formType = $rawFormType;
 
                 // Normalize tax_year: clamp to a sane range.
                 $taxYear = (int) ($entry['tax_year'] ?? $context['tax_year'] ?? date('Y'));
