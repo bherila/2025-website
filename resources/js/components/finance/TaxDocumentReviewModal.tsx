@@ -575,12 +575,22 @@ export default function TaxDocumentReviewModal({
           linkPayload,
         )
 
-        // Also persist the edited parsed_data back into the parent's array.
-        const updatedArray = patchLinkParsedDataInArray(doc, propAccountLink, editData as Record<string, unknown>)
-        await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}`, {
-          parsed_data: updatedArray,
-        })
+        // Also persist the edited parsed_data back into the parent's array,
+        // but only when the parent parsed_data shape is valid and the target entry exists.
+        if (!Array.isArray(doc.parsed_data)) {
+          toast.error('Unable to save parent parsed data: document parsed data is not an array')
+        } else {
+          const existingLinkParsedData = extractLinkParsedData(doc, propAccountLink)
 
+          if (existingLinkParsedData == null) {
+            toast.error('Unable to save parent parsed data: account entry was not found in document parsed data')
+          } else {
+            const updatedArray = patchLinkParsedDataInArray(doc, propAccountLink, editData as Record<string, unknown>)
+            await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}`, {
+              parsed_data: updatedArray,
+            })
+          }
+        }
         toast.success(isReviewToggling ? 'Account link marked as reviewed' : 'Changes saved')
         onDocumentReviewed?.()
         if (isReviewed && isReviewToggling && propDocument) {
