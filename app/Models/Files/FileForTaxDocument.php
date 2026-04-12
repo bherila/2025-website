@@ -91,7 +91,7 @@ class FileForTaxDocument extends Model
                 }
                 $data = is_string($value) ? json_decode($value, true) : $value;
                 if (! is_array($data)) {
-                    return $data;
+                    return null;
                 }
                 if ($this->form_type === 'k1' && K1LegacyTransformer::isLegacy($data)) {
                     return K1LegacyTransformer::transform($data);

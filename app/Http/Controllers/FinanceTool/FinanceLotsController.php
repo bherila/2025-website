@@ -518,7 +518,7 @@ class FinanceLotsController extends Controller
         $transactions = $query->limit(200)->get();
 
         // Enrich with account name
-        $accounts = FinAccounts::pluck('acct_name', 'acct_id');
+        $accounts = FinAccounts::whereIn('acct_id', $accountIds)->pluck('acct_name', 'acct_id');
         $transactions->transform(function ($t) use ($accounts) {
             $t->acct_name = $accounts[$t->t_account] ?? null;
 

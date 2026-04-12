@@ -22,7 +22,7 @@ class FinanceK1MigrateCommandTest extends TestCase
 
     protected function tearDown(): void
     {
-        putenv('FINANCE_CLI_USER_ID=');
+        putenv('FINANCE_CLI_USER_ID');
         parent::tearDown();
     }
 

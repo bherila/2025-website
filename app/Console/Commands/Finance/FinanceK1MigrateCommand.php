@@ -26,7 +26,8 @@ class FinanceK1MigrateCommand extends BaseFinanceCommand
             ->get();
 
         $migrated = 0;
-        $skipped = 0;
+        $skippedCanonical = 0;
+        $skippedInvalid = 0;
 
         foreach ($docs as $doc) {
             // Read the raw JSON from the DB, bypassing the model's normalising getter
@@ -34,8 +35,14 @@ class FinanceK1MigrateCommand extends BaseFinanceCommand
             $rawJson = $doc->getRawOriginal('parsed_data');
             $parsed = is_string($rawJson) ? json_decode($rawJson, true) : $rawJson;
 
-            if (! is_array($parsed) || ! K1LegacyTransformer::isLegacy($parsed)) {
-                $skipped++;
+            if (! is_array($parsed)) {
+                $skippedInvalid++;
+
+                continue;
+            }
+
+            if (! K1LegacyTransformer::isLegacy($parsed)) {
+                $skippedCanonical++;
 
                 continue;
             }
@@ -55,7 +62,10 @@ class FinanceK1MigrateCommand extends BaseFinanceCommand
 
         $label = $isDryRun ? 'Would migrate' : 'Migrated';
         $this->info("{$label}: {$migrated} record(s).");
-        $this->info("Skipped (already canonical): {$skipped}.");
+        $this->info("Skipped (already canonical): {$skippedCanonical}.");
+        if ($skippedInvalid > 0) {
+            $this->warn("Skipped (invalid/unexpected shape): {$skippedInvalid}.");
+        }
 
         return 0;
     }
