@@ -194,13 +194,13 @@ FinAccountLineItems::query()
 
 ### User scoping
 
-`FinAccounts` has a global scope that filters by the authenticated web user. CLI commands must use `withoutGlobalScopes()` and then apply the user filter explicitly:
+`FinAccounts` has a global scope that filters by the authenticated web user (`auth()->id()`), which is null in CLI and queue contexts. Use the `forOwner` scope instead — it bypasses the global scope and applies an explicit `acct_owner` filter:
 
 ```php
-FinAccounts::withoutGlobalScopes()
-    ->where('acct_owner', $this->userId())
-    ->get();
+FinAccounts::forOwner($this->userId())->get();
 ```
+
+This replaces the older `withoutGlobalScopes()->where('acct_owner', ...)` pattern. Use `forOwner` anywhere `auth()->id()` is unavailable (CLI commands, queue jobs, services).
 
 ### Deduplication on import
 
@@ -217,7 +217,7 @@ Import commands (`finance:import-transactions`, `finance:tax-import`) additional
 php artisan finance:import-transactions --schema
 ```
 
-The schema is defined as a constant on the command class (not duplicated in docs). `BaseFinanceCommand` provides `emitSchema(array $schema): never` to handle output and exit consistently.
+The schema is defined as a constant on the command class (not duplicated in docs). `BaseFinanceCommand` provides `emitSchema(array $schema): void` to handle output; the caller immediately returns `0`.
 
 ### Base class
 
@@ -226,7 +226,7 @@ All commands extend `App\Console\Commands\Finance\BaseFinanceCommand`, which pro
 | Method | Purpose |
 |---|---|
 | `userId()` | Read `FINANCE_CLI_USER_ID` env var, default 1 |
-| `resolveUser()` | Load `User` model, exit with error if not found |
+| `resolveUser()` | Load `User` model; returns `null` and prints an error if not found — caller must `return 1` |
 | `outputData($headers, $rows, $data)` | Route to `renderTable` or `outputJson` based on `--format` |
 | `renderTable($headers, $rows)` | Monospaced pipe-delimited terminal table |
 | `outputJson($data)` | Pretty-printed JSON to stdout |

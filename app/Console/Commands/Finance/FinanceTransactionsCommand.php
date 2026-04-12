@@ -24,7 +24,9 @@ class FinanceTransactionsCommand extends BaseFinanceCommand
             return 1;
         }
 
-        $this->resolveUser();
+        if ($this->resolveUser() === null) {
+            return 1;
+        }
 
         // Validate --month requires --year
         if ($this->option('month') !== null && $this->option('year') === null) {
@@ -53,8 +55,7 @@ class FinanceTransactionsCommand extends BaseFinanceCommand
         }
 
         // Resolve account IDs the user is allowed to see, including closed accounts.
-        $accountQuery = FinAccounts::withoutGlobalScopes()
-            ->where('acct_owner', $this->userId());
+        $accountQuery = FinAccounts::forOwner($this->userId());
 
         if ($this->option('account') !== null) {
             $accountQuery->where('acct_id', (int) $this->option('account'));

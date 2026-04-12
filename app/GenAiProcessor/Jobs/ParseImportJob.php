@@ -459,8 +459,7 @@ class ParseImportJob implements ShouldQueue
         }
 
         // Load all accounts for this user for matching.
-        $userAccounts = FinAccounts::withoutGlobalScopes()
-            ->where('acct_owner', $taxDoc->user_id)
+        $userAccounts = FinAccounts::forOwner($taxDoc->user_id)
             ->get(['acct_id', 'acct_name', 'acct_number']);
 
         // Normalise the AI output: wrap a bare object in an array.

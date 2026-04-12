@@ -22,26 +22,33 @@ use Illuminate\Console\Command;
  */
 abstract class BaseFinanceCommand extends Command
 {
+    private ?int $cachedUserId = null;
+
     /**
      * Resolve the target user ID from the environment.
      *
-     * Reads FINANCE_CLI_USER_ID; falls back to 1.
+     * Reads FINANCE_CLI_USER_ID; falls back to 1. Cached after first call.
      */
     protected function userId(): int
     {
-        return (int) (env('FINANCE_CLI_USER_ID', 1) ?: 1);
+        return $this->cachedUserId ??= (int) (env('FINANCE_CLI_USER_ID', 1) ?: 1);
     }
 
     /**
-     * Resolve the target User model, exiting with an error if not found.
+     * Resolve the target User model, returning null if not found.
+     *
+     * Callers should return 1 immediately on null:
+     *
+     *   if ($this->resolveUser() === null) { return 1; }
      */
-    protected function resolveUser(): User
+    protected function resolveUser(): ?User
     {
         $user = User::find($this->userId());
 
         if (! $user) {
             $this->error("User ID {$this->userId()} not found. Set FINANCE_CLI_USER_ID to a valid user.");
-            exit(1);
+
+            return null;
         }
 
         return $user;

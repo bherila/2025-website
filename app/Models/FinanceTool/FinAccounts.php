@@ -55,4 +55,15 @@ class FinAccounts extends Model
             }
         });
     }
+
+    /**
+     * Scope to a specific owner, bypassing the auth-based global scope.
+     *
+     * Use this instead of `withoutGlobalScopes()->where('acct_owner', $userId)`
+     * in CLI commands, queue jobs, and services where auth()->id() is unavailable.
+     */
+    public function scopeForOwner(Builder $query, int $userId): void
+    {
+        $query->withoutGlobalScopes()->where('acct_owner', $userId);
+    }
 }
