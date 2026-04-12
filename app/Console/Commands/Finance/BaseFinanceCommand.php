@@ -50,9 +50,9 @@ abstract class BaseFinanceCommand extends Command
     /**
      * Output an array of rows in the format selected by --format (table|json).
      *
-     * @param  array<string>         $headers  Column headers (for table mode)
-     * @param  array<array<string>>  $rows     Rows of scalar values (for table mode)
-     * @param  array<mixed>          $data     Raw data (for json mode)
+     * @param  array<string>  $headers  Column headers (for table mode)
+     * @param  array<array<string>>  $rows  Rows of scalar values (for table mode)
+     * @param  array<mixed>  $data  Raw data (for json mode)
      */
     protected function outputData(array $headers, array $rows, array $data): void
     {
@@ -81,7 +81,7 @@ abstract class BaseFinanceCommand extends Command
      * Calculates the maximum width of each column across both headers and rows,
      * then pads every cell with spaces so columns are aligned.
      *
-     * @param  array<string>         $headers
+     * @param  array<string>  $headers
      * @param  array<array<string>>  $rows
      */
     protected function renderTable(array $headers, array $rows): void
@@ -163,6 +163,22 @@ abstract class BaseFinanceCommand extends Command
         }
 
         return $decoded;
+    }
+
+    /**
+     * Emit a JSON schema to stdout.
+     *
+     * Called when the command is invoked with --schema. Intended for LLM context
+     * injection: the caller can run `php artisan finance:import-X --schema` to
+     * learn the expected stdin payload before generating import data.
+     *
+     * The caller should return 0 immediately after this call.
+     *
+     * @param  array<mixed>  $schema
+     */
+    protected function emitSchema(array $schema): void
+    {
+        $this->line(json_encode($schema, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
     }
 
     /**
