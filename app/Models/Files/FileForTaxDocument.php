@@ -7,8 +7,10 @@ use App\Jobs\DeleteS3Object;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinEmploymentEntity;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use App\Services\Finance\K1LegacyTransformer;
 use App\Traits\HasFileStorage;
 use App\Traits\SerializesDatesAsLocal;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -68,9 +70,38 @@ class FileForTaxDocument extends Model
         'file_size_bytes' => 'integer',
         'is_reviewed' => 'boolean',
         'tax_year' => 'integer',
-        'parsed_data' => 'array',
         'download_history' => 'array',
     ];
+
+    /**
+     * Decode parsed_data as an array, automatically normalising legacy flat-format
+     * K-1 records to the canonical schemaVersion structure on read.
+     *
+     * Writes pass through unchanged so the backfill command can store the
+     * already-transformed value without re-encoding it.
+     *
+     * @return Attribute<array<string,mixed>|null, array<string,mixed>|null>
+     */
+    protected function parsedData(): Attribute
+    {
+        return Attribute::make(
+            get: function (mixed $value): ?array {
+                if ($value === null) {
+                    return null;
+                }
+                $data = is_string($value) ? json_decode($value, true) : $value;
+                if (! is_array($data)) {
+                    return $data;
+                }
+                if ($this->form_type === 'k1' && K1LegacyTransformer::isLegacy($data)) {
+                    return K1LegacyTransformer::transform($data);
+                }
+
+                return $data;
+            },
+            set: fn (mixed $value): ?string => $value !== null ? json_encode($value) : null,
+        );
+    }
 
     protected $appends = ['human_file_size', 'download_count'];
 
