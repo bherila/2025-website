@@ -827,4 +827,270 @@ class TaxDocumentControllerTest extends TestCase
         $response->assertStatus(201);
         $response->assertJsonFragment(['form_type' => '1099_r', 'tax_year' => 2024]);
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Multi-account upload and account link management tests
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public function test_can_store_multi_account_document(): void
+    {
+        $user = $this->createUser();
+        $this->actingAs($user);
+
+        $response = $this->postJson('/api/finance/tax-documents/multi-account', [
+            's3_key' => "tax_docs/{$user->id}/2024.01.01 abc12 broker-1099.pdf",
+            'original_filename' => 'fidelity-tax-statement-2024.pdf',
+            'tax_year' => 2024,
+            'file_size_bytes' => 512000,
+            'file_hash' => str_repeat('x', 64),
+        ]);
+
+        $response->assertStatus(201);
+        $response->assertJsonFragment(['form_type' => 'broker_1099', 'tax_year' => 2024]);
+
+        // Verify the document was created
+        $doc = FileForTaxDocument::where('user_id', $user->id)
+            ->where('form_type', 'broker_1099')
+            ->first();
+        $this->assertNotNull($doc);
+        $this->assertEquals('pending', $doc->genai_status);
+    }
+
+    public function test_can_confirm_account_links(): void
+    {
+        $user = $this->createUser();
+        $this->actingAs($user);
+        $account1 = $this->createFinAccount($user->id, 'Brokerage');
+        $account2 = $this->createFinAccount($user->id, 'IRA');
+
+        // Create a multi-account document
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => 'broker_1099',
+            'genai_status' => 'parsed',
+            'parsed_data' => [
+                [
+                    'account_identifier' => '1234',
+                    'account_name' => 'Brokerage',
+                    'form_type' => '1099_div',
+                    'tax_year' => 2024,
+                ],
+                [
+                    'account_identifier' => '5678',
+                    'account_name' => 'IRA',
+                    'form_type' => '1099_int',
+                    'tax_year' => 2024,
+                ],
+            ],
+        ]);
+
+        // Confirm account links
+        $response = $this->postJson("/api/finance/tax-documents/{$doc->id}/accounts", [
+            'links' => [
+                [
+                    'account_id' => $account1->acct_id,
+                    'form_type' => '1099_div',
+                    'tax_year' => 2024,
+                    'ai_identifier' => '1234',
+                    'ai_account_name' => 'Brokerage',
+                ],
+                [
+                    'account_id' => $account2->acct_id,
+                    'form_type' => '1099_int',
+                    'tax_year' => 2024,
+                    'ai_identifier' => '5678',
+                    'ai_account_name' => 'IRA',
+                ],
+            ],
+        ]);
+
+        $response->assertOk();
+
+        // Verify links were created
+        $this->assertCount(2, $doc->fresh()->accountLinks);
+        $link1 = $doc->accountLinks()->where('account_id', $account1->acct_id)->first();
+        $this->assertNotNull($link1);
+        $this->assertEquals('1099_div', $link1->form_type);
+        $this->assertEquals('1234', $link1->ai_identifier);
+
+        $link2 = $doc->accountLinks()->where('account_id', $account2->acct_id)->first();
+        $this->assertNotNull($link2);
+        $this->assertEquals('1099_int', $link2->form_type);
+        $this->assertEquals('5678', $link2->ai_identifier);
+    }
+
+    public function test_can_update_single_account_link(): void
+    {
+        $user = $this->createUser();
+        $this->actingAs($user);
+        $account = $this->createFinAccount($user->id);
+        $doc = $this->createTaxDocument($user->id, ['form_type' => 'broker_1099']);
+
+        // Create an unresolved link (account_id = null)
+        $link = TaxDocumentAccount::create([
+            'tax_document_id' => $doc->id,
+            'account_id' => null,
+            'form_type' => '1099_div',
+            'tax_year' => 2024,
+            'ai_identifier' => '1234',
+            'ai_account_name' => 'Unknown Account',
+            'is_reviewed' => false,
+        ]);
+
+        // Resolve the link by assigning an account
+        $response = $this->patchJson("/api/finance/tax-documents/{$doc->id}/accounts/{$link->id}", [
+            'account_id' => $account->acct_id,
+        ]);
+
+        $response->assertOk();
+
+        // Verify the link was updated
+        $link->refresh();
+        $this->assertEquals($account->acct_id, $link->account_id);
+    }
+
+    public function test_can_mark_account_link_as_reviewed(): void
+    {
+        $user = $this->createUser();
+        $this->actingAs($user);
+        $account = $this->createFinAccount($user->id);
+        $doc = $this->createTaxDocument($user->id, ['form_type' => 'broker_1099']);
+
+        $link = TaxDocumentAccount::create([
+            'tax_document_id' => $doc->id,
+            'account_id' => $account->acct_id,
+            'form_type' => '1099_div',
+            'tax_year' => 2024,
+            'is_reviewed' => false,
+        ]);
+
+        $response = $this->patchJson("/api/finance/tax-documents/{$doc->id}/accounts/{$link->id}", [
+            'is_reviewed' => true,
+            'notes' => 'Verified all amounts match statement',
+        ]);
+
+        $response->assertOk();
+
+        $link->refresh();
+        $this->assertTrue($link->is_reviewed);
+        $this->assertEquals('Verified all amounts match statement', $link->notes);
+    }
+
+    public function test_delete_account_link_keeps_document_when_other_links_exist(): void
+    {
+        $user = $this->createUser();
+        $this->actingAs($user);
+        $account1 = $this->createFinAccount($user->id, 'Brokerage');
+        $account2 = $this->createFinAccount($user->id, 'IRA');
+        $doc = $this->createTaxDocument($user->id, ['form_type' => 'broker_1099']);
+
+        $link1 = TaxDocumentAccount::create([
+            'tax_document_id' => $doc->id,
+            'account_id' => $account1->acct_id,
+            'form_type' => '1099_div',
+            'tax_year' => 2024,
+        ]);
+
+        $link2 = TaxDocumentAccount::create([
+            'tax_document_id' => $doc->id,
+            'account_id' => $account2->acct_id,
+            'form_type' => '1099_int',
+            'tax_year' => 2024,
+        ]);
+
+        // Delete one link
+        $response = $this->deleteJson("/api/finance/tax-documents/{$doc->id}/accounts/{$link1->id}");
+        $response->assertOk();
+
+        // Document should still exist
+        $this->assertNotNull(FileForTaxDocument::find($doc->id));
+
+        // Only one link should remain
+        $this->assertCount(1, $doc->fresh()->accountLinks);
+        $this->assertNull(TaxDocumentAccount::find($link1->id));
+        $this->assertNotNull(TaxDocumentAccount::find($link2->id));
+    }
+
+    public function test_delete_last_account_link_deletes_parent_document(): void
+    {
+        $user = $this->createUser();
+        $this->actingAs($user);
+        $account = $this->createFinAccount($user->id);
+        $doc = $this->createTaxDocument($user->id, ['form_type' => 'broker_1099']);
+
+        $link = TaxDocumentAccount::create([
+            'tax_document_id' => $doc->id,
+            'account_id' => $account->acct_id,
+            'form_type' => '1099_div',
+            'tax_year' => 2024,
+        ]);
+
+        $docId = $doc->id;
+
+        // Delete the last link
+        $response = $this->deleteJson("/api/finance/tax-documents/{$doc->id}/accounts/{$link->id}");
+        $response->assertOk();
+
+        // Both the link and the parent document should be deleted
+        $this->assertNull(TaxDocumentAccount::find($link->id));
+        $this->assertNull(FileForTaxDocument::find($docId));
+    }
+
+    public function test_cannot_confirm_account_links_for_other_users_accounts(): void
+    {
+        $user = $this->createUser();
+        $otherUser = $this->createUser();
+        $this->actingAs($user);
+        $otherAccount = $this->createFinAccount($otherUser->id);
+
+        $doc = $this->createTaxDocument($user->id, ['form_type' => 'broker_1099']);
+
+        $response = $this->postJson("/api/finance/tax-documents/{$doc->id}/accounts", [
+            'links' => [
+                [
+                    'account_id' => $otherAccount->acct_id,
+                    'form_type' => '1099_div',
+                    'tax_year' => 2024,
+                ],
+            ],
+        ]);
+
+        $response->assertStatus(403);
+    }
+
+    public function test_list_filters_by_account_using_join_table(): void
+    {
+        $user = $this->createUser();
+        $this->actingAs($user);
+        $account1 = $this->createFinAccount($user->id, 'Account 1');
+        $account2 = $this->createFinAccount($user->id, 'Account 2');
+
+        // Create a multi-account document
+        $doc = $this->createTaxDocument($user->id, ['form_type' => 'broker_1099']);
+
+        TaxDocumentAccount::create([
+            'tax_document_id' => $doc->id,
+            'account_id' => $account1->acct_id,
+            'form_type' => '1099_div',
+            'tax_year' => 2024,
+        ]);
+
+        TaxDocumentAccount::create([
+            'tax_document_id' => $doc->id,
+            'account_id' => $account2->acct_id,
+            'form_type' => '1099_int',
+            'tax_year' => 2024,
+        ]);
+
+        // Filter by account1
+        $response = $this->getJson("/api/finance/tax-documents?account_id={$account1->acct_id}");
+        $response->assertOk();
+        $this->assertCount(1, $response->json());
+        $this->assertEquals($doc->id, $response->json('0.id'));
+
+        // Filter by account2 - should return the same document
+        $response = $this->getJson("/api/finance/tax-documents?account_id={$account2->acct_id}");
+        $response->assertOk();
+        $this->assertCount(1, $response->json());
+        $this->assertEquals($doc->id, $response->json('0.id'));
+    }
 }
