@@ -117,37 +117,20 @@ class TaxDocumentController extends Controller
 
         if (in_array($formType, FileForTaxDocument::W2_FORM_TYPES)) {
             $request->validate(['employment_entity_id' => 'required|integer']);
-            FinEmploymentEntity::withoutGlobalScopes()
-                ->where('id', $request->employment_entity_id)
-                ->where('user_id', $userId)
-                ->firstOrFail();
+            $this->verifyEmploymentEntityOwnership($request->employment_entity_id, $userId);
         }
 
         if (in_array($formType, FileForTaxDocument::ACCOUNT_FORM_TYPES)) {
             $request->validate(['account_id' => 'required|integer']);
-            FinAccounts::withoutGlobalScopes()
-                ->where('acct_id', $request->account_id)
-                ->where('acct_owner', $userId)
-                ->firstOrFail();
+            $this->verifyAccountOwnership($request->account_id, $userId);
         }
 
-        $s3Key = (string) $request->s3_key;
-        $expectedPrefix = "tax_docs/{$userId}/";
-
-        if (! str_starts_with($s3Key, $expectedPrefix)) {
-            return response()->json([
-                'message' => 'The selected file key is invalid.',
-            ], 422);
+        $validated = $this->validateS3Key((string) $request->s3_key, $userId);
+        if ($validated instanceof JsonResponse) {
+            return $validated;
         }
-
-        $storedFilename = basename($s3Key);
-        $keySuffix = substr($s3Key, strlen($expectedPrefix));
-
-        if ($storedFilename === '' || $storedFilename === '.' || $storedFilename === '..' || $keySuffix !== $storedFilename) {
-            return response()->json([
-                'message' => 'The selected file key is invalid.',
-            ], 422);
-        }
+        $s3Key = $validated['s3_key'];
+        $storedFilename = $validated['stored_filename'];
 
         // When caller supplies pre-parsed JSON, skip AI processing entirely.
         $hasParsedData = $request->filled('parsed_data');
@@ -172,14 +155,13 @@ class TaxDocumentController extends Controller
 
             // Create the canonical account link for account-based form types.
             if ($request->filled('account_id') && in_array($formType, FileForTaxDocument::ACCOUNT_FORM_TYPES)) {
-                TaxDocumentAccount::create([
-                    'tax_document_id' => $taxDoc->id,
-                    'account_id' => $request->account_id,
-                    'form_type' => $formType,
-                    'tax_year' => $request->tax_year,
-                    'is_reviewed' => false,
-                    'notes' => $request->notes,
-                ]);
+                TaxDocumentAccount::createLink(
+                    $taxDoc->id,
+                    $request->account_id,
+                    $formType,
+                    $request->tax_year,
+                    notes: $request->notes,
+                );
             }
 
             if (! $hasParsedData) {
@@ -234,19 +216,13 @@ class TaxDocumentController extends Controller
         ]);
 
         $userId = Auth::id();
-        $s3Key = (string) $request->s3_key;
-        $expectedPrefix = "tax_docs/{$userId}/";
 
-        if (! str_starts_with($s3Key, $expectedPrefix)) {
-            return response()->json(['message' => 'The selected file key is invalid.'], 422);
+        $validated = $this->validateS3Key((string) $request->s3_key, $userId);
+        if ($validated instanceof JsonResponse) {
+            return $validated;
         }
-
-        $storedFilename = basename($s3Key);
-        $keySuffix = substr($s3Key, strlen($expectedPrefix));
-
-        if ($storedFilename === '' || $storedFilename === '.' || $storedFilename === '..' || $keySuffix !== $storedFilename) {
-            return response()->json(['message' => 'The selected file key is invalid.'], 422);
-        }
+        $s3Key = $validated['s3_key'];
+        $storedFilename = $validated['stored_filename'];
 
         $doc = DB::transaction(function () use ($request, $userId, $s3Key, $storedFilename): FileForTaxDocument {
             $taxDoc = FileForTaxDocument::create([
@@ -316,7 +292,7 @@ class TaxDocumentController extends Controller
         $userId = Auth::id();
 
         DB::transaction(function () use ($doc, $request, $userId): void {
-            // Verify ownership of all non-null account_ids in a single query.
+            // Verify ownership of all non-null account_ids in a single batch query.
             $requestedIds = array_values(array_unique(array_filter(
                 array_column($request->links, 'account_id')
             )));
@@ -334,15 +310,14 @@ class TaxDocumentController extends Controller
             $doc->accountLinks()->delete();
 
             foreach ($request->links as $link) {
-                TaxDocumentAccount::create([
-                    'tax_document_id' => $doc->id,
-                    'account_id' => $link['account_id'] ?? null,
-                    'form_type' => $link['form_type'],
-                    'tax_year' => $link['tax_year'],
-                    'ai_identifier' => $link['ai_identifier'] ?? null,
-                    'ai_account_name' => $link['ai_account_name'] ?? null,
-                    'is_reviewed' => false,
-                ]);
+                TaxDocumentAccount::createLink(
+                    $doc->id,
+                    $link['account_id'] ?? null,
+                    $link['form_type'],
+                    $link['tax_year'],
+                    aiIdentifier: $link['ai_identifier'] ?? null,
+                    aiAccountName: $link['ai_account_name'] ?? null,
+                );
             }
         });
 
@@ -372,10 +347,7 @@ class TaxDocumentController extends Controller
         ]);
 
         if ($request->has('account_id') && $request->account_id !== null) {
-            FinAccounts::withoutGlobalScopes()
-                ->where('acct_id', $request->account_id)
-                ->where('acct_owner', Auth::id())
-                ->firstOrFail();
+            $this->verifyAccountOwnership($request->account_id, Auth::id());
             $link->account_id = $request->account_id;
         } elseif ($request->has('account_id')) {
             $link->account_id = null;
@@ -477,22 +449,11 @@ class TaxDocumentController extends Controller
 
         if (in_array($formType, FileForTaxDocument::ACCOUNT_FORM_TYPES, true)) {
             $request->validate(['account_id' => 'required|integer']);
-            $exists = FinAccounts::withoutGlobalScopes()
-                ->where('acct_id', $request->account_id)
-                ->where('acct_owner', $userId)
-                ->exists();
-            if (! $exists) {
-                return response()->json(['message' => 'Account not found.'], 404);
-            }
+            $this->verifyAccountOwnership($request->account_id, $userId);
         }
 
         if (in_array($formType, FileForTaxDocument::W2_FORM_TYPES, true) && $request->filled('employment_entity_id')) {
-            $exists = FinEmploymentEntity::where('id', $request->employment_entity_id)
-                ->where('user_id', $userId)
-                ->exists();
-            if (! $exists) {
-                return response()->json(['message' => 'Employment entity not found.'], 404);
-            }
+            $this->verifyEmploymentEntityOwnership($request->employment_entity_id, $userId);
         }
 
         $isReviewed = $request->boolean('is_reviewed', false);
@@ -519,13 +480,13 @@ class TaxDocumentController extends Controller
 
             // Create the canonical account link for account-based form types.
             if ($request->filled('account_id') && in_array($formType, FileForTaxDocument::ACCOUNT_FORM_TYPES, true)) {
-                TaxDocumentAccount::create([
-                    'tax_document_id' => $taxDoc->id,
-                    'account_id' => $request->account_id,
-                    'form_type' => $formType,
-                    'tax_year' => $request->tax_year,
-                    'is_reviewed' => $isReviewed,
-                ]);
+                TaxDocumentAccount::createLink(
+                    $taxDoc->id,
+                    $request->account_id,
+                    $formType,
+                    $request->tax_year,
+                    $isReviewed,
+                );
             }
 
             return $taxDoc;
@@ -608,18 +569,14 @@ class TaxDocumentController extends Controller
         $doc->save();
 
         // Write-through: keep account links in sync for notes/review state.
-        if ($request->has('notes') || $request->has('is_reviewed')) {
-            $updates = [];
-            if ($request->has('notes')) {
-                $updates['notes'] = $request->notes;
-            }
-            if ($request->has('is_reviewed')) {
-                $updates['is_reviewed'] = $request->boolean('is_reviewed');
-            }
-            if (! empty($updates)) {
-                $doc->accountLinks()->update($updates);
-            }
+        $linkUpdates = [];
+        if ($request->has('notes')) {
+            $linkUpdates['notes'] = $request->notes;
         }
+        if ($request->has('is_reviewed')) {
+            $linkUpdates['is_reviewed'] = $request->boolean('is_reviewed');
+        }
+        $doc->syncToAccountLinks($linkUpdates);
 
         return response()->json($doc);
     }
@@ -681,8 +638,53 @@ class TaxDocumentController extends Controller
         if ($request->has('notes')) {
             $linkUpdates['notes'] = $request->notes;
         }
-        $doc->accountLinks()->update($linkUpdates);
+        $doc->syncToAccountLinks($linkUpdates);
 
         return response()->json($doc);
+    }
+
+    /**
+     * Validate that an S3 key belongs to the given user and contains no path traversal.
+     *
+     * @return array{s3_key: string, stored_filename: string}|JsonResponse Parsed key parts on success, or error response.
+     */
+    private function validateS3Key(string $s3Key, int $userId): array|JsonResponse
+    {
+        $expectedPrefix = "tax_docs/{$userId}/";
+
+        if (! str_starts_with($s3Key, $expectedPrefix)) {
+            return response()->json(['message' => 'The selected file key is invalid.'], 422);
+        }
+
+        $storedFilename = basename($s3Key);
+        $keySuffix = substr($s3Key, strlen($expectedPrefix));
+
+        if ($storedFilename === '' || $storedFilename === '.' || $storedFilename === '..' || $keySuffix !== $storedFilename) {
+            return response()->json(['message' => 'The selected file key is invalid.'], 422);
+        }
+
+        return ['s3_key' => $s3Key, 'stored_filename' => $storedFilename];
+    }
+
+    /**
+     * Verify that the given account belongs to the given user. Throws 404 if not found.
+     */
+    private function verifyAccountOwnership(int $accountId, int $userId): FinAccounts
+    {
+        return FinAccounts::withoutGlobalScopes()
+            ->where('acct_id', $accountId)
+            ->where('acct_owner', $userId)
+            ->firstOrFail();
+    }
+
+    /**
+     * Verify that the given employment entity belongs to the given user. Throws 404 if not found.
+     */
+    private function verifyEmploymentEntityOwnership(int $entityId, int $userId): FinEmploymentEntity
+    {
+        return FinEmploymentEntity::withoutGlobalScopes()
+            ->where('id', $entityId)
+            ->where('user_id', $userId)
+            ->firstOrFail();
     }
 }

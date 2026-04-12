@@ -182,13 +182,12 @@ class FinanceTaxImportCommand extends BaseFinanceCommand
                     // Create account links if provided
                     foreach ((array) ($doc['account_links'] ?? []) as $link) {
                         if (is_array($link)) {
-                            TaxDocumentAccount::create([
-                                'tax_document_id' => $created->id,
-                                'account_id' => $link['account_id'] ?? null,
-                                'form_type' => $link['form_type'] ?? $doc['form_type'],
-                                'tax_year' => $link['tax_year'] ?? $taxYear,
-                                'is_reviewed' => false,
-                            ]);
+                            TaxDocumentAccount::createLink(
+                                $created->id,
+                                $link['account_id'] ?? null,
+                                $link['form_type'] ?? $doc['form_type'],
+                                $link['tax_year'] ?? $taxYear,
+                            );
                         }
                     }
 

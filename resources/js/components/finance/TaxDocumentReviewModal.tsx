@@ -31,7 +31,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { fetchWrapper } from '@/fetchWrapper'
 import { F1116ReviewPanel, isF1116Data } from '@/finance/1116'
-import type { TaxDocument, TaxDocumentParsedData, W2ParsedData } from '@/types/finance/tax-document'
+import { extractLinkParsedData, patchLinkParsedDataInArray } from '@/lib/finance/taxDocumentUtils'
+import type { TaxDocument, TaxDocumentAccountLink, TaxDocumentParsedData, W2ParsedData } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
 interface TaxDocumentReviewModalProps {
@@ -39,6 +40,8 @@ interface TaxDocumentReviewModalProps {
   taxYear: number
   /** If provided, review this specific document. If not, fetch all pending. */
   document?: TaxDocument
+  /** Optional: specific account link being reviewed (for multi-account broker_1099 docs). */
+  accountLink?: TaxDocumentAccountLink | undefined
   /** Optional payslips for comparison (specific to the entity/employer if possible) */
   payslips?: fin_payslip[]
   onClose: () => void
@@ -276,7 +279,7 @@ function ParsedDataEditor({
   data: Record<string, unknown>, 
   onChange: (newData: Record<string, unknown>) => void
   readOnly?: boolean
-  formType?: string
+  formType?: string | undefined
 }) {
   // A value is "nullish" for display purposes (string "null" counts as null; 0 is valid)
   const isNullish = (v: unknown): boolean =>
@@ -388,6 +391,7 @@ export default function TaxDocumentReviewModal({
   open,
   taxYear,
   document: propDocument,
+  accountLink: propAccountLink,
   payslips = [],
   onClose,
   onDocumentReviewed,
@@ -406,13 +410,26 @@ export default function TaxDocumentReviewModal({
 
   const activeDoc = documents[currentIndex]
 
+  // When reviewing a specific link in a multi-account doc, determine the effective
+  // form type and review state from the link rather than the parent document.
+  const isLinkReview = propAccountLink != null && propDocument?.form_type === 'broker_1099'
+  const effectiveFormType = isLinkReview ? propAccountLink!.form_type : activeDoc?.form_type
+  const effectiveReviewed = isLinkReview ? propAccountLink!.is_reviewed : activeDoc?.is_reviewed ?? false
+
   const fetchPending = useCallback(async () => {
     if (!open) return
     if (propDocument) {
       setDocuments([propDocument])
       setCurrentIndex(0)
-      setNotes(propDocument.notes ?? '')
-      setEditData(propDocument.parsed_data ?? {})
+      // For per-link review, extract only the matching entry's parsed_data.
+      if (propAccountLink && propDocument.form_type === 'broker_1099') {
+        const linkData = extractLinkParsedData(propDocument, propAccountLink)
+        setEditData(linkData ?? {})
+        setNotes(propAccountLink.notes ?? '')
+      } else {
+        setNotes(propDocument.notes ?? '')
+        setEditData(propDocument.parsed_data ?? {})
+      }
       return
     }
 
@@ -435,7 +452,7 @@ export default function TaxDocumentReviewModal({
     } finally {
       setLoading(false)
     }
-  }, [open, propDocument, taxYear])
+  }, [open, propDocument, propAccountLink, taxYear])
 
   useEffect(() => {
     fetchPending()
@@ -499,12 +516,29 @@ export default function TaxDocumentReviewModal({
   const handleJsonEdit = useCallback(async (doc: TaxDocument, parsedData: unknown) => {
     setSaving(true)
     try {
-      await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}`, { parsed_data: parsedData })
-      setEditData(parsedData as TaxDocumentParsedData | Record<string, unknown>)
-      setDocuments(prev => prev.map(d => d.id === doc.id ? {
-        ...d,
-        parsed_data: JSON.parse(JSON.stringify(parsedData)),
-      } : d))
+      if (isLinkReview && propAccountLink) {
+        // Per-link mode: patch only the specific array entry, not the whole parsed_data array.
+        if (!Array.isArray(doc.parsed_data)) {
+          toast.error('Unable to save: document parsed data is not an array')
+          return
+        }
+        const existingLinkParsedData = extractLinkParsedData(doc, propAccountLink)
+        if (existingLinkParsedData == null) {
+          toast.error('Unable to save: account entry was not found in document parsed data')
+          return
+        }
+        const updatedArray = patchLinkParsedDataInArray(doc, propAccountLink, parsedData as Record<string, unknown>)
+        await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}`, { parsed_data: updatedArray })
+        setEditData(parsedData as TaxDocumentParsedData | Record<string, unknown>)
+        setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, parsed_data: updatedArray as typeof d.parsed_data } : d))
+      } else {
+        await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}`, { parsed_data: parsedData })
+        setEditData(parsedData as TaxDocumentParsedData | Record<string, unknown>)
+        setDocuments(prev => prev.map(d => d.id === doc.id ? {
+          ...d,
+          parsed_data: JSON.parse(JSON.stringify(parsedData)),
+        } : d))
+      }
       toast.success('JSON updated')
       onDocumentReviewed?.()
     } catch {
@@ -513,7 +547,7 @@ export default function TaxDocumentReviewModal({
       setSaving(false)
       setJsonEditOpen(false)
     }
-  }, [onDocumentReviewed])
+  }, [onDocumentReviewed, isLinkReview, propAccountLink])
 
   const handleDelete = async (doc: TaxDocument) => {
     if (!confirm(`Delete "${doc.original_filename}"? This action cannot be undone.`)) return
@@ -546,39 +580,72 @@ export default function TaxDocumentReviewModal({
   const handleUpdate = async (doc: TaxDocument, isReviewed: boolean) => {
     setSaving(true)
     try {
-      const isReviewToggling = isReviewed !== doc.is_reviewed
-      const payload: any = { notes, parsed_data: editData }
-      
-      // Only include is_reviewed if we are explicitly changing it
-      if (isReviewToggling) {
-        payload.is_reviewed = isReviewed
-      }
+      if (isLinkReview && propAccountLink) {
+        // Per-link review: PATCH the individual account link.
+        const linkPayload: Record<string, unknown> = { notes }
+        const isReviewToggling = isReviewed !== propAccountLink.is_reviewed
+        if (isReviewToggling) {
+          linkPayload.is_reviewed = isReviewed
+        }
+        await fetchWrapper.patch(
+          `/api/finance/tax-documents/${doc.id}/accounts/${propAccountLink.id}`,
+          linkPayload,
+        )
 
-      if (isReviewed && isReviewToggling) {
-        // markReviewed endpoint handles marking as reviewed + optional notes/parsed_data
-        await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}/mark-reviewed`, payload)
-        toast.success('Document marked as reviewed')
-      } else {
-        // generic update
-        await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}`, payload)
-        toast.success(isReviewToggling ? 'Review status updated' : 'Changes saved')
-      }
+        // Also persist the edited parsed_data back into the parent's array,
+        // but only when the parent parsed_data shape is valid and the target entry exists.
+        if (!Array.isArray(doc.parsed_data)) {
+          toast.error('Unable to save parent parsed data: document parsed data is not an array')
+        } else {
+          const existingLinkParsedData = extractLinkParsedData(doc, propAccountLink)
 
-      // Update local state immutably
-      setDocuments(prev => prev.map(d => d.id === doc.id ? { 
-        ...d, 
-        notes, 
-        parsed_data: JSON.parse(JSON.stringify(editData)), // deep clone
-        is_reviewed: isReviewed
-      } : d))
-
-      onDocumentReviewed?.()
-
-      if (isReviewed && isReviewToggling) {
-        if (propDocument) {
+          if (existingLinkParsedData == null) {
+            toast.error('Unable to save parent parsed data: account entry was not found in document parsed data')
+          } else {
+            const updatedArray = patchLinkParsedDataInArray(doc, propAccountLink, editData as Record<string, unknown>)
+            await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}`, {
+              parsed_data: updatedArray,
+            })
+          }
+        }
+        toast.success(isReviewToggling ? 'Account link marked as reviewed' : 'Changes saved')
+        onDocumentReviewed?.()
+        if (isReviewed && isReviewToggling && propDocument) {
           onClose()
-        } else if (currentIndex < documents.length - 1) {
-          goToNext()
+        }
+      } else {
+        // Standard document-level review.
+        const isReviewToggling = isReviewed !== doc.is_reviewed
+        const payload: Record<string, unknown> = { notes, parsed_data: editData }
+
+        if (isReviewToggling) {
+          payload.is_reviewed = isReviewed
+        }
+
+        if (isReviewed && isReviewToggling) {
+          await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}/mark-reviewed`, payload)
+          toast.success('Document marked as reviewed')
+        } else {
+          await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}`, payload)
+          toast.success(isReviewToggling ? 'Review status updated' : 'Changes saved')
+        }
+
+        // Update local state immutably
+        setDocuments(prev => prev.map(d => d.id === doc.id ? {
+          ...d,
+          notes,
+          parsed_data: JSON.parse(JSON.stringify(editData)),
+          is_reviewed: isReviewed
+        } : d))
+
+        onDocumentReviewed?.()
+
+        if (isReviewed && isReviewToggling) {
+          if (propDocument) {
+            onClose()
+          } else if (currentIndex < documents.length - 1) {
+            goToNext()
+          }
         }
       }
     } catch {
@@ -631,17 +698,30 @@ export default function TaxDocumentReviewModal({
                     <div className="flex items-center gap-2">
                       <FileText className="h-4 w-4 text-primary shrink-0" />
                       <h3 className="font-bold text-base leading-none">
-                        {FORM_TYPE_LABELS[activeDoc.form_type] ?? activeDoc.form_type}
+                        {FORM_TYPE_LABELS[effectiveFormType ?? ''] ?? effectiveFormType}
                       </h3>
-                      {activeDoc.is_reviewed && (
+                      {effectiveReviewed && (
                         <Badge className="bg-green-100 text-green-700 border-green-200 hover:bg-green-100">Reviewed</Badge>
                       )}
                     </div>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-                      {activeDoc.employment_entity?.display_name && (
-                        <span className="font-medium text-foreground">{activeDoc.employment_entity.display_name}</span>
+                      {isLinkReview && propAccountLink && (
+                        <>
+                          <span className="font-medium text-foreground">
+                            {propAccountLink.account?.acct_name ?? propAccountLink.ai_account_name ?? 'Unknown Account'}
+                          </span>
+                          {propAccountLink.ai_identifier && (
+                            <span className="text-xs text-muted-foreground">({propAccountLink.ai_identifier})</span>
+                          )}
+                          <span className="text-muted-foreground/30">•</span>
+                        </>
                       )}
-                      <span className="text-muted-foreground/30">•</span>
+                      {!isLinkReview && activeDoc.employment_entity?.display_name && (
+                        <>
+                          <span className="font-medium text-foreground">{activeDoc.employment_entity.display_name}</span>
+                          <span className="text-muted-foreground/30">•</span>
+                        </>
+                      )}
                       <span>{taxYear}</span>
                       <span className="text-muted-foreground/30">•</span>
                       <span className="truncate max-w-[200px]">{activeDoc.original_filename}</span>
@@ -667,31 +747,31 @@ export default function TaxDocumentReviewModal({
                   <div className="space-y-2">
                     <div className="flex items-center justify-between px-1">
                       <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Extracted Data</div>
-                      {activeDoc.is_reviewed ? (
+                      {effectiveReviewed ? (
                         <div className="text-[10px] text-muted-foreground/60 italic">Read-only (confirmed)</div>
                       ) : (
                         <div className="text-[10px] text-muted-foreground/60 italic">Mistakes? Correct them below</div>
                       )}
                     </div>
                     <div className="bg-muted/40 rounded-lg p-3 border border-muted-foreground/10">
-                      {activeDoc.form_type === 'k1' && isFK1StructuredData(editData) ? (
+                      {effectiveFormType === 'k1' && isFK1StructuredData(editData) ? (
                         <K1ReviewPanel
                           data={editData}
                           onChange={(updated) => setEditData(updated)}
-                          readOnly={activeDoc.is_reviewed}
+                          readOnly={effectiveReviewed}
                         />
-                      ) : activeDoc.form_type === '1116' && isF1116Data(editData) ? (
+                      ) : effectiveFormType === '1116' && isF1116Data(editData) ? (
                         <F1116ReviewPanel
                           data={editData}
                           onChange={(updated) => setEditData(updated)}
-                          readOnly={activeDoc.is_reviewed}
+                          readOnly={effectiveReviewed}
                         />
                       ) : (
                         <ParsedDataEditor
                           data={editData as Record<string, unknown>}
                           onChange={(d) => setEditData(d)}
-                          readOnly={activeDoc.is_reviewed}
-                          formType={activeDoc.form_type}
+                          readOnly={effectiveReviewed}
+                          formType={effectiveFormType}
                         />
                       )}
                     </div>
@@ -705,16 +785,16 @@ export default function TaxDocumentReviewModal({
                       placeholder="Add notes about this document or discrepancies found..."
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
-                      readOnly={activeDoc.is_reviewed}
+                      readOnly={effectiveReviewed}
                     />
-                    {!activeDoc.is_reviewed && (
+                    {!effectiveReviewed && (
                       <div className="flex justify-end">
                         <Button
                           variant="ghost"
                           size="sm"
                           className="text-xs gap-1 h-8"
                           disabled={saving}
-                          onClick={() => handleUpdate(activeDoc, activeDoc.is_reviewed)}
+                          onClick={() => handleUpdate(activeDoc, effectiveReviewed)}
                         >
                           <Save className="h-3.5 w-3.5" />
                           Save Changes
@@ -725,7 +805,7 @@ export default function TaxDocumentReviewModal({
                 </div>
 
                 {/* Comparison Table (for W-2s) */}
-                {activeDoc.form_type.startsWith('w2') && editData && (
+                {effectiveFormType?.startsWith('w2') && editData && (
                   <W2Comparison 
                     parsed={editData as W2ParsedData} 
                     payslips={payslips}
@@ -757,8 +837,8 @@ export default function TaxDocumentReviewModal({
                     variant="ghost"
                     className="gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
                     onClick={() => handleDelete(activeDoc)}
-                    disabled={deleting || activeDoc.is_reviewed}
-                    title={activeDoc.is_reviewed ? 'Reopen for review before deleting' : 'Delete document'}
+                    disabled={deleting || effectiveReviewed}
+                    title={effectiveReviewed ? 'Reopen for review before deleting' : 'Delete document'}
                   >
                     {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                     Delete
@@ -769,16 +849,16 @@ export default function TaxDocumentReviewModal({
             {activeDoc && (
                <Button
                 size="default"
-                onClick={() => handleUpdate(activeDoc, !activeDoc.is_reviewed)}
+                onClick={() => handleUpdate(activeDoc, !effectiveReviewed)}
                 disabled={saving}
-                className={`gap-2 ${activeDoc.is_reviewed ? 'bg-amber-600 hover:bg-amber-700' : ''}`}
+                className={`gap-2 ${effectiveReviewed ? 'bg-amber-600 hover:bg-amber-700' : ''}`}
               >
                 {saving ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <CheckCircle className="h-4 w-4" />
                 )}
-                {activeDoc.is_reviewed ? 'Reopen for Review' : 'Mark as Reviewed'}
+                {effectiveReviewed ? 'Reopen for Review' : 'Mark as Reviewed'}
               </Button>
             )}
           </div>

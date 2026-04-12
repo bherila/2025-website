@@ -507,15 +507,14 @@ class ParseImportJob implements ShouldQueue
                     ? (trim($entry['account_name']) ?: null)
                     : null;
 
-                TaxDocumentAccount::create([
-                    'tax_document_id' => $taxDoc->id,
-                    'account_id' => $accountId,
-                    'form_type' => $formType,
-                    'tax_year' => $taxYear,
-                    'ai_identifier' => $aiIdentifier,
-                    'ai_account_name' => $aiAccountName,
-                    'is_reviewed' => false,
-                ]);
+                TaxDocumentAccount::createLink(
+                    $taxDoc->id,
+                    $accountId,
+                    $formType,
+                    $taxYear,
+                    aiIdentifier: $aiIdentifier,
+                    aiAccountName: $aiAccountName,
+                );
 
                 // For 1099-B entries with a resolved account, import individual lot transactions.
                 if ($formType === '1099_b' && $accountId !== null) {

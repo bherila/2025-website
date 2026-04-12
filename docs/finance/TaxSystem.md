@@ -246,7 +246,7 @@ Consolidated brokerage 1099s (form_type `broker_1099`) contain multiple form typ
 | `tax_year` | integer | Tax year (e.g., 2024) |
 | `form_type` | TEXT NOT NULL | `w2`, `w2c`, `1099_int`, `1099_int_c`, `1099_div`, `1099_div_c`, `1099_misc`, `1099_nec`, `1099_r`, `1099_b`, `broker_1099`, `k1`, `1116` |
 | `employment_entity_id` | FK → fin_employment_entity (nullable) | Set for W-2 form types |
-| `account_id` | FK → fin_accounts.acct_id (nullable) | Set for 1099/K-1 form types |
+| `account_id` | FK → fin_accounts.acct_id (nullable) | **Legacy** — kept for backward compat; new code uses `fin_tax_document_accounts` join table |
 | `original_filename` | string | User's original filename |
 | `stored_filename` | string | S3-stored filename with date prefix |
 | `s3_path` | string | Full S3 key (`tax_docs/{userId}/{storedFilename}`) |
@@ -258,8 +258,34 @@ Consolidated brokerage 1099s (form_type `broker_1099`) contain multiple form typ
 | `is_reviewed` | boolean | Whether extracted data has been reviewed and confirmed by user |
 | `genai_job_id` | FK → genai_import_jobs (nullable) | Linked GenAI processing job |
 | `genai_status` | string (nullable) | Processing status: `pending`, `processing`, `parsed`, `failed` |
-| `parsed_data` | json (nullable) | Structured data extracted from the PDF (box values). For K-1, stored as a flexible JSON blob. |
+| `parsed_data` | json (nullable) | Structured data extracted from the PDF. Single-form docs: flat object. `broker_1099`: array of `MultiAccountParsedEntry` objects. |
 | `download_history` | json | Track who downloaded and when |
+
+### Account Links Table (`fin_tax_document_accounts`)
+
+The canonical source for document–account associations. One row per (document, account, form_type) tuple.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | PK | Auto-increment |
+| `tax_document_id` | FK → fin_tax_documents (CASCADE DELETE) | Parent PDF |
+| `account_id` | FK → fin_accounts.acct_id (nullable, SET NULL) | Matched account (null if unresolved) |
+| `form_type` | TEXT NOT NULL | Specific form type for this account (e.g., `1099_div`) |
+| `tax_year` | integer | Denormalized for query efficiency |
+| `ai_identifier` | varchar(100, nullable) | AI-detected account identifier (e.g., last-4 digits) |
+| `ai_account_name` | varchar(255, nullable) | AI-detected account name from the PDF |
+| `is_reviewed` | boolean (default false) | Per-account review state |
+| `notes` | text (nullable) | Per-account notes |
+
+**Key design decisions:**
+- All new writes go to the join table; `fin_tax_documents.account_id` is not read or written by new code.
+- For single-account uploads (`store()`, `storeManual()`), one join row is created automatically.
+- For multi-account imports (`storeMultiAccount()`), the GenAI job creates one row per detected form/account combination.
+- `is_reviewed` and `notes` live on the join row because review is per-account, not per-document.
+- Write-through: `markReviewed()` and `update()` propagate `is_reviewed`/`notes` to all join rows for consistency.
+- When the last join row for a document is deleted, the parent document is also hard-deleted and S3 cleanup is queued.
+
+**Model:** `App\Models\FinanceTool\TaxDocumentAccount`
 
 ### Model: `App\Models\Files\FileForTaxDocument`
 
@@ -276,23 +302,40 @@ Form type constants:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/finance/tax-documents` | List documents. Optional filters: `year`, `form_type` (comma-sep), `employment_entity_id`, `account_id` |
+| GET | `/api/finance/tax-documents` | List documents. Filters: `year`, `form_type` (comma-sep), `employment_entity_id`, `account_id` (queries via join table) |
 | POST | `/api/finance/tax-documents/request-upload` | Get presigned S3 upload URL. Returns `{ upload_url, s3_key, expires_in }` |
-| POST | `/api/finance/tax-documents` | Confirm upload, create DB record, dispatch GenAI job. Returns 201. |
+| POST | `/api/finance/tax-documents` | Confirm single-account upload, create DB record + join row, dispatch GenAI job. Returns 201. |
+| POST | `/api/finance/tax-documents/multi-account` | Upload consolidated broker PDF. No `account_id` required — accounts matched after AI parsing. |
 | POST | `/api/finance/tax-documents/manual` | Create a manual entry (no PDF) with pre-filled parsed_data |
+| GET | `/api/finance/tax-documents/{id}` | Get single document with account links (for polling during multi-account import) |
 | GET | `/api/finance/tax-documents/{id}/download` | Get signed download URLs. Returns `{ view_url, download_url, filename }` |
 | DELETE | `/api/finance/tax-documents/{id}` | Delete document and remove from S3 |
-| PUT | `/api/finance/tax-documents/{id}` | Update notes, parsed_data, is_reviewed |
-| PUT | `/api/finance/tax-documents/{id}/mark-reviewed` | Mark document as reviewed (also saves notes/parsed_data) |
+| PUT | `/api/finance/tax-documents/{id}` | Update notes, parsed_data, is_reviewed (writes through to join rows) |
+| PUT | `/api/finance/tax-documents/{id}/mark-reviewed` | Mark document as reviewed (writes through to all join rows) |
+| POST | `/api/finance/tax-documents/{id}/accounts` | Replace all account links atomically (for multi-account confirm) |
+| PATCH | `/api/finance/tax-documents/{id}/accounts/{linkId}` | Update single link (assign account, mark reviewed, add notes) |
+| DELETE | `/api/finance/tax-documents/{id}/accounts/{linkId}` | Delete single link; deletes parent when last link removed |
 
 ### Upload Flow
 
+#### Single-Account Upload
 1. POST `/api/finance/tax-documents/request-upload` with `{ filename, content_type, file_size }` → get `{ upload_url, s3_key }`
 2. PUT file bytes directly to `upload_url` (S3 presigned URL)
 3. Compute SHA-256 of file using Web Crypto API
 4. POST `/api/finance/tax-documents` with `{ s3_key, original_filename, form_type, tax_year, file_size_bytes, file_hash, employment_entity_id | account_id }` → 201
-5. A `GenAiImportJob` is automatically created and dispatched to the `genai-imports` queue
-6. The tax document's `genai_status` is set to `pending`
+5. One `fin_tax_document_accounts` row is created for account-based form types
+6. A `GenAiImportJob` (`job_type: tax_document`) is dispatched; `genai_status` → `pending`
+
+#### Multi-Account Upload (Consolidated Broker 1099)
+1. Same S3 upload steps (1–3 above)
+2. POST `/api/finance/tax-documents/multi-account` with `{ s3_key, original_filename, tax_year, file_size_bytes, file_hash, context_accounts }` → 201
+3. `form_type` is always `broker_1099`; no `account_id` required at upload time
+4. GenAI job (`job_type: tax_form_multi_account_import`) is dispatched with account context hints
+5. AI returns a JSON array of `{ account_identifier, account_name, form_type, tax_year, parsed_data }` entries
+6. Server-side account matching: exact match → last-4 suffix → name word-overlap → null (manual assignment)
+7. One `fin_tax_document_accounts` row created per detected form/account pair; unmatched entries have `account_id = null`
+8. Frontend polls `GET /api/finance/tax-documents/{id}` until `genai_status === 'parsed'`
+9. User reviews/corrects account assignments in the `MultiAccountImportModal`, then confirms via `POST .../accounts`
 
 ### S3 Key Validation
 
@@ -331,14 +374,30 @@ The W-2 Documents table shows a combined **Review** column (replaces separate St
 ### Review Document Modal
 
 The Review Document modal (`TaxDocumentReviewModal`) provides:
-- **Extracted Data** panel — editable fields from `parsed_data` (read-only when document is confirmed/reviewed)
+- **Extracted Data** panel — editable fields from `parsed_data` (read-only when confirmed/reviewed)
 - **Review Notes** — free-text notes
 - **Save Changes** button — only shown when document is not yet reviewed
 - **W-2 Comparison table** — compares W-2 box values against payslips calculations
   - Each "Payslips" amount is clickable → opens a **Data Source** modal showing the individual payslip rows that contributed
-- **Edit JSON button** (pencil icon) in the footer — opens `ManualJsonAttachModal` in edit mode, pre-filled with the current `parsed_data`. Saving posts to `PUT /api/finance/tax-documents/{id}` with updated JSON. Works on both reviewed and unreviewed documents.
+- **Edit JSON button** (pencil icon) in the footer — opens `ManualJsonAttachModal` in edit mode
 - **Delete button** in the footer — removes the document (disabled when reviewed)
 - **Mark as Reviewed / Reopen for Review** button
+
+#### Per-Link Review (Multi-Account Documents)
+
+For `broker_1099` documents with multiple account links, the modal accepts an optional `accountLink` prop:
+- **Header** shows the account name and AI-detected identifier instead of the parent document's info
+- **Extracted Data** shows only the matching entry from the parent's `parsed_data` array (matched by `ai_identifier` + `form_type`)
+- **Review state** uses the per-link `is_reviewed` instead of the parent's
+- **Mark as Reviewed** PATCHes the individual link and persists edited data back into the parent's array
+
+The `useReviewModal()` hook (`resources/js/hooks/useReviewModal.ts`) provides standard open/close state management for both `TaxDocuments1099Section` and `AccountTaxDocumentsSection`.
+
+Matching and iteration utilities live in `resources/js/lib/finance/taxDocumentUtils.ts`:
+- `findMatchingLink()` / `findMatchingEntry()` — correlate links ↔ parsed_data entries
+- `extractLinkParsedData()` / `patchLinkParsedDataInArray()` — read/write per-entry data
+- `iterateReviewedBrokerEntries()` — generator for iterating reviewed entries with their links
+- `hasReviewedContent()` — checks if a document has any reviewed content (parent or per-link)
 
 ### JSON-First Upload Flow
 
@@ -499,23 +558,31 @@ The `FK1StructuredData` format is designed to support basis tracking for the par
 
 ## Account Documents Section
 
-The **Account Documents** section (formerly "1099 Documents") on the Tax Preview page shows a table with one row per account and one column per document type:
+The **Account Documents** section (formerly "1099 Documents") on the Tax Preview page shows a table with one row per account. Each account row displays one button per document linked to that account via the `fin_tax_document_accounts` join table.
 
-| Account | 1099-INT | 1099-DIV | 1099-MISC | K-1 / K-3 |
-|---------|----------|----------|-----------|-----------|
-| Account A | [Upload/doc] | [Upload/doc] | [Upload/doc] | [Upload/doc] |
+A single consolidated broker PDF may produce multiple buttons for the same account (e.g., 1099-DIV, 1099-INT, 1099-B) — each is a separate join table row with its own form_type and review state. Clicking a per-link button opens the review modal with the specific account/form context.
+
+The section header includes a **Multi-Account Import** button that opens the `MultiAccountImportModal` for uploading consolidated brokerage PDFs.
+
+### Totals Computation
+
+Interest and dividend totals are computed from both:
+- Single-form documents (using parent `is_reviewed` state)
+- `broker_1099` entries (using per-link `is_reviewed` state via `iterateReviewedBrokerEntries()`)
+
+Foreign tax summaries follow the same pattern for Form 1116 worksheet data.
 
 ### Account Ordering
 
 Accounts are sorted into two groups:
-1. **Active accounts** (top) — accounts with at least one transaction in the selected year
-2. **Inactive accounts** (bottom, dimmed) — accounts with no transactions in the selected year, separated by a "No transactions in YYYY" divider row
+1. **Active accounts** (top) — accounts with transactions in the selected year OR with any 1099/K-1 documents (via join table)
+2. **Inactive accounts** (bottom, dimmed) — no transactions and no documents, separated by a "No transactions in YYYY" divider row
 
 This sorting uses the `/api/finance/accounts?active_year=YYYY` endpoint, which returns an `active_account_ids` array alongside the normal account lists.
 
 ### Upload Button Style
 
-The Upload buttons in the Account Documents table use the `ghost` variant to reduce visual clutter.
+Per-account upload uses the `ghost` variant **Add** dropdown with per-form-type options. The **Consolidated 1099 (Broker)** option opens the multi-account import modal pre-seeded for that account.
 
 ---
 
@@ -542,17 +609,22 @@ The Tax Preview page (`TaxPreviewPage.tsx`) uses a structured grid layout:
 ### Frontend Components
 
 - **`TaxDocumentsSection`** (`TaxDocumentsSection.tsx`) — W-2/W-2c documents grouped by employment entity. Combined Review column. Delete moved to Review modal.
-- **`TaxDocumentReviewModal`** (`TaxDocumentReviewModal.tsx`) — Document review with editable extracted data (read-only when confirmed), W-2 vs. payslip comparison with clickable Data Source links, and Delete button in footer.
-- **`TaxDocuments1099Section`** (`TaxDocuments1099Section.tsx`) — "Account Documents" section for 1099/K-1 forms. Ghost-style upload buttons. Accounts without transactions appear at the bottom in dimmed style.
+- **`TaxDocumentReviewModal`** (`TaxDocumentReviewModal.tsx`) — Document review with editable extracted data (read-only when confirmed), W-2 vs. payslip comparison, per-link review for multi-account docs, and Delete button in footer.
+- **`TaxDocuments1099Section`** (`TaxDocuments1099Section.tsx`) — "Account Documents" section for 1099/K-1 forms. Per-link buttons for broker_1099 docs. Multi-Account Import button in header.
+- **`MultiAccountImportModal`** (`MultiAccountImportModal.tsx`) — Three-phase modal: upload → polling → account assignment for consolidated broker PDFs.
+- **`AccountTaxDocumentsSection`** (`AccountTaxDocumentsSection.tsx`) — Per-account 1099 document management with per-link review support.
 
 ### Shared Types
 
 TypeScript types are spread across several files in `resources/js/types/finance/`:
 
 **`tax-document.ts`** — re-exports all tax types; primary import target for components:
-- `TaxDocument` interface — API response shape
+- `TaxDocument` interface — API response shape (includes `account_links: TaxDocumentAccountLink[]`)
+- `TaxDocumentAccountLink` interface — join table row (id, account_id, form_type, tax_year, ai_identifier, ai_account_name, is_reviewed, notes)
+- `MultiAccountParsedEntry` interface — one entry in a broker_1099's parsed_data array
 - `EmploymentEntity` interface
 - `W2ParsedData`, `F1099IntParsedData`, `F1099DivParsedData`, `F1099MiscParsedData`, `F1099NecParsedData`, `Form1099RParsedData`, `FK1ParsedData` — per-form parsed data interfaces
+- `Broker1099BParsedData`, `BrokerTransaction1099B` — 1099-B transaction lot types
 - `TaxDocumentParsedData` — union of all parsed data shapes
 - `FORM_TYPE_LABELS` — display labels for form types
 - `W2_FORM_TYPES`, `ACCOUNT_FORM_TYPES_1099` — form type groupings

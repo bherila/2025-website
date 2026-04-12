@@ -312,6 +312,15 @@ export interface Broker1099BParsedData {
 /** Union of all possible parsed_data shapes. */
 export type TaxDocumentParsedData = W2ParsedData | F1099IntParsedData | F1099DivParsedData | F1099MiscParsedData | F1099NecParsedData | Form1099RParsedData | FK1ParsedData | _FK1StructuredData | Broker1099BParsedData
 
+/** One entry in the parsed_data array for a broker_1099 / multi-account document. */
+export interface MultiAccountParsedEntry {
+  account_identifier: string | null
+  account_name: string | null
+  form_type: string
+  tax_year: number
+  parsed_data: Record<string, unknown> | null
+}
+
 /** One row from fin_tax_document_accounts — links a PDF to a specific account. */
 export interface TaxDocumentAccountLink {
   id: number

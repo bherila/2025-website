@@ -126,6 +126,21 @@ class FileForTaxDocument extends Model
         return $this->hasMany(TaxDocumentAccount::class, 'tax_document_id')->orderBy('id');
     }
 
+    /**
+     * Write-through: propagate notes and/or is_reviewed from the parent document
+     * to all account link rows. All provided keys are written as-is, including
+     * null/empty values.
+     *
+     * @param  array<string, mixed>  $updates  Keys: 'notes', 'is_reviewed'
+     */
+    public function syncToAccountLinks(array $updates): void
+    {
+        $allowed = array_intersect_key($updates, array_flip(['notes', 'is_reviewed']));
+        if (! empty($allowed)) {
+            $this->accountLinks()->update($allowed);
+        }
+    }
+
     public static function generateS3Path(int $userId, string $storedFilename): string
     {
         return "tax_docs/{$userId}/{$storedFilename}";

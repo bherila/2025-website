@@ -255,6 +255,17 @@ When a bank summary statement contains transactions for multiple accounts, the s
 
 The frontend (`accountMatcher.ts`) automatically matches each parsed account block to the user's accounts using suffix matching and name disambiguation.
 
+### Multi-Account Tax Document Import
+
+Consolidated brokerage 1099 PDFs (e.g., Fidelity Tax Reporting Statement) containing forms for multiple accounts are imported via the `tax_form_multi_account_import` GenAI job type. The flow:
+
+1. Upload PDF via `POST /api/finance/tax-documents/multi-account` (no `account_id` required)
+2. GenAI returns a JSON array of per-account `{ account_identifier, account_name, form_type, tax_year, parsed_data }` entries
+3. Server-side matching creates `fin_tax_document_accounts` rows; unmatched entries get `account_id = null`
+4. User reviews/corrects assignments in `MultiAccountImportModal`, then confirms
+
+Each account link has independent `is_reviewed` state; the review modal supports per-link review via an `accountLink` prop. See [TaxSystem.md](TaxSystem.md) for full schema and API details.
+
 #### Backend API
 
 | Endpoint | Description |
