@@ -18,6 +18,8 @@ class FinanceAccountsCommand extends BaseFinanceCommand
             return 1;
         }
 
+        $this->resolveUser();
+
         $query = FinAccounts::withoutGlobalScopes()
             ->where('acct_owner', $this->userId())
             ->orderBy('acct_sort_order')

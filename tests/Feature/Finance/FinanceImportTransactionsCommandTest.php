@@ -187,7 +187,7 @@ class FinanceImportTransactionsCommandTest extends TestCase
             ->assertExitCode(1);
     }
 
-    public function test_empty_transactions_array_exits_cleanly(): void
+    public function test_rejects_empty_transactions_array(): void
     {
         $this->withPayload([
             'account_id' => $this->checkingId,
@@ -196,5 +196,92 @@ class FinanceImportTransactionsCommandTest extends TestCase
 
         $this->artisan('finance:import-transactions')
             ->assertExitCode(1); // empty transactions array is an error per the spec
+    }
+
+    public function test_rejects_invalid_date_format(): void
+    {
+        $this->withPayload([
+            'account_id' => $this->checkingId,
+            'transactions' => [
+                ['t_date' => '01/15/2026', 't_type' => 'deposit', 't_amt' => 100.00],
+            ],
+        ]);
+
+        $this->artisan('finance:import-transactions')
+            ->assertExitCode(1);
+    }
+
+    public function test_rejects_non_numeric_amount(): void
+    {
+        $this->withPayload([
+            'account_id' => $this->checkingId,
+            'transactions' => [
+                ['t_date' => '2026-10-01', 't_type' => 'deposit', 't_amt' => 'not-a-number'],
+            ],
+        ]);
+
+        $this->artisan('finance:import-transactions')
+            ->assertExitCode(1);
+    }
+
+    public function test_normalizes_symbol_to_uppercase(): void
+    {
+        $this->withPayload([
+            'account_id' => $this->checkingId,
+            'transactions' => [
+                ['t_date' => '2026-10-02', 't_type' => 'Buy', 't_amt' => -500.00, 't_symbol' => 'aapl'],
+            ],
+        ]);
+
+        $this->artisan('finance:import-transactions')->assertExitCode(0);
+
+        $this->assertDatabaseHas('fin_account_line_items', [
+            't_account' => $this->checkingId,
+            't_date' => '2026-10-02',
+            't_symbol' => 'AAPL',
+        ]);
+    }
+
+    public function test_dry_run_json_mode_outputs_valid_json(): void
+    {
+        $this->withPayload([
+            'account_id' => $this->checkingId,
+            'transactions' => [
+                ['t_date' => '2026-11-01', 't_type' => 'deposit', 't_amt' => 300.00],
+            ],
+        ]);
+
+        $this->artisan('finance:import-transactions', ['--dry-run' => true, '--format' => 'json'])
+            ->assertExitCode(0)
+            ->expectsOutputToContain('"dry_run"');
+
+        // Nothing should have been inserted
+        $this->assertDatabaseMissing('fin_account_line_items', [
+            't_account' => $this->checkingId,
+            't_date' => '2026-11-01',
+        ]);
+    }
+
+    public function test_statement_id_is_stripped_from_imported_rows(): void
+    {
+        $this->withPayload([
+            'account_id' => $this->checkingId,
+            'transactions' => [
+                ['t_date' => '2026-12-01', 't_type' => 'deposit', 't_amt' => 200.00, 'statement_id' => 99999],
+            ],
+        ]);
+
+        $this->artisan('finance:import-transactions')->assertExitCode(0);
+
+        $this->assertDatabaseHas('fin_account_line_items', [
+            't_account' => $this->checkingId,
+            't_date' => '2026-12-01',
+        ]);
+
+        $this->assertDatabaseMissing('fin_account_line_items', [
+            't_account' => $this->checkingId,
+            't_date' => '2026-12-01',
+            'statement_id' => 99999,
+        ]);
     }
 }

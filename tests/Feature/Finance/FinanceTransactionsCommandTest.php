@@ -71,6 +71,24 @@ class FinanceTransactionsCommandTest extends TestCase
             ->assertExitCode(1);
     }
 
+    public function test_rejects_invalid_month_zero(): void
+    {
+        $this->artisan('finance:transactions', ['--year' => '2026', '--month' => '0'])
+            ->assertExitCode(1);
+    }
+
+    public function test_rejects_invalid_month_thirteen(): void
+    {
+        $this->artisan('finance:transactions', ['--year' => '2026', '--month' => '13'])
+            ->assertExitCode(1);
+    }
+
+    public function test_rejects_invalid_year(): void
+    {
+        $this->artisan('finance:transactions', ['--year' => '99'])
+            ->assertExitCode(1);
+    }
+
     public function test_filter_by_type(): void
     {
         $this->artisan('finance:transactions', ['--type' => 'Buy', '--format' => 'json'])

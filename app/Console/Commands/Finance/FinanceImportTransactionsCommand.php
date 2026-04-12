@@ -36,7 +36,7 @@ class FinanceImportTransactionsCommand extends BaseFinanceCommand
                         't_date' => ['type' => 'string', 'format' => 'date', 'description' => 'Transaction date (YYYY-MM-DD).'],
                         't_type' => ['type' => 'string', 'description' => 'Transaction type (e.g. Buy, Sell, Dividend, deposit, withdrawal).'],
                         't_amt' => ['type' => 'number', 'description' => 'Amount (negative = debit/cost, positive = credit/proceeds).'],
-                        't_symbol' => ['type' => 'string', 'description' => 'Ticker symbol (optional).'],
+                        't_symbol' => ['type' => ['string', 'null'], 'description' => 'Ticker symbol (optional, nullable). Normalized to uppercase on import.'],
                         't_qty' => ['type' => 'number', 'description' => 'Quantity (shares/contracts; negative for sales).'],
                         't_price' => ['type' => 'number', 'description' => 'Price per share/contract.'],
                         't_commission' => ['type' => 'number'],
@@ -93,6 +93,8 @@ class FinanceImportTransactionsCommand extends BaseFinanceCommand
             return 1;
         }
 
+        $this->resolveUser();
+
         $payload = $this->getStdinData();
 
         if ($payload === null) {
@@ -121,13 +123,16 @@ class FinanceImportTransactionsCommand extends BaseFinanceCommand
             ->flip()
             ->toArray();
 
-        $toInsert = [];
-        $skipped = [];
+        // Fillable columns, excluding statement_id which must not be set by the importer
+        // to prevent linking a row to a statement owned by a different account/user.
+        $allowedFields = array_diff((new FinAccountLineItems)->getFillable(), ['statement_id']);
+
+        $validRows = [];
         $errors = [];
 
         foreach ($transactions as $index => $row) {
             if (! is_array($row)) {
-                $errors[] = "Row {$index}: not an object, skipped.";
+                $errors[] = "Row {$index}: not an object. This is an error and the import will fail.";
 
                 continue;
             }
@@ -158,26 +163,32 @@ class FinanceImportTransactionsCommand extends BaseFinanceCommand
                 }
             }
 
-            $row['t_account'] = $accountId;
-
-            // Deduplication: check for existing row with same key tuple
-            $exists = FinAccountLineItems::query()
-                ->where('t_account', $accountId)
-                ->where('t_date', $row['t_date'])
-                ->where('t_type', $row['t_type'])
-                ->where('t_amt', $row['t_amt'])
-                ->where('t_symbol', $row['t_symbol'] ?? null)
-                ->exists();
-
-            if ($exists) {
-                $skipped[] = $row;
+            // Validate t_date format (YYYY-MM-DD)
+            if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $row['t_date'])) {
+                $errors[] = "Row {$index}: t_date must be in YYYY-MM-DD format, got '{$row['t_date']}'.";
 
                 continue;
             }
 
-            // Filter to only fillable columns
-            $fillable = (new FinAccountLineItems)->getFillable();
-            $toInsert[] = array_intersect_key($row, array_flip($fillable));
+            // Validate t_amt is numeric
+            if (! is_numeric($row['t_amt'])) {
+                $errors[] = "Row {$index}: t_amt must be numeric, got '{$row['t_amt']}'.";
+
+                continue;
+            }
+
+            $row['t_account'] = $accountId;
+
+            // Normalize t_symbol: trim whitespace, uppercase, and convert empty string to null
+            $normalizedSymbol = null;
+            if (array_key_exists('t_symbol', $row) && $row['t_symbol'] !== null) {
+                $normalizedSymbol = trim((string) $row['t_symbol']);
+                $normalizedSymbol = $normalizedSymbol === '' ? null : strtoupper($normalizedSymbol);
+            }
+            $row['t_symbol'] = $normalizedSymbol;
+
+            // Filter to only allowed fillable columns (strips statement_id and unknown fields)
+            $validRows[] = array_intersect_key($row, array_flip($allowedFields));
         }
 
         foreach ($errors as $error) {
@@ -188,10 +199,58 @@ class FinanceImportTransactionsCommand extends BaseFinanceCommand
             return 1;
         }
 
+        // Batch deduplication: pre-fetch existing tuples per account to avoid N+1 queries.
+        $toInsert = [];
+        $skipped = [];
+
+        /** @var array<int, array<string, bool>> $existingByAccount */
+        $existingByAccount = [];
+        $accountIdsInBatch = array_unique(array_column($validRows, 't_account'));
+
+        foreach ($accountIdsInBatch as $acctId) {
+            $existing = FinAccountLineItems::query()
+                ->where('t_account', $acctId)
+                ->get(['t_date', 't_type', 't_amt', 't_symbol']);
+
+            foreach ($existing as $ex) {
+                $key = $ex->t_date.'|'.$ex->t_type.'|'.$ex->t_amt.'|'.($ex->t_symbol ?? '');
+                $existingByAccount[$acctId][$key] = true;
+            }
+        }
+
+        foreach ($validRows as $row) {
+            $acctId = (int) $row['t_account'];
+            $key = $row['t_date'].'|'.$row['t_type'].'|'.$row['t_amt'].'|'.($row['t_symbol'] ?? '');
+
+            if (isset($existingByAccount[$acctId][$key])) {
+                $skipped[] = $row;
+            } else {
+                $toInsert[] = $row;
+                // Track in-memory to handle duplicates within the same import batch
+                $existingByAccount[$acctId][$key] = true;
+            }
+        }
+
         $isDryRun = $this->option('dry-run');
+        $isJson = ($this->option('format') ?? 'table') === 'json';
 
         if (! $isDryRun && ! empty($toInsert)) {
             DB::table('fin_account_line_items')->insert($toInsert);
+        }
+
+        // Dry-run preview: suppressed in JSON mode to keep stdout valid JSON
+        if ($isDryRun && ! empty($toInsert) && ! $isJson) {
+            $this->info('[dry-run] The following rows would be inserted:');
+            $previewHeaders = ['t_account', 't_date', 't_type', 't_amt', 't_symbol', 't_description'];
+            $previewRows = array_map(fn ($r) => [
+                $r['t_account'] ?? '',
+                $r['t_date'] ?? '',
+                $r['t_type'] ?? '',
+                $r['t_amt'] ?? '',
+                $r['t_symbol'] ?? '',
+                mb_strimwidth((string) ($r['t_description'] ?? ''), 0, 50, '…'),
+            ], $toInsert);
+            $this->renderTable($previewHeaders, $previewRows);
         }
 
         // Summary output
@@ -206,20 +265,6 @@ class FinanceImportTransactionsCommand extends BaseFinanceCommand
             'skipped_duplicate' => count($skipped),
             'rows' => $isDryRun ? $toInsert : [],
         ];
-
-        if ($isDryRun && ! empty($toInsert)) {
-            $this->info('[dry-run] The following rows would be inserted:');
-            $previewHeaders = ['t_account', 't_date', 't_type', 't_amt', 't_symbol', 't_description'];
-            $previewRows = array_map(fn ($r) => [
-                $r['t_account'] ?? '',
-                $r['t_date'] ?? '',
-                $r['t_type'] ?? '',
-                $r['t_amt'] ?? '',
-                $r['t_symbol'] ?? '',
-                mb_strimwidth((string) ($r['t_description'] ?? ''), 0, 50, '…'),
-            ], $toInsert);
-            $this->renderTable($previewHeaders, $previewRows);
-        }
 
         $this->outputData($summaryHeaders, $summaryRows, $summaryData);
 

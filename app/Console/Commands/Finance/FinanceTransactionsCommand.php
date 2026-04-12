@@ -24,6 +24,8 @@ class FinanceTransactionsCommand extends BaseFinanceCommand
             return 1;
         }
 
+        $this->resolveUser();
+
         // Validate --month requires --year
         if ($this->option('month') !== null && $this->option('year') === null) {
             $this->error('--month requires --year to be specified.');
@@ -31,10 +33,28 @@ class FinanceTransactionsCommand extends BaseFinanceCommand
             return 1;
         }
 
-        // Resolve account IDs the user is allowed to see
+        // Validate --year and --month ranges
+        if ($this->option('year') !== null) {
+            $year = (int) $this->option('year');
+            if ($year < 1900 || $year > 9999) {
+                $this->error("--year must be a 4-digit year (1900–9999), got '{$this->option('year')}'.");
+
+                return 1;
+            }
+        }
+
+        if ($this->option('month') !== null) {
+            $month = (int) $this->option('month');
+            if ($month < 1 || $month > 12) {
+                $this->error("--month must be between 1 and 12, got '{$this->option('month')}'.");
+
+                return 1;
+            }
+        }
+
+        // Resolve account IDs the user is allowed to see, including closed accounts.
         $accountQuery = FinAccounts::withoutGlobalScopes()
-            ->where('acct_owner', $this->userId())
-            ->whereNull('when_closed');
+            ->where('acct_owner', $this->userId());
 
         if ($this->option('account') !== null) {
             $accountQuery->where('acct_id', (int) $this->option('account'));
@@ -94,7 +114,7 @@ class FinanceTransactionsCommand extends BaseFinanceCommand
             mb_strimwidth((string) ($t->t_description ?? ''), 0, 60, '…'),
         ])->toArray();
 
-        $data = $transactions->map(fn (FinAccountLineItems $t) => $t->toArray())->values()->toArray();
+        $data = $transactions->map(fn (FinAccountLineItems $t) => $t->getAttributes())->values()->toArray();
 
         $this->outputData($headers, $rows, $data);
 
