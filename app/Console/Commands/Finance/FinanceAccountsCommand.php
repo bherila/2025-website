@@ -18,10 +18,11 @@ class FinanceAccountsCommand extends BaseFinanceCommand
             return 1;
         }
 
-        $this->resolveUser();
+        if ($this->resolveUser() === null) {
+            return 1;
+        }
 
-        $query = FinAccounts::withoutGlobalScopes()
-            ->where('acct_owner', $this->userId())
+        $query = FinAccounts::forOwner($this->userId())
             ->orderBy('acct_sort_order')
             ->orderBy('acct_name');
 

@@ -93,7 +93,9 @@ class FinanceImportTransactionsCommand extends BaseFinanceCommand
             return 1;
         }
 
-        $this->resolveUser();
+        if ($this->resolveUser() === null) {
+            return 1;
+        }
 
         $payload = $this->getStdinData();
 
@@ -117,8 +119,7 @@ class FinanceImportTransactionsCommand extends BaseFinanceCommand
         }
 
         // Cache valid account IDs for the user to prevent inserting into another user's account
-        $validAccountIds = FinAccounts::withoutGlobalScopes()
-            ->where('acct_owner', $this->userId())
+        $validAccountIds = FinAccounts::forOwner($this->userId())
             ->pluck('acct_id')
             ->flip()
             ->toArray();
