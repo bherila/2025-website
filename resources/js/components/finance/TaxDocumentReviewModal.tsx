@@ -700,7 +700,10 @@ export default function TaxDocumentReviewModal({
                         </>
                       )}
                       {!isLinkReview && activeDoc.employment_entity?.display_name && (
-                        <span className="font-medium text-foreground">{activeDoc.employment_entity.display_name}</span>
+                        <>
+                          <span className="font-medium text-foreground">{activeDoc.employment_entity.display_name}</span>
+                          <span className="text-muted-foreground/30">•</span>
+                        </>
                       )}
                       <span>{taxYear}</span>
                       <span className="text-muted-foreground/30">•</span>
