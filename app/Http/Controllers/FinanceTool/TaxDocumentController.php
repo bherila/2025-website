@@ -2,8 +2,6 @@
 
 namespace App\Http\Controllers\FinanceTool;
 
-use App\GenAiProcessor\Jobs\ParseImportJob;
-use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Services\GenAiJobDispatcherService;
 use App\Http\Controllers\Controller;
 use App\Models\Files\FileForTaxDocument;
@@ -11,6 +9,7 @@ use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinEmploymentEntity;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\FileStorageService;
+use App\Services\TaxDocument\TaxDocumentCreationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -22,10 +21,16 @@ class TaxDocumentController extends Controller
 
     protected GenAiJobDispatcherService $dispatcherService;
 
-    public function __construct(FileStorageService $fileService, GenAiJobDispatcherService $dispatcherService)
-    {
+    protected TaxDocumentCreationService $creationService;
+
+    public function __construct(
+        FileStorageService $fileService,
+        GenAiJobDispatcherService $dispatcherService,
+        TaxDocumentCreationService $creationService,
+    ) {
         $this->fileService = $fileService;
         $this->dispatcherService = $dispatcherService;
+        $this->creationService = $creationService;
     }
 
     public function index(Request $request): JsonResponse
@@ -135,61 +140,34 @@ class TaxDocumentController extends Controller
         // When caller supplies pre-parsed JSON, skip AI processing entirely.
         $hasParsedData = $request->filled('parsed_data');
 
-        $doc = DB::transaction(function () use ($request, $userId, $formType, $s3Key, $storedFilename, $hasParsedData): FileForTaxDocument {
-            $taxDoc = FileForTaxDocument::create([
-                'user_id' => $userId,
-                'tax_year' => $request->tax_year,
+        $docAttributes = [
+            'user_id' => $userId,
+            'tax_year' => $request->tax_year,
+            'form_type' => $formType,
+            'employment_entity_id' => $request->employment_entity_id,
+            'original_filename' => $request->original_filename,
+            'stored_filename' => $storedFilename,
+            's3_path' => $s3Key,
+            'mime_type' => $request->input('mime_type', 'application/pdf'),
+            'file_size_bytes' => $request->file_size_bytes,
+            'file_hash' => $request->file_hash,
+            'uploaded_by_user_id' => $userId,
+            'notes' => $request->notes,
+            'parsed_data' => $hasParsedData ? $request->parsed_data : null,
+            'genai_status' => $hasParsedData ? 'parsed' : 'pending',
+        ];
+
+        $linkAttributes = null;
+        if ($request->filled('account_id') && in_array($formType, FileForTaxDocument::ACCOUNT_FORM_TYPES)) {
+            $linkAttributes = [
+                'account_id' => $request->account_id,
                 'form_type' => $formType,
-                'employment_entity_id' => $request->employment_entity_id,
-                'original_filename' => $request->original_filename,
-                'stored_filename' => $storedFilename,
-                's3_path' => $s3Key,
-                'mime_type' => $request->input('mime_type', 'application/pdf'),
-                'file_size_bytes' => $request->file_size_bytes,
-                'file_hash' => $request->file_hash,
-                'uploaded_by_user_id' => $userId,
+                'tax_year' => $request->tax_year,
                 'notes' => $request->notes,
-                'parsed_data' => $hasParsedData ? $request->parsed_data : null,
-                'genai_status' => $hasParsedData ? 'parsed' : 'pending',
-            ]);
-
-            // Create the canonical account link for account-based form types.
-            if ($request->filled('account_id') && in_array($formType, FileForTaxDocument::ACCOUNT_FORM_TYPES)) {
-                TaxDocumentAccount::createLink(
-                    $taxDoc->id,
-                    $request->account_id,
-                    $formType,
-                    $request->tax_year,
-                    notes: $request->notes,
-                );
-            }
-
-            if (! $hasParsedData) {
-                $genaiJob = GenAiImportJob::create([
-                    'user_id' => $userId,
-                    'job_type' => 'tax_document',
-                    'file_hash' => $request->file_hash,
-                    'original_filename' => $request->original_filename,
-                    's3_path' => $s3Key,
-                    'mime_type' => $request->input('mime_type', 'application/pdf'),
-                    'file_size_bytes' => $request->file_size_bytes,
-                    'context_json' => json_encode([
-                        'tax_year' => (int) $request->tax_year,
-                        'form_type' => $formType,
-                        'tax_document_id' => $taxDoc->id,
-                    ]),
-                    'status' => 'pending',
-                ]);
-
-                $taxDoc->update(['genai_job_id' => $genaiJob->id]);
-            }
-
-            return $taxDoc;
-        });
-
-        if (! $hasParsedData) {
-            ParseImportJob::dispatch($doc->genai_job_id);
+            ];
         }
+
+        $doc = $this->creationService->createSingleAccountDocument($docAttributes, $linkAttributes);
 
         return response()->json(
             $doc->load(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name', 'accountLinks.account:acct_id,acct_name']),
@@ -224,8 +202,8 @@ class TaxDocumentController extends Controller
         $s3Key = $validated['s3_key'];
         $storedFilename = $validated['stored_filename'];
 
-        $doc = DB::transaction(function () use ($request, $userId, $s3Key, $storedFilename): FileForTaxDocument {
-            $taxDoc = FileForTaxDocument::create([
+        $doc = $this->creationService->createMultiAccountDocument(
+            [
                 'user_id' => $userId,
                 'tax_year' => $request->tax_year,
                 'form_type' => 'broker_1099',
@@ -236,31 +214,9 @@ class TaxDocumentController extends Controller
                 'file_size_bytes' => $request->file_size_bytes,
                 'file_hash' => $request->file_hash,
                 'uploaded_by_user_id' => $userId,
-                'genai_status' => 'pending',
-            ]);
-
-            $genaiJob = GenAiImportJob::create([
-                'user_id' => $userId,
-                'job_type' => 'tax_form_multi_account_import',
-                'file_hash' => $request->file_hash,
-                'original_filename' => $request->original_filename,
-                's3_path' => $s3Key,
-                'mime_type' => $request->input('mime_type', 'application/pdf'),
-                'file_size_bytes' => $request->file_size_bytes,
-                'context_json' => json_encode([
-                    'tax_document_id' => $taxDoc->id,
-                    'tax_year' => (int) $request->tax_year,
-                    'accounts' => $request->input('context_accounts', []),
-                ]),
-                'status' => 'pending',
-            ]);
-
-            $taxDoc->update(['genai_job_id' => $genaiJob->id]);
-
-            return $taxDoc;
-        });
-
-        ParseImportJob::dispatch($doc->genai_job_id);
+            ],
+            $request->input('context_accounts', []),
+        );
 
         return response()->json(
             $doc->load(['uploader:id,name', 'accountLinks.account:acct_id,acct_name']),
