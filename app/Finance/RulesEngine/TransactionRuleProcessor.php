@@ -123,7 +123,7 @@ class TransactionRuleProcessor
      * @param  FinRule  $rule  The rule whose conditions to apply
      * @param  User  $user  The user whose transactions to search
      * @param  int|null  $limit  Maximum number of transactions to return
-     * @return Collection<FinAccountLineItems> Matching transactions
+     * @return Collection<int, FinAccountLineItems> Matching transactions
      */
     private function getTransactionsForRule(FinRule $rule, User $user, ?int $limit = null): Collection
     {
@@ -156,7 +156,7 @@ class TransactionRuleProcessor
      * Try to apply rule conditions to query builder for database-level filtering.
      * Returns true if all conditions were successfully applied, false otherwise.
      *
-     * @param  Builder  $query  The query builder to modify
+     * @param  Builder<FinAccountLineItems>  $query  The query builder to modify
      * @param  FinRule  $rule  The rule whose conditions to apply
      * @return bool True if query optimization was successful
      */
@@ -207,7 +207,7 @@ class TransactionRuleProcessor
      *
      * @param  FinRule  $rule  The rule whose conditions to match against
      * @param  User  $user  The user whose transactions to search
-     * @return Collection<FinAccountLineItems> Matching transactions
+     * @return Collection<int, FinAccountLineItems> Matching transactions
      */
     public function getMatchingTransactions(FinRule $rule, User $user): Collection
     {
@@ -216,6 +216,8 @@ class TransactionRuleProcessor
 
     /**
      * Apply a set of rules to a single transaction.
+     *
+     * @param  iterable<FinRule>  $rules
      */
     private function applyRulesToTransaction(
         FinAccountLineItems $tx,

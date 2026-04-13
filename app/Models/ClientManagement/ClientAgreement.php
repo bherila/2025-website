@@ -6,6 +6,8 @@ use App\Models\User;
 use App\Traits\SerializesDatesAsLocal;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ClientAgreement extends Model
@@ -46,24 +48,30 @@ class ClientAgreement extends Model
 
     /**
      * Get the client company that owns this agreement.
+     *
+     * @return BelongsTo<ClientCompany, self>
      */
-    public function clientCompany()
+    public function clientCompany(): BelongsTo
     {
         return $this->belongsTo(ClientCompany::class, 'client_company_id');
     }
 
     /**
      * Get the user who signed the agreement on behalf of the client company.
+     *
+     * @return BelongsTo<User, self>
      */
-    public function signedByUser()
+    public function signedByUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'client_company_signed_user_id');
     }
 
     /**
      * Get the invoices associated with this agreement.
+     *
+     * @return HasMany<ClientInvoice, self>
      */
-    public function invoices()
+    public function invoices(): HasMany
     {
         return $this->hasMany(ClientInvoice::class, 'client_agreement_id');
     }

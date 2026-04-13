@@ -26,7 +26,7 @@ class CleanupOrphanedInvoices extends Command
     /**
      * Execute the console command.
      */
-    public function handle()
+    public function handle(): int
     {
         $this->info('Starting orphaned invoice cleanup...');
 
@@ -66,5 +66,7 @@ class CleanupOrphanedInvoices extends Command
         }
 
         $this->info('Cleanup completed successfully.');
+
+        return 0;
     }
 }

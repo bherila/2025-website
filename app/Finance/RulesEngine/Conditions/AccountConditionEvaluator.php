@@ -16,6 +16,9 @@ class AccountConditionEvaluator implements QueryConditionEvaluatorInterface
         };
     }
 
+    /**
+     * @param  Builder<FinAccountLineItems>  $query
+     */
     public function applyToQuery(Builder $query, FinRuleCondition $condition): void
     {
         $accountId = (int) $condition->value;

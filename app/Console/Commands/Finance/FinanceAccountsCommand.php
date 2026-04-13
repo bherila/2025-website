@@ -34,7 +34,7 @@ class FinanceAccountsCommand extends BaseFinanceCommand
 
         $headers = ['acct_id', 'name', 'number', 'balance', 'debt', 'retirement', 'closed'];
 
-        $rows = $accounts->map(fn (FinAccounts $a) => [
+        $rows = $accounts->map(fn (FinAccounts $a): array => [
             $a->acct_id,
             $a->acct_name,
             $a->acct_number ?? '',
@@ -44,7 +44,7 @@ class FinanceAccountsCommand extends BaseFinanceCommand
             $a->when_closed?->toDateString() ?? '',
         ])->toArray();
 
-        $data = $accounts->map(fn (FinAccounts $a) => [
+        $data = $accounts->map(fn (FinAccounts $a): array => [
             'acct_id' => $a->acct_id,
             'acct_name' => $a->acct_name,
             'acct_number' => $a->acct_number,

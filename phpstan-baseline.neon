@@ -181,50 +181,14 @@ parameters:
 			path: app/Http/Controllers/BingoController.php
 
 		-
-			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientAgreement\:\:\$clientCompany\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/ClientManagement/ClientAgreementApiController.php
-
-		-
 			message: '#^Method App\\Http\\Controllers\\ClientManagement\\ClientAgreementApiController\:\:index\(\) return type with generic class Illuminate\\Database\\Eloquent\\Collection does not specify its types\: TKey, TModel$#'
 			identifier: missingType.generics
 			count: 1
 			path: app/Http/Controllers/ClientManagement/ClientAgreementApiController.php
 
 		-
-			message: '#^Relation ''clientCompany'' is not found in App\\Models\\ClientManagement\\ClientAgreement model\.$#'
-			identifier: larastan.relationExistence
-			count: 4
-			path: app/Http/Controllers/ClientManagement/ClientAgreementApiController.php
-
-		-
-			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientAgreement\:\:\$clientCompany\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/ClientManagement/ClientAgreementController.php
-
-		-
-			message: '#^Relation ''clientCompany'' is not found in App\\Models\\ClientManagement\\ClientAgreement model\.$#'
-			identifier: larastan.relationExistence
-			count: 1
-			path: app/Http/Controllers/ClientManagement/ClientAgreementController.php
-
-		-
 			message: '#^Cannot call method get\(\) on array\<int, string\>\.$#'
 			identifier: method.nonObject
-			count: 1
-			path: app/Http/Controllers/ClientManagement/ClientCompanyApiController.php
-
-		-
-			message: '#^Relation ''agreements'' is not found in App\\Models\\ClientManagement\\ClientCompany model\.$#'
-			identifier: larastan.relationExistence
-			count: 1
-			path: app/Http/Controllers/ClientManagement/ClientCompanyApiController.php
-
-		-
-			message: '#^Relation ''users'' is not found in App\\Models\\ClientManagement\\ClientCompany model\.$#'
-			identifier: larastan.relationExistence
 			count: 1
 			path: app/Http/Controllers/ClientManagement/ClientCompanyApiController.php
 
@@ -235,39 +199,15 @@ parameters:
 			path: app/Http/Controllers/ClientManagement/ClientCompanyApiController.php
 
 		-
-			message: '#^Relation ''users'' is not found in App\\Models\\ClientManagement\\ClientCompany model\.$#'
-			identifier: larastan.relationExistence
-			count: 1
-			path: app/Http/Controllers/ClientManagement/ClientCompanyController.php
-
-		-
-			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientExpense\:\:\$finLineItem\.$#'
-			identifier: property.notFound
-			count: 4
-			path: app/Http/Controllers/ClientManagement/ClientExpenseApiController.php
-
-		-
 			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientExpense\:\:\$fin_line_item\.$#'
 			identifier: property.notFound
 			count: 1
 			path: app/Http/Controllers/ClientManagement/ClientExpenseApiController.php
 
 		-
-			message: '#^Relation ''creator'' is not found in App\\Models\\ClientManagement\\ClientExpense model\.$#'
-			identifier: larastan.relationExistence
-			count: 1
-			path: app/Http/Controllers/ClientManagement/ClientExpenseApiController.php
-
-		-
-			message: '#^Relation ''finLineItem'' is not found in App\\Models\\ClientManagement\\ClientExpense model\.$#'
-			identifier: larastan.relationExistence
-			count: 1
-			path: app/Http/Controllers/ClientManagement/ClientExpenseApiController.php
-
-		-
-			message: '#^Relation ''project'' is not found in App\\Models\\ClientManagement\\ClientExpense model\.$#'
-			identifier: larastan.relationExistence
-			count: 1
+			message: '#^Access to an undefined property App\\Models\\FinanceTool\\FinAccountLineItems\:\:\$account\.$#'
+			identifier: property.notFound
+			count: 4
 			path: app/Http/Controllers/ClientManagement/ClientExpenseApiController.php
 
 		-
@@ -313,22 +253,10 @@ parameters:
 			path: app/Http/Controllers/ClientManagement/ClientPortalAgreementApiController.php
 
 		-
-			message: '#^Relation ''signedByUser'' is not found in App\\Models\\ClientManagement\\ClientAgreement model\.$#'
-			identifier: larastan.relationExistence
-			count: 1
-			path: app/Http/Controllers/ClientManagement/ClientPortalAgreementApiController.php
-
-		-
 			message: '#^Relation ''uploader'' is not found in App\\Models\\Files\\FileForAgreement model\.$#'
 			identifier: larastan.relationExistence
 			count: 1
 			path: app/Http/Controllers/ClientManagement/ClientPortalAgreementController.php
-
-		-
-			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientCompany\:\:\$users\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/ClientManagement/ClientPortalApiController.php
 
 		-
 			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientTimeEntry\:\:\$invoiceLine\.$#'
@@ -391,6 +319,12 @@ parameters:
 			path: app/Http/Controllers/ClientManagement/ClientPortalApiController.php
 
 		-
+			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientTimeEntry\:\:\$invoiceLine\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientPortalController.php
+
+		-
 			message: '#^Relation ''assignee'' is not found in App\\Models\\ClientManagement\\ClientTask model\.$#'
 			identifier: larastan.relationExistence
 			count: 1
@@ -398,6 +332,12 @@ parameters:
 
 		-
 			message: '#^Relation ''creator'' is not found in App\\Models\\ClientManagement\\ClientTask model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientPortalController.php
+
+		-
+			message: '#^Relation ''invoiceLine'' is not found in App\\Models\\ClientManagement\\ClientTimeEntry model\.$#'
 			identifier: larastan.relationExistence
 			count: 1
 			path: app/Http/Controllers/ClientManagement/ClientPortalController.php
@@ -1039,20 +979,20 @@ parameters:
 			path: app/Models/ClientManagement/ClientAgreement.php
 
 		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientAgreement\:\:clientCompany\(\) has no return type specified\.$#'
-			identifier: missingType.return
+			message: '#^Method App\\Models\\ClientManagement\\ClientAgreement\:\:clientCompany\(\) should return Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\ClientManagement\\ClientCompany, App\\Models\\ClientManagement\\ClientAgreement\> but returns Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\ClientManagement\\ClientCompany, \$this\(App\\Models\\ClientManagement\\ClientAgreement\)\>\.$#'
+			identifier: return.type
 			count: 1
 			path: app/Models/ClientManagement/ClientAgreement.php
 
 		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientAgreement\:\:invoices\(\) has no return type specified\.$#'
-			identifier: missingType.return
+			message: '#^Method App\\Models\\ClientManagement\\ClientAgreement\:\:invoices\(\) should return Illuminate\\Database\\Eloquent\\Relations\\HasMany\<App\\Models\\ClientManagement\\ClientInvoice, App\\Models\\ClientManagement\\ClientAgreement\> but returns Illuminate\\Database\\Eloquent\\Relations\\HasMany\<App\\Models\\ClientManagement\\ClientInvoice, \$this\(App\\Models\\ClientManagement\\ClientAgreement\)\>\.$#'
+			identifier: return.type
 			count: 1
 			path: app/Models/ClientManagement/ClientAgreement.php
 
 		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientAgreement\:\:signedByUser\(\) has no return type specified\.$#'
-			identifier: missingType.return
+			message: '#^Method App\\Models\\ClientManagement\\ClientAgreement\:\:signedByUser\(\) should return Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\User, App\\Models\\ClientManagement\\ClientAgreement\> but returns Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\User, \$this\(App\\Models\\ClientManagement\\ClientAgreement\)\>\.$#'
+			identifier: return.type
 			count: 1
 			path: app/Models/ClientManagement/ClientAgreement.php
 
@@ -1075,116 +1015,68 @@ parameters:
 			path: app/Models/ClientManagement/ClientAgreement.php
 
 		-
-			message: '#^Class App\\Models\\ClientManagement\\ClientCompany uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
-			identifier: missingType.generics
+			message: '#^Method App\\Models\\ClientManagement\\ClientCompany\:\:agreements\(\) should return Illuminate\\Database\\Eloquent\\Relations\\HasMany\<App\\Models\\ClientManagement\\ClientAgreement, App\\Models\\ClientManagement\\ClientCompany\> but returns Illuminate\\Database\\Eloquent\\Relations\\HasMany\<App\\Models\\ClientManagement\\ClientAgreement, \$this\(App\\Models\\ClientManagement\\ClientCompany\)\>\.$#'
+			identifier: return.type
 			count: 1
 			path: app/Models/ClientManagement/ClientCompany.php
 
 		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientCompany\:\:agreements\(\) has no return type specified\.$#'
-			identifier: missingType.return
+			message: '#^Method App\\Models\\ClientManagement\\ClientCompany\:\:invoices\(\) should return Illuminate\\Database\\Eloquent\\Relations\\HasMany\<App\\Models\\ClientManagement\\ClientInvoice, App\\Models\\ClientManagement\\ClientCompany\> but returns Illuminate\\Database\\Eloquent\\Relations\\HasMany\<App\\Models\\ClientManagement\\ClientInvoice, \$this\(App\\Models\\ClientManagement\\ClientCompany\)\>\.$#'
+			identifier: return.type
 			count: 1
 			path: app/Models/ClientManagement/ClientCompany.php
 
 		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientCompany\:\:invoices\(\) has no return type specified\.$#'
-			identifier: missingType.return
+			message: '#^Method App\\Models\\ClientManagement\\ClientCompany\:\:projects\(\) should return Illuminate\\Database\\Eloquent\\Relations\\HasMany\<App\\Models\\ClientManagement\\ClientProject, App\\Models\\ClientManagement\\ClientCompany\> but returns Illuminate\\Database\\Eloquent\\Relations\\HasMany\<App\\Models\\ClientManagement\\ClientProject, \$this\(App\\Models\\ClientManagement\\ClientCompany\)\>\.$#'
+			identifier: return.type
 			count: 1
 			path: app/Models/ClientManagement/ClientCompany.php
 
 		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientCompany\:\:projects\(\) has no return type specified\.$#'
-			identifier: missingType.return
+			message: '#^Method App\\Models\\ClientManagement\\ClientCompany\:\:tasks\(\) should return Illuminate\\Database\\Eloquent\\Relations\\HasManyThrough\<App\\Models\\ClientManagement\\ClientTask, App\\Models\\ClientManagement\\ClientProject, App\\Models\\ClientManagement\\ClientCompany\> but returns Illuminate\\Database\\Eloquent\\Relations\\HasManyThrough\<App\\Models\\ClientManagement\\ClientTask, App\\Models\\ClientManagement\\ClientProject, \$this\(App\\Models\\ClientManagement\\ClientCompany\)\>\.$#'
+			identifier: return.type
 			count: 1
 			path: app/Models/ClientManagement/ClientCompany.php
 
 		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientCompany\:\:tasks\(\) has no return type specified\.$#'
-			identifier: missingType.return
+			message: '#^Method App\\Models\\ClientManagement\\ClientCompany\:\:timeEntries\(\) should return Illuminate\\Database\\Eloquent\\Relations\\HasMany\<App\\Models\\ClientManagement\\ClientTimeEntry, App\\Models\\ClientManagement\\ClientCompany\> but returns Illuminate\\Database\\Eloquent\\Relations\\HasMany\<App\\Models\\ClientManagement\\ClientTimeEntry, \$this\(App\\Models\\ClientManagement\\ClientCompany\)\>\.$#'
+			identifier: return.type
 			count: 1
 			path: app/Models/ClientManagement/ClientCompany.php
 
 		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientCompany\:\:timeEntries\(\) has no return type specified\.$#'
-			identifier: missingType.return
+			message: '#^Method App\\Models\\ClientManagement\\ClientCompany\:\:users\(\) should return Illuminate\\Database\\Eloquent\\Relations\\BelongsToMany\<App\\Models\\User, App\\Models\\ClientManagement\\ClientCompany, Illuminate\\Database\\Eloquent\\Relations\\Pivot, ''pivot''\> but returns Illuminate\\Database\\Eloquent\\Relations\\BelongsToMany\<App\\Models\\User, \$this\(App\\Models\\ClientManagement\\ClientCompany\), Illuminate\\Database\\Eloquent\\Relations\\Pivot, ''pivot''\>\.$#'
+			identifier: return.type
 			count: 1
 			path: app/Models/ClientManagement/ClientCompany.php
 
 		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientCompany\:\:touchLastActivity\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/ClientManagement/ClientCompany.php
-
-		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientCompany\:\:users\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/ClientManagement/ClientCompany.php
-
-		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientExpense\:\:clientCompany\(\) has no return type specified\.$#'
-			identifier: missingType.return
+			message: '#^Method App\\Models\\ClientManagement\\ClientExpense\:\:clientCompany\(\) should return Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\ClientManagement\\ClientCompany, App\\Models\\ClientManagement\\ClientExpense\> but returns Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\ClientManagement\\ClientCompany, \$this\(App\\Models\\ClientManagement\\ClientExpense\)\>\.$#'
+			identifier: return.type
 			count: 1
 			path: app/Models/ClientManagement/ClientExpense.php
 
 		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientExpense\:\:creator\(\) has no return type specified\.$#'
-			identifier: missingType.return
+			message: '#^Method App\\Models\\ClientManagement\\ClientExpense\:\:creator\(\) should return Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\User, App\\Models\\ClientManagement\\ClientExpense\> but returns Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\User, \$this\(App\\Models\\ClientManagement\\ClientExpense\)\>\.$#'
+			identifier: return.type
 			count: 1
 			path: app/Models/ClientManagement/ClientExpense.php
 
 		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientExpense\:\:finLineItem\(\) has no return type specified\.$#'
-			identifier: missingType.return
+			message: '#^Method App\\Models\\ClientManagement\\ClientExpense\:\:finLineItem\(\) should return Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\FinanceTool\\FinAccountLineItems, App\\Models\\ClientManagement\\ClientExpense\> but returns Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\FinanceTool\\FinAccountLineItems, \$this\(App\\Models\\ClientManagement\\ClientExpense\)\>\.$#'
+			identifier: return.type
 			count: 1
 			path: app/Models/ClientManagement/ClientExpense.php
 
 		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientExpense\:\:invoiceLine\(\) has no return type specified\.$#'
-			identifier: missingType.return
+			message: '#^Method App\\Models\\ClientManagement\\ClientExpense\:\:invoiceLine\(\) should return Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\ClientManagement\\ClientInvoiceLine, App\\Models\\ClientManagement\\ClientExpense\> but returns Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\ClientManagement\\ClientInvoiceLine, \$this\(App\\Models\\ClientManagement\\ClientExpense\)\>\.$#'
+			identifier: return.type
 			count: 1
 			path: app/Models/ClientManagement/ClientExpense.php
 
 		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientExpense\:\:project\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/ClientManagement/ClientExpense.php
-
-		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientExpense\:\:scopeNonReimbursable\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/ClientManagement/ClientExpense.php
-
-		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientExpense\:\:scopeNonReimbursable\(\) has parameter \$query with no type specified\.$#'
-			identifier: missingType.parameter
-			count: 1
-			path: app/Models/ClientManagement/ClientExpense.php
-
-		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientExpense\:\:scopePendingReimbursement\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/ClientManagement/ClientExpense.php
-
-		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientExpense\:\:scopePendingReimbursement\(\) has parameter \$query with no type specified\.$#'
-			identifier: missingType.parameter
-			count: 1
-			path: app/Models/ClientManagement/ClientExpense.php
-
-		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientExpense\:\:scopeReimbursable\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/ClientManagement/ClientExpense.php
-
-		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientExpense\:\:scopeReimbursable\(\) has parameter \$query with no type specified\.$#'
-			identifier: missingType.parameter
+			message: '#^Method App\\Models\\ClientManagement\\ClientExpense\:\:project\(\) should return Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\ClientManagement\\ClientProject, App\\Models\\ClientManagement\\ClientExpense\> but returns Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\ClientManagement\\ClientProject, \$this\(App\\Models\\ClientManagement\\ClientExpense\)\>\.$#'
+			identifier: return.type
 			count: 1
 			path: app/Models/ClientManagement/ClientExpense.php
 

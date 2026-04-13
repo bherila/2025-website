@@ -34,6 +34,9 @@ class StockSymbolConditionEvaluator implements QueryConditionEvaluatorInterface
         return in_array(strtoupper(trim($symbol)), array_map('strtoupper', $symbols));
     }
 
+    /**
+     * @param  Builder<FinAccountLineItems>  $query
+     */
     public function applyToQuery(Builder $query, FinRuleCondition $condition): void
     {
         $operator = strtoupper($condition->operator);
@@ -48,6 +51,9 @@ class StockSymbolConditionEvaluator implements QueryConditionEvaluatorInterface
         };
     }
 
+    /**
+     * @param  Builder<FinAccountLineItems>  $query
+     */
     private function applyIsSymbolToQuery(Builder $query, ?string $value): void
     {
         $symbols = array_filter(

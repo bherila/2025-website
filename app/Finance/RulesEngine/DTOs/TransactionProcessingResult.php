@@ -8,6 +8,7 @@ class TransactionProcessingResult
         public readonly int $transactionId,
         public readonly int $rulesMatched,
         public readonly int $actionsApplied,
+        /** @var array<int, string> */
         public readonly array $errors = [],
     ) {}
 }

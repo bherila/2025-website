@@ -4,12 +4,17 @@ namespace App\Models\ClientManagement;
 
 use App\Models\User;
 use App\Traits\SerializesDatesAsLocal;
+use Database\Factories\ClientManagement\ClientCompanyFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ClientCompany extends Model
 {
+    /** @use HasFactory<ClientCompanyFactory> */
     use HasFactory, SerializesDatesAsLocal, SoftDeletes;
 
     protected $fillable = [
@@ -46,8 +51,10 @@ class ClientCompany extends Model
 
     /**
      * Get the users associated with this client company.
+     *
+     * @return BelongsToMany<User, self>
      */
-    public function users()
+    public function users(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'client_company_user', 'client_company_id', 'user_id')
             ->withTimestamps();
@@ -55,16 +62,20 @@ class ClientCompany extends Model
 
     /**
      * Get the projects associated with this client company.
+     *
+     * @return HasMany<ClientProject, self>
      */
-    public function projects()
+    public function projects(): HasMany
     {
         return $this->hasMany(ClientProject::class, 'client_company_id');
     }
 
     /**
      * Get the agreements associated with this client company.
+     *
+     * @return HasMany<ClientAgreement, self>
      */
-    public function agreements()
+    public function agreements(): HasMany
     {
         return $this->hasMany(ClientAgreement::class, 'client_company_id');
     }
@@ -100,24 +111,30 @@ class ClientCompany extends Model
 
     /**
      * Get the invoices associated with this client company.
+     *
+     * @return HasMany<ClientInvoice, self>
      */
-    public function invoices()
+    public function invoices(): HasMany
     {
         return $this->hasMany(ClientInvoice::class, 'client_company_id');
     }
 
     /**
      * Get time entries for this client company.
+     *
+     * @return HasMany<ClientTimeEntry, self>
      */
-    public function timeEntries()
+    public function timeEntries(): HasMany
     {
         return $this->hasMany(ClientTimeEntry::class, 'client_company_id');
     }
 
     /**
      * Get tasks for this client company (through projects).
+     *
+     * @return HasManyThrough<ClientTask, ClientProject, self>
      */
-    public function tasks()
+    public function tasks(): HasManyThrough
     {
         return $this->hasManyThrough(
             ClientTask::class,
@@ -132,7 +149,7 @@ class ClientCompany extends Model
     /**
      * Update the last activity timestamp.
      */
-    public function touchLastActivity()
+    public function touchLastActivity(): void
     {
         $this->last_activity = now();
         $this->save();

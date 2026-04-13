@@ -8,6 +8,9 @@ use Illuminate\Database\Eloquent\Collection;
 
 class TransactionRuleLoader
 {
+    /**
+     * @return Collection<int, FinRule>
+     */
     public function loadActiveRules(User $user): Collection
     {
         return FinRule::where('user_id', $user->id)
@@ -17,6 +20,9 @@ class TransactionRuleLoader
             ->get();
     }
 
+    /**
+     * @return Collection<int, FinRule>
+     */
     public function loadAllRules(User $user): Collection
     {
         return FinRule::where('user_id', $user->id)

@@ -5,7 +5,9 @@ namespace App\Models\ClientManagement;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\User;
 use App\Traits\SerializesDatesAsLocal;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ClientExpense extends Model
@@ -40,40 +42,50 @@ class ClientExpense extends Model
 
     /**
      * Get the client company this expense belongs to.
+     *
+     * @return BelongsTo<ClientCompany, self>
      */
-    public function clientCompany()
+    public function clientCompany(): BelongsTo
     {
         return $this->belongsTo(ClientCompany::class, 'client_company_id');
     }
 
     /**
      * Get the project this expense is associated with.
+     *
+     * @return BelongsTo<ClientProject, self>
      */
-    public function project()
+    public function project(): BelongsTo
     {
         return $this->belongsTo(ClientProject::class, 'project_id');
     }
 
     /**
      * Get the linked FinAccount line item (admin-only visibility).
+     *
+     * @return BelongsTo<FinAccountLineItems, self>
      */
-    public function finLineItem()
+    public function finLineItem(): BelongsTo
     {
         return $this->belongsTo(FinAccountLineItems::class, 'fin_line_item_id', 't_id');
     }
 
     /**
      * Get the user who created this expense.
+     *
+     * @return BelongsTo<User, self>
      */
-    public function creator()
+    public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'creator_user_id');
     }
 
     /**
      * Get the invoice line this expense is linked to.
+     *
+     * @return BelongsTo<ClientInvoiceLine, self>
      */
-    public function invoiceLine()
+    public function invoiceLine(): BelongsTo
     {
         return $this->belongsTo(ClientInvoiceLine::class, 'client_invoice_line_id', 'client_invoice_line_id');
     }
@@ -88,24 +100,33 @@ class ClientExpense extends Model
 
     /**
      * Scope to get only reimbursable expenses.
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
      */
-    public function scopeReimbursable($query)
+    public function scopeReimbursable(Builder $query): Builder
     {
         return $query->where('is_reimbursable', true);
     }
 
     /**
      * Scope to get only non-reimbursable expenses.
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
      */
-    public function scopeNonReimbursable($query)
+    public function scopeNonReimbursable(Builder $query): Builder
     {
         return $query->where('is_reimbursable', false);
     }
 
     /**
      * Scope to get pending reimbursement expenses.
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
      */
-    public function scopePendingReimbursement($query)
+    public function scopePendingReimbursement(Builder $query): Builder
     {
         return $query->where('is_reimbursable', true)
             ->where('is_reimbursed', false);

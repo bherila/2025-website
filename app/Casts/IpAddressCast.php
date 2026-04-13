@@ -10,6 +10,8 @@ use Illuminate\Database\Eloquent\Model;
  *
  * IPv4 addresses are packed to 4 bytes; IPv6 addresses to 16 bytes.
  * Uses PHP's inet_pton() / inet_ntop() so the same code works on both MySQL and SQLite.
+ *
+ * @implements CastsAttributes<string, string>
  */
 class IpAddressCast implements CastsAttributes
 {

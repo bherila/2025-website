@@ -21,6 +21,9 @@ class OptionTypeConditionEvaluator implements QueryConditionEvaluatorInterface
         };
     }
 
+    /**
+     * @param  Builder<FinAccountLineItems>  $query
+     */
     public function applyToQuery(Builder $query, FinRuleCondition $condition): void
     {
         $operator = strtoupper($condition->operator);
