@@ -6,13 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLineItemTagMap;
 use App\Models\FinanceTool\FinAccountTag;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 
 class FinanceTransactionTaggingApiController extends Controller
 {
-    public function getUserTags(Request $request)
+    public function getUserTags(Request $request): JsonResponse
     {
         $uid = Auth::id();
 
@@ -56,7 +57,7 @@ class FinanceTransactionTaggingApiController extends Controller
         ]);
     }
 
-    public function createTag(Request $request)
+    public function createTag(Request $request): JsonResponse
     {
         $uid = Auth::id();
 
@@ -90,7 +91,7 @@ class FinanceTransactionTaggingApiController extends Controller
         ]);
     }
 
-    public function updateTag(Request $request, $tag_id)
+    public function updateTag(Request $request, int $tag_id): JsonResponse
     {
         $uid = Auth::id();
 
@@ -125,7 +126,7 @@ class FinanceTransactionTaggingApiController extends Controller
         return response()->json(['success' => true]);
     }
 
-    public function deleteTag(Request $request, $tag_id)
+    public function deleteTag(Request $request, int $tag_id): JsonResponse
     {
         $uid = Auth::id();
 
@@ -139,7 +140,7 @@ class FinanceTransactionTaggingApiController extends Controller
         return response()->json(['success' => true]);
     }
 
-    public function removeTagsFromTransactions(Request $request)
+    public function removeTagsFromTransactions(Request $request): JsonResponse
     {
         $uid = Auth::id();
 
@@ -181,7 +182,7 @@ class FinanceTransactionTaggingApiController extends Controller
         return response()->json(['success' => true]);
     }
 
-    public function applyTagToTransactions(Request $request)
+    public function applyTagToTransactions(Request $request): JsonResponse
     {
         $uid = Auth::id();
 

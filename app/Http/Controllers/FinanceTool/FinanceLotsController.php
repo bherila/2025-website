@@ -60,7 +60,7 @@ class FinanceLotsController extends Controller
      * List lots for an account.
      * Query params: status=open|closed, year=YYYY (for closed lots)
      */
-    public function index(Request $request, $account_id)
+    public function index(Request $request, int $account_id): JsonResponse
     {
         $account = $this->resolveOwnedAccount($account_id);
 
@@ -134,7 +134,7 @@ class FinanceLotsController extends Controller
     /**
      * Create a new lot manually.
      */
-    public function store(Request $request, $account_id)
+    public function store(Request $request, int $account_id): JsonResponse
     {
         $account = $this->resolveOwnedAccount($account_id);
 
@@ -186,7 +186,7 @@ class FinanceLotsController extends Controller
     /**
      * Search transactions by date range for matching lots during import.
      */
-    public function searchTransactions(Request $request, $account_id)
+    public function searchTransactions(Request $request, int $account_id): JsonResponse
     {
         $account = $this->resolveOwnedAccount($account_id);
 
@@ -208,7 +208,7 @@ class FinanceLotsController extends Controller
     /**
      * Bulk import lots (from Fidelity TSV paste).
      */
-    public function importLots(Request $request, $account_id)
+    public function importLots(Request $request, int $account_id): JsonResponse
     {
         $account = $this->resolveOwnedAccount($account_id);
 
@@ -314,7 +314,7 @@ class FinanceLotsController extends Controller
     /**
      * Get lots linked to a specific transaction.
      */
-    public function lotsByTransaction(Request $request, $account_id, $t_id)
+    public function lotsByTransaction(Request $request, int $account_id, int $t_id): JsonResponse
     {
         $account = $this->resolveOwnedAccount($account_id);
 
@@ -338,7 +338,7 @@ class FinanceLotsController extends Controller
      * This endpoint first removes any existing analyzer-sourced lots for
      * the account (lot_source = 'analyzer'), then inserts the new set.
      */
-    public function saveAnalyzedLots(Request $request, $account_id)
+    public function saveAnalyzedLots(Request $request, int $account_id): JsonResponse
     {
         $account = $this->resolveOwnedAccount($account_id);
 
@@ -417,7 +417,7 @@ class FinanceLotsController extends Controller
     /**
      * Update a single lot (e.g. reassign opening/closing transaction IDs).
      */
-    public function updateLot(Request $request, $account_id, $lot_id)
+    public function updateLot(Request $request, int $account_id, int $lot_id): JsonResponse
     {
         $account = $this->resolveOwnedAccount($account_id);
 
@@ -460,7 +460,7 @@ class FinanceLotsController extends Controller
     /**
      * Delete a single lot.
      */
-    public function deleteLot(Request $request, $account_id, $lot_id)
+    public function deleteLot(Request $request, int $account_id, int $lot_id): JsonResponse
     {
         $account = $this->resolveOwnedAccount($account_id);
 
@@ -481,7 +481,7 @@ class FinanceLotsController extends Controller
      * This is distinct from TransactionLinkModal — that links related
      * transfers across accounts; this links buy/sell lot pairs for tax reporting.
      */
-    public function searchOpeningTransactions(Request $request)
+    public function searchOpeningTransactions(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'symbol' => 'required|string|max:20',
@@ -532,7 +532,7 @@ class FinanceLotsController extends Controller
      * Save a manual lot assignment (linking an opening transaction to a closing transaction).
      * This persists the lot so the user does not have to repeat manual matching.
      */
-    public function saveLotAssignment(Request $request)
+    public function saveLotAssignment(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'assignments' => 'required|array|min:1',

@@ -553,6 +553,8 @@ PROMPT;
      * Normalise a payslip model for JSON output:
      * • Decode the `other` field if it is a JSON string.
      * • Rename the eager-loaded stateData relation to `state_data`.
+     *
+     * @return array<string, mixed>
      */
     private function transformPayslip(FinPayslips $payslip): array
     {

@@ -8,6 +8,7 @@ use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class FinanceTransactionsApiController extends Controller
 {
@@ -17,7 +18,7 @@ class FinanceTransactionsApiController extends Controller
      * Get line items (transactions) for one or all accounts.
      * Pass account_id = 'all' (or null) to retrieve transactions across all accounts.
      */
-    public function getLineItems(Request $request, $account_id = null)
+    public function getLineItems(Request $request, int|string|null $account_id = null): StreamedResponse
     {
         if ($account_id && $account_id !== 'all') {
             $account = $this->resolveOwnedAccount($account_id);
@@ -82,7 +83,7 @@ class FinanceTransactionsApiController extends Controller
     /**
      * Delete a line item (transaction)
      */
-    public function deleteLineItem(Request $request, $account_id)
+    public function deleteLineItem(Request $request, int $account_id): JsonResponse
     {
         $account = $this->resolveOwnedAccount($account_id);
 
@@ -104,7 +105,7 @@ class FinanceTransactionsApiController extends Controller
     /**
      * Import line items (transactions) for an account
      */
-    public function importLineItems(Request $request, $account_id)
+    public function importLineItems(Request $request, int $account_id): JsonResponse
     {
         $account = $this->resolveOwnedAccount($account_id);
 
@@ -160,7 +161,7 @@ class FinanceTransactionsApiController extends Controller
     /**
      * Create a single transaction for an account
      */
-    public function createTransaction(Request $request, $account_id)
+    public function createTransaction(Request $request, int $account_id): JsonResponse
     {
         $account = $this->resolveOwnedAccount($account_id);
 
@@ -202,7 +203,7 @@ class FinanceTransactionsApiController extends Controller
      * Get available years for transactions in one or all accounts.
      * Pass account_id = 'all' (or omit to use the default) to retrieve years across all accounts.
      */
-    public function getTransactionYears(Request $request, $account_id = 'all')
+    public function getTransactionYears(Request $request, int|string $account_id = 'all'): JsonResponse
     {
         if ($account_id === 'all') {
             $query = FinAccountLineItems::whereIn('t_account', $this->getUserAccountIds())->whereNotNull('t_date');
@@ -225,8 +226,10 @@ class FinanceTransactionsApiController extends Controller
 
     /**
      * Transform a line item (transaction) to its API representation
+     *
+     * @return array<string, mixed>
      */
-    protected function transformLineItem($item)
+    protected function transformLineItem(FinAccountLineItems $item): array
     {
         $itemArray = $item->toArray();
 

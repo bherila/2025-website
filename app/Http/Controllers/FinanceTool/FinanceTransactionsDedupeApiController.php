@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -22,7 +24,7 @@ class FinanceTransactionsDedupeApiController extends Controller
      * Note: We prefer to keep the transaction with the most information (non-null fields).
      * If equally detailed, we prefer the newer t_id (highest).
      */
-    public function findDuplicates(Request $request, $account_id)
+    public function findDuplicates(Request $request, int $account_id): JsonResponse
     {
         $uid = Auth::id();
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
@@ -234,7 +236,7 @@ class FinanceTransactionsDedupeApiController extends Controller
      * - Deletes the specified transactions
      * - Records confirmed non-duplicate pairs in fin_transaction_non_duplicate_pairs
      */
-    public function mergeDuplicates(Request $request, $account_id)
+    public function mergeDuplicates(Request $request, int $account_id): JsonResponse
     {
         $uid = Auth::id();
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
@@ -250,7 +252,9 @@ class FinanceTransactionsDedupeApiController extends Controller
             'markAsNotDuplicatePairs.*.t_id_2' => 'required|integer',
         ]);
 
+        /** @var array<int, array<string, mixed>> $merges */
         $merges = $request->merges ?? [];
+        /** @var array<int, array<string, mixed>> $markAsNotDuplicatePairs */
         $markAsNotDuplicatePairs = $request->markAsNotDuplicatePairs ?? [];
         $totalDeleted = 0;
         $totalTagsAdded = 0;
@@ -453,7 +457,7 @@ class FinanceTransactionsDedupeApiController extends Controller
      * Used to prefer keeping the transaction with more data when deduplicating.
      * Tags and other JOIN-requiring fields are excluded.
      */
-    private function informationScore($transaction): int
+    private function informationScore(FinAccountLineItems $transaction): int
     {
         $score = 0;
         $fields = ['t_type', 't_description', 't_symbol', 't_qty', 't_price', 't_comment'];
@@ -471,8 +475,12 @@ class FinanceTransactionsDedupeApiController extends Controller
      * Filter a group of transactions by removing transactions whose all pairwise
      * combinations are already in the confirmed non-duplicate pairs set.
      * Returns the transactions that still form potential duplicate pairs.
+     *
+     * @param  Collection<int, FinAccountLineItems>  $group
+     * @param  array<string, bool>  $knownNonDuplicatePairs
+     * @return Collection<int, FinAccountLineItems>
      */
-    private function filterKnownNonDuplicates($group, array $knownNonDuplicatePairs)
+    private function filterKnownNonDuplicates(Collection $group, array $knownNonDuplicatePairs): Collection
     {
         $ids = $group->pluck('t_id')->toArray();
         $count = count($ids);
@@ -501,7 +509,7 @@ class FinanceTransactionsDedupeApiController extends Controller
      * Normalize a numeric value for comparison
      * Treats null, empty string, 0, and "0" as equivalent
      */
-    private function normalizeValue($value): string
+    private function normalizeValue(mixed $value): string
     {
         if ($value === null || $value === '' || $value === 0 || $value === '0' || $value === 0.0 || $value === '0.0' || $value === '0.00') {
             return '0';
@@ -515,7 +523,7 @@ class FinanceTransactionsDedupeApiController extends Controller
      * Normalize a string value for comparison
      * Treats null and empty string as equivalent, trims whitespace
      */
-    private function normalizeString($value): string
+    private function normalizeString(mixed $value): string
     {
         if ($value === null || $value === '') {
             return '';

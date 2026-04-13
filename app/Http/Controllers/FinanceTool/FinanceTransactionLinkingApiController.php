@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\FinanceTool\FinAccountLineItemLink;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -15,7 +16,7 @@ class FinanceTransactionLinkingApiController extends Controller
      * Normalize link direction: older transaction is always 'a' (parent), newer is 'b' (child).
      * If dates are equal, lower t_id is 'a'.
      *
-     * @return array ['a' => FinAccountLineItems, 'b' => FinAccountLineItems]
+     * @return array<string, FinAccountLineItems>
      */
     private function normalizeLink(FinAccountLineItems $transaction1, FinAccountLineItems $transaction2): array
     {
@@ -47,7 +48,7 @@ class FinanceTransactionLinkingApiController extends Controller
     /**
      * Find potential transactions to link based on date and amount criteria
      */
-    public function findLinkableTransactions(Request $request, $transaction_id)
+    public function findLinkableTransactions(Request $request, int $transaction_id): JsonResponse
     {
         $uid = Auth::id();
 
@@ -136,7 +137,7 @@ class FinanceTransactionLinkingApiController extends Controller
      * Links are normalized: older transaction is 'a' (parent), newer is 'b' (child).
      * If dates are equal, lower t_id is 'a'.
      */
-    public function linkTransactions(Request $request)
+    public function linkTransactions(Request $request): JsonResponse
     {
         $uid = Auth::id();
 
@@ -191,7 +192,7 @@ class FinanceTransactionLinkingApiController extends Controller
      * With normalized links, we need to check both directions since the caller
      * might not know which transaction ended up as parent vs child.
      */
-    public function unlinkTransaction(Request $request, $transaction_id)
+    public function unlinkTransaction(Request $request, int $transaction_id): JsonResponse
     {
         $uid = Auth::id();
 
@@ -230,7 +231,7 @@ class FinanceTransactionLinkingApiController extends Controller
     /**
      * Get transaction link details for a specific transaction
      */
-    public function getTransactionLinks(Request $request, $transaction_id)
+    public function getTransactionLinks(Request $request, int $transaction_id): JsonResponse
     {
         $uid = Auth::id();
 
@@ -299,7 +300,7 @@ class FinanceTransactionLinkingApiController extends Controller
      * For bulk linking: requires EXACT amount match, but allows ±5 day date offset
      * to accommodate weekends and holidays.
      */
-    public function findLinkablePairs(Request $request, $account_id)
+    public function findLinkablePairs(Request $request, int $account_id): JsonResponse
     {
         $uid = Auth::id();
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();

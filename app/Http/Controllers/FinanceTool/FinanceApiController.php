@@ -8,6 +8,7 @@ use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -63,7 +64,7 @@ class FinanceApiController extends Controller
         return response()->json($response);
     }
 
-    public function updateBalance(Request $request)
+    public function updateBalance(Request $request): JsonResponse
     {
         $request->validate([
             'acct_id' => 'required|integer',
@@ -88,7 +89,7 @@ class FinanceApiController extends Controller
         return response()->json(['success' => true]);
     }
 
-    public function createAccount(Request $request)
+    public function createAccount(Request $request): JsonResponse
     {
         $request->validate([
             'accountName' => 'required|string',
@@ -109,7 +110,7 @@ class FinanceApiController extends Controller
         return response()->json(['success' => true]);
     }
 
-    public function chartData(Request $request)
+    public function chartData(Request $request): JsonResponse
     {
         $uid = Auth::id();
 
@@ -166,7 +167,7 @@ class FinanceApiController extends Controller
         ]);
     }
 
-    public function getBalanceTimeseries(Request $request, $account_id)
+    public function getBalanceTimeseries(Request $request, int $account_id): JsonResponse
     {
         $uid = Auth::id();
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
@@ -213,8 +214,12 @@ class FinanceApiController extends Controller
      * 3. For each statement date, accumulate all transactions up to and including that date.
      * 4. Deposits add abs(amount), withdrawals subtract abs(amount), transfers add signed amount.
      * 5. If a statement has is_cost_basis_override=true, use the stored cost_basis and reset running total.
+     *
+     * @param  Collection<int, \stdClass>  $balances
+     * @param  Collection<int, \stdClass>  $transactions
+     * @return array<int, array<string, mixed>>
      */
-    private function computeCostBasisForStatements($balances, $transactions): array
+    private function computeCostBasisForStatements(Collection $balances, Collection $transactions): array
     {
         $txList = $transactions->values()->all();
         $txCount = count($txList);
@@ -277,7 +282,7 @@ class FinanceApiController extends Controller
         return $result;
     }
 
-    public function getSummary(Request $request, $account_id)
+    public function getSummary(Request $request, int $account_id): JsonResponse
     {
         $uid = Auth::id();
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
@@ -332,7 +337,7 @@ class FinanceApiController extends Controller
         ]);
     }
 
-    public function deleteBalanceSnapshot(Request $request, $account_id)
+    public function deleteBalanceSnapshot(Request $request, int $account_id): JsonResponse
     {
         $uid = Auth::id();
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
@@ -394,7 +399,7 @@ class FinanceApiController extends Controller
         return response()->json(['success' => true]);
     }
 
-    public function renameAccount(Request $request, $account_id)
+    public function renameAccount(Request $request, int $account_id): JsonResponse
     {
         $request->validate([
             'newName' => 'required|string',
@@ -410,7 +415,7 @@ class FinanceApiController extends Controller
         return response()->json(['success' => true]);
     }
 
-    public function updateAccountClosed(Request $request, $account_id)
+    public function updateAccountClosed(Request $request, int $account_id): JsonResponse
     {
         $request->validate([
             'closedDate' => 'nullable|date',
@@ -426,7 +431,7 @@ class FinanceApiController extends Controller
         return response()->json(['success' => true]);
     }
 
-    public function updateAccountFlags(Request $request, $account_id)
+    public function updateAccountFlags(Request $request, int $account_id): JsonResponse
     {
         $request->validate([
             'isDebt' => 'boolean',
@@ -454,7 +459,7 @@ class FinanceApiController extends Controller
         return response()->json(['success' => true]);
     }
 
-    public function deleteAccount(Request $request, $account_id)
+    public function deleteAccount(Request $request, int $account_id): JsonResponse
     {
         $uid = Auth::id();
 
