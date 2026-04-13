@@ -21,7 +21,7 @@ class TaxDocumentCreationServiceTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->service = new TaxDocumentCreationService;
+        $this->service = app(TaxDocumentCreationService::class);
     }
 
     private function baseDocAttributes(int $userId, array $overrides = []): array

@@ -13,14 +13,12 @@ class MultiAccountTaxImportPromptTemplate extends PromptTemplate
         $taxYear = (int) ($context['tax_year'] ?? date('Y'));
         $accounts = $context['accounts'] ?? [];
 
-        $accountHints = '';
-        if (! empty($accounts)) {
-            $lines = array_map(
-                fn ($a) => '  - Name: '.($a['name'] ?? 'unknown').', Last 4: '.($a['last4'] ?? 'unknown'),
-                $accounts
-            );
-            $accountHints = "\n\nKnown accounts for matching (use last 4 digits and name as hints):\n".implode("\n", $lines);
-        }
+        $accountHints = $this->buildAccountsContext(
+            array_map(fn ($a) => [
+                'name' => $a['name'] ?? 'unknown',
+                'last4' => $a['last4'] ?? 'unknown',
+            ], $accounts)
+        );
 
         return <<<PROMPT
 You are processing a consolidated brokerage tax statement (e.g. Fidelity Tax Reporting Statement, Wealthfront 1099) for tax year {$taxYear}.

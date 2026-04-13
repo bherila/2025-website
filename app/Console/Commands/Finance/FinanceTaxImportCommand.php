@@ -156,10 +156,9 @@ class FinanceTaxImportCommand extends BaseFinanceCommand
         $userId = $this->userId();
 
         $inserted = [];
+        $creationService = app(TaxDocumentCreationService::class);
 
         if (! $isDryRun) {
-            $creationService = app(TaxDocumentCreationService::class);
-
             foreach ($validDocs as $doc) {
                 $docAttributes = [
                     'user_id' => $userId,
