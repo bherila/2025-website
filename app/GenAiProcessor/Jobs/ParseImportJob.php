@@ -704,18 +704,19 @@ class ParseImportJob implements ShouldQueue
         }
 
         // 3. Name word-overlap disambiguation among last-4 candidates (or all if no last4).
+        // Split on non-word characters (\W+) for consistency with the TypeScript accountMatcher.ts.
         $pool = $candidates->isNotEmpty() ? $candidates : $accounts;
 
         if ($aiName === '') {
             return null;
         }
 
-        $aiWords = array_filter(preg_split('/\s+/', $aiName) ?: []);
+        $aiWords = array_filter(preg_split('/\W+/', $aiName) ?: []);
         $bestScore = 0;
         $bestId = null;
 
         foreach ($pool as $acct) {
-            $acctWords = array_filter(preg_split('/\s+/', strtolower($acct->acct_name)) ?: []);
+            $acctWords = array_filter(preg_split('/\W+/', strtolower($acct->acct_name)) ?: []);
             $overlap = count(array_intersect($aiWords, $acctWords));
             if ($overlap > $bestScore) {
                 $bestScore = $overlap;

@@ -4,6 +4,12 @@ namespace App\GenAiProcessor\Services;
 
 use App\GenAiProcessor\Models\GenAiDailyQuota;
 use App\GenAiProcessor\Models\GenAiImportJob;
+use App\GenAiProcessor\Services\Prompts\FinanceTransactionsPromptTemplate;
+use App\GenAiProcessor\Services\Prompts\MultiAccountTaxImportPromptTemplate;
+use App\GenAiProcessor\Services\Prompts\PayslipPromptTemplate;
+use App\GenAiProcessor\Services\Prompts\PromptTemplate;
+use App\GenAiProcessor\Services\Prompts\TaxDocumentPromptTemplate;
+use App\GenAiProcessor\Services\Prompts\UtilityBillPromptTemplate;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -211,17 +217,22 @@ PROMPT;
 
     /**
      * Build the Gemini prompt for the given job type and context.
+     *
+     * Each job type delegates to a dedicated {@see PromptTemplate}
+     * subclass. Add new job types by creating a new template class and registering it here.
      */
     public function buildPrompt(string $jobType, array $context): string
     {
-        return match ($jobType) {
-            'finance_transactions' => $this->buildFinanceTransactionsPrompt($context),
-            'finance_payslip' => $this->buildPayslipPrompt($context),
-            'utility_bill' => $this->buildUtilityBillPrompt($context),
-            'tax_document' => $this->buildTaxDocumentPrompt($context),
-            'tax_form_multi_account_import' => $this->buildMultiAccountTaxImportPrompt($context),
+        $template = match ($jobType) {
+            'finance_transactions' => new FinanceTransactionsPromptTemplate,
+            'finance_payslip' => new PayslipPromptTemplate,
+            'utility_bill' => new UtilityBillPromptTemplate,
+            'tax_document' => new TaxDocumentPromptTemplate,
+            'tax_form_multi_account_import' => new MultiAccountTaxImportPromptTemplate,
             default => throw new \InvalidArgumentException("Unknown job type: {$jobType}"),
         };
+
+        return $template->build($context);
     }
 
     /**
@@ -377,115 +388,7 @@ PROMPT;
         return true;
     }
 
-    private function buildFinanceTransactionsPrompt(array $context): string
-    {
-        $accountsContext = $context['accounts'] ?? [];
-
-        $accountsSection = '';
-        if (! empty($accountsContext)) {
-            $lines = array_map(
-                fn ($a) => "- {$a['name']}: last 4 digits {$a['last4']}",
-                $accountsContext
-            );
-            $accountsSection = "\n\nKnown user accounts (use these to assign transactions to the correct account):\n".implode("\n", $lines);
-        }
-
-        return <<<PROMPT
-Analyze the provided bank or brokerage statement PDF and extract investor-level account data only. Use the `addFinanceAccount` tool once per account. If tool use is unavailable, return ONLY valid JSON as `{"accounts":[ACCOUNT,...]}` where each `ACCOUNT` matches the tool payload below.{$accountsSection}
-
-ACCOUNT schema:
-- `statementInfo`: object with optional `brokerName`, `accountNumber`, `accountName`, `periodStart`, `periodEnd`, `closingBalance`
-- `statementDetails[]`: `{ "section": string, "line_item": string, "statement_period_value": number, "ytd_value": number, "is_percentage": boolean }`
-- `transactions[]`: `{ "date": "YYYY-MM-DD", "description": string, "amount": number, "type"?: string, "symbol"?: string|null, "quantity"?: number|null, "price"?: number|null, "commission"?: number, "fee"?: number }`
-- `lots[]`: `{ "symbol": string, "description"?: string, "quantity": number, "purchaseDate": "YYYY-MM-DD", "costBasis": number, "costPerUnit"?: number, "marketValue"?: number, "unrealizedGainLoss"?: number, "saleDate"?: "YYYY-MM-DD", "proceeds"?: number, "realizedGainLoss"?: number }`
-
-Rules:
-1. Extract only partner-level or investor-level data. Exclude fund-level sections such as "Fund Level Capital Account", "Fund Level Summary", "Statement of Operations", "Statement of Cash Flows", "Statement of Assets & Liabilities", and "Statement of Changes in Partners' Capital".
-2. Always use the unified multi-account shape: `{ "accounts": [ACCOUNT, ...] }`. If a section is missing, return an empty array for that section.
-3. Statement detail section mappings: "Statement Summary (Dollars)" → "Statement Summary (\$)", "Statement Summary (Percent)" → "Statement Summary (%)", "Investor Capital Account Detail" → "Investor Capital Account", "Tax and Pre Tax Return Detail (Dollars)" → "Tax and Pre-Tax Return Detail (\$)", "Tax and Pre Tax Return Detail (Percent)" → "Tax and Pre-Tax Return Detail (%)".
-4. Statement detail line-item mappings: "Pre - Tax Return" → "Pre-Tax Return", "Post - Tax Return" → "Post-Tax Return", "Net Contributions / Withdrawals" → "Net Contributions/Withdrawals", "Mgt Fee" → "Management Fee", "Incentive Fee" → "Incentive Allocation", "Total Pre-Tax Fees" → "Total Fees", "Realized Gain (Loss)" → "Realized Gain/Loss", "Unrealized Gain (Loss)" → "Unrealized Gain/Loss", "Change In Unrealized" → "Change in Unrealized".
-5. Extract dated transactions such as deposits, withdrawals, trades, dividends, and interest. Populate `symbol` for stock-related transactions; infer the well-known ticker when the company name is clear and no ticker is shown.
-6. Extract lot-level data for both open and closed positions. Open lots include `marketValue` and `unrealizedGainLoss`; closed lots include `saleDate`, `proceeds`, and `realizedGainLoss`. Normalize Purchase Date, Acquisition Date, and Invt. Date to `purchaseDate`.
-7. Return only valid JSON / tool arguments. Normalize all dates to `YYYY-MM-DD`, convert parentheses to negative numbers, strip footnote superscripts, normalize spacing, and output numeric fields as numbers.
-PROMPT;
-    }
-
-    private function buildFinanceAccountToolDefinition(): array
-    {
-        return [
-            'name' => self::FINANCE_ACCOUNT_TOOL_NAME,
-            'description' => 'Add one parsed finance account from a bank or brokerage statement.',
-            'parameters' => [
-                'type' => 'OBJECT',
-                'properties' => [
-                    'statementInfo' => [
-                        'type' => 'OBJECT',
-                        'properties' => [
-                            'brokerName' => ['type' => 'STRING'],
-                            'accountNumber' => ['type' => 'STRING'],
-                            'accountName' => ['type' => 'STRING'],
-                            'periodStart' => ['type' => 'STRING'],
-                            'periodEnd' => ['type' => 'STRING'],
-                            'closingBalance' => ['type' => 'NUMBER'],
-                        ],
-                    ],
-                    'statementDetails' => [
-                        'type' => 'ARRAY',
-                        'items' => [
-                            'type' => 'OBJECT',
-                            'properties' => [
-                                'section' => ['type' => 'STRING'],
-                                'line_item' => ['type' => 'STRING'],
-                                'statement_period_value' => ['type' => 'NUMBER'],
-                                'ytd_value' => ['type' => 'NUMBER'],
-                                'is_percentage' => ['type' => 'BOOLEAN'],
-                            ],
-                            'required' => ['section', 'line_item', 'statement_period_value', 'ytd_value', 'is_percentage'],
-                        ],
-                    ],
-                    'transactions' => [
-                        'type' => 'ARRAY',
-                        'items' => [
-                            'type' => 'OBJECT',
-                            'properties' => [
-                                'date' => ['type' => 'STRING'],
-                                'description' => ['type' => 'STRING'],
-                                'amount' => ['type' => 'NUMBER'],
-                                'type' => ['type' => 'STRING'],
-                                'symbol' => ['type' => 'STRING'],
-                                'quantity' => ['type' => 'NUMBER'],
-                                'price' => ['type' => 'NUMBER'],
-                                'commission' => ['type' => 'NUMBER'],
-                                'fee' => ['type' => 'NUMBER'],
-                            ],
-                            'required' => ['date', 'description', 'amount'],
-                        ],
-                    ],
-                    'lots' => [
-                        'type' => 'ARRAY',
-                        'items' => [
-                            'type' => 'OBJECT',
-                            'properties' => [
-                                'symbol' => ['type' => 'STRING'],
-                                'description' => ['type' => 'STRING'],
-                                'quantity' => ['type' => 'NUMBER'],
-                                'purchaseDate' => ['type' => 'STRING'],
-                                'costBasis' => ['type' => 'NUMBER'],
-                                'costPerUnit' => ['type' => 'NUMBER'],
-                                'marketValue' => ['type' => 'NUMBER'],
-                                'unrealizedGainLoss' => ['type' => 'NUMBER'],
-                                'saleDate' => ['type' => 'STRING'],
-                                'proceeds' => ['type' => 'NUMBER'],
-                                'realizedGainLoss' => ['type' => 'NUMBER'],
-                            ],
-                            'required' => ['symbol', 'quantity', 'purchaseDate', 'costBasis'],
-                        ],
-                    ],
-                ],
-                'required' => ['statementInfo', 'statementDetails', 'transactions', 'lots'],
-            ],
-        ];
-    }
+    // ── Finance extract / normalize methods ───────────────────────────────────
 
     private function extractFinanceGenerateContentData(array $responseBody): ?array
     {
@@ -830,309 +733,69 @@ PROMPT;
         return null;
     }
 
-    private function buildPayslipPrompt(array $context): string
+    private function buildFinanceAccountToolDefinition(): array
     {
-        $fileCount = $context['file_count'] ?? 1;
-
-        return <<<PROMPT
-Analyze the provided {$fileCount} payslip PDF document(s).
-I have provided each file preceded by "Filename: [name]".
-
-For EACH file, extract the following fields.
-Return a SINGLE JSON ARRAY containing objects.
-If a single file contains multiple payslips, create separate objects for each payslip, using the same `original_filename`.
-
-**JSON Fields:**
-- `original_filename`: The filename provided.
-- `period_start`: Pay period start date (YYYY-MM-DD)
-- `period_end`: Pay period end date (YYYY-MM-DD)
-- `pay_date`: The date the payment was issued (YYYY-MM-DD)
-- `earnings_gross`: Gross pay amount (numeric)
-- `earnings_bonus`: Bonus amount, if any (numeric)
-- `earnings_net_pay`: Net pay amount (numeric)
-- `earnings_rsu`: Value of Restricted Stock Units (RSUs) vested, if any (numeric)
-- `imp_other`: Imputed income, if any (numeric)
-- `imp_legal`: Imputed income for legal services, if any (numeric)
-- `imp_fitness`: Imputed income for fitness benefits, including "Life@ Choice" if any (numeric)
-- `imp_ltd`: Imputed income for long-term disability, if any (numeric)
-- `ps_oasdi`: Employee OASDI (Social Security) tax (numeric)
-- `ps_medicare`: Employee Medicare tax (numeric)
-- `ps_fed_tax`: Federal income tax withheld (numeric)
-- `ps_fed_tax_addl`: Additional federal tax withheld, if any (numeric)
-- `ps_state_tax`: State income tax withheld (numeric)
-- `ps_state_tax_addl`: Additional state tax withheld, if any (numeric)
-- `ps_state_disability`: State disability insurance deduction (numeric)
-- `ps_401k_pretax`: Pre-tax 401(k) contribution (numeric)
-- `ps_401k_aftertax`: After-tax/Roth 401(k) contribution (numeric)
-- `ps_401k_employer`: Employer 401(k) contribution (numeric)
-- `ps_pretax_medical`: Pre-tax medical deduction (numeric)
-- `ps_pretax_dental`: Pre-tax dental deduction (numeric)
-- `ps_pretax_vision`: Pre-tax vision deduction (numeric)
-- `ps_pretax_fsa`: Pre-tax Flexible Spending Account (FSA) deduction (numeric)
-- `ps_salary`: Salary amount for the period (numeric)
-- `ps_vacation_payout`: Payout for unused vacation time, if any (numeric)
-- `ps_comment`: Any notes or comments.
-
-**Instructions:**
-1.  Return the data in a clean JSON format. Do not include any explanatory text outside of the JSON structure.
-2.  If a field is not present in the document, omit it from the JSON or set its value to `null`.
-3.  All monetary values should be numbers (e.g., `1234.56`).
-4.  All dates must be in `YYYY-MM-DD` format.
-
-PROMPT;
-    }
-
-    private function buildUtilityBillPrompt(array $context): string
-    {
-        $accountType = $context['account_type'] ?? 'General';
-        $fileCount = $context['file_count'] ?? 1;
-
-        $basePrompt = <<<PROMPT
-Analyze the provided {$fileCount} utility bill PDF document(s).
-I have provided each file preceded by "Filename: [name]".
-
-For EACH file, extract the following fields.
-Return a SINGLE JSON ARRAY containing {$fileCount} objects, one for each file.
-Each object MUST include the `original_filename` to identify which file it belongs to.
-
-**JSON Fields per object:**
-- `original_filename`: The filename provided in the text preceding the file.
-- `bill_start_date`: Billing period start date (YYYY-MM-DD)
-- `bill_end_date`: Billing period end date (YYYY-MM-DD)
-- `due_date`: Payment due date (YYYY-MM-DD)
-- `total_cost`: Total amount due (numeric, in dollars)
-- `taxes`: Total taxes charged on the bill (numeric, in dollars)
-- `fees`: Total fees charged on the bill, excluding taxes (numeric, in dollars)
-- `discounts`: Total discounts applied to the bill (numeric, in dollars). Only include realized discounts, not potential ones.
-- `credits`: Total credits applied to the bill (numeric, in dollars)
-- `payments_received`: Total payments received during the period (numeric, in dollars)
-- `previous_unpaid_balance`: Previous unpaid balance carried over (numeric, in dollars)
-- `notes`: Any relevant notes or account information extracted from the bill (optional, string)
-PROMPT;
-
-        if ($accountType === 'Electricity') {
-            $basePrompt .= <<<'PROMPT'
-
-**Additional Electricity-Specific Fields:**
-- `power_consumed_kwh`: Total power consumed in kilowatt-hours (numeric)
-- `total_generation_fees`: Total generation/supply charges (numeric, in dollars)
-- `total_delivery_fees`: Total delivery/distribution charges (numeric, in dollars)
-
-Please ensure you extract all electricity-specific metrics from the bill, including usage in kWh and the breakdown of generation vs delivery fees if available.
-PROMPT;
-        }
-
-        $basePrompt .= <<<'PROMPT'
-
-Return ONLY the JSON array.
-PROMPT;
-
-        return $basePrompt;
-    }
-
-    private function buildMultiAccountTaxImportPrompt(array $context): string
-    {
-        $taxYear = (int) ($context['tax_year'] ?? date('Y'));
-        $accounts = $context['accounts'] ?? [];
-
-        $accountHints = '';
-        if (! empty($accounts)) {
-            $lines = array_map(
-                fn ($a) => '  - Name: '.($a['name'] ?? 'unknown').', Last 4: '.($a['last4'] ?? 'unknown'),
-                $accounts
-            );
-            $accountHints = "\n\nKnown accounts for matching (use last 4 digits and name as hints):\n".implode("\n", $lines);
-        }
-
-        return <<<PROMPT
-You are processing a consolidated brokerage tax statement (e.g. Fidelity Tax Reporting Statement, Wealthfront 1099) for tax year {$taxYear}.
-
-This PDF may contain forms for multiple accounts (1099-DIV, 1099-INT, 1099-MISC, 1099-B, etc.) across one or more brokerage accounts.{$accountHints}
-
-Return a JSON **array** where each element represents one account/form combination. Each element must have these fields:
-- `account_identifier`: The full or partial account number found in the PDF (string, e.g. "...1234" or "8W163GBF")
-- `account_name`: The brokerage/account name found in the PDF (string, e.g. "Fidelity Brokerage")
-- `form_type`: The specific IRS form type found in this section. Use one of: 1099_int, 1099_div, 1099_misc, 1099_b, k1 (string). Do NOT use "broker_1099" — that is the container type for the uploaded PDF, not a form type you should return.
-- `tax_year`: The tax year this form covers (integer)
-- `parsed_data`: An object containing the extracted form fields relevant to that form type (see below)
-
-If the PDF is a consolidated 1099 that covers multiple form types for the same account, create one element per form type per account.
-
-## parsed_data by form_type
-
-**1099-DIV** (`form_type: "1099_div"`): Extract box values: `payer_name`, `payer_tin`, `box1a_ordinary`, `box1b_qualified`, `box2a_cap_gain`, `box2b_unrecap_1250`, `box2c_section_1202`, `box2d_collectibles`, `box2e_section_897_ordinary`, `box2f_section_897_cap_gain`, `box3_nondividend`, `box4_fed_tax`, `box5_section_199a`, `box6_investment_expense`, `box7_foreign_tax`, `box8_foreign_country`, `box9_cash_liquidation`, `box10_noncash_liquidation`, `box11_exempt_interest`, `box12_private_activity`, `box14_state_tax`. All amounts are numbers or null.
-
-**1099-INT** (`form_type: "1099_int"`): Extract box values: `payer_name`, `payer_tin`, `box1_interest`, `box2_early_withdrawal`, `box3_savings_bond`, `box4_fed_tax`, `box5_investment_expense`, `box6_foreign_tax`, `box7_foreign_country`, `box8_tax_exempt`, `box9_private_activity`, `box10_market_discount`, `box11_bond_premium`, `box12_treasury_premium`, `box13_tax_exempt_premium`. All amounts are numbers or null.
-
-**1099-MISC** (`form_type: "1099_misc"`): Extract box values: `payer_name`, `payer_tin`, `box1_rents`, `box2_royalties`, `box3_other_income`, `box4_fed_tax`, `box8_substitute_payments`. All amounts are numbers or null. Omit if all fields are zero.
-
-**1099-B** (`form_type: "1099_b"`): Extract the summary totals AND all individual transaction lots.
-- Summary fields: `payer_name`, `payer_tin`, `total_proceeds`, `total_cost_basis`, `total_wash_sale_disallowed`, `total_realized_gain_loss`
-- `transactions`: JSON array of every individual lot line from the 1099-B sections (short-term covered, long-term covered, etc.). Each transaction object:
-  - `symbol`: ticker symbol if shown, otherwise null (string or null)
-  - `description`: security name / description (string)
-  - `cusip`: CUSIP number if shown (string or null)
-  - `quantity`: number of shares/units sold (number)
-  - `purchase_date`: acquisition date as "YYYY-MM-DD", or "various" if multiple lots aggregated (string)
-  - `sale_date`: date sold/disposed as "YYYY-MM-DD" (string)
-  - `proceeds`: gross proceeds (number)
-  - `cost_basis`: cost or other basis (number)
-  - `accrued_market_discount`: accrued market discount if shown (number or null)
-  - `wash_sale_disallowed`: wash sale loss disallowed amount (number, 0 if blank)
-  - `realized_gain_loss`: net gain or loss (number)
-  - `is_short_term`: true for short-term, false for long-term, null for undetermined (boolean or null)
-  - `form_8949_box`: IRS Form 8949 reporting box — "A" (short covered), "B" (short not covered), "C" (short other), "D" (long covered), "E" (long not covered), "F" (long other) (string)
-  - `is_covered`: whether basis is reported to IRS (boolean)
-  - `additional_info`: any additional information column text (string or null)
-
-Extract EVERY individual lot line. Do not skip lines or summarize. If a security shows subtotals, emit a separate transaction row for each individual lot line (not the subtotal row).
-
-Return ONLY the JSON array, no other text.
-PROMPT;
-    }
-
-    private function buildTaxDocumentPrompt(array $context): string
-    {
-        $formType = $context['form_type'] ?? 'w2';
-        $taxYear = $context['tax_year'] ?? date('Y');
-
-        return match (true) {
-            in_array($formType, ['w2', 'w2c']) => $this->buildW2Prompt($formType, (int) $taxYear),
-            in_array($formType, ['1099_int', '1099_int_c']) => $this->build1099IntPrompt($formType, (int) $taxYear),
-            in_array($formType, ['1099_div', '1099_div_c']) => $this->build1099DivPrompt($formType, (int) $taxYear),
-            $formType === '1099_misc' => $this->build1099MiscPrompt((int) $taxYear),
-            $formType === 'k1' => $this->buildK1Prompt((int) $taxYear),
-            default => throw new \InvalidArgumentException("Unknown tax form type: {$formType}"),
-        };
-    }
-
-    private function buildW2Prompt(string $formType, int $taxYear): string
-    {
-        $formName = $formType === 'w2c' ? 'W-2c (Corrected Wage and Tax Statement)' : 'W-2 (Wage and Tax Statement)';
-        $toolName = self::TAX_DOCUMENT_W2_TOOL_NAME;
-
-        return <<<PROMPT
-<!-- tool:{$toolName} -->
-Analyze the provided {$formName} PDF for tax year {$taxYear}.
-Use the `{$toolName}` tool to return ALL extracted box values from the form.
-All monetary values must be numbers (not strings). If a field is not present on the form, set it to null.
-For Box 12, return an empty array if no codes are present. For Box 14, return an empty array if nothing is listed.
-PROMPT;
-    }
-
-    private function build1099IntPrompt(string $formType, int $taxYear): string
-    {
-        $formName = $formType === '1099_int_c' ? '1099-INT (Corrected)' : '1099-INT';
-        $toolName = self::TAX_DOCUMENT_1099INT_TOOL_NAME;
-
-        return <<<PROMPT
-<!-- tool:{$toolName} -->
-Analyze the provided {$formName} PDF for tax year {$taxYear}.
-Use the `{$toolName}` tool to return ALL extracted box values from the Interest Income form.
-All monetary values must be numbers (not strings). If a field is not present on the form, set it to null.
-PROMPT;
-    }
-
-    private function build1099DivPrompt(string $formType, int $taxYear): string
-    {
-        $formName = $formType === '1099_div_c' ? '1099-DIV (Corrected)' : '1099-DIV';
-        $toolName = self::TAX_DOCUMENT_1099DIV_TOOL_NAME;
-
-        return <<<PROMPT
-<!-- tool:{$toolName} -->
-Analyze the provided {$formName} PDF for tax year {$taxYear}.
-Use the `{$toolName}` tool to return ALL extracted box values from the Dividends and Distributions form.
-All monetary values must be numbers (not strings). If a field is not present on the form, set it to null.
-PROMPT;
-    }
-
-    private function build1099MiscPrompt(int $taxYear): string
-    {
-        $toolName = self::TAX_DOCUMENT_1099MISC_TOOL_NAME;
-
-        return <<<PROMPT
-<!-- tool:{$toolName} -->
-Analyze the provided 1099-MISC PDF for tax year {$taxYear}.
-Use the `{$toolName}` tool to return ALL extracted box values from the Miscellaneous Income form.
-All monetary values must be numbers (not strings). If a field is not present on the form, set it to null.
-PROMPT;
-    }
-
-    /**
-     * Build the AI prompt for extracting Schedule K-1 data.
-     *
-     * The tool definition carries all the structural detail, so the prompt can be concise.
-     * Structured output (schemaVersion "2026.1") is stored directly in parsed_data.
-     *
-     * Future extension: Box 16 (foreign transactions) feeds into Form 1116 when that support is added.
-     */
-    private function buildK1Prompt(int $taxYear): string
-    {
-        $toolName = self::TAX_DOCUMENT_K1_TOOL_NAME;
-
-        return <<<PROMPT
-<!-- tool:{$toolName} -->
-Extract ALL data from this Schedule K-1 PDF (tax year {$taxYear}) using the `{$toolName}` tool.
-This document may include the K-1 face page, supporting statements, and a multi-page Schedule K-3.
-
-EXTRACTION RULES:
-
-1. FLAT FIELDS (fields A–O, boxes 1–10, 12, 14, 21):
-   Extract every labeled field. Use null for absent fields. For these flat numeric fields,
-   return numbers as JSON numbers (not strings).
-   Negative amounts shown in parentheses like (1,234) must be returned as -1234.
-   Box 21 (foreign taxes paid or accrued) is a direct numeric field, not a coded box.
-
-2. CODED BOXES (11, 13–20):
-   Each code entry becomes a SEPARATE array item even if the same code appears multiple times.
-   The coded-box `value` field must follow the tool schema and be returned as a string,
-   preserving the value shown on the form/supporting statement (for example, "-23167").
-   CRITICAL: When a box has multiple sub-items under the same code (e.g., Box 11 Code ZZ
-   contains three distinct items: §988 loss, swap loss, PFIC income), create one array entry
-   per sub-item with its individual amount/value and a descriptive note.
-   Example: three Box 11 ZZ entries with values "-23167", "-54237", and "3198" respectively.
-   The `notes` field must include: (a) what the item is, (b) its tax character
-   (ordinary vs. capital), and (c) where it goes on the return (e.g., "Schedule E Part II
-   nonpassive" or "Schedule D"). Quote the K-1 footnote verbatim when it specifies treatment.
-
-3. SUPPORTING STATEMENTS:
-   Read ALL supplemental pages. Box totals on the face page are often aggregates;
-   the breakdown is in the supporting statements. Always prefer the line-item detail
-   over the face-page total when both are present.
-
-4. SCHEDULE K-3 — PART II (Foreign Tax Credit Limitation):
-   This is the most structurally complex section. Extract EVERY row from EVERY table.
-   For each K-3 line (6–24 for income, 25–55 for deductions), capture every country
-   row as a separate entry with its 7-column breakdown:
-     (a) U.S. source, (b) Foreign branch, (c) Passive category,
-     (d) General category, (e) Other 901j, (f) Sourced by partner, (g) Total.
-   The country code is a 2-letter IRS code (US, AS, BE, CA, etc.) or XX for
-   "sourced by partner" items. Include the section totals (lines 24, 54, 55).
-
-5. SCHEDULE K-3 — PART III (Form 1116 Apportionment):
-   Section 2 (interest expense apportionment): extract all 8 asset rows with their
-   7-column breakdown. Record the passive asset ratio (passive assets / total assets).
-   Section 4 (foreign taxes): extract each country with tax type (WHTD = withholding),
-   amount paid, and which basket (passive/general/branch) it falls into.
-   Section 1 (Part I Box 4 FX translation): if present, extract the exchange rate table
-   showing each country's foreign currency amount, exchange rate, and USD equivalent.
-
-6. SCHEDULE K-3 — OTHER PARTS:
-   For Parts IV–XIII, note which parts apply (checkbox). Capture any numeric data present.
-   Most will be blank (N/A). Record that fact in a warning if Parts unexpectedly have data.
-
-7. WARNINGS:
-   Add a warning string for: (a) any item whose tax character is ambiguous,
-   (b) any K-3 section that has data but couldn't be fully parsed,
-   (c) any footnote that overrides standard treatment (e.g., "report on Schedule E,
-   not Schedule D" for swap losses).
-
-8. NORMALIZATION:
-   - Flat monetary fields: JSON numbers. Coded-box `value` fields: strings matching the tool schema. Parentheses = negative.
-   - All percentages: store as decimal (e.g., 0.042400 not 4.2400).
-   - All dates: YYYY-MM-DD.
-   - Partner number / form ID: capture from header if present.
-PROMPT;
+        return ToolDefinitionBuilder::functionDefinition(
+            self::FINANCE_ACCOUNT_TOOL_NAME,
+            'Add one parsed finance account from a bank or brokerage statement.',
+            [
+                'statementInfo' => ToolDefinitionBuilder::object([
+                    'brokerName' => ToolDefinitionBuilder::string(),
+                    'accountNumber' => ToolDefinitionBuilder::string(),
+                    'accountName' => ToolDefinitionBuilder::string(),
+                    'periodStart' => ToolDefinitionBuilder::string(),
+                    'periodEnd' => ToolDefinitionBuilder::string(),
+                    'closingBalance' => ToolDefinitionBuilder::number(),
+                ]),
+                'statementDetails' => ToolDefinitionBuilder::arrayOf(
+                    ToolDefinitionBuilder::object(
+                        [
+                            'section' => ToolDefinitionBuilder::string(),
+                            'line_item' => ToolDefinitionBuilder::string(),
+                            'statement_period_value' => ToolDefinitionBuilder::number(),
+                            'ytd_value' => ToolDefinitionBuilder::number(),
+                            'is_percentage' => ToolDefinitionBuilder::boolean(),
+                        ],
+                        ['section', 'line_item', 'statement_period_value', 'ytd_value', 'is_percentage'],
+                    )
+                ),
+                'transactions' => ToolDefinitionBuilder::arrayOf(
+                    ToolDefinitionBuilder::object(
+                        [
+                            'date' => ToolDefinitionBuilder::string(),
+                            'description' => ToolDefinitionBuilder::string(),
+                            'amount' => ToolDefinitionBuilder::number(),
+                            'type' => ToolDefinitionBuilder::string(),
+                            'symbol' => ToolDefinitionBuilder::string(),
+                            'quantity' => ToolDefinitionBuilder::number(),
+                            'price' => ToolDefinitionBuilder::number(),
+                            'commission' => ToolDefinitionBuilder::number(),
+                            'fee' => ToolDefinitionBuilder::number(),
+                        ],
+                        ['date', 'description', 'amount'],
+                    )
+                ),
+                'lots' => ToolDefinitionBuilder::arrayOf(
+                    ToolDefinitionBuilder::object(
+                        [
+                            'symbol' => ToolDefinitionBuilder::string(),
+                            'description' => ToolDefinitionBuilder::string(),
+                            'quantity' => ToolDefinitionBuilder::number(),
+                            'purchaseDate' => ToolDefinitionBuilder::string(),
+                            'costBasis' => ToolDefinitionBuilder::number(),
+                            'costPerUnit' => ToolDefinitionBuilder::number(),
+                            'marketValue' => ToolDefinitionBuilder::number(),
+                            'unrealizedGainLoss' => ToolDefinitionBuilder::number(),
+                            'saleDate' => ToolDefinitionBuilder::string(),
+                            'proceeds' => ToolDefinitionBuilder::number(),
+                            'realizedGainLoss' => ToolDefinitionBuilder::number(),
+                        ],
+                        ['symbol', 'quantity', 'purchaseDate', 'costBasis'],
+                    )
+                ),
+            ],
+            ['statementInfo', 'statementDetails', 'transactions', 'lots'],
+        );
     }
 
     /**
@@ -1601,177 +1264,142 @@ PROMPT;
 
     private function buildW2ToolDefinition(): array
     {
-        $numberProp = fn () => ['type' => 'NUMBER'];
-        $stringProp = fn () => ['type' => 'STRING'];
-        $boolProp = fn () => ['type' => 'BOOLEAN'];
-
-        return [
-            'name' => self::TAX_DOCUMENT_W2_TOOL_NAME,
-            'description' => 'Extract all box values from a W-2 or W-2c tax form.',
-            'parameters' => [
-                'type' => 'OBJECT',
-                'properties' => [
-                    'employer_name' => $stringProp(),
-                    'employer_ein' => $stringProp(),
-                    'employee_name' => $stringProp(),
-                    'employee_ssn_last4' => $stringProp(),
-                    'box1_wages' => $numberProp(),
-                    'box2_fed_tax' => $numberProp(),
-                    'box3_ss_wages' => $numberProp(),
-                    'box4_ss_tax' => $numberProp(),
-                    'box5_medicare_wages' => $numberProp(),
-                    'box6_medicare_tax' => $numberProp(),
-                    'box7_ss_tips' => $numberProp(),
-                    'box8_allocated_tips' => $numberProp(),
-                    'box10_dependent_care' => $numberProp(),
-                    'box11_nonqualified' => $numberProp(),
-                    'box12_codes' => [
-                        'type' => 'ARRAY',
-                        'items' => [
-                            'type' => 'OBJECT',
-                            'properties' => [
-                                'code' => $stringProp(),
-                                'amount' => $numberProp(),
-                            ],
-                            'required' => ['code', 'amount'],
-                        ],
-                    ],
-                    'box13_statutory' => $boolProp(),
-                    'box13_retirement' => $boolProp(),
-                    'box13_sick_pay' => $boolProp(),
-                    'box14_other' => [
-                        'type' => 'ARRAY',
-                        'items' => [
-                            'type' => 'OBJECT',
-                            'properties' => [
-                                'label' => $stringProp(),
-                                'amount' => $numberProp(),
-                            ],
-                            'required' => ['label', 'amount'],
-                        ],
-                    ],
-                    'box15_state' => $stringProp(),
-                    'box16_state_wages' => $numberProp(),
-                    'box17_state_tax' => $numberProp(),
-                    'box18_local_wages' => $numberProp(),
-                    'box19_local_tax' => $numberProp(),
-                    'box20_locality' => $stringProp(),
-                ],
+        return ToolDefinitionBuilder::functionDefinition(
+            self::TAX_DOCUMENT_W2_TOOL_NAME,
+            'Extract all box values from a W-2 or W-2c tax form.',
+            [
+                'employer_name' => ToolDefinitionBuilder::string(),
+                'employer_ein' => ToolDefinitionBuilder::string(),
+                'employee_name' => ToolDefinitionBuilder::string(),
+                'employee_ssn_last4' => ToolDefinitionBuilder::string(),
+                'box1_wages' => ToolDefinitionBuilder::number(),
+                'box2_fed_tax' => ToolDefinitionBuilder::number(),
+                'box3_ss_wages' => ToolDefinitionBuilder::number(),
+                'box4_ss_tax' => ToolDefinitionBuilder::number(),
+                'box5_medicare_wages' => ToolDefinitionBuilder::number(),
+                'box6_medicare_tax' => ToolDefinitionBuilder::number(),
+                'box7_ss_tips' => ToolDefinitionBuilder::number(),
+                'box8_allocated_tips' => ToolDefinitionBuilder::number(),
+                'box10_dependent_care' => ToolDefinitionBuilder::number(),
+                'box11_nonqualified' => ToolDefinitionBuilder::number(),
+                'box12_codes' => ToolDefinitionBuilder::arrayOf(
+                    ToolDefinitionBuilder::object(
+                        ['code' => ToolDefinitionBuilder::string(), 'amount' => ToolDefinitionBuilder::number()],
+                        ['code', 'amount'],
+                    )
+                ),
+                'box13_statutory' => ToolDefinitionBuilder::boolean(),
+                'box13_retirement' => ToolDefinitionBuilder::boolean(),
+                'box13_sick_pay' => ToolDefinitionBuilder::boolean(),
+                'box14_other' => ToolDefinitionBuilder::arrayOf(
+                    ToolDefinitionBuilder::object(
+                        ['label' => ToolDefinitionBuilder::string(), 'amount' => ToolDefinitionBuilder::number()],
+                        ['label', 'amount'],
+                    )
+                ),
+                'box15_state' => ToolDefinitionBuilder::string(),
+                'box16_state_wages' => ToolDefinitionBuilder::number(),
+                'box17_state_tax' => ToolDefinitionBuilder::number(),
+                'box18_local_wages' => ToolDefinitionBuilder::number(),
+                'box19_local_tax' => ToolDefinitionBuilder::number(),
+                'box20_locality' => ToolDefinitionBuilder::string(),
             ],
-        ];
+        );
     }
 
     private function build1099IntToolDefinition(): array
     {
-        $numberProp = fn () => ['type' => 'NUMBER'];
-        $stringProp = fn () => ['type' => 'STRING'];
-
-        return [
-            'name' => self::TAX_DOCUMENT_1099INT_TOOL_NAME,
-            'description' => 'Extract all box values from a 1099-INT interest income form.',
-            'parameters' => [
-                'type' => 'OBJECT',
-                'properties' => [
-                    'payer_name' => $stringProp(),
-                    'payer_tin' => $stringProp(),
-                    'recipient_name' => $stringProp(),
-                    'recipient_tin_last4' => $stringProp(),
-                    'box1_interest' => $numberProp(),
-                    'box2_early_withdrawal' => $numberProp(),
-                    'box3_savings_bond' => $numberProp(),
-                    'box4_fed_tax' => $numberProp(),
-                    'box5_investment_expense' => $numberProp(),
-                    'box6_foreign_tax' => $numberProp(),
-                    'box7_foreign_country' => $stringProp(),
-                    'box8_tax_exempt' => $numberProp(),
-                    'box9_private_activity' => $numberProp(),
-                    'box10_market_discount' => $numberProp(),
-                    'box11_bond_premium' => $numberProp(),
-                    'box12_treasury_premium' => $numberProp(),
-                    'box13_tax_exempt_premium' => $numberProp(),
-                    'account_number' => $stringProp(),
-                ],
+        return ToolDefinitionBuilder::functionDefinition(
+            self::TAX_DOCUMENT_1099INT_TOOL_NAME,
+            'Extract all box values from a 1099-INT interest income form.',
+            [
+                'payer_name' => ToolDefinitionBuilder::string(),
+                'payer_tin' => ToolDefinitionBuilder::string(),
+                'recipient_name' => ToolDefinitionBuilder::string(),
+                'recipient_tin_last4' => ToolDefinitionBuilder::string(),
+                'box1_interest' => ToolDefinitionBuilder::number(),
+                'box2_early_withdrawal' => ToolDefinitionBuilder::number(),
+                'box3_savings_bond' => ToolDefinitionBuilder::number(),
+                'box4_fed_tax' => ToolDefinitionBuilder::number(),
+                'box5_investment_expense' => ToolDefinitionBuilder::number(),
+                'box6_foreign_tax' => ToolDefinitionBuilder::number(),
+                'box7_foreign_country' => ToolDefinitionBuilder::string(),
+                'box8_tax_exempt' => ToolDefinitionBuilder::number(),
+                'box9_private_activity' => ToolDefinitionBuilder::number(),
+                'box10_market_discount' => ToolDefinitionBuilder::number(),
+                'box11_bond_premium' => ToolDefinitionBuilder::number(),
+                'box12_treasury_premium' => ToolDefinitionBuilder::number(),
+                'box13_tax_exempt_premium' => ToolDefinitionBuilder::number(),
+                'account_number' => ToolDefinitionBuilder::string(),
             ],
-        ];
+        );
     }
 
     private function build1099DivToolDefinition(): array
     {
-        $numberProp = fn () => ['type' => 'NUMBER'];
-        $stringProp = fn () => ['type' => 'STRING'];
-
-        return [
-            'name' => self::TAX_DOCUMENT_1099DIV_TOOL_NAME,
-            'description' => 'Extract all box values from a 1099-DIV dividends and distributions form.',
-            'parameters' => [
-                'type' => 'OBJECT',
-                'properties' => [
-                    'payer_name' => $stringProp(),
-                    'recipient_name' => $stringProp(),
-                    'recipient_tin_last4' => $stringProp(),
-                    'payer_tin' => $stringProp(),
-                    'box1a_ordinary' => $numberProp(),
-                    'box1b_qualified' => $numberProp(),
-                    'box2a_cap_gain' => $numberProp(),
-                    'box2b_unrecap_1250' => $numberProp(),
-                    'box2c_section_1202' => $numberProp(),
-                    'box2d_collectibles' => $numberProp(),
-                    'box2e_section_897_ordinary' => $numberProp(),
-                    'box2f_section_897_cap_gain' => $numberProp(),
-                    'box3_nondividend' => $numberProp(),
-                    'box4_fed_tax' => $numberProp(),
-                    'box5_section_199a' => $numberProp(),
-                    'box6_investment_expense' => $numberProp(),
-                    'box7_foreign_tax' => $numberProp(),
-                    'box8_foreign_country' => $stringProp(),
-                    'box9_cash_liquidation' => $numberProp(),
-                    'box10_noncash_liquidation' => $numberProp(),
-                    'box11_exempt_interest' => $numberProp(),
-                    'box12_private_activity' => $numberProp(),
-                    'box13_state' => $stringProp(),
-                    'box14_state_tax' => $numberProp(),
-                    'account_number' => $stringProp(),
-                ],
+        return ToolDefinitionBuilder::functionDefinition(
+            self::TAX_DOCUMENT_1099DIV_TOOL_NAME,
+            'Extract all box values from a 1099-DIV dividends and distributions form.',
+            [
+                'payer_name' => ToolDefinitionBuilder::string(),
+                'recipient_name' => ToolDefinitionBuilder::string(),
+                'recipient_tin_last4' => ToolDefinitionBuilder::string(),
+                'payer_tin' => ToolDefinitionBuilder::string(),
+                'box1a_ordinary' => ToolDefinitionBuilder::number(),
+                'box1b_qualified' => ToolDefinitionBuilder::number(),
+                'box2a_cap_gain' => ToolDefinitionBuilder::number(),
+                'box2b_unrecap_1250' => ToolDefinitionBuilder::number(),
+                'box2c_section_1202' => ToolDefinitionBuilder::number(),
+                'box2d_collectibles' => ToolDefinitionBuilder::number(),
+                'box2e_section_897_ordinary' => ToolDefinitionBuilder::number(),
+                'box2f_section_897_cap_gain' => ToolDefinitionBuilder::number(),
+                'box3_nondividend' => ToolDefinitionBuilder::number(),
+                'box4_fed_tax' => ToolDefinitionBuilder::number(),
+                'box5_section_199a' => ToolDefinitionBuilder::number(),
+                'box6_investment_expense' => ToolDefinitionBuilder::number(),
+                'box7_foreign_tax' => ToolDefinitionBuilder::number(),
+                'box8_foreign_country' => ToolDefinitionBuilder::string(),
+                'box9_cash_liquidation' => ToolDefinitionBuilder::number(),
+                'box10_noncash_liquidation' => ToolDefinitionBuilder::number(),
+                'box11_exempt_interest' => ToolDefinitionBuilder::number(),
+                'box12_private_activity' => ToolDefinitionBuilder::number(),
+                'box13_state' => ToolDefinitionBuilder::string(),
+                'box14_state_tax' => ToolDefinitionBuilder::number(),
+                'account_number' => ToolDefinitionBuilder::string(),
             ],
-        ];
+        );
     }
 
     private function build1099MiscToolDefinition(): array
     {
-        $numberProp = fn () => ['type' => 'NUMBER'];
-        $stringProp = fn () => ['type' => 'STRING'];
-
-        return [
-            'name' => self::TAX_DOCUMENT_1099MISC_TOOL_NAME,
-            'description' => 'Extract all box values from a 1099-MISC miscellaneous income form.',
-            'parameters' => [
-                'type' => 'OBJECT',
-                'properties' => [
-                    'payer_name' => $stringProp(),
-                    'payer_tin' => $stringProp(),
-                    'recipient_name' => $stringProp(),
-                    'recipient_tin_last4' => $stringProp(),
-                    'account_number' => $stringProp(),
-                    'box1_rents' => $numberProp(),
-                    'box2_royalties' => $numberProp(),
-                    'box3_other_income' => $numberProp(),
-                    'box4_fed_tax' => $numberProp(),
-                    'box5_fishing_boat' => $numberProp(),
-                    'box6_medical' => $numberProp(),
-                    'box7_direct_sales_indicator' => ['type' => 'BOOLEAN'],
-                    'box8_substitute_payments' => $numberProp(),
-                    'box9_crop_insurance' => $numberProp(),
-                    'box10_gross_proceeds_attorney' => $numberProp(),
-                    'box11_fish_purchased' => $numberProp(),
-                    'box12_section_409a_deferrals' => $numberProp(),
-                    'box13_fatca_filing' => $stringProp(),
-                    'box14_excess_golden_parachute' => $numberProp(),
-                    'box15_nonqualified_deferred' => $numberProp(),
-                    'box15_state' => $stringProp(),
-                    'box16_state_tax' => $numberProp(),
-                ],
+        return ToolDefinitionBuilder::functionDefinition(
+            self::TAX_DOCUMENT_1099MISC_TOOL_NAME,
+            'Extract all box values from a 1099-MISC miscellaneous income form.',
+            [
+                'payer_name' => ToolDefinitionBuilder::string(),
+                'payer_tin' => ToolDefinitionBuilder::string(),
+                'recipient_name' => ToolDefinitionBuilder::string(),
+                'recipient_tin_last4' => ToolDefinitionBuilder::string(),
+                'account_number' => ToolDefinitionBuilder::string(),
+                'box1_rents' => ToolDefinitionBuilder::number(),
+                'box2_royalties' => ToolDefinitionBuilder::number(),
+                'box3_other_income' => ToolDefinitionBuilder::number(),
+                'box4_fed_tax' => ToolDefinitionBuilder::number(),
+                'box5_fishing_boat' => ToolDefinitionBuilder::number(),
+                'box6_medical' => ToolDefinitionBuilder::number(),
+                'box7_direct_sales_indicator' => ToolDefinitionBuilder::boolean(),
+                'box8_substitute_payments' => ToolDefinitionBuilder::number(),
+                'box9_crop_insurance' => ToolDefinitionBuilder::number(),
+                'box10_gross_proceeds_attorney' => ToolDefinitionBuilder::number(),
+                'box11_fish_purchased' => ToolDefinitionBuilder::number(),
+                'box12_section_409a_deferrals' => ToolDefinitionBuilder::number(),
+                'box13_fatca_filing' => ToolDefinitionBuilder::string(),
+                'box14_excess_golden_parachute' => ToolDefinitionBuilder::number(),
+                'box15_nonqualified_deferred' => ToolDefinitionBuilder::number(),
+                'box15_state' => ToolDefinitionBuilder::string(),
+                'box16_state_tax' => ToolDefinitionBuilder::number(),
             ],
-        ];
+        );
     }
 
     /**
@@ -1791,240 +1419,211 @@ PROMPT;
      */
     private function buildK1ToolDefinition(): array
     {
-        $strField = fn () => ['type' => 'STRING'];
-        $numField = fn () => ['type' => 'NUMBER'];
-        $boolField = fn () => ['type' => 'BOOLEAN'];
-        $codeItemsProp = fn () => [
-            'type' => 'ARRAY',
-            'items' => [
-                'type' => 'OBJECT',
-                'properties' => [
-                    'code' => ['type' => 'STRING'],
-                    'value' => ['type' => 'STRING'],
-                    'notes' => ['type' => 'STRING'],
+        $codeItemsProp = ToolDefinitionBuilder::arrayOf(
+            ToolDefinitionBuilder::object(
+                [
+                    'code' => ToolDefinitionBuilder::string(),
+                    'value' => ToolDefinitionBuilder::string(),
+                    'notes' => ToolDefinitionBuilder::string(),
                 ],
-                'required' => ['code', 'value'],
-            ],
-        ];
-        $k3SectionProp = fn () => [
-            'type' => 'ARRAY',
-            'items' => [
-                'type' => 'OBJECT',
-                'properties' => [
-                    'sectionId' => ['type' => 'STRING'],
-                    'title' => ['type' => 'STRING'],
-                    'notes' => ['type' => 'STRING'],
+                ['code', 'value'],
+            )
+        );
+        $k3SectionProp = ToolDefinitionBuilder::arrayOf(
+            ToolDefinitionBuilder::object(
+                [
+                    'sectionId' => ToolDefinitionBuilder::string(),
+                    'title' => ToolDefinitionBuilder::string(),
+                    'notes' => ToolDefinitionBuilder::string(),
                 ],
-                'required' => ['sectionId', 'title'],
+                ['sectionId', 'title'],
+            )
+        );
+
+        return ToolDefinitionBuilder::functionDefinition(
+            self::TAX_DOCUMENT_K1_TOOL_NAME,
+            'Extract all boxes, codes, and K-3 sections from a Schedule K-1 (Form 1065, 1120-S, or 1041). Returns structured data keyed by box identifier.',
+            [
+                // ── Identification ────────────────────────────────────────────────
+                'formType' => ToolDefinitionBuilder::string(),   // "K-1-1065" | "K-1-1120S" | "K-1-1041"
+                'formId' => ToolDefinitionBuilder::string(),   // e.g. "AQR-DELPHI-1693-2025"
+                'partnerNumber' => ToolDefinitionBuilder::string(),   // e.g. "1693"
+                'pages' => ToolDefinitionBuilder::number(),
+                'amendedK1' => ToolDefinitionBuilder::boolean(),
+                'finalK1' => ToolDefinitionBuilder::boolean(),
+                'taxYearBeginning' => ToolDefinitionBuilder::string(),   // YYYY-MM-DD
+                'taxYearEnding' => ToolDefinitionBuilder::string(),   // YYYY-MM-DD
+
+                // ── Left-panel fields (A–O): entity & partner identification ─────
+                'field_A' => ToolDefinitionBuilder::string(),   // Partnership EIN
+                'field_B' => ToolDefinitionBuilder::string(),   // Partnership name/address (multiline)
+                'field_C' => ToolDefinitionBuilder::string(),   // IRS Center (Ogden / Kansas City / Cincinnati)
+                'field_D' => ToolDefinitionBuilder::boolean(),  // PTP indicator (checkbox)
+                'field_E' => ToolDefinitionBuilder::string(),   // Partner identifying number
+                'field_F' => ToolDefinitionBuilder::string(),   // Partner name/address (multiline)
+                'field_G' => ToolDefinitionBuilder::string(),   // Partner type (General / LLC / Limited)
+                'field_H1' => ToolDefinitionBuilder::string(),   // Domestic or Foreign
+                'field_H2' => ToolDefinitionBuilder::boolean(),  // Foreign U.S. person checkbox
+                'field_I1' => ToolDefinitionBuilder::string(),   // Profit share beginning/end
+                'field_I2' => ToolDefinitionBuilder::string(),   // Loss share beginning/end
+                'field_I3' => ToolDefinitionBuilder::string(),   // Capital share beginning/end
+                'field_M' => ToolDefinitionBuilder::string(),   // Tax basis capital
+                'field_N' => ToolDefinitionBuilder::string(),   // At-risk amount
+                'field_O' => ToolDefinitionBuilder::string(),   // Qualified liability
+
+                // ── Item J: Profit/Loss/Capital percentages ───────────────────────
+                'field_J_profit_beginning' => ToolDefinitionBuilder::number(),
+                'field_J_profit_ending' => ToolDefinitionBuilder::number(),
+                'field_J_loss_beginning' => ToolDefinitionBuilder::number(),
+                'field_J_loss_ending' => ToolDefinitionBuilder::number(),
+                'field_J_capital_beginning' => ToolDefinitionBuilder::number(),
+                'field_J_capital_ending' => ToolDefinitionBuilder::number(),
+
+                // ── Item K: Partner's share of liabilities ───────────────────────
+                'field_K_recourse_beginning' => ToolDefinitionBuilder::number(),
+                'field_K_recourse_ending' => ToolDefinitionBuilder::number(),
+                'field_K_nonrecourse_beginning' => ToolDefinitionBuilder::number(),
+                'field_K_nonrecourse_ending' => ToolDefinitionBuilder::number(),
+                'field_K_qual_nonrecourse_beginning' => ToolDefinitionBuilder::number(),
+                'field_K_qual_nonrecourse_ending' => ToolDefinitionBuilder::number(),
+
+                // ── Item L: Capital account analysis ─────────────────────────────
+                'field_L_beginning_capital' => ToolDefinitionBuilder::number(),
+                'field_L_contributed' => ToolDefinitionBuilder::number(),
+                'field_L_current_year_net' => ToolDefinitionBuilder::number(),
+                'field_L_other_increase' => ToolDefinitionBuilder::number(),
+                'field_L_withdrawals' => ToolDefinitionBuilder::number(),
+                'field_L_ending_capital' => ToolDefinitionBuilder::number(),
+                'field_L_capital_method' => ToolDefinitionBuilder::string(),  // "TAX_BASIS" | "GAAP" | "SECTION_704B" | "OTHER"
+
+                // ── Right-panel fields (1–10, 12, 21): numeric income/deduction boxes ─
+                'field_1' => ToolDefinitionBuilder::number(),   // Ordinary business income (loss)
+                'field_2' => ToolDefinitionBuilder::number(),   // Net rental real estate income (loss)
+                'field_3' => ToolDefinitionBuilder::number(),   // Other net rental income (loss)
+                'field_4' => ToolDefinitionBuilder::number(),   // Guaranteed payments (total)
+                'field_4a' => ToolDefinitionBuilder::number(),   // GP – services
+                'field_4b' => ToolDefinitionBuilder::number(),   // GP – capital
+                'field_4c' => ToolDefinitionBuilder::number(),   // GP – total
+                'field_5' => ToolDefinitionBuilder::number(),   // Interest income
+                'field_6a' => ToolDefinitionBuilder::number(),   // Ordinary dividends
+                'field_6b' => ToolDefinitionBuilder::number(),   // Qualified dividends
+                'field_6c' => ToolDefinitionBuilder::number(),   // Dividend equivalents
+                'field_7' => ToolDefinitionBuilder::number(),   // Royalties
+                'field_8' => ToolDefinitionBuilder::number(),   // Net short-term capital gain (loss)
+                'field_9a' => ToolDefinitionBuilder::number(),   // Net long-term capital gain (loss)
+                'field_9b' => ToolDefinitionBuilder::number(),   // Collectibles (28%) gain (loss)
+                'field_9c' => ToolDefinitionBuilder::number(),   // Unrecaptured Sec. 1250 gain
+                'field_10' => ToolDefinitionBuilder::number(),   // Net section 1231 gain (loss)
+                'field_12' => ToolDefinitionBuilder::number(),   // Section 179 deduction
+                'field_21' => ToolDefinitionBuilder::number(),   // Foreign taxes paid or accrued
+
+                // ── Coded boxes (11, 13–20): arrays of {code, value, notes} ──────
+                'codes_11' => $codeItemsProp,  // Other income (loss)
+                'codes_13' => $codeItemsProp,  // Other deductions
+                'codes_14' => $codeItemsProp,  // Self-employment earnings
+                'codes_15' => $codeItemsProp,  // Credits
+                'codes_16' => $codeItemsProp,  // Foreign transactions
+                'codes_17' => $codeItemsProp,  // AMT items
+                'codes_18' => $codeItemsProp,  // Tax-exempt & nondeductible
+                'codes_19' => $codeItemsProp,  // Distributions
+                'codes_20' => $codeItemsProp,  // Other information
+
+                // ── Schedule K-3 (backward-compat fallback) ───────────────────────
+                'k3_sections' => $k3SectionProp,
+
+                // ── Schedule K-3 Part I checkboxes ────────────────────────────────
+                'k3_part1_checkboxes' => ToolDefinitionBuilder::arrayOf(
+                    ToolDefinitionBuilder::object(
+                        [
+                            'box' => ToolDefinitionBuilder::string(),
+                            'checked' => ToolDefinitionBuilder::boolean(),
+                            'note' => ToolDefinitionBuilder::string(),
+                        ],
+                        ['box', 'checked'],
+                    )
+                ),
+
+                // ── Schedule K-3 Part II rows (one per line+country combination) ──
+                'k3_part2_rows' => ToolDefinitionBuilder::arrayOf(
+                    ToolDefinitionBuilder::object(
+                        [
+                            'line' => ToolDefinitionBuilder::string(),
+                            'country' => ToolDefinitionBuilder::string(),
+                            'col_a_us_source' => ToolDefinitionBuilder::number(),
+                            'col_b_foreign_branch' => ToolDefinitionBuilder::number(),
+                            'col_c_passive' => ToolDefinitionBuilder::number(),
+                            'col_d_general' => ToolDefinitionBuilder::number(),
+                            'col_e_other_901j' => ToolDefinitionBuilder::number(),
+                            'col_f_sourced_by_partner' => ToolDefinitionBuilder::number(),
+                            'col_g_total' => ToolDefinitionBuilder::number(),
+                            'note' => ToolDefinitionBuilder::string(),
+                        ],
+                        ['line', 'country'],
+                    )
+                ),
+
+                // ── Schedule K-3 Part III Section 2: asset apportionment rows ─────
+                'k3_part3_asset_rows' => ToolDefinitionBuilder::arrayOf(
+                    ToolDefinitionBuilder::object(
+                        [
+                            'line' => ToolDefinitionBuilder::string(),
+                            'col_a_us_source' => ToolDefinitionBuilder::number(),
+                            'col_b_foreign_branch' => ToolDefinitionBuilder::number(),
+                            'col_c_passive' => ToolDefinitionBuilder::number(),
+                            'col_d_general' => ToolDefinitionBuilder::number(),
+                            'col_f_sourced_by_partner' => ToolDefinitionBuilder::number(),
+                            'col_g_total' => ToolDefinitionBuilder::number(),
+                        ],
+                        ['line'],
+                    )
+                ),
+
+                // ── Schedule K-3 Part III Section 4: foreign taxes by country ─────
+                'k3_part3_foreign_taxes' => ToolDefinitionBuilder::arrayOf(
+                    ToolDefinitionBuilder::object(
+                        [
+                            'country' => ToolDefinitionBuilder::string(),
+                            'tax_type' => ToolDefinitionBuilder::string(),   // "WHTD" | "PAID" | "ACCRUED"
+                            'basket' => ToolDefinitionBuilder::string(),   // "passive" | "general" | "branch" | "951A"
+                            'amount_usd' => ToolDefinitionBuilder::number(),
+                            'amount_foreign_currency' => ToolDefinitionBuilder::number(),
+                            'exchange_rate' => ToolDefinitionBuilder::number(),
+                            'date_paid' => ToolDefinitionBuilder::string(),
+                        ],
+                        ['country', 'amount_usd'],
+                    )
+                ),
+
+                // ── Schedule K-3 Part I Box 4: FX translation table ───────────────
+                'k3_part1_fx_translation' => ToolDefinitionBuilder::arrayOf(
+                    ToolDefinitionBuilder::object(
+                        [
+                            'country' => ToolDefinitionBuilder::string(),
+                            'date_paid' => ToolDefinitionBuilder::string(),
+                            'exchange_rate' => ToolDefinitionBuilder::number(),
+                            'amount_foreign_currency' => ToolDefinitionBuilder::number(),
+                            'amount_usd' => ToolDefinitionBuilder::number(),
+                        ],
+                        ['country', 'amount_usd'],
+                    )
+                ),
+
+                // ── Schedule K-3 parts applicability checkboxes ───────────────────
+                'k3_parts_applicable' => ToolDefinitionBuilder::object([
+                    'part1' => ToolDefinitionBuilder::boolean(), 'part2' => ToolDefinitionBuilder::boolean(), 'part3' => ToolDefinitionBuilder::boolean(),
+                    'part4' => ToolDefinitionBuilder::boolean(), 'part5' => ToolDefinitionBuilder::boolean(), 'part6' => ToolDefinitionBuilder::boolean(),
+                    'part7' => ToolDefinitionBuilder::boolean(), 'part8' => ToolDefinitionBuilder::boolean(), 'part9' => ToolDefinitionBuilder::boolean(),
+                    'part10' => ToolDefinitionBuilder::boolean(), 'part11' => ToolDefinitionBuilder::boolean(), 'part12' => ToolDefinitionBuilder::boolean(),
+                    'part13' => ToolDefinitionBuilder::boolean(),
+                ]),
+
+                // ── K-3 general notes ─────────────────────────────────────────────
+                'k3_notes' => ToolDefinitionBuilder::arrayOf(ToolDefinitionBuilder::string()),
+
+                // ── Supplemental text & metadata ─────────────────────────────────
+                'raw_text' => ToolDefinitionBuilder::string(),
+                'warnings' => ToolDefinitionBuilder::arrayOf(ToolDefinitionBuilder::string()),
             ],
-        ];
-
-        return [
-            'name' => self::TAX_DOCUMENT_K1_TOOL_NAME,
-            'description' => 'Extract all boxes, codes, and K-3 sections from a Schedule K-1 (Form 1065, 1120-S, or 1041). Returns structured data keyed by box identifier.',
-            'parameters' => [
-                'type' => 'OBJECT',
-                'properties' => [
-                    // ── Identification ────────────────────────────────────────────────
-                    'formType' => $strField(),   // "K-1-1065" | "K-1-1120S" | "K-1-1041"
-                    'formId' => $strField(),   // e.g. "AQR-DELPHI-1693-2025"
-                    'partnerNumber' => $strField(),   // e.g. "1693"
-                    'pages' => $numField(),
-                    'amendedK1' => $boolField(),
-                    'finalK1' => $boolField(),
-                    'taxYearBeginning' => $strField(),   // YYYY-MM-DD
-                    'taxYearEnding' => $strField(),   // YYYY-MM-DD
-
-                    // ── Left-panel fields (A–O): entity & partner identification ─────
-                    'field_A' => $strField(),   // Partnership EIN
-                    'field_B' => $strField(),   // Partnership name/address (multiline)
-                    'field_C' => $strField(),   // IRS Center (Ogden / Kansas City / Cincinnati)
-                    'field_D' => $boolField(),  // PTP indicator (checkbox)
-                    'field_E' => $strField(),   // Partner identifying number
-                    'field_F' => $strField(),   // Partner name/address (multiline)
-                    'field_G' => $strField(),   // Partner type (General / LLC / Limited)
-                    'field_H1' => $strField(),   // Domestic or Foreign
-                    'field_H2' => $boolField(),  // Foreign U.S. person checkbox
-                    'field_I1' => $strField(),   // Profit share beginning/end
-                    'field_I2' => $strField(),   // Loss share beginning/end
-                    'field_I3' => $strField(),   // Capital share beginning/end
-                    'field_M' => $strField(),   // Tax basis capital
-                    'field_N' => $strField(),   // At-risk amount
-                    'field_O' => $strField(),   // Qualified liability
-
-                    // ── Item J: Profit/Loss/Capital percentages ───────────────────────
-                    'field_J_profit_beginning' => $numField(),
-                    'field_J_profit_ending' => $numField(),
-                    'field_J_loss_beginning' => $numField(),
-                    'field_J_loss_ending' => $numField(),
-                    'field_J_capital_beginning' => $numField(),
-                    'field_J_capital_ending' => $numField(),
-
-                    // ── Item K: Partner's share of liabilities ───────────────────────
-                    'field_K_recourse_beginning' => $numField(),
-                    'field_K_recourse_ending' => $numField(),
-                    'field_K_nonrecourse_beginning' => $numField(),
-                    'field_K_nonrecourse_ending' => $numField(),
-                    'field_K_qual_nonrecourse_beginning' => $numField(),
-                    'field_K_qual_nonrecourse_ending' => $numField(),
-
-                    // ── Item L: Capital account analysis ─────────────────────────────
-                    'field_L_beginning_capital' => $numField(),
-                    'field_L_contributed' => $numField(),
-                    'field_L_current_year_net' => $numField(),
-                    'field_L_other_increase' => $numField(),
-                    'field_L_withdrawals' => $numField(),
-                    'field_L_ending_capital' => $numField(),
-                    'field_L_capital_method' => $strField(),  // "TAX_BASIS" | "GAAP" | "SECTION_704B" | "OTHER"
-
-                    // ── Right-panel fields (1–10, 12, 21): numeric income/deduction boxes ─
-                    'field_1' => $numField(),   // Ordinary business income (loss)
-                    'field_2' => $numField(),   // Net rental real estate income (loss)
-                    'field_3' => $numField(),   // Other net rental income (loss)
-                    'field_4' => $numField(),   // Guaranteed payments (total)
-                    'field_4a' => $numField(),   // GP – services
-                    'field_4b' => $numField(),   // GP – capital
-                    'field_4c' => $numField(),   // GP – total
-                    'field_5' => $numField(),   // Interest income
-                    'field_6a' => $numField(),   // Ordinary dividends
-                    'field_6b' => $numField(),   // Qualified dividends
-                    'field_6c' => $numField(),   // Dividend equivalents
-                    'field_7' => $numField(),   // Royalties
-                    'field_8' => $numField(),   // Net short-term capital gain (loss)
-                    'field_9a' => $numField(),   // Net long-term capital gain (loss)
-                    'field_9b' => $numField(),   // Collectibles (28%) gain (loss)
-                    'field_9c' => $numField(),   // Unrecaptured Sec. 1250 gain
-                    'field_10' => $numField(),   // Net section 1231 gain (loss)
-                    'field_12' => $numField(),   // Section 179 deduction
-                    'field_21' => $numField(),   // Foreign taxes paid or accrued
-
-                    // ── Coded boxes (11, 13–20): arrays of {code, value, notes} ──────
-                    'codes_11' => $codeItemsProp(),  // Other income (loss)
-                    'codes_13' => $codeItemsProp(),  // Other deductions
-                    'codes_14' => $codeItemsProp(),  // Self-employment earnings
-                    'codes_15' => $codeItemsProp(),  // Credits
-                    'codes_16' => $codeItemsProp(),  // Foreign transactions
-                    'codes_17' => $codeItemsProp(),  // AMT items
-                    'codes_18' => $codeItemsProp(),  // Tax-exempt & nondeductible
-                    'codes_19' => $codeItemsProp(),  // Distributions
-                    'codes_20' => $codeItemsProp(),  // Other information
-
-                    // ── Schedule K-3 (backward-compat fallback) ───────────────────────
-                    'k3_sections' => $k3SectionProp(),
-
-                    // ── Schedule K-3 Part I checkboxes ────────────────────────────────
-                    'k3_part1_checkboxes' => [
-                        'type' => 'ARRAY',
-                        'items' => [
-                            'type' => 'OBJECT',
-                            'properties' => [
-                                'box' => $strField(),
-                                'checked' => $boolField(),
-                                'note' => $strField(),
-                            ],
-                            'required' => ['box', 'checked'],
-                        ],
-                    ],
-
-                    // ── Schedule K-3 Part II rows (one per line+country combination) ──
-                    'k3_part2_rows' => [
-                        'type' => 'ARRAY',
-                        'items' => [
-                            'type' => 'OBJECT',
-                            'properties' => [
-                                'line' => $strField(),
-                                'country' => $strField(),
-                                'col_a_us_source' => $numField(),
-                                'col_b_foreign_branch' => $numField(),
-                                'col_c_passive' => $numField(),
-                                'col_d_general' => $numField(),
-                                'col_e_other_901j' => $numField(),
-                                'col_f_sourced_by_partner' => $numField(),
-                                'col_g_total' => $numField(),
-                                'note' => $strField(),
-                            ],
-                            'required' => ['line', 'country'],
-                        ],
-                    ],
-
-                    // ── Schedule K-3 Part III Section 2: asset apportionment rows ─────
-                    'k3_part3_asset_rows' => [
-                        'type' => 'ARRAY',
-                        'items' => [
-                            'type' => 'OBJECT',
-                            'properties' => [
-                                'line' => $strField(),
-                                'col_a_us_source' => $numField(),
-                                'col_b_foreign_branch' => $numField(),
-                                'col_c_passive' => $numField(),
-                                'col_d_general' => $numField(),
-                                'col_f_sourced_by_partner' => $numField(),
-                                'col_g_total' => $numField(),
-                            ],
-                            'required' => ['line'],
-                        ],
-                    ],
-
-                    // ── Schedule K-3 Part III Section 4: foreign taxes by country ─────
-                    'k3_part3_foreign_taxes' => [
-                        'type' => 'ARRAY',
-                        'items' => [
-                            'type' => 'OBJECT',
-                            'properties' => [
-                                'country' => $strField(),
-                                'tax_type' => $strField(),   // "WHTD" | "PAID" | "ACCRUED"
-                                'basket' => $strField(),   // "passive" | "general" | "branch" | "951A"
-                                'amount_usd' => $numField(),
-                                'amount_foreign_currency' => $numField(),
-                                'exchange_rate' => $numField(),
-                                'date_paid' => $strField(),
-                            ],
-                            'required' => ['country', 'amount_usd'],
-                        ],
-                    ],
-
-                    // ── Schedule K-3 Part I Box 4: FX translation table ───────────────
-                    'k3_part1_fx_translation' => [
-                        'type' => 'ARRAY',
-                        'items' => [
-                            'type' => 'OBJECT',
-                            'properties' => [
-                                'country' => $strField(),
-                                'date_paid' => $strField(),
-                                'exchange_rate' => $numField(),
-                                'amount_foreign_currency' => $numField(),
-                                'amount_usd' => $numField(),
-                            ],
-                            'required' => ['country', 'amount_usd'],
-                        ],
-                    ],
-
-                    // ── Schedule K-3 parts applicability checkboxes ───────────────────
-                    'k3_parts_applicable' => [
-                        'type' => 'OBJECT',
-                        'properties' => [
-                            'part1' => $boolField(), 'part2' => $boolField(), 'part3' => $boolField(),
-                            'part4' => $boolField(), 'part5' => $boolField(), 'part6' => $boolField(),
-                            'part7' => $boolField(), 'part8' => $boolField(), 'part9' => $boolField(),
-                            'part10' => $boolField(), 'part11' => $boolField(), 'part12' => $boolField(),
-                            'part13' => $boolField(),
-                        ],
-                    ],
-
-                    // ── K-3 general notes ─────────────────────────────────────────────
-                    'k3_notes' => [
-                        'type' => 'ARRAY',
-                        'items' => ['type' => 'STRING'],
-                    ],
-
-                    // ── Supplemental text & metadata ─────────────────────────────────
-                    'raw_text' => $strField(),
-                    'warnings' => [
-                        'type' => 'ARRAY',
-                        'items' => ['type' => 'STRING'],
-                    ],
-                ],
-            ],
-        ];
+        );
     }
 }

@@ -3,8 +3,7 @@
 namespace App\Console\Commands\Finance;
 
 use App\Models\Files\FileForTaxDocument;
-use App\Models\FinanceTool\TaxDocumentAccount;
-use Illuminate\Support\Facades\DB;
+use App\Services\TaxDocument\TaxDocumentCreationService;
 
 class FinanceTaxImportCommand extends BaseFinanceCommand
 {
@@ -159,41 +158,34 @@ class FinanceTaxImportCommand extends BaseFinanceCommand
         $inserted = [];
 
         if (! $isDryRun) {
-            DB::transaction(function () use ($validDocs, $taxYear, $userId, &$inserted): void {
-                foreach ($validDocs as $doc) {
-                    $created = FileForTaxDocument::create([
-                        'user_id' => $userId,
-                        'tax_year' => $taxYear,
-                        'form_type' => $doc['form_type'],
-                        'original_filename' => $doc['original_filename'] ?? 'Imported',
-                        'stored_filename' => 'imported',
-                        's3_path' => '',
-                        'mime_type' => 'application/octet-stream',
-                        'file_size_bytes' => 0,
-                        'file_hash' => '',
-                        'uploaded_by_user_id' => $userId,
-                        'genai_status' => $doc['genai_status'] ?? 'parsed',
-                        'parsed_data' => $doc['parsed_data'],
-                        'is_reviewed' => (bool) ($doc['is_reviewed'] ?? false),
-                        'employment_entity_id' => $doc['employment_entity_id'] ?? null,
-                        'account_id' => $doc['account_id'] ?? null,
-                    ]);
+            $creationService = app(TaxDocumentCreationService::class);
 
-                    // Create account links if provided
-                    foreach ((array) ($doc['account_links'] ?? []) as $link) {
-                        if (is_array($link)) {
-                            TaxDocumentAccount::createLink(
-                                $created->id,
-                                $link['account_id'] ?? null,
-                                $link['form_type'] ?? $doc['form_type'],
-                                $link['tax_year'] ?? $taxYear,
-                            );
-                        }
-                    }
+            foreach ($validDocs as $doc) {
+                $docAttributes = [
+                    'user_id' => $userId,
+                    'tax_year' => $taxYear,
+                    'form_type' => $doc['form_type'],
+                    'original_filename' => $doc['original_filename'] ?? 'Imported',
+                    'stored_filename' => 'imported',
+                    's3_path' => '',
+                    'mime_type' => 'application/octet-stream',
+                    'file_size_bytes' => 0,
+                    'file_hash' => '',
+                    'uploaded_by_user_id' => $userId,
+                    'genai_status' => $doc['genai_status'] ?? 'parsed',
+                    'parsed_data' => $doc['parsed_data'],
+                    'is_reviewed' => (bool) ($doc['is_reviewed'] ?? false),
+                    'employment_entity_id' => $doc['employment_entity_id'] ?? null,
+                    'account_id' => $doc['account_id'] ?? null,
+                ];
 
-                    $inserted[] = $created;
-                }
-            });
+                $accountLinks = array_map(
+                    fn ($link) => array_merge(['tax_year' => $taxYear, 'form_type' => $doc['form_type']], $link),
+                    array_filter((array) ($doc['account_links'] ?? []), 'is_array'),
+                );
+
+                $inserted[] = $creationService->createImportedDocument($docAttributes, $accountLinks);
+            }
         }
 
         $summaryHeaders = ['status', 'count'];
