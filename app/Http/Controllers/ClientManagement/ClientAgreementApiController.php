@@ -5,6 +5,8 @@ namespace App\Http\Controllers\ClientManagement;
 use App\Http\Controllers\Controller;
 use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientCompany;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
@@ -13,7 +15,7 @@ class ClientAgreementApiController extends Controller
     /**
      * Get all agreements for a client company.
      */
-    public function index($companyId)
+    public function index(int $companyId): Collection
     {
         Gate::authorize('Admin');
 
@@ -25,7 +27,7 @@ class ClientAgreementApiController extends Controller
     /**
      * Get a single agreement.
      */
-    public function show($id)
+    public function show(int $id): ClientAgreement
     {
         Gate::authorize('Admin');
 
@@ -35,7 +37,7 @@ class ClientAgreementApiController extends Controller
     /**
      * Update an agreement (admin only, before signing).
      */
-    public function update(Request $request, $id)
+    public function update(Request $request, int $id): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -84,7 +86,7 @@ class ClientAgreementApiController extends Controller
     /**
      * Terminate an agreement (admin only).
      */
-    public function terminate(Request $request, $id)
+    public function terminate(Request $request, int $id): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -106,7 +108,7 @@ class ClientAgreementApiController extends Controller
     /**
      * Delete an agreement (admin only, only if not signed).
      */
-    public function destroy($id)
+    public function destroy(int $id): JsonResponse
     {
         Gate::authorize('Admin');
 

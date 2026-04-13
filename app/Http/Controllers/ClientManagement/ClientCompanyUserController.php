@@ -5,6 +5,7 @@ namespace App\Http\Controllers\ClientManagement;
 use App\Http\Controllers\Controller;
 use App\Models\ClientManagement\ClientCompany;
 use App\Models\User;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
@@ -13,7 +14,7 @@ class ClientCompanyUserController extends Controller
     /**
      * Attach a user to a client company.
      */
-    public function store(Request $request)
+    public function store(Request $request): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -38,7 +39,7 @@ class ClientCompanyUserController extends Controller
     /**
      * Remove a user from a client company.
      */
-    public function destroy($companyId, $userId)
+    public function destroy(int $companyId, int $userId): JsonResponse
     {
         Gate::authorize('Admin');
 

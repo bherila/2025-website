@@ -8,6 +8,7 @@ use App\Models\ClientManagement\ClientInvoice;
 use App\Models\ClientManagement\ClientInvoicePayment;
 use App\Services\ClientManagement\ClientInvoicingService;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
@@ -24,7 +25,7 @@ class ClientInvoiceApiController extends Controller
     /**
      * List all invoices for a company.
      */
-    public function index(ClientCompany $company)
+    public function index(ClientCompany $company): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -57,7 +58,7 @@ class ClientInvoiceApiController extends Controller
     /**
      * Get a single invoice with full details.
      */
-    public function show(ClientCompany $company, ClientInvoice $invoice)
+    public function show(ClientCompany $company, ClientInvoice $invoice): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -85,7 +86,7 @@ class ClientInvoiceApiController extends Controller
     /**
      * Generate a new invoice.
      */
-    public function store(Request $request, ClientCompany $company)
+    public function store(Request $request, ClientCompany $company): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -118,7 +119,7 @@ class ClientInvoiceApiController extends Controller
     /**
      * Generate invoices for all calendar months.
      */
-    public function generateAll(ClientCompany $company)
+    public function generateAll(ClientCompany $company): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -137,7 +138,7 @@ class ClientInvoiceApiController extends Controller
     /**
      * Update invoice notes.
      */
-    public function update(Request $request, ClientCompany $company, ClientInvoice $invoice)
+    public function update(Request $request, ClientCompany $company, ClientInvoice $invoice): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -175,7 +176,7 @@ class ClientInvoiceApiController extends Controller
     /**
      * Issue an invoice.
      */
-    public function issue(ClientCompany $company, ClientInvoice $invoice)
+    public function issue(ClientCompany $company, ClientInvoice $invoice): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -200,7 +201,7 @@ class ClientInvoiceApiController extends Controller
     /**
      * Mark an invoice as paid.
      */
-    public function markPaid(Request $request, ClientCompany $company, ClientInvoice $invoice)
+    public function markPaid(Request $request, ClientCompany $company, ClientInvoice $invoice): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -220,7 +221,7 @@ class ClientInvoiceApiController extends Controller
     /**
      * Void an invoice.
      */
-    public function void(ClientCompany $company, $invoiceId)
+    public function void(ClientCompany $company, int $invoiceId): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -247,7 +248,7 @@ class ClientInvoiceApiController extends Controller
     /**
      * Revert a voided invoice to issued or draft status.
      */
-    public function unVoid(Request $request, ClientCompany $company, $invoiceId)
+    public function unVoid(Request $request, ClientCompany $company, int $invoiceId): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -293,7 +294,7 @@ class ClientInvoiceApiController extends Controller
     /**
      * Delete a draft invoice.
      */
-    public function destroy(ClientCompany $company, ClientInvoice $invoice)
+    public function destroy(ClientCompany $company, ClientInvoice $invoice): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -313,7 +314,7 @@ class ClientInvoiceApiController extends Controller
     /**
      * Add a custom line item to a draft invoice.
      */
-    public function addLineItem(Request $request, ClientCompany $company, ClientInvoice $invoice)
+    public function addLineItem(Request $request, ClientCompany $company, ClientInvoice $invoice): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -359,7 +360,7 @@ class ClientInvoiceApiController extends Controller
     /**
      * Remove a custom line item from a draft invoice.
      */
-    public function removeLineItem(ClientCompany $company, ClientInvoice $invoice, int $lineId)
+    public function removeLineItem(ClientCompany $company, ClientInvoice $invoice, int $lineId): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -395,7 +396,7 @@ class ClientInvoiceApiController extends Controller
     /**
      * Update a custom line item on a draft invoice.
      */
-    public function updateLineItem(Request $request, ClientCompany $company, ClientInvoice $invoice, int $lineId)
+    public function updateLineItem(Request $request, ClientCompany $company, ClientInvoice $invoice, int $lineId): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -435,7 +436,7 @@ class ClientInvoiceApiController extends Controller
     // Payment Methods
     //
 
-    public function getPayments(ClientCompany $company, ClientInvoice $invoice)
+    public function getPayments(ClientCompany $company, ClientInvoice $invoice): JsonResponse
     {
         Gate::authorize('Admin');
         if ($invoice->client_company_id != $company->id) {
@@ -445,7 +446,7 @@ class ClientInvoiceApiController extends Controller
         return response()->json($invoice->payments()->orderBy('payment_date', 'desc')->get());
     }
 
-    public function addPayment(Request $request, ClientCompany $company, ClientInvoice $invoice)
+    public function addPayment(Request $request, ClientCompany $company, ClientInvoice $invoice): JsonResponse
     {
         Gate::authorize('Admin');
         if ($invoice->client_company_id != $company->id) {
@@ -488,7 +489,7 @@ class ClientInvoiceApiController extends Controller
         ], 201);
     }
 
-    public function updatePayment(Request $request, ClientCompany $company, ClientInvoice $invoice, ClientInvoicePayment $payment)
+    public function updatePayment(Request $request, ClientCompany $company, ClientInvoice $invoice, ClientInvoicePayment $payment): JsonResponse
     {
         Gate::authorize('Admin');
         if ($invoice->client_company_id != $company->id || $payment->client_invoice_id != $invoice->client_invoice_id) {
@@ -540,7 +541,7 @@ class ClientInvoiceApiController extends Controller
         ]);
     }
 
-    public function deletePayment(ClientCompany $company, ClientInvoice $invoice, ClientInvoicePayment $payment)
+    public function deletePayment(ClientCompany $company, ClientInvoice $invoice, ClientInvoicePayment $payment): JsonResponse
     {
         Gate::authorize('Admin');
         if ($invoice->client_company_id != $company->id || $payment->client_invoice_id != $invoice->client_invoice_id) {

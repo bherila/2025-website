@@ -8,13 +8,14 @@ use App\Models\ClientManagement\ClientInvoice;
 use App\Models\ClientManagement\ClientProject;
 use App\Models\ClientManagement\ClientTask;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\View\View;
 
 class ClientPortalController extends Controller
 {
     /**
      * Display the client portal for a company.
      */
-    public function index($slug)
+    public function index(string $slug): View
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
 
@@ -63,7 +64,7 @@ class ClientPortalController extends Controller
     /**
      * Display the time tracking page for a company.
      */
-    public function time($slug)
+    public function time(string $slug): View
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
 
@@ -88,7 +89,7 @@ class ClientPortalController extends Controller
     /**
      * Display a specific project.
      */
-    public function project($slug, $projectSlug)
+    public function project(string $slug, string $projectSlug): View
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
 
@@ -126,7 +127,7 @@ class ClientPortalController extends Controller
     /**
      * Display the invoices list for a company.
      */
-    public function invoices($slug)
+    public function invoices(string $slug): View
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
 
@@ -147,7 +148,7 @@ class ClientPortalController extends Controller
     /**
      * Display a specific invoice.
      */
-    public function invoice($slug, $invoiceId)
+    public function invoice(string $slug, int $invoiceId): View
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
 
@@ -209,11 +210,8 @@ class ClientPortalController extends Controller
 
     /**
      * Utility: recursively remove null values from arrays so Blade JSON can omit nulls.
-     *
-     * @param  mixed  $data
-     * @return mixed
      */
-    private function removeNullsRecursive($data)
+    private function removeNullsRecursive(mixed $data): mixed
     {
         if (is_array($data)) {
             foreach ($data as $k => $v) {
@@ -234,7 +232,7 @@ class ClientPortalController extends Controller
     /**
      * Display the expenses page for a company (admin only).
      */
-    public function expenses($slug)
+    public function expenses(string $slug): View
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
 

@@ -25,6 +25,18 @@ parameters:
 			path: app/Console/Commands/Finance/FinanceAccountsCommand.php
 
 		-
+			message: '#^Return type of call to method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Models\\FinanceTool\\FinAccounts\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: method.unresolvableReturnType
+			count: 2
+			path: app/Console/Commands/Finance/FinanceAccountsCommand.php
+
+		-
+			message: '#^Return type of call to method Illuminate\\Support\\Collection\<int,array\<string, mixed\>\>\:\:values\(\) contains unresolvable type\.$#'
+			identifier: method.unresolvableReturnType
+			count: 1
+			path: app/Console/Commands/Finance/FinanceAccountsCommand.php
+
+		-
 			message: '#^Parameter \#2 \$rows of method App\\Console\\Commands\\Finance\\BaseFinanceCommand\:\:outputData\(\) expects array\<array\<string\>\>, array\<int, array\<int, int\<0, max\>\|string\>\> given\.$#'
 			identifier: argument.type
 			count: 1
@@ -79,40 +91,16 @@ parameters:
 			path: app/Finance/RulesEngine/TransactionRuleLoader.php
 
 		-
+			message: '#^Access to an undefined property App\\Models\\FinanceTool\\FinRule\:\:\$actions\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Finance/RulesEngine/TransactionRuleProcessor.php
+
+		-
 			message: '#^Access to an undefined property App\\Models\\FinanceTool\\FinRule\:\:\$conditions\.$#'
 			identifier: property.notFound
 			count: 3
 			path: app/Finance/RulesEngine/TransactionRuleProcessor.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$acct_id\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/GenAiProcessor/Jobs/ParseImportJob.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$acct_number\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/GenAiProcessor/Jobs/ParseImportJob.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$email\.$#'
-			identifier: property.notFound
-			count: 5
-			path: app/GenAiProcessor/Jobs/ParseImportJob.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/GenAiProcessor/Jobs/ParseImportJob.php
-
-		-
-			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getGeminiApiKey\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: app/GenAiProcessor/Jobs/ParseImportJob.php
 
 		-
 			message: '#^Call to function is_array\(\) with array\<string, mixed\> will always evaluate to true\.$#'
@@ -121,14 +109,56 @@ parameters:
 			path: app/GenAiProcessor/Jobs/ParseImportJob.php
 
 		-
-			message: '#^Parameter \#2 \$user of method App\\GenAiProcessor\\Services\\GenAiJobDispatcherService\:\:claimQuota\(\) expects App\\Models\\User\|null, Illuminate\\Database\\Eloquent\\Model given\.$#'
-			identifier: argument.type
-			count: 1
+			message: '#^Offset 0 on array\<string, mixed\> in isset\(\) does not exist\.$#'
+			identifier: isset.offset
+			count: 3
 			path: app/GenAiProcessor/Jobs/ParseImportJob.php
+
+		-
+			message: '#^Method App\\GenAiProcessor\\Models\\GenAiImportJob\:\:account\(\) should return Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\FinanceTool\\FinAccounts, App\\GenAiProcessor\\Models\\GenAiImportJob\> but returns Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\FinanceTool\\FinAccounts, \$this\(App\\GenAiProcessor\\Models\\GenAiImportJob\)\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/GenAiProcessor/Models/GenAiImportJob.php
+
+		-
+			message: '#^Method App\\GenAiProcessor\\Models\\GenAiImportJob\:\:results\(\) should return Illuminate\\Database\\Eloquent\\Relations\\HasMany\<App\\GenAiProcessor\\Models\\GenAiImportResult, App\\GenAiProcessor\\Models\\GenAiImportJob\> but returns Illuminate\\Database\\Eloquent\\Relations\\HasMany\<App\\GenAiProcessor\\Models\\GenAiImportResult, \$this\(App\\GenAiProcessor\\Models\\GenAiImportJob\)\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/GenAiProcessor/Models/GenAiImportJob.php
+
+		-
+			message: '#^Method App\\GenAiProcessor\\Models\\GenAiImportJob\:\:user\(\) should return Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\User, App\\GenAiProcessor\\Models\\GenAiImportJob\> but returns Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\User, \$this\(App\\GenAiProcessor\\Models\\GenAiImportJob\)\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/GenAiProcessor/Models/GenAiImportJob.php
+
+		-
+			message: '#^Method App\\GenAiProcessor\\Models\\GenAiImportResult\:\:job\(\) should return Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\GenAiProcessor\\Models\\GenAiImportJob, App\\GenAiProcessor\\Models\\GenAiImportResult\> but returns Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\GenAiProcessor\\Models\\GenAiImportJob, \$this\(App\\GenAiProcessor\\Models\\GenAiImportResult\)\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/GenAiProcessor/Models/GenAiImportResult.php
 
 		-
 			message: '#^Called ''env'' outside of the config directory which returns null when the config is cached, use ''config''\.$#'
 			identifier: larastan.noEnvCallsOutsideOfConfig
+			count: 1
+			path: app/GenAiProcessor/Services/GenAiJobDispatcherService.php
+
+		-
+			message: '#^Method App\\GenAiProcessor\\Services\\GenAiJobDispatcherService\:\:normalizeLots\(\) should return array\<string, mixed\> but returns list\<array\<string, float\|string\>\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/GenAiProcessor/Services/GenAiJobDispatcherService.php
+
+		-
+			message: '#^Method App\\GenAiProcessor\\Services\\GenAiJobDispatcherService\:\:normalizeStatementDetails\(\) should return array\<string, mixed\> but returns list\<array\<string, bool\|float\|string\>\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/GenAiProcessor/Services/GenAiJobDispatcherService.php
+
+		-
+			message: '#^Method App\\GenAiProcessor\\Services\\GenAiJobDispatcherService\:\:normalizeTransactions\(\) should return array\<string, mixed\> but returns list\<array\<string, float\|string\>\>\.$#'
+			identifier: return.type
 			count: 1
 			path: app/GenAiProcessor/Services/GenAiJobDispatcherService.php
 
@@ -139,8 +169,26 @@ parameters:
 			path: app/GenAiProcessor/Services/GenAiJobDispatcherService.php
 
 		-
-			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientAgreement\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\ClientManagement\\ClientAgreement\>\:\:\$clientCompany\.$#'
+			message: '#^Method App\\Http\\Controllers\\AdminGenAiJobsWebController\:\:index\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/AdminGenAiJobsWebController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\BingoController\:\:index\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/BingoController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientAgreement\:\:\$clientCompany\.$#'
 			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientAgreementApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\ClientManagement\\ClientAgreementApiController\:\:index\(\) return type with generic class Illuminate\\Database\\Eloquent\\Collection does not specify its types\: TKey, TModel$#'
+			identifier: missingType.generics
 			count: 1
 			path: app/Http/Controllers/ClientManagement/ClientAgreementApiController.php
 
@@ -151,7 +199,7 @@ parameters:
 			path: app/Http/Controllers/ClientManagement/ClientAgreementApiController.php
 
 		-
-			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientAgreement\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\ClientManagement\\ClientAgreement\>\:\:\$clientCompany\.$#'
+			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientAgreement\:\:\$clientCompany\.$#'
 			identifier: property.notFound
 			count: 1
 			path: app/Http/Controllers/ClientManagement/ClientAgreementController.php
@@ -163,50 +211,8 @@ parameters:
 			path: app/Http/Controllers/ClientManagement/ClientAgreementController.php
 
 		-
-			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientCompany\:\:\$invoices\.$#'
-			identifier: property.notFound
-			count: 2
-			path: app/Http/Controllers/ClientManagement/ClientCompanyApiController.php
-
-		-
-			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientCompany\:\:\$lifetime_value\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/ClientManagement/ClientCompanyApiController.php
-
-		-
-			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientCompany\:\:\$total_balance_due\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/ClientManagement/ClientCompanyApiController.php
-
-		-
-			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientCompany\:\:\$uninvoiced_hours\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/ClientManagement/ClientCompanyApiController.php
-
-		-
-			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientCompany\:\:\$uninvoiced_task_complete_total\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/ClientManagement/ClientCompanyApiController.php
-
-		-
-			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientCompany\:\:\$uninvoiced_task_incomplete_total\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/ClientManagement/ClientCompanyApiController.php
-
-		-
-			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientCompany\:\:\$uninvoiced_task_total\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/ClientManagement/ClientCompanyApiController.php
-
-		-
-			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientCompany\:\:\$unpaid_invoices\.$#'
-			identifier: property.notFound
+			message: '#^Cannot call method get\(\) on array\<int, string\>\.$#'
+			identifier: method.nonObject
 			count: 1
 			path: app/Http/Controllers/ClientManagement/ClientCompanyApiController.php
 
@@ -217,14 +223,14 @@ parameters:
 			path: app/Http/Controllers/ClientManagement/ClientCompanyApiController.php
 
 		-
-			message: '#^Relation ''invoices'' is not found in App\\Models\\ClientManagement\\ClientCompany model\.$#'
+			message: '#^Relation ''users'' is not found in App\\Models\\ClientManagement\\ClientCompany model\.$#'
 			identifier: larastan.relationExistence
 			count: 1
 			path: app/Http/Controllers/ClientManagement/ClientCompanyApiController.php
 
 		-
-			message: '#^Relation ''users'' is not found in App\\Models\\ClientManagement\\ClientCompany model\.$#'
-			identifier: larastan.relationExistence
+			message: '#^Undefined variable\: \$companies$#'
+			identifier: variable.undefined
 			count: 1
 			path: app/Http/Controllers/ClientManagement/ClientCompanyApiController.php
 
@@ -289,6 +295,18 @@ parameters:
 			path: app/Http/Controllers/ClientManagement/ClientInvoiceApiController.php
 
 		-
+			message: '#^Method App\\Http\\Controllers\\ClientManagement\\ClientPortalAgreementApiController\:\:getInvoices\(\) return type with generic class Illuminate\\Database\\Eloquent\\Collection does not specify its types\: TKey, TModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientPortalAgreementApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\ClientManagement\\ClientPortalAgreementApiController\:\:index\(\) return type with generic class Illuminate\\Database\\Eloquent\\Collection does not specify its types\: TKey, TModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientPortalAgreementApiController.php
+
+		-
 			message: '#^Relation ''lineItems'' is not found in App\\Models\\ClientManagement\\ClientInvoice model\.$#'
 			identifier: larastan.relationExistence
 			count: 1
@@ -321,6 +339,30 @@ parameters:
 		-
 			message: '#^Left side of && is always true\.$#'
 			identifier: booleanAnd.leftAlwaysTrue
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientPortalApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\ClientManagement\\ClientPortalApiController\:\:calculateMonthlyBalances\(\) should return array\<string, mixed\> but returns list\<array\<string, array\<string, float\>\|bool\|float\|int\|string\|null\>\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientPortalApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\ClientManagement\\ClientPortalApiController\:\:getAccessibleCompanies\(\) return type with generic class Illuminate\\Database\\Eloquent\\Collection does not specify its types\: TKey, TModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientPortalApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\ClientManagement\\ClientPortalApiController\:\:getProjects\(\) return type with generic class Illuminate\\Database\\Eloquent\\Collection does not specify its types\: TKey, TModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientPortalApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\ClientManagement\\ClientPortalApiController\:\:getTasks\(\) return type with generic class Illuminate\\Database\\Eloquent\\Collection does not specify its types\: TKey, TModel$#'
+			identifier: missingType.generics
 			count: 1
 			path: app/Http/Controllers/ClientManagement/ClientPortalApiController.php
 
@@ -367,6 +409,12 @@ parameters:
 			path: app/Http/Controllers/ClientManagement/ClientPortalController.php
 
 		-
+			message: '#^Method App\\Http\\Controllers\\DashboardController\:\:index\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/DashboardController.php
+
+		-
 			message: '#^Relation ''account'' is not found in App\\Models\\Files\\FileForFinAccount model\.$#'
 			identifier: larastan.relationExistence
 			count: 1
@@ -403,8 +451,440 @@ parameters:
 			path: app/Http/Controllers/FileController.php
 
 		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceAccountsController\:\:duplicates\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceAccountsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceAccountsController\:\:duplicates\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceAccountsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceAccountsController\:\:index\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceAccountsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceAccountsController\:\:linker\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceAccountsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceAccountsController\:\:linker\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceAccountsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceAccountsController\:\:lots\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceAccountsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceAccountsController\:\:lots\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceAccountsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceAccountsController\:\:maintenance\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceAccountsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceAccountsController\:\:maintenance\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceAccountsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceAccountsController\:\:show\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceAccountsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceAccountsController\:\:show\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceAccountsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceAccountsController\:\:showAllImportPage\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceAccountsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceAccountsController\:\:showAllLots\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceAccountsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceAccountsController\:\:showAllTransactions\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceAccountsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceAccountsController\:\:showImportTransactionsPage\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceAccountsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceAccountsController\:\:showImportTransactionsPage\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceAccountsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceAccountsController\:\:statements\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceAccountsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceAccountsController\:\:statements\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceAccountsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceAccountsController\:\:summary\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceAccountsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceAccountsController\:\:summary\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceAccountsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceApiController\:\:chartData\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceApiController\:\:computeCostBasisForStatements\(\) has parameter \$balances with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceApiController\:\:computeCostBasisForStatements\(\) has parameter \$transactions with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceApiController\:\:computeCostBasisForStatements\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceApiController\:\:createAccount\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceApiController\:\:deleteAccount\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceApiController\:\:deleteAccount\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceApiController\:\:deleteBalanceSnapshot\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceApiController\:\:deleteBalanceSnapshot\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceApiController\:\:getBalanceTimeseries\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceApiController\:\:getBalanceTimeseries\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceApiController\:\:getSummary\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceApiController\:\:getSummary\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceApiController\:\:renameAccount\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceApiController\:\:renameAccount\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceApiController\:\:updateAccountClosed\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceApiController\:\:updateAccountClosed\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceApiController\:\:updateAccountFlags\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceApiController\:\:updateAccountFlags\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceApiController\:\:updateBalance\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceEmploymentEntityController\:\:destroy\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceEmploymentEntityController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceEmploymentEntityController\:\:destroy\(\) has parameter \$id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceEmploymentEntityController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceEmploymentEntityController\:\:getMarriageStatus\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceEmploymentEntityController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceEmploymentEntityController\:\:index\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceEmploymentEntityController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceEmploymentEntityController\:\:normalize\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceEmploymentEntityController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceEmploymentEntityController\:\:normalize\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceEmploymentEntityController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceEmploymentEntityController\:\:rules\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceEmploymentEntityController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceEmploymentEntityController\:\:store\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceEmploymentEntityController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceEmploymentEntityController\:\:update\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceEmploymentEntityController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceEmploymentEntityController\:\:update\(\) has parameter \$id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceEmploymentEntityController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceEmploymentEntityController\:\:updateMarriageStatus\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceEmploymentEntityController.php
+
+		-
 			message: '#^Access to an undefined property App\\Models\\FinanceTool\\FinAccountLineItems\:\:\$acct_name\.$#'
 			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceLotsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceLotsController\:\:deleteLot\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceLotsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceLotsController\:\:deleteLot\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceLotsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceLotsController\:\:deleteLot\(\) has parameter \$lot_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceLotsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceLotsController\:\:importLots\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceLotsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceLotsController\:\:importLots\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceLotsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceLotsController\:\:index\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceLotsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceLotsController\:\:index\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceLotsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceLotsController\:\:lotsByTransaction\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceLotsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceLotsController\:\:lotsByTransaction\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceLotsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceLotsController\:\:lotsByTransaction\(\) has parameter \$t_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceLotsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceLotsController\:\:saveAnalyzedLots\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceLotsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceLotsController\:\:saveAnalyzedLots\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceLotsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceLotsController\:\:saveLotAssignment\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceLotsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceLotsController\:\:searchOpeningTransactions\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceLotsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceLotsController\:\:searchTransactions\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceLotsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceLotsController\:\:searchTransactions\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceLotsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceLotsController\:\:store\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceLotsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceLotsController\:\:store\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceLotsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceLotsController\:\:updateLot\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceLotsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceLotsController\:\:updateLot\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceLotsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceLotsController\:\:updateLot\(\) has parameter \$lot_id with no type specified\.$#'
+			identifier: missingType.parameter
 			count: 1
 			path: app/Http/Controllers/FinanceTool/FinanceLotsController.php
 
@@ -421,6 +901,12 @@ parameters:
 			path: app/Http/Controllers/FinanceTool/FinancePayslipController.php
 
 		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinancePayslipController\:\:transformPayslip\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinancePayslipController.php
+
+		-
 			message: '#^Result of \|\| is always true\.$#'
 			identifier: booleanOr.alwaysTrue
 			count: 1
@@ -433,6 +919,42 @@ parameters:
 			path: app/Http/Controllers/FinanceTool/FinancePayslipController.php
 
 		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinancePayslipImportController\:\:getPrompt\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinancePayslipImportController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinancePayslipImportController\:\:import\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinancePayslipImportController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceRsuController\:\:deleteRsuGrant\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceRsuController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceRsuController\:\:deleteRsuGrant\(\) has parameter \$id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceRsuController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceRsuController\:\:getRsuData\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceRsuController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceRsuController\:\:upsertRsuGrants\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceRsuController.php
+
+		-
 			message: '#^Relation ''actions'' is not found in App\\Models\\FinanceTool\\FinRule model\.$#'
 			identifier: larastan.relationExistence
 			count: 1
@@ -441,6 +963,18 @@ parameters:
 		-
 			message: '#^Relation ''conditions'' is not found in App\\Models\\FinanceTool\\FinRule model\.$#'
 			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceRulesApiController.php
+
+		-
+			message: '#^Unable to resolve the template type TKey in call to function collect$#'
+			identifier: argument.templateType
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceRulesApiController.php
+
+		-
+			message: '#^Unable to resolve the template type TValue in call to function collect$#'
+			identifier: argument.templateType
 			count: 1
 			path: app/Http/Controllers/FinanceTool/FinanceRulesApiController.php
 
@@ -459,6 +993,66 @@ parameters:
 		-
 			message: '#^Access to an undefined property App\\Models\\FinanceTool\\FinAccountLineItems\:\:\$parentTransactions\.$#'
 			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionLinkingApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionLinkingApiController\:\:findLinkablePairs\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionLinkingApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionLinkingApiController\:\:findLinkablePairs\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionLinkingApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionLinkingApiController\:\:findLinkableTransactions\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionLinkingApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionLinkingApiController\:\:findLinkableTransactions\(\) has parameter \$transaction_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionLinkingApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionLinkingApiController\:\:getTransactionLinks\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionLinkingApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionLinkingApiController\:\:getTransactionLinks\(\) has parameter \$transaction_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionLinkingApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionLinkingApiController\:\:linkTransactions\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionLinkingApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionLinkingApiController\:\:normalizeLink\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionLinkingApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionLinkingApiController\:\:unlinkTransaction\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionLinkingApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionLinkingApiController\:\:unlinkTransaction\(\) has parameter \$transaction_id with no type specified\.$#'
+			identifier: missingType.parameter
 			count: 1
 			path: app/Http/Controllers/FinanceTool/FinanceTransactionLinkingApiController.php
 
@@ -493,6 +1087,126 @@ parameters:
 			path: app/Http/Controllers/FinanceTool/FinanceTransactionTaggingApiController.php
 
 		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionTaggingApiController\:\:applyTagToTransactions\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionTaggingApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionTaggingApiController\:\:createTag\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionTaggingApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionTaggingApiController\:\:deleteTag\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionTaggingApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionTaggingApiController\:\:deleteTag\(\) has parameter \$tag_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionTaggingApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionTaggingApiController\:\:getUserTags\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionTaggingApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionTaggingApiController\:\:removeTagsFromTransactions\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionTaggingApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionTaggingApiController\:\:updateTag\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionTaggingApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionTaggingApiController\:\:updateTag\(\) has parameter \$tag_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionTaggingApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionsApiController\:\:createTransaction\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionsApiController\:\:createTransaction\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionsApiController\:\:deleteLineItem\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionsApiController\:\:deleteLineItem\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionsApiController\:\:getLineItems\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionsApiController\:\:getLineItems\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionsApiController\:\:getTransactionYears\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionsApiController\:\:getTransactionYears\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionsApiController\:\:importLineItems\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionsApiController\:\:importLineItems\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionsApiController\:\:transformLineItem\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionsApiController\:\:transformLineItem\(\) has parameter \$item with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsApiController.php
+
+		-
 			message: '#^Offset 0 on array\<string, mixed\> in isset\(\) does not exist\.$#'
 			identifier: isset.offset
 			count: 1
@@ -517,6 +1231,66 @@ parameters:
 			path: app/Http/Controllers/FinanceTool/FinanceTransactionsDedupeApiController.php
 
 		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionsDedupeApiController\:\:filterKnownNonDuplicates\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsDedupeApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionsDedupeApiController\:\:filterKnownNonDuplicates\(\) has parameter \$group with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsDedupeApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionsDedupeApiController\:\:filterKnownNonDuplicates\(\) has parameter \$knownNonDuplicatePairs with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsDedupeApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionsDedupeApiController\:\:findDuplicates\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsDedupeApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionsDedupeApiController\:\:findDuplicates\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsDedupeApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionsDedupeApiController\:\:informationScore\(\) has parameter \$transaction with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsDedupeApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionsDedupeApiController\:\:mergeDuplicates\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsDedupeApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionsDedupeApiController\:\:mergeDuplicates\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsDedupeApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionsDedupeApiController\:\:normalizeString\(\) has parameter \$value with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsDedupeApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\FinanceTransactionsDedupeApiController\:\:normalizeValue\(\) has parameter \$value with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsDedupeApiController.php
+
+		-
 			message: '#^Relation ''parentTransactions'' is not found in App\\Models\\FinanceTool\\FinAccountLineItems model\.$#'
 			identifier: larastan.relationExistence
 			count: 1
@@ -529,10 +1303,184 @@ parameters:
 			path: app/Http/Controllers/FinanceTool/FinanceTransactionsDedupeApiController.php
 
 		-
+			message: '#^Unable to resolve the template type TKey in call to function collect$#'
+			identifier: argument.templateType
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsDedupeApiController.php
+
+		-
+			message: '#^Unable to resolve the template type TValue in call to function collect$#'
+			identifier: argument.templateType
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsDedupeApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\StatementController\:\:addFinAccountStatement\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/StatementController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\StatementController\:\:addFinAccountStatement\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/StatementController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\StatementController\:\:getDetails\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/StatementController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\StatementController\:\:getDetails\(\) has parameter \$statement_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/StatementController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\StatementController\:\:getFinStatementDetails\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/StatementController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\StatementController\:\:getFinStatementDetails\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/StatementController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\StatementController\:\:importIbStatement\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/StatementController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\StatementController\:\:importIbStatement\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/StatementController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\StatementController\:\:importMultiAccountPdf\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/StatementController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\StatementController\:\:importPdfStatement\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/StatementController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\StatementController\:\:importPdfStatement\(\) has parameter \$account_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/StatementController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\StatementController\:\:updateFinAccountStatement\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/FinanceTool/StatementController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\FinanceTool\\StatementController\:\:updateFinAccountStatement\(\) has parameter \$statement_id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/FinanceTool/StatementController.php
+
+		-
 			message: '#^Call to function is_array\(\) with array will always evaluate to true\.$#'
 			identifier: function.alreadyNarrowedType
 			count: 1
 			path: app/Http/Controllers/LicenseKeyController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\LicenseKeyController\:\:destroy\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/LicenseKeyController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\LicenseKeyController\:\:destroy\(\) has parameter \$id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/LicenseKeyController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\LicenseKeyController\:\:import\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/LicenseKeyController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\LicenseKeyController\:\:index\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/LicenseKeyController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\LicenseKeyController\:\:store\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/LicenseKeyController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\LicenseKeyController\:\:update\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/LicenseKeyController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\LicenseKeyController\:\:update\(\) has parameter \$id with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/LicenseKeyController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\LoginController\:\:devLogin\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/LoginController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\LoginController\:\:login\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/LoginController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\RecipeController\:\:getAllRecipes\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/RecipeController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\RecipeController\:\:index\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/RecipeController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\RecipeController\:\:parseMarkdownWithFrontmatter\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/RecipeController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\RecipeController\:\:show\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/RecipeController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\RecipeController\:\:show\(\) has parameter \$slug with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/RecipeController.php
 
 		-
 			message: '#^Access to an undefined property App\\Models\\User\:\:\$clientCompanies\.$#'
@@ -541,10 +1489,148 @@ parameters:
 			path: app/Http/Controllers/UserManagementApiController.php
 
 		-
+			message: '#^Method App\\Http\\Controllers\\UserManagementApiController\:\:addRole\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/UserManagementApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\UserManagementApiController\:\:create\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/UserManagementApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\UserManagementApiController\:\:index\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/UserManagementApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\UserManagementApiController\:\:removeRole\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/UserManagementApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\UserManagementApiController\:\:setPassword\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/UserManagementApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\UserManagementApiController\:\:updateEmail\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/UserManagementApiController.php
+
+		-
 			message: '#^Relation ''clientCompanies'' is not found in App\\Models\\User model\.$#'
 			identifier: larastan.relationExistence
 			count: 1
 			path: app/Http/Controllers/UserManagementApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\UserManagementController\:\:index\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/UserManagementController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\UtilityBillTracker\\UtilityAccountApiController\:\:destroy\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/UtilityBillTracker/UtilityAccountApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\UtilityBillTracker\\UtilityAccountApiController\:\:index\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/UtilityBillTracker/UtilityAccountApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\UtilityBillTracker\\UtilityAccountApiController\:\:show\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/UtilityBillTracker/UtilityAccountApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\UtilityBillTracker\\UtilityAccountApiController\:\:store\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/UtilityBillTracker/UtilityAccountApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\UtilityBillTracker\\UtilityAccountApiController\:\:updateNotes\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/UtilityBillTracker/UtilityAccountApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\UtilityBillTracker\\UtilityAccountController\:\:bills\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/UtilityBillTracker/UtilityAccountController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\UtilityBillTracker\\UtilityAccountController\:\:index\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/UtilityBillTracker/UtilityAccountController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\UtilityBillTracker\\UtilityBillApiController\:\:deletePdf\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/UtilityBillTracker/UtilityBillApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\UtilityBillTracker\\UtilityBillApiController\:\:destroy\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/UtilityBillTracker/UtilityBillApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\UtilityBillTracker\\UtilityBillApiController\:\:downloadPdf\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/UtilityBillTracker/UtilityBillApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\UtilityBillTracker\\UtilityBillApiController\:\:index\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/UtilityBillTracker/UtilityBillApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\UtilityBillTracker\\UtilityBillApiController\:\:show\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/UtilityBillTracker/UtilityBillApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\UtilityBillTracker\\UtilityBillApiController\:\:store\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/UtilityBillTracker/UtilityBillApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\UtilityBillTracker\\UtilityBillApiController\:\:toggleStatus\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/UtilityBillTracker/UtilityBillApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\UtilityBillTracker\\UtilityBillApiController\:\:update\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/UtilityBillTracker/UtilityBillApiController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\UtilityBillTracker\\UtilityBillImportController\:\:import\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/UtilityBillTracker/UtilityBillImportController.php
 
 		-
 			message: '#^Negated boolean expression is always false\.$#'
@@ -567,6 +1653,24 @@ parameters:
 		-
 			message: '#^Cannot call method format\(\) on string\.$#'
 			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/UtilityBillTracker/UtilityBillLinkingController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\UtilityBillTracker\\UtilityBillLinkingController\:\:findLinkableTransactions\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/UtilityBillTracker/UtilityBillLinkingController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\UtilityBillTracker\\UtilityBillLinkingController\:\:linkTransaction\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/UtilityBillTracker/UtilityBillLinkingController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\UtilityBillTracker\\UtilityBillLinkingController\:\:unlinkTransaction\(\) has no return type specified\.$#'
+			identifier: missingType.return
 			count: 1
 			path: app/Http/Controllers/UtilityBillTracker/UtilityBillLinkingController.php
 
@@ -703,6 +1807,30 @@ parameters:
 			path: app/Mcp/Tools/ListTransactions.php
 
 		-
+			message: '#^Class App\\Models\\ClientManagement\\ClientAgreement uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/ClientManagement/ClientAgreement.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientAgreement\:\:clientCompany\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientAgreement.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientAgreement\:\:invoices\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientAgreement.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientAgreement\:\:signedByUser\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientAgreement.php
+
+		-
 			message: '#^Result of \|\| is always false\.$#'
 			identifier: booleanOr.alwaysFalse
 			count: 1
@@ -719,6 +1847,120 @@ parameters:
 			identifier: identical.alwaysFalse
 			count: 1
 			path: app/Models/ClientManagement/ClientAgreement.php
+
+		-
+			message: '#^Class App\\Models\\ClientManagement\\ClientCompany uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/ClientManagement/ClientCompany.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientCompany\:\:agreements\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientCompany.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientCompany\:\:invoices\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientCompany.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientCompany\:\:projects\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientCompany.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientCompany\:\:tasks\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientCompany.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientCompany\:\:timeEntries\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientCompany.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientCompany\:\:touchLastActivity\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientCompany.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientCompany\:\:users\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientCompany.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientExpense\:\:clientCompany\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientExpense.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientExpense\:\:creator\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientExpense.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientExpense\:\:finLineItem\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientExpense.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientExpense\:\:invoiceLine\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientExpense.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientExpense\:\:project\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientExpense.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientExpense\:\:scopeNonReimbursable\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientExpense.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientExpense\:\:scopeNonReimbursable\(\) has parameter \$query with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Models/ClientManagement/ClientExpense.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientExpense\:\:scopePendingReimbursement\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientExpense.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientExpense\:\:scopePendingReimbursement\(\) has parameter \$query with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Models/ClientManagement/ClientExpense.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientExpense\:\:scopeReimbursable\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientExpense.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientExpense\:\:scopeReimbursable\(\) has parameter \$query with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Models/ClientManagement/ClientExpense.php
 
 		-
 			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientInvoice\:\:\$agreement\.$#'
@@ -739,9 +1981,207 @@ parameters:
 			path: app/Models/ClientManagement/ClientInvoice.php
 
 		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientInvoice\:\:agreement\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientInvoice.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientInvoice\:\:clientCompany\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientInvoice.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientInvoice\:\:getPaymentsTotalAttribute\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientInvoice.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientInvoice\:\:getRemainingBalanceAttribute\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientInvoice.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientInvoice\:\:lineItems\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientInvoice.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientInvoice\:\:payments\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientInvoice.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientInvoice\:\:toDetailedArray\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Models/ClientManagement/ClientInvoice.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientInvoiceLine\:\:agreement\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientInvoiceLine.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientInvoiceLine\:\:expenses\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientInvoiceLine.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientInvoiceLine\:\:invoice\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientInvoiceLine.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientInvoiceLine\:\:tasks\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientInvoiceLine.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientInvoiceLine\:\:timeEntries\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientInvoiceLine.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientInvoicePayment\:\:invoice\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientInvoicePayment.php
+
+		-
+			message: '#^Class App\\Models\\ClientManagement\\ClientProject uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/ClientManagement/ClientProject.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientProject\:\:clientCompany\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientProject.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientProject\:\:creator\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientProject.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientProject\:\:tasks\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientProject.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientProject\:\:timeEntries\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientProject.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientTask\:\:assignee\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientTask.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientTask\:\:creator\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientTask.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientTask\:\:invoiceLine\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientTask.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientTask\:\:markCompleted\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientTask.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientTask\:\:markNotCompleted\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientTask.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientTask\:\:project\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientTask.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientTask\:\:timeEntries\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientTask.php
+
+		-
 			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientTimeEntry\:\:\$invoiceLine\.$#'
 			identifier: property.notFound
 			count: 2
+			path: app/Models/ClientManagement/ClientTimeEntry.php
+
+		-
+			message: '#^Class App\\Models\\ClientManagement\\ClientTimeEntry uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/ClientManagement/ClientTimeEntry.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientTimeEntry\:\:clientCompany\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientTimeEntry.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientTimeEntry\:\:creator\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientTimeEntry.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientTimeEntry\:\:getClientInvoiceAttribute\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientTimeEntry.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientTimeEntry\:\:invoiceLine\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientTimeEntry.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientTimeEntry\:\:project\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientTimeEntry.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientTimeEntry\:\:task\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/ClientManagement/ClientTimeEntry.php
+
+		-
+			message: '#^Method App\\Models\\ClientManagement\\ClientTimeEntry\:\:user\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
 			path: app/Models/ClientManagement/ClientTimeEntry.php
 
 		-
@@ -749,6 +2189,132 @@ parameters:
 			identifier: rules.modelAppends
 			count: 1
 			path: app/Models/ClientManagement/ClientTimeEntry.php
+
+		-
+			message: '#^Method App\\Models\\Files\\FileForAgreement\:\:agreement\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/Files/FileForAgreement.php
+
+		-
+			message: '#^Method App\\Models\\Files\\FileForAgreement\:\:getFileCasts\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Models/Files/FileForAgreement.php
+
+		-
+			message: '#^Method App\\Models\\Files\\FileForAgreement\:\:uploader\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/Files/FileForAgreement.php
+
+		-
+			message: '#^Method App\\Models\\Files\\FileForClientCompany\:\:clientCompany\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/Files/FileForClientCompany.php
+
+		-
+			message: '#^Method App\\Models\\Files\\FileForClientCompany\:\:getFileCasts\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Models/Files/FileForClientCompany.php
+
+		-
+			message: '#^Method App\\Models\\Files\\FileForClientCompany\:\:uploader\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/Files/FileForClientCompany.php
+
+		-
+			message: '#^Method App\\Models\\Files\\FileForFinAccount\:\:account\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/Files/FileForFinAccount.php
+
+		-
+			message: '#^Method App\\Models\\Files\\FileForFinAccount\:\:getFileCasts\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Models/Files/FileForFinAccount.php
+
+		-
+			message: '#^Method App\\Models\\Files\\FileForFinAccount\:\:uploader\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/Files/FileForFinAccount.php
+
+		-
+			message: '#^Method App\\Models\\Files\\FileForProject\:\:getFileCasts\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Models/Files/FileForProject.php
+
+		-
+			message: '#^Method App\\Models\\Files\\FileForProject\:\:project\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/Files/FileForProject.php
+
+		-
+			message: '#^Method App\\Models\\Files\\FileForProject\:\:uploader\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/Files/FileForProject.php
+
+		-
+			message: '#^Method App\\Models\\Files\\FileForTask\:\:getFileCasts\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Models/Files/FileForTask.php
+
+		-
+			message: '#^Method App\\Models\\Files\\FileForTask\:\:task\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/Files/FileForTask.php
+
+		-
+			message: '#^Method App\\Models\\Files\\FileForTask\:\:uploader\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/Files/FileForTask.php
+
+		-
+			message: '#^Method App\\Models\\Files\\FileForTaxDocument\:\:account\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/Files/FileForTaxDocument.php
+
+		-
+			message: '#^Method App\\Models\\Files\\FileForTaxDocument\:\:accountLinks\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\HasMany does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/Files/FileForTaxDocument.php
+
+		-
+			message: '#^Method App\\Models\\Files\\FileForTaxDocument\:\:employmentEntity\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/Files/FileForTaxDocument.php
+
+		-
+			message: '#^Method App\\Models\\Files\\FileForTaxDocument\:\:genaiJob\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/Files/FileForTaxDocument.php
+
+		-
+			message: '#^Method App\\Models\\Files\\FileForTaxDocument\:\:getFileCasts\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Models/Files/FileForTaxDocument.php
+
+		-
+			message: '#^Method App\\Models\\Files\\FileForTaxDocument\:\:uploader\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/Files/FileForTaxDocument.php
 
 		-
 			message: '#^Result of && is always false\.$#'
@@ -763,14 +2329,128 @@ parameters:
 			path: app/Models/Files/FileForTaxDocument.php
 
 		-
+			message: '#^Method App\\Models\\FinanceTool\\FinAccountLineItemLink\:\:childTransaction\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/FinanceTool/FinAccountLineItemLink.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinAccountLineItemLink\:\:parentTransaction\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/FinanceTool/FinAccountLineItemLink.php
+
+		-
 			message: '#^Property App\\Models\\FinanceTool\\FinAccountLineItemTagMap\:\:\$primaryKey \(string\) does not accept default value of type array\<int, string\>\.$#'
 			identifier: property.defaultValue
 			count: 1
 			path: app/Models/FinanceTool/FinAccountLineItemTagMap.php
 
 		-
+			message: '#^Method App\\Models\\FinanceTool\\FinAccountLineItems\:\:account\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/FinanceTool/FinAccountLineItems.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinAccountLineItems\:\:childLinks\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/FinanceTool/FinAccountLineItems.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinAccountLineItems\:\:childTransactions\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/FinanceTool/FinAccountLineItems.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinAccountLineItems\:\:clientExpense\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/FinanceTool/FinAccountLineItems.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinAccountLineItems\:\:parentLinks\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/FinanceTool/FinAccountLineItems.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinAccountLineItems\:\:parentTransactions\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/FinanceTool/FinAccountLineItems.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinAccountLineItems\:\:statement\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/FinanceTool/FinAccountLineItems.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinAccountLineItems\:\:tags\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/FinanceTool/FinAccountLineItems.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinAccountLot\:\:account\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/FinanceTool/FinAccountLot.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinAccountLot\:\:closeTransaction\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/FinanceTool/FinAccountLot.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinAccountLot\:\:openTransaction\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/FinanceTool/FinAccountLot.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinAccountLot\:\:statement\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/FinanceTool/FinAccountLot.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinAccountLot\:\:taxDocument\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/FinanceTool/FinAccountLot.php
+
+		-
 			message: '#^Class App\\Models\\FinanceTool\\User not found\.$#'
 			identifier: class.notFound
+			count: 1
+			path: app/Models/FinanceTool/FinAccountTag.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinAccountTag\:\:employmentEntity\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/FinanceTool/FinAccountTag.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinAccountTag\:\:scheduleCValues\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Models/FinanceTool/FinAccountTag.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinAccountTag\:\:user\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/FinanceTool/FinAccountTag.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinAccountTag\:\:validValues\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
 			count: 1
 			path: app/Models/FinanceTool/FinAccountTag.php
 
@@ -781,10 +2461,208 @@ parameters:
 			path: app/Models/FinanceTool/FinAccountTag.php
 
 		-
+			message: '#^Unable to resolve the template type TRelatedModel in call to method Illuminate\\Database\\Eloquent\\Model\:\:belongsTo\(\)$#'
+			identifier: argument.templateType
+			count: 1
+			path: app/Models/FinanceTool/FinAccountTag.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinAccounts\:\:scopeForOwner\(\) has parameter \$query with generic class Illuminate\\Database\\Eloquent\\Builder but does not specify its types\: TModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/FinanceTool/FinAccounts.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinEmploymentEntity\:\:payslips\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/FinanceTool/FinEmploymentEntity.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinEmploymentEntity\:\:tags\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/FinanceTool/FinEmploymentEntity.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinPayslipDeposit\:\:payslip\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/FinanceTool/FinPayslipDeposit.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinPayslipStateData\:\:payslip\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/FinanceTool/FinPayslipStateData.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinPayslips\:\:deposits\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\HasMany does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/FinanceTool/FinPayslips.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinPayslips\:\:employmentEntity\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/FinanceTool/FinPayslips.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinPayslips\:\:stateData\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\HasMany does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/FinanceTool/FinPayslips.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinRule\:\:actions\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/FinanceTool/FinRule.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinRule\:\:conditions\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/FinanceTool/FinRule.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinRule\:\:logs\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/FinanceTool/FinRule.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinRule\:\:user\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/FinanceTool/FinRule.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinRuleAction\:\:rule\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/FinanceTool/FinRuleAction.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinRuleCondition\:\:rule\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/FinanceTool/FinRuleCondition.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinRuleLog\:\:rule\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/FinanceTool/FinRuleLog.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinRuleLog\:\:transaction\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/FinanceTool/FinRuleLog.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinRuleLog\:\:user\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/FinanceTool/FinRuleLog.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinStatement\:\:account\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/FinanceTool/FinStatement.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinStatement\:\:details\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\HasMany does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/FinanceTool/FinStatement.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinStatement\:\:genaiJob\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/FinanceTool/FinStatement.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinStatement\:\:lots\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\HasMany does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/FinanceTool/FinStatement.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\FinStatement\:\:transactions\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\HasMany does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/FinanceTool/FinStatement.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\TaxDocumentAccount\:\:account\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/FinanceTool/TaxDocumentAccount.php
+
+		-
 			message: '#^Method App\\Models\\FinanceTool\\TaxDocumentAccount\:\:createLink\(\) should return static\(App\\Models\\FinanceTool\\TaxDocumentAccount\) but returns App\\Models\\FinanceTool\\TaxDocumentAccount\.$#'
 			identifier: return.type
 			count: 1
 			path: app/Models/FinanceTool/TaxDocumentAccount.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\TaxDocumentAccount\:\:document\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/FinanceTool/TaxDocumentAccount.php
+
+		-
+			message: '#^Method App\\Models\\LoginAuditLog\:\:user\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/LoginAuditLog.php
+
+		-
+			message: '#^Method App\\Models\\TimeSeriesDatapoint\:\:series\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/TimeSeriesDatapoint.php
+
+		-
+			message: '#^Method App\\Models\\TimeSeriesDocument\:\:series\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\HasMany does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/TimeSeriesDocument.php
+
+		-
+			message: '#^Method App\\Models\\TimeSeriesSeries\:\:datapoints\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\HasMany does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/TimeSeriesSeries.php
+
+		-
+			message: '#^Method App\\Models\\TimeSeriesSeries\:\:document\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/TimeSeriesSeries.php
+
+		-
+			message: '#^Method App\\Models\\User\:\:clientCompanies\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/User.php
+
+		-
+			message: '#^Method App\\Models\\User\:\:getGeminiApiKey\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Models/User.php
+
+		-
+			message: '#^Method App\\Models\\User\:\:getRoles\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Models/User.php
 
 		-
 			message: '#^PHPDoc type array of property App\\Models\\User\:\:\$appends is not covariant with PHPDoc type list\<string\> of overridden property Illuminate\\Database\\Eloquent\\Model\:\:\$appends\.$#'
@@ -797,6 +2675,36 @@ parameters:
 			identifier: rules.modelAppends
 			count: 1
 			path: app/Models/User.php
+
+		-
+			message: '#^Property App\\Models\\User\:\:\$appends type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Models/User.php
+
+		-
+			message: '#^Method App\\Models\\UtilityBillTracker\\UtilityAccount\:\:bills\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\HasMany does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/UtilityBillTracker/UtilityAccount.php
+
+		-
+			message: '#^Method App\\Models\\UtilityBillTracker\\UtilityBill\:\:linkedTransaction\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/UtilityBillTracker/UtilityBill.php
+
+		-
+			message: '#^Method App\\Models\\UtilityBillTracker\\UtilityBill\:\:utilityAccount\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/UtilityBillTracker/UtilityBill.php
+
+		-
+			message: '#^Method App\\Models\\WebAuthnCredential\:\:user\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/WebAuthnCredential.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
@@ -817,8 +2725,44 @@ parameters:
 			path: app/Services/Auth/WebAuthnService.php
 
 		-
+			message: '#^Method App\\Services\\Auth\\WebAuthnService\:\:generateAuthenticationOptions\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Services/Auth/WebAuthnService.php
+
+		-
+			message: '#^Method App\\Services\\Auth\\WebAuthnService\:\:generateRegistrationOptions\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Services/Auth/WebAuthnService.php
+
+		-
+			message: '#^Method App\\Services\\Auth\\WebAuthnService\:\:optionsToArray\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Services/Auth/WebAuthnService.php
+
+		-
+			message: '#^Method App\\Services\\Auth\\WebAuthnService\:\:requestOptionsToArray\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Services/Auth/WebAuthnService.php
+
+		-
+			message: '#^Method App\\Services\\Auth\\WebAuthnService\:\:verifyAuthenticationResponse\(\) has parameter \$credentialData with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Services/Auth/WebAuthnService.php
+
+		-
 			message: '#^Method App\\Services\\Auth\\WebAuthnService\:\:verifyAuthenticationResponse\(\) should return App\\Models\\User but returns Illuminate\\Database\\Eloquent\\Model\.$#'
 			identifier: return.type
+			count: 1
+			path: app/Services/Auth/WebAuthnService.php
+
+		-
+			message: '#^Method App\\Services\\Auth\\WebAuthnService\:\:verifyRegistrationResponse\(\) has parameter \$credentialData with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
 			count: 1
 			path: app/Services/Auth/WebAuthnService.php
 
@@ -829,10 +2773,58 @@ parameters:
 			path: app/Services/Auth/WebAuthnService.php
 
 		-
+			message: '#^Method App\\Services\\ClientManagement\\AllocationService\:\:canMergeEntries\(\) has parameter \$entries with generic class Illuminate\\Support\\Collection but does not specify its types\: TKey, TValue$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Services/ClientManagement/AllocationService.php
+
+		-
+			message: '#^Method App\\Services\\ClientManagement\\AllocationService\:\:mergeEntries\(\) has parameter \$entries with generic class Illuminate\\Support\\Collection but does not specify its types\: TKey, TValue$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Services/ClientManagement/AllocationService.php
+
+		-
 			message: '#^Strict comparison using \=\=\= between int\<0, max\> and null will always evaluate to false\.$#'
 			identifier: identical.alwaysFalse
 			count: 1
 			path: app/Services/ClientManagement/AllocationService.php
+
+		-
+			message: '#^Method App\\Services\\ClientManagement\\ClientInvoicingService\:\:calculateCumulativeBalanceSnapshot\(\) has parameter \$allBalances with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Services/ClientManagement/ClientInvoicingService.php
+
+		-
+			message: '#^Method App\\Services\\ClientManagement\\ClientInvoicingService\:\:calculateCumulativeBalanceSnapshot\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Services/ClientManagement/ClientInvoicingService.php
+
+		-
+			message: '#^Method App\\Services\\ClientManagement\\ClientInvoicingService\:\:generateAllMonthlyInvoices\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Services/ClientManagement/ClientInvoicingService.php
+
+		-
+			message: '#^Method App\\Services\\ClientManagement\\ClientInvoicingService\:\:getInvoiceHistory\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Services/ClientManagement/ClientInvoicingService.php
+
+		-
+			message: '#^Method App\\Services\\ClientManagement\\ClientInvoicingService\:\:linkAllFragmentsToLines\(\) has parameter \$fragmentsToLines with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Services/ClientManagement/ClientInvoicingService.php
+
+		-
+			message: '#^Method App\\Services\\ClientManagement\\ClientInvoicingService\:\:linkTimeEntriesToLine\(\) has parameter \$entries with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Services/ClientManagement/ClientInvoicingService.php
 
 		-
 			message: '#^Relation ''agreement'' is not found in App\\Models\\ClientManagement\\ClientInvoice model\.$#'
@@ -859,10 +2851,34 @@ parameters:
 			path: app/Services/ClientManagement/ClientInvoicingService.php
 
 		-
+			message: '#^Method App\\Services\\ClientManagement\\RolloverCalculator\:\:calculateMonthSummary\(\) has parameter \$previousMonthsUnused with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Services/ClientManagement/RolloverCalculator.php
+
+		-
+			message: '#^Method App\\Services\\ClientManagement\\RolloverCalculator\:\:calculateMultipleMonths\(\) has parameter \$months with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Services/ClientManagement/RolloverCalculator.php
+
+		-
+			message: '#^Method App\\Services\\ClientManagement\\RolloverCalculator\:\:calculateOpeningBalance\(\) has parameter \$previousMonthsUnused with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Services/ClientManagement/RolloverCalculator.php
+
+		-
 			message: '#^PHPDoc tag @param references unknown parameter\: \$rollover_months$#'
 			identifier: parameter.notFound
 			count: 1
 			path: app/Services/ClientManagement/RolloverCalculator.php
+
+		-
+			message: '#^Method App\\Services\\ClientManagement\\TimeEntrySplitter\:\:allocateTimeEntries\(\) has parameter \$timeEntries with generic class Illuminate\\Support\\Collection but does not specify its types\: TKey, TValue$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Services/ClientManagement/TimeEntrySplitter.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$s3_path\.$#'

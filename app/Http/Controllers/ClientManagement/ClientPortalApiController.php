@@ -12,7 +12,9 @@ use App\Models\User;
 use App\Services\ClientManagement\ClientInvoicingService;
 use App\Services\ClientManagement\DataTransferObjects\MonthSummary;
 use App\Services\ClientManagement\RolloverCalculator;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
@@ -21,8 +23,10 @@ class ClientPortalApiController extends Controller
 {
     /**
      * Get company data by slug.
+     *
+     * @return array<string, mixed>
      */
-    public function getCompany($slug)
+    public function getCompany(string $slug): array
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
         Gate::authorize('ClientCompanyMember', $company->id);
@@ -38,7 +42,7 @@ class ClientPortalApiController extends Controller
     /**
      * Get all companies the user has access to.
      */
-    public function getAccessibleCompanies()
+    public function getAccessibleCompanies(): \Illuminate\Database\Eloquent\Collection
     {
         $user = Auth::user();
         if ($user->hasRole('admin')) {
@@ -53,7 +57,7 @@ class ClientPortalApiController extends Controller
     /**
      * Get all projects for a company.
      */
-    public function getProjects($slug)
+    public function getProjects(string $slug): \Illuminate\Database\Eloquent\Collection
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
         Gate::authorize('ClientCompanyMember', $company->id);
@@ -67,7 +71,7 @@ class ClientPortalApiController extends Controller
     /**
      * Create a new project.
      */
-    public function createProject(Request $request, $slug)
+    public function createProject(Request $request, string $slug): JsonResponse
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
 
@@ -102,7 +106,7 @@ class ClientPortalApiController extends Controller
     /**
      * Update a project.
      */
-    public function updateProject(Request $request, $slug, $projectSlug)
+    public function updateProject(Request $request, string $slug, string $projectSlug): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -144,7 +148,7 @@ class ClientPortalApiController extends Controller
     /**
      * Get all tasks for a project.
      */
-    public function getTasks($slug, $projectSlug)
+    public function getTasks(string $slug, string $projectSlug): \Illuminate\Database\Eloquent\Collection
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
         Gate::authorize('ClientCompanyMember', $company->id);
@@ -164,7 +168,7 @@ class ClientPortalApiController extends Controller
     /**
      * Create a new task.
      */
-    public function createTask(Request $request, $slug, $projectSlug)
+    public function createTask(Request $request, string $slug, string $projectSlug): JsonResponse
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
 
@@ -204,7 +208,7 @@ class ClientPortalApiController extends Controller
     /**
      * Update a task.
      */
-    public function updateTask(Request $request, $slug, $projectSlug, $taskId)
+    public function updateTask(Request $request, string $slug, string $projectSlug, int $taskId): JsonResponse
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
 
@@ -253,7 +257,7 @@ class ClientPortalApiController extends Controller
     /**
      * Delete a task.
      */
-    public function deleteTask($slug, $projectSlug, $taskId)
+    public function deleteTask(string $slug, string $projectSlug, int $taskId): JsonResponse
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
 
@@ -271,8 +275,10 @@ class ClientPortalApiController extends Controller
 
     /**
      * Get all time entries for a company, grouped by month with hour balance info.
+     *
+     * @return array<string, mixed>
      */
-    public function getTimeEntries($slug)
+    public function getTimeEntries(string $slug): array
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
         Gate::authorize('ClientCompanyMember', $company->id);
@@ -329,8 +335,11 @@ class ClientPortalApiController extends Controller
 
     /**
      * Calculate monthly hour balances with rollover information.
+     *
+     * @param  Collection<int, ClientTimeEntry>  $entries
+     * @return array<string, mixed>
      */
-    protected function calculateMonthlyBalances(ClientCompany $company, $entries): array
+    protected function calculateMonthlyBalances(ClientCompany $company, Collection $entries): array
     {
         // Group entries by month
         $entriesByMonth = $entries->groupBy(function ($entry) {
@@ -455,7 +464,7 @@ class ClientPortalApiController extends Controller
     /**
      * Create a new time entry.
      */
-    public function createTimeEntry(Request $request, $slug)
+    public function createTimeEntry(Request $request, string $slug): JsonResponse
     {
         return $this->storeOrUpdateTimeEntry($request, $slug);
     }
@@ -463,7 +472,7 @@ class ClientPortalApiController extends Controller
     /**
      * Update a time entry.
      */
-    public function updateTimeEntry(Request $request, $slug, $entryId)
+    public function updateTimeEntry(Request $request, string $slug, int $entryId): JsonResponse
     {
         return $this->storeOrUpdateTimeEntry($request, $slug, $entryId);
     }
@@ -471,7 +480,7 @@ class ClientPortalApiController extends Controller
     /**
      * Shared logic for creating or updating a time entry.
      */
-    private function storeOrUpdateTimeEntry(Request $request, string $slug, ?int $entryId = null)
+    private function storeOrUpdateTimeEntry(Request $request, string $slug, ?int $entryId = null): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -567,7 +576,7 @@ class ClientPortalApiController extends Controller
     /**
      * Delete a time entry.
      */
-    public function deleteTimeEntry($slug, $entryId)
+    public function deleteTimeEntry(string $slug, int $entryId): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -602,7 +611,7 @@ class ClientPortalApiController extends Controller
      * We therefore regenerate every draft invoice, ordered chronologically so
      * that each one sees updated balances from earlier periods.
      */
-    protected function regenerateDraftInvoicesForDate(ClientCompany $company, $date): void
+    protected function regenerateDraftInvoicesForDate(ClientCompany $company, mixed $date): void
     {
         $draftInvoices = ClientInvoice::where('client_company_id', $company->id)
             ->where('status', 'draft')
