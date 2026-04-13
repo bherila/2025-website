@@ -18,8 +18,12 @@ All PHP tests run against an **in-memory SQLite database** for speed and safety 
 
 1. **Laravel Pint** (PHP linter): `./vendor/bin/pint --test` to check, `./vendor/bin/pint` to fix
    - This is mandatory for every change, including minor fixes and refactors.
-2. **PHP Type Annotations**: All PHP methods and functions MUST have explicit return type annotations.
-3. **PHPUnit**: `composer test` — all tests must pass
+2. **PHPStan** (static analysis): `vendor/bin/phpstan analyse --no-progress` — must report no errors
+   - Runs at level 5 with the Larastan Laravel extension
+   - Pre-existing errors are captured in `phpstan-baseline.neon`; new code must not introduce new errors
+   - To regenerate the baseline after fixing old errors: `vendor/bin/phpstan analyse --generate-baseline=phpstan-baseline.neon`
+3. **PHP Type Annotations**: All PHP methods and functions MUST have explicit return type annotations.
+4. **PHPUnit**: `composer test` — all tests must pass
    - SQLite in-memory is auto-configured via `phpunit.xml` + `tests/bootstrap.php`
    - Do NOT use `$this->withoutVite()`; the real manifest should exist during testing
 
