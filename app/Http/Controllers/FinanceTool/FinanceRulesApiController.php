@@ -10,6 +10,7 @@ use App\Http\Controllers\Controller;
 use App\Models\FinanceTool\FinRule;
 use App\Models\FinanceTool\FinRuleAction;
 use App\Models\FinanceTool\FinRuleCondition;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -258,8 +259,8 @@ class FinanceRulesApiController extends Controller
                 'user_id' => $user->id,
                 'title' => 'Preview',
             ]);
-            $rule->setRelation('conditions', collect());
-            $rule->setRelation('actions', collect());
+            $rule->setRelation('conditions', new Collection([]));
+            $rule->setRelation('actions', new Collection([]));
 
             if ($request->has('conditions')) {
                 $conditions = collect($request->input('conditions'))->map(function ($condData) {

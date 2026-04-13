@@ -23,6 +23,9 @@ class DescriptionContainsConditionEvaluator implements QueryConditionEvaluatorIn
         };
     }
 
+    /**
+     * @param  Builder<FinAccountLineItems>  $query
+     */
     public function applyToQuery(Builder $query, FinRuleCondition $condition): void
     {
         $needle = $condition->value ?? '';

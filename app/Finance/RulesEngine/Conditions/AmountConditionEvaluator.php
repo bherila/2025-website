@@ -23,6 +23,9 @@ class AmountConditionEvaluator implements QueryConditionEvaluatorInterface
         };
     }
 
+    /**
+     * @param  Builder<FinAccountLineItems>  $query
+     */
     public function applyToQuery(Builder $query, FinRuleCondition $condition): void
     {
         $value = (float) $condition->value;

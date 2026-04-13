@@ -7,13 +7,14 @@ use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinStatementDetail;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class StatementController extends Controller
 {
-    public function getDetails(Request $request, $statement_id)
+    public function getDetails(Request $request, int $statement_id): JsonResponse
     {
         $details = FinStatementDetail::where('statement_id', $statement_id)->get();
         $statement = DB::table('fin_statements')->where('statement_id', $statement_id)->first();
@@ -41,7 +42,7 @@ class StatementController extends Controller
         ]);
     }
 
-    public function addFinAccountStatement(Request $request, $account_id)
+    public function addFinAccountStatement(Request $request, int $account_id): JsonResponse
     {
         $uid = Auth::id();
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
@@ -69,7 +70,7 @@ class StatementController extends Controller
         return response()->json(['success' => true]);
     }
 
-    public function updateFinAccountStatement(Request $request, $statement_id)
+    public function updateFinAccountStatement(Request $request, int $statement_id): JsonResponse
     {
         $uid = Auth::id();
 
@@ -110,7 +111,7 @@ class StatementController extends Controller
         return response()->json(['success' => true]);
     }
 
-    public function getFinStatementDetails(Request $request, $account_id)
+    public function getFinStatementDetails(Request $request, int $account_id): JsonResponse
     {
         $uid = Auth::id();
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
@@ -165,7 +166,7 @@ class StatementController extends Controller
     /**
      * Import IB statement data (NAV, positions, performance, etc.)
      */
-    public function importIbStatement(Request $request, $account_id)
+    public function importIbStatement(Request $request, int $account_id): JsonResponse
     {
         $uid = Auth::id();
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
@@ -300,7 +301,7 @@ class StatementController extends Controller
      * Import statement details from PDF parsing (MTD/YTD line items).
      * Creates a statement record and adds statement details to it.
      */
-    public function importPdfStatement(Request $request, $account_id)
+    public function importPdfStatement(Request $request, int $account_id): JsonResponse
     {
         $uid = Auth::id();
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
@@ -454,7 +455,7 @@ class StatementController extends Controller
      * transactions, statementDetails, and lots. The file_hash (if provided) is
      * stored once in files_for_fin_accounts and referenced by all created statements.
      */
-    public function importMultiAccountPdf(Request $request)
+    public function importMultiAccountPdf(Request $request): JsonResponse
     {
         $uid = Auth::id();
 

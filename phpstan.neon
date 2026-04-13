@@ -3,6 +3,8 @@ includes:
     - phpstan-baseline.neon
 
 parameters:
+    phpVersion: 80300
+    level: 6
     paths:
         - app/
-    level: 5
+    reportUnmatchedIgnoredErrors: true

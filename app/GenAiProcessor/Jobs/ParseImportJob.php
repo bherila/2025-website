@@ -233,7 +233,7 @@ class ParseImportJob implements ShouldQueue
     /**
      * Call Gemini generateContent with a file_uri reference.
      *
-     * @return array{data: ?array, raw_response: ?string}
+     * @return array<string, mixed>
      */
     private function callGeminiGenerateContent(
         GenAiJobDispatcherService $dispatcher,
@@ -310,6 +310,8 @@ class ParseImportJob implements ShouldQueue
 
     /**
      * Create GenAiImportResult rows from parsed data.
+     *
+     * @param  array<string, mixed>  $data
      */
     private function createResults(GenAiImportJob $job, array $data): void
     {
@@ -332,6 +334,9 @@ class ParseImportJob implements ShouldQueue
         }
     }
 
+    /**
+     * @param  array<string, mixed>  $data
+     */
     private function createFinanceResults(GenAiImportJob $job, array $data): void
     {
         GenAiImportResult::create([
@@ -342,6 +347,9 @@ class ParseImportJob implements ShouldQueue
         ]);
     }
 
+    /**
+     * @param  array<string, mixed>  $data
+     */
     private function createPayslipResults(GenAiImportJob $job, array $data): void
     {
         // The API returns an array of payslip objects
@@ -357,6 +365,9 @@ class ParseImportJob implements ShouldQueue
         }
     }
 
+    /**
+     * @param  array<string, mixed>  $data
+     */
     private function createUtilityBillResults(GenAiImportJob $job, array $data): void
     {
         // The API returns an array of bill objects
@@ -402,6 +413,9 @@ class ParseImportJob implements ShouldQueue
         }
     }
 
+    /**
+     * @param  array<string, mixed>  $data
+     */
     private function createTaxDocumentResults(GenAiImportJob $job, array $data): void
     {
         // Store the result in genai_import_results
@@ -437,6 +451,8 @@ class ParseImportJob implements ShouldQueue
      * 2. Attempts server-side account matching (last-4 suffix, then name overlap).
      * 3. Creates one fin_tax_document_accounts row per detected account/form pair.
      *    Rows with no match have account_id = null; the user resolves them in the UI.
+     *
+     * @param  array<string, mixed>  $data
      */
     private function createMultiAccountTaxDocumentResults(GenAiImportJob $job, array $data): void
     {
@@ -670,6 +686,7 @@ class ParseImportJob implements ShouldQueue
      * 4. Returns null if no confident match.
      *
      * @param  array<string,mixed>  $entry
+     * @param  Collection<int, FinAccounts>  $accounts
      */
     private function matchAccount(array $entry, Collection $accounts): ?int
     {

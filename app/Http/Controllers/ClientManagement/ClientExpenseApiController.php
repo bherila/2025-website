@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientExpense;
 use App\Models\FinanceTool\FinAccountLineItems;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
@@ -15,7 +16,7 @@ class ClientExpenseApiController extends Controller
     /**
      * List all expenses for a company.
      */
-    public function index(ClientCompany $company)
+    public function index(ClientCompany $company): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -53,7 +54,7 @@ class ClientExpenseApiController extends Controller
     /**
      * Store a new expense.
      */
-    public function store(Request $request, ClientCompany $company)
+    public function store(Request $request, ClientCompany $company): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -105,7 +106,7 @@ class ClientExpenseApiController extends Controller
     /**
      * Show a single expense.
      */
-    public function show(ClientCompany $company, ClientExpense $expense)
+    public function show(ClientCompany $company, ClientExpense $expense): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -126,7 +127,7 @@ class ClientExpenseApiController extends Controller
     /**
      * Update an expense.
      */
-    public function update(Request $request, ClientCompany $company, ClientExpense $expense)
+    public function update(Request $request, ClientCompany $company, ClientExpense $expense): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -170,7 +171,7 @@ class ClientExpenseApiController extends Controller
     /**
      * Delete an expense.
      */
-    public function destroy(ClientCompany $company, ClientExpense $expense)
+    public function destroy(ClientCompany $company, ClientExpense $expense): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -186,7 +187,7 @@ class ClientExpenseApiController extends Controller
     /**
      * Mark an expense as reimbursed.
      */
-    public function markReimbursed(Request $request, ClientCompany $company, ClientExpense $expense)
+    public function markReimbursed(Request $request, ClientCompany $company, ClientExpense $expense): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -213,7 +214,7 @@ class ClientExpenseApiController extends Controller
     /**
      * Link an expense to a finance line item.
      */
-    public function linkToFinanceLineItem(Request $request, ClientCompany $company, ClientExpense $expense)
+    public function linkToFinanceLineItem(Request $request, ClientCompany $company, ClientExpense $expense): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -238,7 +239,7 @@ class ClientExpenseApiController extends Controller
     /**
      * Unlink an expense from a finance line item.
      */
-    public function unlinkFromFinanceLineItem(ClientCompany $company, ClientExpense $expense)
+    public function unlinkFromFinanceLineItem(ClientCompany $company, ClientExpense $expense): JsonResponse
     {
         Gate::authorize('Admin');
 

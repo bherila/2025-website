@@ -3,13 +3,14 @@
 namespace App\Http\Controllers\FinanceTool;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class FinanceRsuController extends Controller
 {
-    public function getRsuData(Request $request)
+    public function getRsuData(Request $request): JsonResponse
     {
         $user = Auth::user();
         $data = DB::table('fin_equity_awards as a')
@@ -35,7 +36,7 @@ class FinanceRsuController extends Controller
         return response()->json($data);
     }
 
-    public function upsertRsuGrants(Request $request)
+    public function upsertRsuGrants(Request $request): JsonResponse
     {
         $user = Auth::user();
         $grants = $request->json()->all();
@@ -82,7 +83,7 @@ class FinanceRsuController extends Controller
         return response()->json(['status' => 'success']);
     }
 
-    public function deleteRsuGrant(Request $request, $id)
+    public function deleteRsuGrant(Request $request, int $id): JsonResponse
     {
         $user = Auth::user();
 

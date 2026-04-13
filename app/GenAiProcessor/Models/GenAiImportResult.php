@@ -22,11 +22,17 @@ class GenAiImportResult extends Model
         'imported_at' => 'datetime',
     ];
 
+    /**
+     * @return BelongsTo<GenAiImportJob, self>
+     */
     public function job(): BelongsTo
     {
         return $this->belongsTo(GenAiImportJob::class, 'job_id');
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function getResultArray(): array
     {
         if (empty($this->result_json)) {

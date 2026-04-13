@@ -2,6 +2,7 @@
 
 namespace App\Finance\RulesEngine\Conditions;
 
+use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinRuleCondition;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -26,7 +27,7 @@ interface QueryConditionEvaluatorInterface extends RuleConditionEvaluatorInterfa
      *
      * All SQL queries must be compatible with both MySQL and SQLite.
      *
-     * @param  Builder  $query  The Eloquent query builder to modify
+     * @param  Builder<FinAccountLineItems>  $query  The Eloquent query builder to modify
      * @param  FinRuleCondition  $condition  The condition to apply
      *
      * @throws \Exception If the condition cannot be applied

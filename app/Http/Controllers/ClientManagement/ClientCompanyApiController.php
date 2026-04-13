@@ -5,6 +5,7 @@ namespace App\Http\Controllers\ClientManagement;
 use App\Http\Controllers\Controller;
 use App\Models\ClientManagement\ClientCompany;
 use App\Models\User;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -16,11 +17,9 @@ class ClientCompanyApiController extends Controller
     /**
      * Get all client companies with their users.
      */
-    public function index()
+    public function index(): JsonResponse
     {
-        Gate::authorize('Admin');
-
-        $companies = ClientCompany::with(['users', 'invoices.payments', 'tasks'])->get()->map(function ($company) {
+        (['users', 'invoices.payments', 'tasks'])->get()->map(function ($company) {
             $unpaidInvoices = $company->invoices
                 ->whereNotIn('status', ['paid', 'void'])
                 ->filter(function ($invoice) {
@@ -64,7 +63,7 @@ class ClientCompanyApiController extends Controller
     /**
      * Get a single client company by its ID.
      */
-    public function show($id)
+    public function show(int $id): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -76,7 +75,7 @@ class ClientCompanyApiController extends Controller
     /**
      * Update a client company.
      */
-    public function update(Request $request, $id)
+    public function update(Request $request, int $id): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -117,7 +116,7 @@ class ClientCompanyApiController extends Controller
     /**
      * Get all users for the invite modal.
      */
-    public function getUsers()
+    public function getUsers(): JsonResponse
     {
         Gate::authorize('Admin');
 
@@ -129,7 +128,7 @@ class ClientCompanyApiController extends Controller
     /**
      * Create a new user and assign them to a client company.
      */
-    public function createUserAndAssign(Request $request)
+    public function createUserAndAssign(Request $request): JsonResponse
     {
         Gate::authorize('Admin');
 

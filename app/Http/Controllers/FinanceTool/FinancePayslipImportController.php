@@ -4,6 +4,7 @@ namespace App\Http\Controllers\FinanceTool;
 
 use App\Http\Controllers\Controller;
 use App\Models\FinanceTool\FinPayslips;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
@@ -13,7 +14,7 @@ use Throwable;
 
 class FinancePayslipImportController extends Controller
 {
-    public function import(Request $request)
+    public function import(Request $request): JsonResponse
     {
         // Set execution time limit to 5 minutes to handle multiple files
         set_time_limit(300);
@@ -160,7 +161,7 @@ class FinancePayslipImportController extends Controller
         ]);
     }
 
-    private function getPrompt(int $fileCount)
+    private function getPrompt(int $fileCount): string
     {
         return <<<PROMPT
 Analyze the provided {$fileCount} payslip PDF document(s).

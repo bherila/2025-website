@@ -220,6 +220,8 @@ PROMPT;
      *
      * Each job type delegates to a dedicated {@see PromptTemplate}
      * subclass. Add new job types by creating a new template class and registering it here.
+     *
+     * @param  array<string, mixed>  $context
      */
     public function buildPrompt(string $jobType, array $context): string
     {
@@ -237,6 +239,8 @@ PROMPT;
 
     /**
      * Build the Gemini generateContent payload for the given job type.
+     *
+     * @return array<string, mixed>
      */
     public function buildGenerateContentPayload(string $jobType, string $fileUri, string $mimeType, string $prompt): array
     {
@@ -298,6 +302,9 @@ PROMPT;
 
     /**
      * Extract typed structured data from a Gemini generateContent response.
+     *
+     * @param  array<string, mixed>  $responseBody
+     * @return array<string, mixed>|null
      */
     public function extractGenerateContentData(string $jobType, array $responseBody): ?array
     {
@@ -333,6 +340,8 @@ PROMPT;
     /**
      * Validate context_json against the expected schema for the given job_type.
      * Returns true if valid, throws on invalid.
+     *
+     * @param  array<string, mixed>|null  $context
      *
      * @throws \InvalidArgumentException
      */
@@ -390,6 +399,10 @@ PROMPT;
 
     // ── Finance extract / normalize methods ───────────────────────────────────
 
+    /**
+     * @param  array<string, mixed>  $responseBody
+     * @return array<string, mixed>|null
+     */
     private function extractFinanceGenerateContentData(array $responseBody): ?array
     {
         $toolCalls = [];
@@ -435,6 +448,9 @@ PROMPT;
         return $this->normalizeFinanceJsonResponse($data);
     }
 
+    /**
+     * @param  array<string, mixed>  $responseBody
+     */
     private function extractTextParts(array $responseBody): string
     {
         $parts = $responseBody['candidates'][0]['content']['parts'] ?? [];
@@ -454,6 +470,10 @@ PROMPT;
         return preg_replace('/^```json\s*|\s*```$/s', '', trim($text)) ?? '';
     }
 
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>|null
+     */
     private function normalizeFinanceJsonResponse(array $data): ?array
     {
         if (isset($data['toolCalls']) && is_array($data['toolCalls'])) {
@@ -512,6 +532,10 @@ PROMPT;
         ];
     }
 
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
     private function normalizeFinanceAccountPayload(array $payload): array
     {
         $statementInfo = isset($payload['statementInfo']) && is_array($payload['statementInfo'])
@@ -545,6 +569,9 @@ PROMPT;
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function normalizeStatementDetails(mixed $details): array
     {
         if (! is_array($details)) {
@@ -578,6 +605,9 @@ PROMPT;
         return $normalized;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function normalizeTransactions(mixed $transactions): array
     {
         if (! is_array($transactions)) {
@@ -623,6 +653,9 @@ PROMPT;
         return $normalized;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function normalizeLots(mixed $lots): array
     {
         if (! is_array($lots)) {
@@ -733,6 +766,9 @@ PROMPT;
         return null;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function buildFinanceAccountToolDefinition(): array
     {
         return ToolDefinitionBuilder::functionDefinition(
@@ -802,7 +838,7 @@ PROMPT;
      * Extracts the tool name marker from the prompt and returns the tool definition.
      * Returns null if no marker is found.
      *
-     * @return array{name: string, definition: array}|null
+     * @return array{name: string, definition: array<string, mixed>}|null
      */
     private function buildTaxDocumentToolDefinitionFromPrompt(string $prompt): ?array
     {
@@ -828,6 +864,9 @@ PROMPT;
     /**
      * Extract structured data from a tax_document Gemini tool-call response.
      * Falls back to JSON text parsing if no function call is found.
+     *
+     * @param  array<string, mixed>  $responseBody
+     * @return array<string, mixed>|null
      */
     private function extractTaxDocumentGenerateContentData(array $responseBody): ?array
     {
@@ -875,6 +914,9 @@ PROMPT;
     /**
      * Coerce and validate the args returned by the Gemini tool call for tax documents.
      * Ensures all numeric fields are cast to float|null and strings to string|null.
+     *
+     * @param  array<string, mixed>  $args
+     * @return array<string, mixed>
      */
     private function coerceTaxDocumentArgs(string $toolName, array $args): array
     {
@@ -1015,6 +1057,9 @@ PROMPT;
      *
      * Adds server-stamped extraction metadata and the schemaVersion discriminator so the
      * frontend can reliably detect new-format documents.
+     *
+     * @param  array<string, mixed>  $args
+     * @return array<string, mixed>
      */
     private function coerceK1Args(array $args): array
     {
@@ -1262,6 +1307,9 @@ PROMPT;
         return $result;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function buildW2ToolDefinition(): array
     {
         return ToolDefinitionBuilder::functionDefinition(
@@ -1307,6 +1355,9 @@ PROMPT;
         );
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function build1099IntToolDefinition(): array
     {
         return ToolDefinitionBuilder::functionDefinition(
@@ -1335,6 +1386,9 @@ PROMPT;
         );
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function build1099DivToolDefinition(): array
     {
         return ToolDefinitionBuilder::functionDefinition(
@@ -1370,6 +1424,9 @@ PROMPT;
         );
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function build1099MiscToolDefinition(): array
     {
         return ToolDefinitionBuilder::functionDefinition(
@@ -1416,6 +1473,8 @@ PROMPT;
      * - Map Box 16 codes I/J (foreign taxes paid/withheld) to Form 1116 Part I.
      * - Use box16_country (code A) for the foreign country name.
      * - See IRS Publication 514 for Form 1116 computation rules.
+     *
+     * @return array<string, mixed>
      */
     private function buildK1ToolDefinition(): array
     {

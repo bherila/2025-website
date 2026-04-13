@@ -5,15 +5,17 @@ namespace App\Http\Controllers\ClientManagement;
 use App\Http\Controllers\Controller;
 use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientCompany;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\View\View;
 
 class ClientAgreementController extends Controller
 {
     /**
      * Display the agreement edit page for admin.
      */
-    public function show($id)
+    public function show(int $id): View
     {
         Gate::authorize('Admin');
 
@@ -28,7 +30,7 @@ class ClientAgreementController extends Controller
     /**
      * Create a new agreement for a client company.
      */
-    public function store(Request $request)
+    public function store(Request $request): RedirectResponse
     {
         Gate::authorize('Admin');
 

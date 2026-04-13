@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientInvoice;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
@@ -14,7 +16,7 @@ class ClientPortalAgreementApiController extends Controller
     /**
      * Get visible agreements for a client company.
      */
-    public function index($slug)
+    public function index(string $slug): Collection
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
         Gate::authorize('ClientCompanyMember', $company->id);
@@ -28,7 +30,7 @@ class ClientPortalAgreementApiController extends Controller
     /**
      * Get a single agreement.
      */
-    public function show($slug, $agreementId)
+    public function show(string $slug, int $agreementId): ClientAgreement
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
         Gate::authorize('ClientCompanyMember', $company->id);
@@ -43,7 +45,7 @@ class ClientPortalAgreementApiController extends Controller
     /**
      * Sign an agreement.
      */
-    public function sign(Request $request, $slug, $agreementId)
+    public function sign(Request $request, string $slug, int $agreementId): JsonResponse
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
         Gate::authorize('ClientCompanyMember', $company->id);
@@ -75,7 +77,7 @@ class ClientPortalAgreementApiController extends Controller
     /**
      * Get invoices for the client company.
      */
-    public function getInvoices($slug)
+    public function getInvoices(string $slug): Collection
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
         Gate::authorize('ClientCompanyMember', $company->id);
@@ -96,8 +98,10 @@ class ClientPortalAgreementApiController extends Controller
 
     /**
      * Get a single invoice with line items.
+     *
+     * @return array<string, mixed>
      */
-    public function getInvoice($slug, $invoiceId)
+    public function getInvoice(string $slug, int $invoiceId): array
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
         Gate::authorize('ClientCompanyMember', $company->id);

@@ -77,21 +77,33 @@ class GenAiImportJob extends Model
         });
     }
 
+    /**
+     * @return BelongsTo<User, self>
+     */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
+    /**
+     * @return BelongsTo<FinAccounts, self>
+     */
     public function account(): BelongsTo
     {
         return $this->belongsTo(FinAccounts::class, 'acct_id', 'acct_id');
     }
 
+    /**
+     * @return HasMany<GenAiImportResult, self>
+     */
     public function results(): HasMany
     {
         return $this->hasMany(GenAiImportResult::class, 'job_id');
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function getContextArray(): array
     {
         if (empty($this->context_json)) {

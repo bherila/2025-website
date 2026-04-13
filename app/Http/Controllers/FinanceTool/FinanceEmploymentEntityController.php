@@ -4,12 +4,16 @@ namespace App\Http\Controllers\FinanceTool;
 
 use App\Http\Controllers\Controller;
 use App\Models\FinanceTool\FinEmploymentEntity;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class FinanceEmploymentEntityController extends Controller
 {
-    /** Shared validation rules for create and update. */
+    /** Shared validation rules for create and update.
+     *
+     * @return array<string, string>
+     */
     private function rules(): array
     {
         return [
@@ -26,7 +30,11 @@ class FinanceEmploymentEntityController extends Controller
         ];
     }
 
-    /** Normalize is_current/end_date consistency and validate sic_code. */
+    /** Normalize is_current/end_date consistency and validate sic_code.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
     private function normalize(array $data, string $type): array
     {
         if (! empty($data['is_current'])) {
@@ -38,7 +46,7 @@ class FinanceEmploymentEntityController extends Controller
         return $data;
     }
 
-    public function index(Request $request)
+    public function index(Request $request): JsonResponse
     {
         $query = FinEmploymentEntity::where('user_id', Auth::id())
             ->orderBy('start_date', 'desc');
@@ -53,7 +61,7 @@ class FinanceEmploymentEntityController extends Controller
         return response()->json($query->get());
     }
 
-    public function store(Request $request)
+    public function store(Request $request): JsonResponse
     {
         $data = $request->validate($this->rules());
 
@@ -67,7 +75,7 @@ class FinanceEmploymentEntityController extends Controller
         return response()->json(FinEmploymentEntity::create($data), 201);
     }
 
-    public function update(Request $request, $id)
+    public function update(Request $request, int $id): JsonResponse
     {
         $entity = FinEmploymentEntity::where('id', $id)
             ->where('user_id', Auth::id())
@@ -90,7 +98,7 @@ class FinanceEmploymentEntityController extends Controller
         return response()->json($entity->fresh());
     }
 
-    public function destroy($id)
+    public function destroy(int $id): JsonResponse
     {
         $entity = FinEmploymentEntity::where('id', $id)
             ->where('user_id', Auth::id())
@@ -101,12 +109,12 @@ class FinanceEmploymentEntityController extends Controller
         return response()->json(['success' => true]);
     }
 
-    public function getMarriageStatus()
+    public function getMarriageStatus(): JsonResponse
     {
         return response()->json(Auth::user()->marriage_status_by_year ?? []);
     }
 
-    public function updateMarriageStatus(Request $request)
+    public function updateMarriageStatus(Request $request): JsonResponse
     {
         $data = $request->validate([
             'year' => 'required|integer|min:1900|max:2100',

@@ -9,6 +9,7 @@ class RuleRunSummary
         public readonly int $rulesMatched,
         public readonly int $actionsApplied,
         public readonly int $errors,
+        /** @var array<int, mixed> */
         public readonly array $transactionResults = [],
     ) {}
 }

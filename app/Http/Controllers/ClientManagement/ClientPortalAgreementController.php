@@ -7,13 +7,14 @@ use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientCompany;
 use App\Models\Files\FileForAgreement;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\View\View;
 
 class ClientPortalAgreementController extends Controller
 {
     /**
      * Display an agreement to the client.
      */
-    public function show($slug, $agreementId)
+    public function show(string $slug, int $agreementId): View
     {
         $company = ClientCompany::where('slug', $slug)->firstOrFail();
         Gate::authorize('ClientCompanyMember', $company->id);

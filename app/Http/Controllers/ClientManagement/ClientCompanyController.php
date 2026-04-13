@@ -4,15 +4,18 @@ namespace App\Http\Controllers\ClientManagement;
 
 use App\Http\Controllers\Controller;
 use App\Models\ClientManagement\ClientCompany;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\View\View;
 
 class ClientCompanyController extends Controller
 {
     /**
      * Display a listing of client companies.
      */
-    public function index()
+    public function index(): View
     {
         Gate::authorize('Admin');
 
@@ -22,7 +25,7 @@ class ClientCompanyController extends Controller
     /**
      * Show the form for creating a new client company.
      */
-    public function create()
+    public function create(): View
     {
         Gate::authorize('Admin');
 
@@ -32,7 +35,7 @@ class ClientCompanyController extends Controller
     /**
      * Store a newly created client company in storage.
      */
-    public function store(Request $request)
+    public function store(Request $request): JsonResponse|RedirectResponse
     {
         Gate::authorize('Admin');
 
@@ -71,7 +74,7 @@ class ClientCompanyController extends Controller
     /**
      * Display the specified client company.
      */
-    public function show($id)
+    public function show(int $id): View
     {
         Gate::authorize('Admin');
 
@@ -83,7 +86,7 @@ class ClientCompanyController extends Controller
     /**
      * Update the specified client company in storage.
      */
-    public function update(Request $request, $id)
+    public function update(Request $request, int $id): JsonResponse|RedirectResponse
     {
         Gate::authorize('Admin');
 
@@ -113,7 +116,7 @@ class ClientCompanyController extends Controller
     /**
      * Remove the specified client company from storage.
      */
-    public function destroy($id)
+    public function destroy(int $id): RedirectResponse
     {
         Gate::authorize('Admin');
 
