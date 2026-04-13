@@ -116,7 +116,7 @@ class GenAiJobDispatcherService
      */
     public function getTaxDocumentPromptInfo(string $formType, int $taxYear): array
     {
-        $rawPrompt = $this->buildTaxDocumentPrompt(['form_type' => $formType, 'tax_year' => $taxYear]);
+        $rawPrompt = $this->buildPrompt('tax_document', ['form_type' => $formType, 'tax_year' => $taxYear]);
 
         // Strip the internal `<!-- tool:... -->` marker so users don't see it
         $cleanInstructions = trim((string) preg_replace('/<!--\s*tool:[^>]+-->\s*\n?/', '', $rawPrompt));

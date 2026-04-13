@@ -44,7 +44,7 @@ class TaxDocumentCreationService
         array $docAttributes,
         ?array $linkAttributes = null,
     ): FileForTaxDocument {
-        $hasParsedData = isset($docAttributes['parsed_data']) && $docAttributes['parsed_data'] !== null;
+        $hasParsedData = isset($docAttributes['parsed_data']);
 
         if (! $hasParsedData) {
             $docAttributes['genai_status'] = 'pending';
@@ -163,14 +163,12 @@ class TaxDocumentCreationService
             $taxDoc = FileForTaxDocument::create($docAttributes);
 
             foreach ($accountLinks as $link) {
-                if (is_array($link)) {
-                    TaxDocumentAccount::createLink(
-                        $taxDoc->id,
-                        $link['account_id'] ?? null,
-                        $link['form_type'] ?? $docAttributes['form_type'],
-                        $link['tax_year'] ?? $docAttributes['tax_year'],
-                    );
-                }
+                TaxDocumentAccount::createLink(
+                    $taxDoc->id,
+                    $link['account_id'] ?? null,
+                    $link['form_type'] ?? $docAttributes['form_type'],
+                    $link['tax_year'] ?? $docAttributes['tax_year'],
+                );
             }
 
             return $taxDoc;
