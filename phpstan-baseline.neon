@@ -1,0 +1,895 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Called ''env'' outside of the config directory which returns null when the config is cached, use ''config''\.$#'
+			identifier: larastan.noEnvCallsOutsideOfConfig
+			count: 1
+			path: app/Console/Commands/Finance/BaseFinanceCommand.php
+
+		-
+			message: '#^Command "finance\:k1\-migrate" does not have option "format"\.$#'
+			identifier: larastan.console.undefinedOption
+			count: 2
+			path: app/Console/Commands/Finance/BaseFinanceCommand.php
+
+		-
+			message: '#^Cannot call method toDateString\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: app/Console/Commands/Finance/FinanceAccountsCommand.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Models\\FinanceTool\\FinAccounts\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 2
+			path: app/Console/Commands/Finance/FinanceAccountsCommand.php
+
+		-
+			message: '#^Parameter \#2 \$rows of method App\\Console\\Commands\\Finance\\BaseFinanceCommand\:\:outputData\(\) expects array\<array\<string\>\>, array\<int, array\<int, int\<0, max\>\|string\>\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Console/Commands/Finance/FinanceImportTransactionsCommand.php
+
+		-
+			message: '#^Parameter \#2 \$rows of method App\\Console\\Commands\\Finance\\BaseFinanceCommand\:\:outputData\(\) expects array\<array\<string\>\>, array\<int, array\<int, int\<0, max\>\|string\>\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Console/Commands/Finance/FinanceTaxImportCommand.php
+
+		-
+			message: '#^Match arm comparison between ''1099_div''\|''1099_div_c'' and ''k1'' is always false\.$#'
+			identifier: match.alwaysFalse
+			count: 1
+			path: app/Console/Commands/Finance/FinanceTaxRenderCommand.php
+
+		-
+			message: '#^Relation ''account'' is not found in App\\Models\\FinanceTool\\FinAccountLineItems model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Console/Commands/Finance/FinanceTransactionsCommand.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between float and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: app/Console/Commands/Finance/FinanceTransactionsCommand.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>acct_name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Console/Commands/Finance/FinanceTransactionsCommand.php
+
+		-
+			message: '#^Property App\\Models\\FinanceTool\\FinAccountLineItems\:\:\$t_amt \(float\|null\) does not accept string\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: app/Finance/RulesEngine/Actions/NegateAmountActionHandler.php
+
+		-
+			message: '#^Relation ''actions'' is not found in App\\Models\\FinanceTool\\FinRule model\.$#'
+			identifier: larastan.relationExistence
+			count: 2
+			path: app/Finance/RulesEngine/TransactionRuleLoader.php
+
+		-
+			message: '#^Relation ''conditions'' is not found in App\\Models\\FinanceTool\\FinRule model\.$#'
+			identifier: larastan.relationExistence
+			count: 2
+			path: app/Finance/RulesEngine/TransactionRuleLoader.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\FinanceTool\\FinRule\:\:\$conditions\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Finance/RulesEngine/TransactionRuleProcessor.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$acct_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/GenAiProcessor/Jobs/ParseImportJob.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$acct_number\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/GenAiProcessor/Jobs/ParseImportJob.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$email\.$#'
+			identifier: property.notFound
+			count: 5
+			path: app/GenAiProcessor/Jobs/ParseImportJob.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/GenAiProcessor/Jobs/ParseImportJob.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:getGeminiApiKey\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/GenAiProcessor/Jobs/ParseImportJob.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<string, mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/GenAiProcessor/Jobs/ParseImportJob.php
+
+		-
+			message: '#^Parameter \#2 \$user of method App\\GenAiProcessor\\Services\\GenAiJobDispatcherService\:\:claimQuota\(\) expects App\\Models\\User\|null, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/GenAiProcessor/Jobs/ParseImportJob.php
+
+		-
+			message: '#^Called ''env'' outside of the config directory which returns null when the config is cached, use ''config''\.$#'
+			identifier: larastan.noEnvCallsOutsideOfConfig
+			count: 1
+			path: app/GenAiProcessor/Services/GenAiJobDispatcherService.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>genai_daily_quota_limit" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/GenAiProcessor/Services/GenAiJobDispatcherService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientAgreement\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\ClientManagement\\ClientAgreement\>\:\:\$clientCompany\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientAgreementApiController.php
+
+		-
+			message: '#^Relation ''clientCompany'' is not found in App\\Models\\ClientManagement\\ClientAgreement model\.$#'
+			identifier: larastan.relationExistence
+			count: 4
+			path: app/Http/Controllers/ClientManagement/ClientAgreementApiController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientAgreement\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\ClientManagement\\ClientAgreement\>\:\:\$clientCompany\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientAgreementController.php
+
+		-
+			message: '#^Relation ''clientCompany'' is not found in App\\Models\\ClientManagement\\ClientAgreement model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientAgreementController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientCompany\:\:\$invoices\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/ClientManagement/ClientCompanyApiController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientCompany\:\:\$lifetime_value\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientCompanyApiController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientCompany\:\:\$total_balance_due\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientCompanyApiController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientCompany\:\:\$uninvoiced_hours\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientCompanyApiController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientCompany\:\:\$uninvoiced_task_complete_total\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientCompanyApiController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientCompany\:\:\$uninvoiced_task_incomplete_total\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientCompanyApiController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientCompany\:\:\$uninvoiced_task_total\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientCompanyApiController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientCompany\:\:\$unpaid_invoices\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientCompanyApiController.php
+
+		-
+			message: '#^Relation ''agreements'' is not found in App\\Models\\ClientManagement\\ClientCompany model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientCompanyApiController.php
+
+		-
+			message: '#^Relation ''invoices'' is not found in App\\Models\\ClientManagement\\ClientCompany model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientCompanyApiController.php
+
+		-
+			message: '#^Relation ''users'' is not found in App\\Models\\ClientManagement\\ClientCompany model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientCompanyApiController.php
+
+		-
+			message: '#^Relation ''users'' is not found in App\\Models\\ClientManagement\\ClientCompany model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientCompanyController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientExpense\:\:\$finLineItem\.$#'
+			identifier: property.notFound
+			count: 4
+			path: app/Http/Controllers/ClientManagement/ClientExpenseApiController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientExpense\:\:\$fin_line_item\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientExpenseApiController.php
+
+		-
+			message: '#^Relation ''creator'' is not found in App\\Models\\ClientManagement\\ClientExpense model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientExpenseApiController.php
+
+		-
+			message: '#^Relation ''finLineItem'' is not found in App\\Models\\ClientManagement\\ClientExpense model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientExpenseApiController.php
+
+		-
+			message: '#^Relation ''project'' is not found in App\\Models\\ClientManagement\\ClientExpense model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientExpenseApiController.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientExpenseApiController.php
+
+		-
+			message: '#^Call to function is_object\(\) with App\\Models\\ClientManagement\\ClientCompany will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientInvoiceApiController.php
+
+		-
+			message: '#^Relation ''agreement'' is not found in App\\Models\\ClientManagement\\ClientInvoice model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientInvoiceApiController.php
+
+		-
+			message: '#^Relation ''lineItems'' is not found in App\\Models\\ClientManagement\\ClientInvoice model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientInvoiceApiController.php
+
+		-
+			message: '#^Relation ''lineItems'' is not found in App\\Models\\ClientManagement\\ClientInvoice model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientPortalAgreementApiController.php
+
+		-
+			message: '#^Relation ''signedByUser'' is not found in App\\Models\\ClientManagement\\ClientAgreement model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientPortalAgreementApiController.php
+
+		-
+			message: '#^Relation ''uploader'' is not found in App\\Models\\Files\\FileForAgreement model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientPortalAgreementController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientCompany\:\:\$users\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientPortalApiController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientTimeEntry\:\:\$invoiceLine\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientPortalApiController.php
+
+		-
+			message: '#^Left side of && is always true\.$#'
+			identifier: booleanAnd.leftAlwaysTrue
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientPortalApiController.php
+
+		-
+			message: '#^Relation ''assignee'' is not found in App\\Models\\ClientManagement\\ClientTask model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientPortalApiController.php
+
+		-
+			message: '#^Relation ''creator'' is not found in App\\Models\\ClientManagement\\ClientTask model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientPortalApiController.php
+
+		-
+			message: '#^Relation ''invoiceLine'' is not found in App\\Models\\ClientManagement\\ClientTimeEntry model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientPortalApiController.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type Carbon\\Carbon\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientPortalApiController.php
+
+		-
+			message: '#^Relation ''assignee'' is not found in App\\Models\\ClientManagement\\ClientTask model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientPortalController.php
+
+		-
+			message: '#^Relation ''creator'' is not found in App\\Models\\ClientManagement\\ClientTask model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientPortalController.php
+
+		-
+			message: '#^Relation ''lineItems'' is not found in App\\Models\\ClientManagement\\ClientInvoice model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/ClientManagement/ClientPortalController.php
+
+		-
+			message: '#^Relation ''account'' is not found in App\\Models\\Files\\FileForFinAccount model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/FileController.php
+
+		-
+			message: '#^Relation ''uploader'' is not found in App\\Models\\Files\\FileForAgreement model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/FileController.php
+
+		-
+			message: '#^Relation ''uploader'' is not found in App\\Models\\Files\\FileForClientCompany model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/FileController.php
+
+		-
+			message: '#^Relation ''uploader'' is not found in App\\Models\\Files\\FileForFinAccount model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/FileController.php
+
+		-
+			message: '#^Relation ''uploader'' is not found in App\\Models\\Files\\FileForProject model\.$#'
+			identifier: larastan.relationExistence
+			count: 2
+			path: app/Http/Controllers/FileController.php
+
+		-
+			message: '#^Relation ''uploader'' is not found in App\\Models\\Files\\FileForTask model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/FileController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\FinanceTool\\FinAccountLineItems\:\:\$acct_name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceLotsController.php
+
+		-
+			message: '#^Call to function array_is_list\(\) with array\<string, mixed\> will always evaluate to false\.$#'
+			identifier: function.impossibleType
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinancePayslipController.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<string, mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinancePayslipController.php
+
+		-
+			message: '#^Result of \|\| is always true\.$#'
+			identifier: booleanOr.alwaysTrue
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinancePayslipController.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinancePayslipController.php
+
+		-
+			message: '#^Relation ''actions'' is not found in App\\Models\\FinanceTool\\FinRule model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceRulesApiController.php
+
+		-
+			message: '#^Relation ''conditions'' is not found in App\\Models\\FinanceTool\\FinRule model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceRulesApiController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\FinanceTool\\FinAccountLineItems\:\:\$account\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionLinkingApiController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\FinanceTool\\FinAccountLineItems\:\:\$childTransactions\.$#'
+			identifier: property.notFound
+			count: 4
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionLinkingApiController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\FinanceTool\\FinAccountLineItems\:\:\$parentTransactions\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionLinkingApiController.php
+
+		-
+			message: '#^Relation ''account'' is not found in App\\Models\\FinanceTool\\FinAccountLineItems model\.$#'
+			identifier: larastan.relationExistence
+			count: 11
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionLinkingApiController.php
+
+		-
+			message: '#^Relation ''childTransactions'' is not found in App\\Models\\FinanceTool\\FinAccountLineItems model\.$#'
+			identifier: larastan.relationExistence
+			count: 4
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionLinkingApiController.php
+
+		-
+			message: '#^Relation ''parentTransactions'' is not found in App\\Models\\FinanceTool\\FinAccountLineItems model\.$#'
+			identifier: larastan.relationExistence
+			count: 4
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionLinkingApiController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\FinanceTool\\FinAccountTag\:\:\$totals\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionTaggingApiController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\FinanceTool\\FinAccountTag\:\:\$transaction_count\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionTaggingApiController.php
+
+		-
+			message: '#^Offset 0 on array\<string, mixed\> in isset\(\) does not exist\.$#'
+			identifier: isset.offset
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsApiController.php
+
+		-
+			message: '#^Relation ''parentTransactions'' is not found in App\\Models\\FinanceTool\\FinAccountLineItems model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsApiController.php
+
+		-
+			message: '#^Relation ''tags'' is not found in App\\Models\\FinanceTool\\FinAccountLineItems model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsApiController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\FinanceTool\\FinAccountLineItems\:\:\$tags\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsDedupeApiController.php
+
+		-
+			message: '#^Relation ''parentTransactions'' is not found in App\\Models\\FinanceTool\\FinAccountLineItems model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsDedupeApiController.php
+
+		-
+			message: '#^Relation ''tags'' is not found in App\\Models\\FinanceTool\\FinAccountLineItems model\.$#'
+			identifier: larastan.relationExistence
+			count: 2
+			path: app/Http/Controllers/FinanceTool/FinanceTransactionsDedupeApiController.php
+
+		-
+			message: '#^Call to function is_array\(\) with array will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Http/Controllers/LicenseKeyController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\User\:\:\$clientCompanies\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/UserManagementApiController.php
+
+		-
+			message: '#^Relation ''clientCompanies'' is not found in App\\Models\\User model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/UserManagementApiController.php
+
+		-
+			message: '#^Negated boolean expression is always false\.$#'
+			identifier: booleanNot.alwaysFalse
+			count: 1
+			path: app/Http/Controllers/UtilityBillTracker/UtilityBillImportController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\FinanceTool\\FinAccountLineItems\:\:\$account\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/UtilityBillTracker/UtilityBillLinkingController.php
+
+		-
+			message: '#^Cannot call method copy\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/UtilityBillTracker/UtilityBillLinkingController.php
+
+		-
+			message: '#^Cannot call method format\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/UtilityBillTracker/UtilityBillLinkingController.php
+
+		-
+			message: '#^Relation ''account'' is not found in App\\Models\\FinanceTool\\FinAccountLineItems model\.$#'
+			identifier: larastan.relationExistence
+			count: 3
+			path: app/Http/Controllers/UtilityBillTracker/UtilityBillLinkingController.php
+
+		-
+			message: '#^Call to function is_string\(\) with string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Http/Middleware/AuthenticateMcpRequest.php
+
+		-
+			message: '#^Relation ''uploader'' is not found in App\\Models\\Files\\FileForTaxDocument model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Mcp/Resources/TaxDocuments.php
+
+		-
+			message: '#^Call to an undefined method Laravel\\Mcp\\Request\:\:input\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: app/Mcp/Tools/GetAccountSummary.php
+
+		-
+			message: '#^Method App\\Mcp\\Tools\\GetAccountSummary\:\:schema\(\) should return array\<string, Illuminate\\Contracts\\JsonSchema\\JsonSchema\> but returns array\<string, Illuminate\\JsonSchema\\Types\\IntegerType\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Mcp/Tools/GetAccountSummary.php
+
+		-
+			message: '#^Call to an undefined method Laravel\\Mcp\\Request\:\:input\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Mcp/Tools/GetScheduleC.php
+
+		-
+			message: '#^Method App\\Mcp\\Tools\\GetScheduleC\:\:schema\(\) should return array\<string, Illuminate\\Contracts\\JsonSchema\\JsonSchema\> but returns array\<string, Illuminate\\JsonSchema\\Types\\IntegerType\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Mcp/Tools/GetScheduleC.php
+
+		-
+			message: '#^Call to an undefined method Laravel\\Mcp\\Request\:\:input\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Mcp/Tools/GetTaxDocument.php
+
+		-
+			message: '#^Method App\\Mcp\\Tools\\GetTaxDocument\:\:schema\(\) should return array\<string, Illuminate\\Contracts\\JsonSchema\\JsonSchema\> but returns array\<string, Illuminate\\JsonSchema\\Types\\IntegerType\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Mcp/Tools/GetTaxDocument.php
+
+		-
+			message: '#^Relation ''uploader'' is not found in App\\Models\\Files\\FileForTaxDocument model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Mcp/Tools/GetTaxDocument.php
+
+		-
+			message: '#^Call to an undefined method Laravel\\Mcp\\Request\:\:input\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Mcp/Tools/GetTaxPreview.php
+
+		-
+			message: '#^Method App\\Mcp\\Tools\\GetTaxPreview\:\:schema\(\) should return array\<string, Illuminate\\Contracts\\JsonSchema\\JsonSchema\> but returns array\<string, Illuminate\\JsonSchema\\Types\\IntegerType\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Mcp/Tools/GetTaxPreview.php
+
+		-
+			message: '#^Call to an undefined method Laravel\\Mcp\\Request\:\:input\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: app/Mcp/Tools/ListLots.php
+
+		-
+			message: '#^Method App\\Mcp\\Tools\\ListLots\:\:schema\(\) should return array\<string, Illuminate\\Contracts\\JsonSchema\\JsonSchema\> but returns array\<string, Illuminate\\JsonSchema\\Types\\IntegerType\|Illuminate\\JsonSchema\\Types\\StringType\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Mcp/Tools/ListLots.php
+
+		-
+			message: '#^Call to an undefined method Laravel\\Mcp\\Request\:\:input\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Mcp/Tools/ListPayslips.php
+
+		-
+			message: '#^Method App\\Mcp\\Tools\\ListPayslips\:\:schema\(\) should return array\<string, Illuminate\\Contracts\\JsonSchema\\JsonSchema\> but returns array\<string, Illuminate\\JsonSchema\\Types\\BooleanType\|Illuminate\\JsonSchema\\Types\\IntegerType\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Mcp/Tools/ListPayslips.php
+
+		-
+			message: '#^Call to an undefined method Laravel\\Mcp\\Request\:\:input\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: app/Mcp/Tools/ListTaxDocuments.php
+
+		-
+			message: '#^Method App\\Mcp\\Tools\\ListTaxDocuments\:\:schema\(\) should return array\<string, Illuminate\\Contracts\\JsonSchema\\JsonSchema\> but returns array\<string, Illuminate\\JsonSchema\\Types\\BooleanType\|Illuminate\\JsonSchema\\Types\\IntegerType\|Illuminate\\JsonSchema\\Types\\StringType\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Mcp/Tools/ListTaxDocuments.php
+
+		-
+			message: '#^Relation ''uploader'' is not found in App\\Models\\Files\\FileForTaxDocument model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Mcp/Tools/ListTaxDocuments.php
+
+		-
+			message: '#^Call to an undefined method Laravel\\Mcp\\Request\:\:input\(\)\.$#'
+			identifier: method.notFound
+			count: 4
+			path: app/Mcp/Tools/ListTransactions.php
+
+		-
+			message: '#^Method App\\Mcp\\Tools\\ListTransactions\:\:schema\(\) should return array\<string, Illuminate\\Contracts\\JsonSchema\\JsonSchema\> but returns array\<string, Illuminate\\JsonSchema\\Types\\IntegerType\|Illuminate\\JsonSchema\\Types\\StringType\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Mcp/Tools/ListTransactions.php
+
+		-
+			message: '#^Relation ''tags'' is not found in App\\Models\\FinanceTool\\FinAccountLineItems model\.$#'
+			identifier: larastan.relationExistence
+			count: 2
+			path: app/Mcp/Tools/ListTransactions.php
+
+		-
+			message: '#^Result of \|\| is always false\.$#'
+			identifier: booleanOr.alwaysFalse
+			count: 1
+			path: app/Models/ClientManagement/ClientAgreement.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between numeric\-string and '''' will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Models/ClientManagement/ClientAgreement.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between numeric\-string and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Models/ClientManagement/ClientAgreement.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientInvoice\:\:\$agreement\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/ClientManagement/ClientInvoice.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientInvoice\:\:\$lineItems\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Models/ClientManagement/ClientInvoice.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientInvoice\:\:\$payments\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Models/ClientManagement/ClientInvoice.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientTimeEntry\:\:\$invoiceLine\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Models/ClientManagement/ClientTimeEntry.php
+
+		-
+			message: '#^Property ''is_invoiced'' does not exist in model\.$#'
+			identifier: rules.modelAppends
+			count: 1
+			path: app/Models/ClientManagement/ClientTimeEntry.php
+
+		-
+			message: '#^Result of && is always false\.$#'
+			identifier: booleanAnd.alwaysFalse
+			count: 1
+			path: app/Models/Files/FileForTaxDocument.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between ''1099_div''\|''1099_div_c''\|''1099_int''\|''1099_int_c''\|''w2''\|''w2c'' and ''k1'' will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Models/Files/FileForTaxDocument.php
+
+		-
+			message: '#^Property App\\Models\\FinanceTool\\FinAccountLineItemTagMap\:\:\$primaryKey \(string\) does not accept default value of type array\<int, string\>\.$#'
+			identifier: property.defaultValue
+			count: 1
+			path: app/Models/FinanceTool/FinAccountLineItemTagMap.php
+
+		-
+			message: '#^Class App\\Models\\FinanceTool\\User not found\.$#'
+			identifier: class.notFound
+			count: 1
+			path: app/Models/FinanceTool/FinAccountTag.php
+
+		-
+			message: '#^Parameter \#1 \$related of method Illuminate\\Database\\Eloquent\\Model\:\:belongsTo\(\) expects class\-string\<Illuminate\\Database\\Eloquent\\Model\>, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/FinanceTool/FinAccountTag.php
+
+		-
+			message: '#^Method App\\Models\\FinanceTool\\TaxDocumentAccount\:\:createLink\(\) should return static\(App\\Models\\FinanceTool\\TaxDocumentAccount\) but returns App\\Models\\FinanceTool\\TaxDocumentAccount\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Models/FinanceTool/TaxDocumentAccount.php
+
+		-
+			message: '#^PHPDoc type array of property App\\Models\\User\:\:\$appends is not covariant with PHPDoc type list\<string\> of overridden property Illuminate\\Database\\Eloquent\\Model\:\:\$appends\.$#'
+			identifier: property.phpDocType
+			count: 1
+			path: app/Models/User.php
+
+		-
+			message: '#^Property ''user_role'' is not a computed property, remove from \$appends\.$#'
+			identifier: rules.modelAppends
+			count: 1
+			path: app/Models/User.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/Auth/WebAuthnService.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:canLogin\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Services/Auth/WebAuthnService.php
+
+		-
+			message: '#^Constant App\\Services\\Auth\\WebAuthnService\:\:DEFAULT_APP_URL is unused\.$#'
+			identifier: classConstant.unused
+			count: 1
+			path: app/Services/Auth/WebAuthnService.php
+
+		-
+			message: '#^Method App\\Services\\Auth\\WebAuthnService\:\:verifyAuthenticationResponse\(\) should return App\\Models\\User but returns Illuminate\\Database\\Eloquent\\Model\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Services/Auth/WebAuthnService.php
+
+		-
+			message: '#^Parameter \#2 \$user of method App\\Services\\Auth\\WebAuthnService\:\:credentialToSource\(\) expects App\\Models\\User, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Services/Auth/WebAuthnService.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between int\<0, max\> and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Services/ClientManagement/AllocationService.php
+
+		-
+			message: '#^Relation ''agreement'' is not found in App\\Models\\ClientManagement\\ClientInvoice model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Services/ClientManagement/ClientInvoicingService.php
+
+		-
+			message: '#^Relation ''lineItems'' is not found in App\\Models\\ClientManagement\\ClientInvoice model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Services/ClientManagement/ClientInvoicingService.php
+
+		-
+			message: '#^Relation ''project'' is not found in App\\Models\\ClientManagement\\ClientTask model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Services/ClientManagement/ClientInvoicingService.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between Carbon\\Carbon and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: app/Services/ClientManagement/ClientInvoicingService.php
+
+		-
+			message: '#^PHPDoc tag @param references unknown parameter\: \$rollover_months$#'
+			identifier: parameter.notFound
+			count: 1
+			path: app/Services/ClientManagement/RolloverCalculator.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$s3_path\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/FileStorageService.php
+
+		-
+			message: '#^Call to function is_array\(\) with array will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Services/FileStorageService.php
+
+		-
+			message: '#^Offset ''available_years'' on array\{available_years\: array\<int, string\>, years\: array\<int, array\<string, mixed\>\>, entities\: array\<int, array\{id\: int, display_name\: string, type\: string\}\>\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Services/Finance/TaxPreviewDataService.php
+
+		-
+			message: '#^Parameter \#1 \$array \(non\-empty\-list\<mixed\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Services/Finance/TaxPreviewDataService.php
+
+		-
+			message: '#^Relation ''uploader'' is not found in App\\Models\\Files\\FileForTaxDocument model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Services/Finance/TaxPreviewDataService.php

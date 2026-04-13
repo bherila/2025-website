@@ -37,24 +37,26 @@ jobs:
               - 'composer.json'
               - 'composer.lock'
               - 'phpunit.xml'
+              - 'phpstan.neon'
+              - 'phpstan-baseline.neon'
               - 'database/**'
               - 'scripts/**'
 
       - name: Set up pnpm
-        if: steps.changes.outputs.frontend == 'true' || github.event_name == 'push'
+        if: steps.changes.outputs.frontend == 'true' || steps.changes.outputs.backend == 'true' || github.event_name == 'push'
         uses: pnpm/action-setup@v5
         with:
           version: 10
 
       - name: Set up Node
-        if: steps.changes.outputs.frontend == 'true' || github.event_name == 'push'
+        if: steps.changes.outputs.frontend == 'true' || steps.changes.outputs.backend == 'true' || github.event_name == 'push'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'pnpm'
 
       - name: Install Node dependencies
-        if: steps.changes.outputs.frontend == 'true' || github.event_name == 'push'
+        if: steps.changes.outputs.frontend == 'true' || steps.changes.outputs.backend == 'true' || github.event_name == 'push'
         run: pnpm install --frozen-lockfile
 
       - name: Run pnpm type-check (TypeScript)
@@ -66,7 +68,7 @@ jobs:
         run: pnpm run lint
 
       - name: Build frontend
-        if: steps.changes.outputs.frontend == 'true' || github.event_name == 'push'
+        if: steps.changes.outputs.frontend == 'true' || steps.changes.outputs.backend == 'true' || github.event_name == 'push'
         run: pnpm run build
 
       - name: Run pnpm tests (Jest)
@@ -94,6 +96,10 @@ jobs:
       - name: Check MySQL identifier lengths in migrations
         if: steps.changes.outputs.backend == 'true' || github.event_name == 'push'
         run: python3 scripts/check-migration-identifiers.py
+
+      - name: Run PHPStan
+        if: steps.changes.outputs.backend == 'true' || github.event_name == 'push'
+        run: vendor/bin/phpstan analyse --no-progress
 
       - name: Run PHPUnit
         if: steps.changes.outputs.backend == 'true' || github.event_name == 'push'
