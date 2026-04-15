@@ -2,6 +2,10 @@
  * Tests for transactionCache.ts
  *
  * We mock the `idb` library so tests run deterministically in jsdom (no real IndexedDB).
+ *
+ * Cache key format changed in DB_VERSION=2: keys are now just `{accountId}` (account IDs
+ * are unique across users, so no userId or year scoping is needed). `clearCacheForUser`
+ * is now a no-op alias for `clearAllCache`.
  */
 
 import type { AccountLineItem } from '@/data/finance/AccountLineItem'
@@ -59,12 +63,17 @@ import {
 } from '@/services/transactionCache'
 
 describe('buildCacheKey', () => {
-  it('builds key in {userId}-{accountId}-{year} format', () => {
-    expect(buildCacheKey(42, 7, '2024')).toBe('42-7-2024')
+  it('returns the accountId as the key when called with just accountId', () => {
+    expect(buildCacheKey(7)).toBe('7')
   })
 
-  it('works with string user id', () => {
-    expect(buildCacheKey('abc', 3, '2023')).toBe('abc-3-2023')
+  it('returns the accountId when called with legacy (userId, accountId, year) signature', () => {
+    // Old callers pass (userId, accountId, year) — accountId is param 2
+    expect(buildCacheKey(42, 7, '2024')).toBe('7')
+  })
+
+  it('works with string accountId', () => {
+    expect(buildCacheKey('33')).toBe('33')
   })
 })
 
@@ -78,16 +87,16 @@ describe('getCachedTransactions', () => {
   })
 
   it('returns null when cache is empty', async () => {
-    const result = await getCachedTransactions('42-7-2024')
+    const result = await getCachedTransactions('7')
     expect(result).toBeNull()
   })
 
   it('returns the cached entry when it exists', async () => {
     const rows = makeRows(3)
-    const entry = { cacheKey: '42-7-2024', transactions: rows, lastFetched: Date.now() }
-    mockStore.set('42-7-2024', entry)
+    const entry = { cacheKey: '7', transactions: rows, lastFetched: Date.now() }
+    mockStore.set('7', entry)
 
-    const result = await getCachedTransactions('42-7-2024')
+    const result = await getCachedTransactions('7')
     expect(result).toEqual(entry)
     expect(result?.transactions).toHaveLength(3)
   })
@@ -106,17 +115,17 @@ describe('setCachedTransactions', () => {
 
   it('stores transactions under the given cache key', async () => {
     const rows = makeRows(5)
-    await setCachedTransactions('1-2-2024', rows)
-    expect(mockStore.has('1-2-2024')).toBe(true)
-    const stored = mockStore.get('1-2-2024') as { transactions: AccountLineItem[] }
+    await setCachedTransactions('33', rows)
+    expect(mockStore.has('33')).toBe(true)
+    const stored = mockStore.get('33') as { transactions: AccountLineItem[] }
     expect(stored.transactions).toHaveLength(5)
   })
 
   it('updates lastFetched timestamp', async () => {
     const before = Date.now()
-    await setCachedTransactions('1-2-2024', makeRows(1))
+    await setCachedTransactions('33', makeRows(1))
     const after = Date.now()
-    const stored = mockStore.get('1-2-2024') as { lastFetched: number }
+    const stored = mockStore.get('33') as { lastFetched: number }
     expect(stored.lastFetched).toBeGreaterThanOrEqual(before)
     expect(stored.lastFetched).toBeLessThanOrEqual(after)
   })
@@ -134,9 +143,9 @@ describe('deleteCachedTransactions', () => {
   })
 
   it('removes the specified cache entry', async () => {
-    mockStore.set('1-2-2024', { cacheKey: '1-2-2024', transactions: [], lastFetched: 0 })
-    await deleteCachedTransactions('1-2-2024')
-    expect(mockStore.has('1-2-2024')).toBe(false)
+    mockStore.set('33', { cacheKey: '33', transactions: [], lastFetched: 0 })
+    await deleteCachedTransactions('33')
+    expect(mockStore.has('33')).toBe(false)
   })
 
   it('is a no-op when the key does not exist', async () => {
@@ -148,31 +157,23 @@ describe('clearCacheForUser', () => {
   beforeEach(() => {
     mockStore.clear()
     jest.clearAllMocks()
-    mockTx.objectStore.mockReturnValue(mockObjectStore)
-    mockObjectStore.getAllKeys.mockImplementation(() => Promise.resolve(Array.from(mockStore.keys())))
-    mockObjectStore.delete.mockImplementation((key: string) => {
-      mockStore.delete(key)
+    mockDb.clear.mockImplementation(() => mockObjectStore.clear())
+    mockObjectStore.clear.mockImplementation(() => {
+      mockStore.clear()
       return Promise.resolve()
     })
-    mockDb.transaction.mockReturnValue(mockTx)
   })
 
-  it('removes only entries belonging to the specified user', async () => {
-    mockStore.set('42-1-2024', { cacheKey: '42-1-2024' })
-    mockStore.set('42-2-2023', { cacheKey: '42-2-2023' })
-    mockStore.set('99-1-2024', { cacheKey: '99-1-2024' })
-
+  it('clears all cache entries (no longer user-scoped)', async () => {
+    mockStore.set('1', { cacheKey: '1' })
+    mockStore.set('2', { cacheKey: '2' })
     await clearCacheForUser(42)
-
-    expect(mockStore.has('42-1-2024')).toBe(false)
-    expect(mockStore.has('42-2-2023')).toBe(false)
-    expect(mockStore.has('99-1-2024')).toBe(true)
+    expect(mockStore.size).toBe(0)
   })
 
-  it('is a no-op when there are no entries for the user', async () => {
-    mockStore.set('99-1-2024', { cacheKey: '99-1-2024' })
-    await clearCacheForUser(42)
-    expect(mockStore.size).toBe(1)
+  it('is a no-op when the cache is already empty', async () => {
+    await expect(clearCacheForUser(42)).resolves.toBeUndefined()
+    expect(mockStore.size).toBe(0)
   })
 })
 
@@ -188,8 +189,8 @@ describe('clearAllCache', () => {
   })
 
   it('empties the entire cache store', async () => {
-    mockStore.set('1-1-2024', {})
-    mockStore.set('2-2-2023', {})
+    mockStore.set('1', {})
+    mockStore.set('2', {})
     await clearAllCache()
     expect(mockStore.size).toBe(0)
   })
