@@ -267,7 +267,7 @@ export default function TransactionsPage({ accountId, initialAvailableYears = []
   }
 
   return (
-    <div className="pb-8">
+    <div>
       {toolbar}
       <TransactionsTable
         enableTagging

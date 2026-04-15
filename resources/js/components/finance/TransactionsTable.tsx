@@ -3,7 +3,7 @@ import './TransactionsTable.css'
 
 import { useVirtualizer } from '@tanstack/react-virtual'
 import currency from 'currency.js'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import { collectTagsFromRows, type TransactionTag } from '@/components/finance/transactionsTableTags'
 import { useFinanceTags } from '@/components/finance/useFinanceTags'
@@ -64,6 +64,11 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
   const [viewAll, setViewAll] = useState(false)
   const [currentPageSize, setCurrentPageSize] = useState(pageSize)
   const [focusedRowIndex, setFocusedRowIndex] = useState<number>(-1)
+
+  // Full-viewport layout state (virtual scroll mode only)
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false)
+  const [wrapperTop, setWrapperTop] = useState(100) // Initial estimate: navbar(48px) + toolbar(52px)
 
   const {
     isCategoryColumnEmpty, isQtyColumnEmpty, isPriceColumnEmpty,
@@ -192,6 +197,29 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
 
     virtualizer.scrollToIndex(highlightedTransactionIndex, { align: 'center' })
   }, [useVirtualScroll, highlightedTransactionIndex, virtualizer])
+
+  // Measure wrapper's top offset so the table fills the remaining viewport height
+  useLayoutEffect(() => {
+    if (!useVirtualScroll) return
+    const updateTop = () => {
+      if (wrapperRef.current) {
+        setWrapperTop(wrapperRef.current.getBoundingClientRect().top)
+      }
+    }
+    updateTop()
+    window.addEventListener('resize', updateTop)
+    return () => window.removeEventListener('resize', updateTop)
+  }, [useVirtualScroll])
+
+  // Collapse summary cards and toolbar when the table is scrolled down
+  useEffect(() => {
+    if (!useVirtualScroll) return
+    const container = tableContainerRef.current
+    if (!container) return
+    const onScroll = () => setIsHeaderCollapsed(container.scrollTop > 60)
+    container.addEventListener('scroll', onScroll, { passive: true })
+    return () => container.removeEventListener('scroll', onScroll)
+  }, [useVirtualScroll])
 
   // Data to render: virtual scroll uses sortedData, pagination uses paginatedData
   const displayData = useVirtualScroll ? sortedData : paginatedData
@@ -332,17 +360,44 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
   const inputClass = "bg-background/50 border border-border text-foreground text-xs rounded px-2 py-1 w-full mt-1 focus:ring-1 focus:ring-ring outline-none font-mono"
 
   return (
-    <>
-      <TransactionsSummaryCards
-        netAmount={totalAmount.format()}
-        netAmountPositive={totalAmount.value >= 0}
-        totalCredits={totalPositives.format()}
-        totalDebits={totalNegatives.format()}
-        totalRows={totalRows}
-      />
+    <div
+      ref={wrapperRef}
+      className={useVirtualScroll ? "flex flex-col" : undefined}
+      style={useVirtualScroll ? { height: `calc(100dvh - ${wrapperTop}px)` } : undefined}
+    >
+      {/* Summary cards — collapses when user scrolls the table */}
+      <div
+        style={useVirtualScroll ? {
+          overflow: 'hidden',
+          maxHeight: isHeaderCollapsed ? '0' : '200px',
+          opacity: isHeaderCollapsed ? 0 : 1,
+          transition: 'max-height 250ms ease, opacity 200ms ease',
+        } : undefined}
+      >
+        <TransactionsSummaryCards
+          netAmount={totalAmount.format()}
+          netAmountPositive={totalAmount.value >= 0}
+          totalCredits={totalPositives.format()}
+          totalDebits={totalNegatives.format()}
+          totalRows={totalRows}
+        />
+      </div>
 
-      {/* Sticky zone: pagination + tagging toolbar */}
-      <div className="sticky top-0 z-20 bg-background border-x border-t border-border rounded-t-sm">
+      {/* Pagination + tagging toolbar — collapses when user scrolls the table */}
+      <div
+        className={cn(
+          "bg-background border-x border-t border-border",
+          useVirtualScroll
+            ? (isHeaderCollapsed ? "rounded-sm" : "rounded-t-sm")
+            : "sticky top-0 z-20 rounded-t-sm",
+        )}
+        style={useVirtualScroll ? {
+          overflow: 'hidden',
+          maxHeight: isHeaderCollapsed ? '0' : '200px',
+          opacity: isHeaderCollapsed ? 0 : 1,
+          transition: 'max-height 250ms ease, opacity 200ms ease',
+        } : undefined}
+      >
         {!useVirtualScroll && <PaginationControls {...paginationProps} />}
 
         {enableTagging && (
@@ -362,10 +417,14 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
         )}
       </div>
 
-      {/* Scrollable table container */}
+      {/* Scrollable table container — flex-1 fills remaining height */}
       <div
         ref={tableContainerRef}
-        className="transactions-table-scroll relative w-full overflow-auto max-h-[calc(100vh-14rem)] border border-border rounded-b-sm bg-card"
+        className={cn(
+          "relative w-full overflow-auto border border-border bg-card",
+          useVirtualScroll ? "flex-1 min-h-0" : "transactions-table-scroll max-h-[calc(100vh-14rem)]",
+          isHeaderCollapsed && useVirtualScroll ? "rounded-sm" : "rounded-b-sm",
+        )}
         onKeyDown={handleKeyDown}
         tabIndex={0}
         role="region"
@@ -733,6 +792,6 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
         onClose={() => setDeleteConfirmTransaction(null)}
         onConfirm={(id) => { if (onDeleteTransaction) onDeleteTransaction(id) }}
       />
-    </>
+    </div>
   )
 }
