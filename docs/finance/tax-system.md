@@ -74,7 +74,7 @@ Tags link to employment entities via `employment_entity_id` on `fin_account_tag`
 
 The Tax Preview page groups Schedule C income/expenses by entity, generating separate Schedule C sections per business.
 
-See [Tags.md](Tags.md) for the full list of tax characteristics and helpers.
+See [tags.md](tags.md) for the full list of tax characteristics and helpers.
 
 ---
 
@@ -144,7 +144,7 @@ Overview | Schedules | Schedule A | Schedule E | Capital Gains | Form 1116 | Sch
 | Tax Estimate | `Form1040Preview` + `TotalsTable` | Form 1040 preview + federal/state tax tables |
 | Action Items | `ActionItemsTab` | Resolved/outstanding alerts |
 
-**Short dividend integration:** `TaxPreviewContext` fetches transactions for all active accounts on load, runs `analyzeShortDividends()`, and exposes `shortDividendSummary` on the context. `Form4952Preview` receives `shortDividendDeduction` (the >45-day bucket total) as investment interest expense. `ScheduleAPreview` renders both the K-1/1099 sources and the short dividend breakdown in one place. See [LotAnalyzer.md](LotAnalyzer.md#short-dividend-analysis) for details.
+**Short dividend integration:** `TaxPreviewContext` fetches transactions for all active accounts on load, runs `analyzeShortDividends()`, and exposes `shortDividendSummary` on the context. `Form4952Preview` receives `shortDividendDeduction` (the >45-day bucket total) as investment interest expense. `ScheduleAPreview` renders both the K-1/1099 sources and the short dividend breakdown in one place. See [lot-analyzer.md](lot-analyzer.md#short-dividend-analysis) for details.
 
 ### Schedule C Tab
 
@@ -214,9 +214,9 @@ Non-entity Tags (interest, dividends, etc.)
 
 ## Related Documentation
 
-- [Tags.md](Tags.md) — Tag structure, tax characteristics, and tagging API
-- [FinanceTool.md](FinanceTool.md) — Finance tool overview and navigation
-- [TransactionsTable.md](TransactionsTable.md) — Transaction display and filtering
+- [tags.md](tags.md) — Tag structure, tax characteristics, and tagging API
+- [overview.md](overview.md) — Finance tool overview and navigation
+- [transactions-table.md](transactions-table.md) — Transaction display and filtering
 - `/database/schema/mysql-schema.sql` — Full database schema
 
 ---

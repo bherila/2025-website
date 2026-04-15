@@ -1,8 +1,20 @@
-# Finance Tool — Artisan CLI
+# Finance CLI (`finance:*` Artisan Commands)
 
 Artisan commands for CRUD operations on the Finance domain, designed for power-user workflows and AI-assisted reconciliation (e.g. via Claude CLI).
 
 All commands live under the `finance:` namespace and share a base class (`BaseFinanceCommand`) that handles user resolution, output formatting, and table rendering.
+
+## Quick Start (Agent Discovery)
+
+Use the commands themselves for self-discovery rather than relying on static documentation that can drift.
+
+```bash
+php artisan list finance                      # all available finance commands
+php artisan finance:<command> --help          # options and flags for a specific command
+php artisan finance:<command> --schema        # expected stdin/file input format (import commands only)
+```
+
+When generating data to feed an import command, prefer **TOON format** (`--input-format=toon`). TOON is 30-60% more token-efficient than JSON, and the `helgesverre/toon` package is installed. All import commands that accept JSON also accept TOON.
 
 ---
 
@@ -193,7 +205,7 @@ php artisan finance:lots-import --schema
 
 **Taxable disposition types parsed from pdftotext:** `Sale`, `Merger` (cash mergers), `Cash In Lieu` (fractional share payouts).
 
-→ See [LotAnalyzer.md](LotAnalyzer.md) for the frontend analysis component.
+→ See [lot-analyzer.md](lot-analyzer.md) for the frontend analysis component.
 
 ---
 

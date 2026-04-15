@@ -18,7 +18,7 @@ The Lot Analyzer is a client-side React component that analyzes stock transactio
 | `tests/Feature/Finance/FinanceLotsImportCommandTest.php` | PHP tests for the import command |
 | `tests/Feature/FinanceLotsControllerTest.php` | PHP tests for the API controller |
 
-→ Import command usage: see [finance-tool-artisan-cli.md](finance-tool-artisan-cli.md#financelots-import)
+→ Import command usage: see [cli.md](cli.md#financelots-import)
 
 ---
 

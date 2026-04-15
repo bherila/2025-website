@@ -107,7 +107,7 @@ Tags with Schedule C tax characteristics (`business_income`, `business_returns`,
 
 **Canonical list**: `FinAccountTag::TAX_CHARACTERISTIC_VALUES` (all values) and `FinAccountTag::SCHEDULE_C_CHARACTERISTICS` (Schedule C only).
 
-See [TaxSystem.md](TaxSystem.md) for full employment entity documentation.
+See [tax-system.md](tax-system.md) for full employment entity documentation.
 
 ---
 

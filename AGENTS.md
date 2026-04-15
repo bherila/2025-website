@@ -136,7 +136,7 @@ try {
 
 ## Finance CLI (`finance:*` Artisan Commands)
 
-See `docs/finance/finance-cli-agent-guide.md` for discovery commands, input format preferences (TOON recommended), key command list, and configuration.
+See `docs/finance/cli.md` for discovery commands, input format preferences (TOON recommended), key command list, and configuration.
 
 ---
 
