@@ -497,6 +497,12 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
                 continue;
             }
 
+            if ($this->currentSymbol === '') {
+                $this->warn('Skipping sale row with no security header parsed yet.');
+
+                continue;
+            }
+
             $lots[] = [
                 'symbol' => $this->currentSymbol,
                 'description' => $this->currentDescription,
@@ -628,7 +634,14 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
-    /** Parse "MM/DD/YY" → "YYYY-MM-DD". */
+    /**
+     * Parse "MM/DD/YY" → "YYYY-MM-DD".
+     *
+     * Uses a pivot-year approach: 2-digit years ≤ (current year + 10) mod 100
+     * are treated as 20xx; years above the pivot are treated as 19xx.
+     * This correctly handles long-held positions acquired in the late 1990s
+     * (e.g. "12/31/99" → 1999-12-31, not 2099-12-31).
+     */
     private function parseFidelityDate(string $raw): ?string
     {
         $raw = trim($raw);
@@ -636,7 +649,11 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
             return null;
         }
 
-        return sprintf('20%02d-%02d-%02d', (int) $m[3], (int) $m[1], (int) $m[2]);
+        $twoDigitYear = (int) $m[3];
+        $pivotYear = (int) date('y') + 10; // e.g. 2025 → pivot = 35
+        $century = $twoDigitYear <= $pivotYear ? 2000 : 1900;
+
+        return sprintf('%04d-%02d-%02d', $century + $twoDigitYear, (int) $m[1], (int) $m[2]);
     }
 
     /**

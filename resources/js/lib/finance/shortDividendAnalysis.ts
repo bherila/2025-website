@@ -81,11 +81,17 @@ function isShortDividend(t: AccountLineItem): boolean {
   return desc.includes('SHORT') || desc.includes('CHARGED') || desc.includes('SHORT SALE')
 }
 
-/** Count calendar days between two ISO date strings (date2 - date1). */
+/**
+ * Count calendar days between two ISO date strings (date2 - date1).
+ * Uses Date.UTC to avoid DST transitions producing 23/25-hour days
+ * that would miscount the 45-day threshold.
+ */
 function daysBetween(date1: string, date2: string): number {
-  const d1 = new Date(date1 + 'T00:00:00')
-  const d2 = new Date(date2 + 'T00:00:00')
-  return Math.round((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24))
+  const parts1 = date1.split('-').map(Number)
+  const parts2 = date2.split('-').map(Number)
+  const ms1 = Date.UTC(parts1[0] ?? 0, (parts1[1] ?? 1) - 1, parts1[2] ?? 1)
+  const ms2 = Date.UTC(parts2[0] ?? 0, (parts2[1] ?? 1) - 1, parts2[2] ?? 1)
+  return Math.round((ms2 - ms1) / (1000 * 60 * 60 * 24))
 }
 
 /**

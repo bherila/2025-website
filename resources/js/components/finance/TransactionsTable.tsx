@@ -367,11 +367,13 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
     >
       {/* Summary cards — collapses when user scrolls the table */}
       <div
+        aria-hidden={useVirtualScroll && isHeaderCollapsed ? true : undefined}
         style={useVirtualScroll ? {
           overflow: 'hidden',
           maxHeight: isHeaderCollapsed ? '0' : '200px',
           opacity: isHeaderCollapsed ? 0 : 1,
           transition: 'max-height 250ms ease, opacity 200ms ease',
+          visibility: isHeaderCollapsed ? 'hidden' : 'visible',
         } : undefined}
       >
         <TransactionsSummaryCards
@@ -391,11 +393,13 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
             ? (isHeaderCollapsed ? "rounded-sm" : "rounded-t-sm")
             : "sticky top-0 z-20 rounded-t-sm",
         )}
+        aria-hidden={useVirtualScroll && isHeaderCollapsed ? true : undefined}
         style={useVirtualScroll ? {
           overflow: 'hidden',
           maxHeight: isHeaderCollapsed ? '0' : '200px',
           opacity: isHeaderCollapsed ? 0 : 1,
           transition: 'max-height 250ms ease, opacity 200ms ease',
+          visibility: isHeaderCollapsed ? 'hidden' : 'visible',
         } : undefined}
       >
         {!useVirtualScroll && <PaginationControls {...paginationProps} />}
