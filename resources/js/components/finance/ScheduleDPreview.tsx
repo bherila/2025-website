@@ -4,6 +4,7 @@ import currency from 'currency.js'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { Callout, fmtAmt, FormBlock, FormLine, FormSubLine, FormTotalLine, parseFieldVal } from '@/components/finance/tax-preview-primitives'
+import { scheduleD } from '@/lib/tax/scheduleD'
 import type { FK1StructuredData, K1CodeItem } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 
@@ -14,6 +15,15 @@ function pk1(data: FK1StructuredData, box: string): number {
   if (!v) return 0
   const n = parseFloat(v)
   return isNaN(n) ? 0 : n
+}
+
+/** Read a numeric field from broker_1099 or 1099_b parsed_data. */
+function readBrokerField(p: Record<string, unknown>, ...keys: string[]): number {
+  for (const key of keys) {
+    const v = p[key]
+    if (typeof v === 'number' && !isNaN(v)) return v
+  }
+  return 0
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -63,6 +73,40 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
   const total6781LT = sec1256Sources.reduce((acc, source) => acc.add(source.lt), currency(0)).value
   const total6781ST = sec1256Sources.reduce((acc, source) => acc.add(source.st), currency(0)).value
 
+  // ── broker_1099 / 1099-B totals ───────────────────────────────────────────
+  // Reads the summary ST/LT figures from reviewed broker_1099 and 1099_b documents.
+  // Our imported broker_1099 documents (stored via finance:tax-import or Tax Preview UI)
+  // use field names like b_st_reported_gain_loss / b_lt_gain_loss.
+  // AI-extracted 1099_b documents use total_realized_gain_loss with is_short_term per lot.
+  type BrokerGainSource = { label: string; stGain: number; ltGain: number }
+  const brokerSources: BrokerGainSource[] = []
+
+  const brokerDocs = reviewed1099Docs.filter(
+    (d) => d.form_type === 'broker_1099' || d.form_type === '1099_b' || d.form_type === '1099_b_c',
+  )
+
+  for (const doc of brokerDocs) {
+    const p = (doc.parsed_data ?? {}) as Record<string, unknown>
+    const payer = (p.payer_name as string | undefined) ?? doc.account?.acct_name ?? doc.original_filename ?? 'Brokerage'
+
+    // Our manually-imported broker_1099 format (fields set by finance:tax-import / tinker)
+    const stGain = readBrokerField(p, 'b_st_gain_loss', 'b_st_reported_gain_loss')
+    const ltGain = readBrokerField(p, 'b_lt_gain_loss', 'b_lt_reported_gain_loss')
+    const totalGain = readBrokerField(p, 'b_total_gain_loss', 'total_realized_gain_loss')
+
+    if (stGain !== 0 || ltGain !== 0 || totalGain !== 0) {
+      brokerSources.push({
+        label: payer,
+        stGain: stGain || (totalGain !== 0 ? totalGain : 0), // fallback if no ST/LT split
+        ltGain,
+      })
+    }
+  }
+
+  const hasBrokerData = brokerSources.length > 0
+  const totalBrokerST = brokerSources.reduce((acc, s) => acc.add(s.stGain), currency(0)).value
+  const totalBrokerLT = brokerSources.reduce((acc, s) => acc.add(s.ltGain), currency(0)).value
+
   // ── Short-term capital gains/losses ──────────────────────────────────────
   type CapGainLine = { label: string; amount: number; note?: string }
   const stLines: CapGainLine[] = []
@@ -85,15 +129,18 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
     })
   }
 
-  // 1099-B placeholder
-  const has1099B = reviewed1099Docs.some(
-    (d) => d.form_type === '1099_b' || d.form_type === '1099_b_c',
-  )
-  if (!has1099B) {
+  // broker_1099 / 1099-B short-term
+  if (hasBrokerData) {
+    for (const src of brokerSources) {
+      if (src.stGain !== 0) {
+        stLines.push({ label: `${src.label} — ST 1099-B`, amount: src.stGain })
+      }
+    }
+  } else {
     stLines.push({
       label: 'Brokerage 1099-B (not yet uploaded)',
       amount: 0,
-      note: 'Upload 1099-B for short-term transaction detail',
+      note: 'Upload and review a 1099-B or broker_1099 document to include brokerage transactions',
     })
   }
 
@@ -126,21 +173,44 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
     })
   }
 
-  if (!has1099B) {
+  // broker_1099 / 1099-B long-term
+  if (hasBrokerData) {
+    for (const src of brokerSources) {
+      if (src.ltGain !== 0) {
+        ltLines.push({ label: `${src.label} — LT 1099-B`, amount: src.ltGain })
+      }
+    }
+  } else {
     ltLines.push({
       label: 'Brokerage 1099-B (not yet uploaded)',
       amount: 0,
-      note: 'Upload 1099-B for long-term transaction detail',
+      note: 'Upload and review a 1099-B or broker_1099 document to include brokerage transactions',
     })
   }
 
-  // ── Totals ────────────────────────────────────────────────────────────────
-  const netST = stLines.reduce((acc, line) => acc.add(line.amount), currency(0)).value
-  const netLT = ltLines.reduce((acc, line) => acc.add(line.amount), currency(0)).value
-  const combined = currency(netST).add(netLT).value
+  // ── Totals via lib/tax/scheduleD ─────────────────────────────────────────
+  // Aggregate K-1 ST from Box 8 lines and LT from Box 9a/9b/9c/10 lines
+  const k1ST = stLines
+    .filter((l) => l.label.includes('K-1'))
+    .reduce((acc, l) => acc.add(l.amount), currency(0)).value
+  const k1LT = ltLines
+    .filter((l) => l.label.includes('K-1'))
+    .reduce((acc, l) => acc.add(l.amount), currency(0)).value
 
-  const annualCapLoss = 3000
-  const appliedToReturn = combined < 0 ? Math.max(combined, -annualCapLoss) : 0
+  const schD = scheduleD({
+    line1a_gain_loss: totalBrokerST,   // ST brokerage (basis reported, Box A/1a)
+    line5: k1ST,                        // ST from K-1 partnerships (Line 5)
+    line8a_gain_loss: totalBrokerLT,   // LT brokerage (basis reported, Box D/8a)
+    line12: k1LT,                       // LT from K-1 partnerships (Line 12)
+    // Sec. 1256 split into the 6781 lines
+    line3_gain_loss: total6781ST,       // Form 6781 ST 40% portion
+    line10_gain_loss: total6781LT,      // Form 6781 LT 60% portion
+  })
+
+  const netST = schD.schD_line7
+  const netLT = schD.schD_line15
+  const combined = schD.schD_line16
+  const appliedToReturn = schD.schD_line21 < 0 ? schD.schD_line21 : 0
   const carryforward = combined < 0 ? currency(combined).subtract(appliedToReturn).value : 0
 
   return (
@@ -185,7 +255,7 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
             </div>
           ))}
           {stLines.length === 0 && <FormLine label="No short-term items" raw="—" />}
-          <FormTotalLine label="Part I Net Short-Term" value={netST} />
+          <FormTotalLine label="Line 7 — Net Short-Term (via scheduleD())" value={netST} />
         </FormBlock>
 
         <FormBlock title="Schedule D Part II — Long-Term">
@@ -196,19 +266,19 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
             </div>
           ))}
           {ltLines.length === 0 && <FormLine label="No long-term items" raw="—" />}
-          <FormTotalLine label="Part II Net Long-Term" value={netLT} />
+          <FormTotalLine label="Line 15 — Net Long-Term (via scheduleD())" value={netLT} />
         </FormBlock>
       </div>
 
       {/* Summary */}
       <FormBlock title="Schedule D Summary">
-        <FormLine label="Net short-term capital gain (loss)" value={netST} />
-        <FormLine label="Net long-term capital gain (loss)" value={netLT} />
-        <FormTotalLine label="Combined net capital gain (loss)" value={combined} />
+        <FormLine label="Line 7 — Net short-term capital gain (loss)" value={netST} />
+        <FormLine label="Line 15 — Net long-term capital gain (loss)" value={netLT} />
+        <FormTotalLine label="Line 16 — Combined net capital gain (loss)" value={combined} />
         {combined < 0 && (
           <>
             <FormLine
-              label={`Capital loss applied to ${taxYear} return`}
+              label={`Line 21 — Capital loss applied to ${taxYear} return`}
               value={appliedToReturn}
             />
             <FormLine
@@ -228,10 +298,10 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
         </Callout>
       )}
 
-      {!has1099B && (
+      {!hasBrokerData && (
         <Callout kind="info" title="ℹ 1099-B Not Yet Uploaded">
           <p>
-            Brokerage 1099-B is not yet in the reviewed documents. Upload and review 1099-B statements in the
+            No reviewed broker_1099 or 1099-B documents found. Upload and review brokerage 1099 documents in the
             Overview tab (All Tax Documents section) to include brokerage transactions in this analysis.
           </p>
         </Callout>
