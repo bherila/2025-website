@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { z } from 'zod'
 
 import { Badge } from '@/components/ui/badge'
@@ -27,9 +27,9 @@ import { fetchWrapper } from '@/fetchWrapper'
 import { analyzeShortDividends } from '@/lib/finance/shortDividendAnalysis'
 import type { Lot, LotsResponse } from '@/types/finance/lot'
 
-import { ShortDividendSummaryCard } from './ShortDividendDetailModal'
 import ImportLotsPanel from './lots/ImportLotsPanel'
 import LotAnalyzer from './lots/LotAnalyzer'
+import { ShortDividendSummaryCard } from './ShortDividendDetailModal'
 
 function formatCurrency(value: string | number | null | undefined): string {
     if (value === null || value === undefined) return '—'
@@ -120,6 +120,12 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
         setShowLotAnalyzer(!showLotAnalyzer)
     }
 
+    // Memoize so analyzeShortDividends doesn't re-run on every render
+    const shortDivSummary = useMemo(
+        () => (transactions.length > 0 ? analyzeShortDividends(transactions) : null),
+        [transactions],
+    )
+
     if (isLoading && !data) {
         return (
             <div className="space-y-2 px-8 pt-8">
@@ -200,25 +206,22 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
             </div>
 
             {/* Short Dividend Analysis — shown when transactions are loaded */}
-            {transactions.length > 0 && (() => {
-                const shortDivSummary = analyzeShortDividends(transactions)
-                return shortDivSummary.entries.length > 0 ? (
-                    <div className="mb-6">
-                        <Card>
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-sm">Short Dividend Holding Period Analysis</CardTitle>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    Dividends charged on short positions, classified by IRS holding period rules (IRS Pub. 550).
-                                    Click a row to see supporting transactions.
-                                </p>
-                            </CardHeader>
-                            <CardContent>
-                                <ShortDividendSummaryCard summary={shortDivSummary} />
-                            </CardContent>
-                        </Card>
-                    </div>
-                ) : null
-            })()}
+            {shortDivSummary && shortDivSummary.entries.length > 0 && (
+                <div className="mb-6">
+                    <Card>
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm">Short Dividend Holding Period Analysis</CardTitle>
+                            <p className="text-xs text-muted-foreground mt-1">
+                                Dividends charged on short positions, classified by IRS holding period rules (IRS Pub. 550).
+                                Click a row to see supporting transactions.
+                            </p>
+                        </CardHeader>
+                        <CardContent>
+                            <ShortDividendSummaryCard summary={shortDivSummary} />
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
 
             {/* Lot Analyzer */}
             {showLotAnalyzer && transactions.length > 0 && (

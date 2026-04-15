@@ -40,10 +40,14 @@ const ACTION_TYPE_MAP: Record<string, string> = {
   'Stock Merger': 'Merger',
 }
 
-/** Strip Schwab's "$" prefix and commas from amount strings. */
+/**
+ * Strip Schwab's "$" prefix and commas from amount strings.
+ * Handles both "$1,234.56" and "-$1,234.56" (negative amounts).
+ */
 function parseSchwabAmount(raw: string | undefined): string | undefined {
   if (!raw) return undefined
-  const cleaned = raw.trim().replace(/^\$/, '').replace(/,/g, '')
+  // Replace "-$" → "-" before stripping the bare "$"
+  const cleaned = raw.trim().replace(/-\$/, '-').replace(/^\$/, '').replace(/,/g, '')
   return cleaned === '' || cleaned === '--' ? undefined : cleaned
 }
 

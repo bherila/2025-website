@@ -10,6 +10,7 @@ import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
 import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
+import { buildCacheKey, getCachedTransactions } from '@/services/transactionCache'
 import type { EmploymentEntity, F1099DivParsedData, F1099IntParsedData, TaxDocument } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
@@ -179,6 +180,14 @@ export function TaxPreviewProvider({
       try {
         const perAccountResults = await Promise.all(
           activeAccountIds.map(async (acctId) => {
+            // Check IndexedDB cache first — avoids redundant API calls when
+            // transactions were already fetched by the Transactions page.
+            const cacheKey = buildCacheKey(acctId)
+            const cached = await getCachedTransactions(cacheKey)
+            if (cached) {
+              return analyzeShortDividends(cached.transactions)
+            }
+            // Fall back to API fetch (stores all years, no year param)
             const raw = await fetchWrapper.get(`/api/finance/${acctId}/line_items`)
             const parsed = AccountLineItemSchema.array().safeParse(raw)
             return parsed.success ? analyzeShortDividends(parsed.data) : null
@@ -193,14 +202,17 @@ export function TaxPreviewProvider({
         const costBasis = allEntries.filter((e) => e.treatment === 'cost_basis')
         const unknown = allEntries.filter((e) => e.treatment === 'unknown')
 
+        const sumCharged = (arr: typeof itemized) =>
+          arr.reduce((acc, e) => acc.add(e.amountCharged), currency(0)).value
+
         setShortDividendSummary({
           entries: allEntries,
           itemizedDeductionEntries: itemized,
           costBasisEntries: costBasis,
           unknownEntries: unknown,
-          totalItemizedDeduction: itemized.reduce((s, e) => s + e.amountCharged, 0),
-          totalCostBasis: costBasis.reduce((s, e) => s + e.amountCharged, 0),
-          totalUnknown: unknown.reduce((s, e) => s + e.amountCharged, 0),
+          totalItemizedDeduction: sumCharged(itemized),
+          totalCostBasis: sumCharged(costBasis),
+          totalUnknown: sumCharged(unknown),
         })
       } catch {
         // Non-fatal: short dividend analysis is supplementary

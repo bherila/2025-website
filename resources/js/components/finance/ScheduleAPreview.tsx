@@ -4,7 +4,7 @@ import currency from 'currency.js'
 import { useState } from 'react'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
-import { FormBlock, FormLine, FormTotalLine, fmtAmt } from '@/components/finance/tax-preview-primitives'
+import { FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
   Table,

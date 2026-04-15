@@ -20,6 +20,8 @@
  * Reference: IRS Publication 550, "Short Sales" section.
  */
 
+import currency from 'currency.js'
+
 import type { AccountLineItem } from '@/data/finance/AccountLineItem'
 
 /** Threshold in days: positions held > 45 days qualify for itemized deduction. */
@@ -151,13 +153,16 @@ export function analyzeShortDividends(transactions: AccountLineItem[]): ShortDiv
   const costBasisEntries = entries.filter((e) => e.treatment === 'cost_basis')
   const unknownEntries = entries.filter((e) => e.treatment === 'unknown')
 
+  const sumCharged = (arr: ShortDividendEntry[]) =>
+    arr.reduce((acc, e) => acc.add(e.amountCharged), currency(0)).value
+
   return {
     entries,
     itemizedDeductionEntries,
     costBasisEntries,
     unknownEntries,
-    totalItemizedDeduction: itemizedDeductionEntries.reduce((s, e) => s + e.amountCharged, 0),
-    totalCostBasis: costBasisEntries.reduce((s, e) => s + e.amountCharged, 0),
-    totalUnknown: unknownEntries.reduce((s, e) => s + e.amountCharged, 0),
+    totalItemizedDeduction: sumCharged(itemizedDeductionEntries),
+    totalCostBasis: sumCharged(costBasisEntries),
+    totalUnknown: sumCharged(unknownEntries),
   }
 }
