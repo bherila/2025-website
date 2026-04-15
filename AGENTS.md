@@ -129,8 +129,36 @@ try {
 3. **DB in tests**: Tests use SQLite in-memory (`DB_DATABASE=:memory:`) — `RefreshDatabase` is safe
 4. **Validation**: All tests, linting, and type-checks in [TESTING.md](TESTING.md) must pass.
 5. **Types**: PHP methods must have return types; TypeScript must have no `any` (where possible).
-6. **Monetary Math**: Use `currency.js` (`import currency from 'currency.js'`) for ALL arithmetic on monetary values. Never use plain `+/-/*//` operators on money — floating-point errors accumulate. Use `currency(value).add(x).subtract(y).multiply(z)` for math and `.format()` for display.
+6. **Monetary Math**: Use `currency.js` (`import currency from 'currency.js'`) for ALL arithmetic on monetary values. Never use plain `+/-/*//` operators on money — floating-point errors accumulate. Use `currency(value).add(x).subtract(y).multiply(z)` for math and `.format()` for display. Return `.value` (plain `number`) at the boundary of any exported function — `currency` objects are not JSON-serialisable.
 7. **Zod Schemas**: Use `zod` for client-side validation. Always derive the TypeScript type from the schema with `z.infer<typeof schema>` — never duplicate a schema with a separate TypeScript interface.
+
+---
+
+## Finance CLI (`finance:*` Artisan Commands)
+
+Finance domain work is supported by a set of `finance:*` artisan commands. Do not duplicate their documentation here — use the commands themselves to discover the current interface:
+
+```bash
+php artisan list finance                     # discover all finance commands
+php artisan finance:<command> --help         # options and flags
+php artisan finance:<command> --schema       # expected stdin/file input format (import commands)
+```
+
+**Input format preference**: When generating data to feed an import command, use **TOON format** (`--input-format=toon`) — it is 30–60% more token-efficient than JSON and the `helgesverre/toon` package is installed. All import commands that accept JSON also accept TOON. Example:
+
+```bash
+php artisan finance:lots-import --account=33 --input-format=toon --file=lots.toon
+```
+
+**Key commands**:
+- `finance:accounts` — list accounts for the configured user
+- `finance:transactions` — list/filter transactions
+- `finance:import-transactions` — import transactions from JSON stdin
+- `finance:lots-import` — import 1099-B lots (JSON / CSV / TOON / Fidelity pdftotext)
+- `finance:tax-docs` — list tax documents for a year
+- `finance:tax-import` — import tax document metadata from JSON stdin
+
+The user ID is read from `FINANCE_CLI_USER_ID` env var (default: 1). See `docs/finance/finance-tool-artisan-cli.md` for detailed usage.
 
 ---
 
