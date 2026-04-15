@@ -8,6 +8,7 @@ import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/Acco
 import { parseEtradeCsv } from '@/data/finance/parseEtradeCsv'
 import { parseFidelityCsv } from '@/data/finance/parseFidelityCsv'
 import { type IbStatementData,parseIbCsv } from '@/data/finance/parseIbCsv'
+import { isSchwabCsv, parseSchwabCsv } from '@/data/finance/parseSchwabCsv'
 import { parseQuickenQFX } from '@/data/finance/parseQuickenQFX'
 import { parseWealthfrontHAR } from '@/data/finance/parseWealthfrontHAR'
 import { parseDate } from '@/lib/DateHelper'
@@ -58,6 +59,14 @@ export function parseImportData(text: string): ParseImportDataResult {
   const wealthfrontData = parseWealthfrontHAR(text)
   if (wealthfrontData.length > 0) {
     return { data: wealthfrontData, statement: null, parseError: null }
+  }
+
+  // Try parsing as Schwab CSV (before Fidelity to avoid misdetection)
+  if (isSchwabCsv(text)) {
+    const schwabData = parseSchwabCsv(text)
+    if (schwabData.length > 0) {
+      return { data: schwabData, statement: null, parseError: null }
+    }
   }
 
   // Try parsing as Fidelity

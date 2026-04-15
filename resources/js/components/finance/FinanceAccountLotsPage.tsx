@@ -24,8 +24,10 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
+import { analyzeShortDividends } from '@/lib/finance/shortDividendAnalysis'
 import type { Lot, LotsResponse } from '@/types/finance/lot'
 
+import { ShortDividendSummaryCard } from './ShortDividendDetailModal'
 import ImportLotsPanel from './lots/ImportLotsPanel'
 import LotAnalyzer from './lots/LotAnalyzer'
 
@@ -197,12 +199,33 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
                 {isLoading && <Skeleton className="h-4 w-16 rounded" />}
             </div>
 
+            {/* Short Dividend Analysis — shown when transactions are loaded */}
+            {transactions.length > 0 && (() => {
+                const shortDivSummary = analyzeShortDividends(transactions)
+                return shortDivSummary.entries.length > 0 ? (
+                    <div className="mb-6">
+                        <Card>
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm">Short Dividend Holding Period Analysis</CardTitle>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    Dividends charged on short positions, classified by IRS holding period rules (IRS Pub. 550).
+                                    Click a row to see supporting transactions.
+                                </p>
+                            </CardHeader>
+                            <CardContent>
+                                <ShortDividendSummaryCard summary={shortDivSummary} />
+                            </CardContent>
+                        </Card>
+                    </div>
+                ) : null
+            })()}
+
             {/* Lot Analyzer */}
             {showLotAnalyzer && transactions.length > 0 && (
                 <div className="mb-6">
-                    <LotAnalyzer 
-                        transactions={transactions} 
-                        accountId={id} 
+                    <LotAnalyzer
+                        transactions={transactions}
+                        accountId={id}
                         allYearsLoaded={true}
                     />
                 </div>

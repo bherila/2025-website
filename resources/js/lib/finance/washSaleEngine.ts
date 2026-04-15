@@ -214,7 +214,8 @@ export function normalizeOptions(opts: WashSaleOptions | LegacyWashSaleOptions):
 function isRegularSale(type: string): boolean {
   const t = type.toLowerCase().trim()
   if (t.includes('sell short') || t.includes('sellshort') || t.includes('sell to open')) return false
-  return (t.includes('sell') || t === 'assigned' || t === 'exercised')
+  // Cash mergers and cash-in-lieu are taxable dispositions (closing transactions)
+  return (t.includes('sell') || t === 'assigned' || t === 'exercised' || t === 'merger' || t === 'cash in lieu')
 }
 
 function isShortOpening(type: string): boolean {

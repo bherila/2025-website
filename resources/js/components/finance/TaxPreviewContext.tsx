@@ -7,7 +7,9 @@ import { toast } from 'sonner'
 
 import { computeScheduleCNetIncome } from '@/components/finance/ScheduleCPreview'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
+import { AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
+import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import type { EmploymentEntity, F1099DivParsedData, F1099IntParsedData, TaxDocument } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
@@ -61,6 +63,8 @@ interface TaxPreviewContextValue {
     dividendIncome: currency
     qualifiedDividends: currency
   }
+  /** Aggregated short dividend summary across all active accounts, or null if not yet loaded. */
+  shortDividendSummary: ShortDividendSummary | null
   setPayslips: Dispatch<SetStateAction<fin_payslip[]>>
   setPendingReviewCount: Dispatch<SetStateAction<number>>
   setW2Documents: Dispatch<SetStateAction<TaxDocument[]>>
@@ -102,6 +106,7 @@ export function TaxPreviewProvider({
   const [employmentEntities, setEmploymentEntities] = useState<EmploymentEntity[]>([])
   const [accounts, setAccounts] = useState<TaxPreviewAccount[]>([])
   const [activeAccountIds, setActiveAccountIds] = useState<number[]>([])
+  const [shortDividendSummary, setShortDividendSummary] = useState<ShortDividendSummary | null>(null)
 
   const refreshAll = useCallback(async () => {
     if (!hasLoadedOnce.current) {
@@ -163,6 +168,48 @@ export function TaxPreviewProvider({
     return () => clearInterval(id)
   }, [allDocuments, refreshAll])
 
+  // Load short dividend analysis for all active accounts.
+  // We fetch transactions for each active account, run analyzeShortDividends,
+  // then merge the results into a single summary.
+  useEffect(() => {
+    if (activeAccountIds.length === 0) return
+
+    let cancelled = false
+    void (async () => {
+      try {
+        const perAccountResults = await Promise.all(
+          activeAccountIds.map(async (acctId) => {
+            const raw = await fetchWrapper.get(`/api/finance/${acctId}/line_items`)
+            const parsed = AccountLineItemSchema.array().safeParse(raw)
+            return parsed.success ? analyzeShortDividends(parsed.data) : null
+          }),
+        )
+
+        if (cancelled) return
+
+        // Merge results across accounts
+        const allEntries = perAccountResults.flatMap((r) => r?.entries ?? [])
+        const itemized = allEntries.filter((e) => e.treatment === 'itemized_deduction')
+        const costBasis = allEntries.filter((e) => e.treatment === 'cost_basis')
+        const unknown = allEntries.filter((e) => e.treatment === 'unknown')
+
+        setShortDividendSummary({
+          entries: allEntries,
+          itemizedDeductionEntries: itemized,
+          costBasisEntries: costBasis,
+          unknownEntries: unknown,
+          totalItemizedDeduction: itemized.reduce((s, e) => s + e.amountCharged, 0),
+          totalCostBasis: costBasis.reduce((s, e) => s + e.amountCharged, 0),
+          totalUnknown: unknown.reduce((s, e) => s + e.amountCharged, 0),
+        })
+      } catch {
+        // Non-fatal: short dividend analysis is supplementary
+      }
+    })()
+
+    return () => { cancelled = true }
+  }, [activeAccountIds])
+
   const reviewedW2Docs = useMemo(
     () => w2Documents.filter((doc) => doc.is_reviewed),
     [w2Documents],
@@ -221,6 +268,7 @@ export function TaxPreviewProvider({
     accounts,
     activeAccountIds,
     income1099,
+    shortDividendSummary,
     setPayslips,
     setPendingReviewCount,
     setW2Documents,
@@ -248,6 +296,7 @@ export function TaxPreviewProvider({
     accounts,
     activeAccountIds,
     income1099,
+    shortDividendSummary,
     refreshAll,
   ])
 

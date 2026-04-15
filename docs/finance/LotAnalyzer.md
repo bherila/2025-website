@@ -6,12 +6,19 @@ The Lot Analyzer is a client-side React component that analyzes stock transactio
 
 ## Component Location
 
-- **React Component**: `resources/js/components/finance/LotAnalyzer.tsx`
-- **Wash Sale Engine**: `resources/js/lib/finance/washSaleEngine.ts`
-- **Unit Tests**: `tests-ts/washSaleEngine.test.ts`
-- **PHP Controller**: `app/Http/Controllers/FinanceTool/FinanceLotsController.php`
-- **PHP Tests**: `tests/Feature/FinanceLotsControllerTest.php`
-- **Type Definitions**: `resources/js/types/finance/account-line-item.ts`
+| File | Purpose |
+|---|---|
+| `resources/js/components/finance/LotAnalyzer.tsx` | Main React component (IRS Form 8949 table) |
+| `resources/js/lib/finance/washSaleEngine.ts` | Wash sale detection + lot matching logic |
+| `resources/js/lib/finance/shortDividendAnalysis.ts` | Short dividend holding period classification |
+| `resources/js/components/finance/ShortDividendDetailModal.tsx` | `ShortDividendSummaryCard` + detail modal |
+| `tests-ts/washSaleEngine.test.ts` | JS unit tests for the wash sale engine |
+| `app/Http/Controllers/FinanceTool/FinanceLotsController.php` | PHP API controller |
+| `app/Console/Commands/Finance/FinanceLotsImportCommand.php` | CLI importer (JSON/CSV/TOON/pdftotext) |
+| `tests/Feature/Finance/FinanceLotsImportCommandTest.php` | PHP tests for the import command |
+| `tests/Feature/FinanceLotsControllerTest.php` | PHP tests for the API controller |
+
+→ Import command usage: see [finance-tool-artisan-cli.md](finance-tool-artisan-cli.md#financelots-import)
 
 ---
 
@@ -239,6 +246,35 @@ This scenario was previously mis-classified as a wash sale and is now covered by
 - No other open ENOV lots exist in the window → no replacement shares → correct result: **loss of −$366.60 is fully deductible**.
 
 This is the S10 scenario in the test matrix (see `tests-ts/washSaleEngine.test.ts`).
+
+---
+
+## Short Dividend Analysis
+
+Short stock positions generate **charged dividends** (negative `t_type=Dividend` with `(Short)` in the description). IRS Publication 550 classifies these by the holding period **on the ex-dividend date**:
+
+| Holding period | Tax treatment |
+|---|---|
+| **> 45 days** | Itemized deduction (Schedule A Line 9 via Form 4952) |
+| **≤ 45 days** | Added to the short position's cost basis |
+| **Unknown** | Open transaction not found — classify manually |
+
+### Components
+
+- **`analyzeShortDividends(transactions)`** in `shortDividendAnalysis.ts` — pure function returning a `ShortDividendSummary` with three buckets: `itemizedDeductionEntries`, `costBasisEntries`, `unknownEntries`.
+- **`ShortDividendSummaryCard`** in `ShortDividendDetailModal.tsx` — reusable React component showing the three-row summary table. Click any row to open a detail modal with the supporting transaction list.
+
+### Where it appears
+
+- **Account Lots tab** (`FinanceAccountLotsPage`) — shown automatically when transactions are loaded (same fetch as the Lot Analyzer button). No extra click required.
+- **Tax Preview → Schedule A** (`ScheduleAPreview`) — shows investment interest sources including short dividends. Line 9 is clickable and opens a data-source drilldown modal.
+- **Tax Preview → Schedules** (`Form4952Preview`) — `totalItemizedDeduction` is passed as `shortDividendDeduction` and included in the investment interest expense calculation.
+
+### Tax Preview integration
+
+`TaxPreviewContext` fetches transactions for all active accounts on load, runs `analyzeShortDividends`, and merges results into a single `shortDividendSummary` exposed on the context. This makes it available to `Form4952Preview`, `ScheduleAPreview`, and any other consumer without additional API calls.
+
+---
 
 Run wash sale engine tests:
 ```bash

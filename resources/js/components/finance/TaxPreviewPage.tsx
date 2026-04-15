@@ -10,7 +10,9 @@ import Form1116Preview from '@/components/finance/Form1116Preview'
 import Form4952Preview from '@/components/finance/Form4952Preview'
 import { isFK1StructuredData } from '@/components/finance/k1'
 import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
+import ScheduleAPreview from '@/components/finance/ScheduleAPreview'
 import ScheduleBPreview from '@/components/finance/ScheduleBPreview'
+import ScheduleEPreview from '@/components/finance/ScheduleEPreview'
 import ScheduleCTab from '@/components/finance/ScheduleCTab'
 import ScheduleDPreview from '@/components/finance/ScheduleDPreview'
 import TaxDocumentReviewModal from '@/components/finance/TaxDocumentReviewModal'
@@ -594,6 +596,7 @@ function TaxPreviewPageContent() {
     accounts,
     activeAccountIds,
     income1099,
+    shortDividendSummary,
     refreshAll,
   } = useTaxPreview()
 
@@ -716,6 +719,8 @@ function TaxPreviewPageContent() {
         <TabsList className="mb-4 flex-wrap">
           <TabsTrigger value={TAX_TABS.overview}>Overview</TabsTrigger>
           <TabsTrigger value={TAX_TABS.schedules}>Schedules</TabsTrigger>
+          <TabsTrigger value={TAX_TABS.scheduleA}>Schedule A</TabsTrigger>
+          <TabsTrigger value={TAX_TABS.scheduleE}>Schedule E</TabsTrigger>
           <TabsTrigger value={TAX_TABS.capitalGains}>Capital Gains</TabsTrigger>
           <TabsTrigger value={TAX_TABS.form1116}>Form 1116</TabsTrigger>
           <TabsTrigger value={TAX_TABS.scheduleC}>Schedule C</TabsTrigger>
@@ -786,8 +791,25 @@ function TaxPreviewPageContent() {
               reviewedK1Docs={reviewedK1Docs}
               reviewed1099Docs={reviewed1099Docs}
               income1099={income1099}
+              {...(shortDividendSummary ? { shortDividendDeduction: shortDividendSummary.totalItemizedDeduction } : {})}
             />
           )}
+        </TabsContent>
+
+        <TabsContent value={TAX_TABS.scheduleA} className="mt-0">
+          <ScheduleAPreview
+            selectedYear={selectedYear}
+            reviewedK1Docs={reviewedK1Docs}
+            reviewed1099Docs={reviewed1099Docs}
+            {...(shortDividendSummary ? { shortDividendSummary } : {})}
+          />
+        </TabsContent>
+
+        <TabsContent value={TAX_TABS.scheduleE} className="mt-0">
+          <ScheduleEPreview
+            reviewedK1Docs={reviewedK1Docs}
+            selectedYear={selectedYear}
+          />
         </TabsContent>
 
         <TabsContent value={TAX_TABS.capitalGains} className="mt-0">
