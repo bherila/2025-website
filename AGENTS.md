@@ -136,29 +136,7 @@ try {
 
 ## Finance CLI (`finance:*` Artisan Commands)
 
-Finance domain work is supported by a set of `finance:*` artisan commands. Do not duplicate their documentation here — use the commands themselves to discover the current interface:
-
-```bash
-php artisan list finance                     # discover all finance commands
-php artisan finance:<command> --help         # options and flags
-php artisan finance:<command> --schema       # expected stdin/file input format (import commands)
-```
-
-**Input format preference**: When generating data to feed an import command, use **TOON format** (`--input-format=toon`) — it is 30–60% more token-efficient than JSON and the `helgesverre/toon` package is installed. All import commands that accept JSON also accept TOON. Example:
-
-```bash
-php artisan finance:lots-import --account=33 --input-format=toon --file=lots.toon
-```
-
-**Key commands**:
-- `finance:accounts` — list accounts for the configured user
-- `finance:transactions` — list/filter transactions
-- `finance:import-transactions` — import transactions from JSON stdin
-- `finance:lots-import` — import 1099-B lots (JSON / CSV / TOON / Fidelity pdftotext)
-- `finance:tax-docs` — list tax documents for a year
-- `finance:tax-import` — import tax document metadata from JSON stdin
-
-The user ID is read from `FINANCE_CLI_USER_ID` env var (default: 1). See `docs/finance/finance-tool-artisan-cli.md` for detailed usage.
+See `docs/finance/finance-cli-agent-guide.md` for discovery commands, input format preferences (TOON recommended), key command list, and configuration.
 
 ---
 
