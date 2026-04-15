@@ -93,8 +93,18 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
             return 1;
         }
 
-        if (! DB::table('fin_accounts')->where('acct_id', $acctId)->exists()) {
-            $this->error("Account {$acctId} not found in fin_accounts.");
+        if ($this->resolveUser() === null) {
+            return 1;
+        }
+
+        $userId = $this->userId();
+        $accountExists = DB::table('fin_accounts')
+            ->where('acct_id', $acctId)
+            ->where('acct_owner', $userId)
+            ->exists();
+
+        if (! $accountExists) {
+            $this->error("Account {$acctId} not found or does not belong to user {$userId}.");
 
             return 1;
         }
@@ -225,6 +235,16 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
 
         if (stripos($raw, 'FORM 1099-B') !== false || stripos($raw, 'Short-term transactions for which basis is reported') !== false) {
             return 'text';
+        }
+
+        // TOON: attempt to decode — if it succeeds and yields an array, it's TOON
+        try {
+            $decoded = Toon::decode($raw);
+            if (is_array($decoded) && count($decoded) > 0) {
+                return 'toon';
+            }
+        } catch (\Throwable) {
+            // Not TOON — fall through
         }
 
         // CSV: first non-blank line looks like a header
@@ -561,31 +581,46 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         return [$inserted, $skipped];
     }
 
-    /** @param array<string, mixed> $lot */
+    /**
+     * Find the closing (sell/disposal) transaction for a lot.
+     *
+     * Handles sign conventions per type:
+     *  - Sell / Sell Short / Merger / Cash In Lieu / Transfer: qty is negative
+     *  - Cover (buy-to-cover a short): qty is positive
+     * We match on ABS(qty) and allow either sign.
+     *
+     * @param  array<string, mixed>  $lot
+     */
     private function findClosingTransaction(int $acctId, array $lot): ?int
     {
         $row = DB::table('fin_account_line_items')
             ->where('t_account', $acctId)
             ->where('t_symbol', $lot['symbol'])
             ->where('t_date', $lot['sale_date'])
-            ->whereIn('t_type', ['Sell', 'Cover', 'Sell Short', 'Transfer', 'Merger'])
-            ->where('t_qty', '<', 0)
-            ->orderByRaw('ABS(t_qty - ?) ASC', [-$lot['quantity']])
+            ->whereIn('t_type', ['Sell', 'Cover', 'Sell Short', 'Transfer', 'Merger', 'Cash In Lieu'])
+            ->orderByRaw('ABS(ABS(t_qty) - ?) ASC', [$lot['quantity']])
             ->first(['t_id']);
 
         return $row?->t_id;
     }
 
-    /** @param array<string, mixed> $lot */
+    /**
+     * Find the opening (buy) transaction for a lot.
+     *
+     * For long positions: Buy / Reinvest / Transfer with positive qty.
+     * For short positions: 'Sell Short' with negative qty (short opening).
+     * We match on ABS(qty) regardless of sign.
+     *
+     * @param  array<string, mixed>  $lot
+     */
     private function findOpeningTransaction(int $acctId, array $lot): ?int
     {
         $row = DB::table('fin_account_line_items')
             ->where('t_account', $acctId)
             ->where('t_symbol', $lot['symbol'])
             ->where('t_date', $lot['purchase_date'])
-            ->whereIn('t_type', ['Buy', 'Short Sale', 'Transfer', 'Reinvest'])
-            ->where('t_qty', '>', 0)
-            ->orderByRaw('ABS(t_qty - ?) ASC', [$lot['quantity']])
+            ->whereIn('t_type', ['Buy', 'Sell Short', 'Transfer', 'Reinvest'])
+            ->orderByRaw('ABS(ABS(t_qty) - ?) ASC', [$lot['quantity']])
             ->first(['t_id']);
 
         return $row?->t_id;

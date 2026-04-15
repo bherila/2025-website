@@ -34,7 +34,7 @@ const ACTION_TYPE_MAP: Record<string, string> = {
   'MoneyLink Withdrawal': 'Withdrawal',
   'Service Fee': 'Fee',
   'Misc Cash Entry': 'MISC',
-  'Cash In Lieu': 'MISC',
+  'Cash In Lieu': 'Cash In Lieu',
   'Foreign Tax Paid': 'Tax',
   'Cash Merger': 'Merger',
   'Stock Merger': 'Merger',
@@ -65,10 +65,11 @@ function parseSchwabDate(raw: string | undefined): string | undefined {
 /**
  * Detect whether the text looks like a Schwab CSV.
  * Schwab exports begin with a quoted header row containing "Action" and "Fees & Comm".
+ * Scans up to 5 lines to handle exports that include a title/metadata row above the header.
  */
 export function isSchwabCsv(text: string): boolean {
-  const firstLine = text.trimStart().split('\n')[0] ?? ''
-  return firstLine.includes('Action') && firstLine.includes('Fees & Comm')
+  const lines = text.trimStart().split('\n').slice(0, 5)
+  return lines.some((line) => line.includes('Action') && line.includes('Fees & Comm'))
 }
 
 /**

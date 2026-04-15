@@ -35,9 +35,10 @@ export interface ParseImportDataResult {
  * 1. E-Trade CSV
  * 2. QFX/OFX (Quicken)
  * 3. Wealthfront HAR
- * 4. Fidelity CSV
- * 5. Interactive Brokers CSV (includes statement data)
- * 6. Generic CSV with Date/Description/Amount columns
+ * 4. Schwab CSV (before Fidelity to avoid misdetection)
+ * 5. Fidelity CSV
+ * 6. Interactive Brokers CSV (includes statement data)
+ * 7. Generic CSV with Date/Description/Amount columns
  * 
  * @param text - The raw text content to parse
  * @returns Parsed data with transactions, optional statement data, and any errors

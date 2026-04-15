@@ -10,7 +10,7 @@ import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
 import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
-import { buildCacheKey, getCachedTransactions } from '@/services/transactionCache'
+import { buildCacheKey, getCachedTransactions, setCachedTransactions } from '@/services/transactionCache'
 import type { EmploymentEntity, F1099DivParsedData, F1099IntParsedData, TaxDocument } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
@@ -190,7 +190,10 @@ export function TaxPreviewProvider({
             // Fall back to API fetch (stores all years, no year param)
             const raw = await fetchWrapper.get(`/api/finance/${acctId}/line_items`)
             const parsed = AccountLineItemSchema.array().safeParse(raw)
-            return parsed.success ? analyzeShortDividends(parsed.data) : null
+            if (!parsed.success) return null
+            // Populate cache so the Transactions page and future Tax Preview loads benefit
+            void setCachedTransactions(cacheKey, parsed.data)
+            return analyzeShortDividends(parsed.data)
           }),
         )
 
