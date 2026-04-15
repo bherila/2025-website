@@ -114,7 +114,6 @@ export default function TransactionsPage({ accountId, initialAvailableYears = []
         const canUseCache = !isAllAccounts && filter === 'all' && selectedTag === 'all'
         const cacheKey = canUseCache ? buildCacheKey(accountId) : null
 
-        // 1. Show cached data immediately if available
         // 1. Show cached data immediately if available (filter by year in JS if needed)
         if (cacheKey) {
           const cached = await getCachedTransactions(cacheKey)

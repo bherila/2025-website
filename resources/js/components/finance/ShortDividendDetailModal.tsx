@@ -1,5 +1,6 @@
 'use client'
 
+import currency from 'currency.js'
 import { useState } from 'react'
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -187,7 +188,7 @@ export function ShortDividendSummaryCard({ summary }: ShortDividendSummaryCardPr
               <TableCell>Total Short Dividends</TableCell>
               <TableCell className="text-right">{summary.entries.length}</TableCell>
               <TableCell className="text-right font-mono text-red-600 dark:text-red-400">
-                {(summary.totalItemizedDeduction + summary.totalCostBasis + summary.totalUnknown).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}
+                {currency(summary.totalItemizedDeduction).add(summary.totalCostBasis).add(summary.totalUnknown).format()}
               </TableCell>
             </TableRow>
           </TableBody>
