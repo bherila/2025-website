@@ -3,6 +3,7 @@
 import { ChevronDown, Clock, FileText, FolderOpen, Home, Receipt, Settings } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
+import { PortalNavButton } from '@/components/nav/PortalNavButton'
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -177,56 +178,36 @@ export default function ClientPortalNav({
 
             <div className="flex items-center gap-1">
               {/* Home link */}
-              <Button
-                variant="ghost"
-                size="sm"
-                className={currentPage === 'home' ? 'bg-accent text-accent-foreground' : ''}
-                asChild
-              >
+              <PortalNavButton active={currentPage === 'home'} asChild>
                 <a href={`/client/portal/${slug}`}>
                   <Home className="h-4 w-4 mr-1" />
                   Home
                 </a>
-              </Button>
+              </PortalNavButton>
 
               {/* Time Records */}
-              <Button
-                variant="ghost"
-                size="sm"
-                className={currentPage === 'time' ? 'bg-accent text-accent-foreground' : ''}
-                asChild
-              >
+              <PortalNavButton active={currentPage === 'time'} asChild>
                 <a href={`/client/portal/${slug}/time`}>
                   <Clock className="h-4 w-4 mr-1" />
                   Time Records
                 </a>
-              </Button>
+              </PortalNavButton>
 
               {/* Expenses */}
-              <Button
-                variant="ghost"
-                size="sm"
-                className={currentPage === 'expenses' ? 'bg-accent text-accent-foreground' : ''}
-                asChild
-              >
+              <PortalNavButton active={currentPage === 'expenses'} asChild>
                 <a href={`/client/portal/${slug}/expenses`}>
                   <Receipt className="h-4 w-4 mr-1" />
                   Expenses
                 </a>
-              </Button>
+              </PortalNavButton>
 
               {/* Invoices */}
-              <Button
-                variant="ghost"
-                size="sm"
-                className={currentPage === 'invoices' || currentPage === 'invoice' ? 'bg-accent text-accent-foreground' : ''}
-                asChild
-              >
+              <PortalNavButton active={currentPage === 'invoices' || currentPage === 'invoice'} asChild>
                 <a href={`/client/portal/${slug}/invoices`}>
                   <FileText className="h-4 w-4 mr-1" />
                   Invoices
                 </a>
-              </Button>
+              </PortalNavButton>
 
               {/* Tasks dropdown */}
               <DropdownMenu>

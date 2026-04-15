@@ -92,4 +92,67 @@ describe('ClientPortalNav renders without errors', () => {
     const timeLinks = screen.getAllByRole('link', { name: /Time Records/i })
     expect(timeLinks.some(link => link.getAttribute('href') === '/client/portal/acme/time')).toBe(true)
   })
+
+  it('inactive nav links use text-foreground (not gold text-primary)', async () => {
+    const ClientPortalNav = (await import('@/components/client-management/portal/ClientPortalNav')).default
+    await act(async () => {
+      render(
+        <ClientPortalNav
+          slug="acme"
+          companyName="Acme Corp"
+          currentPage="home"
+          companyId={1}
+        />
+      )
+    })
+
+    // Time Records, Expenses, Invoices are inactive when currentPage=home
+    const timeLink = screen.getByRole('link', { name: /Time Records/i })
+    expect(timeLink.className).toContain('text-foreground')
+    expect(timeLink.className.split(/\s+/)).not.toContain('text-primary')
+
+    const expensesLink = screen.getByRole('link', { name: /Expenses/i })
+    expect(expensesLink.className).toContain('text-foreground')
+    expect(expensesLink.className.split(/\s+/)).not.toContain('text-primary')
+
+    const invoicesLink = screen.getByRole('link', { name: /Invoices/i })
+    expect(invoicesLink.className).toContain('text-foreground')
+    expect(invoicesLink.className.split(/\s+/)).not.toContain('text-primary')
+  })
+
+  it('active nav link uses bg-accent and text-accent-foreground', async () => {
+    const ClientPortalNav = (await import('@/components/client-management/portal/ClientPortalNav')).default
+    await act(async () => {
+      render(
+        <ClientPortalNav
+          slug="acme"
+          companyName="Acme Corp"
+          currentPage="invoices"
+          companyId={1}
+        />
+      )
+    })
+
+    const invoicesLink = screen.getAllByRole('link', { name: /Invoices/i })
+      .find(link => link.getAttribute('href') === '/client/portal/acme/invoices')
+    expect(invoicesLink?.className).toContain('bg-accent')
+    expect(invoicesLink?.className).toContain('text-accent-foreground')
+  })
+
+  it('nav links have hover:no-underline to suppress global a:hover underline', async () => {
+    const ClientPortalNav = (await import('@/components/client-management/portal/ClientPortalNav')).default
+    await act(async () => {
+      render(
+        <ClientPortalNav
+          slug="acme"
+          companyName="Acme Corp"
+          currentPage="home"
+          companyId={1}
+        />
+      )
+    })
+
+    const timeLink = screen.getByRole('link', { name: /Time Records/i })
+    expect(timeLink.className).toContain('hover:no-underline')
+  })
 })
