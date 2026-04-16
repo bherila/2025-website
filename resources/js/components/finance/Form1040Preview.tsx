@@ -56,6 +56,136 @@ interface DataSourceModalState {
   sources: DataSource[]
 }
 
+export interface Form1040LineItem {
+  line: string
+  label: string
+  value: number | null
+  bold?: boolean
+  refSchedule?: string
+  sources?: { label: string; amount: number; note?: string }[]
+  navTab?: string
+}
+
+export function computeForm1040Lines({
+  w2Income,
+  interestIncome,
+  dividendIncome,
+  scheduleCIncome,
+  w2Documents = [],
+  interestDocuments = [],
+  dividendDocuments = [],
+}: {
+  w2Income: currency
+  interestIncome: currency
+  dividendIncome: currency
+  scheduleCIncome: number
+  w2Documents?: TaxDocument[]
+  interestDocuments?: TaxDocument[]
+  dividendDocuments?: TaxDocument[]
+}): Form1040LineItem[] {
+  const reviewedW2Docs = w2Documents.filter(d => d.is_reviewed && d.parsed_data)
+  const w2IncomeFromDocs = reviewedW2Docs.length > 0
+    ? reviewedW2Docs.reduce(
+        (acc, d) => acc.add((d.parsed_data as W2ParsedData)?.box1_wages ?? 0),
+        currency(0),
+      )
+    : null
+
+  const effectiveW2Income = w2IncomeFromDocs ?? w2Income
+
+  const w2Sources = reviewedW2Docs.length > 0
+    ? reviewedW2Docs.map(d => ({
+        label: (d.parsed_data as W2ParsedData)?.employer_name ?? d.employment_entity?.display_name ?? d.original_filename ?? '',
+        amount: currency((d.parsed_data as W2ParsedData)?.box1_wages ?? 0).value,
+        note: 'W-2 Box 1',
+      }))
+    : [{ label: 'Payslip estimate (no W-2 uploaded)', amount: w2Income.value }]
+
+  const reviewedIntDocs = interestDocuments.filter(d => d.is_reviewed && d.parsed_data)
+  const interestSources = reviewedIntDocs.length > 0
+    ? reviewedIntDocs.map(d => ({
+        label: (d.parsed_data as F1099IntParsedData)?.payer_name ?? d.account?.acct_name ?? d.original_filename ?? '',
+        amount: currency((d.parsed_data as F1099IntParsedData)?.box1_interest ?? 0).value,
+        note: '1099-INT Box 1',
+      }))
+    : [{ label: 'From confirmed 1099-INT documents', amount: interestIncome.value }]
+
+  const reviewedDivDocs = dividendDocuments.filter(d => d.is_reviewed && d.parsed_data)
+  const dividendSources = reviewedDivDocs.length > 0
+    ? reviewedDivDocs.map(d => ({
+        label: (d.parsed_data as F1099DivParsedData)?.payer_name ?? d.account?.acct_name ?? d.original_filename ?? '',
+        amount: currency((d.parsed_data as F1099DivParsedData)?.box1a_ordinary ?? 0).value,
+        note: '1099-DIV Box 1a',
+      }))
+    : [{ label: 'From confirmed 1099-DIV documents', amount: dividendIncome.value }]
+
+  const totalIncome = effectiveW2Income
+    .add(interestIncome)
+    .add(dividendIncome)
+    .add(scheduleCIncome)
+
+  return [
+    {
+      line: '1a',
+      label: 'Wages, salaries, tips (W-2, box 1)',
+      value: effectiveW2Income.value,
+      sources: w2Sources,
+    },
+    {
+      line: '2b',
+      label: 'Taxable interest',
+      value: interestIncome.value,
+      refSchedule: 'Schedule B',
+      sources: interestSources,
+      navTab: TAX_TABS.schedules,
+    },
+    {
+      line: '3b',
+      label: 'Ordinary dividends',
+      value: dividendIncome.value,
+      refSchedule: 'Schedule B',
+      sources: dividendSources,
+      navTab: TAX_TABS.schedules,
+    },
+    {
+      line: '7',
+      label: 'Capital gain or loss',
+      value: null,
+      refSchedule: 'Schedule D',
+      navTab: TAX_TABS.capitalGains,
+    },
+    ...(scheduleCIncome !== 0
+      ? [{
+          line: '8',
+          label: 'Business income or loss (Schedule C)',
+          value: currency(scheduleCIncome).value,
+          refSchedule: 'Schedule C',
+          sources: [{ label: 'Schedule C net income', amount: currency(scheduleCIncome).value }],
+          navTab: TAX_TABS.scheduleC,
+        }]
+      : []),
+    {
+      line: '9',
+      label: 'Total income',
+      value: totalIncome.value,
+      bold: true,
+      sources: [
+        { label: 'W-2 wages (Line 1a)', amount: effectiveW2Income.value },
+        { label: 'Interest income (Line 2b)', amount: interestIncome.value },
+        { label: 'Ordinary dividends (Line 3b)', amount: dividendIncome.value },
+        ...(scheduleCIncome !== 0 ? [{ label: 'Schedule C income (Line 8)', amount: currency(scheduleCIncome).value }] : []),
+      ],
+    },
+    {
+      line: '20',
+      label: 'Foreign tax credit',
+      value: null,
+      refSchedule: 'Schedule 3',
+      navTab: TAX_TABS.form1116,
+    },
+  ]
+}
+
 export default function Form1040Preview({
   w2Income,
   interestIncome,
@@ -68,114 +198,34 @@ export default function Form1040Preview({
   onNavigate,
 }: Form1040PreviewProps) {
   const [dataSourceModal, setDataSourceModal] = useState<DataSourceModalState | null>(null)
+  const lines: LineItem[] = computeForm1040Lines({
+    w2Income,
+    interestIncome,
+    dividendIncome,
+    scheduleCIncome,
+    ...(w2Documents ? { w2Documents } : {}),
+    ...(interestDocuments ? { interestDocuments } : {}),
+    ...(dividendDocuments ? { dividendDocuments } : {}),
+  }).map((line) => {
+    const mappedLine: LineItem = {
+      line: line.line,
+      label: line.label,
+      value: line.value === null ? null : currency(line.value),
+      ...(line.bold ? { bold: line.bold } : {}),
+      ...(line.refSchedule ? { refSchedule: line.refSchedule } : {}),
+      ...(line.navTab ? { navTab: line.navTab } : {}),
+    }
 
-  // Compute W-2 income: prefer confirmed W-2 documents when available
-  const reviewedW2Docs = (w2Documents ?? []).filter(d => d.is_reviewed && d.parsed_data)
-  const w2IncomeFromDocs = reviewedW2Docs.length > 0
-    ? reviewedW2Docs.reduce(
-        (acc, d) => acc.add((d.parsed_data as W2ParsedData)?.box1_wages ?? 0),
-        currency(0),
-      )
-    : null
-
-  const effectiveW2Income = w2IncomeFromDocs ?? w2Income
-
-  // Build data sources for W-2 line
-  const w2Sources: DataSource[] = reviewedW2Docs.length > 0
-    ? reviewedW2Docs.map(d => ({
-        label: (d.parsed_data as W2ParsedData)?.employer_name ?? d.employment_entity?.display_name ?? d.original_filename ?? '',
-        amount: currency((d.parsed_data as W2ParsedData)?.box1_wages ?? 0),
-        note: 'W-2 Box 1',
+    if (line.sources) {
+      mappedLine.sources = line.sources.map(source => ({
+        label: source.label,
+        amount: currency(source.amount),
+        ...(source.note ? { note: source.note } : {}),
       }))
-    : [{ label: 'Payslip estimate (no W-2 uploaded)', amount: w2Income }]
+    }
 
-  // Build data sources for interest income
-  const reviewedIntDocs = (interestDocuments ?? []).filter(d => d.is_reviewed && d.parsed_data)
-  const interestSources: DataSource[] = reviewedIntDocs.length > 0
-    ? reviewedIntDocs.map(d => ({
-        label: (d.parsed_data as F1099IntParsedData)?.payer_name ?? d.account?.acct_name ?? d.original_filename ?? '',
-        amount: currency((d.parsed_data as F1099IntParsedData)?.box1_interest ?? 0),
-        note: '1099-INT Box 1',
-      }))
-    : [{ label: 'From confirmed 1099-INT documents', amount: interestIncome }]
-
-  // Build data sources for dividend income
-  const reviewedDivDocs = (dividendDocuments ?? []).filter(d => d.is_reviewed && d.parsed_data)
-  const dividendSources: DataSource[] = reviewedDivDocs.length > 0
-    ? reviewedDivDocs.map(d => ({
-        label: (d.parsed_data as F1099DivParsedData)?.payer_name ?? d.account?.acct_name ?? d.original_filename ?? '',
-        amount: currency((d.parsed_data as F1099DivParsedData)?.box1a_ordinary ?? 0),
-        note: '1099-DIV Box 1a',
-      }))
-    : [{ label: 'From confirmed 1099-DIV documents', amount: dividendIncome }]
-
-  const totalIncome = effectiveW2Income
-    .add(interestIncome)
-    .add(dividendIncome)
-    .add(scheduleCIncome)
-
-  const lines: LineItem[] = [
-    {
-      line: '1a',
-      label: 'Wages, salaries, tips (W-2, box 1)',
-      value: effectiveW2Income,
-      sources: w2Sources,
-    },
-    {
-      line: '2b',
-      label: 'Taxable interest',
-      value: interestIncome,
-      refSchedule: 'Schedule B',
-      sources: interestSources,
-      navTab: TAX_TABS.schedules,
-    },
-    {
-      line: '3b',
-      label: 'Ordinary dividends',
-      value: dividendIncome,
-      refSchedule: 'Schedule B',
-      sources: dividendSources,
-      navTab: TAX_TABS.schedules,
-    },
-    {
-      line: '7',
-      label: 'Capital gain or loss',
-      value: null,
-      refSchedule: 'Schedule D',
-      // Always shown as a navigation link to Schedule D; value populated when capital-gains data is wired in.
-      navTab: TAX_TABS.capitalGains,
-    },
-    ...(scheduleCIncome !== 0
-      ? [{
-          line: '8',
-          label: 'Business income or loss (Schedule C)',
-          value: currency(scheduleCIncome),
-          refSchedule: 'Schedule C',
-          sources: [{ label: 'Schedule C net income', amount: currency(scheduleCIncome) }],
-          navTab: TAX_TABS.scheduleC,
-        }]
-      : []),
-    {
-      line: '9',
-      label: 'Total income',
-      value: totalIncome,
-      bold: true,
-      sources: [
-        { label: 'W-2 wages (Line 1a)', amount: effectiveW2Income },
-        { label: 'Interest income (Line 2b)', amount: interestIncome },
-        { label: 'Ordinary dividends (Line 3b)', amount: dividendIncome },
-        ...(scheduleCIncome !== 0 ? [{ label: 'Schedule C income (Line 8)', amount: currency(scheduleCIncome) }] : []),
-      ],
-    },
-    {
-      line: '20',
-      label: 'Foreign tax credit',
-      value: null,
-      refSchedule: 'Schedule 3',
-      // Always shown as a navigation link to Form 1116; value populated when foreign-tax data is wired in.
-      navTab: TAX_TABS.form1116,
-    },
-  ]
+    return mappedLine
+  })
 
   return (
     <div className="px-4 pb-4">

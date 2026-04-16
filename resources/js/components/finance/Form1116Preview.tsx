@@ -28,10 +28,99 @@ interface Form1116PreviewProps {
   }
 }
 
+export interface Form1116Lines {
+  incomeSources: { label: string; amount: number }[]
+  taxSources: { label: string; amount: number }[]
+  totalPassiveIncome: number
+  totalForeignTaxes: number
+}
+
+export function computeForm1116Lines({
+  reviewedK1Docs,
+  reviewed1099Docs,
+}: Pick<Form1116PreviewProps, 'reviewedK1Docs' | 'reviewed1099Docs'>): Form1116Lines {
+  const k1Parsed = reviewedK1Docs
+    .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
+    .filter((x): x is { doc: TaxDocument; data: FK1StructuredData } => x.data !== null)
+
+  const incomeSources: { label: string; amount: number }[] = []
+  for (const { doc, data } of k1Parsed) {
+    const partnerName =
+      data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
+    const k3Sections = data.k3?.sections ?? []
+    const part2Sec1 = k3Sections.filter(
+      (s) => s.sectionId === 'part2_section1' || s.sectionId === 'part2_section2',
+    )
+    let k3PassiveTotal = 0
+    for (const sec of part2Sec1) {
+      const rows = ((sec.data as Record<string, unknown>)?.rows as Array<Record<string, unknown>> | undefined) ?? []
+      for (const row of rows) {
+        const passive = parseFieldVal(String(row.col_c_passive ?? '')) ?? 0
+        if (passive !== 0) {
+          k3PassiveTotal += passive
+        }
+      }
+    }
+
+    if (k3PassiveTotal !== 0) {
+      incomeSources.push({ label: `${partnerName} — K-3 Part II passive income`, amount: k3PassiveTotal })
+    } else if (pk1(data, '21') > 0) {
+      incomeSources.push({
+        label: `${partnerName} — Box 21 foreign tax (income estimated)`,
+        amount: pk1(data, '21') / 0.15,
+      })
+    }
+  }
+
+  for (const doc of reviewed1099Docs) {
+    if (doc.form_type !== '1099_div' && doc.form_type !== '1099_div_c') continue
+    const p = doc.parsed_data as Record<string, unknown>
+    const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? '1099-DIV'
+    const foreignTax = p?.box7_foreign_tax as number | undefined
+    if (foreignTax != null && foreignTax > 0) {
+      incomeSources.push({ label: `${payer} — 1099-DIV (estimated foreign source)`, amount: foreignTax / 0.15 })
+    }
+  }
+
+  const taxSources: { label: string; amount: number }[] = []
+  for (const { doc, data } of k1Parsed) {
+    const partnerName =
+      data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
+    const box21 = pk1(data, '21')
+    if (box21 !== 0) {
+      taxSources.push({ label: `${partnerName} — K-1 Box 21`, amount: box21 })
+    }
+  }
+
+  for (const doc of reviewed1099Docs) {
+    const p = doc.parsed_data as Record<string, unknown>
+    const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? '1099'
+
+    const divForeignTax = p?.box7_foreign_tax as number | undefined
+    if (divForeignTax != null && divForeignTax > 0) {
+      taxSources.push({ label: `${payer} — 1099-DIV Box 7`, amount: divForeignTax })
+    }
+
+    const intForeignTax = p?.box6_foreign_tax as number | undefined
+    if (intForeignTax != null && intForeignTax > 0) {
+      taxSources.push({ label: `${payer} — 1099-INT Box 6`, amount: intForeignTax })
+    }
+  }
+
+  return {
+    incomeSources,
+    taxSources,
+    totalPassiveIncome: incomeSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value,
+    totalForeignTaxes: taxSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value,
+  }
+}
+
 export default function Form1116Preview({
   reviewedK1Docs,
   reviewed1099Docs,
 }: Form1116PreviewProps) {
+  const computed = computeForm1116Lines({ reviewedK1Docs, reviewed1099Docs })
+
   // ── Parse K-1 docs ────────────────────────────────────────────────────────
   const k1Parsed = reviewedK1Docs
     .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
@@ -91,50 +180,12 @@ export default function Form1116Preview({
     }
   }
 
-  // 1099-DIV foreign source income (box 7 = foreign tax paid; approximate income)
-  for (const doc of reviewed1099Docs) {
-    if (doc.form_type !== '1099_div' && doc.form_type !== '1099_div_c') continue
-    const p = doc.parsed_data as Record<string, unknown>
-    const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? '1099-DIV'
-    const foreignTax = p?.box7_foreign_tax as number | undefined
-    if (foreignTax != null && foreignTax > 0) {
-      // Approximate foreign source income: foreign tax / ~15% withholding rate
-      const approxIncome = foreignTax / 0.15
-      incomeSources.push({ label: `${payer} — 1099-DIV (estimated foreign source)`, amount: approxIncome })
-    }
-  }
-
   const totalPassiveIncome = incomeSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value
 
   // ── Part II — Foreign Taxes Paid ──────────────────────────────────────────
   type TaxSource = { label: string; amount: number }
-  const taxSources: TaxSource[] = []
-
-  for (const { doc, data } of k1Parsed) {
-    const partnerName =
-      data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
-    const box21 = pk1(data, '21')
-    if (box21 !== 0) {
-      taxSources.push({ label: `${partnerName} — K-1 Box 21`, amount: box21 })
-    }
-  }
-
-  for (const doc of reviewed1099Docs) {
-    const p = doc.parsed_data as Record<string, unknown>
-    const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? '1099'
-
-    const divForeignTax = p?.box7_foreign_tax as number | undefined
-    if (divForeignTax != null && divForeignTax > 0) {
-      taxSources.push({ label: `${payer} — 1099-DIV Box 7`, amount: divForeignTax })
-    }
-
-    const intForeignTax = p?.box6_foreign_tax as number | undefined
-    if (intForeignTax != null && intForeignTax > 0) {
-      taxSources.push({ label: `${payer} — 1099-INT Box 6`, amount: intForeignTax })
-    }
-  }
-
-  const totalForeignTaxes = taxSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value
+  const taxSources: TaxSource[] = [...computed.taxSources]
+  const totalForeignTaxes = computed.totalForeignTaxes
 
   // ── Callouts ──────────────────────────────────────────────────────────────
 

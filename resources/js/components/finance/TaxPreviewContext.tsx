@@ -5,7 +5,15 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
+import { computeForm1040Lines } from '@/components/finance/Form1040Preview'
+import { computeForm1116Lines } from '@/components/finance/Form1116Preview'
+import { computeForm4952Lines } from '@/components/finance/Form4952Preview'
+import { isFK1StructuredData } from '@/components/finance/k1'
+import { computeScheduleALines } from '@/components/finance/ScheduleAPreview'
+import { computeScheduleB } from '@/components/finance/ScheduleBPreview'
 import { computeScheduleCNetIncome } from '@/components/finance/ScheduleCPreview'
+import { computeScheduleD } from '@/components/finance/ScheduleDPreview'
+import { computeScheduleELines } from '@/components/finance/ScheduleEPreview'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
@@ -13,6 +21,7 @@ import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/
 import { buildCacheKey, getCachedTransactions, setCachedTransactions } from '@/services/transactionCache'
 import type { EmploymentEntity, F1099DivParsedData, F1099IntParsedData, TaxDocument } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
+import type { TaxReturn1040 } from '@/types/finance/tax-return'
 
 import type { ScheduleCResponse, YearData } from './ScheduleCPreview'
 
@@ -66,6 +75,7 @@ interface TaxPreviewContextValue {
   }
   /** Aggregated short dividend summary across all active accounts, or null if not yet loaded. */
   shortDividendSummary: ShortDividendSummary | null
+  taxReturn: TaxReturn1040
   setPayslips: Dispatch<SetStateAction<fin_payslip[]>>
   setPendingReviewCount: Dispatch<SetStateAction<number>>
   setW2Documents: Dispatch<SetStateAction<TaxDocument[]>>
@@ -84,6 +94,44 @@ const POLLING_INTERVAL_MS = 5_000
 
 function buildEmptyScheduleCNetIncome() {
   return { total: 0, byQuarter: { q1: 0, q2: 0, q3: 0, q4: 0 } }
+}
+
+function toTaxReturnYearK1Entries(reviewedK1Docs: TaxDocument[]) {
+  return reviewedK1Docs
+    .map((doc) => {
+      if (!isFK1StructuredData(doc.parsed_data)) {
+        return null
+      }
+
+      const entityName =
+        doc.parsed_data.fields['B']?.value?.split('\n')[0] ??
+        doc.employment_entity?.display_name ??
+        doc.original_filename ??
+        `K1-${doc.id}`
+      const ein = doc.parsed_data.fields['A']?.value ?? undefined
+      const fields = Object.fromEntries(
+        Object.entries(doc.parsed_data.fields)
+          .filter(([, field]) => field?.value !== null && field?.value !== undefined && field?.value !== '')
+          .map(([key, field]) => {
+            const n = Number(field.value)
+            return [key, Number.isNaN(n) ? String(field.value) : n]
+          }),
+      )
+      const codes = Object.fromEntries(
+        Object.entries(doc.parsed_data.codes).map(([box, items]) => [
+          box,
+          items.map(item => ({ code: item.code, value: item.value })),
+        ]),
+      )
+
+      return {
+        entityName,
+        ...(ein ? { ein } : {}),
+        fields,
+        codes,
+      }
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
 }
 
 export function TaxPreviewProvider({
@@ -265,6 +313,101 @@ export function TaxPreviewProvider({
     return computeScheduleCNetIncome(scheduleCData.years as YearData[], year)
   }, [scheduleCData, year])
 
+  const w2GrossIncome = useMemo(() => payslips.reduce((acc, row) => acc
+    .add(row.ps_salary ?? 0)
+    .add(row.earnings_bonus ?? 0)
+    .add(row.earnings_rsu ?? 0)
+    .add(row.ps_vacation_payout ?? 0)
+    .add(row.imp_ltd ?? 0)
+    .add(row.imp_legal ?? 0)
+    .add(row.imp_fitness ?? 0)
+    .add(row.imp_other ?? 0)
+    .subtract(row.ps_401k_pretax ?? 0)
+    .subtract(row.ps_pretax_medical ?? 0)
+    .subtract(row.ps_pretax_dental ?? 0)
+    .subtract(row.ps_pretax_vision ?? 0)
+    .subtract(row.ps_pretax_fsa ?? 0), currency(0)), [payslips])
+
+  const taxReturn = useMemo<TaxReturn1040>(() => {
+    const reviewedIntDocs = reviewed1099Docs.filter((doc) => doc.form_type === '1099_int' || doc.form_type === '1099_int_c')
+    const reviewedDivDocs = reviewed1099Docs.filter((doc) => doc.form_type === '1099_div' || doc.form_type === '1099_div_c')
+    const scheduleB = computeScheduleB(reviewedK1Docs, reviewed1099Docs, income1099)
+    const scheduleD = computeScheduleD(reviewedK1Docs, reviewed1099Docs)
+    const scheduleE = computeScheduleELines(reviewedK1Docs)
+    const scheduleA = computeScheduleALines({
+      reviewedK1Docs,
+      reviewed1099Docs,
+      ...(shortDividendSummary ? { shortDividendSummary } : {}),
+    })
+    const form4952 = computeForm4952Lines({
+      reviewedK1Docs,
+      reviewed1099Docs,
+      income1099,
+      shortDividendDeduction: shortDividendSummary?.totalItemizedDeduction ?? 0,
+    })
+
+    return {
+      year,
+      form1040: computeForm1040Lines({
+        w2Income: w2GrossIncome,
+        interestIncome: income1099.interestIncome,
+        dividendIncome: income1099.dividendIncome,
+        scheduleCIncome: scheduleCNetIncome.total,
+        w2Documents: reviewedW2Docs,
+        interestDocuments: reviewedIntDocs,
+        dividendDocuments: reviewedDivDocs,
+      }),
+      scheduleA,
+      scheduleB,
+      scheduleC: scheduleCNetIncome,
+      scheduleD: scheduleD.schD,
+      scheduleE: {
+        grandTotal: scheduleE.grandTotal,
+        totalPassive: scheduleE.totalPassive,
+        totalNonpassive: scheduleE.totalNonpassive,
+      },
+      form4952,
+      form1116: computeForm1116Lines({ reviewedK1Docs, reviewed1099Docs }),
+      k1Docs: toTaxReturnYearK1Entries(reviewedK1Docs),
+      k3Docs: reviewedK1Docs
+        .map((doc) => {
+          const parsed = isFK1StructuredData(doc.parsed_data) ? doc.parsed_data : null
+          if (!parsed) {
+            return null
+          }
+
+          return {
+            entityName:
+              parsed.fields['B']?.value?.split('\n')[0] ??
+              doc.employment_entity?.display_name ??
+              doc.original_filename ??
+              `K3-${doc.id}`,
+            sections: parsed.k3?.sections ?? [],
+          }
+        })
+        .filter((entry): entry is NonNullable<typeof entry> => entry !== null),
+      docs1099: reviewed1099Docs.map((doc) => {
+        const parsedData = (doc.parsed_data ?? {}) as Record<string, unknown>
+        const payerName = (parsedData.payer_name as string | undefined) ?? doc.account?.acct_name ?? doc.original_filename ?? `Doc-${doc.id}`
+        return {
+          formType: doc.form_type,
+          payerName,
+          parsedData,
+        }
+      }),
+      ...(shortDividendSummary ? { shortDividends: shortDividendSummary } : {}),
+    }
+  }, [
+    year,
+    reviewed1099Docs,
+    reviewedK1Docs,
+    reviewedW2Docs,
+    income1099,
+    scheduleCNetIncome,
+    w2GrossIncome,
+    shortDividendSummary,
+  ])
+
   const value = useMemo<TaxPreviewContextValue>(() => ({
     year,
     availableYears,
@@ -284,6 +427,7 @@ export function TaxPreviewProvider({
     activeAccountIds,
     income1099,
     shortDividendSummary,
+    taxReturn,
     setPayslips,
     setPendingReviewCount,
     setW2Documents,
@@ -312,6 +456,7 @@ export function TaxPreviewProvider({
     activeAccountIds,
     income1099,
     shortDividendSummary,
+    taxReturn,
     refreshAll,
   ])
 

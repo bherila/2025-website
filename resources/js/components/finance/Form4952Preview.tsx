@@ -46,15 +46,101 @@ interface Form4952PreviewProps {
   shortDividendDeduction?: number
 }
 
+export interface Form4952Lines {
+  invIntSources: { label: string; amount: number }[]
+  totalInvIntExpense: number
+  niiBefore: number
+  totalQualDiv: number
+  deductibleInvestmentInterestExpense: number
+  disallowedCarryforward: number
+}
+
+export function computeForm4952Lines({
+  reviewedK1Docs,
+  reviewed1099Docs,
+  income1099,
+  shortDividendDeduction = 0,
+}: Form4952PreviewProps): Form4952Lines {
+  const invIntSources: { label: string; amount: number }[] = []
+  const k1Parsed = reviewedK1Docs
+    .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
+    .filter((x): x is { doc: TaxDocument; data: FK1StructuredData } => x.data !== null)
+
+  if (shortDividendDeduction > 0) {
+    invIntSources.push({
+      label: 'Short dividends — positions held > 45 days (IRS Pub. 550)',
+      amount: -shortDividendDeduction,
+    })
+  }
+
+  const totalInvInt = invIntSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value
+  const totalInvIntExpense = Math.abs(totalInvInt)
+  const k1Interest = k1Parsed.reduce((acc, { data }) => acc.add(parseK1Field(data, '5')), currency(0)).value
+  const k1OrdDiv = k1Parsed.reduce((acc, { data }) => acc.add(parseK1Field(data, '6a')), currency(0)).value
+  const k1QualDiv = k1Parsed.reduce((acc, { data }) => acc.add(parseK1Field(data, '6b')), currency(0)).value
+  const k1NonQualDiv = currency(k1OrdDiv).subtract(k1QualDiv).value
+  const k1Sec1256 = k1Parsed.reduce((acc, { data }) => acc.add(parseK1Codes(data, '11', ['C'])), currency(0)).value
+  const k1Box20A = k1Parsed.reduce((acc, { data }) => acc.add(parseK1Codes(data, '20', ['A'])), currency(0)).value
+  const direct1099Interest = income1099.interestIncome.value
+  const direct1099OrdDiv = income1099.dividendIncome.value
+  const direct1099QualDiv = income1099.qualifiedDividends.value
+  const direct1099NonQualDiv = currency(direct1099OrdDiv).subtract(direct1099QualDiv).value
+
+  const niiBefore =
+    k1Box20A > 0
+      ? currency(k1Box20A).add(direct1099Interest).add(direct1099NonQualDiv).value
+      : currency(k1Interest).add(k1NonQualDiv).add(k1Sec1256).add(direct1099Interest).add(direct1099NonQualDiv).value
+
+  const totalQualDiv = currency(k1QualDiv).add(direct1099QualDiv).value
+  const scenA_deductible = Math.min(totalInvIntExpense, niiBefore)
+  const gapToFill = Math.max(0, totalInvIntExpense - niiBefore)
+  const scenC_qdElected = Math.min(totalQualDiv, gapToFill)
+  const scenB_nii = niiBefore + totalQualDiv
+  const scenB_deductible = Math.min(totalInvIntExpense, scenB_nii)
+  const scenB_netBenefit = (scenB_deductible - scenA_deductible) * 0.37 - (totalQualDiv * 0.132)
+  const scenC_deductible = Math.min(totalInvIntExpense, niiBefore + scenC_qdElected)
+  const scenC_netBenefit = (scenC_deductible - scenA_deductible) * 0.37 - (scenC_qdElected * 0.132)
+  const noElectionNeeded = totalInvIntExpense - scenA_deductible === 0
+  const bestScenario =
+    noElectionNeeded
+      ? 'A'
+      : scenB_netBenefit >= scenC_netBenefit && scenB_netBenefit > 0
+        ? 'B'
+        : scenC_netBenefit > 0
+          ? 'C'
+          : 'A'
+
+  const useQdElected = bestScenario === 'B' ? totalQualDiv : bestScenario === 'C' ? scenC_qdElected : 0
+  const finalNii = niiBefore + useQdElected
+  const finalDeductible = Math.min(totalInvIntExpense, finalNii)
+  const finalCarryforward = totalInvIntExpense - finalDeductible
+
+  return {
+    invIntSources,
+    totalInvIntExpense,
+    niiBefore,
+    totalQualDiv,
+    deductibleInvestmentInterestExpense: finalDeductible,
+    disallowedCarryforward: finalCarryforward > 0 ? finalCarryforward : 0,
+  }
+}
+
 export default function Form4952Preview({
   reviewedK1Docs,
   reviewed1099Docs,
   income1099,
   shortDividendDeduction = 0,
 }: Form4952PreviewProps) {
+  const computedLines = computeForm4952Lines({
+    reviewedK1Docs,
+    reviewed1099Docs,
+    income1099,
+    shortDividendDeduction,
+  })
+
   // ── Gather investment interest expense ───────────────────────────────────
   type InvIntSource = { label: string; amount: number }
-  const invIntSources: InvIntSource[] = []
+  const invIntSources: InvIntSource[] = [...computedLines.invIntSources]
 
   const k1Parsed = reviewedK1Docs
     .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
@@ -88,16 +174,7 @@ export default function Form4952Preview({
     }
   }
 
-  // Short dividends on positions held > 45 days are investment interest expense (IRS Pub. 550)
-  if (shortDividendDeduction > 0) {
-    invIntSources.push({
-      label: 'Short dividends — positions held > 45 days (IRS Pub. 550)',
-      amount: -shortDividendDeduction,
-    })
-  }
-
-  const totalInvInt = invIntSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value
-  const totalInvIntExpense = Math.abs(totalInvInt)
+  const totalInvIntExpense = computedLines.totalInvIntExpense
 
   // ── Gather Net Investment Income ─────────────────────────────────────────
   const k1Interest = k1Parsed.reduce((acc, { data }) => acc.add(parseK1Field(data, '5')), currency(0)).value
@@ -141,12 +218,8 @@ export default function Form4952Preview({
   const direct1099NonQualDiv = currency(direct1099OrdDiv).subtract(direct1099QualDiv).value
 
   // If Box 20A is present, use it as the authoritative NII figure
-  const niiBefore =
-    k1Box20A > 0
-      ? currency(k1Box20A).add(direct1099Interest).add(direct1099NonQualDiv).value
-      : currency(k1Interest).add(k1NonQualDiv).add(k1Sec1256).add(direct1099Interest).add(direct1099NonQualDiv).value
-
-  const totalQualDiv = currency(k1QualDiv).add(direct1099QualDiv).value
+  const niiBefore = computedLines.niiBefore
+  const totalQualDiv = computedLines.totalQualDiv
 
   if (totalInvIntExpense === 0 && niiBefore === 0) return null
 

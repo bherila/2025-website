@@ -10,6 +10,7 @@ function getCsrfToken() {
 export const fetchWrapper = {
   get,
   post,
+  postRaw,
   put,
   patch,
   delete: _delete,
@@ -32,6 +33,17 @@ function post(url: string, body: any) {
     body: isFormData ? body : JSON.stringify(body),
   }
   return fetch(url, requestOptions).then(handleResponse)
+}
+
+function postRaw(url: string, body: any) {
+  const isFormData = body instanceof FormData;
+  const requestOptions: RequestInit = {
+    method: 'POST',
+    headers: isFormData ? { 'X-CSRF-TOKEN': getCsrfToken() || '' } : { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() || '' },
+    credentials: 'include' as RequestCredentials,
+    body: isFormData ? body : JSON.stringify(body),
+  }
+  return fetch(url, requestOptions)
 }
 
 function patch(url: string, body: any) {

@@ -25,6 +25,7 @@ use App\Http\Controllers\FinanceTool\FinanceTransactionsDedupeApiController;
 use App\Http\Controllers\FinanceTool\FinanceTransactionTaggingApiController;
 use App\Http\Controllers\FinanceTool\StatementController;
 use App\Http\Controllers\FinanceTool\TaxDocumentController;
+use App\Http\Controllers\FinanceTool\TaxPreviewExportController;
 use App\Http\Controllers\LicenseKeyController;
 use App\Http\Controllers\LoginAuditController;
 use App\Http\Controllers\PasskeyController;
@@ -307,6 +308,7 @@ Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accoun
 Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accountId}/bills/{billId}/unlink', [UtilityBillLinkingController::class, 'unlinkTransaction']);
 
 // Tax documents (W-2, W-2c, 1099-INT, 1099-INT-C, 1099-DIV, 1099-DIV-C, broker 1099, K-1, etc.)
+Route::middleware(['web'])->post('/finance/tax-preview/export-xlsx', [TaxPreviewExportController::class, 'export']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-preview-data', [TaxPreviewDataController::class, 'index']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents', [TaxDocumentController::class, 'index']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents/prompt', [TaxDocumentController::class, 'getPromptInfo']);

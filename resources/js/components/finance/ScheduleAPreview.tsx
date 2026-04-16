@@ -26,6 +26,77 @@ interface InvIntSource {
   amount: number
 }
 
+export interface ScheduleALines {
+  invIntSources: InvIntSource[]
+  totalInvIntExpense: number
+}
+
+export function computeScheduleALines({
+  reviewedK1Docs = [],
+  reviewed1099Docs = [],
+  shortDividendSummary,
+}: {
+  reviewedK1Docs?: TaxDocument[]
+  reviewed1099Docs?: TaxDocument[]
+  shortDividendSummary?: ShortDividendSummary
+}): ScheduleALines {
+  const invIntSources: InvIntSource[] = []
+
+  const k1Parsed = reviewedK1Docs
+    .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
+    .filter((x): x is { doc: TaxDocument; data: FK1StructuredData } => x.data !== null)
+
+  for (const { doc, data } of k1Parsed) {
+    const partnerName =
+      data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
+    const hItems = (data.codes['13'] ?? []).filter((item) => item.code === 'H')
+    for (const item of hItems) {
+      const n = parseFloat(item.value)
+      if (!isNaN(n) && n !== 0) {
+        invIntSources.push({ label: `${partnerName} — K-1 Box 13H (investment interest)`, amount: -Math.abs(n) })
+      }
+    }
+    const gItems = (data.codes['13'] ?? []).filter((item) => item.code === 'G')
+    for (const item of gItems) {
+      const n = parseFloat(item.value)
+      if (!isNaN(n) && n !== 0) {
+        invIntSources.push({ label: `${partnerName} — K-1 Box 13G (investment interest)`, amount: -Math.abs(n) })
+      }
+    }
+  }
+
+  for (const doc of reviewed1099Docs) {
+    const p = doc.parsed_data as Record<string, unknown>
+    const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? '1099'
+    const box5 = p?.box5_investment_expense ?? p?.int_5_investment_expenses
+    if (typeof box5 === 'number' && box5 !== 0) {
+      invIntSources.push({ label: `${payer} — 1099-INT Box 5 (investment expense)`, amount: -Math.abs(box5) })
+    }
+    const bIntInvExp = p?.b_investment_expenses
+    if (typeof bIntInvExp === 'number' && bIntInvExp !== 0) {
+      invIntSources.push({ label: `${payer} — 1099-B investment expense`, amount: -Math.abs(bIntInvExp) })
+    }
+  }
+
+  const shortDivDeduction = shortDividendSummary?.totalItemizedDeduction ?? 0
+  if (shortDivDeduction > 0) {
+    invIntSources.push({
+      label: 'Short dividends — positions held > 45 days (IRS Pub. 550)',
+      amount: -shortDivDeduction,
+    })
+  }
+
+  const totalInvIntExpense = invIntSources.reduce(
+    (acc, s) => acc.add(Math.abs(s.amount)),
+    currency(0),
+  ).value
+
+  return {
+    invIntSources,
+    totalInvIntExpense,
+  }
+}
+
 interface ScheduleAPreviewProps {
   selectedYear: number
   reviewedK1Docs?: TaxDocument[]
@@ -103,58 +174,12 @@ export default function ScheduleAPreview({
 }: ScheduleAPreviewProps) {
   const [showInvIntModal, setShowInvIntModal] = useState(false)
 
-  // ── Investment interest expense sources ───────────────────────────────────
-  const invIntSources: InvIntSource[] = []
-
-  const k1Parsed = reviewedK1Docs
-    .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
-    .filter((x): x is { doc: TaxDocument; data: FK1StructuredData } => x.data !== null)
-
-  for (const { doc, data } of k1Parsed) {
-    const partnerName =
-      data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
-    const hItems = (data.codes['13'] ?? []).filter((item) => item.code === 'H')
-    for (const item of hItems) {
-      const n = parseFloat(item.value)
-      if (!isNaN(n) && n !== 0) {
-        invIntSources.push({ label: `${partnerName} — K-1 Box 13H (investment interest)`, amount: -Math.abs(n) })
-      }
-    }
-    const gItems = (data.codes['13'] ?? []).filter((item) => item.code === 'G')
-    for (const item of gItems) {
-      const n = parseFloat(item.value)
-      if (!isNaN(n) && n !== 0) {
-        invIntSources.push({ label: `${partnerName} — K-1 Box 13G (investment interest)`, amount: -Math.abs(n) })
-      }
-    }
-  }
-
-  for (const doc of reviewed1099Docs) {
-    const p = doc.parsed_data as Record<string, unknown>
-    const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? '1099'
-    const box5 = p?.box5_investment_expense ?? p?.int_5_investment_expenses
-    if (typeof box5 === 'number' && box5 !== 0) {
-      invIntSources.push({ label: `${payer} — 1099-INT Box 5 (investment expense)`, amount: -Math.abs(box5) })
-    }
-    const bIntInvExp = p?.b_investment_expenses
-    if (typeof bIntInvExp === 'number' && bIntInvExp !== 0) {
-      invIntSources.push({ label: `${payer} — 1099-B investment expense`, amount: -Math.abs(bIntInvExp) })
-    }
-  }
-
-  // Short dividends held > 45 days are investment interest expense
   const shortDivDeduction = shortDividendSummary?.totalItemizedDeduction ?? 0
-  if (shortDivDeduction > 0) {
-    invIntSources.push({
-      label: 'Short dividends — positions held > 45 days (IRS Pub. 550)',
-      amount: -shortDivDeduction,
-    })
-  }
-
-  const totalInvIntExpense = invIntSources.reduce(
-    (acc, s) => acc.add(Math.abs(s.amount)),
-    currency(0),
-  ).value
+  const { invIntSources, totalInvIntExpense } = computeScheduleALines({
+    reviewedK1Docs,
+    reviewed1099Docs,
+    ...(shortDividendSummary ? { shortDividendSummary } : {}),
+  })
 
   return (
     <div className="space-y-4">

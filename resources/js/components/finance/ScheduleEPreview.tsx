@@ -31,14 +31,19 @@ interface PartnerRow {
   netNonpassive: number
 }
 
-interface ScheduleEPreviewProps {
-  reviewedK1Docs: TaxDocument[]
-  selectedYear: number
+export interface ScheduleELines {
+  partnerRows: PartnerRow[]
+  totalBox1: number
+  totalBox2: number
+  totalBox3: number
+  totalBox4: number
+  totalBox5: number
+  totalPassive: number
+  totalNonpassive: number
+  grandTotal: number
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
-
-export default function ScheduleEPreview({ reviewedK1Docs, selectedYear }: ScheduleEPreviewProps) {
+export function computeScheduleELines(reviewedK1Docs: TaxDocument[]): ScheduleELines {
   const k1Parsed = reviewedK1Docs
     .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
     .filter((x): x is { doc: TaxDocument; data: FK1StructuredData } => x.data !== null)
@@ -54,8 +59,6 @@ export default function ScheduleEPreview({ reviewedK1Docs, selectedYear }: Sched
     const box4GuaranteedPayments = parseK1Field(data, '4')
     const box5Interest = parseK1Field(data, '5')
 
-    // For Schedule E purposes, Box 1 ordinary income is typically nonpassive for
-    // active/trader partnerships; Box 2/3 rental are passive by default.
     const netPassive = currency(box2NetRentalRealEstate).add(box3OtherNetRental).value
     const netNonpassive = currency(box1OrdinaryIncome).add(box4GuaranteedPayments).value
 
@@ -73,8 +76,6 @@ export default function ScheduleEPreview({ reviewedK1Docs, selectedYear }: Sched
     }
   })
 
-  // ── Totals ────────────────────────────────────────────────────────────────
-
   const totalBox1 = partnerRows.reduce((acc, r) => acc.add(r.box1OrdinaryIncome), currency(0)).value
   const totalBox2 = partnerRows.reduce((acc, r) => acc.add(r.box2NetRentalRealEstate), currency(0)).value
   const totalBox3 = partnerRows.reduce((acc, r) => acc.add(r.box3OtherNetRental), currency(0)).value
@@ -83,6 +84,39 @@ export default function ScheduleEPreview({ reviewedK1Docs, selectedYear }: Sched
   const totalPassive = partnerRows.reduce((acc, r) => acc.add(r.netPassive), currency(0)).value
   const totalNonpassive = partnerRows.reduce((acc, r) => acc.add(r.netNonpassive), currency(0)).value
   const grandTotal = currency(totalPassive).add(totalNonpassive).value
+
+  return {
+    partnerRows,
+    totalBox1,
+    totalBox2,
+    totalBox3,
+    totalBox4,
+    totalBox5,
+    totalPassive,
+    totalNonpassive,
+    grandTotal,
+  }
+}
+
+interface ScheduleEPreviewProps {
+  reviewedK1Docs: TaxDocument[]
+  selectedYear: number
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
+export default function ScheduleEPreview({ reviewedK1Docs, selectedYear }: ScheduleEPreviewProps) {
+  const {
+    partnerRows,
+    totalBox1,
+    totalBox2,
+    totalBox3,
+    totalBox4,
+    totalBox5,
+    totalPassive,
+    totalNonpassive,
+    grandTotal,
+  } = computeScheduleELines(reviewedK1Docs)
 
   if (partnerRows.length === 0) {
     return (

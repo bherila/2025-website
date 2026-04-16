@@ -34,6 +34,87 @@ interface ScheduleDPreviewProps {
   selectedYear?: number
 }
 
+export interface ScheduleDComputedData {
+  schD: ReturnType<typeof scheduleD>
+  netST: number
+  netLT: number
+  combined: number
+  appliedToReturn: number
+  carryforward: number
+}
+
+export function computeScheduleD(reviewedK1Docs: TaxDocument[], reviewed1099Docs: TaxDocument[]): ScheduleDComputedData {
+  const k1Parsed = reviewedK1Docs
+    .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
+    .filter((x): x is { doc: TaxDocument; data: FK1StructuredData } => x.data !== null)
+
+  const sec1256Sources: { amount: number; lt: number; st: number }[] = []
+  for (const { data } of k1Parsed) {
+    const cItems = (data.codes['11'] ?? []).filter((i: K1CodeItem) => i.code === 'C')
+    for (const item of cItems) {
+      const n = parseFieldVal(item.value) ?? 0
+      if (n !== 0) {
+        sec1256Sources.push({
+          amount: n,
+          lt: currency(n).multiply(0.6).value,
+          st: currency(n).multiply(0.4).value,
+        })
+      }
+    }
+  }
+
+  const total6781LT = sec1256Sources.reduce((acc, source) => acc.add(source.lt), currency(0)).value
+  const total6781ST = sec1256Sources.reduce((acc, source) => acc.add(source.st), currency(0)).value
+
+  const brokerSources = reviewed1099Docs
+    .filter((d) => d.form_type === 'broker_1099' || d.form_type === '1099_b' || d.form_type === '1099_b_c')
+    .map((doc) => {
+      const p = (doc.parsed_data ?? {}) as Record<string, unknown>
+      const stGain = readBrokerField(p, 'b_st_gain_loss', 'b_st_reported_gain_loss')
+      const ltGain = readBrokerField(p, 'b_lt_gain_loss', 'b_lt_reported_gain_loss')
+      const totalGain = readBrokerField(p, 'b_total_gain_loss', 'total_realized_gain_loss')
+      if (stGain !== 0 || ltGain !== 0 || totalGain !== 0) {
+        return {
+          stGain: stGain || (totalGain !== 0 ? totalGain : 0),
+          ltGain,
+        }
+      }
+      return null
+    })
+    .filter((source): source is NonNullable<typeof source> => source !== null)
+
+  const totalBrokerST = brokerSources.reduce((acc, s) => acc.add(s.stGain), currency(0)).value
+  const totalBrokerLT = brokerSources.reduce((acc, s) => acc.add(s.ltGain), currency(0)).value
+
+  const k1ST = k1Parsed.reduce((acc, { data }) => acc.add(pk1(data, '8')), currency(0)).value
+  const k1LT = k1Parsed.reduce((acc, { data }) => acc
+    .add(pk1(data, '9a'))
+    .add(pk1(data, '9b'))
+    .add(pk1(data, '9c'))
+    .add(pk1(data, '10')), currency(0)).value
+
+  const schD = scheduleD({
+    line1a_gain_loss: totalBrokerST,
+    line5: k1ST,
+    line8a_gain_loss: totalBrokerLT,
+    line12: k1LT,
+    line3_gain_loss: total6781ST,
+    line10_gain_loss: total6781LT,
+  })
+
+  const combined = schD.schD_line16
+  const appliedToReturn = schD.schD_line21 < 0 ? schD.schD_line21 : 0
+
+  return {
+    schD,
+    netST: schD.schD_line7,
+    netLT: schD.schD_line15,
+    combined,
+    appliedToReturn,
+    carryforward: combined < 0 ? currency(combined).subtract(appliedToReturn).value : 0,
+  }
+}
+
 export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, selectedYear }: ScheduleDPreviewProps) {
   const taxYear = selectedYear ?? new Date().getFullYear()
   const k1Parsed = reviewedK1Docs

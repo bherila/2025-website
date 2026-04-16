@@ -24,6 +24,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { fetchWrapper } from '@/fetchWrapper'
+import { buildTaxWorkbook } from '@/lib/finance/buildTaxWorkbook'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
@@ -597,11 +599,13 @@ function TaxPreviewPageContent() {
     activeAccountIds,
     income1099,
     shortDividendSummary,
+    taxReturn,
     refreshAll,
   } = useTaxPreview()
 
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<string>(TAX_TABS.overview)
+  const [isExporting, setIsExporting] = useState(false)
 
   const handleYearChange = useCallback((year: number | 'all') => {
     if (typeof year !== 'number') return
@@ -615,6 +619,32 @@ function TaxPreviewPageContent() {
     }
     window.location.href = url.toString()
   }, [])
+
+  const handleExportXlsx = useCallback(async () => {
+    setIsExporting(true)
+    try {
+      const workbook = buildTaxWorkbook(taxReturn)
+      const response = await fetchWrapper.postRaw('/api/finance/tax-preview/export-xlsx', workbook)
+      if (!response.ok) {
+        throw new Error(`Export failed with status ${response.status}`)
+      }
+      const blob = await response.blob()
+      const contentDisposition = response.headers.get('content-disposition')
+      const filename = contentDisposition?.match(/filename="([^"]+)"/)?.[1] ?? workbook.filename
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Failed to export tax preview workbook', error)
+    } finally {
+      setIsExporting(false)
+    }
+  }, [taxReturn])
 
   const year = selectedYear
   const { data, dataThroughQ1, dataThroughQ2, dataThroughQ3 } = (() => {
@@ -691,13 +721,18 @@ function TaxPreviewPageContent() {
           </Button>
         )}
         <div className="ml-auto">
-          <YearSelectorWithNav
-            selectedYear={selectedYear}
-            availableYears={availableYears}
-            isLoading={isLoading && availableYears.length === 0}
-            onYearChange={handleYearChange}
-            includeAll={false}
-          />
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={handleExportXlsx} disabled={isExporting}>
+              {isExporting ? 'Generating…' : 'Export XLSX'}
+            </Button>
+            <YearSelectorWithNav
+              selectedYear={selectedYear}
+              availableYears={availableYears}
+              isLoading={isLoading && availableYears.length === 0}
+              onYearChange={handleYearChange}
+              includeAll={false}
+            />
+          </div>
         </div>
       </div>
 
