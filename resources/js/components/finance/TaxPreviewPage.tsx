@@ -367,7 +367,7 @@ function TaxIncomeOverview({
                     const p = doc.parsed_data as Record<string, unknown>
                     return (
                       <TableRow key={doc.id}>
-                        <TableCell className="py-2">{(p?.employer_name as string) ?? doc.employment_entity?.display_name ?? '—'}</TableCell>
+                        <TableCell className="py-2">{(p?.employer_name as string) ?? doc.employment_entity?.display_name ?? doc.account?.acct_name ?? '—'}</TableCell>
                         <TableCell className="py-2">
                           <span className="flex items-center gap-1">
                             <DetailsButton onClick={() => onOpenDoc(doc)} />
@@ -397,7 +397,7 @@ function TaxIncomeOverview({
                     const foreignTax = parseK1Field(data, '21')
                     return (
                       <TableRow key={doc.id}>
-                        <TableCell className="py-2">{partnerName ?? doc.employment_entity?.display_name ?? '—'}</TableCell>
+                        <TableCell className="py-2">{partnerName ?? doc.employment_entity?.display_name ?? doc.account?.acct_name ?? '—'}</TableCell>
                         <TableCell className="py-2">
                           <span className="flex items-center gap-1">
                             <DetailsButton onClick={() => onOpenDoc(doc)} />
@@ -432,7 +432,7 @@ function TaxIncomeOverview({
                     const foreignTax = (p?.box7_foreign_tax ?? p?.box6_foreign_tax) as number | undefined
                     return (
                       <TableRow key={doc.id}>
-                        <TableCell className="py-2">{payer ?? doc.employment_entity?.display_name ?? '—'}</TableCell>
+                        <TableCell className="py-2">{payer ?? doc.employment_entity?.display_name ?? doc.account?.acct_name ?? '—'}</TableCell>
                         <TableCell className="py-2">
                           <span className="flex items-center gap-1">
                             <DetailsButton onClick={() => onOpenDoc(doc)} />
