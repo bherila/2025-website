@@ -1,15 +1,16 @@
 'use client'
 
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Search, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 
+import { fmtAmt, parseFieldVal } from '../tax-preview-primitives'
 import type { K1CodeItem } from './k1-types'
 
 interface K1CodesModalProps {
@@ -53,11 +54,20 @@ export default function K1CodesModal({ open, boxLabel, codeDefinitions, items, r
     onClose()
   }
 
-  const availableCodes = Object.keys(codeDefinitions)
+  const availableCodes = Object.entries(codeDefinitions).map(([code, description]) => ({
+    code,
+    description,
+    label: `${code} — ${description}`,
+  }))
+
+  const boxTotal = localItems.reduce((acc, item) => {
+    const v = parseFieldVal(item.value)
+    return v !== null ? acc + v : acc
+  }, 0)
 
   return (
     <Dialog open={open} onOpenChange={handleOpen}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+      <DialogContent className="w-[80vw] max-w-[80vw] max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="text-lg">{boxLabel} — Code Details</DialogTitle>
         </DialogHeader>
@@ -69,8 +79,8 @@ export default function K1CodesModal({ open, boxLabel, codeDefinitions, items, r
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-52">Code</TableHead>
-                  <TableHead className="w-44">Amount</TableHead>
+                  <TableHead className="w-72">Code</TableHead>
+                  <TableHead className="w-32 text-right">Amount</TableHead>
                   <TableHead>Notes</TableHead>
                   {!readOnly && <TableHead className="w-10" />}
                 </TableRow>
@@ -82,27 +92,35 @@ export default function K1CodesModal({ open, boxLabel, codeDefinitions, items, r
                       {readOnly ? (
                         <span className="font-mono text-base font-semibold">{item.code}</span>
                       ) : (
-                        <Select value={item.code} onValueChange={(val) => updateItem(idx, { code: val })}>
-                          <SelectTrigger className="h-9 text-sm font-mono font-semibold">
-                            <SelectValue placeholder="Select code" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {availableCodes.map((code) => (
-                              <SelectItem key={code} value={code}>
-                                <span className="font-mono font-semibold">{code}</span>
-                                <span className="text-muted-foreground ml-2 text-xs">{codeDefinitions[code]}</span>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
-                      {item.code && codeDefinitions[item.code] && (
-                        <div className="text-xs text-muted-foreground mt-1">{codeDefinitions[item.code]}</div>
+                        <Combobox
+                          value={item.code || null}
+                          onValueChange={(val) => updateItem(idx, { code: val ?? '' })}
+                        >
+                          <ComboboxInput
+                            className="h-9 text-sm w-full"
+                            placeholder="Search code…"
+                            showTrigger
+                          />
+                          <ComboboxContent>
+                            <ComboboxList>
+                              {availableCodes.map(({ code, description }) => (
+                                <ComboboxItem key={code} value={code}>
+                                  <span className="font-mono font-semibold">{code}</span>
+                                  <span className="text-muted-foreground ml-2 text-xs">{description}</span>
+                                </ComboboxItem>
+                              ))}
+                            </ComboboxList>
+                            <ComboboxEmpty>
+                              <Search className="mx-auto mb-1 h-4 w-4 opacity-50" />
+                              No matching codes
+                            </ComboboxEmpty>
+                          </ComboboxContent>
+                        </Combobox>
                       )}
                     </TableCell>
                     <TableCell className="py-2 align-top">
                       <Input
-                        className="h-9 text-sm font-mono text-right"
+                        className="h-9 text-sm font-mono text-right min-w-[100px]"
                         value={item.value}
                         onChange={(e) => updateItem(idx, { value: e.target.value })}
                         readOnly={readOnly}
@@ -140,6 +158,10 @@ export default function K1CodesModal({ open, boxLabel, codeDefinitions, items, r
               Add Code
             </Button>
           )}
+          <div className="flex items-center gap-1.5 text-sm font-mono font-semibold text-muted-foreground">
+            <span className="text-xs font-sans font-normal">Total:</span>
+            <span className={boxTotal < 0 ? 'text-destructive' : ''}>{fmtAmt(boxTotal)}</span>
+          </div>
           <div className="flex-1" />
           <Button variant="ghost" onClick={onClose}>
             {readOnly ? 'Close' : 'Cancel'}
