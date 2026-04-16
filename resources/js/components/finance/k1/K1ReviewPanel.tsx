@@ -1,19 +1,17 @@
 'use client'
 
 import currency from 'currency.js'
-import { ChevronDown, ChevronRight, Search } from 'lucide-react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
-import { fmtAmt, parseFieldVal } from '../tax-preview-primitives'
+import { DetailsButton, fmtAmt, parseFieldVal } from '../tax-preview-primitives'
 import { BOX11_CODES, BOX13_CODES } from './k1-codes'
 import { K1_SPEC } from './k1-spec'
 import type { FK1StructuredData, K1CodeItem, K1FieldSpec, K3Section } from './k1-types'
@@ -242,24 +240,6 @@ function SectionHeader({ title }: { title: string }) {
 }
 
 // ── Income / Deduction line item ──────────────────────────────────────────────
-
-function DetailsButton({ onClick }: { onClick: () => void }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground"
-          onClick={(e) => { e.stopPropagation(); onClick() }}
-        >
-          <Search className="h-3 w-3" />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>View Details</TooltipContent>
-    </Tooltip>
-  )
-}
 
 function LineItem({
   boxRef,
