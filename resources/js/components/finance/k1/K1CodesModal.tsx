@@ -67,7 +67,7 @@ export default function K1CodesModal({ open, boxLabel, codeDefinitions, items, r
 
   return (
     <Dialog open={open} onOpenChange={handleOpen}>
-      <DialogContent className="w-[80vw] max-w-[80vw] max-h-[90vh] flex flex-col">
+      <DialogContent className="w-[80vw] max-w-[80vw] sm:max-w-[80vw] min-w-[min(80vw,900px)] max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="text-lg">{boxLabel} — Code Details</DialogTitle>
         </DialogHeader>
