@@ -1,7 +1,7 @@
 'use client'
 
 import { AlertCircle, CheckCircle, Clock, Loader2, Upload } from 'lucide-react'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -42,6 +42,12 @@ interface MultiAccountImportModalProps {
    * title reflects the source account. The user can still reassign individual rows.
    */
   preselectedAccountId?: number | null
+  /**
+   * When set, skip the upload phase and go directly to the assign phase for an
+   * already-parsed document. Used by the "Assign accounts" button for unresolved
+   * broker_1099 docs that completed GenAI processing but still have null account_ids.
+   */
+  existingTaxDocId?: number | null
 }
 
 type Phase = 'upload' | 'polling' | 'assign'
@@ -66,6 +72,7 @@ export default function MultiAccountImportModal({
   onClose,
   onSuccess,
   preselectedAccountId = null,
+  existingTaxDocId = null,
 }: MultiAccountImportModalProps) {
   const [phase, setPhase] = useState<Phase>('upload')
   const [uploading, setUploading] = useState(false)
@@ -86,11 +93,6 @@ export default function MultiAccountImportModal({
     if (pollTimerRef.current) {
       clearTimeout(pollTimerRef.current)
     }
-  }
-
-  const handleClose = () => {
-    reset()
-    onClose()
   }
 
   const pollJob = useCallback(
@@ -139,6 +141,24 @@ export default function MultiAccountImportModal({
     },
     [preselectedAccountId],
   )
+
+  // When an existing parsed doc is provided, load its links directly into the assign phase.
+  useEffect(() => {
+    if (!open || !existingTaxDocId) return
+    setTaxDocId(existingTaxDocId)
+    pollJob(existingTaxDocId)
+  }, [open, existingTaxDocId, pollJob])
+
+  const handleClose = () => {
+    // If a doc was created or loaded (taxDocId is set) but the user closed without confirming,
+    // still trigger a reload so the parent shows the auto-created links from ParseImportJob.
+    const hadDoc = taxDocId != null
+    reset()
+    onClose()
+    if (hadDoc) {
+      onSuccess()
+    }
+  }
 
   const handleFileSelect = async (file: File) => {
     setUploading(true)

@@ -104,6 +104,8 @@ export default function TaxDocuments1099Section({
   const [multiAccountImportOpen, setMultiAccountImportOpen] = useState(false)
   // When set, opens the multi-account import modal pre-seeded for a specific account.
   const [consolidatedUploadAccountId, setConsolidatedUploadAccountId] = useState<number | null>(null)
+  // When set, opens MultiAccountImportModal in assign mode for an already-parsed unresolved doc.
+  const [assignDocId, setAssignDocId] = useState<number | null>(null)
   const [manualEntry, setManualEntry] = useState<ManualEntryState | null>(null)
   const [manualSaving, setManualSaving] = useState(false)
   const { reviewDoc: reviewModalDoc, reviewLink: reviewModalLink, openReview: openReviewModal, closeReview: closeReviewModal } = useReviewModal()
@@ -254,6 +256,17 @@ export default function TaxDocuments1099Section({
     }, 60_000)
     return () => clearTimeout(timer)
   }, [documents, fetchDocuments])
+
+  // broker_1099 docs that are still processing (no links yet) or have unresolved links (null account_id).
+  const pendingBrokerDocs = documents.filter(
+    d => d.form_type === 'broker_1099' &&
+      (d.genai_status === 'pending' || d.genai_status === 'processing'),
+  )
+  const unresolvedBrokerDocs = documents.filter(
+    d => d.form_type === 'broker_1099' &&
+      d.genai_status === 'parsed' &&
+      (d.account_links ?? []).some(l => l.account_id === null),
+  )
 
   // Accounts with at least one 1099/k-1 document (via join table) should be promoted to active section.
   const accountsWithDocs = new Set(
@@ -564,6 +577,49 @@ export default function TaxDocuments1099Section({
                 </TableRow>
               )}
               {renderAccountRows(inactiveAccounts, true)}
+              {(pendingBrokerDocs.length > 0 || unresolvedBrokerDocs.length > 0) && (
+                <TableRow>
+                  <TableCell
+                    colSpan={3}
+                    className="py-1 bg-orange-50 dark:bg-orange-950/20 text-[10px] text-orange-700 dark:text-orange-400 font-medium uppercase tracking-wider"
+                  >
+                    Pending imports — awaiting account assignment
+                  </TableCell>
+                </TableRow>
+              )}
+              {pendingBrokerDocs.map(doc => (
+                <TableRow key={`pending-${doc.id}`}>
+                  <TableCell className="text-sm text-muted-foreground italic">
+                    {doc.original_filename ?? 'Consolidated 1099'}
+                  </TableCell>
+                  <TableCell>
+                    <Button size="sm" variant="outline" disabled className="gap-1 h-7 text-xs border-orange-300 text-orange-600 px-2">
+                      <Clock className="h-3 w-3 animate-pulse" />
+                      Processing…
+                    </Button>
+                  </TableCell>
+                  <TableCell />
+                </TableRow>
+              ))}
+              {unresolvedBrokerDocs.map(doc => (
+                <TableRow key={`unresolved-${doc.id}`}>
+                  <TableCell className="text-sm text-muted-foreground italic">
+                    {doc.original_filename ?? 'Consolidated 1099'}
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1 h-7 text-xs border-amber-300 text-amber-700 px-2"
+                      onClick={() => setAssignDocId(doc.id)}
+                    >
+                      <Eye className="h-3 w-3" />
+                      Assign accounts
+                    </Button>
+                  </TableCell>
+                  <TableCell />
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
         </div>
@@ -720,6 +776,25 @@ export default function TaxDocuments1099Section({
           onClose={() => setConsolidatedUploadAccountId(null)}
           onSuccess={() => {
             setConsolidatedUploadAccountId(null)
+            if (onDocumentsReload) {
+              onDocumentsReload()
+            } else {
+              fetchDocuments()
+            }
+          }}
+        />
+      )}
+
+      {/* Assign accounts modal for already-parsed unresolved broker_1099 docs */}
+      {assignDocId !== null && (
+        <MultiAccountImportModal
+          open
+          taxYear={selectedYear}
+          accounts={accounts}
+          existingTaxDocId={assignDocId}
+          onClose={() => setAssignDocId(null)}
+          onSuccess={() => {
+            setAssignDocId(null)
             if (onDocumentsReload) {
               onDocumentsReload()
             } else {
