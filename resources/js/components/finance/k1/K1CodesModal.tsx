@@ -1,12 +1,12 @@
 'use client'
 
-import { Plus, Search, Trash2 } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 
@@ -54,11 +54,7 @@ export default function K1CodesModal({ open, boxLabel, codeDefinitions, items, r
     onClose()
   }
 
-  const availableCodes = Object.entries(codeDefinitions).map(([code, description]) => ({
-    code,
-    description,
-    label: `${code} — ${description}`,
-  }))
+  const availableCodes = Object.keys(codeDefinitions)
 
   const boxTotal = localItems.reduce((acc, item) => {
     const v = parseFieldVal(item.value)
@@ -92,30 +88,19 @@ export default function K1CodesModal({ open, boxLabel, codeDefinitions, items, r
                       {readOnly ? (
                         <span className="font-mono text-base font-semibold">{item.code}</span>
                       ) : (
-                        <Combobox
-                          value={item.code || null}
-                          onValueChange={(val) => updateItem(idx, { code: val ?? '' })}
-                        >
-                          <ComboboxInput
-                            className="h-9 text-sm w-full"
-                            placeholder="Search code…"
-                            showTrigger
-                          />
-                          <ComboboxContent>
-                            <ComboboxList>
-                              {availableCodes.map(({ code, description }) => (
-                                <ComboboxItem key={code} value={code}>
-                                  <span className="font-mono font-semibold">{code}</span>
-                                  <span className="text-muted-foreground ml-2 text-xs">{description}</span>
-                                </ComboboxItem>
-                              ))}
-                            </ComboboxList>
-                            <ComboboxEmpty>
-                              <Search className="mx-auto mb-1 h-4 w-4 opacity-50" />
-                              No matching codes
-                            </ComboboxEmpty>
-                          </ComboboxContent>
-                        </Combobox>
+                        <Select value={item.code} onValueChange={(val) => updateItem(idx, { code: val })}>
+                          <SelectTrigger className="h-9 text-sm font-mono font-semibold">
+                            <SelectValue placeholder="Select code" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableCodes.map((code) => (
+                              <SelectItem key={code} value={code}>
+                                <span className="font-mono font-semibold">{code}</span>
+                                <span className="text-muted-foreground ml-2 text-xs">{codeDefinitions[code]}</span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       )}
                     </TableCell>
                     <TableCell className="py-2 align-top">
