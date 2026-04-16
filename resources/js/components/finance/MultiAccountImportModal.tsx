@@ -89,8 +89,14 @@ export default function MultiAccountImportModal({
   }
 
   const handleClose = () => {
+    // If we already processed and set up links but the user closed without confirming,
+    // still trigger a reload so the parent shows the auto-created links from ParseImportJob.
+    const wasProcessed = phase === 'assign' || phase === 'polling'
     reset()
     onClose()
+    if (wasProcessed) {
+      onSuccess()
+    }
   }
 
   const pollJob = useCallback(
