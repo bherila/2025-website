@@ -1,15 +1,17 @@
 'use client'
 
 import currency from 'currency.js'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, Search } from 'lucide-react'
 import { useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 import { fmtAmt, parseFieldVal } from '../tax-preview-primitives'
 import { BOX11_CODES, BOX13_CODES } from './k1-codes'
@@ -241,6 +243,24 @@ function SectionHeader({ title }: { title: string }) {
 
 // ── Income / Deduction line item ──────────────────────────────────────────────
 
+function DetailsButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground"
+          onClick={(e) => { e.stopPropagation(); onClick() }}
+        >
+          <Search className="h-3 w-3" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>View Details</TooltipContent>
+    </Tooltip>
+  )
+}
+
 function LineItem({
   boxRef,
   label,
@@ -249,6 +269,7 @@ function LineItem({
   notes,
   onClick,
   onNoteClick,
+  onDetails,
 }: {
   boxRef?: string | undefined
   label: string
@@ -257,11 +278,12 @@ function LineItem({
   notes?: string | undefined
   onClick?: (() => void) | undefined
   onNoteClick?: (() => void) | undefined
+  onDetails?: (() => void) | undefined
 }) {
   const n = value ?? null
   return (
     <div
-      className={`flex items-baseline gap-2 px-3 py-1 min-h-[24px] ${onClick ? 'cursor-pointer hover:bg-muted/20 transition-colors' : ''}`}
+      className={`flex items-center gap-2 px-3 py-1 min-h-[24px] ${onClick ? 'cursor-pointer hover:bg-muted/20 transition-colors' : ''}`}
       onClick={onClick}
     >
       <span className="text-[10px] font-mono text-muted-foreground w-16 shrink-0 select-none">{boxRef ?? ''}</span>
@@ -269,9 +291,10 @@ function LineItem({
         <span>{label}</span>
         <NoteBadge notes={notes} onClick={onNoteClick} />
       </span>
-      <span className={`font-mono tabular-nums text-xs shrink-0 text-right min-w-[80px] ${amtCls(n)}`}>
+      <span className={`font-mono tabular-nums text-xs shrink-0 text-right min-w-[100px] ${amtCls(n)}`}>
         {raw ?? renderAmt(n)}
       </span>
+      {onDetails ? <DetailsButton onClick={onDetails} /> : <span className="w-5 shrink-0" />}
     </div>
   )
 }
@@ -287,11 +310,12 @@ function SubLine({ text }: { text: string }) {
 function TotalLine({ label, value, double }: { label: string; value: number | null; double?: boolean }) {
   return (
     <div
-      className={`flex items-baseline gap-2 px-3 py-1.5 font-semibold ${double ? 'border-t-2 border-double border-border' : 'border-t border-border'} bg-muted/20`}
+      className={`flex items-center gap-2 px-3 py-1.5 font-semibold ${double ? 'border-t-2 border-double border-border' : 'border-t border-border'} bg-muted/20`}
     >
       <span className="w-16 shrink-0" />
       <span className="flex-1 text-xs">{label}</span>
-      <span className={`font-mono text-xs tabular-nums min-w-[80px] text-right ${amtCls(value)}`}>{renderAmt(value)}</span>
+      <span className={`font-mono text-xs tabular-nums min-w-[100px] text-right ${amtCls(value)}`}>{renderAmt(value)}</span>
+      <span className="w-5 shrink-0" />
     </div>
   )
 }
@@ -368,27 +392,22 @@ function IncomeItemsBlock({
             </div>
           )
         })}
-        {box11Items.map((item, i) => {
-          const noteKey = `11-${i}`
+        {box11Items.length > 0 && (() => {
+          const total = box11Items.reduce((acc, item) => acc.add(parseFieldVal(item.value) ?? 0), currency(0)).value
+          const uniqueCodes = [...new Set(box11Items.map((i) => i.code))].filter((c): c is string => Boolean(c))
+          const firstCode = uniqueCodes[0] ?? ''
+          const label = uniqueCodes.length === 1
+            ? (BOX11_CODES[firstCode] ?? `Other income (code ${firstCode})`)
+            : `Other income (${uniqueCodes.length} codes)`
           return (
-            <div key={i}>
-              <LineItem
-                boxRef={`Box 11${item.code}`}
-                label={BOX11_CODES[item.code] ?? `Other income (code ${item.code})`}
-                value={parseFieldVal(item.value)}
-                notes={item.notes}
-                onClick={() => onOpenCodes('11')}
-                onNoteClick={() => setOpenNote(openNote === noteKey ? null : noteKey)}
-              />
-              {openNote === noteKey && item.notes && (
-                <NoteDetail notes={item.notes} onClose={() => setOpenNote(null)} />
-              )}
-              {item.notes && openNote !== noteKey && (
-                <SubLine text={item.notes.length > 100 ? item.notes.substring(0, 100) + '…' : item.notes} />
-              )}
-            </div>
+            <LineItem
+              boxRef={uniqueCodes.length === 1 ? `Box 11${firstCode}` : 'Box 11'}
+              label={label}
+              value={total}
+              onDetails={() => onOpenCodes('11')}
+            />
           )
-        })}
+        })()}
         <TotalLine label="Subtotal gross income items" value={subtotal} />
       </div>
     </div>
@@ -437,24 +456,25 @@ function DeductionItemsBlock({
     <div className="border border-border rounded-lg overflow-hidden">
       <SectionHeader title="Deduction Items — Part III" />
       <div className="divide-y divide-dashed divide-border/50">
-        {box13Items.map((item, i) => {
-          const noteKey = `13-${i}`
+        {box13Items.length > 0 && (() => {
+          const total = box13Items.reduce((acc, item) => {
+            const v = parseFieldVal(item.value)
+            return v !== null ? acc.add(-Math.abs(v)) : acc
+          }, currency(0)).value
+          const uniqueCodes = [...new Set(box13Items.map((i) => i.code))].filter((c): c is string => Boolean(c))
+          const firstCode = uniqueCodes[0] ?? ''
+          const label = uniqueCodes.length === 1
+            ? (BOX13_CODES[firstCode] ?? `Other deductions (code ${firstCode})`)
+            : `Other deductions (${uniqueCodes.length} codes)`
           return (
-            <div key={i}>
-              <LineItem
-                boxRef={`Box 13${item.code}`}
-                label={BOX13_CODES[item.code] ?? `Other deductions (code ${item.code})`}
-                value={parseFieldVal(item.value) !== null ? -Math.abs(parseFieldVal(item.value)!) : null}
-                notes={item.notes}
-                onClick={() => onOpenCodes('13')}
-                onNoteClick={() => setOpenNote(openNote === noteKey ? null : noteKey)}
-              />
-              {openNote === noteKey && item.notes && (
-                <NoteDetail notes={item.notes} onClose={() => setOpenNote(null)} />
-              )}
-            </div>
+            <LineItem
+              boxRef={uniqueCodes.length === 1 ? `Box 13${firstCode}` : 'Box 13'}
+              label={label}
+              value={total}
+              onDetails={() => onOpenCodes('13')}
+            />
           )
-        })}
+        })()}
         {box12Val !== null && box12Val !== 0 && (
           <LineItem boxRef="Box 12" label="Section 179 deduction" value={-Math.abs(box12Val)} />
         )}
@@ -495,28 +515,27 @@ function SupplementalBlock({
     <div className="border border-border rounded-lg overflow-hidden">
       <SectionHeader title="Box 20 Supplemental" />
       <div className="divide-y divide-dashed divide-border/50">
-        {box20Items.map((item, i) => {
-          const noteKey = `20-${i}`
+        {box20Items.length > 0 && (() => {
+          const uniqueCodes = [...new Set(box20Items.map((i) => i.code))].filter((c): c is string => Boolean(c))
+          const firstCode = uniqueCodes[0] ?? ''
+          const allStmt = box20Items.every((i) => i.value === 'STMT')
+          const total = allStmt ? null : box20Items.reduce((acc, item) => {
+            const v = item.value === 'STMT' ? null : parseFieldVal(item.value)
+            return v !== null ? acc.add(v) : acc
+          }, currency(0)).value
+          const label = uniqueCodes.length === 1
+            ? (BOX20_LABELS[firstCode] ?? `Other information (code ${firstCode})`)
+            : `Supplemental information (${uniqueCodes.length} codes)`
           return (
-            <div key={i}>
-              <LineItem
-                boxRef={`20${item.code}`}
-                label={BOX20_LABELS[item.code] ?? `Other information (code ${item.code})`}
-                value={item.value === 'STMT' ? null : parseFieldVal(item.value)}
-                raw={item.value === 'STMT' ? 'STMT' : undefined}
-                notes={item.notes}
-                onClick={() => onOpenCodes('20')}
-                onNoteClick={() => setOpenNote(openNote === noteKey ? null : noteKey)}
-              />
-              {openNote === noteKey && item.notes && (
-                <NoteDetail notes={item.notes} onClose={() => setOpenNote(null)} />
-              )}
-              {item.value === 'STMT' && item.notes && openNote !== noteKey && (
-                <SubLine text={item.notes.length > 120 ? item.notes.substring(0, 120) + '…' : item.notes} />
-              )}
-            </div>
+            <LineItem
+              boxRef={uniqueCodes.length === 1 ? `20${firstCode}` : 'Box 20'}
+              label={label}
+              value={total}
+              raw={allStmt ? 'STMT' : undefined}
+              onDetails={() => onOpenCodes('20')}
+            />
           )
-        })}
+        })()}
       </div>
     </div>
   )

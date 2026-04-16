@@ -1,7 +1,10 @@
 'use client'
 
 import currency from 'currency.js'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, Search } from 'lucide-react'
+
+import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 // ── Value helpers ─────────────────────────────────────────────────────────────
 
@@ -41,12 +44,14 @@ export function FormLine({
   value,
   raw,
   onClick,
+  onDetails,
 }: {
   boxRef?: string
   label: React.ReactNode
   value?: string | number | null
   raw?: string
   onClick?: () => void
+  onDetails?: () => void
 }) {
   const n = typeof value === 'number' ? value : parseFieldVal(value as string | null | undefined)
   const cls = n === null ? '' : n < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'
@@ -57,10 +62,26 @@ export function FormLine({
     >
       <span className="text-[10px] font-mono text-muted-foreground w-14 shrink-0 select-none">{boxRef ?? ''}</span>
       <span className="flex-1 text-[13px]">{label}</span>
-      <span className={`font-mono tabular-nums text-[13px] shrink-0 ${cls}`}>
+      <span className={`font-mono tabular-nums text-[13px] shrink-0 min-w-[100px] text-right ${cls}`}>
         {raw ?? (n === null ? '—' : fmtAmt(n))}
       </span>
       {onClick && <ChevronRight size={14} className="text-muted-foreground shrink-0" />}
+      {onDetails && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground"
+              onClick={(e) => { e.stopPropagation(); onDetails() }}
+            >
+              <Search className="h-3 w-3" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>View Details</TooltipContent>
+        </Tooltip>
+      )}
+      {!onClick && !onDetails && <span className="w-5 shrink-0" />}
     </div>
   )
 }
