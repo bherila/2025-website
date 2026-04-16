@@ -425,11 +425,20 @@ function TaxIncomeOverview({
                     <TableCell colSpan={5} className="py-1.5 text-xs font-semibold text-muted-foreground">Brokerage / 1099 Accounts</TableCell>
                   </TableRow>
                   {f1099Rows.map(({ doc, p }) => {
+                    const isBroker = doc.form_type === 'broker_1099'
                     const payer = p?.payer_name as string | undefined
                     const acct = p?.account_number as string | undefined
-                    const interest = p?.box1_interest as number | undefined
-                    const ordDiv = p?.box1a_ordinary as number | undefined
-                    const foreignTax = (p?.box7_foreign_tax ?? p?.box6_foreign_tax) as number | undefined
+                    // broker_1099 uses div_/int_ prefixes; standard 1099 uses box_ prefixes
+                    const interest = isBroker
+                      ? (p?.int_1_interest_income as number | undefined)
+                      : (p?.box1_interest as number | undefined)
+                    const ordDiv = isBroker
+                      ? (p?.div_1a_total_ordinary as number | undefined)
+                      : (p?.box1a_ordinary as number | undefined)
+                    const foreignTax = isBroker
+                      ? (p?.div_7_foreign_tax_paid as number | undefined)
+                      : ((p?.box7_foreign_tax ?? p?.box6_foreign_tax) as number | undefined)
+                    const capGainLoss = isBroker ? (p?.b_total_gain_loss as number | undefined) : undefined
                     return (
                       <TableRow key={doc.id}>
                         <TableCell className="py-2">{payer ?? doc.employment_entity?.display_name ?? doc.account?.acct_name ?? '—'}</TableCell>
@@ -443,6 +452,7 @@ function TaxIncomeOverview({
                         <TableCell className="py-2 text-right font-mono text-xs">
                           {interest != null && interest !== 0 && <div className="text-emerald-600 dark:text-emerald-500">Interest {fmtOverview(interest)}</div>}
                           {ordDiv != null && ordDiv !== 0 && <div className="text-emerald-600 dark:text-emerald-500">Ord div {fmtOverview(ordDiv)}</div>}
+                          {capGainLoss != null && capGainLoss !== 0 && <div className={capGainLoss < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'}>Cap G/L {fmtOverview(capGainLoss)}</div>}
                           {foreignTax != null && foreignTax !== 0 && <div>Foreign tax {fmtOverview(foreignTax, 2)}</div>}
                         </TableCell>
                         <TableCell className="py-2 text-xs text-muted-foreground">{doc.notes ?? '—'}</TableCell>
