@@ -57,20 +57,20 @@ export default function K1CodesModal({ open, boxLabel, codeDefinitions, items, r
 
   return (
     <Dialog open={open} onOpenChange={handleOpen}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>{boxLabel} — Code Details</DialogTitle>
+          <DialogTitle className="text-lg">{boxLabel} — Code Details</DialogTitle>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto">
           {localItems.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4 text-center">No codes entered yet.</p>
           ) : (
-            <Table className="text-sm">
+            <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-28">Code</TableHead>
-                  <TableHead className="w-40">Amount</TableHead>
+                  <TableHead className="w-52">Code</TableHead>
+                  <TableHead className="w-44">Amount</TableHead>
                   <TableHead>Notes</TableHead>
                   {!readOnly && <TableHead className="w-10" />}
                 </TableRow>
@@ -78,51 +78,51 @@ export default function K1CodesModal({ open, boxLabel, codeDefinitions, items, r
               <TableBody>
                 {localItems.map((item, idx) => (
                   <TableRow key={idx}>
-                    <TableCell className="py-1.5">
+                    <TableCell className="py-2 align-top">
                       {readOnly ? (
-                        <span className="font-mono text-sm font-semibold">{item.code}</span>
+                        <span className="font-mono text-base font-semibold">{item.code}</span>
                       ) : (
                         <Select value={item.code} onValueChange={(val) => updateItem(idx, { code: val })}>
-                          <SelectTrigger className="h-7 text-xs">
-                            <SelectValue placeholder="Code" />
+                          <SelectTrigger className="h-9 text-sm font-mono font-semibold">
+                            <SelectValue placeholder="Select code" />
                           </SelectTrigger>
                           <SelectContent>
                             {availableCodes.map((code) => (
                               <SelectItem key={code} value={code}>
                                 <span className="font-mono font-semibold">{code}</span>
-                                <span className="text-muted-foreground ml-2 text-xs truncate max-w-[200px]">{codeDefinitions[code]}</span>
+                                <span className="text-muted-foreground ml-2 text-xs">{codeDefinitions[code]}</span>
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       )}
                       {item.code && codeDefinitions[item.code] && (
-                        <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{codeDefinitions[item.code]}</div>
+                        <div className="text-xs text-muted-foreground mt-1">{codeDefinitions[item.code]}</div>
                       )}
                     </TableCell>
-                    <TableCell className="py-1.5">
+                    <TableCell className="py-2 align-top">
                       <Input
-                        className="h-7 text-xs font-mono text-right"
+                        className="h-9 text-sm font-mono text-right"
                         value={item.value}
                         onChange={(e) => updateItem(idx, { value: e.target.value })}
                         readOnly={readOnly}
                         placeholder="0.00"
                       />
                     </TableCell>
-                    <TableCell className="py-1.5">
+                    <TableCell className="py-2 align-top">
                       <Textarea
-                        className="h-7 min-h-0 text-xs resize-none"
+                        className="min-h-[72px] text-sm resize-y"
                         value={item.notes ?? ''}
                         onChange={(e) => updateItem(idx, { notes: e.target.value })}
                         readOnly={readOnly}
                         placeholder="Optional notes"
-                        rows={1}
+                        rows={3}
                       />
                     </TableCell>
                     {!readOnly && (
-                      <TableCell className="py-1.5">
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => removeItem(idx)}>
-                          <Trash2 className="h-3.5 w-3.5" />
+                      <TableCell className="py-2 align-top">
+                        <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive hover:text-destructive" onClick={() => removeItem(idx)}>
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </TableCell>
                     )}
@@ -136,7 +136,7 @@ export default function K1CodesModal({ open, boxLabel, codeDefinitions, items, r
         <DialogFooter className="border-t pt-3 gap-2">
           {!readOnly && (
             <Button variant="outline" size="sm" className="gap-1" onClick={addItem}>
-              <Plus className="h-3.5 w-3.5" />
+              <Plus className="h-4 w-4" />
               Add Code
             </Button>
           )}

@@ -244,11 +244,13 @@ export default function ManualJsonAttachModal({
     }
   }, [isValid, jsonInput, onJsonReady, formType, taxYear, accountId, employmentEntityId, formLabel, onSuccess])
 
+  const isEditMode = initialJson != null
+
   return (
     <Dialog open={open} onOpenChange={isOpen => !isOpen && !submitting && onBack()}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Attach JSON — {formLabel}</DialogTitle>
+          <DialogTitle>{isEditMode ? 'Edit JSON' : 'Attach JSON'} — {formLabel}</DialogTitle>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto space-y-4 pr-1 py-2">
