@@ -24,6 +24,9 @@ import {
 } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
 import { transactionsUrl } from '@/lib/financeRouteBuilder'
+import type { ScheduleCNetIncome } from '@/types/finance/tax-return'
+
+export type { ScheduleCNetIncome } from '@/types/finance/tax-return'
 
 export interface ScheduleCTransaction {
   t_id: number
@@ -105,17 +108,6 @@ export function computeHomeOfficeCalcs(allData: YearData[]): Map<string, HomeOff
     }
   }
   return map
-}
-
-/** Quarterly net income result from Schedule C computation */
-export interface ScheduleCNetIncome {
-  total: number
-  byQuarter: {
-    q1: number
-    q2: number
-    q3: number
-    q4: number
-  }
 }
 
 /**

@@ -5,6 +5,9 @@ import currency from 'currency.js'
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
 import type { TaxDocument } from '@/types/finance/tax-document'
+import type { ScheduleBLines, ScheduleBSourceLine } from '@/types/finance/tax-return'
+
+export type { ScheduleBLines, ScheduleBSourceLine } from '@/types/finance/tax-return'
 
 interface ScheduleBPreviewProps {
   interestIncome: currency
@@ -15,22 +18,20 @@ interface ScheduleBPreviewProps {
   reviewed1099Docs?: TaxDocument[]
 }
 
-export default function ScheduleBPreview({
-  interestIncome,
-  dividendIncome,
-  qualifiedDividends,
-  selectedYear,
-  reviewedK1Docs = [],
-  reviewed1099Docs = [],
-}: ScheduleBPreviewProps) {
-  // ── Part I — Interest ─────────────────────────────────────────────────────
 
-  type SourceLine = { label: string; amount: number }
-  const interestLines: SourceLine[] = []
-  const dividendLines: SourceLine[] = []
-  const qualDividendLines: SourceLine[] = []
+export function computeScheduleB(
+  reviewedK1Docs: TaxDocument[],
+  reviewed1099Docs: TaxDocument[],
+  income1099: {
+    interestIncome: currency
+    dividendIncome: currency
+    qualifiedDividends: currency
+  },
+): ScheduleBLines {
+  const interestLines: ScheduleBSourceLine[] = []
+  const dividendLines: ScheduleBSourceLine[] = []
+  const qualDividendLines: ScheduleBSourceLine[] = []
 
-  // K-1 interest (Box 5) and dividend (Box 6a / 6b) sources
   for (const doc of reviewedK1Docs) {
     const data = isFK1StructuredData(doc.parsed_data) ? doc.parsed_data : null
     if (!data) continue
@@ -53,7 +54,6 @@ export default function ScheduleBPreview({
     }
   }
 
-  // 1099-INT and 1099-DIV sources
   for (const doc of reviewed1099Docs) {
     const p = doc.parsed_data as Record<string, unknown>
     const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? '1099 Payer'
@@ -77,16 +77,39 @@ export default function ScheduleBPreview({
     }
   }
 
-  // Compute totals from line items; fall back to aggregated props if no line items
   const interestTotal = interestLines.length > 0
     ? interestLines.reduce((acc, l) => acc.add(l.amount), currency(0)).value
-    : interestIncome.value
+    : income1099.interestIncome.value
   const dividendTotal = dividendLines.length > 0
     ? dividendLines.reduce((acc, l) => acc.add(l.amount), currency(0)).value
-    : dividendIncome.value
-  const qualDivTotal = qualDividendLines.length > 0
+    : income1099.dividendIncome.value
+  const qualifiedDivTotal = qualDividendLines.length > 0
     ? qualDividendLines.reduce((acc, l) => acc.add(l.amount), currency(0)).value
-    : qualifiedDividends.value
+    : income1099.qualifiedDividends.value
+
+  return {
+    interestTotal,
+    dividendTotal,
+    qualifiedDivTotal,
+    interestLines,
+    dividendLines,
+    qualifiedDividendLines: qualDividendLines,
+  }
+}
+
+export default function ScheduleBPreview({
+  interestIncome,
+  dividendIncome,
+  qualifiedDividends,
+  selectedYear,
+  reviewedK1Docs = [],
+  reviewed1099Docs = [],
+}: ScheduleBPreviewProps) {
+  const { interestLines, dividendLines, qualifiedDividendLines, interestTotal, dividendTotal, qualifiedDivTotal } = computeScheduleB(
+    reviewedK1Docs,
+    reviewed1099Docs,
+    { interestIncome, dividendIncome, qualifiedDividends },
+  )
 
   const hasLineSources = interestLines.length > 0 || dividendLines.length > 0
 
@@ -122,14 +145,14 @@ export default function ScheduleBPreview({
             <FormLine label="No dividend income reported" raw="—" />
           )}
           <FormTotalLine label="Line 6 — Total ordinary dividends" value={dividendTotal} />
-          {qualDivTotal > 0 && (
+          {qualifiedDivTotal > 0 && (
             <>
-              {qualDividendLines.length > 0
-                ? qualDividendLines.map((line, i) => (
+              {qualifiedDividendLines.length > 0
+                ? qualifiedDividendLines.map((line, i) => (
                     <FormLine key={`qd-${i}`} label={line.label} value={line.amount} />
                   ))
-                : <FormLine label="Qualified dividends" value={qualDivTotal} />}
-              <FormTotalLine label="Line 7 — Qualified dividends" value={qualDivTotal} />
+                : <FormLine label="Qualified dividends" value={qualifiedDivTotal} />}
+              <FormTotalLine label="Line 7 — Qualified dividends" value={qualifiedDivTotal} />
             </>
           )}
         </FormBlock>

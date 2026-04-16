@@ -6,6 +6,9 @@ import { isFK1StructuredData } from '@/components/finance/k1'
 import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine, parseFieldVal } from '@/components/finance/tax-preview-primitives'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
+import type { Form1116Lines } from '@/types/finance/tax-return'
+
+export type { Form1116Lines } from '@/types/finance/tax-return'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -28,88 +31,54 @@ interface Form1116PreviewProps {
   }
 }
 
-export default function Form1116Preview({
+export function computeForm1116Lines({
   reviewedK1Docs,
   reviewed1099Docs,
-}: Form1116PreviewProps) {
-  // ── Parse K-1 docs ────────────────────────────────────────────────────────
+}: Pick<Form1116PreviewProps, 'reviewedK1Docs' | 'reviewed1099Docs'>): Form1116Lines {
   const k1Parsed = reviewedK1Docs
     .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
     .filter((x): x is { doc: TaxDocument; data: FK1StructuredData } => x.data !== null)
 
-  // ── Part I — Foreign Source Passive Income ────────────────────────────────
-  type IncomeSource = { label: string; amount: number }
-  const incomeSources: IncomeSource[] = []
-
+  const incomeSources: { label: string; amount: number }[] = []
   for (const { doc, data } of k1Parsed) {
     const partnerName =
       data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
     const k3Sections = data.k3?.sections ?? []
-
-    // Sum K-3 Part II section 1 passive column (col_c_passive), lines ≤ 24
     const part2Sec1 = k3Sections.filter(
       (s) => s.sectionId === 'part2_section1' || s.sectionId === 'part2_section2',
     )
-    let k3PassiveTotal = 0
-    let hasXXOnly = true // track if all entries have country XX (U.S. source)
-    let hasGeneralCategory = false
-
+    let k3PassiveTotal = currency(0)
     for (const sec of part2Sec1) {
       const rows = ((sec.data as Record<string, unknown>)?.rows as Array<Record<string, unknown>> | undefined) ?? []
       for (const row of rows) {
         const passive = parseFieldVal(String(row.col_c_passive ?? '')) ?? 0
-        const general = parseFieldVal(String(row.col_d_general ?? '')) ?? 0
-        const country = (row.country as string | undefined) ?? ''
         if (passive !== 0) {
-          k3PassiveTotal += passive
-          if (country !== 'XX' && country !== '') hasXXOnly = false
-        }
-        if (general !== 0 && country !== 'XX' && country !== '') {
-          hasGeneralCategory = true
+          k3PassiveTotal = k3PassiveTotal.add(passive)
         }
       }
     }
 
-    if (k3PassiveTotal !== 0) {
-      incomeSources.push({ label: `${partnerName} — K-3 Part II passive income`, amount: k3PassiveTotal })
+    if (k3PassiveTotal.value !== 0) {
+      incomeSources.push({ label: `${partnerName} — K-3 Part II passive income`, amount: k3PassiveTotal.value })
     } else if (pk1(data, '21') > 0) {
-      // Box 21 > 0 but no K-3 passive income — approximate
       incomeSources.push({
         label: `${partnerName} — Box 21 foreign tax (income estimated)`,
-        amount: pk1(data, '21') / 0.15, // rough 15% withholding assumption
+        amount: pk1(data, '21') / 0.15,
       })
-    }
-
-    // Track general category
-    if (hasGeneralCategory) {
-      // We'll use this below for the callout
-    }
-
-    // Track XX-only for callout
-    if (hasXXOnly && k3PassiveTotal === 0) {
-      // All XX — no actual foreign passive income
     }
   }
 
-  // 1099-DIV foreign source income (box 7 = foreign tax paid; approximate income)
   for (const doc of reviewed1099Docs) {
     if (doc.form_type !== '1099_div' && doc.form_type !== '1099_div_c') continue
     const p = doc.parsed_data as Record<string, unknown>
     const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? '1099-DIV'
     const foreignTax = p?.box7_foreign_tax as number | undefined
     if (foreignTax != null && foreignTax > 0) {
-      // Approximate foreign source income: foreign tax / ~15% withholding rate
-      const approxIncome = foreignTax / 0.15
-      incomeSources.push({ label: `${payer} — 1099-DIV (estimated foreign source)`, amount: approxIncome })
+      incomeSources.push({ label: `${payer} — 1099-DIV (estimated foreign source)`, amount: foreignTax / 0.15 })
     }
   }
 
-  const totalPassiveIncome = incomeSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value
-
-  // ── Part II — Foreign Taxes Paid ──────────────────────────────────────────
-  type TaxSource = { label: string; amount: number }
-  const taxSources: TaxSource[] = []
-
+  const taxSources: { label: string; amount: number }[] = []
   for (const { doc, data } of k1Parsed) {
     const partnerName =
       data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
@@ -134,7 +103,78 @@ export default function Form1116Preview({
     }
   }
 
-  const totalForeignTaxes = taxSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value
+  return {
+    incomeSources,
+    taxSources,
+    totalPassiveIncome: incomeSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value,
+    totalForeignTaxes: taxSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value,
+  }
+}
+
+export default function Form1116Preview({
+  reviewedK1Docs,
+  reviewed1099Docs,
+}: Form1116PreviewProps) {
+  const computed = computeForm1116Lines({ reviewedK1Docs, reviewed1099Docs })
+
+  // ── Parse K-1 docs ────────────────────────────────────────────────────────
+  const k1Parsed = reviewedK1Docs
+    .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
+    .filter((x): x is { doc: TaxDocument; data: FK1StructuredData } => x.data !== null)
+
+  // ── Part I — Foreign Source Passive Income ────────────────────────────────
+  type IncomeSource = { label: string; amount: number }
+  const incomeSources: IncomeSource[] = []
+
+  for (const { doc, data } of k1Parsed) {
+    const partnerName =
+      data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
+    const k3Sections = data.k3?.sections ?? []
+
+    // Sum K-3 Part II section 1 passive column (col_c_passive), lines ≤ 24
+    const part2Sec1 = k3Sections.filter(
+      (s) => s.sectionId === 'part2_section1' || s.sectionId === 'part2_section2',
+    )
+    let k3PassiveTotal = currency(0)
+    let hasXXOnly = true // track if all entries have country XX (U.S. source)
+    let hasGeneralCategory = false
+
+    for (const sec of part2Sec1) {
+      const rows = ((sec.data as Record<string, unknown>)?.rows as Array<Record<string, unknown>> | undefined) ?? []
+      for (const row of rows) {
+        const passive = parseFieldVal(String(row.col_c_passive ?? '')) ?? 0
+        const general = parseFieldVal(String(row.col_d_general ?? '')) ?? 0
+        const country = (row.country as string | undefined) ?? ''
+        if (passive !== 0) {
+          k3PassiveTotal = k3PassiveTotal.add(passive)
+          if (country !== 'XX' && country !== '') hasXXOnly = false
+        }
+        if (general !== 0 && country !== 'XX' && country !== '') {
+          hasGeneralCategory = true
+        }
+      }
+    }
+
+    if (k3PassiveTotal.value !== 0) {
+      incomeSources.push({ label: `${partnerName} — K-3 Part II passive income`, amount: k3PassiveTotal.value })
+    } else if (pk1(data, '21') > 0) {
+      // Box 21 > 0 but no K-3 passive income — approximate
+      incomeSources.push({
+        label: `${partnerName} — Box 21 foreign tax (income estimated)`,
+        amount: pk1(data, '21') / 0.15, // rough 15% withholding assumption
+      })
+    }
+
+    void hasXXOnly
+    void hasGeneralCategory
+  }
+
+  const totalPassiveIncome = incomeSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value
+
+  // ── Part II — Foreign Taxes Paid ──────────────────────────────────────────
+  type TaxSource = { label: string; amount: number }
+  const taxSources: TaxSource[] = [...computed.taxSources]
+  const totalForeignTaxes = computed.totalForeignTaxes
 
   // ── Callouts ──────────────────────────────────────────────────────────────
 
