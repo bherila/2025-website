@@ -104,6 +104,8 @@ export default function TaxDocuments1099Section({
   const [multiAccountImportOpen, setMultiAccountImportOpen] = useState(false)
   // When set, opens the multi-account import modal pre-seeded for a specific account.
   const [consolidatedUploadAccountId, setConsolidatedUploadAccountId] = useState<number | null>(null)
+  // When set, opens MultiAccountImportModal in assign mode for an already-parsed unresolved doc.
+  const [assignDocId, setAssignDocId] = useState<number | null>(null)
   const [manualEntry, setManualEntry] = useState<ManualEntryState | null>(null)
   const [manualSaving, setManualSaving] = useState(false)
   const { reviewDoc: reviewModalDoc, reviewLink: reviewModalLink, openReview: openReviewModal, closeReview: closeReviewModal } = useReviewModal()
@@ -609,7 +611,7 @@ export default function TaxDocuments1099Section({
                       size="sm"
                       variant="outline"
                       className="gap-1 h-7 text-xs border-amber-300 text-amber-700 px-2"
-                      onClick={() => openReviewModal(doc, undefined)}
+                      onClick={() => setAssignDocId(doc.id)}
                     >
                       <Eye className="h-3 w-3" />
                       Assign accounts
@@ -774,6 +776,25 @@ export default function TaxDocuments1099Section({
           onClose={() => setConsolidatedUploadAccountId(null)}
           onSuccess={() => {
             setConsolidatedUploadAccountId(null)
+            if (onDocumentsReload) {
+              onDocumentsReload()
+            } else {
+              fetchDocuments()
+            }
+          }}
+        />
+      )}
+
+      {/* Assign accounts modal for already-parsed unresolved broker_1099 docs */}
+      {assignDocId !== null && (
+        <MultiAccountImportModal
+          open
+          taxYear={selectedYear}
+          accounts={accounts}
+          existingTaxDocId={assignDocId}
+          onClose={() => setAssignDocId(null)}
+          onSuccess={() => {
+            setAssignDocId(null)
             if (onDocumentsReload) {
               onDocumentsReload()
             } else {
