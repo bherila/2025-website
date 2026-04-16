@@ -74,7 +74,7 @@ Tags link to employment entities via `employment_entity_id` on `fin_account_tag`
 
 The Tax Preview page groups Schedule C income/expenses by entity, generating separate Schedule C sections per business.
 
-See [Tags.md](Tags.md) for the full list of tax characteristics and helpers.
+See [tags.md](tags.md) for the full list of tax characteristics and helpers.
 
 ---
 
@@ -129,18 +129,22 @@ The React mini-SPA is wrapped in `TaxPreviewProvider`, which loads `/api/finance
 ### Tab Structure
 
 ```
-Overview | Schedules | Capital Gains | Form 1116 | Schedule C | Tax Estimate | Action Items
+Overview | Schedules | Schedule A | Schedule E | Capital Gains | Form 1116 | Schedule C | Tax Estimate | Action Items
 ```
 
-| Tab | Component | Description |
-|-----|-----------|-------------|
+| Tab | Component(s) | Description |
+|-----|---|---|
 | Overview | `TaxIncomeOverview` | Income card grid + summary table + W-2 Income Summary + All Tax Documents |
-| Schedules | `ScheduleBPreview` + `Form4952Preview` | Schedule B + Form 4952 |
+| Schedules | `ScheduleBPreview` + `Form4952Preview` | Schedule B (interest/dividends) + Form 4952 (investment interest) |
+| Schedule A | `ScheduleAPreview` | Itemized deductions — investment interest (K-1, 1099, short dividends) with drilldown modal |
+| Schedule E | `ScheduleEPreview` | Partnership/S-corp income from K-1 — Box 1 ordinary, Box 2/3 rental, Box 4 guaranteed payments |
 | Capital Gains | `ScheduleDPreview` | Form 6781 + Schedule D |
-| Form 1116 | `Form1116Preview` | Passive FTC |
+| Form 1116 | `Form1116Preview` | Passive foreign tax credit |
 | Schedule C | `ScheduleCTab` | Self-employment income/expenses + Form 8829 home office |
 | Tax Estimate | `Form1040Preview` + `TotalsTable` | Form 1040 preview + federal/state tax tables |
 | Action Items | `ActionItemsTab` | Resolved/outstanding alerts |
+
+**Short dividend integration:** `TaxPreviewContext` fetches transactions for all active accounts on load, runs `analyzeShortDividends()`, and exposes `shortDividendSummary` on the context. `Form4952Preview` receives `shortDividendDeduction` (the >45-day bucket total) as investment interest expense. `ScheduleAPreview` renders both the K-1/1099 sources and the short dividend breakdown in one place. See [lot-analyzer.md](lot-analyzer.md#short-dividend-analysis) for details.
 
 ### Schedule C Tab
 
@@ -210,9 +214,9 @@ Non-entity Tags (interest, dividends, etc.)
 
 ## Related Documentation
 
-- [Tags.md](Tags.md) — Tag structure, tax characteristics, and tagging API
-- [FinanceTool.md](FinanceTool.md) — Finance tool overview and navigation
-- [TransactionsTable.md](TransactionsTable.md) — Transaction display and filtering
+- [tags.md](tags.md) — Tag structure, tax characteristics, and tagging API
+- [overview.md](overview.md) — Finance tool overview and navigation
+- [transactions-table.md](transactions-table.md) — Transaction display and filtering
 - `/database/schema/mysql-schema.sql` — Full database schema
 
 ---

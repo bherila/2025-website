@@ -9,6 +9,7 @@ import { parseEtradeCsv } from '@/data/finance/parseEtradeCsv'
 import { parseFidelityCsv } from '@/data/finance/parseFidelityCsv'
 import { type IbStatementData,parseIbCsv } from '@/data/finance/parseIbCsv'
 import { parseQuickenQFX } from '@/data/finance/parseQuickenQFX'
+import { isSchwabCsv, parseSchwabCsv } from '@/data/finance/parseSchwabCsv'
 import { parseWealthfrontHAR } from '@/data/finance/parseWealthfrontHAR'
 import { parseDate } from '@/lib/DateHelper'
 import { splitDelimitedText } from '@/lib/splitDelimitedText'
@@ -34,9 +35,10 @@ export interface ParseImportDataResult {
  * 1. E-Trade CSV
  * 2. QFX/OFX (Quicken)
  * 3. Wealthfront HAR
- * 4. Fidelity CSV
- * 5. Interactive Brokers CSV (includes statement data)
- * 6. Generic CSV with Date/Description/Amount columns
+ * 4. Schwab CSV (before Fidelity to avoid misdetection)
+ * 5. Fidelity CSV
+ * 6. Interactive Brokers CSV (includes statement data)
+ * 7. Generic CSV with Date/Description/Amount columns
  * 
  * @param text - The raw text content to parse
  * @returns Parsed data with transactions, optional statement data, and any errors
@@ -58,6 +60,14 @@ export function parseImportData(text: string): ParseImportDataResult {
   const wealthfrontData = parseWealthfrontHAR(text)
   if (wealthfrontData.length > 0) {
     return { data: wealthfrontData, statement: null, parseError: null }
+  }
+
+  // Try parsing as Schwab CSV (before Fidelity to avoid misdetection)
+  if (isSchwabCsv(text)) {
+    const schwabData = parseSchwabCsv(text)
+    if (schwabData.length > 0) {
+      return { data: schwabData, statement: null, parseError: null }
+    }
   }
 
   // Try parsing as Fidelity

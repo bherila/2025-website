@@ -1,8 +1,20 @@
-# Finance Tool — Artisan CLI
+# Finance CLI (`finance:*` Artisan Commands)
 
 Artisan commands for CRUD operations on the Finance domain, designed for power-user workflows and AI-assisted reconciliation (e.g. via Claude CLI).
 
 All commands live under the `finance:` namespace and share a base class (`BaseFinanceCommand`) that handles user resolution, output formatting, and table rendering.
+
+## Quick Start (Agent Discovery)
+
+Use the commands themselves for self-discovery rather than relying on static documentation that can drift.
+
+```bash
+php artisan list finance                      # all available finance commands
+php artisan finance:<command> --help          # options and flags for a specific command
+php artisan finance:<command> --schema        # expected stdin/file input format (import commands only)
+```
+
+When generating data to feed an import command, prefer **TOON format** (`--input-format=toon`). TOON is 30-60% more token-efficient than JSON, and the `helgesverre/toon` package is installed. All import commands that accept JSON also accept TOON.
 
 ---
 
@@ -157,22 +169,43 @@ php artisan finance:statements [--account=ACCT_ID] [--year=YEAR] [--format=table
 
 ---
 
-### `finance:lots` *(planned)*
+### `finance:lots-import`
 
-List investment lots.
+Import 1099-B closed-lot records into `fin_account_lots`. Accepts **JSON**, **CSV**, **TOON**, or **Fidelity pdftotext** input.
 
-```
-php artisan finance:lots
-  [--account=ACCT_ID]
-  [--symbol=SYMBOL]
-  [--open]
-  [--year=YEAR]
-  [--format=table|json]
+```bash
+# JSON (broker_1099 format — see --schema)
+php artisan finance:lots-import --account=33 --file=1099b.json
+
+# CSV
+php artisan finance:lots-import --account=33 --file=lots.csv
+
+# TOON (helgesverre/toon — 30–60% fewer tokens vs JSON)
+php artisan finance:lots-import --account=33 --file=lots.toon
+
+# Fidelity 1099-B PDF via pdftotext
+pdftotext -layout "2025 1099 Fidelity.pdf" - | php artisan finance:lots-import --account=33
+
+# Print expected schema for all formats
+php artisan finance:lots-import --schema
 ```
 
 **Options**
-- `--open` — only show open (unsold) lots
-- `--year` — filter by sale year (closed lots only)
+- `--account` — target `fin_accounts.acct_id` (required)
+- `--file` — path to input file; omit to read from stdin
+- `--input-format` — force format: `json` | `csv` | `toon` | `text` (auto-detected by default)
+- `--dry-run` — parse and preview without writing
+- `--clear` — delete all existing lots for this account before importing
+- `--schema` — print expected input schemas and exit
+- `--format` — output format (default: `table`)
+
+**Duplicate detection:** skips rows where the same `(acct_id, symbol, quantity, purchase_date, sale_date, proceeds, cost_basis)` already exists (within $0.01 rounding).
+
+**Transaction linking:** for each imported lot, attempts to find a matching `fin_account_line_items` opening (buy) and closing (sell) transaction and sets `open_t_id` / `close_t_id`.
+
+**Taxable disposition types parsed from pdftotext:** `Sale`, `Merger` (cash mergers), `Cash In Lieu` (fractional share payouts).
+
+→ See [lot-analyzer.md](lot-analyzer.md) for the frontend analysis component.
 
 ---
 

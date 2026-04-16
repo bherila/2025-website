@@ -38,12 +38,19 @@ interface Form4952PreviewProps {
     dividendIncome: currency
     qualifiedDividends: currency
   }
+  /**
+   * Short dividends charged on positions held > 45 days.
+   * These are deductible as investment interest expense on Form 4952.
+   * Pass the `totalItemizedDeduction` from `analyzeShortDividends()`.
+   */
+  shortDividendDeduction?: number
 }
 
 export default function Form4952Preview({
   reviewedK1Docs,
   reviewed1099Docs,
   income1099,
+  shortDividendDeduction = 0,
 }: Form4952PreviewProps) {
   // ── Gather investment interest expense ───────────────────────────────────
   type InvIntSource = { label: string; amount: number }
@@ -79,6 +86,14 @@ export default function Form4952Preview({
     if (typeof invExp === 'number' && invExp !== 0) {
       invIntSources.push({ label: `${payer} — 1099-INT Box 5 (investment expense)`, amount: -Math.abs(invExp) })
     }
+  }
+
+  // Short dividends on positions held > 45 days are investment interest expense (IRS Pub. 550)
+  if (shortDividendDeduction > 0) {
+    invIntSources.push({
+      label: 'Short dividends — positions held > 45 days (IRS Pub. 550)',
+      amount: -shortDividendDeduction,
+    })
   }
 
   const totalInvInt = invIntSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value

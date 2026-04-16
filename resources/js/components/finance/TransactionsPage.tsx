@@ -110,23 +110,25 @@ export default function TransactionsPage({ accountId, initialAvailableYears = []
       try {
         setIsLoading(true)
 
-        // Build cache key (only cache single-account views with a specific year,
-        // since "all accounts" or "all years" queries are too broad to cache simply)
-        const canUseCache = !isAllAccounts && selectedYear !== 'all' && filter === 'all' && selectedTag === 'all' && userId != null
-        const cacheKey = canUseCache ? buildCacheKey(userId!, accountId, selectedYear) : null
+        // Cache single-account, unfiltered fetches by accountId (no year scoping).
+        const canUseCache = !isAllAccounts && filter === 'all' && selectedTag === 'all'
+        const cacheKey = canUseCache ? buildCacheKey(accountId) : null
 
-        // 1. Show cached data immediately if available
+        // 1. Show cached data immediately if available (filter by year in JS if needed)
         if (cacheKey) {
           const cached = await getCachedTransactions(cacheKey)
           if (cached) {
-            setData(cached.transactions)
+            const fromCache = selectedYear !== 'all'
+              ? cached.transactions.filter((t) => t.t_date?.startsWith(selectedYear))
+              : cached.transactions
+            setData(fromCache)
             setIsLoading(false)
           }
         }
 
-        // 2. Always fetch fresh data from the API
+        // 2. Always fetch fresh data from the API.
+        // Cache stores the full all-year dataset; year filter is applied in JS above.
         const params = new URLSearchParams()
-        if (selectedYear !== 'all') params.append('year', selectedYear)
         if (filter !== 'all') params.append('filter', filter)
         if (selectedTag !== 'all') params.append('tag', selectedTag)
         const queryString = params.toString() ? `?${params.toString()}` : ''
@@ -134,13 +136,17 @@ export default function TransactionsPage({ accountId, initialAvailableYears = []
           ? `/api/finance/all/line_items${queryString}`
           : `/api/finance/${accountId}/line_items${queryString}`
         const fetchedData = await fetchWrapper.get(endpoint)
-        const parsedData = z.array(AccountLineItemSchema).parse(fetchedData)
-        const filtered = parsedData.filter(Boolean)
-        setData(filtered)
+        const allParsed = z.array(AccountLineItemSchema).parse(fetchedData).filter(Boolean)
 
-        // 3. Persist fresh data to cache
+        // Apply year filter in JS for display
+        const yearFiltered = selectedYear !== 'all'
+          ? allParsed.filter((t) => t.t_date?.startsWith(selectedYear))
+          : allParsed
+        setData(yearFiltered)
+
+        // 3. Persist the FULL (all-year) dataset to cache for reuse
         if (cacheKey) {
-          await setCachedTransactions(cacheKey, filtered)
+          await setCachedTransactions(cacheKey, allParsed)
         }
       } catch (error) {
         console.error('Error fetching transactions:', error)

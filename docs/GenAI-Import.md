@@ -281,7 +281,7 @@ Because the cron-based queue has up to 60 seconds latency, the UI should:
 - Show a deferred notice when status is `queued_tomorrow`
 - Show an error state with a Clear button when status is `failed`
 
-For finance-specific import UI details (components, checkboxes, button text), see [FinanceTool.md § Transaction Import](finance/FinanceTool.md#transaction-import).
+For finance-specific import UI details (components, checkboxes, button text), see [import.md](finance/import.md).
 
 ---
 
