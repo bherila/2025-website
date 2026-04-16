@@ -6,6 +6,9 @@ import { isFK1StructuredData } from '@/components/finance/k1'
 import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine, parseFieldVal } from '@/components/finance/tax-preview-primitives'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
+import type { Form1116Lines } from '@/types/finance/tax-return'
+
+export type { Form1116Lines } from '@/types/finance/tax-return'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -28,13 +31,6 @@ interface Form1116PreviewProps {
   }
 }
 
-export interface Form1116Lines {
-  incomeSources: { label: string; amount: number }[]
-  taxSources: { label: string; amount: number }[]
-  totalPassiveIncome: number
-  totalForeignTaxes: number
-}
-
 export function computeForm1116Lines({
   reviewedK1Docs,
   reviewed1099Docs,
@@ -51,19 +47,19 @@ export function computeForm1116Lines({
     const part2Sec1 = k3Sections.filter(
       (s) => s.sectionId === 'part2_section1' || s.sectionId === 'part2_section2',
     )
-    let k3PassiveTotal = 0
+    let k3PassiveTotal = currency(0)
     for (const sec of part2Sec1) {
       const rows = ((sec.data as Record<string, unknown>)?.rows as Array<Record<string, unknown>> | undefined) ?? []
       for (const row of rows) {
         const passive = parseFieldVal(String(row.col_c_passive ?? '')) ?? 0
         if (passive !== 0) {
-          k3PassiveTotal += passive
+          k3PassiveTotal = k3PassiveTotal.add(passive)
         }
       }
     }
 
-    if (k3PassiveTotal !== 0) {
-      incomeSources.push({ label: `${partnerName} — K-3 Part II passive income`, amount: k3PassiveTotal })
+    if (k3PassiveTotal.value !== 0) {
+      incomeSources.push({ label: `${partnerName} — K-3 Part II passive income`, amount: k3PassiveTotal.value })
     } else if (pk1(data, '21') > 0) {
       incomeSources.push({
         label: `${partnerName} — Box 21 foreign tax (income estimated)`,
@@ -139,7 +135,7 @@ export default function Form1116Preview({
     const part2Sec1 = k3Sections.filter(
       (s) => s.sectionId === 'part2_section1' || s.sectionId === 'part2_section2',
     )
-    let k3PassiveTotal = 0
+    let k3PassiveTotal = currency(0)
     let hasXXOnly = true // track if all entries have country XX (U.S. source)
     let hasGeneralCategory = false
 
@@ -150,7 +146,7 @@ export default function Form1116Preview({
         const general = parseFieldVal(String(row.col_d_general ?? '')) ?? 0
         const country = (row.country as string | undefined) ?? ''
         if (passive !== 0) {
-          k3PassiveTotal += passive
+          k3PassiveTotal = k3PassiveTotal.add(passive)
           if (country !== 'XX' && country !== '') hasXXOnly = false
         }
         if (general !== 0 && country !== 'XX' && country !== '') {
@@ -159,8 +155,8 @@ export default function Form1116Preview({
       }
     }
 
-    if (k3PassiveTotal !== 0) {
-      incomeSources.push({ label: `${partnerName} — K-3 Part II passive income`, amount: k3PassiveTotal })
+    if (k3PassiveTotal.value !== 0) {
+      incomeSources.push({ label: `${partnerName} — K-3 Part II passive income`, amount: k3PassiveTotal.value })
     } else if (pk1(data, '21') > 0) {
       // Box 21 > 0 but no K-3 passive income — approximate
       incomeSources.push({
@@ -169,15 +165,8 @@ export default function Form1116Preview({
       })
     }
 
-    // Track general category
-    if (hasGeneralCategory) {
-      // We'll use this below for the callout
-    }
-
-    // Track XX-only for callout
-    if (hasXXOnly && k3PassiveTotal === 0) {
-      // All XX — no actual foreign passive income
-    }
+    void hasXXOnly
+    void hasGeneralCategory
   }
 
   const totalPassiveIncome = incomeSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value

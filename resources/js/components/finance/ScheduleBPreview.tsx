@@ -5,6 +5,9 @@ import currency from 'currency.js'
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
 import type { TaxDocument } from '@/types/finance/tax-document'
+import type { ScheduleBLines, ScheduleBSourceLine } from '@/types/finance/tax-return'
+
+export type { ScheduleBLines, ScheduleBSourceLine } from '@/types/finance/tax-return'
 
 interface ScheduleBPreviewProps {
   interestIncome: currency
@@ -15,19 +18,6 @@ interface ScheduleBPreviewProps {
   reviewed1099Docs?: TaxDocument[]
 }
 
-export interface ScheduleBSourceLine {
-  label: string
-  amount: number
-}
-
-export interface ScheduleBLines {
-  interestTotal: number
-  dividendTotal: number
-  qualifiedDivTotal: number
-  interestLines: ScheduleBSourceLine[]
-  dividendLines: ScheduleBSourceLine[]
-  qualifiedDividendLines: ScheduleBSourceLine[]
-}
 
 export function computeScheduleB(
   reviewedK1Docs: TaxDocument[],

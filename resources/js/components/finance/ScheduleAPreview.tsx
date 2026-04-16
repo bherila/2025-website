@@ -17,18 +17,16 @@ import {
 import type { ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
+import type { ScheduleALines } from '@/types/finance/tax-return'
 
 import { ShortDividendSummaryCard } from './ShortDividendDetailModal'
+
+export type { ScheduleALines } from '@/types/finance/tax-return'
 
 interface InvIntSource {
   label: string
   /** Negative means expense (charge). Positive means income. */
   amount: number
-}
-
-export interface ScheduleALines {
-  invIntSources: InvIntSource[]
-  totalInvIntExpense: number
 }
 
 export function computeScheduleALines({

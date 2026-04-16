@@ -6,6 +6,9 @@ import { isFK1StructuredData } from '@/components/finance/k1'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
+import type { Form4952Lines } from '@/types/finance/tax-return'
+
+export type { Form4952Lines } from '@/types/finance/tax-return'
 
 import { Callout, fmtAmt,FormBlock, FormLine, FormTotalLine } from './tax-preview-primitives'
 
@@ -46,15 +49,6 @@ interface Form4952PreviewProps {
   shortDividendDeduction?: number
 }
 
-export interface Form4952Lines {
-  invIntSources: { label: string; amount: number }[]
-  totalInvIntExpense: number
-  niiBefore: number
-  totalQualDiv: number
-  deductibleInvestmentInterestExpense: number
-  disallowedCarryforward: number
-}
-
 export function computeForm4952Lines({
   reviewedK1Docs,
   reviewed1099Docs,
@@ -71,6 +65,30 @@ export function computeForm4952Lines({
       label: 'Short dividends — positions held > 45 days (IRS Pub. 550)',
       amount: -shortDividendDeduction,
     })
+  }
+
+  // K-1 Box 13H (investment interest expense) and 13G
+  for (const { doc, data } of k1Parsed) {
+    const partnerName =
+      data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
+    for (const item of data.codes['13'] ?? []) {
+      if (item.code === 'H' || item.code === 'G') {
+        const n = parseFloat(item.value)
+        if (!isNaN(n) && n !== 0) {
+          invIntSources.push({ label: `${partnerName} — Box 13${item.code}`, amount: n })
+        }
+      }
+    }
+  }
+
+  // 1099-INT Box 5 (investment expenses)
+  for (const doc of reviewed1099Docs) {
+    const p = doc.parsed_data as Record<string, unknown>
+    const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? ''
+    const invExp = p?.box5_investment_expense
+    if (typeof invExp === 'number' && invExp !== 0) {
+      invIntSources.push({ label: `${payer} — 1099-INT Box 5 (investment expense)`, amount: -Math.abs(invExp) })
+    }
   }
 
   const totalInvInt = invIntSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value
@@ -138,43 +156,13 @@ export default function Form4952Preview({
     shortDividendDeduction,
   })
 
-  // ── Gather investment interest expense ───────────────────────────────────
-  type InvIntSource = { label: string; amount: number }
-  const invIntSources: InvIntSource[] = [...computedLines.invIntSources]
+  // ── Gather investment interest expense (already computed) ───────────────
+  const invIntSources = computedLines.invIntSources
+  const totalInvIntExpense = computedLines.totalInvIntExpense
 
   const k1Parsed = reviewedK1Docs
     .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
     .filter((x): x is { doc: TaxDocument; data: FK1StructuredData } => x.data !== null)
-
-  for (const { doc, data } of k1Parsed) {
-    const partnerName =
-      data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
-    const hItems = (data.codes['13'] ?? []).filter((item) => item.code === 'H')
-    for (const item of hItems) {
-      const n = parseFloat(item.value)
-      if (!isNaN(n) && n !== 0) {
-        invIntSources.push({ label: `${partnerName} — Box 13H`, amount: n })
-      }
-    }
-    const gItems = (data.codes['13'] ?? []).filter((item) => item.code === 'G')
-    for (const item of gItems) {
-      const n = parseFloat(item.value)
-      if (!isNaN(n) && n !== 0) {
-        invIntSources.push({ label: `${partnerName} — Box 13G`, amount: n })
-      }
-    }
-  }
-
-  for (const doc of reviewed1099Docs) {
-    const p = doc.parsed_data as Record<string, unknown>
-    const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? ''
-    const invExp = p?.box5_investment_expense
-    if (typeof invExp === 'number' && invExp !== 0) {
-      invIntSources.push({ label: `${payer} — 1099-INT Box 5 (investment expense)`, amount: -Math.abs(invExp) })
-    }
-  }
-
-  const totalInvIntExpense = computedLines.totalInvIntExpense
 
   // ── Gather Net Investment Income ─────────────────────────────────────────
   const k1Interest = k1Parsed.reduce((acc, { data }) => acc.add(parseK1Field(data, '5')), currency(0)).value

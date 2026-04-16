@@ -98,6 +98,7 @@ describe('buildTaxWorkbook', () => {
     }
 
     const workbook = buildTaxWorkbook(taxReturn)
+    // K-3 sheets contain only notes, which are now treated as exportable content.
     expect(workbook.sheets.map(s => s.name)).toEqual([
       'Form 1040',
       'Schedule A',
@@ -108,6 +109,7 @@ describe('buildTaxWorkbook', () => {
       'Form 1116',
       'Form 4952',
       'K-1 Blue Harbor',
+      'K-3 Blue Harbor',
       '1099-DIV Fidelity SMA',
     ])
   })

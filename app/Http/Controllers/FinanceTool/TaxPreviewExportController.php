@@ -17,7 +17,7 @@ class TaxPreviewExportController extends Controller
         $validated = $request->validate([
             'filename' => ['required', 'string', 'max:255'],
             'sheets' => ['required', 'array', 'min:1'],
-            'sheets.*.name' => ['required', 'string', 'max:255'],
+            'sheets.*.name' => ['required', 'string', 'max:31'],
             'sheets.*.rows' => ['required', 'array'],
             'sheets.*.rows.*.line' => ['nullable', 'string'],
             'sheets.*.rows.*.description' => ['required', 'string'],
@@ -32,7 +32,10 @@ class TaxPreviewExportController extends Controller
         $spreadsheet->removeSheetByIndex(0);
 
         foreach ($validated['sheets'] as $index => $sheetData) {
-            $sheet = $spreadsheet->createSheet($index)->setTitle($sheetData['name']);
+            // Sanitize: strip Excel-invalid characters and enforce the 31-char limit.
+            $tabName = preg_replace('/[\\\\\/\*\?\:\[\]]/', '', (string) $sheetData['name']);
+            $tabName = trim(mb_substr($tabName, 0, 31)) ?: 'Sheet';
+            $sheet = $spreadsheet->createSheet($index)->setTitle($tabName);
             $sheet->setCellValue('A1', 'Line');
             $sheet->setCellValue('B1', 'Description');
             $sheet->setCellValue('C1', 'Amount');
@@ -45,7 +48,7 @@ class TaxPreviewExportController extends Controller
                 if (array_key_exists('line', $rowData) && $rowData['line'] !== null) {
                     $sheet->setCellValueExplicit("A{$excelRow}", (string) $rowData['line'], DataType::TYPE_STRING);
                 }
-                $sheet->setCellValue("B{$excelRow}", $rowData['description']);
+                $sheet->setCellValueExplicit("B{$excelRow}", $rowData['description'], DataType::TYPE_STRING);
 
                 if (! empty($rowData['formula'])) {
                     $sheet->setCellValue("C{$excelRow}", $rowData['formula']);
@@ -54,7 +57,7 @@ class TaxPreviewExportController extends Controller
                 }
 
                 if (! empty($rowData['note'])) {
-                    $sheet->setCellValue("D{$excelRow}", $rowData['note']);
+                    $sheet->setCellValueExplicit("D{$excelRow}", $rowData['note'], DataType::TYPE_STRING);
                 }
 
                 if (! empty($rowData['isHeader'])) {

@@ -16,6 +16,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { cn } from '@/lib/utils'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import type { F1099DivParsedData, F1099IntParsedData, W2ParsedData } from '@/types/finance/tax-document'
+import type { Form1040LineItem } from '@/types/finance/tax-return'
+
+export type { Form1040LineItem } from '@/types/finance/tax-return'
 
 interface DataSource {
   label: string
@@ -54,16 +57,6 @@ interface DataSourceModalState {
   line: string
   label: string
   sources: DataSource[]
-}
-
-export interface Form1040LineItem {
-  line: string
-  label: string
-  value: number | null
-  bold?: boolean
-  refSchedule?: string
-  sources?: { label: string; amount: number; note?: string }[]
-  navTab?: string
 }
 
 export function computeForm1040Lines({

@@ -1,16 +1,64 @@
-import type { Form1040LineItem } from '@/components/finance/Form1040Preview'
-import type { Form1116Lines } from '@/components/finance/Form1116Preview'
-import type { Form4952Lines } from '@/components/finance/Form4952Preview'
-import type { ScheduleALines } from '@/components/finance/ScheduleAPreview'
-import type { ScheduleBLines } from '@/components/finance/ScheduleBPreview'
-import type { ScheduleCNetIncome } from '@/components/finance/ScheduleCPreview'
 import type { ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import type { ScheduleDData } from '@/lib/tax/scheduleD'
+
+// These interfaces duplicate the ones exported from the component files.
+// They live here (in types/) so that the domain type layer does not depend on the UI layer.
+// The component files re-export these for backward-compatibility.
+
+export interface Form1040LineItem {
+  line: string
+  label: string
+  value: number | null
+  bold?: boolean
+  refSchedule?: string
+  sources?: { label: string; amount: number; note?: string }[]
+  navTab?: string
+}
+
+export interface ScheduleALines {
+  invIntSources: { label: string; amount: number }[]
+  totalInvIntExpense: number
+}
+
+export interface ScheduleBSourceLine {
+  label: string
+  amount: number
+}
+
+export interface ScheduleBLines {
+  interestTotal: number
+  dividendTotal: number
+  qualifiedDivTotal: number
+  interestLines: ScheduleBSourceLine[]
+  dividendLines: ScheduleBSourceLine[]
+  qualifiedDividendLines: ScheduleBSourceLine[]
+}
+
+export interface ScheduleCNetIncome {
+  total: number
+  byQuarter: { q1: number; q2: number; q3: number; q4: number }
+}
 
 export interface ScheduleELines {
   grandTotal: number
   totalPassive: number
   totalNonpassive: number
+}
+
+export interface Form4952Lines {
+  invIntSources: { label: string; amount: number }[]
+  totalInvIntExpense: number
+  niiBefore: number
+  totalQualDiv: number
+  deductibleInvestmentInterestExpense: number
+  disallowedCarryforward: number
+}
+
+export interface Form1116Lines {
+  incomeSources: { label: string; amount: number }[]
+  taxSources: { label: string; amount: number }[]
+  totalPassiveIncome: number
+  totalForeignTaxes: number
 }
 
 export interface K1ExportEntry {
