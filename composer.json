@@ -103,10 +103,7 @@
     "prefer-stable": true,
     "repositories": [{
         "name": "genai-laravel",
-        "type": "path",
-        "url": "../../genai-laravel",
-        "options": {
-            "symlink": true
-        }
+        "type": "vcs",
+        "url": "https://github.com/bherila/genai-laravel"
     }]
 }

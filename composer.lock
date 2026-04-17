@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "f69e487e4dd6a72e42bf8f9a1728bf9f",
+    "content-hash": "e875b42f36b37d13f04f7c9e89f9bf06",
     "packages": [
         {
             "name": "aws/aws-crt-php",
@@ -160,10 +160,16 @@
         {
             "name": "bherila/genai-laravel",
             "version": "dev-main",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/bherila/genai-laravel.git",
+                "reference": "24fc7f7b014dbdf55b2e81aa9cf8900698ea339e"
+            },
             "dist": {
-                "type": "path",
-                "url": "../../genai-laravel",
-                "reference": "ad3016290c837f1c80d30799ae2911774429de90"
+                "type": "zip",
+                "url": "https://api.github.com/repos/bherila/genai-laravel/zipball/24fc7f7b014dbdf55b2e81aa9cf8900698ea339e",
+                "reference": "24fc7f7b014dbdf55b2e81aa9cf8900698ea339e",
+                "shasum": ""
             },
             "require": {
                 "illuminate/contracts": "^10|^11|^12|^13",
@@ -176,6 +182,7 @@
                 "orchestra/testbench": "^8|^9|^10|^11",
                 "phpunit/phpunit": "^10|^11"
             },
+            "default-branch": true,
             "type": "library",
             "extra": {
                 "laravel": {
@@ -215,10 +222,11 @@
                 "laravel",
                 "llm"
             ],
-            "transport-options": {
-                "symlink": true,
-                "relative": true
-            }
+            "support": {
+                "source": "https://github.com/bherila/genai-laravel/tree/main",
+                "issues": "https://github.com/bherila/genai-laravel/issues"
+            },
+            "time": "2026-04-17T01:48:30+00:00"
         },
         {
             "name": "brick/math",
