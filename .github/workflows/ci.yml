@@ -97,6 +97,10 @@ jobs:
         if: steps.changes.outputs.backend == 'true' || github.event_name == 'push'
         run: python3 scripts/check-migration-identifiers.py
 
+      - name: Create .env for PHPStan
+        if: steps.changes.outputs.backend == 'true' || github.event_name == 'push'
+        run: cp .env.example .env
+
       - name: Cache PHPStan result cache
         if: steps.changes.outputs.backend == 'true' || github.event_name == 'push'
         uses: actions/cache@v5
