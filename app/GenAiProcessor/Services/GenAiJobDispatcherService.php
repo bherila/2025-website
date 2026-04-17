@@ -11,6 +11,10 @@ use App\GenAiProcessor\Services\Prompts\PromptTemplate;
 use App\GenAiProcessor\Services\Prompts\TaxDocumentPromptTemplate;
 use App\GenAiProcessor\Services\Prompts\UtilityBillPromptTemplate;
 use App\Models\User;
+use Bherila\GenAiLaravel\Schema;
+use Bherila\GenAiLaravel\ToolChoice;
+use Bherila\GenAiLaravel\ToolConfig;
+use Bherila\GenAiLaravel\ToolDefinition;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -126,7 +130,7 @@ class GenAiJobDispatcherService
             $jsonSchema = $this->buildK1ManualJsonSchema();
         } else {
             $toolDef = $this->buildTaxDocumentToolDefinitionFromPrompt($rawPrompt);
-            $jsonSchema = $toolDef ? ($toolDef['definition']['parameters']['properties'] ?? []) : [];
+            $jsonSchema = $toolDef ? ($toolDef->inputSchema->toArray()['properties'] ?? []) : [];
         }
 
         // Build a complete copy-paste prompt for external LLMs (no tool calls)
@@ -238,47 +242,32 @@ PROMPT;
     }
 
     /**
-     * Build the Gemini tool configuration (tools + toolConfig) for a given job type.
-     * Returns an empty array for job types that use JSON-mode output instead of function calling.
+     * Build the tool configuration for a given job type.
+     * Returns null for job types that use JSON-mode output instead of function calling.
      *
      * @param  string  $prompt  Required for tax_document jobs to extract the form type marker.
-     * @return array<string, mixed>
      */
-    public function buildToolConfig(string $jobType, string $prompt = ''): array
+    public function buildToolConfig(string $jobType, string $prompt = ''): ?ToolConfig
     {
         if ($jobType === 'finance_transactions') {
-            return [
-                'tools' => [[
-                    'function_declarations' => [$this->buildFinanceAccountToolDefinition()],
-                ]],
-                'toolConfig' => [
-                    'functionCallingConfig' => [
-                        'mode' => 'ANY',
-                        'allowedFunctionNames' => [self::FINANCE_ACCOUNT_TOOL_NAME],
-                    ],
-                ],
-            ];
+            return new ToolConfig(
+                tools: [$this->buildFinanceAccountToolDefinition()],
+                choice: ToolChoice::any(),
+            );
         }
 
         if ($jobType === 'tax_document' && $prompt !== '') {
             $toolDef = $this->buildTaxDocumentToolDefinitionFromPrompt($prompt);
             if ($toolDef !== null) {
-                return [
-                    'tools' => [[
-                        'function_declarations' => [$toolDef['definition']],
-                    ]],
-                    'toolConfig' => [
-                        'functionCallingConfig' => [
-                            'mode' => 'ANY',
-                            'allowedFunctionNames' => [$toolDef['name']],
-                        ],
-                    ],
-                ];
+                return new ToolConfig(
+                    tools: [$toolDef],
+                    choice: ToolChoice::any(),
+                );
             }
         }
 
         // All other job types use JSON-mode output
-        return [];
+        return null;
     }
 
     /**
@@ -307,8 +296,9 @@ PROMPT;
         ];
 
         if ($jobType === 'finance_transactions') {
+            $toolDef = $this->buildFinanceAccountToolDefinition();
             $payload['tools'] = [[
-                'function_declarations' => [$this->buildFinanceAccountToolDefinition()],
+                'function_declarations' => [['name' => $toolDef->name, 'description' => $toolDef->description, 'parameters' => $toolDef->inputSchema->toArray()]],
             ]];
             $payload['toolConfig'] = [
                 'functionCallingConfig' => [
@@ -326,12 +316,12 @@ PROMPT;
             $toolDef = $this->buildTaxDocumentToolDefinitionFromPrompt($prompt);
             if ($toolDef !== null) {
                 $payload['tools'] = [[
-                    'function_declarations' => [$toolDef['definition']],
+                    'function_declarations' => [['name' => $toolDef->name, 'description' => $toolDef->description, 'parameters' => $toolDef->inputSchema->toArray()]],
                 ]];
                 $payload['toolConfig'] = [
                     'functionCallingConfig' => [
                         'mode' => 'ANY',
-                        'allowedFunctionNames' => [$toolDef['name']],
+                        'allowedFunctionNames' => [$toolDef->name],
                     ],
                 ];
 
@@ -812,96 +802,93 @@ PROMPT;
         return null;
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    private function buildFinanceAccountToolDefinition(): array
+    private function buildFinanceAccountToolDefinition(): ToolDefinition
     {
-        return ToolDefinitionBuilder::functionDefinition(
+        return new ToolDefinition(
             self::FINANCE_ACCOUNT_TOOL_NAME,
             'Add one parsed finance account from a bank or brokerage statement.',
-            [
-                'statementInfo' => ToolDefinitionBuilder::object([
-                    'brokerName' => ToolDefinitionBuilder::string(),
-                    'accountNumber' => ToolDefinitionBuilder::string(),
-                    'accountName' => ToolDefinitionBuilder::string(),
-                    'periodStart' => ToolDefinitionBuilder::string(),
-                    'periodEnd' => ToolDefinitionBuilder::string(),
-                    'closingBalance' => ToolDefinitionBuilder::number(),
-                ]),
-                'statementDetails' => ToolDefinitionBuilder::arrayOf(
-                    ToolDefinitionBuilder::object(
-                        [
-                            'section' => ToolDefinitionBuilder::string(),
-                            'line_item' => ToolDefinitionBuilder::string(),
-                            'statement_period_value' => ToolDefinitionBuilder::number(),
-                            'ytd_value' => ToolDefinitionBuilder::number(),
-                            'is_percentage' => ToolDefinitionBuilder::boolean(),
-                        ],
-                        ['section', 'line_item', 'statement_period_value', 'ytd_value', 'is_percentage'],
-                    )
-                ),
-                'transactions' => ToolDefinitionBuilder::arrayOf(
-                    ToolDefinitionBuilder::object(
-                        [
-                            'date' => ToolDefinitionBuilder::string(),
-                            'description' => ToolDefinitionBuilder::string(),
-                            'amount' => ToolDefinitionBuilder::number(),
-                            'type' => ToolDefinitionBuilder::string(),
-                            'symbol' => ToolDefinitionBuilder::string(),
-                            'quantity' => ToolDefinitionBuilder::number(),
-                            'price' => ToolDefinitionBuilder::number(),
-                            'commission' => ToolDefinitionBuilder::number(),
-                            'fee' => ToolDefinitionBuilder::number(),
-                        ],
-                        ['date', 'description', 'amount'],
-                    )
-                ),
-                'lots' => ToolDefinitionBuilder::arrayOf(
-                    ToolDefinitionBuilder::object(
-                        [
-                            'symbol' => ToolDefinitionBuilder::string(),
-                            'description' => ToolDefinitionBuilder::string(),
-                            'quantity' => ToolDefinitionBuilder::number(),
-                            'purchaseDate' => ToolDefinitionBuilder::string(),
-                            'costBasis' => ToolDefinitionBuilder::number(),
-                            'costPerUnit' => ToolDefinitionBuilder::number(),
-                            'marketValue' => ToolDefinitionBuilder::number(),
-                            'unrealizedGainLoss' => ToolDefinitionBuilder::number(),
-                            'saleDate' => ToolDefinitionBuilder::string(),
-                            'proceeds' => ToolDefinitionBuilder::number(),
-                            'realizedGainLoss' => ToolDefinitionBuilder::number(),
-                        ],
-                        ['symbol', 'quantity', 'purchaseDate', 'costBasis'],
-                    )
-                ),
-            ],
-            ['statementInfo', 'statementDetails', 'transactions', 'lots'],
+            Schema::object(
+                [
+                    'statementInfo' => Schema::object([
+                        'brokerName' => Schema::string(),
+                        'accountNumber' => Schema::string(),
+                        'accountName' => Schema::string(),
+                        'periodStart' => Schema::string(),
+                        'periodEnd' => Schema::string(),
+                        'closingBalance' => Schema::number(),
+                    ]),
+                    'statementDetails' => Schema::arrayOf(
+                        Schema::object(
+                            [
+                                'section' => Schema::string(),
+                                'line_item' => Schema::string(),
+                                'statement_period_value' => Schema::number(),
+                                'ytd_value' => Schema::number(),
+                                'is_percentage' => Schema::boolean(),
+                            ],
+                            ['section', 'line_item', 'statement_period_value', 'ytd_value', 'is_percentage'],
+                        )
+                    ),
+                    'transactions' => Schema::arrayOf(
+                        Schema::object(
+                            [
+                                'date' => Schema::string(),
+                                'description' => Schema::string(),
+                                'amount' => Schema::number(),
+                                'type' => Schema::string(),
+                                'symbol' => Schema::string(),
+                                'quantity' => Schema::number(),
+                                'price' => Schema::number(),
+                                'commission' => Schema::number(),
+                                'fee' => Schema::number(),
+                            ],
+                            ['date', 'description', 'amount'],
+                        )
+                    ),
+                    'lots' => Schema::arrayOf(
+                        Schema::object(
+                            [
+                                'symbol' => Schema::string(),
+                                'description' => Schema::string(),
+                                'quantity' => Schema::number(),
+                                'purchaseDate' => Schema::string(),
+                                'costBasis' => Schema::number(),
+                                'costPerUnit' => Schema::number(),
+                                'marketValue' => Schema::number(),
+                                'unrealizedGainLoss' => Schema::number(),
+                                'saleDate' => Schema::string(),
+                                'proceeds' => Schema::number(),
+                                'realizedGainLoss' => Schema::number(),
+                            ],
+                            ['symbol', 'quantity', 'purchaseDate', 'costBasis'],
+                        )
+                    ),
+                ],
+                ['statementInfo', 'statementDetails', 'transactions', 'lots'],
+            ),
         );
     }
 
     /**
      * Extracts the tool name marker from the prompt and returns the tool definition.
      * Returns null if no marker is found.
-     *
-     * @return array{name: string, definition: array<string, mixed>}|null
      */
-    private function buildTaxDocumentToolDefinitionFromPrompt(string $prompt): ?array
+    private function buildTaxDocumentToolDefinitionFromPrompt(string $prompt): ?ToolDefinition
     {
         if (str_contains($prompt, self::TAX_DOCUMENT_W2_TOOL_NAME)) {
-            return ['name' => self::TAX_DOCUMENT_W2_TOOL_NAME, 'definition' => $this->buildW2ToolDefinition()];
+            return $this->buildW2ToolDefinition();
         }
         if (str_contains($prompt, self::TAX_DOCUMENT_1099INT_TOOL_NAME)) {
-            return ['name' => self::TAX_DOCUMENT_1099INT_TOOL_NAME, 'definition' => $this->build1099IntToolDefinition()];
+            return $this->build1099IntToolDefinition();
         }
         if (str_contains($prompt, self::TAX_DOCUMENT_1099DIV_TOOL_NAME)) {
-            return ['name' => self::TAX_DOCUMENT_1099DIV_TOOL_NAME, 'definition' => $this->build1099DivToolDefinition()];
+            return $this->build1099DivToolDefinition();
         }
         if (str_contains($prompt, self::TAX_DOCUMENT_1099MISC_TOOL_NAME)) {
-            return ['name' => self::TAX_DOCUMENT_1099MISC_TOOL_NAME, 'definition' => $this->build1099MiscToolDefinition()];
+            return $this->build1099MiscToolDefinition();
         }
         if (str_contains($prompt, self::TAX_DOCUMENT_K1_TOOL_NAME)) {
-            return ['name' => self::TAX_DOCUMENT_K1_TOOL_NAME, 'definition' => $this->buildK1ToolDefinition()];
+            return $this->buildK1ToolDefinition();
         }
 
         return null;
@@ -1353,155 +1340,143 @@ PROMPT;
         return $result;
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    private function buildW2ToolDefinition(): array
+    private function buildW2ToolDefinition(): ToolDefinition
     {
-        return ToolDefinitionBuilder::functionDefinition(
+        return new ToolDefinition(
             self::TAX_DOCUMENT_W2_TOOL_NAME,
             'Extract all box values from a W-2 or W-2c tax form.',
-            [
-                'employer_name' => ToolDefinitionBuilder::string(),
-                'employer_ein' => ToolDefinitionBuilder::string(),
-                'employee_name' => ToolDefinitionBuilder::string(),
-                'employee_ssn_last4' => ToolDefinitionBuilder::string(),
-                'box1_wages' => ToolDefinitionBuilder::number(),
-                'box2_fed_tax' => ToolDefinitionBuilder::number(),
-                'box3_ss_wages' => ToolDefinitionBuilder::number(),
-                'box4_ss_tax' => ToolDefinitionBuilder::number(),
-                'box5_medicare_wages' => ToolDefinitionBuilder::number(),
-                'box6_medicare_tax' => ToolDefinitionBuilder::number(),
-                'box7_ss_tips' => ToolDefinitionBuilder::number(),
-                'box8_allocated_tips' => ToolDefinitionBuilder::number(),
-                'box10_dependent_care' => ToolDefinitionBuilder::number(),
-                'box11_nonqualified' => ToolDefinitionBuilder::number(),
-                'box12_codes' => ToolDefinitionBuilder::arrayOf(
-                    ToolDefinitionBuilder::object(
-                        ['code' => ToolDefinitionBuilder::string(), 'amount' => ToolDefinitionBuilder::number()],
+            Schema::object([
+                'employer_name' => Schema::string(),
+                'employer_ein' => Schema::string(),
+                'employee_name' => Schema::string(),
+                'employee_ssn_last4' => Schema::string(),
+                'box1_wages' => Schema::number(),
+                'box2_fed_tax' => Schema::number(),
+                'box3_ss_wages' => Schema::number(),
+                'box4_ss_tax' => Schema::number(),
+                'box5_medicare_wages' => Schema::number(),
+                'box6_medicare_tax' => Schema::number(),
+                'box7_ss_tips' => Schema::number(),
+                'box8_allocated_tips' => Schema::number(),
+                'box10_dependent_care' => Schema::number(),
+                'box11_nonqualified' => Schema::number(),
+                'box12_codes' => Schema::arrayOf(
+                    Schema::object(
+                        ['code' => Schema::string(), 'amount' => Schema::number()],
                         ['code', 'amount'],
                     )
                 ),
-                'box13_statutory' => ToolDefinitionBuilder::boolean(),
-                'box13_retirement' => ToolDefinitionBuilder::boolean(),
-                'box13_sick_pay' => ToolDefinitionBuilder::boolean(),
-                'box14_other' => ToolDefinitionBuilder::arrayOf(
-                    ToolDefinitionBuilder::object(
-                        ['label' => ToolDefinitionBuilder::string(), 'amount' => ToolDefinitionBuilder::number()],
+                'box13_statutory' => Schema::boolean(),
+                'box13_retirement' => Schema::boolean(),
+                'box13_sick_pay' => Schema::boolean(),
+                'box14_other' => Schema::arrayOf(
+                    Schema::object(
+                        ['label' => Schema::string(), 'amount' => Schema::number()],
                         ['label', 'amount'],
                     )
                 ),
-                'box15_state' => ToolDefinitionBuilder::string(),
-                'box16_state_wages' => ToolDefinitionBuilder::number(),
-                'box17_state_tax' => ToolDefinitionBuilder::number(),
-                'box18_local_wages' => ToolDefinitionBuilder::number(),
-                'box19_local_tax' => ToolDefinitionBuilder::number(),
-                'box20_locality' => ToolDefinitionBuilder::string(),
-            ],
+                'box15_state' => Schema::string(),
+                'box16_state_wages' => Schema::number(),
+                'box17_state_tax' => Schema::number(),
+                'box18_local_wages' => Schema::number(),
+                'box19_local_tax' => Schema::number(),
+                'box20_locality' => Schema::string(),
+            ]),
         );
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    private function build1099IntToolDefinition(): array
+    private function build1099IntToolDefinition(): ToolDefinition
     {
-        return ToolDefinitionBuilder::functionDefinition(
+        return new ToolDefinition(
             self::TAX_DOCUMENT_1099INT_TOOL_NAME,
             'Extract all box values from a 1099-INT interest income form.',
-            [
-                'payer_name' => ToolDefinitionBuilder::string(),
-                'payer_tin' => ToolDefinitionBuilder::string(),
-                'recipient_name' => ToolDefinitionBuilder::string(),
-                'recipient_tin_last4' => ToolDefinitionBuilder::string(),
-                'box1_interest' => ToolDefinitionBuilder::number(),
-                'box2_early_withdrawal' => ToolDefinitionBuilder::number(),
-                'box3_savings_bond' => ToolDefinitionBuilder::number(),
-                'box4_fed_tax' => ToolDefinitionBuilder::number(),
-                'box5_investment_expense' => ToolDefinitionBuilder::number(),
-                'box6_foreign_tax' => ToolDefinitionBuilder::number(),
-                'box7_foreign_country' => ToolDefinitionBuilder::string(),
-                'box8_tax_exempt' => ToolDefinitionBuilder::number(),
-                'box9_private_activity' => ToolDefinitionBuilder::number(),
-                'box10_market_discount' => ToolDefinitionBuilder::number(),
-                'box11_bond_premium' => ToolDefinitionBuilder::number(),
-                'box12_treasury_premium' => ToolDefinitionBuilder::number(),
-                'box13_tax_exempt_premium' => ToolDefinitionBuilder::number(),
-                'account_number' => ToolDefinitionBuilder::string(),
-            ],
+            Schema::object([
+                'payer_name' => Schema::string(),
+                'payer_tin' => Schema::string(),
+                'recipient_name' => Schema::string(),
+                'recipient_tin_last4' => Schema::string(),
+                'box1_interest' => Schema::number(),
+                'box2_early_withdrawal' => Schema::number(),
+                'box3_savings_bond' => Schema::number(),
+                'box4_fed_tax' => Schema::number(),
+                'box5_investment_expense' => Schema::number(),
+                'box6_foreign_tax' => Schema::number(),
+                'box7_foreign_country' => Schema::string(),
+                'box8_tax_exempt' => Schema::number(),
+                'box9_private_activity' => Schema::number(),
+                'box10_market_discount' => Schema::number(),
+                'box11_bond_premium' => Schema::number(),
+                'box12_treasury_premium' => Schema::number(),
+                'box13_tax_exempt_premium' => Schema::number(),
+                'account_number' => Schema::string(),
+            ]),
         );
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    private function build1099DivToolDefinition(): array
+    private function build1099DivToolDefinition(): ToolDefinition
     {
-        return ToolDefinitionBuilder::functionDefinition(
+        return new ToolDefinition(
             self::TAX_DOCUMENT_1099DIV_TOOL_NAME,
             'Extract all box values from a 1099-DIV dividends and distributions form.',
-            [
-                'payer_name' => ToolDefinitionBuilder::string(),
-                'recipient_name' => ToolDefinitionBuilder::string(),
-                'recipient_tin_last4' => ToolDefinitionBuilder::string(),
-                'payer_tin' => ToolDefinitionBuilder::string(),
-                'box1a_ordinary' => ToolDefinitionBuilder::number(),
-                'box1b_qualified' => ToolDefinitionBuilder::number(),
-                'box2a_cap_gain' => ToolDefinitionBuilder::number(),
-                'box2b_unrecap_1250' => ToolDefinitionBuilder::number(),
-                'box2c_section_1202' => ToolDefinitionBuilder::number(),
-                'box2d_collectibles' => ToolDefinitionBuilder::number(),
-                'box2e_section_897_ordinary' => ToolDefinitionBuilder::number(),
-                'box2f_section_897_cap_gain' => ToolDefinitionBuilder::number(),
-                'box3_nondividend' => ToolDefinitionBuilder::number(),
-                'box4_fed_tax' => ToolDefinitionBuilder::number(),
-                'box5_section_199a' => ToolDefinitionBuilder::number(),
-                'box6_investment_expense' => ToolDefinitionBuilder::number(),
-                'box7_foreign_tax' => ToolDefinitionBuilder::number(),
-                'box8_foreign_country' => ToolDefinitionBuilder::string(),
-                'box9_cash_liquidation' => ToolDefinitionBuilder::number(),
-                'box10_noncash_liquidation' => ToolDefinitionBuilder::number(),
-                'box11_exempt_interest' => ToolDefinitionBuilder::number(),
-                'box12_private_activity' => ToolDefinitionBuilder::number(),
-                'box13_state' => ToolDefinitionBuilder::string(),
-                'box14_state_tax' => ToolDefinitionBuilder::number(),
-                'account_number' => ToolDefinitionBuilder::string(),
-            ],
+            Schema::object([
+                'payer_name' => Schema::string(),
+                'recipient_name' => Schema::string(),
+                'recipient_tin_last4' => Schema::string(),
+                'payer_tin' => Schema::string(),
+                'box1a_ordinary' => Schema::number(),
+                'box1b_qualified' => Schema::number(),
+                'box2a_cap_gain' => Schema::number(),
+                'box2b_unrecap_1250' => Schema::number(),
+                'box2c_section_1202' => Schema::number(),
+                'box2d_collectibles' => Schema::number(),
+                'box2e_section_897_ordinary' => Schema::number(),
+                'box2f_section_897_cap_gain' => Schema::number(),
+                'box3_nondividend' => Schema::number(),
+                'box4_fed_tax' => Schema::number(),
+                'box5_section_199a' => Schema::number(),
+                'box6_investment_expense' => Schema::number(),
+                'box7_foreign_tax' => Schema::number(),
+                'box8_foreign_country' => Schema::string(),
+                'box9_cash_liquidation' => Schema::number(),
+                'box10_noncash_liquidation' => Schema::number(),
+                'box11_exempt_interest' => Schema::number(),
+                'box12_private_activity' => Schema::number(),
+                'box13_state' => Schema::string(),
+                'box14_state_tax' => Schema::number(),
+                'account_number' => Schema::string(),
+            ]),
         );
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    private function build1099MiscToolDefinition(): array
+    private function build1099MiscToolDefinition(): ToolDefinition
     {
-        return ToolDefinitionBuilder::functionDefinition(
+        return new ToolDefinition(
             self::TAX_DOCUMENT_1099MISC_TOOL_NAME,
             'Extract all box values from a 1099-MISC miscellaneous income form.',
-            [
-                'payer_name' => ToolDefinitionBuilder::string(),
-                'payer_tin' => ToolDefinitionBuilder::string(),
-                'recipient_name' => ToolDefinitionBuilder::string(),
-                'recipient_tin_last4' => ToolDefinitionBuilder::string(),
-                'account_number' => ToolDefinitionBuilder::string(),
-                'box1_rents' => ToolDefinitionBuilder::number(),
-                'box2_royalties' => ToolDefinitionBuilder::number(),
-                'box3_other_income' => ToolDefinitionBuilder::number(),
-                'box4_fed_tax' => ToolDefinitionBuilder::number(),
-                'box5_fishing_boat' => ToolDefinitionBuilder::number(),
-                'box6_medical' => ToolDefinitionBuilder::number(),
-                'box7_direct_sales_indicator' => ToolDefinitionBuilder::boolean(),
-                'box8_substitute_payments' => ToolDefinitionBuilder::number(),
-                'box9_crop_insurance' => ToolDefinitionBuilder::number(),
-                'box10_gross_proceeds_attorney' => ToolDefinitionBuilder::number(),
-                'box11_fish_purchased' => ToolDefinitionBuilder::number(),
-                'box12_section_409a_deferrals' => ToolDefinitionBuilder::number(),
-                'box13_fatca_filing' => ToolDefinitionBuilder::string(),
-                'box14_excess_golden_parachute' => ToolDefinitionBuilder::number(),
-                'box15_nonqualified_deferred' => ToolDefinitionBuilder::number(),
-                'box15_state' => ToolDefinitionBuilder::string(),
-                'box16_state_tax' => ToolDefinitionBuilder::number(),
-            ],
+            Schema::object([
+                'payer_name' => Schema::string(),
+                'payer_tin' => Schema::string(),
+                'recipient_name' => Schema::string(),
+                'recipient_tin_last4' => Schema::string(),
+                'account_number' => Schema::string(),
+                'box1_rents' => Schema::number(),
+                'box2_royalties' => Schema::number(),
+                'box3_other_income' => Schema::number(),
+                'box4_fed_tax' => Schema::number(),
+                'box5_fishing_boat' => Schema::number(),
+                'box6_medical' => Schema::number(),
+                'box7_direct_sales_indicator' => Schema::boolean(),
+                'box8_substitute_payments' => Schema::number(),
+                'box9_crop_insurance' => Schema::number(),
+                'box10_gross_proceeds_attorney' => Schema::number(),
+                'box11_fish_purchased' => Schema::number(),
+                'box12_section_409a_deferrals' => Schema::number(),
+                'box13_fatca_filing' => Schema::string(),
+                'box14_excess_golden_parachute' => Schema::number(),
+                'box15_nonqualified_deferred' => Schema::number(),
+                'box15_state' => Schema::string(),
+                'box16_state_tax' => Schema::number(),
+            ]),
         );
     }
 
@@ -1520,107 +1495,107 @@ PROMPT;
      * - Use box16_country (code A) for the foreign country name.
      * - See IRS Publication 514 for Form 1116 computation rules.
      *
-     * @return array<string, mixed>
+     * @return ToolDefinition
      */
-    private function buildK1ToolDefinition(): array
+    private function buildK1ToolDefinition(): ToolDefinition
     {
-        $codeItemsProp = ToolDefinitionBuilder::arrayOf(
-            ToolDefinitionBuilder::object(
+        $codeItemsProp = Schema::arrayOf(
+            Schema::object(
                 [
-                    'code' => ToolDefinitionBuilder::string(),
-                    'value' => ToolDefinitionBuilder::string(),
-                    'notes' => ToolDefinitionBuilder::string(),
+                    'code' => Schema::string(),
+                    'value' => Schema::string(),
+                    'notes' => Schema::string(),
                 ],
                 ['code', 'value'],
             )
         );
-        $k3SectionProp = ToolDefinitionBuilder::arrayOf(
-            ToolDefinitionBuilder::object(
+        $k3SectionProp = Schema::arrayOf(
+            Schema::object(
                 [
-                    'sectionId' => ToolDefinitionBuilder::string(),
-                    'title' => ToolDefinitionBuilder::string(),
-                    'notes' => ToolDefinitionBuilder::string(),
+                    'sectionId' => Schema::string(),
+                    'title' => Schema::string(),
+                    'notes' => Schema::string(),
                 ],
                 ['sectionId', 'title'],
             )
         );
 
-        return ToolDefinitionBuilder::functionDefinition(
+        return new ToolDefinition(
             self::TAX_DOCUMENT_K1_TOOL_NAME,
             'Extract all boxes, codes, and K-3 sections from a Schedule K-1 (Form 1065, 1120-S, or 1041). Returns structured data keyed by box identifier.',
-            [
+            Schema::object([
                 // ── Identification ────────────────────────────────────────────────
-                'formType' => ToolDefinitionBuilder::string(),   // "K-1-1065" | "K-1-1120S" | "K-1-1041"
-                'formId' => ToolDefinitionBuilder::string(),   // e.g. "AQR-DELPHI-1693-2025"
-                'partnerNumber' => ToolDefinitionBuilder::string(),   // e.g. "1693"
-                'pages' => ToolDefinitionBuilder::number(),
-                'amendedK1' => ToolDefinitionBuilder::boolean(),
-                'finalK1' => ToolDefinitionBuilder::boolean(),
-                'taxYearBeginning' => ToolDefinitionBuilder::string(),   // YYYY-MM-DD
-                'taxYearEnding' => ToolDefinitionBuilder::string(),   // YYYY-MM-DD
+                'formType' => Schema::string(),   // "K-1-1065" | "K-1-1120S" | "K-1-1041"
+                'formId' => Schema::string(),   // e.g. "AQR-DELPHI-1693-2025"
+                'partnerNumber' => Schema::string(),   // e.g. "1693"
+                'pages' => Schema::number(),
+                'amendedK1' => Schema::boolean(),
+                'finalK1' => Schema::boolean(),
+                'taxYearBeginning' => Schema::string(),   // YYYY-MM-DD
+                'taxYearEnding' => Schema::string(),   // YYYY-MM-DD
 
                 // ── Left-panel fields (A–O): entity & partner identification ─────
-                'field_A' => ToolDefinitionBuilder::string(),   // Partnership EIN
-                'field_B' => ToolDefinitionBuilder::string(),   // Partnership name/address (multiline)
-                'field_C' => ToolDefinitionBuilder::string(),   // IRS Center (Ogden / Kansas City / Cincinnati)
-                'field_D' => ToolDefinitionBuilder::boolean(),  // PTP indicator (checkbox)
-                'field_E' => ToolDefinitionBuilder::string(),   // Partner identifying number
-                'field_F' => ToolDefinitionBuilder::string(),   // Partner name/address (multiline)
-                'field_G' => ToolDefinitionBuilder::string(),   // Partner type (General / LLC / Limited)
-                'field_H1' => ToolDefinitionBuilder::string(),   // Domestic or Foreign
-                'field_H2' => ToolDefinitionBuilder::boolean(),  // Foreign U.S. person checkbox
-                'field_I1' => ToolDefinitionBuilder::string(),   // Profit share beginning/end
-                'field_I2' => ToolDefinitionBuilder::string(),   // Loss share beginning/end
-                'field_I3' => ToolDefinitionBuilder::string(),   // Capital share beginning/end
-                'field_M' => ToolDefinitionBuilder::string(),   // Tax basis capital
-                'field_N' => ToolDefinitionBuilder::string(),   // At-risk amount
-                'field_O' => ToolDefinitionBuilder::string(),   // Qualified liability
+                'field_A' => Schema::string(),   // Partnership EIN
+                'field_B' => Schema::string(),   // Partnership name/address (multiline)
+                'field_C' => Schema::string(),   // IRS Center (Ogden / Kansas City / Cincinnati)
+                'field_D' => Schema::boolean(),  // PTP indicator (checkbox)
+                'field_E' => Schema::string(),   // Partner identifying number
+                'field_F' => Schema::string(),   // Partner name/address (multiline)
+                'field_G' => Schema::string(),   // Partner type (General / LLC / Limited)
+                'field_H1' => Schema::string(),   // Domestic or Foreign
+                'field_H2' => Schema::boolean(),  // Foreign U.S. person checkbox
+                'field_I1' => Schema::string(),   // Profit share beginning/end
+                'field_I2' => Schema::string(),   // Loss share beginning/end
+                'field_I3' => Schema::string(),   // Capital share beginning/end
+                'field_M' => Schema::string(),   // Tax basis capital
+                'field_N' => Schema::string(),   // At-risk amount
+                'field_O' => Schema::string(),   // Qualified liability
 
                 // ── Item J: Profit/Loss/Capital percentages ───────────────────────
-                'field_J_profit_beginning' => ToolDefinitionBuilder::number(),
-                'field_J_profit_ending' => ToolDefinitionBuilder::number(),
-                'field_J_loss_beginning' => ToolDefinitionBuilder::number(),
-                'field_J_loss_ending' => ToolDefinitionBuilder::number(),
-                'field_J_capital_beginning' => ToolDefinitionBuilder::number(),
-                'field_J_capital_ending' => ToolDefinitionBuilder::number(),
+                'field_J_profit_beginning' => Schema::number(),
+                'field_J_profit_ending' => Schema::number(),
+                'field_J_loss_beginning' => Schema::number(),
+                'field_J_loss_ending' => Schema::number(),
+                'field_J_capital_beginning' => Schema::number(),
+                'field_J_capital_ending' => Schema::number(),
 
                 // ── Item K: Partner's share of liabilities ───────────────────────
-                'field_K_recourse_beginning' => ToolDefinitionBuilder::number(),
-                'field_K_recourse_ending' => ToolDefinitionBuilder::number(),
-                'field_K_nonrecourse_beginning' => ToolDefinitionBuilder::number(),
-                'field_K_nonrecourse_ending' => ToolDefinitionBuilder::number(),
-                'field_K_qual_nonrecourse_beginning' => ToolDefinitionBuilder::number(),
-                'field_K_qual_nonrecourse_ending' => ToolDefinitionBuilder::number(),
+                'field_K_recourse_beginning' => Schema::number(),
+                'field_K_recourse_ending' => Schema::number(),
+                'field_K_nonrecourse_beginning' => Schema::number(),
+                'field_K_nonrecourse_ending' => Schema::number(),
+                'field_K_qual_nonrecourse_beginning' => Schema::number(),
+                'field_K_qual_nonrecourse_ending' => Schema::number(),
 
                 // ── Item L: Capital account analysis ─────────────────────────────
-                'field_L_beginning_capital' => ToolDefinitionBuilder::number(),
-                'field_L_contributed' => ToolDefinitionBuilder::number(),
-                'field_L_current_year_net' => ToolDefinitionBuilder::number(),
-                'field_L_other_increase' => ToolDefinitionBuilder::number(),
-                'field_L_withdrawals' => ToolDefinitionBuilder::number(),
-                'field_L_ending_capital' => ToolDefinitionBuilder::number(),
-                'field_L_capital_method' => ToolDefinitionBuilder::string(),  // "TAX_BASIS" | "GAAP" | "SECTION_704B" | "OTHER"
+                'field_L_beginning_capital' => Schema::number(),
+                'field_L_contributed' => Schema::number(),
+                'field_L_current_year_net' => Schema::number(),
+                'field_L_other_increase' => Schema::number(),
+                'field_L_withdrawals' => Schema::number(),
+                'field_L_ending_capital' => Schema::number(),
+                'field_L_capital_method' => Schema::string(),  // "TAX_BASIS" | "GAAP" | "SECTION_704B" | "OTHER"
 
                 // ── Right-panel fields (1–10, 12, 21): numeric income/deduction boxes ─
-                'field_1' => ToolDefinitionBuilder::number(),   // Ordinary business income (loss)
-                'field_2' => ToolDefinitionBuilder::number(),   // Net rental real estate income (loss)
-                'field_3' => ToolDefinitionBuilder::number(),   // Other net rental income (loss)
-                'field_4' => ToolDefinitionBuilder::number(),   // Guaranteed payments (total)
-                'field_4a' => ToolDefinitionBuilder::number(),   // GP – services
-                'field_4b' => ToolDefinitionBuilder::number(),   // GP – capital
-                'field_4c' => ToolDefinitionBuilder::number(),   // GP – total
-                'field_5' => ToolDefinitionBuilder::number(),   // Interest income
-                'field_6a' => ToolDefinitionBuilder::number(),   // Ordinary dividends
-                'field_6b' => ToolDefinitionBuilder::number(),   // Qualified dividends
-                'field_6c' => ToolDefinitionBuilder::number(),   // Dividend equivalents
-                'field_7' => ToolDefinitionBuilder::number(),   // Royalties
-                'field_8' => ToolDefinitionBuilder::number(),   // Net short-term capital gain (loss)
-                'field_9a' => ToolDefinitionBuilder::number(),   // Net long-term capital gain (loss)
-                'field_9b' => ToolDefinitionBuilder::number(),   // Collectibles (28%) gain (loss)
-                'field_9c' => ToolDefinitionBuilder::number(),   // Unrecaptured Sec. 1250 gain
-                'field_10' => ToolDefinitionBuilder::number(),   // Net section 1231 gain (loss)
-                'field_12' => ToolDefinitionBuilder::number(),   // Section 179 deduction
-                'field_21' => ToolDefinitionBuilder::number(),   // Foreign taxes paid or accrued
+                'field_1' => Schema::number(),   // Ordinary business income (loss)
+                'field_2' => Schema::number(),   // Net rental real estate income (loss)
+                'field_3' => Schema::number(),   // Other net rental income (loss)
+                'field_4' => Schema::number(),   // Guaranteed payments (total)
+                'field_4a' => Schema::number(),   // GP – services
+                'field_4b' => Schema::number(),   // GP – capital
+                'field_4c' => Schema::number(),   // GP – total
+                'field_5' => Schema::number(),   // Interest income
+                'field_6a' => Schema::number(),   // Ordinary dividends
+                'field_6b' => Schema::number(),   // Qualified dividends
+                'field_6c' => Schema::number(),   // Dividend equivalents
+                'field_7' => Schema::number(),   // Royalties
+                'field_8' => Schema::number(),   // Net short-term capital gain (loss)
+                'field_9a' => Schema::number(),   // Net long-term capital gain (loss)
+                'field_9b' => Schema::number(),   // Collectibles (28%) gain (loss)
+                'field_9c' => Schema::number(),   // Unrecaptured Sec. 1250 gain
+                'field_10' => Schema::number(),   // Net section 1231 gain (loss)
+                'field_12' => Schema::number(),   // Section 179 deduction
+                'field_21' => Schema::number(),   // Foreign taxes paid or accrued
 
                 // ── Coded boxes (11, 13–20): arrays of {code, value, notes} ──────
                 'codes_11' => $codeItemsProp,  // Other income (loss)
@@ -1637,98 +1612,98 @@ PROMPT;
                 'k3_sections' => $k3SectionProp,
 
                 // ── Schedule K-3 Part I checkboxes ────────────────────────────────
-                'k3_part1_checkboxes' => ToolDefinitionBuilder::arrayOf(
-                    ToolDefinitionBuilder::object(
+                'k3_part1_checkboxes' => Schema::arrayOf(
+                    Schema::object(
                         [
-                            'box' => ToolDefinitionBuilder::string(),
-                            'checked' => ToolDefinitionBuilder::boolean(),
-                            'note' => ToolDefinitionBuilder::string(),
+                            'box' => Schema::string(),
+                            'checked' => Schema::boolean(),
+                            'note' => Schema::string(),
                         ],
                         ['box', 'checked'],
                     )
                 ),
 
                 // ── Schedule K-3 Part II rows (one per line+country combination) ──
-                'k3_part2_rows' => ToolDefinitionBuilder::arrayOf(
-                    ToolDefinitionBuilder::object(
+                'k3_part2_rows' => Schema::arrayOf(
+                    Schema::object(
                         [
-                            'line' => ToolDefinitionBuilder::string(),
-                            'country' => ToolDefinitionBuilder::string(),
-                            'col_a_us_source' => ToolDefinitionBuilder::number(),
-                            'col_b_foreign_branch' => ToolDefinitionBuilder::number(),
-                            'col_c_passive' => ToolDefinitionBuilder::number(),
-                            'col_d_general' => ToolDefinitionBuilder::number(),
-                            'col_e_other_901j' => ToolDefinitionBuilder::number(),
-                            'col_f_sourced_by_partner' => ToolDefinitionBuilder::number(),
-                            'col_g_total' => ToolDefinitionBuilder::number(),
-                            'note' => ToolDefinitionBuilder::string(),
+                            'line' => Schema::string(),
+                            'country' => Schema::string(),
+                            'col_a_us_source' => Schema::number(),
+                            'col_b_foreign_branch' => Schema::number(),
+                            'col_c_passive' => Schema::number(),
+                            'col_d_general' => Schema::number(),
+                            'col_e_other_901j' => Schema::number(),
+                            'col_f_sourced_by_partner' => Schema::number(),
+                            'col_g_total' => Schema::number(),
+                            'note' => Schema::string(),
                         ],
                         ['line', 'country'],
                     )
                 ),
 
                 // ── Schedule K-3 Part III Section 2: asset apportionment rows ─────
-                'k3_part3_asset_rows' => ToolDefinitionBuilder::arrayOf(
-                    ToolDefinitionBuilder::object(
+                'k3_part3_asset_rows' => Schema::arrayOf(
+                    Schema::object(
                         [
-                            'line' => ToolDefinitionBuilder::string(),
-                            'col_a_us_source' => ToolDefinitionBuilder::number(),
-                            'col_b_foreign_branch' => ToolDefinitionBuilder::number(),
-                            'col_c_passive' => ToolDefinitionBuilder::number(),
-                            'col_d_general' => ToolDefinitionBuilder::number(),
-                            'col_f_sourced_by_partner' => ToolDefinitionBuilder::number(),
-                            'col_g_total' => ToolDefinitionBuilder::number(),
+                            'line' => Schema::string(),
+                            'col_a_us_source' => Schema::number(),
+                            'col_b_foreign_branch' => Schema::number(),
+                            'col_c_passive' => Schema::number(),
+                            'col_d_general' => Schema::number(),
+                            'col_f_sourced_by_partner' => Schema::number(),
+                            'col_g_total' => Schema::number(),
                         ],
                         ['line'],
                     )
                 ),
 
                 // ── Schedule K-3 Part III Section 4: foreign taxes by country ─────
-                'k3_part3_foreign_taxes' => ToolDefinitionBuilder::arrayOf(
-                    ToolDefinitionBuilder::object(
+                'k3_part3_foreign_taxes' => Schema::arrayOf(
+                    Schema::object(
                         [
-                            'country' => ToolDefinitionBuilder::string(),
-                            'tax_type' => ToolDefinitionBuilder::string(),   // "WHTD" | "PAID" | "ACCRUED"
-                            'basket' => ToolDefinitionBuilder::string(),   // "passive" | "general" | "branch" | "951A"
-                            'amount_usd' => ToolDefinitionBuilder::number(),
-                            'amount_foreign_currency' => ToolDefinitionBuilder::number(),
-                            'exchange_rate' => ToolDefinitionBuilder::number(),
-                            'date_paid' => ToolDefinitionBuilder::string(),
+                            'country' => Schema::string(),
+                            'tax_type' => Schema::string(),   // "WHTD" | "PAID" | "ACCRUED"
+                            'basket' => Schema::string(),   // "passive" | "general" | "branch" | "951A"
+                            'amount_usd' => Schema::number(),
+                            'amount_foreign_currency' => Schema::number(),
+                            'exchange_rate' => Schema::number(),
+                            'date_paid' => Schema::string(),
                         ],
                         ['country', 'amount_usd'],
                     )
                 ),
 
                 // ── Schedule K-3 Part I Box 4: FX translation table ───────────────
-                'k3_part1_fx_translation' => ToolDefinitionBuilder::arrayOf(
-                    ToolDefinitionBuilder::object(
+                'k3_part1_fx_translation' => Schema::arrayOf(
+                    Schema::object(
                         [
-                            'country' => ToolDefinitionBuilder::string(),
-                            'date_paid' => ToolDefinitionBuilder::string(),
-                            'exchange_rate' => ToolDefinitionBuilder::number(),
-                            'amount_foreign_currency' => ToolDefinitionBuilder::number(),
-                            'amount_usd' => ToolDefinitionBuilder::number(),
+                            'country' => Schema::string(),
+                            'date_paid' => Schema::string(),
+                            'exchange_rate' => Schema::number(),
+                            'amount_foreign_currency' => Schema::number(),
+                            'amount_usd' => Schema::number(),
                         ],
                         ['country', 'amount_usd'],
                     )
                 ),
 
                 // ── Schedule K-3 parts applicability checkboxes ───────────────────
-                'k3_parts_applicable' => ToolDefinitionBuilder::object([
-                    'part1' => ToolDefinitionBuilder::boolean(), 'part2' => ToolDefinitionBuilder::boolean(), 'part3' => ToolDefinitionBuilder::boolean(),
-                    'part4' => ToolDefinitionBuilder::boolean(), 'part5' => ToolDefinitionBuilder::boolean(), 'part6' => ToolDefinitionBuilder::boolean(),
-                    'part7' => ToolDefinitionBuilder::boolean(), 'part8' => ToolDefinitionBuilder::boolean(), 'part9' => ToolDefinitionBuilder::boolean(),
-                    'part10' => ToolDefinitionBuilder::boolean(), 'part11' => ToolDefinitionBuilder::boolean(), 'part12' => ToolDefinitionBuilder::boolean(),
-                    'part13' => ToolDefinitionBuilder::boolean(),
+                'k3_parts_applicable' => Schema::object([
+                    'part1' => Schema::boolean(), 'part2' => Schema::boolean(), 'part3' => Schema::boolean(),
+                    'part4' => Schema::boolean(), 'part5' => Schema::boolean(), 'part6' => Schema::boolean(),
+                    'part7' => Schema::boolean(), 'part8' => Schema::boolean(), 'part9' => Schema::boolean(),
+                    'part10' => Schema::boolean(), 'part11' => Schema::boolean(), 'part12' => Schema::boolean(),
+                    'part13' => Schema::boolean(),
                 ]),
 
                 // ── K-3 general notes ─────────────────────────────────────────────
-                'k3_notes' => ToolDefinitionBuilder::arrayOf(ToolDefinitionBuilder::string()),
+                'k3_notes' => Schema::arrayOf(Schema::string()),
 
                 // ── Supplemental text & metadata ─────────────────────────────────
-                'raw_text' => ToolDefinitionBuilder::string(),
-                'warnings' => ToolDefinitionBuilder::arrayOf(ToolDefinitionBuilder::string()),
-            ],
+                'raw_text' => Schema::string(),
+                'warnings' => Schema::arrayOf(Schema::string()),
+            ]),
         );
     }
 }

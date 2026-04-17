@@ -163,23 +163,23 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/bherila/genai-laravel.git",
-                "reference": "24fc7f7b014dbdf55b2e81aa9cf8900698ea339e"
+                "reference": "52c22cd8eef6d3d851fa41c165c52e88c88b9e3b"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/bherila/genai-laravel/zipball/24fc7f7b014dbdf55b2e81aa9cf8900698ea339e",
-                "reference": "24fc7f7b014dbdf55b2e81aa9cf8900698ea339e",
+                "url": "https://api.github.com/repos/bherila/genai-laravel/zipball/52c22cd8eef6d3d851fa41c165c52e88c88b9e3b",
+                "reference": "52c22cd8eef6d3d851fa41c165c52e88c88b9e3b",
                 "shasum": ""
             },
             "require": {
-                "illuminate/contracts": "^10|^11|^12|^13",
-                "illuminate/http": "^10|^11|^12|^13",
-                "illuminate/support": "^10|^11|^12|^13",
+                "illuminate/contracts": "^12|^13",
+                "illuminate/http": "^12|^13",
+                "illuminate/support": "^12|^13",
                 "php": "^8.2"
             },
             "require-dev": {
                 "laravel/pint": "^1",
-                "orchestra/testbench": "^8|^9|^10|^11",
+                "orchestra/testbench": "^10|^11",
                 "phpunit/phpunit": "^10|^11"
             },
             "default-branch": true,
@@ -204,6 +204,11 @@
                     "Bherila\\GenAiLaravel\\Tests\\": "tests/"
                 }
             },
+            "scripts": {
+                "test": [
+                    "phpunit"
+                ]
+            },
             "license": [
                 "MIT"
             ],
@@ -226,7 +231,7 @@
                 "source": "https://github.com/bherila/genai-laravel/tree/main",
                 "issues": "https://github.com/bherila/genai-laravel/issues"
             },
-            "time": "2026-04-17T01:48:30+00:00"
+            "time": "2026-04-17T05:43:59+00:00"
         },
         {
             "name": "brick/math",
