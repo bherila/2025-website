@@ -370,7 +370,7 @@ function TaxIncomeOverview({
                         <TableCell className="py-2">{(p?.employer_name as string) ?? doc.employment_entity?.display_name ?? doc.account?.acct_name ?? '—'}</TableCell>
                         <TableCell className="py-2">
                           <span className="flex items-center gap-1">
-                            <DetailsButton onClick={() => onOpenDoc(doc)} />
+                            <DetailsButton onClick={() => onOpenDoc(doc)} isReviewed={doc.is_reviewed} />
                             {FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type}
                           </span>
                         </TableCell>
@@ -400,7 +400,7 @@ function TaxIncomeOverview({
                         <TableCell className="py-2">{partnerName ?? doc.employment_entity?.display_name ?? doc.account?.acct_name ?? '—'}</TableCell>
                         <TableCell className="py-2">
                           <span className="flex items-center gap-1">
-                            <DetailsButton onClick={() => onOpenDoc(doc)} />
+                            <DetailsButton onClick={() => onOpenDoc(doc)} isReviewed={doc.is_reviewed} />
                             {FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type}
                           </span>
                         </TableCell>
@@ -444,7 +444,7 @@ function TaxIncomeOverview({
                         <TableCell className="py-2">{payer ?? doc.employment_entity?.display_name ?? doc.account?.acct_name ?? '—'}</TableCell>
                         <TableCell className="py-2">
                           <span className="flex items-center gap-1">
-                            <DetailsButton onClick={() => onOpenDoc(doc)} />
+                            <DetailsButton onClick={() => onOpenDoc(doc)} isReviewed={doc.is_reviewed} />
                             {FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type}
                           </span>
                         </TableCell>

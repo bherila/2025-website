@@ -29,14 +29,19 @@ export function AmountCell({ val, className = '' }: { val: string | number | nul
 
 // ── Shared details button ─────────────────────────────────────────────────────
 
-export function DetailsButton({ onClick }: { onClick: () => void }) {
+export function DetailsButton({ onClick, isReviewed }: { onClick: () => void; isReviewed?: boolean }) {
+  const colorClass = isReviewed === undefined
+    ? 'text-muted-foreground hover:text-foreground'
+    : isReviewed
+      ? 'text-green-700 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300'
+      : 'text-amber-700 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300'
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
           variant="ghost"
           size="icon"
-          className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground"
+          className={`h-5 w-5 shrink-0 ${colorClass}`}
           onClick={(e) => { e.stopPropagation(); onClick() }}
         >
           <Search className="h-3 w-3" />
