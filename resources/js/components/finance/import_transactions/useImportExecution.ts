@@ -57,7 +57,7 @@ export function useImportExecution({
   const [dataToImport, setDataToImport] = useState<AccountLineItem[]>([])
   const [importedStatementId, setImportedStatementId] = useState<number | undefined>(undefined)
 
-  const processChunksRef = useRef<(chunks: AccountLineItem[][], chunkIndex: number, statementId?: number) => Promise<void>>()
+  const processChunksRef = useRef<(chunks: AccountLineItem[][], chunkIndex: number, statementId?: number) => Promise<void>>(undefined)
 
   const processChunks = useCallback(
     async (chunks: AccountLineItem[][], chunkIndex: number, statementId?: number) => {

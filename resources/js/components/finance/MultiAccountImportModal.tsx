@@ -95,7 +95,7 @@ export default function MultiAccountImportModal({
     }
   }
 
-  const pollJobRef = useRef<(docId: number, attempt?: number) => Promise<void>>()
+  const pollJobRef = useRef<(docId: number, attempt?: number) => Promise<void>>(undefined)
 
   const pollJob = useCallback(
     async (docId: number, attempt = 0) => {
