@@ -13,7 +13,7 @@ import type { AccountForMatching } from '@/lib/finance/accountMatcher'
 import { getAccountSuffix } from '@/lib/finance/accountMatcher'
 
 import { useFinanceAccounts } from '../AccountNavigation'
-import TransactionsTable from '../TransactionsTable'
+import TransactionsTable from '../transactionTable/TransactionsTable'
 import GenAiJobsList from './GenAiJobsList'
 import { ImportProgressDialog } from './ImportProgressDialog'
 import type { GeminiImportResponse } from './importTypes'

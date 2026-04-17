@@ -12,9 +12,9 @@ import { importUrl } from '@/lib/financeRouteBuilder'
 import { buildCacheKey, getCachedTransactions, setCachedTransactions } from '@/services/transactionCache'
 
 import NewTransactionModal from './NewTransactionModal'
-import { exportToCSV, exportToJSON } from './transactionExport'
 import { type FilterType,TransactionsPageToolbar } from './TransactionsPageToolbar'
-import TransactionsTable from './TransactionsTable'
+import { exportToCSV, exportToJSON } from './transactionTable/transactionExport'
+import TransactionsTable from './transactionTable/TransactionsTable'
 
 interface TransactionsPageProps {
   accountId: number | 'all'

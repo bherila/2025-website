@@ -1,4 +1,4 @@
-import { collectTagsFromRows } from '@/components/finance/transactionsTableTags'
+import { collectTagsFromRows } from '@/components/finance/transactionTable/transactionsTableTags'
 
 describe('transactionsTableTags', () => {
   it('collects unique tags from transaction rows as fallback', () => {

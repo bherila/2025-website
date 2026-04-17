@@ -20,8 +20,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Spinner } from '@/components/ui/spinner'
 
-import { TagSelect } from './rules_engine/TagSelect'
-import type { FinanceTag } from './useFinanceTags'
+import { TagSelect } from '../rules_engine/TagSelect'
+import type { FinanceTag } from '../useFinanceTags'
 
 interface TransactionsTaggingToolbarProps {
   effectiveCount: number
