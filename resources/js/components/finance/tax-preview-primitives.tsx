@@ -27,6 +27,31 @@ export function AmountCell({ val, className = '' }: { val: string | number | nul
   return <span className={`font-mono tabular-nums ${cls} ${className}`}>{fmtAmt(n)}</span>
 }
 
+// ── Shared details button ─────────────────────────────────────────────────────
+
+export function DetailsButton({ onClick, isReviewed }: { onClick: () => void; isReviewed?: boolean }) {
+  const colorClass = isReviewed === undefined
+    ? 'text-muted-foreground hover:text-foreground'
+    : isReviewed
+      ? 'text-green-700 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300'
+      : 'text-amber-700 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300'
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className={`h-5 w-5 shrink-0 ${colorClass}`}
+          onClick={(e) => { e.stopPropagation(); onClick() }}
+        >
+          <Search className="h-3 w-3" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>View Details</TooltipContent>
+    </Tooltip>
+  )
+}
+
 // ── Form-block card primitives ────────────────────────────────────────────────
 
 export function FormBlock({ title, children }: { title: string; children: React.ReactNode }) {
@@ -66,21 +91,7 @@ export function FormLine({
         {raw ?? (n === null ? '—' : fmtAmt(n))}
       </span>
       {onClick && <ChevronRight size={14} className="text-muted-foreground shrink-0" />}
-      {onDetails && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground"
-              onClick={(e) => { e.stopPropagation(); onDetails() }}
-            >
-              <Search className="h-3 w-3" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>View Details</TooltipContent>
-        </Tooltip>
-      )}
+      {onDetails && <DetailsButton onClick={onDetails} />}
       {!onClick && !onDetails && <span className="w-5 shrink-0" />}
     </div>
   )

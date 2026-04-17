@@ -15,6 +15,7 @@ import ScheduleBPreview from '@/components/finance/ScheduleBPreview'
 import ScheduleCTab from '@/components/finance/ScheduleCTab'
 import ScheduleDPreview from '@/components/finance/ScheduleDPreview'
 import ScheduleEPreview from '@/components/finance/ScheduleEPreview'
+import { DetailsButton } from '@/components/finance/tax-preview-primitives'
 import TaxDocumentReviewModal from '@/components/finance/TaxDocumentReviewModal'
 import TaxDocuments1099Section from '@/components/finance/TaxDocuments1099Section'
 import TaxDocumentsSection from '@/components/finance/TaxDocumentsSection'
@@ -107,6 +108,7 @@ interface TaxIncomeOverviewProps {
   reviewedW2Docs: TaxDocument[]
   reviewed1099Docs: TaxDocument[]
   reviewedK1Docs: TaxDocument[]
+  onOpenDoc: (doc: TaxDocument) => void
 }
 
 function TaxIncomeOverview({
@@ -117,6 +119,7 @@ function TaxIncomeOverview({
   reviewedW2Docs,
   reviewed1099Docs,
   reviewedK1Docs,
+  onOpenDoc,
 }: TaxIncomeOverviewProps) {
   // Aggregate K-1 data
   const k1Parsed = reviewedK1Docs
@@ -364,8 +367,13 @@ function TaxIncomeOverview({
                     const p = doc.parsed_data as Record<string, unknown>
                     return (
                       <TableRow key={doc.id}>
-                        <TableCell className="py-2">{(p?.employer_name as string) ?? doc.employment_entity?.display_name ?? '—'}</TableCell>
-                        <TableCell className="py-2">{FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type}</TableCell>
+                        <TableCell className="py-2">{(p?.employer_name as string) ?? doc.employment_entity?.display_name ?? doc.account?.acct_name ?? '—'}</TableCell>
+                        <TableCell className="py-2">
+                          <span className="flex items-center gap-1">
+                            <DetailsButton onClick={() => onOpenDoc(doc)} isReviewed={doc.is_reviewed} />
+                            {FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type}
+                          </span>
+                        </TableCell>
                         <TableCell className="py-2 font-mono text-xs">{p?.employer_ein as string ?? '—'}</TableCell>
                         <TableCell className="py-2 text-right font-mono text-xs">
                           {wages != null && <div className="text-emerald-600 dark:text-emerald-500">{fmtOverview(wages)} wages</div>}
@@ -389,8 +397,13 @@ function TaxIncomeOverview({
                     const foreignTax = parseK1Field(data, '21')
                     return (
                       <TableRow key={doc.id}>
-                        <TableCell className="py-2">{partnerName ?? doc.employment_entity?.display_name ?? '—'}</TableCell>
-                        <TableCell className="py-2">{FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type}</TableCell>
+                        <TableCell className="py-2">{partnerName ?? doc.employment_entity?.display_name ?? doc.account?.acct_name ?? '—'}</TableCell>
+                        <TableCell className="py-2">
+                          <span className="flex items-center gap-1">
+                            <DetailsButton onClick={() => onOpenDoc(doc)} isReviewed={doc.is_reviewed} />
+                            {FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type}
+                          </span>
+                        </TableCell>
                         <TableCell className="py-2 font-mono text-xs">{ein ?? '—'}</TableCell>
                         <TableCell className="py-2 text-right font-mono text-xs">
                           <div className={net < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'}>
@@ -412,19 +425,34 @@ function TaxIncomeOverview({
                     <TableCell colSpan={5} className="py-1.5 text-xs font-semibold text-muted-foreground">Brokerage / 1099 Accounts</TableCell>
                   </TableRow>
                   {f1099Rows.map(({ doc, p }) => {
+                    const isBroker = doc.form_type === 'broker_1099'
                     const payer = p?.payer_name as string | undefined
                     const acct = p?.account_number as string | undefined
-                    const interest = p?.box1_interest as number | undefined
-                    const ordDiv = p?.box1a_ordinary as number | undefined
-                    const foreignTax = (p?.box7_foreign_tax ?? p?.box6_foreign_tax) as number | undefined
+                    // broker_1099 uses div_/int_ prefixes; standard 1099 uses box_ prefixes
+                    const interest = isBroker
+                      ? (p?.int_1_interest_income as number | undefined)
+                      : (p?.box1_interest as number | undefined)
+                    const ordDiv = isBroker
+                      ? (p?.div_1a_total_ordinary as number | undefined)
+                      : (p?.box1a_ordinary as number | undefined)
+                    const foreignTax = isBroker
+                      ? (p?.div_7_foreign_tax_paid as number | undefined)
+                      : ((p?.box7_foreign_tax ?? p?.box6_foreign_tax) as number | undefined)
+                    const capGainLoss = isBroker ? (p?.b_total_gain_loss as number | undefined) : undefined
                     return (
                       <TableRow key={doc.id}>
-                        <TableCell className="py-2">{payer ?? doc.employment_entity?.display_name ?? '—'}</TableCell>
-                        <TableCell className="py-2">{FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type}</TableCell>
+                        <TableCell className="py-2">{payer ?? doc.employment_entity?.display_name ?? doc.account?.acct_name ?? '—'}</TableCell>
+                        <TableCell className="py-2">
+                          <span className="flex items-center gap-1">
+                            <DetailsButton onClick={() => onOpenDoc(doc)} isReviewed={doc.is_reviewed} />
+                            {FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type}
+                          </span>
+                        </TableCell>
                         <TableCell className="py-2 font-mono text-xs">{acct ?? '—'}</TableCell>
                         <TableCell className="py-2 text-right font-mono text-xs">
                           {interest != null && interest !== 0 && <div className="text-emerald-600 dark:text-emerald-500">Interest {fmtOverview(interest)}</div>}
                           {ordDiv != null && ordDiv !== 0 && <div className="text-emerald-600 dark:text-emerald-500">Ord div {fmtOverview(ordDiv)}</div>}
+                          {capGainLoss != null && capGainLoss !== 0 && <div className={capGainLoss < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'}>Cap G/L {fmtOverview(capGainLoss)}</div>}
                           {foreignTax != null && foreignTax !== 0 && <div>Foreign tax {fmtOverview(foreignTax, 2)}</div>}
                         </TableCell>
                         <TableCell className="py-2 text-xs text-muted-foreground">{doc.notes ?? '—'}</TableCell>
@@ -604,6 +632,7 @@ function TaxPreviewPageContent() {
   } = useTaxPreview()
 
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
+  const [reviewingDoc, setReviewingDoc] = useState<TaxDocument | undefined>(undefined)
   const [activeTab, setActiveTab] = useState<string>(TAX_TABS.overview)
   const [isExporting, setIsExporting] = useState(false)
 
@@ -743,9 +772,11 @@ function TaxPreviewPageContent() {
       <TaxDocumentReviewModal
         open={reviewModalOpen}
         taxYear={selectedYear}
-        onClose={() => setReviewModalOpen(false)}
+        {...(reviewingDoc ? { document: reviewingDoc } : {})}
+        onClose={() => { setReviewModalOpen(false); setReviewingDoc(undefined) }}
         onDocumentReviewed={() => {
           setReviewModalOpen(false)
+          setReviewingDoc(undefined)
           void refreshAll()
         }}
       />
@@ -772,6 +803,7 @@ function TaxPreviewPageContent() {
             reviewedW2Docs={reviewedW2Docs}
             reviewed1099Docs={reviewed1099Docs}
             reviewedK1Docs={reviewedK1Docs}
+            onOpenDoc={(doc) => { setReviewingDoc(doc); setReviewModalOpen(true) }}
           />
 
           {showTaxTables ? (

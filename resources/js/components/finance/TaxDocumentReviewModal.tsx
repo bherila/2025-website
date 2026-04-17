@@ -293,7 +293,7 @@ function ParsedDataEditor({
 
   const handleFieldChange = (key: string, value: string) => {
     if (readOnly) return
-    const isPossiblyNumeric = key.startsWith('box') || key.includes('wages') || key.includes('tax') || key.includes('amount') || key.includes('interest') || key.includes('dividend')
+    const isPossiblyNumeric = key.startsWith('box') || key.startsWith('div_') || key.startsWith('int_') || key.startsWith('misc_') || key.startsWith('b_') || key.includes('wages') || key.includes('tax') || key.includes('amount') || key.includes('interest') || key.includes('dividend')
     let finalValue: unknown = value
     if (value === '') {
       finalValue = null
@@ -307,9 +307,12 @@ function ParsedDataEditor({
     onChange({ ...data, [key]: finalValue })
   }
 
-  // Split into non-tax (identifiers/names) vs tax (box fields) columns
-  const nonTaxEntries = entries.filter(([k]) => !k.startsWith('box'))
-  const taxEntries = entries.filter(([k]) => k.startsWith('box'))
+  // Split into non-tax (identifiers/names) vs tax (numeric field) columns.
+  // Covers standard box_ prefixes and broker_1099 div_/int_/misc_/b_ prefixes.
+  const isTaxField = (k: string) =>
+    k.startsWith('box') || k.startsWith('div_') || k.startsWith('int_') || k.startsWith('misc_') || k.startsWith('b_')
+  const nonTaxEntries = entries.filter(([k]) => !isTaxField(k))
+  const taxEntries = entries.filter(([k]) => isTaxField(k))
 
   const [payerInfoOpen, setPayerInfoOpen] = useState(false)
 
