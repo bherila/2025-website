@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
-import TransactionsTable from '@/components/finance/TransactionsTable'
+import TransactionsTable from '@/components/finance/transactionTable/TransactionsTable'
 import { useFinanceTags } from '@/components/finance/useFinanceTags'
 import { fetchWrapper } from '@/fetchWrapper'
 

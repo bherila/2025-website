@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import React from 'react'
 
+import type { FinanceTag } from '../../useFinanceTags'
 import { TransactionsTaggingToolbar } from '../TransactionsTaggingToolbar'
-import type { FinanceTag } from '../useFinanceTags'
 
 // --- Mocks ------------------------------------------------------------------
 
@@ -45,7 +45,7 @@ jest.mock('@/components/ui/spinner', () => ({
   Spinner: () => <div data-testid="spinner" />,
 }))
 
-jest.mock('../rules_engine/TagSelect', () => ({
+jest.mock('../../rules_engine/TagSelect', () => ({
   TagSelect: ({ onChange, tags, placeholder }: { value: string | null; onChange: (v: string) => void; tags: FinanceTag[]; placeholder?: string; className?: string }) => (
     <select aria-label={placeholder ?? 'Select a tag'} onChange={(e) => onChange(e.target.value)}>
       <option value="">—</option>

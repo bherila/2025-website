@@ -9,7 +9,7 @@ import type { GenAiImportJobData, GenAiImportResultData } from '@/genai-processo
 import ImportTransactions from './ImportTransactions';
 
 // Mock the child component
-jest.mock('@/components/finance/TransactionsTable', () => {
+jest.mock('@/components/finance/transactionTable/TransactionsTable', () => {
   const MockTransactionsTable = () => <div data-testid="transactions-table" />;
   MockTransactionsTable.displayName = 'TransactionsTable';
   return MockTransactionsTable;
