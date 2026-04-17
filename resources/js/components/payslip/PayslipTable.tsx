@@ -18,6 +18,17 @@ interface Props {
   onRowEdited?: (row: fin_payslip) => void
 }
 
+function Th({ right, children, sub }: { right?: boolean; children: ReactNode; sub?: string }) {
+  return (
+    <TableHead
+      className={`font-mono text-[10px] tracking-wide uppercase text-muted-foreground py-2.5 px-3 ${right ? 'text-right' : ''}`}
+    >
+      {children}
+      {sub && <span className="block normal-case tracking-normal text-[9px] opacity-70 mt-0.5">{sub}</span>}
+    </TableHead>
+  )
+}
+
 // ─── Formatters ──────────────────────────────────────────────────────────────
 
 function fmt(val: number | null | undefined): string | null {
@@ -156,16 +167,6 @@ export function PayslipTable({ data, onRowEdited }: Props) {
   }
 
   const sorted = _.orderBy(data, 'pay_date', 'asc')
-
-  // Column header sub-text
-  const Th = ({ right, children, sub }: { right?: boolean; children: ReactNode; sub?: string }) => (
-    <TableHead
-      className={`font-mono text-[10px] tracking-wide uppercase text-muted-foreground py-2.5 px-3 ${right ? 'text-right' : ''}`}
-    >
-      {children}
-      {sub && <span className="block normal-case tracking-normal text-[9px] opacity-70 mt-0.5">{sub}</span>}
-    </TableHead>
-  )
 
   return (
     <div className="overflow-x-auto">

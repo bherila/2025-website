@@ -31,6 +31,53 @@ interface TransactionLinkModalProps {
   onLinkChanged?: () => void
 }
 
+function LinkedTransactionCard({
+  linkedTx,
+  label,
+  isLinking,
+  onNavigate,
+  onUnlink,
+}: {
+  linkedTx: LinkedTransaction
+  label: string
+  isLinking: boolean
+  onNavigate: (accountId: number, transactionId: number, date?: string) => void
+  onUnlink: (tId: number) => void
+}) {
+  return (
+    <div className="mb-2">
+      <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">{label}:</p>
+      <div className="border rounded p-3">
+        <div className="flex justify-between items-start">
+          <div className="text-sm">
+            <p><strong>Account:</strong> {linkedTx.acct_name}</p>
+            <p><strong>Date:</strong> {linkedTx.t_date}</p>
+            <p><strong>Description:</strong> {linkedTx.t_description}</p>
+            <p><strong>Amount:</strong> {currency(linkedTx.t_amt).format()}</p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onNavigate(linkedTx.t_account, linkedTx.t_id, linkedTx.t_date)}
+            >
+              Go to
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => onUnlink(linkedTx.t_id)}
+              disabled={isLinking}
+            >
+              Unlink
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function TransactionLinkModal({ 
   transaction, 
   isOpen, 
@@ -182,46 +229,6 @@ export default function TransactionLinkModal({
 
   const hasExistingLinks = parentTransaction || childTransactions.length > 0
 
-  // Reusable component for displaying a linked transaction
-  const LinkedTransactionCard = ({ 
-    linkedTx, 
-    label, 
-  }: { 
-    linkedTx: LinkedTransaction
-    label: string
-  }) => (
-    <div className="mb-2">
-      <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">{label}:</p>
-      <div className="border rounded p-3">
-        <div className="flex justify-between items-start">
-          <div className="text-sm">
-            <p><strong>Account:</strong> {linkedTx.acct_name}</p>
-            <p><strong>Date:</strong> {linkedTx.t_date}</p>
-            <p><strong>Description:</strong> {linkedTx.t_description}</p>
-            <p><strong>Amount:</strong> {currency(linkedTx.t_amt).format()}</p>
-          </div>
-          <div className="flex gap-2">
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => navigateToTransaction(linkedTx.t_account, linkedTx.t_id, linkedTx.t_date)}
-            >
-              Go to
-            </Button>
-            <Button 
-              variant="destructive" 
-              size="sm"
-              onClick={() => handleUnlink(linkedTx.t_id)}
-              disabled={isLinking}
-            >
-              Unlink
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[700px] max-h-[80vh] overflow-y-auto">
@@ -255,18 +262,24 @@ export default function TransactionLinkModal({
               
               {/* Parent Transaction */}
               {parentTransaction && (
-                <LinkedTransactionCard 
+                <LinkedTransactionCard
                   linkedTx={parentTransaction}
                   label="Linked Transaction (source of transfer)"
+                  isLinking={isLinking}
+                  onNavigate={navigateToTransaction}
+                  onUnlink={handleUnlink}
                 />
               )}
 
               {/* Child Transactions */}
               {childTransactions.map((child) => (
-                <LinkedTransactionCard 
+                <LinkedTransactionCard
                   key={child.t_id}
                   linkedTx={child}
                   label="Linked Transaction (destination of transfer)"
+                  isLinking={isLinking}
+                  onNavigate={navigateToTransaction}
+                  onUnlink={handleUnlink}
                 />
               ))}
 

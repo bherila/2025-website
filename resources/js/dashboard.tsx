@@ -26,10 +26,6 @@ const MyAccount: React.FC = () => {
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [success, setSuccess] = useState('');
 
-  useEffect(() => {
-    fetchUserData();
-  }, []);
-
   const fetchUserData = async () => {
     try {
       const response = await fetch('/api/user');
@@ -45,6 +41,10 @@ const MyAccount: React.FC = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchUserData();
+  }, []);
 
   if (loading) return <div className="flex justify-center items-center min-h-[200px]"><Spinner /></div>;
 

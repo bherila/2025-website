@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 
 import Container from '@/components/container'
@@ -31,17 +31,17 @@ function BingoPage() {
   const [input, setInput] = useState<BingoData | null>(null)
   const [error, setError] = useState<any>(null)
 
-  const generatedCards = useMemo(() => {
+  const [generatedCards, generatedError] = useMemo((): [string[][][], Error | null] => {
     try {
       if (!input?.numCards) {
-        return []
+        return [[], null]
       }
       const cards = new Map<string, string[][]>()
       const itemList = input.itemsList
         .split('\n')
         .map((r) => r.trim())
         .filter(Boolean)
-      
+
       if (itemList.length < 25) {
         throw new Error('List of items must contain at least 25 items.')
       }
@@ -61,13 +61,15 @@ function BingoPage() {
           console.warn('generated a dupe! try again.')
         }
       }
-      setError(null);
-      return Array.from(cards.values())
+      return [Array.from(cards.values()), null]
     } catch (err: any) {
-      setError(err)
-      return []
+      return [[], err]
     }
-  }, [input?.itemsList, input?.numCards, input?.activateFreeSpace])
+  }, [input])
+
+  useEffect(() => {
+    setError(generatedError)
+  }, [generatedError])
 
   return (
     <Container>

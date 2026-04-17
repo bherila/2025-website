@@ -30,18 +30,6 @@ export default function InvitePeopleModal({ open, onOpenChange, companies, onSuc
 
   const isNewUser = selectedUserId === NEW_USER_VALUE
 
-  useEffect(() => {
-    if (open) {
-      fetchUsers()
-      fetchCurrentUser()
-      setError(null)
-      // Pre-select company if provided
-      if (preselectedCompanyId) {
-        setSelectedCompanyId(preselectedCompanyId.toString())
-      }
-    }
-  }, [open, preselectedCompanyId])
-
   const fetchUsers = async () => {
     try {
       const response = await fetch('/api/client/mgmt/users')
@@ -68,6 +56,17 @@ export default function InvitePeopleModal({ open, onOpenChange, companies, onSuc
       console.error('Error fetching current user:', error)
     }
   }
+
+  useEffect(() => {
+    if (open) {
+      fetchUsers()
+      fetchCurrentUser()
+      setError(null)
+      if (preselectedCompanyId) {
+        setSelectedCompanyId(preselectedCompanyId.toString())
+      }
+    }
+  }, [open, preselectedCompanyId])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

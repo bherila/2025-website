@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import { z } from 'zod'
 
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
@@ -57,18 +57,20 @@ export function useImportExecution({
   const [dataToImport, setDataToImport] = useState<AccountLineItem[]>([])
   const [importedStatementId, setImportedStatementId] = useState<number | undefined>(undefined)
 
+  const processChunksRef = useRef<(chunks: AccountLineItem[][], chunkIndex: number, statementId?: number) => Promise<void>>()
+
   const processChunks = useCallback(
     async (chunks: AccountLineItem[][], chunkIndex: number, statementId?: number) => {
       if (chunkIndex >= chunks.length) {
         setIsImporting(false)
-        window.location.href = buildImportBackUrl(accountId)
+        window.location.assign(buildImportBackUrl(accountId))
         return
       }
 
       const chunk = chunks[chunkIndex]
       if (!chunk) {
         setIsImporting(false)
-        window.location.href = buildImportBackUrl(accountId)
+        window.location.assign(buildImportBackUrl(accountId))
         return
       }
 
@@ -82,7 +84,7 @@ export function useImportExecution({
           statement_id: statementId,
         })
         setImportProgress((prev) => ({ ...prev, processed: prev.processed + chunk.length }))
-        await processChunks(chunks, chunkIndex + 1, statementId)
+        await processChunksRef.current?.(chunks, chunkIndex + 1, statementId)
       } catch (e) {
         const errorMessage = e instanceof Error ? e.message : String(e)
         setImportError(`Failed to import chunk ${chunkIndex + 1}: ${errorMessage}`)
@@ -90,6 +92,10 @@ export function useImportExecution({
     },
     [accountId],
   )
+
+  useLayoutEffect(() => {
+    processChunksRef.current = processChunks
+  })
 
   const handleImport = useCallback(
     async (importData: AccountLineItem[], statementToImport: IbStatementData | null) => {

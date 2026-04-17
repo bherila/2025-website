@@ -1,7 +1,7 @@
 'use client'
 
 import { AlertCircle, CheckCircle, Clock, Loader2, Upload } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -95,6 +95,8 @@ export default function MultiAccountImportModal({
     }
   }
 
+  const pollJobRef = useRef<(docId: number, attempt?: number) => Promise<void>>()
+
   const pollJob = useCallback(
     async (docId: number, attempt = 0) => {
       try {
@@ -125,14 +127,14 @@ export default function MultiAccountImportModal({
 
         // Still pending/processing — keep polling (up to ~5 min)
         if (attempt < 60) {
-          pollTimerRef.current = setTimeout(() => pollJob(docId, attempt + 1), 5_000)
+          pollTimerRef.current = setTimeout(() => pollJobRef.current?.(docId, attempt + 1), 5_000)
         } else {
           setError('Processing timed out. Check the document status on the Tax Preview page.')
           setPhase('upload')
         }
       } catch {
         if (attempt < 3) {
-          pollTimerRef.current = setTimeout(() => pollJob(docId, attempt + 1), 3_000)
+          pollTimerRef.current = setTimeout(() => pollJobRef.current?.(docId, attempt + 1), 3_000)
         } else {
           setError('Failed to check processing status.')
           setPhase('upload')
@@ -141,6 +143,10 @@ export default function MultiAccountImportModal({
     },
     [preselectedAccountId],
   )
+
+  useLayoutEffect(() => {
+    pollJobRef.current = pollJob
+  })
 
   // When an existing parsed doc is provided, load its links directly into the assign phase.
   useEffect(() => {

@@ -44,7 +44,7 @@ export function UtilityAccountListPage() {
   };
 
   const handleRowClick = (accountId: number) => {
-    window.location.href = `/utility-bill-tracker/${accountId}/bills`;
+    window.location.assign(`/utility-bill-tracker/${accountId}/bills`);
   };
 
   return (

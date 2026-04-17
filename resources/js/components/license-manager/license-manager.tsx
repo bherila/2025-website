@@ -45,10 +45,6 @@ const LicenseManager: React.FC = () => {
   const [commentFilter, setCommentFilter] = useState('')
   const [computerNameFilter, setComputerNameFilter] = useState('')
 
-  useEffect(() => {
-    fetchProductKeys()
-  }, [])
-
   const fetchProductKeys = async () => {
     try {
       const response = await fetchWrapper.get('/api/license-keys')
@@ -60,6 +56,10 @@ const LicenseManager: React.FC = () => {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    fetchProductKeys()
+  }, [])
 
   const updateProductKey = async (id: number, data: Partial<ProductKey>) => {
     try {

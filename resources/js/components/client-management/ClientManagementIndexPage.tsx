@@ -22,10 +22,6 @@ export default function ClientManagementIndexPage() {
   const [inviteModalOpen, setInviteModalOpen] = useState(false)
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null)
 
-  useEffect(() => {
-    fetchCompanies()
-  }, [])
-
   const fetchCompanies = async () => {
     try {
       const response = await fetch('/api/client/mgmt/companies')
@@ -37,6 +33,10 @@ export default function ClientManagementIndexPage() {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    fetchCompanies()
+  }, [])
 
   const openInviteModal = (companyId?: number) => {
     setSelectedCompanyId(companyId || null)
