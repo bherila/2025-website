@@ -97,6 +97,16 @@ jobs:
         if: steps.changes.outputs.backend == 'true' || github.event_name == 'push'
         run: python3 scripts/check-migration-identifiers.py
 
+      - name: Cache PHPStan result cache
+        if: steps.changes.outputs.backend == 'true' || github.event_name == 'push'
+        uses: actions/cache@v5
+        with:
+          path: .phpstan-cache
+          key: phpstan-${{ hashFiles('phpstan.neon', 'phpstan-baseline.neon', 'composer.lock') }}-${{ github.sha }}
+          restore-keys: |
+            phpstan-${{ hashFiles('phpstan.neon', 'phpstan-baseline.neon', 'composer.lock') }}-
+            phpstan-
+
       - name: Run PHPStan
         if: steps.changes.outputs.backend == 'true' || github.event_name == 'push'
         run: vendor/bin/phpstan analyse --no-progress

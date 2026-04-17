@@ -10,6 +10,7 @@ package-lock.json
 /.idea
 /.nova
 /.phpunit.cache
+/.phpstan-cache
 /.vscode
 /.zed
 /auth.json

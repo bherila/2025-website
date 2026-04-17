@@ -8,3 +8,4 @@ parameters:
     paths:
         - app/
     reportUnmatchedIgnoredErrors: true
+    resultCachePath: .phpstan-cache/result-cache.php
