@@ -238,9 +238,55 @@ PROMPT;
     }
 
     /**
+     * Build the Gemini tool configuration (tools + toolConfig) for a given job type.
+     * Returns an empty array for job types that use JSON-mode output instead of function calling.
+     *
+     * @param  string  $prompt  Required for tax_document jobs to extract the form type marker.
+     * @return array<string, mixed>
+     */
+    public function buildToolConfig(string $jobType, string $prompt = ''): array
+    {
+        if ($jobType === 'finance_transactions') {
+            return [
+                'tools' => [[
+                    'function_declarations' => [$this->buildFinanceAccountToolDefinition()],
+                ]],
+                'toolConfig' => [
+                    'functionCallingConfig' => [
+                        'mode' => 'ANY',
+                        'allowedFunctionNames' => [self::FINANCE_ACCOUNT_TOOL_NAME],
+                    ],
+                ],
+            ];
+        }
+
+        if ($jobType === 'tax_document' && $prompt !== '') {
+            $toolDef = $this->buildTaxDocumentToolDefinitionFromPrompt($prompt);
+            if ($toolDef !== null) {
+                return [
+                    'tools' => [[
+                        'function_declarations' => [$toolDef['definition']],
+                    ]],
+                    'toolConfig' => [
+                        'functionCallingConfig' => [
+                            'mode' => 'ANY',
+                            'allowedFunctionNames' => [$toolDef['name']],
+                        ],
+                    ],
+                ];
+            }
+        }
+
+        // All other job types use JSON-mode output
+        return [];
+    }
+
+    /**
      * Build the Gemini generateContent payload for the given job type.
      *
      * @return array<string, mixed>
+     *
+     * @deprecated Use GeminiClient::converseWithFileRef() + buildToolConfig() instead.
      */
     public function buildGenerateContentPayload(string $jobType, string $fileUri, string $mimeType, string $prompt): array
     {

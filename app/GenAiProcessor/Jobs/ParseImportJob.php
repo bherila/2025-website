@@ -12,6 +12,9 @@ use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use Bherila\GenAiLaravel\Clients\GeminiClient;
+use Bherila\GenAiLaravel\Exceptions\GenAiFatalException;
+use Bherila\GenAiLaravel\Exceptions\GenAiRateLimitException;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Database\Eloquent\Collection;
@@ -19,7 +22,6 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
@@ -69,6 +71,7 @@ class ParseImportJob implements ShouldQueue
             return;
         }
 
+        $gemini = new GeminiClient($apiKey);
         $geminiFileUri = null;
 
         try {
@@ -82,7 +85,7 @@ class ParseImportJob implements ShouldQueue
 
             // Upload to Gemini File API using stream
             try {
-                $geminiFileUri = $this->uploadToGeminiFileApi($apiKey, $fileStream, $job->mime_type ?? 'application/pdf');
+                $geminiFileUri = $gemini->uploadFile($fileStream, $job->mime_type ?? 'application/pdf', 'genai-import-'.time());
             } finally {
                 if (is_resource($fileStream)) {
                     fclose($fileStream);
@@ -118,9 +121,9 @@ class ParseImportJob implements ShouldQueue
 
             // Call generateContent with file_uri
             ['data' => $data, 'raw_response' => $rawResponse] = $this->callGeminiGenerateContent(
+                $gemini,
                 $dispatcher,
                 $job->job_type,
-                $apiKey,
                 $geminiFileUri,
                 $job->mime_type ?? 'application/pdf',
                 $prompt
@@ -152,7 +155,7 @@ class ParseImportJob implements ShouldQueue
             } catch (\Throwable $mailEx) {
                 Log::warning('Failed to send completion mail', ['job_id' => $job->id, 'error' => $mailEx->getMessage()]);
             }
-        } catch (GeminiRateLimitException $e) {
+        } catch (GenAiRateLimitException $e) {
             $job->markFailed('API rate limit exceeded. Please wait and try again.');
             $this->markLinkedTaxDocumentFailed($job);
 
@@ -161,7 +164,7 @@ class ParseImportJob implements ShouldQueue
             } catch (\Throwable $mailEx) {
                 Log::warning('Failed to send failure mail', ['job_id' => $job->id]);
             }
-        } catch (GeminiFatalException $e) {
+        } catch (GenAiFatalException $e) {
             // Fatal errors (400 Bad Request, etc.) - mark as failed immediately with max retries
             $job->update([
                 'status' => 'failed',
@@ -189,123 +192,39 @@ class ParseImportJob implements ShouldQueue
                 Log::warning('Failed to send failure mail', ['job_id' => $job->id]);
             }
         } finally {
-            // Always try to clean up Gemini file
+            // Always try to clean up the Gemini file to free quota.
             if ($geminiFileUri) {
-                $this->deleteFromGeminiFileApi($apiKey, $geminiFileUri);
+                $gemini->deleteFile($geminiFileUri);
             }
         }
     }
 
     /**
-     * Upload a file stream to the Gemini File API.
-     * Returns the file URI (e.g., "files/abc123") or null on failure.
+     * Call Gemini generateContent with an already-uploaded file reference.
      *
-     * @param  resource  $fileStream
-     */
-    private function uploadToGeminiFileApi(string $apiKey, $fileStream, string $mimeType): ?string
-    {
-        // Pass the stream resource directly to Guzzle's multipart builder.
-        // Guzzle accepts a PHP resource for streaming uploads, avoiding full in-memory buffering.
-        $response = Http::withHeaders([
-            'x-goog-api-key' => $apiKey,
-        ])->attach(
-            'file', $fileStream, 'upload.pdf', ['Content-Type' => $mimeType]
-        )->post('https://generativelanguage.googleapis.com/upload/v1beta/files', [
-            'file' => ['display_name' => 'genai-import-'.time()],
-        ]);
-
-        if (! $response->successful()) {
-            Log::error('Gemini File API upload failed', [
-                'status' => $response->status(),
-                'response' => $response->body(),
-            ]);
-
-            if ($response->status() === 400) {
-                throw new GeminiFatalException('File rejected by Gemini: '.$response->body());
-            }
-
-            return null;
-        }
-
-        return $response->json('file.uri') ?? $response->json('file.name');
-    }
-
-    /**
-     * Call Gemini generateContent with a file_uri reference.
-     *
-     * @return array<string, mixed>
+     * @return array{data: array<string, mixed>|null, raw_response: string|null}
      */
     private function callGeminiGenerateContent(
+        GeminiClient $gemini,
         GenAiJobDispatcherService $dispatcher,
         string $jobType,
-        string $apiKey,
         string $fileUri,
         string $mimeType,
         string $prompt
     ): array {
-        $response = Http::withHeaders([
-            'x-goog-api-key' => $apiKey,
-            'Content-Type' => 'application/json',
-        ])->withOptions([
-            'timeout' => 240,
-        ])->post(
-            'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent',
-            $dispatcher->buildGenerateContentPayload($jobType, $fileUri, $mimeType, $prompt)
-        );
+        $toolConfig = $dispatcher->buildToolConfig($jobType, $prompt);
+        $response = $gemini->converseWithFileRef($fileUri, $mimeType, $prompt, $toolConfig ?: null);
+        $rawResponse = json_encode($response);
 
-        if (! $response->successful()) {
-            Log::error('Gemini generateContent failed', [
-                'status' => $response->status(),
-                'response' => $response->body(),
-            ]);
-
-            if ($response->status() === 429) {
-                throw new GeminiRateLimitException('API rate limit exceeded.');
-            }
-
-            if ($response->status() === 400) {
-                throw new GeminiFatalException('Bad request: '.$response->body());
-            }
-
-            return ['data' => null, 'raw_response' => $response->body()];
-        }
-
-        $body = $response->json();
-        $data = $dispatcher->extractGenerateContentData($jobType, is_array($body) ? $body : []);
+        $data = $dispatcher->extractGenerateContentData($jobType, $response);
 
         if ($data === null) {
             Log::error('Failed to decode structured response from Gemini API', [
-                'response' => $response->body(),
+                'response' => $rawResponse,
             ]);
         }
 
-        return ['data' => $data, 'raw_response' => $response->body()];
-    }
-
-    /**
-     * Delete a file from the Gemini File API to free quota.
-     */
-    private function deleteFromGeminiFileApi(string $apiKey, string $fileUri): void
-    {
-        try {
-            // The fileUri might be "files/abc123" or a full URL. Extract the name part.
-            $fileName = $fileUri;
-            if (! str_starts_with($fileName, 'files/')) {
-                // Try to extract from URI
-                if (preg_match('/files\/[a-zA-Z0-9_-]+/', $fileUri, $matches)) {
-                    $fileName = $matches[0];
-                }
-            }
-
-            Http::withHeaders([
-                'x-goog-api-key' => $apiKey,
-            ])->delete("https://generativelanguage.googleapis.com/v1beta/{$fileName}");
-        } catch (\Throwable $e) {
-            Log::warning('Failed to delete Gemini file', [
-                'file_uri' => $fileUri,
-                'error' => $e->getMessage(),
-            ]);
-        }
+        return ['data' => $data, 'raw_response' => $rawResponse];
     }
 
     /**
@@ -744,13 +663,3 @@ class ParseImportJob implements ShouldQueue
         return $bestScore > 0 ? $bestId : null;
     }
 }
-
-/**
- * Thrown on transient rate-limit errors (429).
- */
-class GeminiRateLimitException extends \RuntimeException {}
-
-/**
- * Thrown on fatal errors where retrying would be pointless (400, corrupt file, etc.).
- */
-class GeminiFatalException extends \RuntimeException {}

@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "17466a95cb71de50797cfc6a63831edb",
+    "content-hash": "f69e487e4dd6a72e42bf8f9a1728bf9f",
     "packages": [
         {
             "name": "aws/aws-crt-php",
@@ -156,6 +156,69 @@
                 "source": "https://github.com/aws/aws-sdk-php/tree/3.376.3"
             },
             "time": "2026-04-03T18:07:33+00:00"
+        },
+        {
+            "name": "bherila/genai-laravel",
+            "version": "dev-main",
+            "dist": {
+                "type": "path",
+                "url": "../../genai-laravel",
+                "reference": "ad3016290c837f1c80d30799ae2911774429de90"
+            },
+            "require": {
+                "illuminate/contracts": "^10|^11|^12|^13",
+                "illuminate/http": "^10|^11|^12|^13",
+                "illuminate/support": "^10|^11|^12|^13",
+                "php": "^8.2"
+            },
+            "require-dev": {
+                "laravel/pint": "^1",
+                "orchestra/testbench": "^8|^9|^10|^11",
+                "phpunit/phpunit": "^10|^11"
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "providers": [
+                        "Bherila\\GenAiLaravel\\GenAiServiceProvider"
+                    ],
+                    "aliases": {
+                        "GenAi": "Bherila\\GenAiLaravel\\Facades\\GenAi"
+                    }
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Bherila\\GenAiLaravel\\": "src/"
+                }
+            },
+            "autoload-dev": {
+                "psr-4": {
+                    "Bherila\\GenAiLaravel\\Tests\\": "tests/"
+                }
+            },
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Ben Herila",
+                    "email": "ben@herila.net"
+                }
+            ],
+            "description": "Provider-agnostic GenAI client for Laravel: Gemini, AWS Bedrock, and more",
+            "keywords": [
+                "ai",
+                "bedrock",
+                "gemini",
+                "genai",
+                "laravel",
+                "llm"
+            ],
+            "transport-options": {
+                "symlink": true,
+                "relative": true
+            }
         },
         {
             "name": "brick/math",
@@ -11301,7 +11364,9 @@
     ],
     "aliases": [],
     "minimum-stability": "dev",
-    "stability-flags": {},
+    "stability-flags": {
+        "bherila/genai-laravel": 20
+    },
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {
