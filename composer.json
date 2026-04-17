@@ -10,6 +10,7 @@
     "license": "MIT",
     "require": {
         "php": "^8.3",
+        "bherila/genai-laravel": "@dev",
         "erusev/parsedown": "^1.7",
         "helgesverre/toon": "^3.1",
         "laravel/framework": "^13.0",
@@ -100,5 +101,9 @@
     },
     "minimum-stability": "dev",
     "prefer-stable": true,
-    "repositories": []
+    "repositories": [{
+        "name": "genai-laravel",
+        "type": "vcs",
+        "url": "https://github.com/bherila/genai-laravel"
+    }]
 }
