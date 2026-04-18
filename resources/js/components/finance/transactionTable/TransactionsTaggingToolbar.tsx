@@ -19,6 +19,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Spinner } from '@/components/ui/spinner'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 import { TagSelect } from '../rules_engine/TagSelect'
 import type { FinanceTag } from '../useFinanceTags'
@@ -87,38 +92,47 @@ export function TransactionsTaggingToolbar({
               <Button variant="outline" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider" disabled={effectiveCount === 0 || !selectedTagId} onClick={() => selectedTagId && onRemoveTag(Number(selectedTagId))}>
                 Remove
               </Button>
-              <Button variant="destructive" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider ml-2" disabled={effectiveCount === 0} onClick={() => setRemoveTagsConfirmOpen(true)}>
-                Clear All
-              </Button>
-              {onBatchDelete && (
-                <Button variant="destructive" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider ml-2" disabled={effectiveCount === 0} onClick={() => setBatchDeleteConfirmOpen(true)}>
-                  Delete
-                </Button>
-              )}
-              {(onExportCSV || onExportJSON) && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider ml-2" disabled={effectiveCount === 0}>
-                      Export ▾
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="bg-card border-border">
-                    {onExportCSV && (
-                      <DropdownMenuItem onClick={onExportCSV} className="font-mono text-xs cursor-pointer hover:bg-muted">
-                        📄 Export as CSV
-                      </DropdownMenuItem>
-                    )}
-                    {onExportJSON && (
-                      <DropdownMenuItem onClick={onExportJSON} className="font-mono text-xs cursor-pointer hover:bg-muted">
-                        📋 Export as JSON
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-              <Button asChild variant="secondary" size="sm" className="ml-auto h-8 font-mono text-[10px] uppercase tracking-wider text-accent">
-                <a href="/finance/tags">Manage Tags</a>
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="destructive" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider ml-2" disabled={effectiveCount === 0} onClick={() => setRemoveTagsConfirmOpen(true)}>
+                    Clear All
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Remove all tags from {isSelection ? 'selected' : 'transactions in the current view'}</TooltipContent>
+              </Tooltip>
+              <div className="ml-auto flex items-center gap-3">
+                {(onExportCSV || onExportJSON) && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider" disabled={effectiveCount === 0}>
+                        Export ▾
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="bg-card border-border">
+                      {onExportCSV && (
+                        <DropdownMenuItem onClick={onExportCSV} className="font-mono text-xs cursor-pointer hover:bg-muted">
+                          📄 Export as CSV
+                        </DropdownMenuItem>
+                      )}
+                      {onExportJSON && (
+                        <DropdownMenuItem onClick={onExportJSON} className="font-mono text-xs cursor-pointer hover:bg-muted">
+                          📋 Export as JSON
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+                {onBatchDelete && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="destructive" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider" disabled={effectiveCount === 0} onClick={() => setBatchDeleteConfirmOpen(true)}>
+                        Delete ({effectiveCount.toLocaleString()})
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Permanently delete {isSelection ? 'selected' : 'transactions in the current view'}</TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
             </>
           )}
         </div>
@@ -129,7 +143,7 @@ export function TransactionsTaggingToolbar({
           <AlertDialogHeader>
             <AlertDialogTitle className="font-mono text-accent">Remove all tags</AlertDialogTitle>
             <AlertDialogDescription className="text-muted-foreground">
-              This will remove all tags from the {effectiveCount} {isSelection ? 'selected ' : 'matching '}transaction{effectiveCount !== 1 ? 's' : ''}. This cannot be undone.
+              This will remove all tags from {isSelection ? `the ${effectiveCount} selected transaction${effectiveCount !== 1 ? 's' : ''}` : `all transactions in the current view (${effectiveCount.toLocaleString()})`}. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -147,7 +161,7 @@ export function TransactionsTaggingToolbar({
             <AlertDialogHeader>
               <AlertDialogTitle className="font-mono text-accent">Delete transactions</AlertDialogTitle>
               <AlertDialogDescription className="text-muted-foreground">
-                This will permanently delete {effectiveCount} {isSelection ? 'selected ' : 'matching '}transaction{effectiveCount !== 1 ? 's' : ''}. This cannot be undone.
+                This will permanently delete {isSelection ? `the ${effectiveCount} selected transaction${effectiveCount !== 1 ? 's' : ''}` : `all transactions in the current view (${effectiveCount.toLocaleString()})`}. This cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

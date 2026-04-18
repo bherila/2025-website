@@ -134,18 +134,18 @@ describe('TransactionsTaggingToolbar', () => {
   it('shows Delete button when onBatchDelete is provided', () => {
     const onBatchDelete = jest.fn().mockResolvedValue(undefined)
     render(<TransactionsTaggingToolbar {...defaultProps} onBatchDelete={onBatchDelete} />)
-    expect(screen.getByRole('button', { name: /^Delete$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Delete/i })).toBeInTheDocument()
   })
 
   it('does not show Delete button when onBatchDelete is not provided', () => {
     render(<TransactionsTaggingToolbar {...defaultProps} />)
-    expect(screen.queryByRole('button', { name: /^Delete$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Delete/i })).not.toBeInTheDocument()
   })
 
   it('opens batch delete confirmation dialog when Delete clicked', () => {
     const onBatchDelete = jest.fn().mockResolvedValue(undefined)
     render(<TransactionsTaggingToolbar {...defaultProps} onBatchDelete={onBatchDelete} />)
-    fireEvent.click(screen.getByRole('button', { name: /^Delete$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^Delete/i }))
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByText(/Delete transactions/i)).toBeInTheDocument()
   })
@@ -153,7 +153,7 @@ describe('TransactionsTaggingToolbar', () => {
   it('calls onBatchDelete when confirm delete pressed', () => {
     const onBatchDelete = jest.fn().mockResolvedValue(undefined)
     render(<TransactionsTaggingToolbar {...defaultProps} onBatchDelete={onBatchDelete} />)
-    fireEvent.click(screen.getByRole('button', { name: /^Delete$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^Delete/i }))
     fireEvent.click(screen.getByText(/Confirm Delete/i))
     expect(onBatchDelete).toHaveBeenCalled()
   })
