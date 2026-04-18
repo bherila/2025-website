@@ -134,7 +134,7 @@ Overview | Schedules | Schedule A | Schedule E | Capital Gains | Form 1116 | Sch
 
 | Tab | Component(s) | Description |
 |-----|---|---|
-| Overview | `TaxIncomeOverview` | Income card grid + summary table + W-2 Income Summary + All Tax Documents |
+| Overview | `TaxIncomeOverview` | Income card grid + unified Tax Documents & Estimated Positions table + W-2 Income Summary |
 | Schedules | `ScheduleBPreview` + `Form4952Preview` | Schedule B (interest/dividends) + Form 4952 (investment interest) |
 | Schedule A | `ScheduleAPreview` | Itemized deductions — investment interest (K-1, 1099, short dividends) with drilldown modal |
 | Schedule E | `ScheduleEPreview` | Partnership/S-corp income from K-1 — Box 1 ordinary, Box 2/3 rental, Box 4 guaranteed payments |
