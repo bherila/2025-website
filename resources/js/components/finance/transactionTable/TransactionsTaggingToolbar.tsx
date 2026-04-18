@@ -13,6 +13,11 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -87,13 +92,23 @@ export function TransactionsTaggingToolbar({
               <Button variant="outline" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider" disabled={effectiveCount === 0 || !selectedTagId} onClick={() => selectedTagId && onRemoveTag(Number(selectedTagId))}>
                 Remove
               </Button>
-              <Button variant="destructive" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider ml-2" disabled={effectiveCount === 0} onClick={() => setRemoveTagsConfirmOpen(true)}>
-                Clear All
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="destructive" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider ml-2" disabled={effectiveCount === 0} onClick={() => setRemoveTagsConfirmOpen(true)}>
+                    Clear All
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Remove all tags from {isSelection ? 'selected' : 'matching'} transactions</TooltipContent>
+              </Tooltip>
               {onBatchDelete && (
-                <Button variant="destructive" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider ml-2" disabled={effectiveCount === 0} onClick={() => setBatchDeleteConfirmOpen(true)}>
-                  Delete
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="destructive" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider ml-2" disabled={effectiveCount === 0} onClick={() => setBatchDeleteConfirmOpen(true)}>
+                      Delete
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Permanently delete {isSelection ? 'selected' : 'matching'} transactions</TooltipContent>
+                </Tooltip>
               )}
               {(onExportCSV || onExportJSON) && (
                 <DropdownMenu>
