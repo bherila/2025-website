@@ -567,7 +567,6 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
               {enableLinking && <th className={cn(thClass, "text-center cursor-default")}>Link</th>}
               {accountId && <th className={cn(thClass, "text-center cursor-default")}>Lots</th>}
               <th className={cn(thClass, "text-center cursor-default")}>Details</th>
-              {onDeleteTransaction && <th className={cn(thClass, "text-center cursor-default")}>🗑️</th>}
             </tr>
           </thead>
           
@@ -726,13 +725,6 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                     </Button>
                   </td>
 
-                  {onDeleteTransaction && (
-                    <td className={cn(tdClass, "text-center")}>
-                      <button onClick={(e) => { e.stopPropagation(); setDeleteConfirmTransaction(row) }} className="text-muted-foreground hover:text-destructive transition-colors">
-                        🗑️
-                      </button>
-                    </td>
-                  )}
                 </tr>
               )
             })}
@@ -780,7 +772,6 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
               {enableLinking && <td />}
               {accountId && <td />}
               <td />
-              {onDeleteTransaction && <td />}
             </tr>
           </tfoot>
         </table>
