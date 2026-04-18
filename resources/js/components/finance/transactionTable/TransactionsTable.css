@@ -11,8 +11,11 @@
   }
 }
 
-/* Prevent text selection when shift-clicking rows */
-.transactions-table-scroll tbody tr {
+/* Prevent text selection when shift-clicking or dragging rows */
+.transactions-table-scroll tbody tr,
+.transactions-table-scroll tbody td,
+[role="grid"] tbody tr,
+[role="grid"] tbody td {
   user-select: none;
   -webkit-user-select: none;
 }
