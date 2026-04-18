@@ -355,7 +355,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
     onPageSizeChange: handlePageSizeChange,
   }
 
-  const thClass = "text-left py-3 px-2 text-[10px] tracking-widest uppercase text-muted-foreground font-medium align-bottom whitespace-nowrap cursor-pointer hover:text-foreground transition-colors"
+  const thClass = "text-left py-3 px-2 text-[10px] tracking-widest uppercase text-muted-foreground font-medium align-top whitespace-nowrap cursor-pointer hover:text-foreground transition-colors"
   const tdClass = "py-2 px-2 border-b border-table-border align-top"
   const inputClass = "bg-background/50 border border-border text-foreground text-xs rounded px-2 py-1 w-full mt-1 focus:ring-1 focus:ring-ring outline-none font-mono"
 
@@ -571,8 +571,11 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
             </tr>
           </thead>
           
-          <tbody className="[&_tr:last-child]:border-0" style={useVirtualScroll ? { position: 'relative', height: `${virtualizer.getTotalSize()}px` } : undefined}>
-            {(useVirtualScroll ? virtualizer.getVirtualItems().map(virtualRow => ({ ...virtualRow, row: sortedData[virtualRow.index] })) : paginatedData.map((row, i) => ({ index: i, size: 0, start: 0, key: i, row }))).map((item) => {
+          <tbody className="[&_tr:last-child]:border-0">
+            {useVirtualScroll && virtualizer.getVirtualItems().length > 0 && (
+              <tr style={{ height: `${virtualizer.getVirtualItems()[0]!.start}px` }} aria-hidden />
+            )}
+            {(useVirtualScroll ? virtualizer.getVirtualItems().map(virtualRow => ({ virtualRow, row: sortedData[virtualRow.index], index: virtualRow.index })) : paginatedData.map((row, i) => ({ virtualRow: null, row, index: i }))).map((item) => {
               const { row, index: i } = item
               if (!row) return null
               const rowId = row.t_id ?? -i
@@ -583,13 +586,6 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
               return (
                 <tr
                   key={row.t_id != null ? row.t_id : `row-${i}`}
-                  style={useVirtualScroll ? {
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    transform: `translateY(${item.start}px)`,
-                  } : undefined}
                   className={cn(
                     "transition-colors cursor-pointer hover:bg-muted/20",
                     isDuplicate(row) && "bg-destructive/10 hover:bg-destructive/20",
@@ -740,6 +736,12 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                 </tr>
               )
             })}
+            {useVirtualScroll && virtualizer.getVirtualItems().length > 0 && (() => {
+              const items = virtualizer.getVirtualItems()
+              const last = items[items.length - 1]!
+              const bottomPad = virtualizer.getTotalSize() - last.end
+              return bottomPad > 0 ? <tr style={{ height: `${bottomPad}px` }} aria-hidden /> : null
+            })()}
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-border bg-muted/30 font-semibold text-sm">
