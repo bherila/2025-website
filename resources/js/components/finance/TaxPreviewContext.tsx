@@ -19,10 +19,10 @@ import { AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
 import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import { buildCacheKey, getCachedTransactions, setCachedTransactions } from '@/services/transactionCache'
+import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { EmploymentEntity, F1099DivParsedData, F1099IntParsedData, TaxDocument } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 import type { OverviewRow, TaxReturn1040 } from '@/types/finance/tax-return'
-import type { FK1StructuredData } from '@/types/finance/k1-data'
 
 import type { ScheduleCResponse, YearData } from './ScheduleCPreview'
 
