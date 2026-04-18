@@ -246,105 +246,9 @@ function TaxIncomeOverview({
         </div>
       </div>
 
-      {/* Summary of Estimated Tax Positions */}
+      {/* Tax Documents & Estimated Positions — merged table */}
       <div>
-        <h2 className="text-base font-semibold mb-3">Summary of Estimated Tax Positions</h2>
-        <div className="border rounded-lg overflow-hidden">
-          <Table className="text-sm">
-            <TableHeader className="bg-muted/20">
-              <TableRow>
-                <TableHead className="text-xs">Item</TableHead>
-                <TableHead className="text-xs text-right">Federal</TableHead>
-                <TableHead className="text-xs">Notes</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {w2GrossIncome.value > 0 && (
-                <TableRow>
-                  <TableCell className="py-2">W-2 Wages</TableCell>
-                  <TableCell className="py-2 text-right font-mono text-emerald-600 dark:text-emerald-500 tabular-nums">{w2GrossIncome.format()}</TableCell>
-                  <TableCell className="py-2 text-xs text-muted-foreground">Box 1 — includes RSU vesting and bonuses</TableCell>
-                </TableRow>
-              )}
-              {totalInvestmentIncome !== 0 && (
-                <TableRow>
-                  <TableCell className="py-2">Net investment income (interest + divs)</TableCell>
-                  <TableCell className="py-2 text-right font-mono tabular-nums text-emerald-600 dark:text-emerald-500">
-                    {fmtOverview(totalInvestmentIncome)}
-                  </TableCell>
-                  <TableCell className="py-2 text-xs text-muted-foreground">Before deductions; subject to NIIT (3.8%)</TableCell>
-                </TableRow>
-              )}
-              {k1Parsed.map(({ doc, data }) => {
-                const net = k1NetIncome(data)
-                const name = (data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership K-1').substring(0, 40)
-                return (
-                  <TableRow key={doc.id}>
-                    <TableCell className="py-2">{name} — K-1</TableCell>
-                    <TableCell className={`py-2 text-right font-mono tabular-nums ${net < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'}`}>
-                      {fmtOverview(net)}
-                    </TableCell>
-                    <TableCell className="py-2 text-xs text-muted-foreground">
-                      {net < 0 ? 'Net loss — Schedule E' : 'Net income — Schedule E'}
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-              {(k1StCapital !== 0 || k1LtCapital !== 0) && (
-                <TableRow>
-                  <TableCell className="py-2">Net capital gain (loss) — K-1s</TableCell>
-                  <TableCell className={`py-2 text-right font-mono tabular-nums ${totalCapitalGains < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'}`}>
-                    {fmtOverview(totalCapitalGains)}
-                  </TableCell>
-                  <TableCell className="py-2 text-xs text-muted-foreground">
-                    S/T {fmtOverview(k1StCapital)} · L/T {fmtOverview(k1LtCapital)}
-                  </TableCell>
-                </TableRow>
-              )}
-              {k1InvInterest !== 0 && (
-                <TableRow>
-                  <TableCell className="py-2">Investment interest deduction (Form 4952)</TableCell>
-                  <TableCell className={`py-2 text-right font-mono tabular-nums ${k1InvInterest < 0 ? 'text-destructive' : ''}`}>
-                    {fmtOverview(k1InvInterest)}
-                  </TableCell>
-                  <TableCell className="py-2 text-xs text-muted-foreground">From K-1 Box 13G/H — flows to Schedule E</TableCell>
-                </TableRow>
-              )}
-              {totalForeignTax !== 0 && (
-                <TableRow>
-                  <TableCell className="py-2">Foreign tax credit (Form 1116)</TableCell>
-                  <TableCell className="py-2 text-right font-mono tabular-nums text-emerald-600 dark:text-emerald-500">
-                    {fmtOverview(totalForeignTax)} credit
-                  </TableCell>
-                  <TableCell className="py-2 text-xs text-muted-foreground">Dollar-for-dollar vs. income tax</TableCell>
-                </TableRow>
-              )}
-              {fedWH > 0 && (
-                <TableRow>
-                  <TableCell className="py-2">Federal withholding (W-2 Box 2)</TableCell>
-                  <TableCell className="py-2 text-right font-mono tabular-nums">
-                    {fmtOverview(fedWH)}
-                  </TableCell>
-                  <TableCell className="py-2 text-xs text-muted-foreground">Already paid — compare to final liability</TableCell>
-                </TableRow>
-              )}
-              {w2GrossIncome.value > 200000 && (
-                <TableRow>
-                  <TableCell className="py-2">Additional Medicare Tax (Form 8959)</TableCell>
-                  <TableCell className="py-2 text-right font-mono tabular-nums text-destructive">
-                    ({fmtOverview(addlMedicare)})
-                  </TableCell>
-                  <TableCell className="py-2 text-xs text-muted-foreground">0.9% on wages over $200K threshold</TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
-
-      {/* All tax documents table */}
-      <div>
-        <h2 className="text-base font-semibold mb-3">All Tax Documents in Package</h2>
+        <h2 className="text-base font-semibold mb-3">Tax Documents &amp; Estimated Positions</h2>
         <div className="border rounded-lg overflow-hidden">
           <Table className="text-sm">
             <TableHeader className="bg-muted/20">
@@ -459,6 +363,91 @@ function TaxIncomeOverview({
                       </TableRow>
                     )
                   })}
+                </>
+              )}
+              {/* Estimated tax positions — aggregate and calculated rows */}
+              {(w2GrossIncome.value > 0 || totalInvestmentIncome !== 0 || k1StCapital !== 0 || k1LtCapital !== 0 || k1InvInterest !== 0 || totalForeignTax !== 0 || fedWH > 0) && (
+                <>
+                  <TableRow className="bg-muted/20">
+                    <TableCell colSpan={5} className="py-1.5 text-xs font-semibold text-muted-foreground">Estimated Tax Positions</TableCell>
+                  </TableRow>
+                  {w2GrossIncome.value > 0 && (
+                    <TableRow>
+                      <TableCell className="py-2">W-2 Wages</TableCell>
+                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
+                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
+                      <TableCell className="py-2 text-right font-mono text-xs">
+                        <div className="text-emerald-600 dark:text-emerald-500">{w2GrossIncome.format()} wages</div>
+                      </TableCell>
+                      <TableCell className="py-2 text-xs text-muted-foreground">Box 1 — includes RSU vesting and bonuses</TableCell>
+                    </TableRow>
+                  )}
+                  {totalInvestmentIncome !== 0 && (
+                    <TableRow>
+                      <TableCell className="py-2">Net investment income (interest + divs)</TableCell>
+                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
+                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
+                      <TableCell className="py-2 text-right font-mono text-xs">
+                        <div className="text-emerald-600 dark:text-emerald-500">{fmtOverview(totalInvestmentIncome)}</div>
+                      </TableCell>
+                      <TableCell className="py-2 text-xs text-muted-foreground">Before deductions; subject to NIIT (3.8%)</TableCell>
+                    </TableRow>
+                  )}
+                  {(k1StCapital !== 0 || k1LtCapital !== 0) && (
+                    <TableRow>
+                      <TableCell className="py-2">Net capital gain (loss) — K-1s</TableCell>
+                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
+                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
+                      <TableCell className="py-2 text-right font-mono text-xs">
+                        <div className={totalCapitalGains < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'}>{fmtOverview(totalCapitalGains)}</div>
+                      </TableCell>
+                      <TableCell className="py-2 text-xs text-muted-foreground">S/T {fmtOverview(k1StCapital)} · L/T {fmtOverview(k1LtCapital)}</TableCell>
+                    </TableRow>
+                  )}
+                  {k1InvInterest !== 0 && (
+                    <TableRow>
+                      <TableCell className="py-2">Investment interest deduction (Form 4952)</TableCell>
+                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
+                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
+                      <TableCell className="py-2 text-right font-mono text-xs">
+                        <div className={k1InvInterest < 0 ? 'text-destructive' : ''}>{fmtOverview(k1InvInterest)}</div>
+                      </TableCell>
+                      <TableCell className="py-2 text-xs text-muted-foreground">From K-1 Box 13G/H — flows to Schedule E</TableCell>
+                    </TableRow>
+                  )}
+                  {totalForeignTax !== 0 && (
+                    <TableRow>
+                      <TableCell className="py-2">Foreign tax credit (Form 1116)</TableCell>
+                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
+                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
+                      <TableCell className="py-2 text-right font-mono text-xs">
+                        <div className="text-emerald-600 dark:text-emerald-500">{fmtOverview(totalForeignTax)} credit</div>
+                      </TableCell>
+                      <TableCell className="py-2 text-xs text-muted-foreground">Dollar-for-dollar vs. income tax</TableCell>
+                    </TableRow>
+                  )}
+                  {fedWH > 0 && (
+                    <TableRow>
+                      <TableCell className="py-2">Federal withholding (W-2 Box 2)</TableCell>
+                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
+                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
+                      <TableCell className="py-2 text-right font-mono text-xs">
+                        <div>{fmtOverview(fedWH)}</div>
+                      </TableCell>
+                      <TableCell className="py-2 text-xs text-muted-foreground">Already paid — compare to final liability</TableCell>
+                    </TableRow>
+                  )}
+                  {w2GrossIncome.value > 200000 && (
+                    <TableRow>
+                      <TableCell className="py-2">Additional Medicare Tax (Form 8959)</TableCell>
+                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
+                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
+                      <TableCell className="py-2 text-right font-mono text-xs">
+                        <div className="text-destructive">({fmtOverview(addlMedicare)})</div>
+                      </TableCell>
+                      <TableCell className="py-2 text-xs text-muted-foreground">0.9% on wages over $200K threshold</TableCell>
+                    </TableRow>
+                  )}
                 </>
               )}
             </TableBody>

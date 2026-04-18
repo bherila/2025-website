@@ -79,8 +79,20 @@ export interface Doc1099ExportEntry {
   parsedData: Record<string, unknown>
 }
 
+export interface OverviewSection {
+  heading: string
+  rows: OverviewRow[]
+}
+
+export interface OverviewRow {
+  item: string
+  amount?: number | undefined
+  note?: string | undefined
+}
+
 export interface TaxReturn1040 {
   year: number
+  overviewSections?: OverviewSection[] | undefined
   form1040?: Form1040LineItem[]
   scheduleA?: ScheduleALines
   scheduleB?: ScheduleBLines

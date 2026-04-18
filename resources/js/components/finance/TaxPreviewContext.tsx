@@ -19,9 +19,10 @@ import { AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
 import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import { buildCacheKey, getCachedTransactions, setCachedTransactions } from '@/services/transactionCache'
+import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { EmploymentEntity, F1099DivParsedData, F1099IntParsedData, TaxDocument } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
-import type { TaxReturn1040 } from '@/types/finance/tax-return'
+import type { OverviewRow, TaxReturn1040 } from '@/types/finance/tax-return'
 
 import type { ScheduleCResponse, YearData } from './ScheduleCPreview'
 
@@ -331,6 +332,136 @@ export function TaxPreviewProvider({
   const taxReturn = useMemo<TaxReturn1040>(() => {
     const reviewedIntDocs = reviewed1099Docs.filter((doc) => doc.form_type === '1099_int' || doc.form_type === '1099_int_c')
     const reviewedDivDocs = reviewed1099Docs.filter((doc) => doc.form_type === '1099_div' || doc.form_type === '1099_div_c')
+
+    // ── Overview sheet data ───────────────────────────────────────────────────
+    function parseK1FieldLocal(data: FK1StructuredData, box: string): number {
+      const v = data.fields[box]?.value
+      if (!v) return 0
+      const n = parseFloat(v)
+      return isNaN(n) ? 0 : n
+    }
+
+    function parseK1CodesLocal(data: FK1StructuredData, box: string): number {
+      const items = data.codes[box] ?? []
+      return items.reduce((acc, item) => {
+        const n = parseFloat(item.value)
+        return isNaN(n) ? acc : acc.add(n)
+      }, currency(0)).value
+    }
+
+    function k1NetIncomeLocal(data: FK1StructuredData): number {
+      const INCOME_BOXES = ['1', '2', '3', '4', '5', '6a', '6b', '6c', '7', '8', '9a', '9b', '9c', '10']
+      const incomeTotal = INCOME_BOXES.reduce((acc, box) => acc.add(parseK1FieldLocal(data, box)), currency(0))
+        .add(parseK1CodesLocal(data, '11'))
+      const box12 = parseK1FieldLocal(data, '12')
+      const box21 = parseK1FieldLocal(data, '21')
+      return incomeTotal
+        .add(box12 !== 0 ? -Math.abs(box12) : 0)
+        .add(parseK1CodesLocal(data, '13'))
+        .add(box21 !== 0 ? -Math.abs(box21) : 0).value
+    }
+
+    const k1Parsed = reviewedK1Docs
+      .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
+      .filter((x): x is { doc: TaxDocument; data: FK1StructuredData } => x.data !== null)
+
+    const k1Interest = k1Parsed.reduce((acc, { data }) => acc.add(parseK1FieldLocal(data, '5')), currency(0)).value
+    const k1OrdinaryDiv = k1Parsed.reduce((acc, { data }) => acc.add(parseK1FieldLocal(data, '6a')), currency(0)).value
+    const k1StCapital = k1Parsed.reduce((acc, { data }) => acc.add(parseK1FieldLocal(data, '8')), currency(0)).value
+    const k1LtCapital = k1Parsed.reduce((acc, { data }) => acc
+      .add(parseK1FieldLocal(data, '9a'))
+      .add(parseK1FieldLocal(data, '9b'))
+      .add(parseK1FieldLocal(data, '9c'))
+      .add(parseK1FieldLocal(data, '10')), currency(0)).value
+    const k1ForeignTax = k1Parsed.reduce((acc, { data }) => acc.add(parseK1FieldLocal(data, '21')), currency(0)).value
+    const k1InvInterest = k1Parsed.reduce((acc, { data }) => {
+      const items = data.codes['13'] ?? []
+      return acc.add(items.filter((i) => i.code === 'G' || i.code === 'H')
+        .reduce((s, i) => { const n = parseFloat(i.value); return isNaN(n) ? s : s.add(n) }, currency(0)))
+    }, currency(0)).value
+
+    const div1099ForeignTax = reviewed1099Docs
+      .filter((d) => d.form_type === '1099_div' || d.form_type === '1099_div_c')
+      .reduce((acc, d) => {
+        const p = d.parsed_data as Record<string, unknown>
+        const n = typeof p?.box7_foreign_tax === 'number' ? p.box7_foreign_tax : typeof p?.box7_foreign_tax === 'string' ? parseFloat(p.box7_foreign_tax as string) : 0
+        return isNaN(n) ? acc : acc.add(n)
+      }, currency(0)).value
+
+    const totalInterest = income1099.interestIncome.add(k1Interest).value
+    const totalOrdinaryDiv = income1099.dividendIncome.add(k1OrdinaryDiv).value
+    const totalInvestmentIncome = currency(totalInterest).add(totalOrdinaryDiv).value
+    const totalForeignTax = currency(k1ForeignTax).add(div1099ForeignTax).value
+    const totalCapitalGains = currency(k1StCapital).add(k1LtCapital).value
+
+    const yearStr = String(year)
+    const yearPayslips = payslips.filter((r) => r.pay_date && r.pay_date > `${yearStr}-01-01` && r.pay_date < `${String(year + 1)}-01-01`)
+    const fedWH = yearPayslips.reduce((acc, r) => acc.add(r.ps_fed_tax ?? 0).add(r.ps_fed_tax_addl ?? 0).subtract(r.ps_fed_tax_refunded ?? 0), currency(0)).value
+    const addlMedicare = currency(Math.max(0, w2GrossIncome.value - 200000)).multiply(0.009).value
+
+    const docRows: OverviewRow[] = []
+    // W-2 documents
+    for (const doc of reviewedW2Docs) {
+      const p = doc.parsed_data as Record<string, unknown>
+      const employer = (p?.employer_name as string | undefined) ?? doc.employment_entity?.display_name ?? doc.account?.acct_name ?? '—'
+      const wages = p?.box1_wages as number | undefined
+      const fedTax = p?.box2_fed_tax as number | undefined
+      docRows.push({
+        item: `${employer} — W-2`,
+        amount: wages,
+        note: fedTax != null ? `Fed WH: ${currency(fedTax).format()}` : undefined,
+      })
+    }
+    // K-1 documents
+    for (const { doc, data } of k1Parsed) {
+      const partnerName = data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership K-1'
+      const net = k1NetIncomeLocal(data)
+      const interest = parseK1FieldLocal(data, '5')
+      const foreignTax = parseK1FieldLocal(data, '21')
+      const noteParts = [
+        net < 0 ? 'Net loss — Schedule E' : 'Net income — Schedule E',
+        interest !== 0 ? `Interest: ${currency(interest).format()}` : null,
+        foreignTax !== 0 ? `Foreign tax: ${currency(foreignTax).format()}` : null,
+      ].filter(Boolean)
+      docRows.push({ item: `${partnerName} — K-1`, amount: net, note: noteParts.join(' · ') })
+    }
+    // 1099 documents
+    for (const doc of reviewed1099Docs) {
+      const p = doc.parsed_data as Record<string, unknown>
+      const isBroker = doc.form_type === 'broker_1099'
+      const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? doc.account?.acct_name ?? '—'
+      const interest = isBroker ? (p?.int_1_interest_income as number | undefined) : (p?.box1_interest as number | undefined)
+      const ordDiv = isBroker ? (p?.div_1a_total_ordinary as number | undefined) : (p?.box1a_ordinary as number | undefined)
+      const foreignTax = isBroker ? (p?.div_7_foreign_tax_paid as number | undefined) : ((p?.box7_foreign_tax ?? p?.box6_foreign_tax) as number | undefined)
+      const capGainLoss = isBroker ? (p?.b_total_gain_loss as number | undefined) : undefined
+      const label = FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type
+      const noteParts = [
+        interest != null && interest !== 0 ? `Interest: ${currency(interest).format()}` : null,
+        ordDiv != null && ordDiv !== 0 ? `Ord div: ${currency(ordDiv).format()}` : null,
+        capGainLoss != null && capGainLoss !== 0 ? `Cap G/L: ${currency(capGainLoss).format()}` : null,
+        foreignTax != null && foreignTax !== 0 ? `Foreign tax: ${currency(foreignTax, { precision: 2 }).format()}` : null,
+      ].filter(Boolean)
+      const primaryAmount = (interest ?? 0) + (ordDiv ?? 0)
+      docRows.push({
+        item: `${payer} — ${label}`,
+        amount: primaryAmount !== 0 ? primaryAmount : undefined,
+        note: noteParts.join(' · ') || undefined,
+      })
+    }
+
+    const taxPositionRows: OverviewRow[] = []
+    if (w2GrossIncome.value > 0) taxPositionRows.push({ item: 'W-2 Wages', amount: w2GrossIncome.value, note: 'Box 1 — includes RSU vesting and bonuses' })
+    if (totalInvestmentIncome !== 0) taxPositionRows.push({ item: 'Net investment income (interest + divs)', amount: totalInvestmentIncome, note: 'Before deductions; subject to NIIT (3.8%)' })
+    if (k1StCapital !== 0 || k1LtCapital !== 0) taxPositionRows.push({ item: 'Net capital gain (loss) — K-1s', amount: totalCapitalGains, note: `S/T ${k1StCapital.toLocaleString()} · L/T ${k1LtCapital.toLocaleString()}` })
+    if (k1InvInterest !== 0) taxPositionRows.push({ item: 'Investment interest deduction (Form 4952)', amount: k1InvInterest, note: 'From K-1 Box 13G/H — flows to Schedule E' })
+    if (totalForeignTax !== 0) taxPositionRows.push({ item: 'Foreign tax credit (Form 1116)', amount: totalForeignTax, note: 'Dollar-for-dollar vs. income tax' })
+    if (fedWH > 0) taxPositionRows.push({ item: 'Federal withholding (W-2 Box 2)', amount: fedWH, note: 'Already paid — compare to final liability' })
+    if (w2GrossIncome.value > 200000) taxPositionRows.push({ item: 'Additional Medicare Tax (Form 8959)', amount: -addlMedicare, note: '0.9% on wages over $200K threshold' })
+
+    const overviewSections = [
+      ...(docRows.length > 0 ? [{ heading: 'Tax Documents', rows: docRows }] : []),
+      ...(taxPositionRows.length > 0 ? [{ heading: 'Estimated Tax Positions', rows: taxPositionRows }] : []),
+    ]
     const scheduleB = computeScheduleB(reviewedK1Docs, reviewed1099Docs, income1099)
     const scheduleD = computeScheduleD(reviewedK1Docs, reviewed1099Docs)
     const scheduleE = computeScheduleELines(reviewedK1Docs)
@@ -348,6 +479,7 @@ export function TaxPreviewProvider({
 
     return {
       year,
+      ...(overviewSections.length > 0 ? { overviewSections } : {}),
       form1040: computeForm1040Lines({
         w2Income: w2GrossIncome,
         interestIncome: income1099.interestIncome,
@@ -405,6 +537,7 @@ export function TaxPreviewProvider({
     income1099,
     scheduleCNetIncome,
     w2GrossIncome,
+    payslips,
     shortDividendSummary,
   ])
 
