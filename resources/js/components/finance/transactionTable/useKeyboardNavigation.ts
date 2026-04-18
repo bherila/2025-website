@@ -1,5 +1,5 @@
 import type { Virtualizer } from '@tanstack/react-virtual'
-import type { KeyboardEvent, MouseEvent } from 'react'
+import type { KeyboardEvent, MouseEvent, RefObject } from 'react'
 import { useCallback } from 'react'
 
 import type { AccountLineItem } from '@/data/finance/AccountLineItem'
@@ -14,6 +14,7 @@ interface UseKeyboardNavigationParams {
   selectAll: () => void
   useVirtualScroll: boolean
   virtualizer: Virtualizer<HTMLDivElement, Element>
+  tableContainerRef: RefObject<HTMLDivElement | null>
   onDeleteTransaction?: ((transactionId: string) => Promise<void>) | undefined
   handleBatchDelete: () => Promise<void>
   setSelectedTransaction: (transaction: AccountLineItem) => void
@@ -34,11 +35,36 @@ export function useKeyboardNavigation({
   selectAll,
   useVirtualScroll,
   virtualizer,
+  tableContainerRef,
   onDeleteTransaction,
   handleBatchDelete,
   setSelectedTransaction,
   setDeleteConfirmTransaction,
 }: UseKeyboardNavigationParams) {
+  const scrollRowIntoView = useCallback((index: number, row: AccountLineItem) => {
+    if (!useVirtualScroll) return
+    const container = tableContainerRef.current
+    if (!container) {
+      virtualizer.scrollToIndex(index, { align: 'auto' })
+      return
+    }
+    // Try to find the rendered DOM row first
+    const tr = row.t_id != null
+      ? container.querySelector<HTMLElement>(`[data-transaction-id="${row.t_id}"]`)
+      : null
+    if (tr) {
+      const containerRect = container.getBoundingClientRect()
+      const trRect = tr.getBoundingClientRect()
+      if (trRect.bottom > containerRect.bottom) {
+        container.scrollTop += trRect.bottom - containerRect.bottom
+      } else if (trRect.top < containerRect.top) {
+        container.scrollTop -= containerRect.top - trRect.top
+      }
+    } else {
+      // Row not yet rendered — ask the virtualizer to scroll it into view
+      virtualizer.scrollToIndex(index, { align: 'auto' })
+    }
+  }, [useVirtualScroll, tableContainerRef, virtualizer])
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       const totalDisplayedRows = displayData.length
@@ -69,10 +95,7 @@ export function useKeyboardNavigation({
             } as MouseEvent)
           }
         }
-        // Scroll into view if virtual scrolling
-        if (useVirtualScroll) {
-          virtualizer.scrollToIndex(newIndex, { align: 'auto' })
-        }
+        if (row) scrollRowIntoView(newIndex, row)
       }
       // Arrow Up: Move focus/selection up
       else if (e.key === 'ArrowUp') {
@@ -97,9 +120,8 @@ export function useKeyboardNavigation({
             } as MouseEvent)
           }
         }
-        if (useVirtualScroll) {
-          virtualizer.scrollToIndex(newIndex, { align: 'auto' })
-        }
+        const upRow = displayData[newIndex]
+        if (upRow) scrollRowIntoView(newIndex, upRow)
       }
       // Ctrl+A / Cmd+A: Select all visible rows
       else if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
@@ -148,8 +170,7 @@ export function useKeyboardNavigation({
       handleRowClick,
       clearSelection,
       selectAll,
-      useVirtualScroll,
-      virtualizer,
+      scrollRowIntoView,
       onDeleteTransaction,
       handleBatchDelete,
       setSelectedTransaction,

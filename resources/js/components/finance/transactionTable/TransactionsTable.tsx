@@ -330,6 +330,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
     selectAll,
     useVirtualScroll,
     virtualizer,
+    tableContainerRef,
     onDeleteTransaction,
     handleBatchDelete,
     setSelectedTransaction,
