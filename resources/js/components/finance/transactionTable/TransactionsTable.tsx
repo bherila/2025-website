@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils'
 import TransactionLotsModal from '../lots/TransactionLotsModal'
 import TransactionDetailsModal from '../TransactionDetailsModal'
 import TransactionLinkModal from '../TransactionLinkModal'
+import { ColumnHeader } from './ColumnHeader'
 import { DeleteTransactionDialog } from './DeleteTransactionDialog'
 import { PaginationControls, type PaginationControlsProps } from './PaginationControls'
 import { exportToCSV, exportToJSON } from './transactionExport'
@@ -330,6 +331,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
     selectAll,
     useVirtualScroll,
     virtualizer,
+    tableContainerRef,
     onDeleteTransaction,
     handleBatchDelete,
     setSelectedTransaction,
@@ -355,9 +357,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
     onPageSizeChange: handlePageSizeChange,
   }
 
-  const thClass = "text-left py-3 px-2 text-[10px] tracking-widest uppercase text-muted-foreground font-medium align-top whitespace-nowrap cursor-pointer hover:text-foreground transition-colors"
   const tdClass = "py-2 px-2 border-b border-table-border align-top"
-  const inputClass = "bg-background/50 border border-border text-foreground text-xs rounded px-2 py-1 w-full mt-1 focus:ring-1 focus:ring-ring outline-none font-mono"
 
   return (
     <div
@@ -437,137 +437,28 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
         <table className="w-full text-sm" role="grid" aria-rowcount={sortedData.length}>
           <thead className="sticky top-0 z-10 bg-card border-b border-border shadow-sm">
             <tr>
-              <th className={thClass} onClick={() => handleSort('t_date')}>
-                <div>Date {sortField === 't_date' && (sortDirection === 'asc' ? '↑' : '↓')}</div>
-                <div className="relative mt-1">
-                  <input className={inputClass} placeholder="Filter..." value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} onClick={e => e.stopPropagation()} />
-                </div>
-              </th>
-              
-              {!isPostDateColumnEmpty && (
-                <th className={thClass} onClick={() => handleSort('t_date_posted')}>
-                  <div>Post Date {sortField === 't_date_posted' && (sortDirection === 'asc' ? '↑' : '↓')}</div>
-                  <div className="relative mt-1">
-                    <input className={inputClass} placeholder="Filter..." value={postDateFilter} onChange={(e) => setPostDateFilter(e.target.value)} onClick={e => e.stopPropagation()} />
-                  </div>
-                </th>
-              )}
-              
-              {!isTypeColumnEmpty && (
-                <th className={thClass} onClick={() => handleSort('t_type')}>
-                  <div>Type {sortField === 't_type' && (sortDirection === 'asc' ? '↑' : '↓')}</div>
-                  <div className="relative mt-1">
-                    <input className={inputClass} placeholder="Filter..." value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} onClick={e => e.stopPropagation()} />
-                  </div>
-                </th>
-              )}
-              
-              <th className={thClass} onClick={() => handleSort('t_description')}>
-                <div>Description {sortField === 't_description' && (sortDirection === 'asc' ? '↑' : '↓')}</div>
-                <div className="relative mt-1">
-                  <input className={inputClass} placeholder="Filter..." value={descriptionFilter} onChange={(e) => setDescriptionFilter(e.target.value)} onClick={e => e.stopPropagation()} />
-                </div>
-              </th>
-              
-              {!isTagsColumnEmpty && (
-                <th className={cn(thClass, "cursor-default")}>
-                  <div>Tags</div>
-                  <div className="relative mt-1">
-                    <input className={inputClass} placeholder="Filter..." value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} onClick={e => e.stopPropagation()} />
-                  </div>
-                </th>
-              )}
-              
-              {!isSymbolColumnEmpty && (
-                <th className={thClass} onClick={() => handleSort('t_symbol')}>
-                  <div>Symbol {sortField === 't_symbol' && (sortDirection === 'asc' ? '↑' : '↓')}</div>
-                  <div className="relative mt-1">
-                    <input className={inputClass} placeholder="Filter..." value={symbolFilter} onChange={(e) => setSymbolFilter(e.target.value)} onClick={e => e.stopPropagation()} />
-                  </div>
-                </th>
-              )}
-              
-              {!isQtyColumnEmpty && (
-                <th className={cn(thClass, "text-right")} onClick={() => handleSort('t_qty')}>
-                  <div>Qty {sortField === 't_qty' && (sortDirection === 'asc' ? '↑' : '↓')}</div>
-                  <div className="relative mt-1">
-                    <input className={inputClass} placeholder="Filter..." value={qtyFilter} onChange={(e) => setQtyFilter(e.target.value)} onClick={e => e.stopPropagation()} />
-                  </div>
-                </th>
-              )}
-              
-              {!isPriceColumnEmpty && <th className={cn(thClass, "text-right")} onClick={() => handleSort('t_price')}>Price</th>}
-              {!isCommissionColumnEmpty && <th className={cn(thClass, "text-right")} onClick={() => handleSort('t_commission')}>Comm.</th>}
-              {!isFeeColumnEmpty && <th className={cn(thClass, "text-right")} onClick={() => handleSort('t_fee')}>Fee</th>}
-              
-              <th className={cn(thClass, "text-right")} onClick={() => handleSort('t_amt')}>
-                <div>Amount {sortField === 't_amt' && (sortDirection === 'asc' ? '↑' : '↓')}</div>
-                <div className="relative mt-1">
-                  <input className={inputClass} placeholder="Filter..." value={amountFilter} onChange={(e) => setAmountFilter(e.target.value)} onClick={e => e.stopPropagation()} />
-                </div>
-              </th>
-              
-              {!isCategoryColumnEmpty && (
-                <th className={thClass} onClick={() => handleSort('t_schc_category')}>
-                  <div>Category {sortField === 't_schc_category' && (sortDirection === 'asc' ? '↑' : '↓')}</div>
-                  <div className="relative mt-1">
-                    <input className={inputClass} placeholder="Filter..." value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} onClick={e => e.stopPropagation()} />
-                  </div>
-                </th>
-              )}
-              
-              {!isCusipColumnEmpty && (
-                <th className={thClass} onClick={() => handleSort('t_cusip')}>
-                  <div>CUSIP {sortField === 't_cusip' && (sortDirection === 'asc' ? '↑' : '↓')}</div>
-                  <div className="relative mt-1">
-                    <input className={inputClass} placeholder="Filter..." value={cusipFilter} onChange={(e) => setCusipFilter(e.target.value)} onClick={e => e.stopPropagation()} />
-                  </div>
-                </th>
-              )}
-              
-              {!isOptionExpiryColumnEmpty && (
-                <th className={thClass} onClick={() => handleSort('opt_expiration')}>
-                  <div>Expiry {sortField === 'opt_expiration' && (sortDirection === 'asc' ? '↑' : '↓')}</div>
-                </th>
-              )}
-              
-              {!isOptionTypeColumnEmpty && (
-                <th className={thClass} onClick={() => handleSort('opt_type')}>
-                  <div>Opt Type {sortField === 'opt_type' && (sortDirection === 'asc' ? '↑' : '↓')}</div>
-                </th>
-              )}
-              
-              {!isStrikeColumnEmpty && <th className={thClass} onClick={() => handleSort('opt_strike')}>Strike</th>}
-              
-              {!isMemoColumnEmpty && (
-                <th className={thClass} onClick={() => handleSort('t_comment')}>
-                  <div>Memo {sortField === 't_comment' && (sortDirection === 'asc' ? '↑' : '↓')}</div>
-                  <div className="relative mt-1">
-                    <input className={inputClass} placeholder="Filter..." value={memoFilter} onChange={(e) => setMemoFilter(e.target.value)} onClick={e => e.stopPropagation()} />
-                  </div>
-                </th>
-              )}
-              
-              {!isCashBalanceColumnEmpty && (
-                <th className={cn(thClass, "text-right whitespace-nowrap")} onClick={() => handleSort('t_account_balance')}>
-                  <div>Balance {sortField === 't_account_balance' && (sortDirection === 'asc' ? '↑' : '↓')}</div>
-                  <div className="relative mt-1">
-                    <input
-                      className={inputClass}
-                      placeholder="Filter..."
-                      value={cashBalanceFilter}
-                      onChange={(e) => setCashBalanceFilter(e.target.value)}
-                      onClick={e => e.stopPropagation()}
-                    />
-                  </div>
-                </th>
-              )}
-              
-              {!isClientExpenseColumnEmpty && <th className={cn(thClass, "text-center cursor-default")}>Client</th>}
-              {enableLinking && <th className={cn(thClass, "text-center cursor-default")}>Link</th>}
-              {accountId && <th className={cn(thClass, "text-center cursor-default")}>Lots</th>}
-              <th className={cn(thClass, "text-center cursor-default")}>Details</th>
-              {onDeleteTransaction && <th className={cn(thClass, "text-center cursor-default")}>🗑️</th>}
+              <ColumnHeader label="Date" field="t_date" sortField={sortField} sortDirection={sortDirection} onSort={() => handleSort('t_date')} filter={dateFilter} setFilter={setDateFilter} />
+              {!isPostDateColumnEmpty && <ColumnHeader label="Post Date" field="t_date_posted" sortField={sortField} sortDirection={sortDirection} onSort={() => handleSort('t_date_posted')} filter={postDateFilter} setFilter={setPostDateFilter} />}
+              {!isTypeColumnEmpty && <ColumnHeader label="Type" field="t_type" sortField={sortField} sortDirection={sortDirection} onSort={() => handleSort('t_type')} filter={typeFilter} setFilter={setTypeFilter} />}
+              <ColumnHeader label="Description" field="t_description" sortField={sortField} sortDirection={sortDirection} onSort={() => handleSort('t_description')} filter={descriptionFilter} setFilter={setDescriptionFilter} />
+              {!isTagsColumnEmpty && <ColumnHeader label="Tags" sortField={sortField} sortDirection={sortDirection} filter={tagFilter} setFilter={setTagFilter} />}
+              {!isSymbolColumnEmpty && <ColumnHeader label="Symbol" field="t_symbol" sortField={sortField} sortDirection={sortDirection} onSort={() => handleSort('t_symbol')} filter={symbolFilter} setFilter={setSymbolFilter} />}
+              {!isQtyColumnEmpty && <ColumnHeader label="Qty" field="t_qty" sortField={sortField} sortDirection={sortDirection} onSort={() => handleSort('t_qty')} filter={qtyFilter} setFilter={setQtyFilter} className="text-right" />}
+              {!isPriceColumnEmpty && <ColumnHeader label="Price" field="t_price" sortField={sortField} sortDirection={sortDirection} onSort={() => handleSort('t_price')} className="text-right" />}
+              {!isCommissionColumnEmpty && <ColumnHeader label="Comm." field="t_commission" sortField={sortField} sortDirection={sortDirection} onSort={() => handleSort('t_commission')} className="text-right" />}
+              {!isFeeColumnEmpty && <ColumnHeader label="Fee" field="t_fee" sortField={sortField} sortDirection={sortDirection} onSort={() => handleSort('t_fee')} className="text-right" />}
+              <ColumnHeader label="Amount" field="t_amt" sortField={sortField} sortDirection={sortDirection} onSort={() => handleSort('t_amt')} filter={amountFilter} setFilter={setAmountFilter} className="text-right" />
+              {!isCategoryColumnEmpty && <ColumnHeader label="Category" field="t_schc_category" sortField={sortField} sortDirection={sortDirection} onSort={() => handleSort('t_schc_category')} filter={categoryFilter} setFilter={setCategoryFilter} />}
+              {!isCusipColumnEmpty && <ColumnHeader label="CUSIP" field="t_cusip" sortField={sortField} sortDirection={sortDirection} onSort={() => handleSort('t_cusip')} filter={cusipFilter} setFilter={setCusipFilter} />}
+              {!isOptionExpiryColumnEmpty && <ColumnHeader label="Expiry" field="opt_expiration" sortField={sortField} sortDirection={sortDirection} onSort={() => handleSort('opt_expiration')} />}
+              {!isOptionTypeColumnEmpty && <ColumnHeader label="Opt Type" field="opt_type" sortField={sortField} sortDirection={sortDirection} onSort={() => handleSort('opt_type')} />}
+              {!isStrikeColumnEmpty && <ColumnHeader label="Strike" field="opt_strike" sortField={sortField} sortDirection={sortDirection} onSort={() => handleSort('opt_strike')} />}
+              {!isMemoColumnEmpty && <ColumnHeader label="Memo" field="t_comment" sortField={sortField} sortDirection={sortDirection} onSort={() => handleSort('t_comment')} filter={memoFilter} setFilter={setMemoFilter} />}
+              {!isCashBalanceColumnEmpty && <ColumnHeader label="Balance" field="t_account_balance" sortField={sortField} sortDirection={sortDirection} onSort={() => handleSort('t_account_balance')} filter={cashBalanceFilter} setFilter={setCashBalanceFilter} className="text-right whitespace-nowrap" />}
+              {!isClientExpenseColumnEmpty && <ColumnHeader label="Client" sortField={sortField} sortDirection={sortDirection} className="text-center" />}
+              {enableLinking && <ColumnHeader label="Link" sortField={sortField} sortDirection={sortDirection} className="text-center" />}
+              {accountId && <ColumnHeader label="Lots" sortField={sortField} sortDirection={sortDirection} className="text-center" />}
+              <ColumnHeader label="Details" sortField={sortField} sortDirection={sortDirection} className="text-center" />
             </tr>
           </thead>
           
@@ -726,13 +617,6 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                     </Button>
                   </td>
 
-                  {onDeleteTransaction && (
-                    <td className={cn(tdClass, "text-center")}>
-                      <button onClick={(e) => { e.stopPropagation(); setDeleteConfirmTransaction(row) }} className="text-muted-foreground hover:text-destructive transition-colors">
-                        🗑️
-                      </button>
-                    </td>
-                  )}
                 </tr>
               )
             })}
@@ -780,7 +664,6 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
               {enableLinking && <td />}
               {accountId && <td />}
               <td />
-              {onDeleteTransaction && <td />}
             </tr>
           </tfoot>
         </table>
