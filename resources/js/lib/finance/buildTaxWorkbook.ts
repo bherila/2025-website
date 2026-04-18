@@ -62,6 +62,21 @@ function sumFormula(firstDetailExcelRow: number, lastDetailExcelRow: number): st
 }
 
 export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
+  // ── Overview ────────────────────────────────────────────────────────────────
+  const overviewSheet = taxReturn.overviewSections && taxReturn.overviewSections.length > 0
+    ? (() => {
+        const rows: XlsxRow[] = []
+        for (const section of taxReturn.overviewSections!) {
+          rows.push({ isHeader: true, description: section.heading })
+          for (const row of section.rows) {
+            rows.push({ description: row.item, amount: row.amount, note: row.note })
+          }
+        }
+        return buildSheet('Overview', rows)
+      })()
+    : null
+
+
   // ── Schedule B ──────────────────────────────────────────────────────────────
   const scheduleBSheet = taxReturn.scheduleB
     ? (() => {
@@ -380,6 +395,7 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
   ))
 
   const orderedSheets = [
+    overviewSheet,
     form1040Sheet,
     scheduleASheet,
     scheduleBSheet,
