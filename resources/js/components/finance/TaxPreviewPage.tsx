@@ -17,10 +17,12 @@ import ScheduleBPreview from '@/components/finance/ScheduleBPreview'
 import ScheduleCTab from '@/components/finance/ScheduleCTab'
 import ScheduleDPreview from '@/components/finance/ScheduleDPreview'
 import ScheduleEPreview from '@/components/finance/ScheduleEPreview'
+import StateSelectorSection from '@/components/finance/StateSelectorSection'
 import { DetailsButton } from '@/components/finance/tax-preview-primitives'
 import TaxDocumentReviewModal from '@/components/finance/TaxDocumentReviewModal'
 import TaxDocuments1099Section from '@/components/finance/TaxDocuments1099Section'
 import TaxDocumentsSection from '@/components/finance/TaxDocumentsSection'
+import UserDeductionsSection from '@/components/finance/UserDeductionsSection'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import TotalsTable from '@/components/payslip/TotalsTable.client'
 import { Badge } from '@/components/ui/badge'
@@ -618,6 +620,10 @@ function TaxPreviewPageContent() {
     activeAccountIds,
     income1099,
     isMarried,
+    activeTaxStates,
+    setActiveTaxStates,
+    userDeductions,
+    setUserDeductions,
     shortDividendSummary,
     taxReturn,
     refreshAll,
@@ -856,15 +862,27 @@ function TaxPreviewPageContent() {
           )}
         </TabsContent>
 
-        <TabsContent value={TAX_TABS.scheduleA} className="mt-0">
+        <TabsContent value={TAX_TABS.scheduleA} className="mt-0 space-y-6">
           <ScheduleAPreview
             selectedYear={selectedYear}
             reviewedK1Docs={reviewedK1Docs}
             reviewed1099Docs={reviewed1099Docs}
             saltPaid={taxReturn.scheduleA?.saltPaid ?? 0}
             isMarried={isMarried}
+            userDeductions={userDeductions}
             {...(shortDividendSummary ? { shortDividendSummary } : {})}
           />
+          <div>
+            <h3 className="text-sm font-semibold mb-2">Additional Deductions</h3>
+            <p className="text-xs text-muted-foreground mb-3">
+              Add property tax, mortgage interest, charitable contributions, and other Schedule A deductions not captured from documents.
+            </p>
+            <UserDeductionsSection
+              year={selectedYear}
+              deductions={userDeductions}
+              onChange={setUserDeductions}
+            />
+          </div>
         </TabsContent>
 
         <TabsContent value={TAX_TABS.scheduleE} className="mt-0">
@@ -929,6 +947,11 @@ function TaxPreviewPageContent() {
 
           {showTaxTables && (
             <div className="space-y-6">
+              <StateSelectorSection
+                year={selectedYear}
+                activeTaxStates={activeTaxStates}
+                onChange={setActiveTaxStates}
+              />
               <div>
                 <h2 className="text-base font-semibold mb-2">Federal Taxes</h2>
                 <TotalsTable
@@ -936,25 +959,27 @@ function TaxPreviewPageContent() {
                   taxConfig={{
                     year: String(selectedYear),
                     state: '',
-                    filingStatus: 'Single',
-                    standardDeduction: 13850,
+                    filingStatus: isMarried ? 'Married' : 'Single',
+                    standardDeduction: taxReturn.scheduleA?.standardDeduction ?? 15_000,
                   }}
                   extraIncome={scheduleCIncomeBySeries}
                 />
               </div>
-              <div>
-                <h2 className="text-base font-semibold mb-2">California State Taxes</h2>
-                <TotalsTable
-                  series={dataSeries}
-                  taxConfig={{
-                    year: String(selectedYear),
-                    state: 'CA',
-                    filingStatus: 'Single',
-                    standardDeduction: 13850,
-                  }}
-                  extraIncome={scheduleCIncomeBySeries}
-                />
-              </div>
+              {activeTaxStates.map(stateCode => (
+                <div key={stateCode}>
+                  <h2 className="text-base font-semibold mb-2">{stateCode} State Taxes</h2>
+                  <TotalsTable
+                    series={dataSeries}
+                    taxConfig={{
+                      year: String(selectedYear),
+                      state: stateCode,
+                      filingStatus: isMarried ? 'Married' : 'Single',
+                      standardDeduction: taxReturn.scheduleA?.standardDeduction ?? 15_000,
+                    }}
+                    extraIncome={scheduleCIncomeBySeries}
+                  />
+                </div>
+              ))}
             </div>
           )}
         </TabsContent>

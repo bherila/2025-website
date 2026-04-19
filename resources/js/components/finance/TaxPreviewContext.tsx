@@ -81,6 +81,14 @@ interface TaxPreviewContextValue {
   }
   /** Whether the user is married for the selected tax year (from marriage status settings). */
   isMarried: boolean
+  /** State codes the user filed in for the selected tax year (e.g. ['CA', 'NY']). */
+  activeTaxStates: string[]
+  /** Callback to add/remove a state — triggers a re-fetch. */
+  setActiveTaxStates: Dispatch<SetStateAction<string[]>>
+  /** User-entered Schedule A deductions for the year (property tax, mortgage, etc.). */
+  userDeductions: import('@/types/finance/tax-return').UserDeductionEntry[]
+  /** Callback to replace the deductions list after a mutation. */
+  setUserDeductions: Dispatch<SetStateAction<import('@/types/finance/tax-return').UserDeductionEntry[]>>
   /** Aggregated short dividend summary across all active accounts, or null if not yet loaded. */
   shortDividendSummary: ShortDividendSummary | null
   taxReturn: TaxReturn1040
@@ -165,6 +173,8 @@ export function TaxPreviewProvider({
   const [activeAccountIds, setActiveAccountIds] = useState<number[]>([])
   const [shortDividendSummary, setShortDividendSummary] = useState<ShortDividendSummary | null>(null)
   const [isMarried, setIsMarried] = useState(false)
+  const [activeTaxStates, setActiveTaxStates] = useState<string[]>([])
+  const [userDeductions, setUserDeductions] = useState<import('@/types/finance/tax-return').UserDeductionEntry[]>([])
 
   const refreshAll = useCallback(async () => {
     if (!hasLoadedOnce.current) {
@@ -201,7 +211,6 @@ export function TaxPreviewProvider({
         if (String(year) in status) {
           setIsMarried(status[String(year)] ?? false)
         } else {
-          // Carry forward the most recent prior year's status
           const priorYear = Object.keys(status)
             .map(Number)
             .filter(y => y < year)
@@ -210,6 +219,28 @@ export function TaxPreviewProvider({
         }
       } catch {
         // Non-fatal — default to false (single)
+      }
+    })()
+  }, [year])
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const states = (await fetchWrapper.get(`/api/finance/user-tax-states?year=${year}`)) as string[]
+        setActiveTaxStates(Array.isArray(states) ? states : [])
+      } catch {
+        setActiveTaxStates([])
+      }
+    })()
+  }, [year])
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const deductions = (await fetchWrapper.get(`/api/finance/user-deductions?year=${year}`)) as import('@/types/finance/tax-return').UserDeductionEntry[]
+        setUserDeductions(Array.isArray(deductions) ? deductions : [])
+      } catch {
+        setUserDeductions([])
       }
     })()
   }, [year])
@@ -504,6 +535,7 @@ export function TaxPreviewProvider({
       saltPaid,
       year,
       isMarried,
+      userDeductions,
     })
     const form4952 = computeForm4952Lines({
       reviewedK1Docs,
@@ -644,6 +676,7 @@ export function TaxPreviewProvider({
     payslips,
     shortDividendSummary,
     isMarried,
+    userDeductions,
   ])
 
   const value = useMemo<TaxPreviewContextValue>(() => ({
@@ -665,6 +698,10 @@ export function TaxPreviewProvider({
     activeAccountIds,
     income1099,
     isMarried,
+    activeTaxStates,
+    setActiveTaxStates,
+    userDeductions,
+    setUserDeductions,
     shortDividendSummary,
     taxReturn,
     setPayslips,
@@ -695,6 +732,8 @@ export function TaxPreviewProvider({
     activeAccountIds,
     income1099,
     isMarried,
+    activeTaxStates,
+    userDeductions,
     shortDividendSummary,
     taxReturn,
     refreshAll,

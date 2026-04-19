@@ -226,8 +226,22 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
           line: '7',
           description: 'Line 7 — State and local taxes paid (SALT, capped at $10,000)',
           amount: taxReturn.scheduleA.saltDeduction,
-          note: 'From W-2 Box 17 state withholding. Real estate taxes add separately.',
+          note: 'W-2 Box 17 + user-entered property tax',
         },
+        ...(taxReturn.scheduleA.mortgageInterest > 0 ? [{
+          line: '8',
+          description: 'Line 8 — Mortgage interest',
+          amount: taxReturn.scheduleA.mortgageInterest,
+        }] : []),
+        ...(taxReturn.scheduleA.charitable > 0 ? [{
+          line: '11',
+          description: 'Lines 11–12 — Charitable contributions',
+          amount: taxReturn.scheduleA.charitable,
+        }] : []),
+        ...(taxReturn.scheduleA.otherDeductions > 0 ? [{
+          description: 'Other user-entered deductions',
+          amount: taxReturn.scheduleA.otherDeductions,
+        }] : []),
         {
           line: '9',
           description: 'Line 9 — Investment interest expense (from Form 4952)',

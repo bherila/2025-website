@@ -50,14 +50,16 @@ export function computeScheduleALines({
   saltPaid = 0,
   year = new Date().getFullYear(),
   isMarried = false,
+  userDeductions = [],
 }: {
   reviewedK1Docs?: TaxDocument[]
   reviewed1099Docs?: TaxDocument[]
   shortDividendSummary?: ShortDividendSummary
-  /** State and local taxes paid (will be capped at $10,000). */
+  /** State and local taxes paid (W-2 Box 17 + user-entered property tax, capped at $10,000). */
   saltPaid?: number
   year?: number
   isMarried?: boolean
+  userDeductions?: import('@/types/finance/tax-return').UserDeductionEntry[]
 }): ScheduleALines {
   const invIntSources: InvIntSource[] = []
 
@@ -110,16 +112,39 @@ export function computeScheduleALines({
     currency(0),
   ).value
 
-  const saltDeduction = Math.min(saltPaid, SALT_CAP)
-  const totalItemizedDeductions = currency(totalInvIntExpense).add(saltDeduction).value
+  // Aggregate user-entered deductions by category
+  const userSaltCategories = new Set(['real_estate_tax', 'state_est_tax', 'sales_tax'])
+  const userSalt = userDeductions
+    .filter(d => userSaltCategories.has(d.category))
+    .reduce((acc, d) => currency(acc).add(d.amount).value, 0)
+  const mortgageInterest = userDeductions
+    .filter(d => d.category === 'mortgage_interest')
+    .reduce((acc, d) => currency(acc).add(d.amount).value, 0)
+  const charitable = userDeductions
+    .filter(d => d.category === 'charitable_cash' || d.category === 'charitable_noncash')
+    .reduce((acc, d) => currency(acc).add(d.amount).value, 0)
+  const otherDeductions = userDeductions
+    .filter(d => d.category === 'other')
+    .reduce((acc, d) => currency(acc).add(d.amount).value, 0)
+
+  const saltDeduction = Math.min(currency(saltPaid).add(userSalt).value, SALT_CAP)
+  const totalItemizedDeductions = currency(totalInvIntExpense)
+    .add(saltDeduction)
+    .add(mortgageInterest)
+    .add(charitable)
+    .add(otherDeductions).value
   const standardDeduction = getStandardDeduction(year, isMarried)
   const shouldItemize = totalItemizedDeductions > standardDeduction
 
   return {
     invIntSources,
     totalInvIntExpense,
-    saltPaid,
+    saltPaid: currency(saltPaid).add(userSalt).value,
     saltDeduction,
+    mortgageInterest,
+    charitable,
+    otherDeductions,
+    userDeductions,
     totalItemizedDeductions,
     standardDeduction,
     shouldItemize,
@@ -134,6 +159,7 @@ interface ScheduleAPreviewProps {
   /** State and local taxes paid (from W-2 Box 17). Capped at $10,000 on the form. */
   saltPaid?: number
   isMarried?: boolean
+  userDeductions?: import('@/types/finance/tax-return').UserDeductionEntry[]
 }
 
 /** Modal showing all sources that contribute to investment interest expense. */
@@ -200,17 +226,19 @@ export default function ScheduleAPreview({
   shortDividendSummary,
   saltPaid = 0,
   isMarried = false,
+  userDeductions = [],
 }: ScheduleAPreviewProps) {
   const [showInvIntModal, setShowInvIntModal] = useState(false)
 
   const shortDivDeduction = shortDividendSummary?.totalItemizedDeduction ?? 0
-  const { invIntSources, totalInvIntExpense, saltDeduction, totalItemizedDeductions, standardDeduction, shouldItemize } = computeScheduleALines({
+  const { invIntSources, totalInvIntExpense, saltDeduction, mortgageInterest, charitable, otherDeductions, totalItemizedDeductions, standardDeduction, shouldItemize } = computeScheduleALines({
     reviewedK1Docs,
     reviewed1099Docs,
     ...(shortDividendSummary ? { shortDividendSummary } : {}),
     saltPaid,
     year: selectedYear,
     isMarried,
+    userDeductions,
   })
 
   return (
@@ -293,7 +321,10 @@ export default function ScheduleAPreview({
           label="SALT (Line 7)"
           {...(saltDeduction > 0 ? { value: saltDeduction } : { raw: '—' })}
         />
-        <FormLine label="Other (mortgage, charitable, medical)" raw="Enter from records — not yet computed" />
+        {mortgageInterest > 0 && <FormLine label="Mortgage interest (Line 8)" value={mortgageInterest} />}
+        {charitable > 0 && <FormLine label="Charitable contributions (Lines 11–12)" value={charitable} />}
+        {otherDeductions > 0 && <FormLine label="Other deductions" value={otherDeductions} />}
+        <FormLine label="Medical, casualty, other" raw="Enter below — not yet computed" />
         <FormTotalLine
           label={shouldItemize
             ? '✓ Itemizing saves more — use Schedule A'
