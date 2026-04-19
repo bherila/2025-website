@@ -19,7 +19,6 @@ export const ADDITIONAL_MEDICARE_THRESHOLD = {
   mfj: 250_000,
 } as const
 
-export type { Form8959Lines } from '@/types/finance/tax-return'
 import type { Form8959Lines } from '@/types/finance/tax-return'
 
 export function computeForm8959Lines(

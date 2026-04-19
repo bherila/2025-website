@@ -73,7 +73,7 @@ export default function AdditionalTaxesPreview({ schedule2, form8959, form8960, 
     (form8959?.additionalTax ?? 0) > 0 ||
     (form8960?.magi ?? 0) > 0 ||
     (capitalLossCarryover?.combined ?? 0) < 0 ||
-    form461 !== undefined
+    (form461?.aggregateBusinessIncomeLoss ?? 0) !== 0
   if (!hasContent) return null
 
   return (
@@ -99,7 +99,9 @@ export default function AdditionalTaxesPreview({ schedule2, form8959, form8960, 
             <FormLine label="Line 12 — Net Investment Income Tax (Form 8960)" value={schedule2.niit} />
           )}
           <FormTotalLine label="Total additional taxes → Form 1040 Line 17" value={schedule2.totalAdditionalTaxes} double />
-          <FormLine label="Note" raw="AMT (Line 2) not computed — shown as $0. See Form 6251 if applicable." />
+          {schedule2.altMinimumTax === 0 && (
+            <FormLine label="Note" raw="AMT (Line 2) not computed — see Form 6251 if your income exceeds the AMT exemption." />
+          )}
         </FormBlock>
       )}
 

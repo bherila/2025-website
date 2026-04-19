@@ -26,7 +26,6 @@ export const NIIT_THRESHOLD = {
   mfj: 250_000,
 } as const
 
-export type { Form8960Lines } from '@/types/finance/tax-return'
 import type { Form8960Lines } from '@/types/finance/tax-return'
 
 export interface Form8960NiiComponent {

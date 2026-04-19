@@ -22,7 +22,6 @@ import { computeForm8959Lines } from '@/finance/8959/form8959'
 import { computeForm8960Lines } from '@/finance/8960/form8960'
 import { computeCapitalLossCarryover } from '@/finance/capitalLoss/capitalLossCarryover'
 import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
-import { ExcessBusinessLossLimitation } from '@/lib/tax/ExcessBusinessLossLimitation'
 import { form461 } from '@/lib/tax/form461'
 import { buildCacheKey, getCachedTransactions, setCachedTransactions } from '@/services/transactionCache'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
@@ -496,7 +495,7 @@ export function TaxPreviewProvider({
     const scheduleE = computeScheduleELines(reviewedK1Docs)
     const saltPaid = reviewedW2Docs.reduce((acc, doc) => {
       const p = doc.parsed_data as { box17_state_tax?: number | null } | null
-      return acc + (p?.box17_state_tax ?? 0)
+      return currency(acc).add(p?.box17_state_tax ?? 0).value
     }, 0)
     const scheduleA = computeScheduleALines({
       reviewedK1Docs,
@@ -521,10 +520,9 @@ export function TaxPreviewProvider({
       scheduleDData: scheduleD.schD,
       override_f461_line15: null,
     })
-    const eblLimit = ExcessBusinessLossLimitation({ taxYear: year, isSingle: !isMarried })
     const form461Lines = {
       aggregateBusinessIncomeLoss: eblData.f461_line9,
-      eblLimit,
+      eblLimit: eblData.f461_line15, // form461() already computes the limit via ExcessBusinessLossLimitation()
       excessBusinessLoss: eblData.f461_line16,
       isTriggered: eblData.f461_line16 > 0,
       isMarried,
