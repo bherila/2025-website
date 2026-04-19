@@ -1260,6 +1260,80 @@ PROMPT;
             ];
         }
 
+        // Part III Section 5: Sec. 743(b) basis adjustments
+        $sec743bPos = $args['k3_part3_section5_sec743b_positive'] ?? null;
+        $sec743bNeg = $args['k3_part3_section5_sec743b_negative'] ?? null;
+        if (is_numeric($sec743bPos) || is_numeric($sec743bNeg)) {
+            $sec5Data = [];
+            if (is_numeric($sec743bPos)) {
+                $sec5Data['sec743b_positive'] = (float) $sec743bPos;
+            }
+            if (is_numeric($sec743bNeg)) {
+                $sec5Data['sec743b_negative'] = (float) $sec743bNeg;
+            }
+            $k3Sections[] = [
+                'sectionId' => 'part3_section5',
+                'title' => 'Part III – Section 5: Sec. 743(b) Basis Adjustments',
+                'data' => $sec5Data,
+                'notes' => '',
+            ];
+        }
+
+        // Part IV: FDII and Sec. 250 deduction
+        $part4FieldMap = [
+            'net_income_loss' => $args['k3_part4_net_income_loss'] ?? null,
+            'dei_gross_receipts' => $args['k3_part4_dei_gross_receipts'] ?? null,
+            'dei_allocated_deductions' => $args['k3_part4_dei_allocated_deductions'] ?? null,
+            'other_interest_expense_dei' => $args['k3_part4_other_interest_expense_dei'] ?? null,
+            'total_average_assets' => $args['k3_part4_total_average_assets'] ?? null,
+        ];
+        $part4Data = [];
+        foreach ($part4FieldMap as $key => $val) {
+            if (is_numeric($val)) {
+                $part4Data[$key] = (float) $val;
+            }
+        }
+        if (! empty($part4Data)) {
+            $k3Sections[] = [
+                'sectionId' => 'part4',
+                'title' => 'Part IV – Foreign-Derived Intangible Income (FDII) and Sec. 250 Deduction',
+                'data' => $part4Data,
+                'notes' => '',
+            ];
+        }
+
+        // Parts V–XIII: note-based sections; Part IX also has numeric fields
+        $part9NumericData = [];
+        if (is_numeric($args['k3_part9_line1_gross_receipts'] ?? null)) {
+            $part9NumericData['line1_gross_receipts'] = (float) $args['k3_part9_line1_gross_receipts'];
+        }
+        if (is_numeric($args['k3_part9_line5_denominator_amounts'] ?? null)) {
+            $part9NumericData['line5_denominator_amounts'] = (float) $args['k3_part9_line5_denominator_amounts'];
+        }
+
+        $partNoteMap = [
+            'k3_part5_notes' => ['part5', 'Part V – Distributions From Foreign Corporations to Partnership', []],
+            'k3_part6_notes' => ['part6', 'Part VI – Information on Partners\' Sec. 951(a)(1) and Sec. 951A Inclusions', []],
+            'k3_part7_notes' => ['part7', 'Part VII – Information on Partners\' Sec. 951A Inclusions', []],
+            'k3_part8_notes' => ['part8', 'Part VIII – Alternative Calculation for Transition Year', []],
+            'k3_part9_notes' => ['part9', 'Part IX – Partners\' Information on Tax-Exempt Income From a Foreign Partnership', $part9NumericData],
+            'k3_part10_notes' => ['part10', 'Part X – Foreign Partner\'s Character and Source of Income and Deductions', []],
+            'k3_part11_notes' => ['part11', 'Part XI – Foreign Partner\'s Distributive Share of Deemed Sale Items on Transfer', []],
+            'k3_part12_notes' => ['part12', 'Part XII – Partner\'s Information for Base Erosion and Anti-Abuse Tax (BEAT)', []],
+            'k3_part13_notes' => ['part13', 'Part XIII – Foreign Partner\'s Distributive Share of Effectively Connected Taxable Income', []],
+        ];
+        foreach ($partNoteMap as $argKey => [$sectionId, $title, $extraData]) {
+            $notes = (isset($args[$argKey]) && $args[$argKey] !== '') ? (string) $args[$argKey] : null;
+            if ($notes !== null || ! empty($extraData)) {
+                $k3Sections[] = [
+                    'sectionId' => $sectionId,
+                    'title' => $title,
+                    'data' => $extraData,
+                    'notes' => $notes ?? '',
+                ];
+            }
+        }
+
         // Backward-compat: merge any legacy k3_sections entries not already covered
         $rawSections = is_array($args['k3_sections'] ?? null) ? $args['k3_sections'] : [];
         $existingIds = array_column($k3Sections, 'sectionId');
@@ -1273,7 +1347,7 @@ PROMPT;
             $k3Sections[] = [
                 'sectionId' => (string) $sec['sectionId'],
                 'title' => isset($sec['title']) ? (string) $sec['title'] : '',
-                'data' => (object) [],
+                'data' => (isset($sec['data']) && is_array($sec['data'])) ? $sec['data'] : (object) [],
                 'notes' => isset($sec['notes']) ? (string) $sec['notes'] : '',
             ];
         }
@@ -1494,8 +1568,6 @@ PROMPT;
      * - Map Box 16 codes I/J (foreign taxes paid/withheld) to Form 1116 Part I.
      * - Use box16_country (code A) for the foreign country name.
      * - See IRS Publication 514 for Form 1116 computation rules.
-     *
-     * @return ToolDefinition
      */
     private function buildK1ToolDefinition(): ToolDefinition
     {
@@ -1687,6 +1759,32 @@ PROMPT;
                         ['country', 'amount_usd'],
                     )
                 ),
+
+                // ── Schedule K-3 Part III Section 5: Sec. 743(b) basis adjustments ─
+                'k3_part3_section5_sec743b_positive' => Schema::number(),
+                'k3_part3_section5_sec743b_negative' => Schema::number(),
+
+                // ── Schedule K-3 Part IV: FDII and Sec. 250 deduction ─────────────
+                'k3_part4_net_income_loss' => Schema::number(),
+                'k3_part4_dei_gross_receipts' => Schema::number(),
+                'k3_part4_dei_allocated_deductions' => Schema::number(),
+                'k3_part4_other_interest_expense_dei' => Schema::number(),
+                'k3_part4_total_average_assets' => Schema::number(),
+
+                // ── Schedule K-3 Part IX key numeric fields ───────────────────────
+                'k3_part9_line1_gross_receipts' => Schema::number(),
+                'k3_part9_line5_denominator_amounts' => Schema::number(),
+
+                // ── Schedule K-3 Parts V–XIII free-form notes ─────────────────────
+                'k3_part5_notes' => Schema::string(),
+                'k3_part6_notes' => Schema::string(),
+                'k3_part7_notes' => Schema::string(),
+                'k3_part8_notes' => Schema::string(),
+                'k3_part9_notes' => Schema::string(),
+                'k3_part10_notes' => Schema::string(),
+                'k3_part11_notes' => Schema::string(),
+                'k3_part12_notes' => Schema::string(),
+                'k3_part13_notes' => Schema::string(),
 
                 // ── Schedule K-3 parts applicability checkboxes ───────────────────
                 'k3_parts_applicable' => Schema::object([
