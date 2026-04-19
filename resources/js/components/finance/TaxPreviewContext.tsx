@@ -27,7 +27,7 @@ import { buildCacheKey, getCachedTransactions, setCachedTransactions } from '@/s
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { EmploymentEntity, F1099DivParsedData, F1099IntParsedData, TaxDocument, W2ParsedData } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
-import type { OverviewRow, TaxReturn1040 } from '@/types/finance/tax-return'
+import type { OverviewRow, TaxReturn1040, UserDeductionEntry } from '@/types/finance/tax-return'
 
 import type { ScheduleCResponse, YearData } from './ScheduleCPreview'
 
@@ -86,9 +86,9 @@ interface TaxPreviewContextValue {
   /** Callback to add/remove a state — triggers a re-fetch. */
   setActiveTaxStates: Dispatch<SetStateAction<string[]>>
   /** User-entered Schedule A deductions for the year (property tax, mortgage, etc.). */
-  userDeductions: import('@/types/finance/tax-return').UserDeductionEntry[]
+  userDeductions: UserDeductionEntry[]
   /** Callback to replace the deductions list after a mutation. */
-  setUserDeductions: Dispatch<SetStateAction<import('@/types/finance/tax-return').UserDeductionEntry[]>>
+  setUserDeductions: Dispatch<SetStateAction<UserDeductionEntry[]>>
   /** Aggregated short dividend summary across all active accounts, or null if not yet loaded. */
   shortDividendSummary: ShortDividendSummary | null
   taxReturn: TaxReturn1040
@@ -174,7 +174,7 @@ export function TaxPreviewProvider({
   const [shortDividendSummary, setShortDividendSummary] = useState<ShortDividendSummary | null>(null)
   const [isMarried, setIsMarried] = useState(false)
   const [activeTaxStates, setActiveTaxStates] = useState<string[]>([])
-  const [userDeductions, setUserDeductions] = useState<import('@/types/finance/tax-return').UserDeductionEntry[]>([])
+  const [userDeductions, setUserDeductions] = useState<UserDeductionEntry[]>([])
 
   const refreshAll = useCallback(async () => {
     if (!hasLoadedOnce.current) {
@@ -237,7 +237,7 @@ export function TaxPreviewProvider({
   useEffect(() => {
     void (async () => {
       try {
-        const deductions = (await fetchWrapper.get(`/api/finance/user-deductions?year=${year}`)) as import('@/types/finance/tax-return').UserDeductionEntry[]
+        const deductions = (await fetchWrapper.get(`/api/finance/user-deductions?year=${year}`)) as UserDeductionEntry[]
         setUserDeductions(Array.isArray(deductions) ? deductions : [])
       } catch {
         setUserDeductions([])

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Finance;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Finance\StoreUserTaxStateRequest;
 use App\Models\FinanceTool\UserTaxState;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,12 +24,9 @@ class UserTaxStateController extends Controller
     }
 
     /** POST /api/finance/user-tax-states — add a state for a tax year. */
-    public function store(Request $request): JsonResponse
+    public function store(StoreUserTaxStateRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'tax_year' => ['required', 'integer', 'min:2018', 'max:2030'],
-            'state_code' => ['required', 'string', 'size:2', 'regex:/^[A-Z]{2}$/'],
-        ]);
+        $validated = $request->validated();
 
         UserTaxState::firstOrCreate([
             'user_id' => auth()->id(),
@@ -42,11 +40,13 @@ class UserTaxStateController extends Controller
     /** DELETE /api/finance/user-tax-states/{stateCode}?year=YYYY — remove a state. */
     public function destroy(Request $request, string $stateCode): JsonResponse
     {
-        $year = (int) $request->query('year', date('Y'));
+        $request->validate([
+            'year' => ['required', 'integer', 'min:2018', 'max:2030'],
+        ]);
 
         UserTaxState::query()
             ->where('user_id', auth()->id())
-            ->where('tax_year', $year)
+            ->where('tax_year', (int) $request->query('year'))
             ->where('state_code', strtoupper($stateCode))
             ->delete();
 

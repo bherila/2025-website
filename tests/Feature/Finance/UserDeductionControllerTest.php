@@ -114,4 +114,42 @@ class UserDeductionControllerTest extends TestCase
             'amount' => 0,
         ])->assertUnprocessable();
     }
+
+    public function test_index_does_not_return_other_users_deductions(): void
+    {
+        $other = User::factory()->create();
+        $this->actingAs($other);
+        $this->postJson('/api/finance/user-deductions', [
+            'tax_year' => 2025,
+            'category' => 'real_estate_tax',
+            'amount' => 5000,
+        ]);
+
+        $this->actingAs($this->user);
+        $this->getJson('/api/finance/user-deductions?year=2025')
+            ->assertOk()
+            ->assertExactJson([]);
+    }
+
+    public function test_update_ignores_tax_year_field(): void
+    {
+        $create = $this->postJson('/api/finance/user-deductions', [
+            'tax_year' => 2025,
+            'category' => 'real_estate_tax',
+            'amount' => 1000,
+        ]);
+        $id = $create->json('id');
+
+        // Attempting to change tax_year should be silently ignored
+        $this->putJson("/api/finance/user-deductions/{$id}", [
+            'tax_year' => 2020,
+            'amount' => 2000,
+        ])->assertOk();
+
+        $this->assertDatabaseHas('fin_user_deductions', [
+            'id' => $id,
+            'tax_year' => 2025, // unchanged
+            'amount' => 2000,
+        ]);
+    }
 }

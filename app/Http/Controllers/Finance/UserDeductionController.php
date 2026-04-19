@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Finance;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Finance\StoreUserDeductionRequest;
+use App\Http\Requests\Finance\UpdateUserDeductionRequest;
 use App\Models\FinanceTool\UserDeduction;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -25,37 +27,24 @@ class UserDeductionController extends Controller
     }
 
     /** POST /api/finance/user-deductions — add a deduction. */
-    public function store(Request $request): JsonResponse
+    public function store(StoreUserDeductionRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'tax_year' => ['required', 'integer', 'min:2018', 'max:2030'],
-            'category' => ['required', 'string', 'in:real_estate_tax,state_est_tax,sales_tax,mortgage_interest,charitable_cash,charitable_noncash,other'],
-            'description' => ['nullable', 'string', 'max:255'],
-            'amount' => ['required', 'numeric', 'min:0.01'],
-        ]);
-
         $deduction = UserDeduction::create([
             'user_id' => auth()->id(),
-            ...$validated,
+            ...$request->validated(),
         ]);
 
         return response()->json($deduction, 201);
     }
 
     /** PUT /api/finance/user-deductions/{id} — update a deduction. */
-    public function update(Request $request, int $id): JsonResponse
+    public function update(UpdateUserDeductionRequest $request, int $id): JsonResponse
     {
         $deduction = UserDeduction::query()
             ->where('user_id', auth()->id())
             ->findOrFail($id);
 
-        $validated = $request->validate([
-            'category' => ['sometimes', 'string', 'in:real_estate_tax,state_est_tax,sales_tax,mortgage_interest,charitable_cash,charitable_noncash,other'],
-            'description' => ['nullable', 'string', 'max:255'],
-            'amount' => ['sometimes', 'numeric', 'min:0.01'],
-        ]);
-
-        $deduction->update($validated);
+        $deduction->update($request->validated());
 
         return response()->json($deduction);
     }

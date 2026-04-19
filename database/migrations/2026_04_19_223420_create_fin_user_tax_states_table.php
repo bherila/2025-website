@@ -15,8 +15,8 @@ return new class extends Migration
             $table->string('state_code', 2); // e.g. 'CA', 'NY'
             $table->timestamps();
 
+            // Unique index on (user_id, tax_year, state_code) also serves (user_id, tax_year) queries.
             $table->unique(['user_id', 'tax_year', 'state_code']);
-            $table->index(['user_id', 'tax_year']);
         });
     }
 

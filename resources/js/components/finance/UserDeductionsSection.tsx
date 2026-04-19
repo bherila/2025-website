@@ -41,8 +41,8 @@ export default function UserDeductionsSection({ year, deductions, onChange }: Us
   const [saving, setSaving] = useState(false)
 
   async function handleSave() {
-    const amount = parseFloat(form.amount)
-    if (!form.category || isNaN(amount) || amount <= 0) return
+    const amount = currency(form.amount).value
+    if (!form.category || amount <= 0) return
     setSaving(true)
     try {
       if (editingId !== null) {
@@ -78,7 +78,8 @@ export default function UserDeductionsSection({ year, deductions, onChange }: Us
     setForm(EMPTY_FORM)
   }
 
-  async function handleDelete(id: number) {
+  async function handleDelete(id: number, label: string) {
+    if (!window.confirm(`Remove "${label}"?`)) return
     await fetchWrapper.delete(`/api/finance/user-deductions/${id}`, undefined)
     onChange(deductions.filter(d => d.id !== id))
   }
@@ -103,10 +104,10 @@ export default function UserDeductionsSection({ year, deductions, onChange }: Us
                 <TableCell className="text-right font-mono text-sm">{currency(d.amount).format()}</TableCell>
                 <TableCell>
                   <div className="flex gap-1 justify-end">
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(d)}>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(d)} aria-label={`Edit ${CATEGORY_LABELS[d.category] ?? d.category}`}>
                       <Pencil className="h-3 w-3" />
                     </Button>
-                    <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleDelete(d.id)}>
+                    <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleDelete(d.id, CATEGORY_LABELS[d.category] ?? d.category)} aria-label={`Delete ${CATEGORY_LABELS[d.category] ?? d.category}`}>
                       <Trash2 className="h-3 w-3" />
                     </Button>
                   </div>

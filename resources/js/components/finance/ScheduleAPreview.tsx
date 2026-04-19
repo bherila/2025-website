@@ -17,7 +17,7 @@ import {
 import type { ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
-import type { ScheduleALines } from '@/types/finance/tax-return'
+import type { ScheduleALines, UserDeductionEntry } from '@/types/finance/tax-return'
 
 import { ShortDividendSummaryCard } from './ShortDividendDetailModal'
 
@@ -59,7 +59,7 @@ export function computeScheduleALines({
   saltPaid?: number
   year?: number
   isMarried?: boolean
-  userDeductions?: import('@/types/finance/tax-return').UserDeductionEntry[]
+  userDeductions?: UserDeductionEntry[]
 }): ScheduleALines {
   const invIntSources: InvIntSource[] = []
 
@@ -159,7 +159,7 @@ interface ScheduleAPreviewProps {
   /** State and local taxes paid (from W-2 Box 17). Capped at $10,000 on the form. */
   saltPaid?: number
   isMarried?: boolean
-  userDeductions?: import('@/types/finance/tax-return').UserDeductionEntry[]
+  userDeductions?: UserDeductionEntry[]
 }
 
 /** Modal showing all sources that contribute to investment interest expense. */

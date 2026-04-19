@@ -960,7 +960,7 @@ function TaxPreviewPageContent() {
                     year: String(selectedYear),
                     state: '',
                     filingStatus: isMarried ? 'Married' : 'Single',
-                    standardDeduction: taxReturn.scheduleA?.standardDeduction ?? 15_000,
+                    standardDeduction: taxReturn.scheduleA?.standardDeduction ?? 0,
                   }}
                   extraIncome={scheduleCIncomeBySeries}
                 />
@@ -974,7 +974,7 @@ function TaxPreviewPageContent() {
                       year: String(selectedYear),
                       state: stateCode,
                       filingStatus: isMarried ? 'Married' : 'Single',
-                      standardDeduction: taxReturn.scheduleA?.standardDeduction ?? 15_000,
+                      standardDeduction: taxReturn.scheduleA?.standardDeduction ?? 0,
                     }}
                     extraIncome={scheduleCIncomeBySeries}
                   />
