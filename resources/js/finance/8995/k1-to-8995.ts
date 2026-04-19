@@ -55,23 +55,45 @@ export function qbiThreshold(year: number): { single: number; mfj: number } {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/** Normalize a K-1 value string before parsing: strip $, commas, whitespace; convert (1,234) → -1234. */
+function normalizeNumericString(s: string): string {
+  const trimmed = s.trim()
+  if (!trimmed) return ''
+  const isNeg = /^\(.*\)$/.test(trimmed)
+  const inner = isNeg ? trimmed.slice(1, -1) : trimmed
+  const digits = inner.replace(/[$,\s]/g, '')
+  return isNeg ? `-${digits}` : digits
+}
+
 function toNum(v: unknown): number {
   if (v == null || v === '') return 0
-  const n = typeof v === 'number' ? v : parseFloat(String(v))
+  if (typeof v === 'number') return isFinite(v) ? v : 0
+  const normalized = normalizeNumericString(String(v))
+  if (!normalized) return 0
+  const n = parseFloat(normalized)
   return isFinite(n) ? n : 0
 }
 
-function getCodeValue(codes: FK1StructuredData['codes'], box: string, code: string): number {
-  const items = codes[box]
-  if (!items) return 0
-  const item = items.find(i => i.code.toUpperCase() === code.toUpperCase())
-  return item ? toNum(item.value) : 0
+/** Filter all code items matching `code` in the given box (there may be multiple per the K-1 spec). */
+function getCodeItems(
+  codes: FK1StructuredData['codes'],
+  box: string,
+  code: string,
+): NonNullable<FK1StructuredData['codes'][string]> {
+  return (codes[box] ?? []).filter(i => i.code.toUpperCase() === code.toUpperCase())
 }
 
+/** Sum numeric values from all matching code items. */
+function getCodeValue(codes: FK1StructuredData['codes'], box: string, code: string): number {
+  return getCodeItems(codes, box, code).reduce((acc, i) => currency(acc).add(toNum(i.value)).value, 0)
+}
+
+/** Concatenate notes from all matching code items (newline-separated). */
 function getCodeNotes(codes: FK1StructuredData['codes'], box: string, code: string): string {
-  const items = codes[box]
-  if (!items) return ''
-  return items.find(i => i.code.toUpperCase() === code.toUpperCase())?.notes ?? ''
+  return getCodeItems(codes, box, code)
+    .map(i => i.notes?.trim() ?? '')
+    .filter(n => n !== '')
+    .join('\n')
 }
 
 // ── Per-K-1 extraction ────────────────────────────────────────────────────────
@@ -111,8 +133,12 @@ export interface Form8995Lines {
   totalQBI: number
   /** 20% × max(totalQBI, 0) — losses net across activities before applying the rate (Form 8995 Line 12). */
   totalQBIComponent: number
+  /** The totalIncome value passed in (stored for downstream consumers to avoid recomputation). */
+  totalIncome: number
   /** Estimated taxable income (total income minus standard deduction). */
   estimatedTaxableIncome: number
+  /** Standard deduction actually subtracted (may be less than the full amount if income < standard deduction). */
+  stdDedApplied: number
   /** 20% × estimated taxable income — the upper cap on the deduction. */
   taxableIncomeCap: number
   /** Final estimated QBI deduction: min(totalQBIComponent, taxableIncomeCap). */
@@ -147,8 +173,10 @@ export function computeForm8995Lines(
   const totalQBIComponent = currency(Math.max(totalQBI, 0)).multiply(0.2).value
 
   const stdDed = standardDeduction(year, isMarried)
-  const estimatedTaxableIncome = currency(totalIncome).subtract(stdDed).value
-  const taxableIncomeCap = currency(Math.max(estimatedTaxableIncome, 0)).multiply(0.2).value
+  const rawTaxableIncome = currency(totalIncome).subtract(stdDed).value
+  const estimatedTaxableIncome = Math.max(rawTaxableIncome, 0)
+  const stdDedApplied = currency(totalIncome).subtract(estimatedTaxableIncome).value
+  const taxableIncomeCap = currency(estimatedTaxableIncome).multiply(0.2).value
   const estimatedDeduction = currency(Math.min(totalQBIComponent, taxableIncomeCap)).value
 
   const { single, mfj } = qbiThreshold(year)
@@ -159,7 +187,9 @@ export function computeForm8995Lines(
     entries,
     totalQBI,
     totalQBIComponent,
+    totalIncome,
     estimatedTaxableIncome,
+    stdDedApplied,
     taxableIncomeCap,
     estimatedDeduction,
     aboveThreshold,

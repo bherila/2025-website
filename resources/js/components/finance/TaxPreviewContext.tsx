@@ -503,7 +503,12 @@ export function TaxPreviewProvider({
       form1116: computeForm1116Lines({ reviewedK1Docs, reviewed1099Docs }),
       form8995: computeForm8995({
         reviewedK1Docs,
-        totalIncome: w2GrossIncome.add(income1099.interestIncome).add(income1099.dividendIncome).add(scheduleCNetIncome.total).value,
+        totalIncome: w2GrossIncome
+          .add(income1099.interestIncome)
+          .add(income1099.dividendIncome)
+          .add(scheduleCNetIncome.total)
+          .add(scheduleE.grandTotal)
+          .add(Math.max(scheduleD.schD.schD_line16, -3000)).value,
         selectedYear: year,
       }),
       k1Docs: toTaxReturnYearK1Entries(reviewedK1Docs),

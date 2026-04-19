@@ -889,7 +889,8 @@ function TaxPreviewPageContent() {
         <TabsContent value={TAX_TABS.form8995} className="mt-0">
           <Form8995Preview
             reviewedK1Docs={reviewedK1Docs}
-            totalIncome={w2GrossIncome.add(income1099.interestIncome).add(income1099.dividendIncome).add(scheduleCNetIncome.total).value}
+            totalIncome={taxReturn.form8995?.totalIncome
+              ?? w2GrossIncome.add(income1099.interestIncome).add(income1099.dividendIncome).add(scheduleCNetIncome.total).value}
             selectedYear={selectedYear}
           />
         </TabsContent>

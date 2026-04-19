@@ -102,7 +102,9 @@ export interface Form8995Lines {
   entries: { label: string; qbiIncome: number; ubia: number; sectionNotes: string; qbiComponent: number }[]
   totalQBI: number
   totalQBIComponent: number
+  totalIncome: number
   estimatedTaxableIncome: number
+  stdDedApplied: number
   taxableIncomeCap: number
   estimatedDeduction: number
   aboveThreshold: boolean

@@ -39,6 +39,7 @@ export default function Form8995Preview({ reviewedK1Docs, totalIncome, selectedY
     totalQBI,
     totalQBIComponent,
     estimatedTaxableIncome,
+    stdDedApplied,
     taxableIncomeCap,
     estimatedDeduction,
     aboveThreshold,
@@ -111,7 +112,7 @@ export default function Form8995Preview({ reviewedK1Docs, totalIncome, selectedY
         <FormLine label="Total income (Form 1040 Line 9 estimate)" value={totalIncome} />
         <FormLine
           label={`Less: estimated standard deduction (${selectedYear} ${isMarried ? 'MFJ' : 'Single'})`}
-          value={-(totalIncome - estimatedTaxableIncome)}
+          value={-stdDedApplied}
         />
         <FormLine label="Estimated taxable income (Line 15 proxy)" value={estimatedTaxableIncome} />
         <FormLine label="20% of estimated taxable income (cap)" value={taxableIncomeCap} />

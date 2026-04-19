@@ -59,6 +59,27 @@ describe('extractQBIFromK1', () => {
     const result = extractQBIFromK1(data, 'Acme LP')
     expect(result!.sectionNotes).toBe('W-2 wages: $50,000; SSTB: No')
   })
+
+  it('parses parenthesized negative values like (1,234)', () => {
+    const data = makeData(box20({ code: 'S', value: '(25,000)' }))
+    const result = extractQBIFromK1(data, 'Acme LP')
+    expect(result!.qbiIncome).toBe(-25_000)
+    expect(result!.qbiComponent).toBe(0) // loss → no component
+  })
+
+  it('sums multiple Code S entries for the same partnership', () => {
+    const data = makeData({
+      '20': [
+        { code: 'S', value: '30000', notes: 'Business A' },
+        { code: 'S', value: '20000', notes: 'Business B' },
+        { code: 'V', value: '500000', notes: '' },
+      ],
+    })
+    const result = extractQBIFromK1(data, 'Multi LP')
+    expect(result!.qbiIncome).toBe(50_000)
+    expect(result!.sectionNotes).toBe('Business A\nBusiness B')
+    expect(result!.ubia).toBe(500_000)
+  })
 })
 
 // ── computeForm8995Lines ──────────────────────────────────────────────────────
