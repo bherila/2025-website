@@ -74,6 +74,15 @@ export default function TimeEntryListItem({
                 {entry.project.name}
               </Badge>
             )}
+            {isAdmin && entry.is_deferred_billing && !entry.is_invoiced && (
+              <Badge
+                variant="outline"
+                className="text-[9px] px-1 py-0 h-3.5 font-bold shrink-0 uppercase border-amber-600 text-amber-700 bg-amber-50"
+                title="Deferred: will be billed on a future invoice when retainer capacity is available."
+              >
+                Deferred
+              </Badge>
+            )}
           </div>
         </div>
       </TableCell>

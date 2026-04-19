@@ -349,22 +349,30 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                                         </TableRow>
                                         {showDetail && item.time_entries && item.time_entries.length > 0 && (
                                             <TableRow key={`${item.client_invoice_line_id}-details`}>
-                                                <TableCell colSpan={isAdmin ? 5 : 4} className="bg-muted/30 py-2">
-                                                    <div className="pl-6 text-sm text-muted-foreground">
-                                                        <div className="font-medium mb-1">Time Entries:</div>
-                                                        <ul className="list-disc list-inside space-y-0.5">
+                                                <TableCell colSpan={isAdmin ? 5 : 4} className="bg-muted/30 py-2 px-4">
+                                                    <table className="w-full text-sm text-muted-foreground">
+                                                        <tbody>
                                                             {item.time_entries.map((entry, idx) => (
-                                                                <li key={idx}>
-                                                                    {entry.name} ({formatHours(entry.minutes_worked / 60)})
-                                                                    {entry.date_worked && (
-                                                                        <span className="text-muted-foreground/70 ml-1">
-                                                                            - {format(new Date(entry.date_worked), 'MMM d, yyyy')}
-                                                                        </span>
-                                                                    )}
-                                                                </li>
+                                                                <tr key={idx} className="align-top">
+                                                                    <td className="py-0.5 pr-4 w-full">
+                                                                        <span className="text-muted-foreground/70 mr-2">•</span>
+                                                                        {entry.name || '—'}
+                                                                        {entry.is_deferred_billing && isAdmin && (
+                                                                            <Badge variant="outline" className="ml-2 text-[9px] px-1 py-0 h-3.5 border-amber-600 text-amber-700 bg-amber-50 font-bold uppercase">
+                                                                                Deferred
+                                                                            </Badge>
+                                                                        )}
+                                                                    </td>
+                                                                    <td className="py-0.5 pr-4 text-right tabular-nums whitespace-nowrap">
+                                                                        {formatHours(entry.minutes_worked / 60)}
+                                                                    </td>
+                                                                    <td className="py-0.5 text-right whitespace-nowrap text-muted-foreground/70">
+                                                                        {entry.date_worked ? format(new Date(entry.date_worked), 'MMM d, yyyy') : '—'}
+                                                                    </td>
+                                                                </tr>
                                                             ))}
-                                                        </ul>
-                                                    </div>
+                                                        </tbody>
+                                                    </table>
                                                 </TableCell>
                                             </TableRow>
                                         )}
@@ -372,6 +380,69 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                                 ))}
                             </TableBody>
                         </Table>
+
+                        {/* Deferred-to-future-invoice note (admin only). Shows only when a draft
+                          invoice has deferred entries that did not fit this cycle's capacity. */}
+                        {isAdmin && invoice.deferred_pending && invoice.deferred_pending.length > 0 && (
+                            <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm">
+                                <div className="mb-2 flex items-center gap-2">
+                                    <Badge variant="outline" className="border-amber-600 text-amber-700 bg-amber-50 font-bold uppercase text-[9px] px-1 py-0 h-3.5">
+                                        Deferred
+                                    </Badge>
+                                    <span className="font-medium text-amber-900">
+                                        {invoice.deferred_pending.length} entr{invoice.deferred_pending.length === 1 ? 'y' : 'ies'} deferred to a future invoice
+                                    </span>
+                                </div>
+                                <table className="w-full text-muted-foreground">
+                                    <tbody>
+                                        {invoice.deferred_pending.map(p => (
+                                            <tr key={p.id} className="align-top">
+                                                <td className="py-0.5 pr-4 w-full">
+                                                    <span className="text-muted-foreground/70 mr-2">•</span>
+                                                    {p.name || '—'}
+                                                </td>
+                                                <td className="py-0.5 pr-4 text-right tabular-nums whitespace-nowrap">
+                                                    {formatHours(p.hours)}
+                                                </td>
+                                                <td className="py-0.5 text-right whitespace-nowrap text-muted-foreground/70">
+                                                    {format(new Date(p.date_worked), 'MMM d, yyyy')}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                <p className="mt-2 text-xs text-amber-800/80">
+                                    These entries will roll forward until a future invoice has retainer capacity
+                                    (or until the agreement is terminated, at which point they are billed at the hourly rate).
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Credit summary (admin + portal). Shows overpayments on this invoice
+                          and the remaining company-wide credit balance after this invoice. */}
+                        {(invoice.credit_applied || invoice.overpaid_amount || invoice.available_credit_after) ? (
+                            <div className="mt-4 flex flex-wrap gap-4 text-sm">
+                                {invoice.credit_applied && invoice.credit_applied > 0 ? (
+                                    <div className="rounded-md border border-blue-300 bg-blue-50 px-3 py-2">
+                                        <span className="font-medium text-blue-900">Credit applied:</span>{' '}
+                                        <span className="tabular-nums">${invoice.credit_applied.toFixed(2)}</span>
+                                    </div>
+                                ) : null}
+                                {invoice.overpaid_amount && invoice.overpaid_amount > 0 ? (
+                                    <div className="rounded-md border border-blue-300 bg-blue-50 px-3 py-2">
+                                        <span className="font-medium text-blue-900">Overpaid on this invoice:</span>{' '}
+                                        <span className="tabular-nums">${invoice.overpaid_amount.toFixed(2)}</span>
+                                    </div>
+                                ) : null}
+                                {invoice.available_credit_after && invoice.available_credit_after > 0 ? (
+                                    <div className="rounded-md border border-green-300 bg-green-50 px-3 py-2">
+                                        <span className="font-medium text-green-900">Available credit:</span>{' '}
+                                        <span className="tabular-nums">${invoice.available_credit_after.toFixed(2)}</span>
+                                        <span className="text-muted-foreground/70 text-xs ml-2">(applied to future invoices)</span>
+                                    </div>
+                                ) : null}
+                            </div>
+                        ) : null}
                     </section>
 
                     {/* Payments Section - only show table if there are payments */}
@@ -469,6 +540,7 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                     onClose={() => { setPaymentModalOpen(false); setSelectedPayment(null); }}
                     payment={selectedPayment}
                     defaultAmount={invoice.remaining_balance}
+                    remainingBalance={parseFloat(invoice.remaining_balance) || 0}
                     onSave={handleSavePayment}
                     onDelete={handleDeletePayment}
                 />

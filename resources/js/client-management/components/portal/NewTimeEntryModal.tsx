@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter,DialogHeader, Di
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { useCurrentUser } from '@/hooks/useAppInitialData'
+import { useCurrentUser, useIsUserAdmin } from '@/hooks/useAppInitialData'
 import { usePortalInitialData } from '@/hooks/usePortalInitialData'
 
 function getLocalISODate(): string {
@@ -73,12 +73,14 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
   const [dateWorked, setDateWorked] = useState(getLocalISODate())
   const [jobType, setJobType] = useState('Software Development')
   const [isBillable, setIsBillable] = useState(true)
+  const [isDeferredBilling, setIsDeferredBilling] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  
+
   const currentUser = useCurrentUser()
   const portalData = usePortalInitialData()
   const effectiveUsers: User[] = portalData.companyUsers ?? users
+  const isAdmin = useIsUserAdmin()
 
   useEffect(() => {
     if (!currentUser) {
@@ -106,6 +108,7 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
       setDateWorked(entry.date_worked ? entry.date_worked.split(' ')[0]! : getLocalISODate())
       setJobType(entry.job_type || 'Software Development')
       setIsBillable(entry.is_billable ?? true)
+      setIsDeferredBilling(Boolean(entry.is_deferred_billing))
     } else if (open) {
       // Reset for new entry
       setTime('')
@@ -114,6 +117,7 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
       setDateWorked(getLocalISODate())
       setJobType('Software Development')
       setIsBillable(true)
+      setIsDeferredBilling(false)
       
       // Automatically select project if only one exists, or use the last one used
       if (projects.length === 1) {
@@ -154,7 +158,7 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
           'Accept': 'application/json',
           'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           time,
           name: description,
           project_id: parseInt(projectId),
@@ -162,6 +166,8 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
           date_worked: dateWorked,
           job_type: jobType,
           is_billable: isBillable,
+          // Only admins can defer billing; server ignores the flag for non-admins.
+          is_deferred_billing: isBillable ? isDeferredBilling : false,
         })
       })
 
@@ -356,12 +362,34 @@ export default function NewTimeEntryModal({ open, onOpenChange, slug, projects, 
             <Checkbox
               id="billable"
               checked={isBillable}
-              onCheckedChange={(checked) => setIsBillable(checked as boolean)}
+              onCheckedChange={(checked) => {
+                const next = Boolean(checked)
+                setIsBillable(next)
+                if (!next) setIsDeferredBilling(false)
+              }}
             />
             <Label htmlFor="billable" className="font-normal cursor-pointer">
               Billable
             </Label>
           </div>
+
+          {isAdmin && (
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="deferred-billing"
+                checked={isDeferredBilling}
+                disabled={!isBillable}
+                onCheckedChange={(checked) => setIsDeferredBilling(Boolean(checked))}
+              />
+              <Label
+                htmlFor="deferred-billing"
+                className={`font-normal cursor-pointer ${!isBillable ? 'opacity-50' : ''}`}
+                title="Bill on a future invoice when retainer capacity is available. Deferred entries are never split and are force-billed at the hourly rate on agreement termination."
+              >
+                Defer billing
+              </Label>
+            </div>
+          )}
 
           <DialogFooter className="flex justify-between items-center sm:justify-between w-full">
             <div className="flex-1">

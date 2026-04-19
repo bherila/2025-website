@@ -18,11 +18,13 @@ interface AddPaymentModalProps {
     onClose: () => void
     payment: ClientInvoicePayment | null
     defaultAmount?: string
+    /** Remaining balance on the invoice, used to warn about overpayment. Optional. */
+    remainingBalance?: number
     onSave: (payment: Partial<ClientInvoicePayment>) => void
     onDelete?: (payment: ClientInvoicePayment) => void
 }
 
-export default function AddPaymentModal({ isOpen, onClose, payment, defaultAmount, onSave, onDelete }: AddPaymentModalProps) {
+export default function AddPaymentModal({ isOpen, onClose, payment, defaultAmount, remainingBalance, onSave, onDelete }: AddPaymentModalProps) {
     const [amount, setAmount] = useState('0')
     const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split('T')[0]!)
     const [paymentMethod, setPaymentMethod] = useState<string>('Credit Card')
@@ -83,6 +85,18 @@ export default function AddPaymentModal({ isOpen, onClose, payment, defaultAmoun
                         </Label>
                         <Input id="amount" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="col-span-3" />
                     </div>
+                    {(() => {
+                        if (remainingBalance === undefined) return null
+                        const entered = parseFloat(amount || '0')
+                        if (!Number.isFinite(entered) || entered <= remainingBalance) return null
+                        const overpay = (entered - remainingBalance).toFixed(2)
+                        return (
+                            <div className="col-span-4 rounded-md border border-blue-300 bg-blue-50 px-3 py-2 text-xs text-blue-900">
+                                This creates an overpayment of <strong>${overpay}</strong>. The excess will be
+                                applied as a credit on the next invoice and rolls forward until used up.
+                            </div>
+                        )
+                    })()}
                     <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="payment-date" className="text-right">
                             Date

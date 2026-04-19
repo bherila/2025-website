@@ -3,13 +3,24 @@ import { z } from 'zod'
 import { ClientInvoicePaymentHydrationSchema,ClientInvoicePaymentSchema } from './invoice-payment'
 import { coerceMoney, coerceNumberLike } from './zod-helpers'
 
-// Basic time entry schema
+// Basic time entry schema (used as a subitem on an invoice line)
 export const InvoiceLineTimeEntrySchema = z.object({
-  name: z.string(),
+  name: z.string().nullable(),
   minutes_worked: z.number(),
   date_worked: z.string().nullable(),
+  is_deferred_billing: z.boolean().optional(),
 })
 export type InvoiceLineTimeEntry = z.infer<typeof InvoiceLineTimeEntrySchema>
+
+// A single deferred time entry that did not fit the retainer capacity this cycle.
+// Surfaced under the invoice's line items so admins can see what is rolling forward.
+export const DeferredPendingEntrySchema = z.object({
+  id: z.number(),
+  hours: z.number(),
+  date_worked: z.string(),
+  name: z.string().nullable(),
+})
+export type DeferredPendingEntry = z.infer<typeof DeferredPendingEntrySchema>
 
 export const InvoiceLineSchema = z.object({
   client_invoice_line_id: z.number(),
@@ -52,6 +63,10 @@ export const InvoiceSchema = z.object({
   payments: z.array(ClientInvoicePaymentSchema),
   remaining_balance: z.string(),
   payments_total: z.string(),
+  credit_applied: z.number().optional(),
+  overpaid_amount: z.number().optional(),
+  available_credit_after: z.number().optional(),
+  deferred_pending: z.array(DeferredPendingEntrySchema).optional(),
   previous_invoice_id: z.number().nullable().optional(),
   next_invoice_id: z.number().nullable().optional(),
 })
@@ -85,6 +100,10 @@ export const InvoiceHydrationSchema = z.object({
   payments: z.array(ClientInvoicePaymentHydrationSchema).optional().default([]),
   remaining_balance: coerceMoney('0.00').optional(),
   payments_total: coerceMoney('0.00').optional(),
+  credit_applied: z.number().optional(),
+  overpaid_amount: z.number().optional(),
+  available_credit_after: z.number().optional(),
+  deferred_pending: z.array(DeferredPendingEntrySchema).optional(),
   previous_invoice_id: z.number().nullable().optional(),
   next_invoice_id: z.number().nullable().optional(),
 })

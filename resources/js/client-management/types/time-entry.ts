@@ -8,6 +8,7 @@ export interface TimeEntry {
   date_worked: string
   is_billable: boolean
   is_invoiced: boolean
+  is_deferred_billing?: boolean // Admin-only: defer billing until retainer capacity exists
   job_type: string
   user: User | null
   project: Project | null
@@ -65,4 +66,5 @@ export interface TimeEntriesResponse {
   billable_time: string
   billable_minutes: number
   total_unbilled_hours?: number // Total hours to be billed against future agreements
+  total_deferred_hours?: number // Total hours flagged as deferred-billing awaiting capacity
 }
