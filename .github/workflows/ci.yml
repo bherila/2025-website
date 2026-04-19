@@ -111,9 +111,9 @@ jobs:
         if: steps.changes.outputs.backend == 'true' || github.event_name == 'push'
         run: vendor/bin/phpstan analyse --no-progress
 
-      - name: Run PHPUnit (parallel)
+      - name: Run PHPUnit
         if: steps.changes.outputs.backend == 'true' || github.event_name == 'push'
-        run: vendor/bin/paratest --processes=auto --configuration phpunit.xml
+        run: php artisan test --compact
 
       - name: Upload frontend build artifact
         if: github.ref == 'refs/heads/main'
