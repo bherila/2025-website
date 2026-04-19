@@ -22,6 +22,8 @@ import { computeForm8959Lines } from '@/finance/8959/form8959'
 import { computeForm8960Lines } from '@/finance/8960/form8960'
 import { computeCapitalLossCarryover } from '@/finance/capitalLoss/capitalLossCarryover'
 import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
+import { ExcessBusinessLossLimitation } from '@/lib/tax/ExcessBusinessLossLimitation'
+import { form461 } from '@/lib/tax/form461'
 import { buildCacheKey, getCachedTransactions, setCachedTransactions } from '@/services/transactionCache'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { EmploymentEntity, F1099DivParsedData, F1099IntParsedData, TaxDocument } from '@/types/finance/tax-document'
@@ -511,6 +513,22 @@ export function TaxPreviewProvider({
       shortDividendDeduction: shortDividendSummary?.totalItemizedDeduction ?? 0,
     })
 
+    const eblData = form461({
+      taxYear: year,
+      isSingle: !isMarried,
+      schedule1_line3: scheduleCNetIncome.total,
+      schedule1_line5: scheduleE.grandTotal,
+      scheduleDData: scheduleD.schD,
+      override_f461_line15: null,
+    })
+    const eblLimit = ExcessBusinessLossLimitation({ taxYear: year, isSingle: !isMarried })
+    const form461Lines = {
+      aggregateBusinessIncomeLoss: eblData.f461_line9,
+      eblLimit,
+      excessBusinessLoss: eblData.f461_line16,
+      isTriggered: eblData.f461_line16 > 0,
+    }
+
     const form8959 = computeForm8959Lines(w2GrossIncome.value, isMarried)
     const form8960 = computeForm8960Lines({
       taxableInterest: income1099.interestIncome.value,
@@ -559,6 +577,7 @@ export function TaxPreviewProvider({
       schedule2,
       form8959,
       form8960,
+      form461: form461Lines,
       capitalLossCarryover: computeCapitalLossCarryover(
         scheduleD.schD.schD_line7,
         scheduleD.schD.schD_line15,

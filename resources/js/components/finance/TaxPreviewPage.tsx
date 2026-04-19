@@ -916,6 +916,7 @@ function TaxPreviewPageContent() {
             form8959={taxReturn.form8959}
             form8960={taxReturn.form8960}
             capitalLossCarryover={taxReturn.capitalLossCarryover}
+            form461={taxReturn.form461}
           />
           <Form1040Preview
             w2Income={w2GrossIncome}

@@ -418,6 +418,22 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
       })()
     : null
 
+  // ── Form 461 ─────────────────────────────────────────────────────────────────
+  const form461Sheet = taxReturn.form461
+    ? buildSheet('Form 461', [
+        { line: '9', description: 'Line 9 — Aggregate trade/business income (loss)', amount: taxReturn.form461.aggregateBusinessIncomeLoss, isTotal: true },
+        { line: '15', description: 'Line 15 — EBL limit (filing-status threshold)', amount: taxReturn.form461.eblLimit },
+        {
+          line: '16',
+          description: taxReturn.form461.isTriggered
+            ? 'Line 16 — Excess business loss → Schedule 1 Line 8p (NOL carryforward)'
+            : 'Line 16 — No excess (within limit)',
+          amount: taxReturn.form461.isTriggered ? -taxReturn.form461.excessBusinessLoss : 0,
+          isTotal: true,
+        },
+      ])
+    : null
+
   // ── Short Dividends ──────────────────────────────────────────────────────────
   const shortDivSheet = taxReturn.shortDividends
     ? buildSheet('Short Dividends', [
@@ -608,6 +624,7 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
     form8995Sheet,
     form4952Sheet,
     capitalLossSheet,
+    form461Sheet,
     shortDivSheet,
     ...k1Sheets,
     ...k3Sheets,

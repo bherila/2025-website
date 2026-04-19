@@ -164,6 +164,17 @@ export interface Schedule2Lines {
   totalAdditionalTaxes: number
 }
 
+export interface Form461Lines {
+  /** Aggregate trade/business income (loss) — Form 461 Line 9. */
+  aggregateBusinessIncomeLoss: number
+  /** EBL threshold for the year and filing status — Form 461 Line 15. */
+  eblLimit: number
+  /** Disallowed excess loss → NOL carryforward (Form 461 Line 16, 0 if not triggered). */
+  excessBusinessLoss: number
+  /** True when business losses exceed the EBL limit. */
+  isTriggered: boolean
+}
+
 export interface TaxReturn1040 {
   year: number
   overviewSections?: OverviewSection[] | undefined
@@ -180,6 +191,7 @@ export interface TaxReturn1040 {
   form8960?: Form8960Lines
   form8995?: Form8995Lines
   capitalLossCarryover?: CapitalLossCarryoverLines
+  form461?: Form461Lines
   k1Docs?: K1ExportEntry[]
   k3Docs?: K3ExportEntry[]
   docs1099?: Doc1099ExportEntry[]

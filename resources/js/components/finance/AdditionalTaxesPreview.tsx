@@ -1,17 +1,18 @@
 'use client'
 
 import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
-import type { CapitalLossCarryoverLines, Form8959Lines, Form8960Lines, Schedule2Lines } from '@/types/finance/tax-return'
+import type { CapitalLossCarryoverLines, Form461Lines, Form8959Lines, Form8960Lines, Schedule2Lines } from '@/types/finance/tax-return'
 
 interface AdditionalTaxesPreviewProps {
   schedule2?: Schedule2Lines | undefined
   form8959?: Form8959Lines | undefined
   form8960?: Form8960Lines | undefined
   capitalLossCarryover?: CapitalLossCarryoverLines | undefined
+  form461?: Form461Lines | undefined
 }
 
-export default function AdditionalTaxesPreview({ schedule2, form8959, form8960, capitalLossCarryover }: AdditionalTaxesPreviewProps) {
-  const hasContent = form8959?.additionalTax || form8960?.niitTax || capitalLossCarryover?.hasCarryover
+export default function AdditionalTaxesPreview({ schedule2, form8959, form8960, capitalLossCarryover, form461 }: AdditionalTaxesPreviewProps) {
+  const hasContent = form8959?.additionalTax || form8960?.niitTax || capitalLossCarryover?.hasCarryover || form461
   if (!hasContent) return null
 
   return (
@@ -75,6 +76,36 @@ export default function AdditionalTaxesPreview({ schedule2, form8959, form8960, 
           <FormLine label="MAGI (estimated)" value={form8960.magi} />
           <FormLine label={`Threshold (${form8960.threshold === 200_000 ? 'Single' : 'MFJ'})`} value={form8960.threshold} />
           <FormLine label="NIIT" raw="$0 — MAGI does not exceed the threshold" />
+        </FormBlock>
+      )}
+
+      {/* Form 461 — Excess Business Loss */}
+      {form461 && (
+        <FormBlock title={`Form 461 — Excess Business Loss Limitation (${form461.isTriggered ? '⚠ EBL Applies' : '✓ Within Limit'})`}>
+          <FormLine label="Aggregate trade/business income (loss)" value={form461.aggregateBusinessIncomeLoss} />
+          <FormLine label={`EBL limit (${fmtAmt(form461.eblLimit, 0)} — ${form461.eblLimit > 305_000 ? 'MFJ' : 'Single'})`} value={form461.eblLimit} />
+          {form461.isTriggered ? (
+            <>
+              <FormTotalLine label="Excess business loss — disallowed this year" value={-form461.excessBusinessLoss} double />
+              <FormLine label="Disallowed loss converts to NOL carryforward" raw="Enter on Schedule 1 Line 8p — reduces future year ordinary income" />
+              <Callout kind="warn" title="⚠ Excess Business Loss Applies — Schedule 1 Line 8p">
+                <p>
+                  Business losses of <strong>{fmtAmt(form461.aggregateBusinessIncomeLoss, 0)}</strong> exceed
+                  the EBL limit of <strong>{fmtAmt(form461.eblLimit, 0)}</strong>. The excess{' '}
+                  <strong>{fmtAmt(form461.excessBusinessLoss, 0)}</strong> is disallowed this year and
+                  converts to a Net Operating Loss (NOL) carryforward. Enter as a positive number on
+                  Schedule 1 (Form 1040) Line 8p.
+                </p>
+              </Callout>
+            </>
+          ) : (
+            <FormLine
+              label="EBL status"
+              raw={form461.aggregateBusinessIncomeLoss >= 0
+                ? '✓ Net business income — EBL does not apply'
+                : `✓ Loss of ${fmtAmt(Math.abs(form461.aggregateBusinessIncomeLoss), 0)} is within the ${fmtAmt(form461.eblLimit, 0)} limit`}
+            />
+          )}
         </FormBlock>
       )}
 
