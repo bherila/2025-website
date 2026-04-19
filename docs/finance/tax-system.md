@@ -524,6 +524,26 @@ When `form_type === 'k1'` and the data contains `schemaVersion`, the modal rende
 - `FK1ParsedData` — legacy flat format (kept for backward compat with pre-2026.1 documents)
 - `isFK1StructuredData(data)` — type guard to detect new-format documents
 
+### Form 8959 / 8960 / Capital Loss Carryover Support
+
+**New modules:**
+
+| Path | Purpose |
+|------|---------|
+| `resources/js/finance/8959/form8959.ts` | `computeForm8959Lines` — Additional Medicare Tax (0.9% × wages over $200k/$250k MFJ) |
+| `resources/js/finance/8960/form8960.ts` | `computeForm8960Lines` — full NIIT computation (interest + dividends + cap gains + passive − investment interest) |
+| `resources/js/finance/capitalLoss/capitalLossCarryover.ts` | `computeCapitalLossCarryover` — ST/LT carryforward with correct IRS ordering rules |
+
+All three are computed in `TaxPreviewContext` using the `isMarried` flag (MFJ threshold: $250k for Form 8959/8960 vs. $200k single).
+
+**UI:** `AdditionalTaxesPreview` component rendered at the top of the Tax Estimate tab. Shows Form 8959 (when applicable), full Form 8960 NII breakdown, and capital loss carryforward with ST/LT split and planning callout.
+
+**XLSX:** Form 8959, Form 8960, and Capital Loss Carryover sheets added to `buildTaxWorkbook`.
+
+**Note:** The overview tab `addlMedicare` estimate still uses a hardcoded $200k threshold (a sub-component without `isMarried` access). The Tax Estimate tab's Form 8959 block uses the correct MFJ-aware value from the context.
+
+---
+
 ### Form 8995 (QBI Deduction) Support
 
 **Directory: `resources/js/finance/8995/`**

@@ -6,7 +6,6 @@ import { isFK1StructuredData } from '@/components/finance/k1'
 import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
 import {
   extractForeignTaxSummaries,
-  extractK1NIIComponents,
   extractK3Line4bApportionment,
 } from '@/finance/1116/k3-to-1116'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
@@ -48,9 +47,6 @@ export function computeForm1116Lines({
   const generalIncomeSources: { label: string; amount: number }[] = []
   const taxSources: { label: string; amount: number }[] = []
   const line4bApportionment: { label: string; interestExpense: number; ratio: number; line4b: number }[] = []
-  const niiComponents: { label: string; amount: number }[] = []
-  let totalNII = currency(0)
-
   for (const { doc, data } of k1Parsed) {
     const partnerName =
       data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
@@ -89,11 +85,6 @@ export function computeForm1116Lines({
       })
     }
 
-    const nii = extractK1NIIComponents(data)
-    if (nii.totalNII !== 0) {
-      niiComponents.push({ label: partnerName, amount: nii.totalNII })
-      totalNII = totalNII.add(nii.totalNII)
-    }
   }
 
   for (const doc of reviewed1099Docs) {
@@ -121,15 +112,6 @@ export function computeForm1116Lines({
   const totalForeignTaxes = taxSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value
   const totalLine4b = line4bApportionment.reduce((acc, s) => acc.add(s.line4b), currency(0)).value
 
-  const niit =
-    totalNII.value !== 0
-      ? {
-          niiComponents,
-          totalNII: totalNII.value,
-          niitEstimate: currency(totalNII.value).multiply(0.038).value,
-        }
-      : null
-
   const creditVsDeduction =
     totalForeignTaxes > 0
       ? {
@@ -152,7 +134,6 @@ export function computeForm1116Lines({
     totalGeneralIncome,
     line4bApportionment,
     totalLine4b,
-    niit,
     creditVsDeduction,
     turboTaxAlert,
   }
@@ -172,7 +153,6 @@ export default function Form1116Preview({
     totalGeneralIncome,
     line4bApportionment,
     totalLine4b,
-    niit,
     creditVsDeduction,
     turboTaxAlert,
     totalK1Box5 = 0,
@@ -337,29 +317,6 @@ export default function Form1116Preview({
         </FormBlock>
       )}
 
-      {/* NIIT — Form 8960 */}
-      {niit && (
-        <FormBlock title="Form 8960 — Net Investment Income Tax (NIIT) Estimate">
-          {niit.niiComponents.map((c, i) => (
-            <FormLine key={i} label={c.label} value={c.amount} />
-          ))}
-          <FormTotalLine label="Estimated Net Investment Income (NII)" value={niit.totalNII} />
-          <FormLine label="NIIT rate" raw="3.8%" />
-          <FormLine
-            label="MAGI threshold (single $200k / MFJ $250k / MFS $125k)"
-            raw="Enter from your return"
-          />
-          <FormTotalLine
-            label="Estimated NIIT (3.8% × NII — before MAGI threshold)"
-            value={niit.niitEstimate}
-          />
-          <FormLine
-            label="⚠ Note: Foreign Tax Credit does NOT reduce NIIT"
-            raw="NIIT is a separate tax — FTC offsets regular income tax only"
-          />
-        </FormBlock>
-      )}
-
       {turboTaxAlert && (
         <Callout kind="alert" title="⚠ TurboTax FTC Worksheet Line 1d — Correction Required">
           <p>
@@ -377,7 +334,7 @@ export default function Form1116Preview({
           The allowable FTC flows to <strong>Schedule 3, Line 1</strong> (foreign tax credit). It is a
           dollar-for-dollar credit against your regular federal income tax.
         </p>
-        <p>The FTC does NOT reduce the Net Investment Income Tax (NIIT, Form 8960).</p>
+        <p>The FTC does NOT reduce the Net Investment Income Tax (NIIT, Form 8960). See the Tax Estimate tab for the full Form 8960 computation.</p>
         {totalGeneralIncome > 0 && (
           <p>
             <strong>Two Form 1116s required:</strong> one for passive category, one for general category.

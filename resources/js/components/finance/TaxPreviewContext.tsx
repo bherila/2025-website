@@ -18,6 +18,9 @@ import { computeScheduleELines } from '@/components/finance/ScheduleEPreview'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
+import { computeForm8959Lines } from '@/finance/8959/form8959'
+import { computeForm8960Lines } from '@/finance/8960/form8960'
+import { computeCapitalLossCarryover } from '@/finance/capitalLoss/capitalLossCarryover'
 import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import { buildCacheKey, getCachedTransactions, setCachedTransactions } from '@/services/transactionCache'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
@@ -524,6 +527,25 @@ export function TaxPreviewProvider({
       },
       form4952,
       form1116: computeForm1116Lines({ reviewedK1Docs, reviewed1099Docs }),
+      form8959: computeForm8959Lines(w2GrossIncome.value, isMarried),
+      form8960: computeForm8960Lines({
+        taxableInterest: income1099.interestIncome.value,
+        ordinaryDividends: income1099.dividendIncome.value,
+        netCapGainsRaw: scheduleD.schD.schD_line16,
+        passiveIncome: scheduleE.totalPassive,
+        investmentInterestExpense: form4952.deductibleInvestmentInterestExpense,
+        magi: w2GrossIncome
+          .add(income1099.interestIncome)
+          .add(income1099.dividendIncome)
+          .add(scheduleCNetIncome.total)
+          .add(scheduleE.grandTotal)
+          .add(Math.max(scheduleD.schD.schD_line16, -3000)).value,
+        isMarried,
+      }),
+      capitalLossCarryover: computeCapitalLossCarryover(
+        scheduleD.schD.schD_line7,
+        scheduleD.schD.schD_line15,
+      ),
       form8995: computeForm8995({
         reviewedK1Docs,
         totalIncome: w2GrossIncome
