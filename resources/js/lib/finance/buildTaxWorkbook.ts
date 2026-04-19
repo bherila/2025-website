@@ -370,8 +370,8 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
   // ── Form 8959 ────────────────────────────────────────────────────────────────
   const form8959Sheet = taxReturn.form8959 && taxReturn.form8959.additionalTax > 0
     ? buildSheet('Form 8959', [
-        { line: '1', description: 'Line 1 — Medicare wages (W-2 Box 1)', amount: taxReturn.form8959.wages },
-        { line: '5', description: `Line 5 — Threshold (${taxReturn.form8959.threshold === 200_000 ? 'Single/MFS/HOH' : 'MFJ'})`, amount: taxReturn.form8959.threshold },
+        { line: '1', description: 'Line 1 — Medicare wages (W-2 Box 1 approx; exact = Box 5)', amount: taxReturn.form8959.wages, note: 'Box 5 (Medicare wages) may exceed Box 1 when 401k deferrals apply' },
+        { line: '5', description: `Line 5 — Threshold (${taxReturn.form8959.threshold === 200_000 ? 'Single/HOH' : 'MFJ'})`, amount: taxReturn.form8959.threshold },
         { line: '6', description: 'Line 6 — Wages above threshold', amount: taxReturn.form8959.excessWages },
         { line: '7', description: 'Line 7 — Additional Medicare Tax (0.9%) → Schedule 2 Line 11', amount: taxReturn.form8959.additionalTax, isTotal: true },
       ])
@@ -394,7 +394,7 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
           { isHeader: true, description: 'Part III — NIIT Computation' },
           { line: '12', description: 'Net Investment Income (Line 8 − 11)', amount: f.netInvestmentIncome, isTotal: true },
           { line: '13', description: 'Modified AGI (estimated)', amount: f.magi },
-          { line: '14', description: `Threshold (${f.threshold === 200_000 ? 'Single/MFS/HOH' : 'MFJ'})`, amount: f.threshold },
+          { line: '14', description: `Threshold (${f.threshold === 200_000 ? 'Single/HOH' : 'MFJ'})`, amount: f.threshold },
           { line: '15', description: 'MAGI excess over threshold', amount: f.magiExcess },
           { line: '17', description: 'NIIT (3.8% × lesser of Line 12 or 15) → Schedule 2 Line 12', amount: f.niitTax, isTotal: true },
         ]
@@ -544,7 +544,11 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
           amount: taxReturn.schedule2?.totalAdditionalTaxes,
           formula: (form8959Line7 && form8960Line17)
             ? `=${formulaRef('Form 8959', form8959Line7).slice(1)}+${formulaRef('Form 8960', form8960Line17).slice(1)}`
-            : (form8959Line7 ? formulaRef('Form 8959', form8959Line7) : undefined),
+            : form8959Line7
+              ? formulaRef('Form 8959', form8959Line7)
+              : form8960Line17
+                ? formulaRef('Form 8960', form8960Line17)
+                : undefined,
           note: '→ Form 8959 (Medicare) + Form 8960 (NIIT)',
         },
         {

@@ -12,7 +12,11 @@ interface AdditionalTaxesPreviewProps {
 }
 
 export default function AdditionalTaxesPreview({ schedule2, form8959, form8960, capitalLossCarryover, form461 }: AdditionalTaxesPreviewProps) {
-  const hasContent = form8959?.additionalTax || form8960?.niitTax || capitalLossCarryover?.hasCarryover || form461
+  const hasContent =
+    (form8959?.additionalTax ?? 0) > 0 ||
+    (form8960?.magi ?? 0) > 0 ||
+    (capitalLossCarryover?.combined ?? 0) < 0 ||
+    form461 !== undefined
   if (!hasContent) return null
 
   return (
@@ -46,12 +50,12 @@ export default function AdditionalTaxesPreview({ schedule2, form8959, form8960, 
         <FormBlock title="Form 8959 — Additional Medicare Tax (0.9%)">
           <FormLine label="W-2 wages (Box 1)" value={form8959.wages} />
           <FormLine
-            label={`Less: threshold (${fmtAmt(form8959.threshold, 0)} — ${form8959.threshold === 200_000 ? 'Single/MFS/HOH' : 'MFJ'})`}
+            label={`Less: threshold (${fmtAmt(form8959.threshold, 0)} — ${form8959.threshold === 200_000 ? 'Single/HOH' : 'MFJ'})`}
             value={-form8959.threshold}
           />
           <FormLine label="Wages above threshold" value={form8959.excessWages} />
           <FormTotalLine label="Additional Medicare Tax (0.9% × excess) — Schedule 2 Line 11" value={form8959.additionalTax} double />
-          <FormLine label="Note" raw="Withheld at source (W-2 Box 6) does not include the 0.9% — you may owe this at filing unless employer withheld extra." />
+          <FormLine label="Note" raw="Employers must withhold the 0.9% once wages from that employer exceed $200,000 — that withholding is in W-2 Box 6. Your actual liability is reconciled on Form 8959 at filing and may differ if you have multiple jobs or a spouse with income." />
         </FormBlock>
       )}
 
@@ -63,7 +67,7 @@ export default function AdditionalTaxesPreview({ schedule2, form8959, form8960, 
           ))}
           <FormTotalLine label="Net Investment Income (Line 12)" value={form8960.netInvestmentIncome} />
           <FormLine label="Modified AGI (estimated)" value={form8960.magi} />
-          <FormLine label={`Less: threshold (${fmtAmt(form8960.threshold, 0)} — ${form8960.threshold === 200_000 ? 'Single/MFS/HOH' : 'MFJ'})`} value={-form8960.threshold} />
+          <FormLine label={`Less: threshold (${fmtAmt(form8960.threshold, 0)} — ${form8960.threshold === 200_000 ? 'Single/HOH' : 'MFJ'})`} value={-form8960.threshold} />
           <FormLine label="Excess MAGI over threshold" value={form8960.magiExcess} />
           <FormLine label="NIIT base (lesser of NII or MAGI excess)" value={Math.min(form8960.netInvestmentIncome, form8960.magiExcess)} />
           <FormTotalLine label="NIIT (3.8% × base) — Schedule 2 Line 12" value={form8960.niitTax} double />

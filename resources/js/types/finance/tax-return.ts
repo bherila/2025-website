@@ -22,7 +22,7 @@ export interface ScheduleALines {
   saltPaid: number
   /** SALT paid (state/local income or sales tax + property tax), capped at $10,000. */
   saltDeduction: number
-  /** Total itemized deductions (investment interest + SALT + other). */
+  /** Itemized deductions subtotal (investment interest gross + SALT only; mortgage, charitable, medical not yet included). */
   totalItemizedDeductions: number
   /** Standard deduction for the year and filing status. */
   standardDeduction: number
