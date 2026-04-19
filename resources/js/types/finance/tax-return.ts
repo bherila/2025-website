@@ -112,6 +112,40 @@ export interface Form8995Lines {
   thresholdMFJ: number
 }
 
+export interface Form8959Lines {
+  wages: number
+  threshold: number
+  excessWages: number
+  additionalTax: number
+}
+
+export interface Form8960Lines {
+  taxableInterest: number
+  ordinaryDividends: number
+  netCapGains: number
+  passiveIncome: number
+  investmentInterestExpense: number
+  grossNII: number
+  totalDeductions: number
+  netInvestmentIncome: number
+  magi: number
+  threshold: number
+  magiExcess: number
+  niitTax: number
+  components: { label: string; amount: number }[]
+}
+
+export interface CapitalLossCarryoverLines {
+  netShortTerm: number
+  netLongTerm: number
+  combined: number
+  appliedToOrdinaryIncome: number
+  shortTermCarryover: number
+  longTermCarryover: number
+  totalCarryover: number
+  hasCarryover: boolean
+}
+
 export interface TaxReturn1040 {
   year: number
   overviewSections?: OverviewSection[] | undefined
@@ -123,7 +157,10 @@ export interface TaxReturn1040 {
   scheduleE?: ScheduleELines
   form4952?: Form4952Lines
   form1116?: Form1116Lines
+  form8959?: Form8959Lines
+  form8960?: Form8960Lines
   form8995?: Form8995Lines
+  capitalLossCarryover?: CapitalLossCarryoverLines
   k1Docs?: K1ExportEntry[]
   k3Docs?: K3ExportEntry[]
   docs1099?: Doc1099ExportEntry[]

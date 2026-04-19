@@ -360,6 +360,57 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
       })()
     : null
 
+  // ── Form 8959 ────────────────────────────────────────────────────────────────
+  const form8959Sheet = taxReturn.form8959 && taxReturn.form8959.additionalTax > 0
+    ? buildSheet('Form 8959', [
+        { line: '1', description: 'Line 1 — Medicare wages (W-2 Box 1)', amount: taxReturn.form8959.wages },
+        { line: '5', description: `Line 5 — Threshold (${taxReturn.form8959.threshold === 200_000 ? 'Single/MFS/HOH' : 'MFJ'})`, amount: taxReturn.form8959.threshold },
+        { line: '6', description: 'Line 6 — Wages above threshold', amount: taxReturn.form8959.excessWages },
+        { line: '7', description: 'Line 7 — Additional Medicare Tax (0.9%) → Schedule 2 Line 11', amount: taxReturn.form8959.additionalTax, isTotal: true },
+      ])
+    : null
+
+  // ── Form 8960 ────────────────────────────────────────────────────────────────
+  const form8960Sheet = taxReturn.form8960
+    ? (() => {
+        const f = taxReturn.form8960
+        const rows: XlsxRow[] = [
+          { isHeader: true, description: 'Part I — Net Investment Income' },
+          { line: '1', description: 'Taxable interest (Schedule B)', amount: f.taxableInterest },
+          { line: '2', description: 'Ordinary dividends (Schedule B)', amount: f.ordinaryDividends },
+          { line: '5a', description: 'Net capital gains (Schedule D, capped at 0)', amount: f.netCapGains },
+          { line: '4a', description: 'Net passive income (K-1 Schedule E)', amount: f.passiveIncome },
+          { line: '8', description: 'Line 8 — Gross NII', amount: f.grossNII, isTotal: true },
+          { isHeader: true, description: 'Part II — Deductions' },
+          { line: '9a', description: 'Investment interest expense (Form 4952)', amount: -f.investmentInterestExpense },
+          { line: '11', description: 'Line 11 — Total deductions', amount: -f.totalDeductions, isTotal: true },
+          { isHeader: true, description: 'Part III — NIIT Computation' },
+          { line: '12', description: 'Net Investment Income (Line 8 − 11)', amount: f.netInvestmentIncome, isTotal: true },
+          { line: '13', description: 'Modified AGI (estimated)', amount: f.magi },
+          { line: '14', description: `Threshold (${f.threshold === 200_000 ? 'Single/MFS/HOH' : 'MFJ'})`, amount: f.threshold },
+          { line: '15', description: 'MAGI excess over threshold', amount: f.magiExcess },
+          { line: '17', description: 'NIIT (3.8% × lesser of Line 12 or 15) → Schedule 2 Line 12', amount: f.niitTax, isTotal: true },
+        ]
+        return buildSheet('Form 8960', rows)
+      })()
+    : null
+
+  // ── Capital Loss Carryover ────────────────────────────────────────────────────
+  const capitalLossSheet = taxReturn.capitalLossCarryover?.hasCarryover
+    ? (() => {
+        const c = taxReturn.capitalLossCarryover!
+        return buildSheet('Capital Loss Carryover', [
+          { description: 'Net short-term capital gain/(loss)', amount: c.netShortTerm },
+          { description: 'Net long-term capital gain/(loss)', amount: c.netLongTerm },
+          { description: 'Combined net capital gain/(loss)', amount: c.combined, isTotal: true },
+          { description: 'Applied to ordinary income this year (max $3,000)', amount: c.appliedToOrdinaryIncome },
+          { description: 'Short-term capital loss carryforward', amount: -c.shortTermCarryover },
+          { description: 'Long-term capital loss carryforward', amount: -c.longTermCarryover },
+          { description: 'Total capital loss carryforward → next year Schedule D', amount: -c.totalCarryover, isTotal: true },
+        ])
+      })()
+    : null
+
   // ── Short Dividends ──────────────────────────────────────────────────────────
   const shortDivSheet = taxReturn.shortDividends
     ? buildSheet('Short Dividends', [
@@ -534,8 +585,11 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
     scheduleDSheet,
     scheduleESheet,
     form1116Sheet,
+    form8959Sheet,
+    form8960Sheet,
     form8995Sheet,
     form4952Sheet,
+    capitalLossSheet,
     shortDivSheet,
     ...k1Sheets,
     ...k3Sheets,

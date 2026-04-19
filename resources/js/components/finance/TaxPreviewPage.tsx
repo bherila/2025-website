@@ -5,6 +5,7 @@ import { ClipboardList } from 'lucide-react'
 import { useCallback, useState } from 'react'
 
 import ActionItemsTab from '@/components/finance/ActionItemsTab'
+import AdditionalTaxesPreview from '@/components/finance/AdditionalTaxesPreview'
 import Form1040Preview from '@/components/finance/Form1040Preview'
 import Form1116Preview from '@/components/finance/Form1116Preview'
 import Form4952Preview from '@/components/finance/Form4952Preview'
@@ -172,7 +173,7 @@ function TaxIncomeOverview({
     .add(row.ps_fed_tax ?? 0)
     .add(row.ps_fed_tax_addl ?? 0)
     .subtract(row.ps_fed_tax_refunded ?? 0), currency(0)).value
-  const addlMedicare = currency(Math.max(0, w2GrossIncome.value - 200000)).multiply(0.009).value
+  const addlMedicare = currency(Math.max(0, w2GrossIncome.value - 200_000)).multiply(0.009).value
 
   const hasData = reviewedW2Docs.length + reviewed1099Docs.length + reviewedK1Docs.length > 0
 
@@ -905,6 +906,11 @@ function TaxPreviewPageContent() {
         </TabsContent>
 
         <TabsContent value={TAX_TABS.estimate} className="space-y-6 mt-0">
+          <AdditionalTaxesPreview
+            form8959={taxReturn.form8959}
+            form8960={taxReturn.form8960}
+            capitalLossCarryover={taxReturn.capitalLossCarryover}
+          />
           <Form1040Preview
             w2Income={w2GrossIncome}
             interestIncome={income1099.interestIncome}
