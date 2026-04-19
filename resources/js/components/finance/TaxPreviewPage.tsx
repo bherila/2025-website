@@ -729,6 +729,11 @@ function TaxPreviewPageContent() {
     .subtract(row.ps_pretax_vision ?? 0)
     .subtract(row.ps_pretax_fsa ?? 0), currency(0))
 
+  const w2SaltPaid = reviewedW2Docs.reduce((acc, doc) => {
+    const parsed = doc.parsed_data as { box17_state_tax?: number | null } | null
+    return currency(acc).add(parsed?.box17_state_tax ?? 0).value
+  }, 0)
+
   return (
     <div>
       <div className="flex items-center gap-4 px-4 pt-4 pb-2 flex-wrap">
@@ -867,7 +872,7 @@ function TaxPreviewPageContent() {
             selectedYear={selectedYear}
             reviewedK1Docs={reviewedK1Docs}
             reviewed1099Docs={reviewed1099Docs}
-            saltPaid={taxReturn.scheduleA?.saltPaid ?? 0}
+            saltPaid={w2SaltPaid}
             isMarried={isMarried}
             userDeductions={userDeductions}
             {...(shortDividendSummary ? { shortDividendSummary } : {})}

@@ -55,7 +55,7 @@ export function computeScheduleALines({
   reviewedK1Docs?: TaxDocument[]
   reviewed1099Docs?: TaxDocument[]
   shortDividendSummary?: ShortDividendSummary
-  /** State and local taxes paid (W-2 Box 17 + user-entered property tax, capped at $10,000). */
+  /** W-2 Box 17 state tax withheld. User-entered SALT is added separately. */
   saltPaid?: number
   year?: number
   isMarried?: boolean
@@ -231,7 +231,7 @@ export default function ScheduleAPreview({
   const [showInvIntModal, setShowInvIntModal] = useState(false)
 
   const shortDivDeduction = shortDividendSummary?.totalItemizedDeduction ?? 0
-  const { invIntSources, totalInvIntExpense, saltDeduction, mortgageInterest, charitable, otherDeductions, totalItemizedDeductions, standardDeduction, shouldItemize } = computeScheduleALines({
+  const { invIntSources, totalInvIntExpense, saltPaid: totalSaltPaidBeforeCap, saltDeduction, mortgageInterest, charitable, otherDeductions, totalItemizedDeductions, standardDeduction, shouldItemize } = computeScheduleALines({
     reviewedK1Docs,
     reviewed1099Docs,
     ...(shortDividendSummary ? { shortDividendSummary } : {}),
@@ -240,6 +240,24 @@ export default function ScheduleAPreview({
     isMarried,
     userDeductions,
   })
+
+  const stateEstimatedTax = userDeductions
+    .filter(d => d.category === 'state_est_tax')
+    .reduce((acc, d) => currency(acc).add(d.amount).value, 0)
+  const realEstateTax = userDeductions
+    .filter(d => d.category === 'real_estate_tax')
+    .reduce((acc, d) => currency(acc).add(d.amount).value, 0)
+  const salesTax = userDeductions
+    .filter(d => d.category === 'sales_tax')
+    .reduce((acc, d) => currency(acc).add(d.amount).value, 0)
+  const charitableCash = userDeductions
+    .filter(d => d.category === 'charitable_cash')
+    .reduce((acc, d) => currency(acc).add(d.amount).value, 0)
+  const charitableNoncash = userDeductions
+    .filter(d => d.category === 'charitable_noncash')
+    .reduce((acc, d) => currency(acc).add(d.amount).value, 0)
+  const stateIncomeTax = currency(saltPaid).add(stateEstimatedTax).value
+  const totalInterest = currency(mortgageInterest).add(totalInvIntExpense).value
 
   return (
     <div className="space-y-4">
@@ -258,36 +276,59 @@ export default function ScheduleAPreview({
         {/* Part II — Taxes */}
         <FormBlock title="Part II — Taxes You Paid">
           <FormLine
-            label="Line 5a — State income tax withheld (W-2 Box 17)"
-            {...(saltPaid > 0 ? { value: saltPaid } : { raw: '—' })}
+            label="Line 5a — State income tax withheld / estimated tax paid"
+            {...(stateIncomeTax > 0 ? { value: stateIncomeTax } : { raw: '—' })}
           />
-          <FormLine label="Line 6 — Real estate taxes" raw="Enter from records" />
+          <FormLine
+            label="Line 5c — State/local general sales taxes"
+            {...(salesTax > 0 ? { value: salesTax } : { raw: '—' })}
+          />
+          <FormLine
+            label="Line 6 — Real estate taxes"
+            {...(realEstateTax > 0 ? { value: realEstateTax } : { raw: '—' })}
+          />
           <FormTotalLine
             label={`Line 7 — Total SALT (capped at $${SALT_CAP.toLocaleString()})`}
             value={saltDeduction}
           />
-          {saltPaid >= SALT_CAP && (
+          {totalSaltPaidBeforeCap >= SALT_CAP && (
             <FormLine label="Note" raw={`SALT cap reached — state taxes above $${SALT_CAP.toLocaleString()} are not deductible`} />
           )}
         </FormBlock>
 
         {/* Part IV — Interest */}
         <FormBlock title="Part IV — Interest You Paid">
-          <FormLine label="Line 8 — Home mortgage interest" raw="—" />
+          <FormLine
+            label="Line 8 — Home mortgage interest"
+            {...(mortgageInterest > 0 ? { value: mortgageInterest } : { raw: '—' })}
+          />
           <FormLine
             label="Line 9 — Investment interest expense (from Form 4952)"
             value={totalInvIntExpense > 0 ? totalInvIntExpense : null}
             {...(totalInvIntExpense === 0 ? { raw: '—' } : {})}
             {...(invIntSources.length > 0 ? { onClick: () => setShowInvIntModal(true) } : {})}
           />
-          <FormTotalLine label="Line 10 — Total interest" value={totalInvIntExpense} />
+          <FormTotalLine label="Line 10 — Total interest" value={totalInterest} />
         </FormBlock>
 
         {/* Part V — Gifts */}
         <FormBlock title="Part V — Gifts to Charity">
-          <FormLine label="Line 11 — Cash contributions" raw="—" />
-          <FormLine label="Line 12 — Non-cash contributions" raw="—" />
-          <FormTotalLine label="Line 14 — Total gifts" value={0} />
+          <FormLine
+            label="Line 11 — Cash contributions"
+            {...(charitableCash > 0 ? { value: charitableCash } : { raw: '—' })}
+          />
+          <FormLine
+            label="Line 12 — Non-cash contributions"
+            {...(charitableNoncash > 0 ? { value: charitableNoncash } : { raw: '—' })}
+          />
+          <FormTotalLine label="Line 14 — Total gifts" value={charitable} />
+        </FormBlock>
+
+        <FormBlock title="Other Itemized Deductions">
+          <FormLine
+            label="Line 16 — Other itemized deductions"
+            {...(otherDeductions > 0 ? { value: otherDeductions } : { raw: '—' })}
+          />
         </FormBlock>
       </div>
 
@@ -335,7 +376,7 @@ export default function ScheduleAPreview({
         {!shouldItemize && (
           <FormLine
             label="Note"
-            raw="Additional deductions (mortgage interest, charitable, property tax) may make itemizing beneficial. See SALT issue for planned support."
+            raw="Additional deductions may still make itemizing beneficial as entries change throughout the year."
           />
         )}
       </FormBlock>

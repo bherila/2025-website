@@ -5,7 +5,7 @@ namespace App\Http\Requests\Finance;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-class StoreUserTaxStateRequest extends FormRequest
+class DeleteUserTaxStateRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -14,7 +14,7 @@ class StoreUserTaxStateRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        $stateCode = $this->input('state_code');
+        $stateCode = $this->route('stateCode');
 
         if (is_string($stateCode)) {
             $this->merge([
@@ -27,7 +27,7 @@ class StoreUserTaxStateRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'tax_year' => ['required', 'integer', 'min:2018', 'max:2030'],
+            'year' => ['required', 'integer', 'min:2018', 'max:2030'],
             'state_code' => ['required', 'string', 'regex:/^[A-Z]{2}$/', Rule::in(['CA', 'NY'])],
         ];
     }

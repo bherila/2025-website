@@ -99,6 +99,20 @@ class UserTaxStateControllerTest extends TestCase
         ])->assertUnprocessable();
     }
 
+    public function test_store_accepts_mixed_case_and_normalizes_to_uppercase(): void
+    {
+        $this->postJson('/api/finance/user-tax-states', [
+            'tax_year' => 2025,
+            'state_code' => 'cA',
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('fin_user_tax_states', [
+            'user_id' => $this->user->id,
+            'tax_year' => 2025,
+            'state_code' => 'CA',
+        ]);
+    }
+
     public function test_index_does_not_return_other_users_states(): void
     {
         $other = User::factory()->create();
@@ -114,5 +128,10 @@ class UserTaxStateControllerTest extends TestCase
     {
         $this->postJson('/api/finance/user-tax-states', ['tax_year' => 2025, 'state_code' => 'CA']);
         $this->deleteJson('/api/finance/user-tax-states/CA')->assertUnprocessable();
+    }
+
+    public function test_destroy_rejects_unsupported_state_code(): void
+    {
+        $this->deleteJson('/api/finance/user-tax-states/TX?year=2025')->assertUnprocessable();
     }
 }

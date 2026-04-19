@@ -19,13 +19,13 @@ export interface UserDeductionEntry {
   id: number
   category: string
   description: string | null
-  amount: number
+  amount: number | string
 }
 
 export interface ScheduleALines {
   invIntSources: { label: string; amount: number }[]
   totalInvIntExpense: number
-  /** Raw SALT paid before the $10,000 cap (W-2 Box 17 + user-entered property tax). */
+  /** Raw SALT paid before the $10,000 cap (W-2 Box 17 + user-entered SALT categories). */
   saltPaid: number
   /** SALT paid capped at $10,000. */
   saltDeduction: number

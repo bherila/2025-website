@@ -22,19 +22,30 @@ interface StateSelectorSectionProps {
 export default function StateSelectorSection({ year, activeTaxStates, onChange }: StateSelectorSectionProps) {
   const [adding, setAdding] = useState(false)
   const [selected, setSelected] = useState('')
+  const [error, setError] = useState<string | null>(null)
 
   const availableToAdd = SUPPORTED_STATES.filter(s => !activeTaxStates.includes(s.code))
 
   async function addState(code: string) {
-    await fetchWrapper.post('/api/finance/user-tax-states', { tax_year: year, state_code: code })
-    onChange([...activeTaxStates, code])
-    setAdding(false)
-    setSelected('')
+    try {
+      setError(null)
+      await fetchWrapper.post('/api/finance/user-tax-states', { tax_year: year, state_code: code })
+      onChange([...activeTaxStates, code])
+      setAdding(false)
+      setSelected('')
+    } catch (err) {
+      setError(typeof err === 'string' ? err : 'Failed to add state.')
+    }
   }
 
   async function removeState(code: string) {
-    await fetchWrapper.delete(`/api/finance/user-tax-states/${code}?year=${year}`, undefined)
-    onChange(activeTaxStates.filter(s => s !== code))
+    try {
+      setError(null)
+      await fetchWrapper.delete(`/api/finance/user-tax-states/${code}?year=${year}`, undefined)
+      onChange(activeTaxStates.filter(s => s !== code))
+    } catch (err) {
+      setError(typeof err === 'string' ? err : 'Failed to remove state.')
+    }
   }
 
   return (
@@ -46,6 +57,7 @@ export default function StateSelectorSection({ year, activeTaxStates, onChange }
           <Badge key={code} variant="secondary" className="gap-1">
             {name}
             <button
+              type="button"
               onClick={() => removeState(code)}
               className="ml-1 text-muted-foreground hover:text-foreground text-xs leading-none"
               aria-label={`Remove ${name}`}
@@ -68,19 +80,20 @@ export default function StateSelectorSection({ year, activeTaxStates, onChange }
                 ))}
               </SelectContent>
             </Select>
-            <Button size="sm" className="h-7 text-xs" disabled={!selected} onClick={() => selected && addState(selected)}>
+            <Button type="button" size="sm" className="h-7 text-xs" disabled={!selected} onClick={() => selected && addState(selected)}>
               Add
             </Button>
-            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setAdding(false); setSelected('') }}>
+            <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setAdding(false); setSelected('') }}>
               Cancel
             </Button>
           </div>
         ) : (
-          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setAdding(true)}>
+          <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={() => setAdding(true)}>
             + Add state
           </Button>
         )
       )}
+      {error && <p className="text-xs text-destructive w-full">{error}</p>}
     </div>
   )
 }

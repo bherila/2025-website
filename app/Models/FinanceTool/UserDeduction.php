@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property int $tax_year
  * @property string $category 'real_estate_tax'|'state_est_tax'|'sales_tax'|'mortgage_interest'|'charitable_cash'|'charitable_noncash'|'other'
  * @property string|null $description
- * @property float $amount
+ * @property string $amount
  */
 class UserDeduction extends Model
 {

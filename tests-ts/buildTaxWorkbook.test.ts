@@ -151,4 +151,30 @@ describe('buildTaxWorkbook', () => {
     const line20 = form1040?.rows.find(r => r.line === '20')
     expect(line20?.amount).toBeUndefined()
   })
+
+  it('includes complete Schedule A deduction rows in workbook export', () => {
+    const workbook = buildTaxWorkbook({
+      year: 2025,
+      scheduleA: {
+        invIntSources: [],
+        totalInvIntExpense: 1200,
+        saltPaid: 9000,
+        saltDeduction: 10_000,
+        mortgageInterest: 6000,
+        charitable: 2500,
+        otherDeductions: 300,
+        userDeductions: [],
+        totalItemizedDeductions: 20_000,
+        standardDeduction: 15_000,
+        shouldItemize: true,
+      },
+    })
+
+    const scheduleASheet = workbook.sheets.find(s => s.name === 'Schedule A')
+    expect(scheduleASheet).toBeDefined()
+    expect(scheduleASheet?.rows.some(r => r.line === '8' && r.amount === 6000)).toBe(true)
+    expect(scheduleASheet?.rows.some(r => r.line === '11' && r.amount === 2500)).toBe(true)
+    expect(scheduleASheet?.rows.some(r => r.description === 'Other user-entered deductions' && r.amount === 300)).toBe(true)
+    expect(scheduleASheet?.rows.some(r => r.line === '7' && r.note?.includes('sales tax'))).toBe(true)
+  })
 })

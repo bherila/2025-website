@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Finance;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Finance\DeleteUserTaxStateRequest;
 use App\Http\Requests\Finance\StoreUserTaxStateRequest;
 use App\Models\FinanceTool\UserTaxState;
 use Illuminate\Http\JsonResponse;
@@ -31,23 +32,21 @@ class UserTaxStateController extends Controller
         UserTaxState::firstOrCreate([
             'user_id' => auth()->id(),
             'tax_year' => $validated['tax_year'],
-            'state_code' => strtoupper($validated['state_code']),
+            'state_code' => $validated['state_code'],
         ]);
 
         return response()->json(['ok' => true], 201);
     }
 
     /** DELETE /api/finance/user-tax-states/{stateCode}?year=YYYY — remove a state. */
-    public function destroy(Request $request, string $stateCode): JsonResponse
+    public function destroy(DeleteUserTaxStateRequest $request): JsonResponse
     {
-        $request->validate([
-            'year' => ['required', 'integer', 'min:2018', 'max:2030'],
-        ]);
+        $validated = $request->validated();
 
         UserTaxState::query()
             ->where('user_id', auth()->id())
-            ->where('tax_year', (int) $request->query('year'))
-            ->where('state_code', strtoupper($stateCode))
+            ->where('tax_year', $validated['year'])
+            ->where('state_code', $validated['state_code'])
             ->delete();
 
         return response()->json(['ok' => true]);

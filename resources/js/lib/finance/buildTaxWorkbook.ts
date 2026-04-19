@@ -226,7 +226,7 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
           line: '7',
           description: 'Line 7 — State and local taxes paid (SALT, capped at $10,000)',
           amount: taxReturn.scheduleA.saltDeduction,
-          note: 'W-2 Box 17 + user-entered property tax',
+          note: 'W-2 Box 17 + user-entered SALT (state est tax, property tax, sales tax)',
         },
         ...(taxReturn.scheduleA.mortgageInterest > 0 ? [{
           line: '8',

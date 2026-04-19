@@ -39,12 +39,14 @@ export default function UserDeductionsSection({ year, deductions, onChange }: Us
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   async function handleSave() {
     const amount = currency(form.amount).value
     if (!form.category || amount <= 0) return
     setSaving(true)
     try {
+      setError(null)
       if (editingId !== null) {
         const updated = await fetchWrapper.put(`/api/finance/user-deductions/${editingId}`, {
           category: form.category,
@@ -63,6 +65,8 @@ export default function UserDeductionsSection({ year, deductions, onChange }: Us
         onChange([...deductions, created])
       }
       setForm(EMPTY_FORM)
+    } catch (err) {
+      setError(typeof err === 'string' ? err : 'Failed to save deduction.')
     } finally {
       setSaving(false)
     }
@@ -80,8 +84,13 @@ export default function UserDeductionsSection({ year, deductions, onChange }: Us
 
   async function handleDelete(id: number, label: string) {
     if (!window.confirm(`Remove "${label}"?`)) return
-    await fetchWrapper.delete(`/api/finance/user-deductions/${id}`, undefined)
-    onChange(deductions.filter(d => d.id !== id))
+    try {
+      setError(null)
+      await fetchWrapper.delete(`/api/finance/user-deductions/${id}`, undefined)
+      onChange(deductions.filter(d => d.id !== id))
+    } catch (err) {
+      setError(typeof err === 'string' ? err : 'Failed to delete deduction.')
+    }
   }
 
   return (
@@ -104,10 +113,10 @@ export default function UserDeductionsSection({ year, deductions, onChange }: Us
                 <TableCell className="text-right font-mono text-sm">{currency(d.amount).format()}</TableCell>
                 <TableCell>
                   <div className="flex gap-1 justify-end">
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(d)} aria-label={`Edit ${CATEGORY_LABELS[d.category] ?? d.category}`}>
+                    <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(d)} aria-label={`Edit ${CATEGORY_LABELS[d.category] ?? d.category}`}>
                       <Pencil className="h-3 w-3" />
                     </Button>
-                    <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleDelete(d.id, CATEGORY_LABELS[d.category] ?? d.category)} aria-label={`Delete ${CATEGORY_LABELS[d.category] ?? d.category}`}>
+                    <Button type="button" size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleDelete(d.id, CATEGORY_LABELS[d.category] ?? d.category)} aria-label={`Delete ${CATEGORY_LABELS[d.category] ?? d.category}`}>
                       <Trash2 className="h-3 w-3" />
                     </Button>
                   </div>
@@ -117,6 +126,7 @@ export default function UserDeductionsSection({ year, deductions, onChange }: Us
           </TableBody>
         </Table>
       )}
+      {error && <p className="text-xs text-destructive">{error}</p>}
 
       {/* Add / edit form */}
       <div className="flex gap-2 flex-wrap items-end">
@@ -147,11 +157,11 @@ export default function UserDeductionsSection({ year, deductions, onChange }: Us
           value={form.amount}
           onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
         />
-        <Button size="sm" className="h-8 text-xs" disabled={saving || !form.category || !form.amount} onClick={handleSave}>
+        <Button type="button" size="sm" className="h-8 text-xs" disabled={saving || !form.category || !form.amount} onClick={handleSave}>
           {editingId !== null ? 'Save' : '+ Add'}
         </Button>
         {editingId !== null && (
-          <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={cancelEdit}>Cancel</Button>
+          <Button type="button" size="sm" variant="ghost" className="h-8 text-xs" onClick={cancelEdit}>Cancel</Button>
         )}
       </div>
     </div>
