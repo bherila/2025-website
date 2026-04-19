@@ -616,6 +616,7 @@ function TaxPreviewPageContent() {
     accounts,
     activeAccountIds,
     income1099,
+    isMarried,
     shortDividendSummary,
     taxReturn,
     refreshAll,
@@ -892,6 +893,7 @@ function TaxPreviewPageContent() {
             totalIncome={taxReturn.form8995?.totalIncome
               ?? w2GrossIncome.add(income1099.interestIncome).add(income1099.dividendIncome).add(scheduleCNetIncome.total).value}
             selectedYear={selectedYear}
+            isMarried={isMarried}
           />
         </TabsContent>
 
