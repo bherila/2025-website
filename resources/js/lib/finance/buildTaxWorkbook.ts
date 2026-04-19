@@ -338,8 +338,8 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
             isTotal: true,
           },
           {
-            line: '15',
-            description: 'Line 15 — 20% × QBI component',
+            line: '13',
+            description: 'Line 13 — 20% × total QBI (after netting losses)',
             amount: f.totalQBIComponent,
           },
           {

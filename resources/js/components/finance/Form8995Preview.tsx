@@ -130,7 +130,7 @@ export default function Form8995Preview({ reviewedK1Docs, totalIncome, selectedY
           value={estimatedDeduction}
           double
         />
-        <FormLine label="Enter on Form 1040 Line 13 / Schedule 3 Line 13" raw="Below-the-line deduction — reduces taxable income" />
+        <FormLine label="Enter on Form 1040 Line 13" raw="Below-the-line deduction — reduces taxable income but not AGI" />
       </FormBlock>
 
       {/* Callouts */}
@@ -160,9 +160,9 @@ export default function Form8995Preview({ reviewedK1Docs, totalIncome, selectedY
 
       <Callout kind="info" title="ℹ Where This Flows on the Return">
         <p>
-          The QBI deduction flows to <strong>Form 1040 Line 13</strong> (via Schedule 1 Line 13 for
-          partnerships). It is a below-the-line deduction — it reduces <em>taxable</em> income
-          but not AGI. It is available whether you itemize (Schedule A) or take the standard deduction.
+          The QBI deduction flows to <strong>Form 1040 Line 13</strong>. It is a below-the-line
+          deduction — it reduces <em>taxable</em> income but not AGI. It is available whether you
+          itemize (Schedule A) or take the standard deduction.
         </p>
         {aboveThreshold && (
           <p>

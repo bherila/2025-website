@@ -140,4 +140,28 @@ describe('computeForm8995Lines', () => {
     expect(result.totalQBI).toBe(100_000)
     expect(result.totalQBIComponent).toBeCloseTo(20_000)
   })
+
+  it('nets losses across partnerships before applying 20% (IRS Form 8995 Line 12)', () => {
+    // LP1 has +$100k QBI, LP2 has -$50k loss → net $50k → component = $10k
+    const lp1 = makeData(box20({ code: 'S', value: '100000' }))
+    const lp2 = makeData(box20({ code: 'S', value: '-50000' }))
+    const result = computeForm8995Lines(
+      [{ data: lp1, label: 'LP 1' }, { data: lp2, label: 'LP 2' }],
+      200_000,
+      2024,
+    )
+    expect(result.totalQBI).toBe(50_000)
+    expect(result.totalQBIComponent).toBeCloseTo(10_000)
+    // Per-entry display components are still clamped (for informational display)
+    expect(result.entries[0]?.qbiComponent).toBeCloseTo(20_000)
+    expect(result.entries[1]?.qbiComponent).toBe(0)
+  })
+
+  it('returns 0 deduction when aggregate QBI is negative', () => {
+    const data = makeData(box20({ code: 'S', value: '-30000' }))
+    const result = computeForm8995Lines([{ data, label: 'Loss LP' }], 200_000, 2024)
+    expect(result.totalQBI).toBe(-30_000)
+    expect(result.totalQBIComponent).toBe(0)
+    expect(result.estimatedDeduction).toBe(0)
+  })
 })

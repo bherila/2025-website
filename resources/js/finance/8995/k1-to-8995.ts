@@ -109,7 +109,7 @@ export interface Form8995Lines {
   entries: QBIEntry[]
   /** Sum of all per-K-1 QBI income amounts. */
   totalQBI: number
-  /** Sum of all per-K-1 QBI components (20% of positive QBI each). */
+  /** 20% × max(totalQBI, 0) — losses net across activities before applying the rate (Form 8995 Line 12). */
   totalQBIComponent: number
   /** Estimated taxable income (total income minus standard deduction). */
   estimatedTaxableIncome: number
@@ -142,12 +142,14 @@ export function computeForm8995Lines(
     .filter((e): e is QBIEntry => e !== null)
 
   const totalQBI = entries.reduce((acc, e) => currency(acc).add(e.qbiIncome).value, 0)
-  const totalQBIComponent = entries.reduce((acc, e) => currency(acc).add(e.qbiComponent).value, 0)
+  // Net losses across all activities before applying 20% (IRS Form 8995 Line 12).
+  // Per-entry qbiComponent is kept as 20% × max(entry, 0) for display only.
+  const totalQBIComponent = currency(Math.max(totalQBI, 0)).multiply(0.2).value
 
   const stdDed = standardDeduction(year, isMarried)
-  const estimatedTaxableIncome = Math.max(currency(totalIncome).subtract(stdDed).value, 0)
-  const taxableIncomeCap = currency(estimatedTaxableIncome).multiply(0.2).value
-  const estimatedDeduction = Math.min(totalQBIComponent, taxableIncomeCap)
+  const estimatedTaxableIncome = currency(totalIncome).subtract(stdDed).value
+  const taxableIncomeCap = currency(Math.max(estimatedTaxableIncome, 0)).multiply(0.2).value
+  const estimatedDeduction = currency(Math.min(totalQBIComponent, taxableIncomeCap)).value
 
   const { single, mfj } = qbiThreshold(year)
   const threshold = isMarried ? mfj : single
