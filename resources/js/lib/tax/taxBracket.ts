@@ -2,13 +2,14 @@ import currency from 'currency.js'
 
 import { splitDelimitedText } from '../splitDelimitedText'
 
-/******* WARNING ***************************
-  Federal 2025 brackets in the CSV match the IRS‑published 2025
-  tables; your California 2023–2025 rows generally align with FTB 
-  published schedules but should be double‑checked for exact 
-  threshold rounding and the million‑plus top‑rate boundary; 
-  the 2026 federal rows in your CSV are from a third‑party 
-  source and should remain non‑final until confirmed by the IRS.
+/******* DATA SOURCES ***************************
+  Federal 2023–2025 brackets: IRS Rev. Proc. 2022-38, 2023-34, 2024-40.
+  Federal 2025 brackets corrected 2026-04-19 (prior data was 2024 numbers).
+  Federal 2026 brackets: third-party projection — mark isFinal=N; replace with
+    IRS Rev. Proc. once published (expected Oct–Nov 2025).
+  California 2023–2025 brackets: FTB Schedule X/Y/Z; the million-plus
+    13.3% boundary and exact threshold rounding should be re-verified against
+    the official FTB tax booklet for each year.
 *******************************************/
 
 interface TaxTableRow {
@@ -93,37 +94,37 @@ CA,2025,MFS,418962,698271,0.113,Y
 CA,2025,MFS,698272,1000000,0.123,Y
 CA,2025,MFS,1000001,999999999,0.133,Y
 
-,2025,S,0,11600,0.10,Y
-,2025,S,11601,47150,0.12,Y
-,2025,S,47151,100525,0.22,Y
-,2025,S,100526,191950,0.24,Y
-,2025,S,191951,243725,0.32,Y
-,2025,S,243726,609350,0.35,Y
-,2025,S,609351,999999999,0.37,Y
+,2025,S,0,11925,0.10,Y
+,2025,S,11926,48475,0.12,Y
+,2025,S,48476,103350,0.22,Y
+,2025,S,103351,197300,0.24,Y
+,2025,S,197301,250525,0.32,Y
+,2025,S,250526,626350,0.35,Y
+,2025,S,626351,999999999,0.37,Y
 
-,2025,MFJ,0,23200,0.10,Y
-,2025,MFJ,23201,94300,0.12,Y
-,2025,MFJ,94301,201050,0.22,Y
-,2025,MFJ,201051,383900,0.24,Y
-,2025,MFJ,383901,487450,0.32,Y
-,2025,MFJ,487451,731200,0.35,Y
-,2025,MFJ,731201,999999999,0.37,Y
+,2025,MFJ,0,23850,0.10,Y
+,2025,MFJ,23851,96950,0.12,Y
+,2025,MFJ,96951,206700,0.22,Y
+,2025,MFJ,206701,394600,0.24,Y
+,2025,MFJ,394601,501050,0.32,Y
+,2025,MFJ,501051,751600,0.35,Y
+,2025,MFJ,751601,999999999,0.37,Y
 
-,2025,MFS,0,11600,0.10,Y
-,2025,MFS,11601,47150,0.12,Y
-,2025,MFS,47151,100525,0.22,Y
-,2025,MFS,100526,191950,0.24,Y
-,2025,MFS,191951,243725,0.32,Y
-,2025,MFS,243726,365600,0.35,Y
-,2025,MFS,365601,999999999,0.37,Y
+,2025,MFS,0,11925,0.10,Y
+,2025,MFS,11926,48475,0.12,Y
+,2025,MFS,48476,103350,0.22,Y
+,2025,MFS,103351,197300,0.24,Y
+,2025,MFS,197301,250525,0.32,Y
+,2025,MFS,250526,375800,0.35,Y
+,2025,MFS,375801,999999999,0.37,Y
 
-,2025,HOH,0,16550,0.10,Y
-,2025,HOH,16551,63100,0.12,Y
-,2025,HOH,63101,100500,0.22,Y
-,2025,HOH,100501,191950,0.24,Y
-,2025,HOH,191951,243700,0.32,Y
-,2025,HOH,243701,609350,0.35,Y
-,2025,HOH,609351,999999999,0.37,Y
+,2025,HOH,0,17000,0.10,Y
+,2025,HOH,17001,64850,0.12,Y
+,2025,HOH,64851,103350,0.22,Y
+,2025,HOH,103351,197300,0.24,Y
+,2025,HOH,197301,250500,0.32,Y
+,2025,HOH,250501,626350,0.35,Y
+,2025,HOH,626351,999999999,0.37,Y
 
 ,2026,S,0,12400,0.10,N
 ,2026,S,12401,50400,0.12,N

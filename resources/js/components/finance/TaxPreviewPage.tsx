@@ -8,6 +8,7 @@ import ActionItemsTab from '@/components/finance/ActionItemsTab'
 import Form1040Preview from '@/components/finance/Form1040Preview'
 import Form1116Preview from '@/components/finance/Form1116Preview'
 import Form4952Preview from '@/components/finance/Form4952Preview'
+import Form8995Preview from '@/components/finance/Form8995Preview'
 import { isFK1StructuredData } from '@/components/finance/k1'
 import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
 import ScheduleAPreview from '@/components/finance/ScheduleAPreview'
@@ -778,6 +779,7 @@ function TaxPreviewPageContent() {
           <TabsTrigger value={TAX_TABS.scheduleE}>Schedule E</TabsTrigger>
           <TabsTrigger value={TAX_TABS.capitalGains}>Capital Gains</TabsTrigger>
           <TabsTrigger value={TAX_TABS.form1116}>Form 1116</TabsTrigger>
+          <TabsTrigger value={TAX_TABS.form8995}>Form 8995</TabsTrigger>
           <TabsTrigger value={TAX_TABS.scheduleC}>Schedule C</TabsTrigger>
           <TabsTrigger value={TAX_TABS.estimate}>Tax Estimate</TabsTrigger>
           <TabsTrigger value={TAX_TABS.actionItems}>Action Items</TabsTrigger>
@@ -881,6 +883,14 @@ function TaxPreviewPageContent() {
             reviewedK1Docs={reviewedK1Docs}
             reviewed1099Docs={reviewed1099Docs}
             income1099={income1099}
+          />
+        </TabsContent>
+
+        <TabsContent value={TAX_TABS.form8995} className="mt-0">
+          <Form8995Preview
+            reviewedK1Docs={reviewedK1Docs}
+            totalIncome={w2GrossIncome.add(income1099.interestIncome).add(income1099.dividendIncome).add(scheduleCNetIncome.total).value}
+            selectedYear={selectedYear}
           />
         </TabsContent>
 

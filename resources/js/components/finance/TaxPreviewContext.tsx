@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { computeForm1040Lines } from '@/components/finance/Form1040Preview'
 import { computeForm1116Lines } from '@/components/finance/Form1116Preview'
 import { computeForm4952Lines } from '@/components/finance/Form4952Preview'
+import { computeForm8995 } from '@/components/finance/Form8995Preview'
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { computeScheduleALines } from '@/components/finance/ScheduleAPreview'
 import { computeScheduleB } from '@/components/finance/ScheduleBPreview'
@@ -500,6 +501,11 @@ export function TaxPreviewProvider({
       },
       form4952,
       form1116: computeForm1116Lines({ reviewedK1Docs, reviewed1099Docs }),
+      form8995: computeForm8995({
+        reviewedK1Docs,
+        totalIncome: w2GrossIncome.add(income1099.interestIncome).add(income1099.dividendIncome).add(scheduleCNetIncome.total).value,
+        selectedYear: year,
+      }),
       k1Docs: toTaxReturnYearK1Entries(reviewedK1Docs),
       k3Docs: reviewedK1Docs
         .map((doc) => {

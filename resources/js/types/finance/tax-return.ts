@@ -98,6 +98,18 @@ export interface OverviewRow {
   note?: string | undefined
 }
 
+export interface Form8995Lines {
+  entries: { label: string; qbiIncome: number; ubia: number; sectionNotes: string; qbiComponent: number }[]
+  totalQBI: number
+  totalQBIComponent: number
+  estimatedTaxableIncome: number
+  taxableIncomeCap: number
+  estimatedDeduction: number
+  aboveThreshold: boolean
+  thresholdSingle: number
+  thresholdMFJ: number
+}
+
 export interface TaxReturn1040 {
   year: number
   overviewSections?: OverviewSection[] | undefined
@@ -109,6 +121,7 @@ export interface TaxReturn1040 {
   scheduleE?: ScheduleELines
   form4952?: Form4952Lines
   form1116?: Form1116Lines
+  form8995?: Form8995Lines
   k1Docs?: K1ExportEntry[]
   k3Docs?: K3ExportEntry[]
   docs1099?: Doc1099ExportEntry[]
