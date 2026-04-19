@@ -3,7 +3,12 @@
 import currency from 'currency.js'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
-import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine, parseFieldVal } from '@/components/finance/tax-preview-primitives'
+import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
+import {
+  extractForeignTaxSummaries,
+  extractK1NIIComponents,
+  extractK3Line4bApportionment,
+} from '@/finance/1116/k3-to-1116'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import type { Form1116Lines } from '@/types/finance/tax-return'
@@ -40,31 +45,54 @@ export function computeForm1116Lines({
     .filter((x): x is { doc: TaxDocument; data: FK1StructuredData } => x.data !== null)
 
   const incomeSources: { label: string; amount: number }[] = []
+  const generalIncomeSources: { label: string; amount: number }[] = []
+  const taxSources: { label: string; amount: number }[] = []
+  const line4bApportionment: { label: string; interestExpense: number; ratio: number; line4b: number }[] = []
+  const niiComponents: { label: string; amount: number }[] = []
+  let totalNII = currency(0)
+
   for (const { doc, data } of k1Parsed) {
     const partnerName =
       data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
-    const k3Sections = data.k3?.sections ?? []
-    const part2Sec1 = k3Sections.filter(
-      (s) => s.sectionId === 'part2_section1' || s.sectionId === 'part2_section2',
-    )
-    let k3PassiveTotal = currency(0)
-    for (const sec of part2Sec1) {
-      const rows = ((sec.data as Record<string, unknown>)?.rows as Array<Record<string, unknown>> | undefined) ?? []
-      for (const row of rows) {
-        const passive = parseFieldVal(String(row.col_c_passive ?? '')) ?? 0
-        if (passive !== 0) {
-          k3PassiveTotal = k3PassiveTotal.add(passive)
+
+    const summaries = extractForeignTaxSummaries(data, doc.account_id)
+
+    if (summaries.length > 0) {
+      let taxAdded = false
+      for (const summary of summaries) {
+        const income = summary.grossForeignIncome ?? 0
+        if (summary.category === 'passive' && income !== 0) {
+          incomeSources.push({ label: `${partnerName} — K-3 passive income`, amount: income })
+        } else if (summary.category === 'general' && income !== 0) {
+          generalIncomeSources.push({ label: `${partnerName} — K-3 general income`, amount: income })
         }
+        if (summary.totalForeignTaxPaid > 0 && !taxAdded) {
+          taxSources.push({ label: `${partnerName} — K-1 Box 21`, amount: summary.totalForeignTaxPaid })
+          taxAdded = true
+        }
+      }
+    } else {
+      const box21 = pk1(data, '21')
+      if (box21 > 0) {
+        incomeSources.push({ label: `${partnerName} — Box 21 (income estimated)`, amount: currency(box21).divide(0.15).value })
+        taxSources.push({ label: `${partnerName} — K-1 Box 21`, amount: box21 })
       }
     }
 
-    if (k3PassiveTotal.value !== 0) {
-      incomeSources.push({ label: `${partnerName} — K-3 Part II passive income`, amount: k3PassiveTotal.value })
-    } else if (pk1(data, '21') > 0) {
-      incomeSources.push({
-        label: `${partnerName} — Box 21 foreign tax (income estimated)`,
-        amount: pk1(data, '21') / 0.15,
+    const appt = extractK3Line4bApportionment(data)
+    if (appt) {
+      line4bApportionment.push({
+        label: partnerName,
+        interestExpense: appt.interestExpense,
+        ratio: appt.passiveRatio,
+        line4b: appt.line4b,
       })
+    }
+
+    const nii = extractK1NIIComponents(data)
+    if (nii.totalNII !== 0) {
+      niiComponents.push({ label: partnerName, amount: nii.totalNII })
+      totalNII = totalNII.add(nii.totalNII)
     }
   }
 
@@ -74,40 +102,54 @@ export function computeForm1116Lines({
     const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? '1099-DIV'
     const foreignTax = p?.box7_foreign_tax as number | undefined
     if (foreignTax != null && foreignTax > 0) {
-      incomeSources.push({ label: `${payer} — 1099-DIV (estimated foreign source)`, amount: foreignTax / 0.15 })
-    }
-  }
-
-  const taxSources: { label: string; amount: number }[] = []
-  for (const { doc, data } of k1Parsed) {
-    const partnerName =
-      data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
-    const box21 = pk1(data, '21')
-    if (box21 !== 0) {
-      taxSources.push({ label: `${partnerName} — K-1 Box 21`, amount: box21 })
+      incomeSources.push({ label: `${payer} — 1099-DIV (estimated foreign source)`, amount: currency(foreignTax).divide(0.15).value })
+      taxSources.push({ label: `${payer} — 1099-DIV Box 7`, amount: foreignTax })
     }
   }
 
   for (const doc of reviewed1099Docs) {
     const p = doc.parsed_data as Record<string, unknown>
     const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? '1099'
-
-    const divForeignTax = p?.box7_foreign_tax as number | undefined
-    if (divForeignTax != null && divForeignTax > 0) {
-      taxSources.push({ label: `${payer} — 1099-DIV Box 7`, amount: divForeignTax })
-    }
-
     const intForeignTax = p?.box6_foreign_tax as number | undefined
     if (intForeignTax != null && intForeignTax > 0) {
       taxSources.push({ label: `${payer} — 1099-INT Box 6`, amount: intForeignTax })
     }
   }
 
+  const totalPassiveIncome = incomeSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value
+  const totalGeneralIncome = generalIncomeSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value
+  const totalForeignTaxes = taxSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value
+  const totalLine4b = line4bApportionment.reduce((acc, s) => acc.add(s.line4b), currency(0)).value
+
+  const niit =
+    totalNII.value !== 0
+      ? {
+          niiComponents,
+          totalNII: totalNII.value,
+          niitEstimate: currency(totalNII.value).multiply(0.038).value,
+        }
+      : null
+
+  const creditVsDeduction =
+    totalForeignTaxes > 0
+      ? {
+          creditValue: totalForeignTaxes,
+          deductionValue: currency(totalForeignTaxes).multiply(0.37).value,
+          recommendation: 'credit' as const,
+        }
+      : null
+
   return {
     incomeSources,
     taxSources,
-    totalPassiveIncome: incomeSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value,
-    totalForeignTaxes: taxSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value,
+    totalPassiveIncome,
+    totalForeignTaxes,
+    generalIncomeSources,
+    totalGeneralIncome,
+    line4bApportionment,
+    totalLine4b,
+    niit,
+    creditVsDeduction,
   }
 }
 
@@ -116,97 +158,27 @@ export default function Form1116Preview({
   reviewed1099Docs,
 }: Form1116PreviewProps) {
   const computed = computeForm1116Lines({ reviewedK1Docs, reviewed1099Docs })
+  const {
+    incomeSources,
+    taxSources,
+    totalPassiveIncome,
+    totalForeignTaxes,
+    generalIncomeSources,
+    totalGeneralIncome,
+    line4bApportionment,
+    totalLine4b,
+    niit,
+    creditVsDeduction,
+  } = computed
 
-  // ── Parse K-1 docs ────────────────────────────────────────────────────────
   const k1Parsed = reviewedK1Docs
     .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
     .filter((x): x is { doc: TaxDocument; data: FK1StructuredData } => x.data !== null)
 
-  // ── Part I — Foreign Source Passive Income ────────────────────────────────
-  type IncomeSource = { label: string; amount: number }
-  const incomeSources: IncomeSource[] = []
-
-  for (const { doc, data } of k1Parsed) {
-    const partnerName =
-      data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
-    const k3Sections = data.k3?.sections ?? []
-
-    // Sum K-3 Part II section 1 passive column (col_c_passive), lines ≤ 24
-    const part2Sec1 = k3Sections.filter(
-      (s) => s.sectionId === 'part2_section1' || s.sectionId === 'part2_section2',
-    )
-    let k3PassiveTotal = currency(0)
-    let hasXXOnly = true // track if all entries have country XX (U.S. source)
-    let hasGeneralCategory = false
-
-    for (const sec of part2Sec1) {
-      const rows = ((sec.data as Record<string, unknown>)?.rows as Array<Record<string, unknown>> | undefined) ?? []
-      for (const row of rows) {
-        const passive = parseFieldVal(String(row.col_c_passive ?? '')) ?? 0
-        const general = parseFieldVal(String(row.col_d_general ?? '')) ?? 0
-        const country = (row.country as string | undefined) ?? ''
-        if (passive !== 0) {
-          k3PassiveTotal = k3PassiveTotal.add(passive)
-          if (country !== 'XX' && country !== '') hasXXOnly = false
-        }
-        if (general !== 0 && country !== 'XX' && country !== '') {
-          hasGeneralCategory = true
-        }
-      }
-    }
-
-    if (k3PassiveTotal.value !== 0) {
-      incomeSources.push({ label: `${partnerName} — K-3 Part II passive income`, amount: k3PassiveTotal.value })
-    } else if (pk1(data, '21') > 0) {
-      // Box 21 > 0 but no K-3 passive income — approximate
-      incomeSources.push({
-        label: `${partnerName} — Box 21 foreign tax (income estimated)`,
-        amount: pk1(data, '21') / 0.15, // rough 15% withholding assumption
-      })
-    }
-
-    void hasXXOnly
-    void hasGeneralCategory
-  }
-
-  const totalPassiveIncome = incomeSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value
-
-  // ── Part II — Foreign Taxes Paid ──────────────────────────────────────────
-  type TaxSource = { label: string; amount: number }
-  const taxSources: TaxSource[] = [...computed.taxSources]
-  const totalForeignTaxes = computed.totalForeignTaxes
-
-  // ── Callouts ──────────────────────────────────────────────────────────────
-
-  // Simplified election check ($300 single / $600 MFJ threshold)
   const simplifiedElectionThreshold = 300
   const aboveSimplifiedThreshold = totalForeignTaxes > simplifiedElectionThreshold
 
-  // General category check — scan K-3 again for clarity
-  let hasGeneralCategoryFinal = false
-  let hasXXOnlyFinal = true
-
-  for (const { data } of k1Parsed) {
-    const k3Sections = data.k3?.sections ?? []
-    const part2 = k3Sections.filter(
-      (s) => s.sectionId === 'part2_section1' || s.sectionId === 'part2_section2',
-    )
-    for (const sec of part2) {
-      const rows = ((sec.data as Record<string, unknown>)?.rows as Array<Record<string, unknown>> | undefined) ?? []
-      for (const row of rows) {
-        const general = parseFieldVal(String(row.col_d_general ?? '')) ?? 0
-        const country = (row.country as string | undefined) ?? ''
-        if (general !== 0 && country !== 'XX' && country !== '') {
-          hasGeneralCategoryFinal = true
-          hasXXOnlyFinal = false
-        }
-      }
-    }
-  }
-
-  // TurboTax Line 1d check
-  // If K-1 Box 5 interest is significantly larger than K-3 passive income, flag it
-  const totalK1Box5 = k1Parsed.reduce((acc, { data }) => acc + pk1(data, '5'), 0)
+  const totalK1Box5 = k1Parsed.reduce((acc, { data }) => currency(acc).add(pk1(data, '5')).value, 0)
   const turboTaxAlert = totalK1Box5 > 0 && totalPassiveIncome < totalK1Box5 * 0.5
 
   if (totalForeignTaxes === 0 && totalPassiveIncome === 0) {
@@ -228,7 +200,6 @@ export default function Form1116Preview({
         </p>
       </div>
 
-      {/* Simplified election check */}
       {aboveSimplifiedThreshold ? (
         <Callout kind="warn" title="⚠ Simplified Limitation Election Does NOT Apply">
           <p>
@@ -245,27 +216,29 @@ export default function Form1116Preview({
         </Callout>
       )}
 
-      {/* General category check */}
-      {hasGeneralCategoryFinal ? (
-        <Callout kind="warn" title="⚠ General Category Income Detected — Second Form 1116 May Be Required">
-          <p>One or more K-3 Part II rows show non-zero general category income from non-XX countries.</p>
+      {totalGeneralIncome > 0 ? (
+        <Callout kind="warn" title="⚠ General Category Income Detected — Second Form 1116 Required">
+          <p>
+            General category foreign income of <strong>{fmtAmt(totalGeneralIncome, 2)}</strong> was detected in K-3
+            Part II. A separate Form 1116 (general category) is required in addition to the passive category form.
+          </p>
         </Callout>
       ) : (
         <Callout kind="good" title="✓ No General Category Form 1116 Required">
           <p>
-            All column (d) general category amounts have country code XX ("Sourced by partner"), which is
-            U.S.-source for domestic partners. Column (d) is effectively $0 for your return. One Form 1116 (passive category) only.
+            All column (d) general category amounts have country code XX ("Sourced by partner"), which is U.S.-source
+            for domestic partners. One Form 1116 (passive category) only.
           </p>
         </Callout>
       )}
 
-      {/* Parts I and II side by side */}
+      {/* Passive Form 1116 — Parts I and II */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <FormBlock title="Part I — Foreign Source Passive Income">
           {incomeSources.map((src, i) => (
             <FormLine key={i} label={src.label} value={src.amount} />
           ))}
-          {incomeSources.length === 0 && <FormLine label="No foreign income identified" raw="—" />}
+          {incomeSources.length === 0 && <FormLine label="No foreign passive income identified" raw="—" />}
           <FormTotalLine label="Total foreign passive income" value={totalPassiveIncome} />
         </FormBlock>
 
@@ -278,9 +251,45 @@ export default function Form1116Preview({
         </FormBlock>
       </div>
 
+      {/* General Category Form 1116 — if applicable */}
+      {generalIncomeSources.length > 0 && (
+        <FormBlock title="General Category Form 1116 — Part I (Foreign Source General Income)">
+          {generalIncomeSources.map((src, i) => (
+            <FormLine key={i} label={src.label} value={src.amount} />
+          ))}
+          <FormTotalLine label="Total foreign general income" value={totalGeneralIncome} />
+          <FormLine
+            label="Foreign taxes attributable to general category"
+            raw="See K-3 Part III Section 4 per-basket breakdown"
+          />
+        </FormBlock>
+      )}
+
+      {/* Line 4b — Apportioned Interest Expense */}
+      {line4bApportionment.length > 0 && (
+        <FormBlock title="Line 4b — Apportioned Interest Expense (Asset Method)">
+          {line4bApportionment.map((row, i) => (
+            <div key={i} className="space-y-0.5">
+              <FormLine label={`${row.label} — allocable interest expense`} value={row.interestExpense} />
+              <FormLine
+                label={`${row.label} — passive asset ratio`}
+                raw={`${(row.ratio * 100).toFixed(2)}%`}
+              />
+              <FormLine label={`${row.label} — Line 4b (expense × ratio)`} value={row.line4b} />
+            </div>
+          ))}
+          <FormTotalLine label="Total apportioned interest (Line 4b)" value={totalLine4b} />
+          <FormLine
+            label="Enter on Form 1116, Part I, Line 4b"
+            raw="Reduce passive foreign income by this amount"
+          />
+        </FormBlock>
+      )}
+
       {/* Part III — Limitation */}
       <FormBlock title="Part III — Limitation Calculation (Estimated)">
         <FormLine label="Foreign passive income (Part I)" value={totalPassiveIncome} />
+        {totalLine4b > 0 && <FormLine label="Less: apportioned interest (Line 4b)" value={-totalLine4b} />}
         <FormLine label="Total income (estimated — enter from prior return)" raw="~see note" />
         <FormLine label="Limiting fraction" raw="foreign income ÷ total income" />
         <FormLine label="U.S. tax before credits (estimated)" raw="~see note" />
@@ -288,7 +297,7 @@ export default function Form1116Preview({
         <FormLine label="Actual foreign taxes paid (Part II)" value={totalForeignTaxes} />
         <FormTotalLine
           label={
-            totalPassiveIncome >= totalForeignTaxes / 0.15
+            totalPassiveIncome >= currency(totalForeignTaxes).divide(0.15).value
               ? 'Credit allowed — likely FULLY ALLOWED ✓'
               : 'Credit allowed (subject to limitation)'
           }
@@ -298,7 +307,59 @@ export default function Form1116Preview({
         <FormLine label="Carryforward (if any)" raw="$0 (estimate)" />
       </FormBlock>
 
-      {/* TurboTax correction callout */}
+      {/* Credit vs. Deduction Comparison */}
+      {creditVsDeduction && (
+        <FormBlock title="Credit vs. Deduction — Which Is Better?">
+          <FormLine
+            label="Option A: Foreign Tax Credit (Form 1116)"
+            value={creditVsDeduction.creditValue}
+          />
+          <FormLine
+            label="Option B: Foreign Tax Deduction (Sch. A, itemized) — est. at 37% marginal"
+            value={creditVsDeduction.deductionValue}
+          />
+          <FormLine
+            label="Option B at 32% marginal"
+            value={currency(creditVsDeduction.creditValue).multiply(0.32).value}
+          />
+          <FormLine
+            label="Option B at 24% marginal"
+            value={currency(creditVsDeduction.creditValue).multiply(0.24).value}
+          />
+          <FormLine
+            label="Recommendation"
+            raw="Take the Credit — saves more at any marginal rate"
+          />
+          <FormLine
+            label="Exception"
+            raw="Use deduction only if FTC is fully limited (rare) or under AMT"
+          />
+        </FormBlock>
+      )}
+
+      {/* NIIT — Form 8960 */}
+      {niit && (
+        <FormBlock title="Form 8960 — Net Investment Income Tax (NIIT) Estimate">
+          {niit.niiComponents.map((c, i) => (
+            <FormLine key={i} label={c.label} value={c.amount} />
+          ))}
+          <FormTotalLine label="Estimated Net Investment Income (NII)" value={niit.totalNII} />
+          <FormLine label="NIIT rate" raw="3.8%" />
+          <FormLine
+            label="MAGI threshold (single $200k / MFJ $250k / MFS $125k)"
+            raw="Enter from your return"
+          />
+          <FormTotalLine
+            label="Estimated NIIT (3.8% × NII — before MAGI threshold)"
+            value={niit.niitEstimate}
+          />
+          <FormLine
+            label="⚠ Note: Foreign Tax Credit does NOT reduce NIIT"
+            raw="NIIT is a separate tax — FTC offsets regular income tax only"
+          />
+        </FormBlock>
+      )}
+
       {turboTaxAlert && (
         <Callout kind="alert" title="⚠ TurboTax FTC Worksheet Line 1d — Correction Required">
           <p>
@@ -317,10 +378,17 @@ export default function Form1116Preview({
           dollar-for-dollar credit against your regular federal income tax.
         </p>
         <p>The FTC does NOT reduce the Net Investment Income Tax (NIIT, Form 8960).</p>
-        <p>
-          <strong>Passive category only:</strong> All foreign income from the K-1 K-3 is passive category. No
-          general category Form 1116 is required unless your review changes.
-        </p>
+        {totalGeneralIncome > 0 && (
+          <p>
+            <strong>Two Form 1116s required:</strong> one for passive category, one for general category.
+          </p>
+        )}
+        {totalLine4b > 0 && (
+          <p>
+            <strong>Line 4b:</strong> Enter {fmtAmt(totalLine4b, 2)} on Form 1116, Part I, Line 4b (apportioned
+            interest expense per K-3 Part III asset method).
+          </p>
+        )}
       </Callout>
     </div>
   )

@@ -79,6 +79,10 @@ export interface ForeignTaxSummary {
   country?: string | undefined
   /** Gross foreign income (Box 16 code B or C). */
   grossForeignIncome?: number | undefined
+  /** "Sourced by Partner" amount (col f) from K-3 Part II. */
+  sourcedByPartner?: number | undefined
+  /** True when the document-level election to treat col-f as U.S. source is active. */
+  electionSBPasUS?: boolean | undefined
   /** Source document type. */
   sourceType: 'k1' | '1099_div' | '1099_int'
   /** Account ID the document belongs to. */

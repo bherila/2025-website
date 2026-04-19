@@ -215,25 +215,23 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
   // ── Form 1116 ────────────────────────────────────────────────────────────────
   const form1116Sheet = taxReturn.form1116
     ? (() => {
-        const incLines = taxReturn.form1116.incomeSources.map((s) => ({
-          description: s.label,
-          amount: s.amount,
-        }))
-        const taxLines = taxReturn.form1116.taxSources.map((s) => ({
-          description: s.label,
-          amount: s.amount,
-        }))
+        const f = taxReturn.form1116
+        const incLines = f.incomeSources.map((s) => ({ description: s.label, amount: s.amount }))
+        const taxLines = f.taxSources.map((s) => ({ description: s.label, amount: s.amount }))
+        const genLines = f.generalIncomeSources.map((s) => ({ description: s.label, amount: s.amount }))
+
         const incStart = 3
         const incEnd = incStart + incLines.length - 1
-        const taxStart = incEnd + 3 // +1 for income total, +1 for header
+        const taxStart = incEnd + 3
         const taxEnd = taxStart + taxLines.length - 1
+
         const rows: XlsxRow[] = [
           { isHeader: true, description: 'Part I — Foreign Source Passive Income' },
           ...incLines,
           {
             line: '1',
             description: 'Total foreign passive income',
-            amount: taxReturn.form1116.totalPassiveIncome,
+            amount: f.totalPassiveIncome,
             formula: incLines.length > 0 ? sumFormula(incStart, incEnd) : undefined,
             isTotal: true,
           },
@@ -242,11 +240,43 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
           {
             line: '2',
             description: 'Total foreign taxes paid',
-            amount: taxReturn.form1116.totalForeignTaxes,
+            amount: f.totalForeignTaxes,
             formula: taxLines.length > 0 ? sumFormula(taxStart, taxEnd) : undefined,
             isTotal: true,
           },
         ]
+
+        if (genLines.length > 0) {
+          rows.push({ isHeader: true, description: 'General Category — Foreign Income' })
+          rows.push(...genLines)
+          rows.push({ line: 'G1', description: 'Total general category income', amount: f.totalGeneralIncome, isTotal: true })
+        }
+
+        if (f.line4bApportionment.length > 0) {
+          rows.push({ isHeader: true, description: 'Line 4b — Apportioned Interest Expense (Asset Method)' })
+          for (const row of f.line4bApportionment) {
+            rows.push({ description: `${row.label} — allocable interest`, amount: row.interestExpense })
+            rows.push({ description: `${row.label} — passive ratio`, amount: row.ratio })
+            rows.push({ description: `${row.label} — Line 4b`, amount: row.line4b })
+          }
+          rows.push({ line: '4b', description: 'Total apportioned interest (Line 4b)', amount: f.totalLine4b, isTotal: true })
+        }
+
+        if (f.niit) {
+          rows.push({ isHeader: true, description: 'Form 8960 — Net Investment Income Tax Estimate' })
+          for (const c of f.niit.niiComponents) {
+            rows.push({ description: c.label, amount: c.amount })
+          }
+          rows.push({ description: 'Total Net Investment Income', amount: f.niit.totalNII, isTotal: true })
+          rows.push({ description: 'Estimated NIIT (3.8% × NII)', amount: f.niit.niitEstimate })
+        }
+
+        if (f.creditVsDeduction) {
+          rows.push({ isHeader: true, description: 'Credit vs. Deduction Comparison' })
+          rows.push({ description: 'Foreign Tax Credit (Form 1116) — dollar-for-dollar', amount: f.creditVsDeduction.creditValue })
+          rows.push({ description: 'Foreign Tax Deduction (Sch. A) — at 37% marginal', amount: f.creditVsDeduction.deductionValue })
+        }
+
         void taxEnd
         return buildSheet('Form 1116', rows)
       })()

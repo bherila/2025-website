@@ -59,6 +59,12 @@ export interface Form1116Lines {
   taxSources: { label: string; amount: number }[]
   totalPassiveIncome: number
   totalForeignTaxes: number
+  generalIncomeSources: { label: string; amount: number }[]
+  totalGeneralIncome: number
+  line4bApportionment: { label: string; interestExpense: number; ratio: number; line4b: number }[]
+  totalLine4b: number
+  niit: { niiComponents: { label: string; amount: number }[]; totalNII: number; niitEstimate: number } | null
+  creditVsDeduction: { creditValue: number; deductionValue: number; recommendation: 'credit' | 'deduction' | 'indeterminate' } | null
 }
 
 export interface K1ExportEntry {

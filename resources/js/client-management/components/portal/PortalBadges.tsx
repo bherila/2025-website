@@ -11,7 +11,7 @@ export function BillabilityBadge({ isBillable }: { isBillable: boolean }) {
   )
 }
 
-export function InvoicedBadge({ href }: { href?: string }) {
+export function InvoicedBadge({ href }: { href?: string | undefined }) {
   const badge = (
     <Badge
       variant="outline"
@@ -64,7 +64,7 @@ export function ProjectBadge({ name }: { name: string }) {
 }
 
 /** Full-size status badge for the invoice list page */
-export function InvoiceListStatusBadge({ status, periodEnd }: { status: string; periodEnd?: string | null }) {
+export function InvoiceListStatusBadge({ status, periodEnd }: { status: string; periodEnd?: string | null | undefined }) {
   if (status === 'draft' && periodEnd && new Date(periodEnd) > new Date()) {
     return <Badge variant="outline" className="border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400">Upcoming</Badge>
   }
