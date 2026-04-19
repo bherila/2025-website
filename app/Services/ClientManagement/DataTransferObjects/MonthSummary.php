@@ -2,7 +2,7 @@
 
 namespace App\Services\ClientManagement\DataTransferObjects;
 
-class MonthSummary
+readonly class MonthSummary
 {
     public function __construct(
         public OpeningBalance $opening,

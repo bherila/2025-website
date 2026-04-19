@@ -1227,7 +1227,7 @@ class ClientInvoiceTest extends TestCase
     // Payment Validation Tests
     // ==========================================
 
-    public function test_payment_api_prevents_overpayment(): void
+    public function test_payment_api_allows_overpayment_as_credit(): void
     {
         $invoice = $this->invoicingService->generateInvoice(
             $this->company,
@@ -1238,7 +1238,8 @@ class ClientInvoiceTest extends TestCase
         $invoice->issue();
         $invoiceTotal = (float) $invoice->invoice_total;
 
-        // Try to add payment larger than invoice total
+        // Overpayments are permitted — the excess rolls forward as a credit.
+        // See docs/client-management/overpayment-credits.md.
         $response = $this->actingAs($this->admin)
             ->postJson("/api/client/mgmt/companies/{$this->company->id}/invoices/{$invoice->client_invoice_id}/payments", [
                 'amount' => $invoiceTotal + 100,
@@ -1246,13 +1247,13 @@ class ClientInvoiceTest extends TestCase
                 'payment_method' => 'Credit Card',
             ]);
 
-        $response->assertStatus(422)
-            ->assertJson([
-                'message' => 'Payment amount exceeds remaining balance.',
-            ]);
+        $response->assertStatus(201);
+        $invoice->refresh();
+        $this->assertEquals('paid', $invoice->status);
+        $this->assertGreaterThan((float) $invoice->invoice_total, (float) $invoice->payments->sum('amount'));
     }
 
-    public function test_payment_update_api_prevents_overpayment(): void
+    public function test_payment_update_api_allows_overpayment_as_credit(): void
     {
         $invoice = $this->invoicingService->generateInvoice(
             $this->company,
@@ -1270,7 +1271,7 @@ class ClientInvoiceTest extends TestCase
             'payment_method' => 'Credit Card',
         ]);
 
-        // Try to update payment to exceed total
+        // Overpayments are permitted on update as well.
         $response = $this->actingAs($this->admin)
             ->putJson("/api/client/mgmt/companies/{$this->company->id}/invoices/{$invoice->client_invoice_id}/payments/{$payment->client_invoice_payment_id}", [
                 'amount' => $invoiceTotal + 100,
@@ -1278,10 +1279,9 @@ class ClientInvoiceTest extends TestCase
                 'payment_method' => 'Credit Card',
             ]);
 
-        $response->assertStatus(422)
-            ->assertJson([
-                'message' => 'Updated payment amount would exceed invoice total.',
-            ]);
+        $response->assertStatus(200);
+        $invoice->refresh();
+        $this->assertEquals('paid', $invoice->status);
     }
 
     public function test_invoice_marked_as_paid_when_fully_paid(): void

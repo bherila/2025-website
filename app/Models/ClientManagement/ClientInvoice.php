@@ -3,6 +3,8 @@
 namespace App\Models\ClientManagement;
 
 use App\Services\ClientManagement\DataTransferObjects\InvoiceHoursBreakdown;
+use App\Services\ClientManagement\DeferredBillingAllocator;
+use App\Services\ClientManagement\OverpaymentCreditService;
 use App\Traits\SerializesDatesAsLocal;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
@@ -239,10 +241,23 @@ class ClientInvoice extends Model
      */
     public function toDetailedArray(): array
     {
-        $this->loadMissing(['agreement', 'lineItems.timeEntries', 'payments']);
+        $this->loadMissing(['agreement', 'lineItems.timeEntries', 'payments', 'clientCompany']);
 
         $hoursBreakdown = $this->calculateHoursBreakdown();
         $negativeOffset = min((float) $this->negative_hours_balance, (float) $this->retainer_hours_included);
+
+        $creditApplied = round(
+            abs((float) $this->lineItems->where('line_type', 'credit')->sum('line_total')),
+            2
+        );
+        $paymentsTotal = (float) $this->payments_total;
+        $overpaidAmount = round(max(0.0, $paymentsTotal - (float) $this->invoice_total), 2);
+        $availableCreditAfter = $this->clientCompany
+            ? (new OverpaymentCreditService)->availableCreditForCompany($this->clientCompany)
+            : 0.0;
+        $deferredPending = $this->clientCompany && $this->period_end
+            ? $this->buildDeferredPendingList()
+            : [];
 
         return [
             'client_invoice_id' => $this->client_invoice_id,
@@ -270,6 +285,10 @@ class ClientInvoice extends Model
             'payments' => $this->payments->toArray(),
             'payments_total' => $this->payments_total,
             'remaining_balance' => $this->remaining_balance,
+            'credit_applied' => $creditApplied,
+            'overpaid_amount' => $overpaidAmount,
+            'available_credit_after' => $availableCreditAfter,
+            'deferred_pending' => $deferredPending,
             'agreement' => $this->agreement ? [
                 'id' => $this->agreement->id,
                 'monthly_retainer_hours' => $this->agreement->monthly_retainer_hours,
@@ -292,6 +311,7 @@ class ClientInvoice extends Model
                             'name' => $entry->name,
                             'minutes_worked' => $entry->minutes_worked,
                             'date_worked' => $entry->date_worked?->toDateString(),
+                            'is_deferred_billing' => (bool) $entry->is_deferred_billing,
                         ];
                     })->toArray(),
                 ];
@@ -305,5 +325,34 @@ class ClientInvoice extends Model
     public function getRouteKeyName(): string
     {
         return 'client_invoice_id';
+    }
+
+    /**
+     * Build the "deferred to future invoice" list surfaced in the invoice
+     * detail UI. These are billable, unbilled, deferred time entries dated
+     * on or before this invoice's period_end that did not fit the available
+     * retainer capacity (and are therefore not linked to any line item here).
+     *
+     * For issued/paid/void invoices this returns an empty list — the list
+     * only carries meaning in the context of current draft state.
+     *
+     * @return list<array{id: int, hours: float, date_worked: string, name: string|null}>
+     */
+    protected function buildDeferredPendingList(): array
+    {
+        if ($this->status !== 'draft') {
+            return [];
+        }
+
+        // Delegate to the allocator in "skipped" mode: use a capacity of 0
+        // so every outstanding deferred entry is reported (for UI only; this
+        // does not mutate any data).
+        $result = (new DeferredBillingAllocator)->allocate(
+            $this->clientCompany,
+            $this->period_end,
+            remainingCapacityHours: 0.0,
+        );
+
+        return $result->skipped;
     }
 }

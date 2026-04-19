@@ -460,21 +460,12 @@ class ClientInvoiceApiController extends Controller
             'notes' => 'nullable|string',
         ]);
 
-        // Check if payment amount would exceed remaining balance
-        $invoiceFresh = $invoice->fresh(['payments']);
-        $remainingBalance = (float) $invoiceFresh->remaining_balance;
-        $paymentAmount = (float) $request->input('amount');
-
-        if ($paymentAmount > $remainingBalance) {
-            return response()->json([
-                'message' => 'Payment amount exceeds remaining balance.',
-                'remaining_balance' => number_format($remainingBalance, 2),
-            ], 422);
-        }
+        // Overpayments are permitted — the excess carries forward as a credit
+        // applied to the next invoice(s). See docs/client-management/overpayment-credits.md.
 
         $payment = $invoice->payments()->create($request->all());
 
-        // Update invoice status if fully paid
+        // Update invoice status if fully paid (or overpaid).
         $invoiceFresh = $invoice->fresh(['payments']);
         if ($invoiceFresh->remaining_balance <= 0) {
             // Set paid_date to the latest payment date
@@ -503,20 +494,7 @@ class ClientInvoiceApiController extends Controller
             'notes' => 'nullable|string',
         ]);
 
-        // Check if updated payment amount would exceed remaining balance
-        // (remaining balance + current payment amount - new payment amount should be >= 0)
-        $invoiceFresh = $invoice->fresh(['payments']);
-        $remainingBalance = (float) $invoiceFresh->remaining_balance;
-        $currentPaymentAmount = (float) $payment->amount;
-        $newPaymentAmount = (float) $request->input('amount');
-        $balanceAfterUpdate = $remainingBalance + $currentPaymentAmount - $newPaymentAmount;
-
-        if ($balanceAfterUpdate < 0) {
-            return response()->json([
-                'message' => 'Updated payment amount would exceed invoice total.',
-                'max_payment_amount' => number_format($remainingBalance + $currentPaymentAmount, 2),
-            ], 422);
-        }
+        // Overpayments are permitted on update as well (see addPayment() for rationale).
 
         $payment->update($request->all());
 

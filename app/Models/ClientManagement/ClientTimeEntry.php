@@ -26,6 +26,7 @@ class ClientTimeEntry extends Model
         'user_id',
         'creator_user_id',
         'is_billable',
+        'is_deferred_billing',
         'job_type',
         'client_invoice_line_id',
     ];
@@ -33,6 +34,7 @@ class ClientTimeEntry extends Model
     protected $casts = [
         'date_worked' => 'date',
         'is_billable' => 'boolean',
+        'is_deferred_billing' => 'boolean',
         'minutes_worked' => 'integer',
     ];
 
@@ -126,6 +128,22 @@ class ClientTimeEntry extends Model
     public function isLinkedToInvoice(): bool
     {
         return $this->client_invoice_line_id !== null;
+    }
+
+    /**
+     * Scope a query to only deferred-billing entries.
+     */
+    public function scopeDeferred($query)
+    {
+        return $query->where('is_deferred_billing', true);
+    }
+
+    /**
+     * Scope a query to only non-deferred entries (the default billing path).
+     */
+    public function scopeNotDeferred($query)
+    {
+        return $query->where('is_deferred_billing', false);
     }
 
     /**
