@@ -861,10 +861,7 @@ function TaxPreviewPageContent() {
             selectedYear={selectedYear}
             reviewedK1Docs={reviewedK1Docs}
             reviewed1099Docs={reviewed1099Docs}
-            saltPaid={reviewedW2Docs.reduce((acc, doc) => {
-              const p = doc.parsed_data as { box17_state_tax?: number | null } | null
-              return acc + (p?.box17_state_tax ?? 0)
-            }, 0)}
+            saltPaid={taxReturn.scheduleA?.saltPaid ?? 0}
             isMarried={isMarried}
             {...(shortDividendSummary ? { shortDividendSummary } : {})}
           />

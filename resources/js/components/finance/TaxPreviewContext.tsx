@@ -527,6 +527,7 @@ export function TaxPreviewProvider({
       eblLimit,
       excessBusinessLoss: eblData.f461_line16,
       isTriggered: eblData.f461_line16 > 0,
+      isMarried,
     }
 
     const form8959 = computeForm8959Lines(w2GrossIncome.value, isMarried)

@@ -18,6 +18,8 @@ export interface Form1040LineItem {
 export interface ScheduleALines {
   invIntSources: { label: string; amount: number }[]
   totalInvIntExpense: number
+  /** Raw SALT paid before the $10,000 cap (W-2 Box 17 + other sources). */
+  saltPaid: number
   /** SALT paid (state/local income or sales tax + property tax), capped at $10,000. */
   saltDeduction: number
   /** Total itemized deductions (investment interest + SALT + other). */
@@ -160,7 +162,7 @@ export interface Schedule2Lines {
   additionalMedicareTax: number
   /** Line 12 — Net Investment Income Tax (Form 8960). */
   niit: number
-  /** Line 10 total → Form 1040 Line 17. */
+  /** Line 21 total → Form 1040 Line 17. */
   totalAdditionalTaxes: number
 }
 
@@ -173,6 +175,8 @@ export interface Form461Lines {
   excessBusinessLoss: number
   /** True when business losses exceed the EBL limit. */
   isTriggered: boolean
+  /** Filing status used for the threshold lookup. */
+  isMarried: boolean
 }
 
 export interface TaxReturn1040 {

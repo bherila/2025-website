@@ -118,6 +118,7 @@ export function computeScheduleALines({
   return {
     invIntSources,
     totalInvIntExpense,
+    saltPaid,
     saltDeduction,
     totalItemizedDeductions,
     standardDeduction,

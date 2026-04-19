@@ -83,7 +83,7 @@ export default function AdditionalTaxesPreview({ schedule2, form8959, form8960, 
       {form461 && (
         <FormBlock title={`Form 461 — Excess Business Loss Limitation (${form461.isTriggered ? '⚠ EBL Applies' : '✓ Within Limit'})`}>
           <FormLine label="Aggregate trade/business income (loss)" value={form461.aggregateBusinessIncomeLoss} />
-          <FormLine label={`EBL limit (${fmtAmt(form461.eblLimit, 0)} — ${form461.eblLimit > 305_000 ? 'MFJ' : 'Single'})`} value={form461.eblLimit} />
+          <FormLine label={`EBL limit (${fmtAmt(form461.eblLimit, 0)} — ${form461.isMarried ? 'MFJ' : 'Single'})`} value={form461.eblLimit} />
           {form461.isTriggered ? (
             <>
               <FormTotalLine label="Excess business loss — disallowed this year" value={-form461.excessBusinessLoss} double />
