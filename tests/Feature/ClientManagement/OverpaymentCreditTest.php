@@ -32,7 +32,7 @@ class OverpaymentCreditTest extends TestCase
         $this->invoicingService = app(ClientInvoicingService::class);
         $this->creditService = new OverpaymentCreditService;
 
-        $this->admin = User::factory()->create(['user_role' => 'Admin']);
+        $this->admin = $this->createAdminUser();
 
         $this->company = ClientCompany::factory()->create([
             'company_name' => 'Overpay Co',

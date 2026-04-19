@@ -262,9 +262,17 @@ class ClientInvoice extends Model
         );
         $paymentsTotal = (float) $this->payments_total;
         $overpaidAmount = round(max(0.0, $paymentsTotal - (float) $this->invoice_total), 2);
-        $availableCreditAfter = $this->clientCompany
-            ? (new OverpaymentCreditService)->availableCreditForCompany($this->clientCompany)
-            : 0.0;
+        $availableCreditAfter = 0.0;
+        if ($this->clientCompany) {
+            $availableCreditAfter = (float) (new OverpaymentCreditService)->availableCreditForCompany($this->clientCompany);
+            // On a draft invoice, the service's pool still includes the credit we
+            // just applied as a line here (drafts don't count as "consumed" yet).
+            // Subtract it so the field matches its documented meaning:
+            // "credit remaining AFTER this invoice is accounted for".
+            if ((string) $this->status === 'draft') {
+                $availableCreditAfter = max(0.0, round($availableCreditAfter - $creditApplied, 2));
+            }
+        }
         $deferredPending = $this->clientCompany && $this->period_end
             ? $this->buildDeferredPendingList()
             : [];

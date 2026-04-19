@@ -1250,7 +1250,11 @@ class ClientInvoiceTest extends TestCase
         $response->assertStatus(201);
         $invoice->refresh();
         $this->assertEquals('paid', $invoice->status);
-        $this->assertGreaterThan((float) $invoice->invoice_total, (float) $invoice->payments->sum('amount'));
+        $paymentsSum = (float) $invoice->payments->sum('amount');
+        $this->assertTrue(
+            $paymentsSum > $invoiceTotal,
+            sprintf('Expected payments sum (%.2f) to exceed invoice total (%.2f)', $paymentsSum, $invoiceTotal),
+        );
     }
 
     public function test_payment_update_api_allows_overpayment_as_credit(): void
