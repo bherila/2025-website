@@ -145,10 +145,22 @@ export interface CapitalLossCarryoverLines {
   hasCarryover: boolean
 }
 
+export interface Schedule2Lines {
+  /** Line 2 — Alternative Minimum Tax (Form 6251). 0 if not applicable. */
+  altMinimumTax: number
+  /** Line 11 — Additional Medicare Tax (Form 8959). */
+  additionalMedicareTax: number
+  /** Line 12 — Net Investment Income Tax (Form 8960). */
+  niit: number
+  /** Line 10 total → Form 1040 Line 17. */
+  totalAdditionalTaxes: number
+}
+
 export interface TaxReturn1040 {
   year: number
   overviewSections?: OverviewSection[] | undefined
   form1040?: Form1040LineItem[]
+  schedule2?: Schedule2Lines
   scheduleA?: ScheduleALines
   scheduleB?: ScheduleBLines
   scheduleC?: ScheduleCNetIncome

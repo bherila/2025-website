@@ -1,15 +1,16 @@
 'use client'
 
 import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
-import type { CapitalLossCarryoverLines, Form8959Lines, Form8960Lines } from '@/types/finance/tax-return'
+import type { CapitalLossCarryoverLines, Form8959Lines, Form8960Lines, Schedule2Lines } from '@/types/finance/tax-return'
 
 interface AdditionalTaxesPreviewProps {
+  schedule2?: Schedule2Lines | undefined
   form8959?: Form8959Lines | undefined
   form8960?: Form8960Lines | undefined
   capitalLossCarryover?: CapitalLossCarryoverLines | undefined
 }
 
-export default function AdditionalTaxesPreview({ form8959, form8960, capitalLossCarryover }: AdditionalTaxesPreviewProps) {
+export default function AdditionalTaxesPreview({ schedule2, form8959, form8960, capitalLossCarryover }: AdditionalTaxesPreviewProps) {
   const hasContent = form8959?.additionalTax || form8960?.niitTax || capitalLossCarryover?.hasCarryover
   if (!hasContent) return null
 
@@ -21,6 +22,23 @@ export default function AdditionalTaxesPreview({ form8959, form8960, capitalLoss
           These amounts flow to Schedule 2 and Form 1040 Lines 17–23.
         </p>
       </div>
+
+      {/* Schedule 2 — Additional Taxes rollup */}
+      {schedule2 && schedule2.totalAdditionalTaxes > 0 && (
+        <FormBlock title="Schedule 2 — Additional Taxes (Form 1040 Line 17)">
+          {schedule2.altMinimumTax > 0 && (
+            <FormLine label="Line 2 — Alternative Minimum Tax (Form 6251)" value={schedule2.altMinimumTax} />
+          )}
+          {schedule2.additionalMedicareTax > 0 && (
+            <FormLine label="Line 11 — Additional Medicare Tax (Form 8959)" value={schedule2.additionalMedicareTax} />
+          )}
+          {schedule2.niit > 0 && (
+            <FormLine label="Line 12 — Net Investment Income Tax (Form 8960)" value={schedule2.niit} />
+          )}
+          <FormTotalLine label="Total additional taxes → Form 1040 Line 17" value={schedule2.totalAdditionalTaxes} double />
+          <FormLine label="Note" raw="AMT (Line 2) not computed — shown as $0. See Form 6251 if applicable." />
+        </FormBlock>
+      )}
 
       {/* Form 8959 — Additional Medicare Tax */}
       {form8959 && form8959.additionalTax > 0 && (

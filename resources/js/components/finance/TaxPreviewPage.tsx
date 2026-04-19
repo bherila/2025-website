@@ -907,6 +907,7 @@ function TaxPreviewPageContent() {
 
         <TabsContent value={TAX_TABS.estimate} className="space-y-6 mt-0">
           <AdditionalTaxesPreview
+            schedule2={taxReturn.schedule2}
             form8959={taxReturn.form8959}
             form8960={taxReturn.form8960}
             capitalLossCarryover={taxReturn.capitalLossCarryover}

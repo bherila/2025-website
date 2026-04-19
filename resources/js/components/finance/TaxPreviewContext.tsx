@@ -504,6 +504,28 @@ export function TaxPreviewProvider({
       shortDividendDeduction: shortDividendSummary?.totalItemizedDeduction ?? 0,
     })
 
+    const form8959 = computeForm8959Lines(w2GrossIncome.value, isMarried)
+    const form8960 = computeForm8960Lines({
+      taxableInterest: income1099.interestIncome.value,
+      ordinaryDividends: income1099.dividendIncome.value,
+      netCapGainsRaw: scheduleD.schD.schD_line16,
+      passiveIncome: scheduleE.totalPassive,
+      investmentInterestExpense: form4952.deductibleInvestmentInterestExpense,
+      magi: w2GrossIncome
+        .add(income1099.interestIncome)
+        .add(income1099.dividendIncome)
+        .add(scheduleCNetIncome.total)
+        .add(scheduleE.grandTotal)
+        .add(Math.max(scheduleD.schD.schD_line16, -3000)).value,
+      isMarried,
+    })
+    const schedule2 = {
+      altMinimumTax: 0,
+      additionalMedicareTax: form8959.additionalTax,
+      niit: form8960.niitTax,
+      totalAdditionalTaxes: currency(form8959.additionalTax).add(form8960.niitTax).value,
+    }
+
     return {
       year,
       ...(overviewSections.length > 0 ? { overviewSections } : {}),
@@ -527,21 +549,9 @@ export function TaxPreviewProvider({
       },
       form4952,
       form1116: computeForm1116Lines({ reviewedK1Docs, reviewed1099Docs }),
-      form8959: computeForm8959Lines(w2GrossIncome.value, isMarried),
-      form8960: computeForm8960Lines({
-        taxableInterest: income1099.interestIncome.value,
-        ordinaryDividends: income1099.dividendIncome.value,
-        netCapGainsRaw: scheduleD.schD.schD_line16,
-        passiveIncome: scheduleE.totalPassive,
-        investmentInterestExpense: form4952.deductibleInvestmentInterestExpense,
-        magi: w2GrossIncome
-          .add(income1099.interestIncome)
-          .add(income1099.dividendIncome)
-          .add(scheduleCNetIncome.total)
-          .add(scheduleE.grandTotal)
-          .add(Math.max(scheduleD.schD.schD_line16, -3000)).value,
-        isMarried,
-      }),
+      schedule2,
+      form8959,
+      form8960,
       capitalLossCarryover: computeCapitalLossCarryover(
         scheduleD.schD.schD_line7,
         scheduleD.schD.schD_line15,

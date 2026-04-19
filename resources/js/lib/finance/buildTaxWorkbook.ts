@@ -420,6 +420,8 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
   const scheduleECombined = scheduleESheet?.rowIndex.get('Schedule E combined total')
   const form1116Line2 = form1116Sheet?.rowIndex.get('Total foreign taxes paid')
   const form8995Line13 = form8995Sheet?.rowIndex.get('QBI Deduction — lesser of 20% QBI or taxable income cap')
+  const form8959Line7 = form8959Sheet?.rowIndex.get('Line 7 — Additional Medicare Tax (0.9%) → Schedule 2 Line 11')
+  const form8960Line17 = form8960Sheet?.rowIndex.get('NIIT (3.8% × lesser of Line 12 or 15) → Schedule 2 Line 12')
 
   const line1a = taxReturn.form1040?.find((line) => line.line === '1a')?.value ?? undefined
   const line2b = scheduleBLine4 ? taxReturn.scheduleB?.interestTotal : undefined
@@ -503,6 +505,15 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
           amount: taxReturn.form8995?.estimatedDeduction,
           formula: form8995Line13 ? formulaRef('Form 8995', form8995Line13) : undefined,
           note: form8995Line13 ? '→ Form 8995' : undefined,
+        },
+        {
+          line: '17',
+          description: 'Other taxes (Schedule 2)',
+          amount: taxReturn.schedule2?.totalAdditionalTaxes,
+          formula: (form8959Line7 && form8960Line17)
+            ? `=${formulaRef('Form 8959', form8959Line7).slice(1)}+${formulaRef('Form 8960', form8960Line17).slice(1)}`
+            : (form8959Line7 ? formulaRef('Form 8959', form8959Line7) : undefined),
+          note: '→ Form 8959 (Medicare) + Form 8960 (NIIT)',
         },
         {
           line: '20',
