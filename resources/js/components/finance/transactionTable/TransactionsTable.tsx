@@ -45,6 +45,7 @@ interface Props {
 }
 
 export default function TransactionsTable({ data, onDeleteTransaction, enableTagging = false, refreshFn, duplicates, enableLinking = false, accountId, pageSize = DEFAULT_PAGE_SIZE, highlightTransactionId, useVirtualScroll = true }: Props) {
+  "use no memo" // useVirtualizer (TanStack Virtual) is not compatible with React Compiler memoization
   const [sortField, setSortField] = useState<keyof AccountLineItem>('t_date')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
   const {
@@ -178,6 +179,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
 
   // Virtual scrolling setup
   const tableContainerRef = useRef<HTMLDivElement>(null)
+  // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
     count: sortedData.length,
     getScrollElement: () => tableContainerRef.current,

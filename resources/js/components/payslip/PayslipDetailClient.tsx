@@ -348,6 +348,7 @@ interface PayslipDetailClientProps {
 }
 
 export default function PayrollForm({ initialPayslip }: PayslipDetailClientProps) {
+  "use no memo" // useForm (React Hook Form) watch() is not compatible with React Compiler memoization
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [saveMode, setSaveMode] = useState<'edit' | 'new'>('edit')
@@ -406,6 +407,7 @@ export default function PayrollForm({ initialPayslip }: PayslipDetailClientProps
 
   const hasYearChanged =
     initialPayslip &&
+    // eslint-disable-next-line react-hooks/incompatible-library
     parseDate(form.watch('pay_date'))?.formatYMD()?.slice(0, 4) !==
       parseDate(initialPayslip.pay_date)?.formatYMD()?.slice(0, 4)
 

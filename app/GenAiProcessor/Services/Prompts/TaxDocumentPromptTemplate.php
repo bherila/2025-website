@@ -130,16 +130,31 @@ EXTRACTION RULES:
    "sourced by partner" items. Include the section totals (lines 24, 54, 55).
 
 5. SCHEDULE K-3 — PART III (Form 1116 Apportionment):
-   Section 2 (interest expense apportionment): extract all 8 asset rows with their
-   7-column breakdown. Record the passive asset ratio (passive assets / total assets).
-   Section 4 (foreign taxes): extract each country with tax type (WHTD = withholding),
-   amount paid, and which basket (passive/general/branch) it falls into.
-   Section 1 (Part I Box 4 FX translation): if present, extract the exchange rate table
-   showing each country's foreign currency amount, exchange rate, and USD equivalent.
+   Section 2 (interest expense apportionment): extract all asset rows with their column
+   breakdown using `k3_part3_asset_rows`. Record the passive asset ratio (passive / total).
+   Section 4 (foreign taxes): extract each country using `k3_part3_foreign_taxes` with tax
+   type (WHTD = withholding), amount paid, and basket (passive/general/branch).
+   Section 5 (Sec. 743(b) basis adjustments): if present, extract the positive adjustment
+   into `k3_part3_section5_sec743b_positive` and the negative adjustment into
+   `k3_part3_section5_sec743b_negative`.
+   Section 1 FX translation (Part I Box 4): if present, extract the exchange rate table
+   into `k3_part1_fx_translation` with each country's foreign currency amount, exchange rate,
+   and USD equivalent.
 
-6. SCHEDULE K-3 — OTHER PARTS:
-   For Parts IV–XIII, note which parts apply (checkbox). Capture any numeric data present.
-   Most will be blank (N/A). Record that fact in a warning if Parts unexpectedly have data.
+6. SCHEDULE K-3 — PART IV AND PARTS V–XIII:
+   CRITICAL: If a Schedule K-3 is attached, you MUST populate every applicable section.
+   Do NOT leave these arrays/fields empty when data is present on the page.
+   Part IV (FDII / Sec. 250 deduction): extract into dedicated fields:
+     `k3_part4_net_income_loss`, `k3_part4_dei_gross_receipts`,
+     `k3_part4_dei_allocated_deductions`, `k3_part4_other_interest_expense_dei`,
+     `k3_part4_total_average_assets`.
+   Part IX (tax-exempt income from foreign partnership): extract line 1 gross receipts into
+     `k3_part9_line1_gross_receipts` and line 5 denominator into
+     `k3_part9_line5_denominator_amounts`.
+   Parts V–XIII: for each applicable part that contains narrative or data not covered by
+   the structured fields above, write a summary into the corresponding notes field
+   (`k3_part5_notes` through `k3_part13_notes`). Do NOT leave these blank if the page
+   has content for that part.
 
 7. WARNINGS:
    Add a warning string for: (a) any item whose tax character is ambiguous,
@@ -152,6 +167,10 @@ EXTRACTION RULES:
    - All percentages: store as decimal (e.g., 0.042400 not 4.2400).
    - All dates: YYYY-MM-DD.
    - Partner number / form ID: capture from header if present.
+
+CRITICAL COMPLETENESS CHECK: Before returning, verify that if a Schedule K-3 is attached,
+at minimum `k3_part2_rows`, `k3_part3_asset_rows`, and `k3_part3_foreign_taxes` are
+non-empty. If any of these are empty despite the K-3 having that section, add a warning.
 PROMPT;
     }
 }

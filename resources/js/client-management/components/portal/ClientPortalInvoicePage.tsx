@@ -4,7 +4,6 @@ import React, { useCallback, useEffect, useState } from "react";
 
 import type { ClientInvoicePayment, Invoice, InvoiceLine } from "@/client-management/types";
 import { Badge } from "@/components/ui/badge";
-import { DeferredBadge } from './PortalBadges'
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,13 +17,14 @@ import AddPaymentModal from "./AddPaymentModal";
 import ClientPortalInvoiceActionButtonRow from "./ClientPortalInvoiceActionButtonRow";
 import ClientPortalNav from "./ClientPortalNav";
 import LineItemEditModal from "./LineItemEditModal";
+import { DeferredBadge } from './PortalBadges'
 import TimeTrackingMonthSummaryRow from "./TimeTrackingMonthSummaryRow";
 
 /** Renders a quantity string for display. "h:mm" → "3h45m", empty/zero → "—", plain numbers unchanged. */
 function renderQuantity(qty: string): string {
     if (!qty || qty === '0') return '—'
     if (qty.includes(':')) {
-        const [hStr, mStr] = qty.split(':')
+        const [hStr = '', mStr = ''] = qty.split(':')
         const h = parseInt(hStr, 10)
         const m = parseInt(mStr, 10)
         if (!isNaN(h) && !isNaN(m)) {

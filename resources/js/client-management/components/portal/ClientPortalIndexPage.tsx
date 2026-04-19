@@ -18,10 +18,10 @@ import { abbreviateName } from '@/lib/nameUtils'
 import type { FileRecord } from '@/types/files'
 
 import ClientPortalNav from './ClientPortalNav'
-import { BillabilityBadge, InvoicedBadge, ProjectBadge } from './PortalBadges'
 import DisabledEditButton from './DisabledEditButton'
  import NewProjectModal from './NewProjectModal'
  import NewTimeEntryModal from './NewTimeEntryModal'
+import { BillabilityBadge, InvoicedBadge, ProjectBadge } from './PortalBadges'
 interface ClientPortalIndexPageProps {
   slug: string
   companyName: string

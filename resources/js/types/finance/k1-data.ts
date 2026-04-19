@@ -47,11 +47,24 @@ export interface K1ExtractionInfo {
 }
 
 /**
+ * Document-level elections that affect how K-3 data is interpreted.
+ * Stored in parsed_data alongside the extracted data.
+ */
+export interface K3Elections {
+  /**
+   * When true, column (f) "Sourced by Partner" amounts are treated as
+   * U.S.-source income for Form 1116 purposes.
+   */
+  sourcedByPartnerAsUSSource?: boolean
+}
+
+/**
  * Structured K-1 / K-3 data stored in parsed_data (schemaVersion "2026.1").
  *
  * - `fields`  — all flat boxes (A–O, 1–10, 12) keyed by box identifier
  * - `codes`   — coded boxes (11, 13–20) keyed by box number, each an array of K1CodeItem
  * - `k3`      — Schedule K-3 sections (foreign tax reporting)
+ * - `k3Elections` — document-level elections affecting K-3 interpretation
  * - `extraction` — server-stamped AI provenance metadata
  */
 export interface FK1StructuredData {
@@ -65,6 +78,7 @@ export interface FK1StructuredData {
   k3?: {
     sections: K3Section[]
   }
+  k3Elections?: K3Elections
   raw_text?: string | null
   warnings?: string[] | null
   extraction?: K1ExtractionInfo

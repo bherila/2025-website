@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ClientCompany } from '@/client-management/types/common'
 import type { Invoice, InvoiceListItem } from '@/client-management/types/invoice'
 import { Button } from '@/components/ui/button'
-import { InvoiceListStatusBadge } from './PortalBadges'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -18,6 +17,7 @@ import {
 import { useIsUserAdmin } from '@/hooks/useAppInitialData'
 
 import ClientPortalNav from './ClientPortalNav'
+import { InvoiceListStatusBadge } from './PortalBadges'
 
 interface ClientPortalInvoicesPageProps {
   slug: string

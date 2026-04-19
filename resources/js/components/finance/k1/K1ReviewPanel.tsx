@@ -354,6 +354,7 @@ function IncomeItemsBlock({
       <div className="divide-y divide-dashed divide-border/50">
         {incomeFieldLines.map(({ box, spec, val, notes }) => {
           const noteKey = `field-${box}`
+          const hasK3Part2 = box === '5' && data.k3?.sections.some(s => s.sectionId === 'part2_section1')
           return (
             <div key={box}>
               <LineItem
@@ -368,6 +369,9 @@ function IncomeItemsBlock({
               )}
               {notes && openNote !== noteKey && (
                 <SubLine text={notes.length > 120 ? notes.substring(0, 120) + '…' : notes} />
+              )}
+              {hasK3Part2 && (
+                <SubLine text="← K-3 Part II, Line 6 shows U.S. vs. foreign breakdown. Use K-3 passive amount on Form 1116, not this box total." />
               )}
             </div>
           )
@@ -443,23 +447,37 @@ function DeductionItemsBlock({
           }, currency(0)).value
           const uniqueCodes = [...new Set(box13Items.map((i) => i.code))].filter((c): c is string => Boolean(c))
           const firstCode = uniqueCodes[0] ?? ''
+          const hasCodeL = box13Items.some(i => i.code.toUpperCase() === 'L')
           const label = uniqueCodes.length === 1
             ? (BOX13_CODES[firstCode] ?? `Other deductions (code ${firstCode})`)
             : `Other deductions (${uniqueCodes.length} codes)`
           return (
-            <LineItem
-              boxRef={uniqueCodes.length === 1 ? `Box 13${firstCode}` : 'Box 13'}
-              label={label}
-              value={total}
-              onDetails={() => onOpenCodes('13')}
-            />
+            <>
+              <LineItem
+                boxRef={uniqueCodes.length === 1 ? `Box 13${firstCode}` : 'Box 13'}
+                label={label}
+                value={total}
+                onDetails={() => onOpenCodes('13')}
+              />
+              {hasCodeL && (
+                <SubLine text="Box 13L → Form 4952, I, line 1 → Sch A line 16. Do NOT enter on Form 8582." />
+              )}
+              {hasCodeL && data.k3?.sections.some(s => s.sectionId === 'part2_section2') && (
+                <SubLine text="← K-3 Part II, Line 42 provides allocable portfolio interest expense detail" />
+              )}
+            </>
           )
         })()}
         {box12Val !== null && box12Val !== 0 && (
           <LineItem boxRef="Box 12" label="Section 179 deduction" value={-Math.abs(box12Val)} />
         )}
         {box21Val !== null && box21Val !== 0 && (
-          <LineItem boxRef="Box 21" label="Foreign taxes (WHTD, all passive) → Form 1116" value={box21Val} />
+          <>
+            <LineItem boxRef="Box 21" label="Foreign taxes paid/accrued → Form 1116" value={box21Val} />
+            {data.k3?.sections.some(s => s.sectionId === 'part3_section4') && (
+              <SubLine text="← K-3 Part III, Section 4 provides per-country/basket breakdown for Form 1116" />
+            )}
+          </>
         )}
         <TotalLine label="Total deductions" value={totalBoxDeductions} />
         <TotalLine label="Net K-1 income/(loss)" value={netK1} double />
@@ -471,10 +489,15 @@ function DeductionItemsBlock({
 // ── Box 20 Supplemental block ─────────────────────────────────────────────────
 
 const BOX20_LABELS: Record<string, string> = {
-  A: 'Investment income (Form 4952 reference)',
-  B: 'Investment expenses (informational)',
+  A: 'Investment income (Form 4952, II, line 4a)',
+  B: 'Investment expenses (Form 4952, II, line 5)',
   AA: 'Sec. 704(c) — already embedded in K-1 boxes',
   AJ: '§461(l) excess business loss components',
+}
+
+const BOX20_ROUTING: Record<string, string> = {
+  A: '→ Form 4952, Part II, line 4a (informational — does not flow to Form 1040 directly)',
+  B: '→ Form 4952, Part II, line 5 (informational — does not flow to Form 1040 directly)',
 }
 
 function SupplementalBlock({
@@ -506,14 +529,18 @@ function SupplementalBlock({
           const label = uniqueCodes.length === 1
             ? (BOX20_LABELS[firstCode] ?? `Other information (code ${firstCode})`)
             : `Supplemental information (${uniqueCodes.length} codes)`
+          const singleRouting = uniqueCodes.length === 1 ? BOX20_ROUTING[firstCode] : undefined
           return (
-            <LineItem
-              boxRef={uniqueCodes.length === 1 ? `20${firstCode}` : 'Box 20'}
-              label={label}
-              value={total}
-              raw={allStmt ? 'STMT' : undefined}
-              onDetails={() => onOpenCodes('20')}
-            />
+            <>
+              <LineItem
+                boxRef={uniqueCodes.length === 1 ? `20${firstCode}` : 'Box 20'}
+                label={label}
+                value={total}
+                raw={allStmt ? 'STMT' : undefined}
+                onDetails={() => onOpenCodes('20')}
+              />
+              {singleRouting && <SubLine text={singleRouting} />}
+            </>
           )
         })()}
       </div>
@@ -729,7 +756,8 @@ function K3GrossIncomeTable({ sections }: { sections: K3Section[] }) {
         <table className="w-full text-xs">
           <thead>
             <tr className="bg-muted/20 border-b border-border">
-              <th className="text-left px-3 py-1.5 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground">K-3 Line / Description</th>
+              <th className="text-left px-2 py-1.5 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground w-[60px] shrink-0">Line</th>
+              <th className="text-left px-3 py-1.5 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground">Description</th>
               <th className="text-right px-3 py-1.5 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground">U.S. Source (A)</th>
               <th className="text-right px-3 py-1.5 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground">Passive (C)</th>
               <th className="text-right px-3 py-1.5 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground">Sourced by Partner (F)</th>
@@ -742,11 +770,12 @@ function K3GrossIncomeTable({ sections }: { sections: K3Section[] }) {
               const isExpanded = expandedRows.has(idx)
               return (
                 <tr key={idx} className="group">
-                  <td colSpan={5} className="p-0">
+                  <td colSpan={6} className="p-0">
                     <div
                       className={`flex items-baseline ${row.isTotal ? 'bg-muted/30 font-semibold border-t border-border' : ''} ${isExpandable ? 'cursor-pointer hover:bg-muted/20' : ''}`}
                       onClick={isExpandable ? () => toggleExpand(idx) : undefined}
                     >
+                      <span className="px-2 py-1.5 font-mono text-[10px] text-muted-foreground w-[60px] shrink-0">{row.line}</span>
                       <span className={`px-3 py-1.5 flex-1 flex items-center gap-1.5 ${row.isTotal ? 'text-xs font-semibold' : 'text-xs'}`}>
                         {isExpandable && (
                           isExpanded
@@ -767,7 +796,8 @@ function K3GrossIncomeTable({ sections }: { sections: K3Section[] }) {
                       <div className="bg-muted/10 border-t border-dashed border-border/50">
                         {row.subRows.map((sub, si) => (
                           <div key={si} className="flex items-baseline border-b border-dashed border-border/30 last:border-b-0">
-                            <span className="px-3 py-0.5 pl-10 flex-1 text-[11px] text-muted-foreground font-mono">{sub.country}</span>
+                            <span className="w-[60px] shrink-0" />
+                            <span className="px-3 py-0.5 pl-4 flex-1 text-[11px] text-muted-foreground font-mono">{sub.country}</span>
                             <span className={`px-3 py-0.5 text-right font-mono tabular-nums w-[100px] shrink-0 text-[11px] ${k3Cls(sub.a)}`}>{fmtK3(sub.a)}</span>
                             <span className={`px-3 py-0.5 text-right font-mono tabular-nums w-[100px] shrink-0 text-[11px] ${k3Cls(sub.c)}`}>{fmtK3(sub.c)}</span>
                             <span className={`px-3 py-0.5 text-right font-mono tabular-nums w-[120px] shrink-0 text-[11px] ${k3Cls(sub.f)}`}>{fmtK3(sub.f)}</span>
@@ -894,11 +924,290 @@ function K3ForeignTaxGrid({ sections }: { sections: K3Section[] }) {
   )
 }
 
+// ── Shared K-3 multi-column table helpers ─────────────────────────────────────
+
+interface K3MultiColRow {
+  line: string
+  description: string
+  a: number; b: number; c: number; d: number; e: number; f: number; g: number
+  isTotal?: boolean
+}
+
+function parseK3SectionRows(data: Record<string, unknown>, descMap: Record<string, string>): K3MultiColRow[] {
+  // Tool format: data.rows is a flat array
+  if (Array.isArray(data['rows'])) {
+    return (data['rows'] as Array<Record<string, unknown>>).map(r => {
+      const line = String(r['line'] ?? '')
+      return {
+        line,
+        description: descMap[line] ?? `Line ${line}`,
+        a: Number(r['col_a_us_source'] ?? 0),
+        b: Number(r['col_b_foreign_branch'] ?? 0),
+        c: Number(r['col_c_passive'] ?? 0),
+        d: Number(r['col_d_general'] ?? 0),
+        e: Number(r['col_e_other_901j'] ?? 0),
+        f: Number(r['col_f_sourced_by_partner'] ?? 0),
+        g: Number(r['col_g_total'] ?? 0),
+      }
+    })
+  }
+
+  // Canonical format: named field keys like "line27_netSTCapLoss"
+  const rows: K3MultiColRow[] = []
+  for (const [key, val] of Object.entries(data)) {
+    if (key === 'derivedPassiveAssetRatio' || !key.startsWith('line')) continue
+    const m = key.match(/^line([0-9]+[a-zA-Z]*)_(.+)$/)
+    if (!m) continue
+    const line = m[1] as string
+    const descKey = m[2] as string
+    const cols = (val && typeof val === 'object') ? val as Record<string, unknown> : {}
+    const n = (k: string) => Number(cols[k] ?? 0)
+    rows.push({
+      line,
+      description: descMap[line] ?? descKey.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').trim(),
+      a: n('a'), b: n('b'), c: n('c'), d: n('d'), e: n('e'), f: n('f'), g: n('g'),
+    })
+  }
+  return rows.sort((x, y) => {
+    const key = (l: string) => parseFloat(l) * 100 + (l.replace(/[0-9.]/g, '') || 'a').charCodeAt(0)
+    return key(x.line) - key(y.line)
+  })
+}
+
+function K3MultiColTable({
+  title,
+  rows,
+  electionActive,
+  footer,
+}: {
+  title: string
+  rows: K3MultiColRow[]
+  electionActive?: boolean | undefined
+  footer?: string | undefined
+}) {
+  const fmtK3 = (n: number) => (n === 0 ? '—' : fmtAmt(n))
+  const k3Cls = (n: number) => (n === 0 ? 'text-muted-foreground' : n < 0 ? 'text-destructive' : '')
+
+  const visibleRows = rows.filter(r =>
+    r.isTotal || [r.a, r.b, r.c, r.d, r.e, r.f, r.g].some(v => v !== 0)
+  )
+  if (visibleRows.length === 0) return null
+
+  return (
+    <div className="border border-border rounded-lg overflow-hidden">
+      <SectionHeader title={title} />
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-muted/20 border-b border-border">
+              <th className="text-left px-2 py-1.5 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground w-10 shrink-0">Line</th>
+              <th className="text-left px-3 py-1.5 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground">Description</th>
+              <th className="text-right px-3 py-1.5 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground w-[100px]">U.S. Source (a)</th>
+              <th className="text-right px-3 py-1.5 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground w-[100px]">Passive (c)</th>
+              <th className={`text-right px-3 py-1.5 font-semibold text-[10px] uppercase tracking-wider w-[130px] ${electionActive ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground'}`}>
+                {electionActive ? 'Sourced by Partner → US (f)' : 'Sourced by Partner (f)'}
+              </th>
+              <th className="text-right px-3 py-1.5 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground w-[100px]">Total (g)</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-dashed divide-border/50">
+            {visibleRows.map((row, idx) => (
+              <tr key={idx} className={row.isTotal ? 'bg-muted/30 font-semibold border-t border-border' : ''}>
+                <td className="px-2 py-1.5 font-mono text-[10px] text-muted-foreground">{row.line}</td>
+                <td className="px-3 py-1.5">{row.description}</td>
+                <td className={`px-3 py-1.5 text-right font-mono tabular-nums ${k3Cls(row.a)}`}>{fmtK3(row.a)}</td>
+                <td className={`px-3 py-1.5 text-right font-mono tabular-nums ${k3Cls(row.c)}`}>{fmtK3(row.c)}</td>
+                <td className={`px-3 py-1.5 text-right font-mono tabular-nums ${k3Cls(row.f)} ${electionActive && row.f !== 0 ? 'bg-blue-50/40 dark:bg-blue-950/20' : ''}`}>{fmtK3(row.f)}</td>
+                <td className={`px-3 py-1.5 text-right font-mono tabular-nums font-semibold ${k3Cls(row.g)}`}>{fmtK3(row.g)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {footer && (
+        <div className="px-3 py-1.5 text-[10px] text-muted-foreground italic border-t border-border bg-muted/10">{footer}</div>
+      )}
+    </div>
+  )
+}
+
+// ── K-3 Part II Section 2 — Deductions ───────────────────────────────────────
+
+const PART2_DEDUCTION_DESC: Record<string, string> = {
+  '25': 'Expenses allocable to sales income',
+  '26': 'Expenses allocable to services income',
+  '27': 'Net short-term capital loss',
+  '28': 'Net long-term capital loss',
+  '29': 'Collectibles loss',
+  '30': 'Net section 1231 loss',
+  '31': 'Other losses',
+  '32A': 'R&E expenses (SIC code A)', '32B': 'R&E expenses (SIC code B)', '32C': 'R&E expenses (SIC code C)',
+  '33': 'Allocable rental expenses — depreciation/depletion/amort.',
+  '34': 'Allocable rental expenses — other',
+  '35': 'Allocable royalty expenses — depreciation/depletion/amort.',
+  '36': 'Allocable royalty expenses — other',
+  '37': 'Depreciation not on line 33 or 35',
+  '38': 'Charitable contributions',
+  '39': 'Interest expense §1.861-10(e)',
+  '40': 'Other interest expense §1.861-10T',
+  '41': 'Other interest expense — business',
+  '42': 'Other interest expense — investment',
+  '43': 'Other interest expense — passive activity',
+  '44': 'Sec. 59(e)(2) expenditures',
+  '45': 'Foreign taxes not creditable but deductible',
+  '46': 'Section 986(c) loss',
+  '47': 'Section 987 loss',
+  '48': 'Section 988 loss',
+  '49': 'Other allocable deductions',
+  '50': 'Other apportioned deductions',
+  '54': 'Total deductions (lines 25–53)',
+  '55': 'Net income (loss)',
+}
+
+function K3DeductionsTable({ sections, electionActive }: { sections: K3Section[]; electionActive?: boolean | undefined }) {
+  const sec = sections.find(s => s.sectionId === 'part2_section2')
+  if (!sec) return null
+  const rows = parseK3SectionRows(sec.data as Record<string, unknown>, PART2_DEDUCTION_DESC)
+  const marked = rows.map(r => ({ ...r, isTotal: r.line === '54' || r.line === '55' }))
+  return <K3MultiColTable title="K-3 Part II Section 2 — Deductions" rows={marked} electionActive={electionActive} />
+}
+
+// ── K-3 Part III Section 2 — Asset Apportionment ─────────────────────────────
+
+const PART3_ASSET_DESC: Record<string, string> = {
+  '1': 'Total average value of assets',
+  '2': 'Sections 734(b)/743(b) adjustment to assets',
+  '3': 'Assets attracting directly allocable interest §1.861-10(e)',
+  '4': 'Assets attracting directly allocable interest §1.861-10T',
+  '5': 'Assets excluded from apportionment formula',
+  '6a': 'Total assets used for apportionment',
+  '6b': 'Assets attracting business interest expense',
+  '6c': 'Assets attracting investment interest expense',
+  '6d': 'Assets attracting passive activity interest expense',
+  '7': 'Basis in stock of 10%-owned noncontrolled foreign corps',
+  '8': 'Basis in stock of CFCs',
+}
+
+function K3AssetApportionmentTable({ sections, electionActive }: { sections: K3Section[]; electionActive?: boolean | undefined }) {
+  const sec = sections.find(s => s.sectionId === 'part3_section2')
+  if (!sec) return null
+  const d = sec.data as Record<string, unknown>
+  const rows = parseK3SectionRows(d, PART3_ASSET_DESC)
+  const marked = rows.map(r => ({ ...r, isTotal: r.line === '6a' }))
+  const derivedRatio = typeof d['derivedPassiveAssetRatio'] === 'number' ? d['derivedPassiveAssetRatio'] : null
+  return (
+    <K3MultiColTable
+      title="K-3 Part III Section 2 — Interest Expense Apportionment Factors"
+      rows={marked}
+      electionActive={electionActive}
+      footer={derivedRatio != null ? `Derived passive asset ratio: ${(derivedRatio * 100).toFixed(4)}%` : undefined}
+    />
+  )
+}
+
+// ── K-3 Part IV — FDII / Sec. 250 ────────────────────────────────────────────
+
+const PART4_FDII_FIELDS: Array<{ keys: string[]; line: string; label: string }> = [
+  { keys: ['line1_netIncomeLoss', 'net_income_loss'], line: '1', label: 'Net income (loss)' },
+  { keys: ['line2a_DEIGrossReceipts', 'dei_gross_receipts'], line: '2a', label: 'DEI gross receipts' },
+  { keys: ['line2b_DEICOGS'], line: '2b', label: 'DEI COGS' },
+  { keys: ['line2c_DEIAllocatedDeductions', 'dei_allocated_deductions'], line: '2c', label: 'DEI allocated deductions' },
+  { keys: ['line13C_otherInterestExpense_DEI', 'other_interest_expense_dei'], line: '13C', label: 'Other interest expense (DEI, line 13C)' },
+  { keys: ['line14A_totalAverageAssets', 'total_average_assets'], line: '14A', label: 'Total average value of assets (line 14A)' },
+]
+
+function K3FDIIPanel({ sections }: { sections: K3Section[] }) {
+  const sec = sections.find(s => s.sectionId === 'part4')
+  if (!sec) return null
+  const d = sec.data as Record<string, unknown>
+
+  const items: Array<{ line: string; label: string; value: number }> = []
+  const seen = new Set<string>()
+  for (const { keys, line, label } of PART4_FDII_FIELDS) {
+    for (const key of keys) {
+      if (key in d && !seen.has(label)) {
+        const val = Number(d[key])
+        if (isFinite(val) && val !== 0) {
+          items.push({ line, label, value: val })
+          seen.add(label)
+        }
+        break
+      }
+    }
+  }
+  if (items.length === 0) return null
+
+  return (
+    <div className="border border-border rounded-lg overflow-hidden">
+      <SectionHeader title="K-3 Part IV — FDII / Sec. 250 Deduction Information" />
+      <div className="divide-y divide-dashed divide-border/50">
+        {items.map((item, i) => (
+          <LineItem key={i} boxRef={`Line ${item.line}`} label={item.label} value={item.value} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── K-3 "Sourced by Partner" election ────────────────────────────────────────
+
+function K3ElectionSection({
+  data,
+  onChange,
+  readOnly,
+}: {
+  data: FK1StructuredData
+  onChange: (updated: FK1StructuredData) => void
+  readOnly: boolean
+}) {
+  const elected = data.k3Elections?.sourcedByPartnerAsUSSource ?? false
+
+  const hasFCol = (data.k3?.sections ?? []).some(sec => {
+    const d = sec.data as Record<string, unknown>
+    if (Array.isArray(d['rows'])) {
+      return (d['rows'] as Array<Record<string, unknown>>).some(r => Number(r['col_f_sourced_by_partner'] ?? 0) !== 0)
+    }
+    for (const val of Object.values(d)) {
+      if (val && typeof val === 'object' && !Array.isArray(val)) {
+        if (Number((val as Record<string, unknown>)['f'] ?? 0) !== 0) return true
+      }
+    }
+    return false
+  })
+
+  if (!hasFCol) return null
+
+  return (
+    <div className="border border-border rounded-lg px-3 py-2.5 bg-muted/10">
+      <div className="flex items-start gap-2.5">
+        <Checkbox
+          id="k3-sbp-election"
+          checked={elected}
+          onCheckedChange={(c) => {
+            if (!readOnly) onChange({ ...data, k3Elections: { ...data.k3Elections, sourcedByPartnerAsUSSource: Boolean(c) } })
+          }}
+          disabled={readOnly}
+          className="mt-0.5"
+        />
+        <div>
+          <Label htmlFor="k3-sbp-election" className="text-xs font-medium cursor-pointer">
+            Elect to treat "Sourced by Partner" (column f) items as U.S. source
+          </Label>
+          <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
+            When checked, column (f) amounts are treated as U.S.-source income for Form 1116 purposes.
+            Applies to domestic partners not subject to a treaty or §901(j) override.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── K-3 generic section fallback ──────────────────────────────────────────────
 
 function K3SectionFallback({ section }: { section: K3Section }) {
-  // Skip sections handled by dedicated components
-  if (['header', 'part2_section1', 'part2_section2', 'part3_section4'].includes(section.sectionId)) return null
+  const HANDLED = ['header', 'part2_section1', 'part2_section2', 'part3_section2', 'part3_section4', 'part4']
+  if (HANDLED.includes(section.sectionId)) return null
 
   return (
     <div className="border border-border rounded-lg px-3 py-2">
@@ -1006,9 +1315,13 @@ export default function K1ReviewPanel({ data, onChange, readOnly = false }: K1Re
       {/* K-3 sections */}
       {k3Sections.length > 0 && (
         <div className="space-y-4">
+          <K3ElectionSection data={data} onChange={onChange} readOnly={readOnly} />
           <K3GrossIncomeTable sections={k3Sections} />
+          <K3DeductionsTable sections={k3Sections} electionActive={data.k3Elections?.sourcedByPartnerAsUSSource} />
+          <K3AssetApportionmentTable sections={k3Sections} electionActive={data.k3Elections?.sourcedByPartnerAsUSSource} />
           <K3ForeignTaxGrid sections={k3Sections} />
-          {/* Generic fallback for other K-3 sections */}
+          <K3FDIIPanel sections={k3Sections} />
+          {/* Generic fallback for remaining sections */}
           {k3Sections.map((section) => (
             <K3SectionFallback key={section.sectionId} section={section} />
           ))}

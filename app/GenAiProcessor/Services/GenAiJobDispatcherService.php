@@ -1182,101 +1182,7 @@ PROMPT;
         }
 
         // Schedule K-3 — assemble structured sections from new flat arrays
-        $k3Sections = [];
-
-        // Part I checkboxes
-        $checkboxes = is_array($args['k3_part1_checkboxes'] ?? null) ? $args['k3_part1_checkboxes'] : [];
-        $fxRows = is_array($args['k3_part1_fx_translation'] ?? null) ? $args['k3_part1_fx_translation'] : [];
-        if (! empty($checkboxes) || ! empty($fxRows)) {
-            $part1Data = [];
-            if (! empty($checkboxes)) {
-                $part1Data['checkboxes'] = $checkboxes;
-            }
-            if (! empty($fxRows)) {
-                $part1Data['fxTranslation'] = $fxRows;
-            }
-            $k3Sections[] = [
-                'sectionId' => 'part1',
-                'title' => 'Part I – Other Current Year International Information',
-                'data' => $part1Data,
-                'notes' => '',
-            ];
-        }
-
-        // Part II income/deduction rows — split into income (lines 6–24) and deductions (lines 25–55)
-        $part2Rows = is_array($args['k3_part2_rows'] ?? null) ? $args['k3_part2_rows'] : [];
-        if (! empty($part2Rows)) {
-            $incomeLines = ['6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24'];
-            $deductionLines = ['25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46', '47', '48', '49', '50', '51', '52', '53', '54', '55'];
-            $section1Rows = array_values(array_filter($part2Rows, fn ($r) => is_array($r) && in_array($r['line'] ?? '', $incomeLines)));
-            $section2Rows = array_values(array_filter($part2Rows, fn ($r) => is_array($r) && in_array($r['line'] ?? '', $deductionLines)));
-            if (! empty($section1Rows)) {
-                $k3Sections[] = [
-                    'sectionId' => 'part2_section1',
-                    'title' => 'Part II – Foreign Tax Credit Limitation, Section 1: Gross Income',
-                    'data' => ['rows' => $section1Rows],
-                    'notes' => '',
-                ];
-            }
-            if (! empty($section2Rows)) {
-                $k3Sections[] = [
-                    'sectionId' => 'part2_section2',
-                    'title' => 'Part II – Foreign Tax Credit Limitation, Section 2: Deductions',
-                    'data' => ['rows' => $section2Rows],
-                    'notes' => '',
-                ];
-            }
-        }
-
-        // Part III Section 2: interest expense apportionment asset rows
-        $assetRows = is_array($args['k3_part3_asset_rows'] ?? null) ? $args['k3_part3_asset_rows'] : [];
-        if (! empty($assetRows)) {
-            $k3Sections[] = [
-                'sectionId' => 'part3_section2',
-                'title' => 'Part III – Section 2: Interest Expense Apportionment Factors',
-                'data' => ['rows' => $assetRows],
-                'notes' => '',
-            ];
-        }
-
-        // Part III Section 4: foreign taxes by country
-        $foreignTaxes = is_array($args['k3_part3_foreign_taxes'] ?? null) ? $args['k3_part3_foreign_taxes'] : [];
-        if (! empty($foreignTaxes)) {
-            $foreignTaxesWithAmounts = array_values(array_filter(
-                $foreignTaxes,
-                static fn ($row): bool => is_array($row) && is_numeric($row['amount_usd'] ?? null)
-            ));
-            $k3Sections[] = [
-                'sectionId' => 'part3_section4',
-                'title' => 'Part III – Section 4: Foreign Taxes',
-                'data' => [
-                    'countries' => $foreignTaxes,
-                    'grandTotalUSD' => array_sum(array_map(
-                        static fn (array $row): float => (float) $row['amount_usd'],
-                        $foreignTaxesWithAmounts
-                    )),
-                ],
-                'notes' => '',
-            ];
-        }
-
-        // Backward-compat: merge any legacy k3_sections entries not already covered
-        $rawSections = is_array($args['k3_sections'] ?? null) ? $args['k3_sections'] : [];
-        $existingIds = array_column($k3Sections, 'sectionId');
-        foreach ($rawSections as $sec) {
-            if (! is_array($sec) || ! isset($sec['sectionId'])) {
-                continue;
-            }
-            if (in_array($sec['sectionId'], $existingIds)) {
-                continue;
-            }
-            $k3Sections[] = [
-                'sectionId' => (string) $sec['sectionId'],
-                'title' => isset($sec['title']) ? (string) $sec['title'] : '',
-                'data' => (object) [],
-                'notes' => isset($sec['notes']) ? (string) $sec['notes'] : '',
-            ];
-        }
+        $k3Sections = (new K3SectionAssembler)->assemble($args);
 
         // Warnings
         $rawWarnings = $args['warnings'] ?? [];
@@ -1494,8 +1400,6 @@ PROMPT;
      * - Map Box 16 codes I/J (foreign taxes paid/withheld) to Form 1116 Part I.
      * - Use box16_country (code A) for the foreign country name.
      * - See IRS Publication 514 for Form 1116 computation rules.
-     *
-     * @return ToolDefinition
      */
     private function buildK1ToolDefinition(): ToolDefinition
     {
@@ -1687,6 +1591,32 @@ PROMPT;
                         ['country', 'amount_usd'],
                     )
                 ),
+
+                // ── Schedule K-3 Part III Section 5: Sec. 743(b) basis adjustments ─
+                'k3_part3_section5_sec743b_positive' => Schema::number('Positive Sec. 743(b) basis adjustment amount from Part III Section 5'),
+                'k3_part3_section5_sec743b_negative' => Schema::number('Negative Sec. 743(b) basis adjustment amount from Part III Section 5'),
+
+                // ── Schedule K-3 Part IV: FDII and Sec. 250 deduction ─────────────
+                'k3_part4_net_income_loss' => Schema::number('Net income or loss from Part IV (FDII / Sec. 250 deduction)'),
+                'k3_part4_dei_gross_receipts' => Schema::number('Deduction eligible income (DEI) — gross receipts from Part IV'),
+                'k3_part4_dei_allocated_deductions' => Schema::number('DEI — allocated deductions from Part IV'),
+                'k3_part4_other_interest_expense_dei' => Schema::number('Other interest expense allocable to DEI from Part IV'),
+                'k3_part4_total_average_assets' => Schema::number('Total average assets reported in Part IV'),
+
+                // ── Schedule K-3 Part IX key numeric fields ───────────────────────
+                'k3_part9_line1_gross_receipts' => Schema::number('Part IX Line 1 — gross receipts from a foreign partnership for Sec. 954(c)(3) exclusion'),
+                'k3_part9_line5_denominator_amounts' => Schema::number('Part IX Line 5 — denominator amounts for tax-exempt income computation'),
+
+                // ── Schedule K-3 Parts V–XIII free-form notes ─────────────────────
+                'k3_part5_notes' => Schema::string('Summarize any notable amounts or elections in K-3 Part V (distributions from foreign corporations)'),
+                'k3_part6_notes' => Schema::string('Summarize any Sec. 951(a)(1) or Sec. 951A inclusions reported in K-3 Part VI'),
+                'k3_part7_notes' => Schema::string('Summarize any Sec. 951A GILTI inclusions reported in K-3 Part VII'),
+                'k3_part8_notes' => Schema::string('Summarize any alternative transition-year calculation details from K-3 Part VIII'),
+                'k3_part9_notes' => Schema::string('Summarize key tax-exempt income amounts and elections from K-3 Part IX'),
+                'k3_part10_notes' => Schema::string('Summarize character and source of income/deductions for foreign partners from K-3 Part X'),
+                'k3_part11_notes' => Schema::string('Summarize deemed sale items on transfer reported in K-3 Part XI'),
+                'k3_part12_notes' => Schema::string('Summarize BEAT-related partner information from K-3 Part XII'),
+                'k3_part13_notes' => Schema::string('Summarize ECTI distributive share amounts for foreign partners from K-3 Part XIII'),
 
                 // ── Schedule K-3 parts applicability checkboxes ───────────────────
                 'k3_parts_applicable' => Schema::object([
