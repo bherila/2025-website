@@ -26,37 +26,12 @@ export const NIIT_THRESHOLD = {
   mfj: 250_000,
 } as const
 
+export type { Form8960Lines } from '@/types/finance/tax-return'
+import type { Form8960Lines } from '@/types/finance/tax-return'
+
 export interface Form8960NiiComponent {
   label: string
   amount: number
-}
-
-export interface Form8960Lines {
-  /** Part I — NII components */
-  taxableInterest: number
-  ordinaryDividends: number
-  /** Net capital gains (Schedule D line 19, capped at 0 — losses don't reduce NII below 0). */
-  netCapGains: number
-  /** Net passive income from K-1 partnerships (Schedule E passive). */
-  passiveIncome: number
-  /** Investment interest expense deduction (Form 4952 line 6, negative). */
-  investmentInterestExpense: number
-  /** Part I Line 8 — Total NII before deductions. */
-  grossNII: number
-  /** Part II — Total deductions (investment interest expense). */
-  totalDeductions: number
-  /** Part III Line 12 — Net Investment Income. */
-  netInvestmentIncome: number
-  /** MAGI (estimated as total income). */
-  magi: number
-  /** Threshold ($200k single / $250k MFJ). */
-  threshold: number
-  /** MAGI − threshold (0 if below threshold). */
-  magiExcess: number
-  /** NIIT = 3.8% × min(NII, magiExcess). */
-  niitTax: number
-  /** Individual NII line items for display. */
-  components: Form8960NiiComponent[]
 }
 
 export function computeForm8960Lines({
@@ -67,6 +42,9 @@ export function computeForm8960Lines({
   investmentInterestExpense,
   magi,
   isMarried,
+  interestSources = [],
+  dividendSources = [],
+  passiveSources = [],
 }: {
   taxableInterest: number
   ordinaryDividends: number
@@ -77,6 +55,9 @@ export function computeForm8960Lines({
   investmentInterestExpense: number
   magi: number
   isMarried: boolean
+  interestSources?: { label: string; amount: number }[]
+  dividendSources?: { label: string; amount: number }[]
+  passiveSources?: { label: string; amount: number }[]
 }): Form8960Lines {
   // Capital gains contribute to NII only when positive; losses don't reduce NII below 0
   const netCapGains = Math.max(0, netCapGainsRaw)
@@ -116,5 +97,8 @@ export function computeForm8960Lines({
     magiExcess,
     niitTax,
     components,
+    interestSources,
+    dividendSources,
+    passiveSources,
   }
 }

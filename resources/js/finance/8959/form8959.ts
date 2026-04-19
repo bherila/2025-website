@@ -19,20 +19,16 @@ export const ADDITIONAL_MEDICARE_THRESHOLD = {
   mfj: 250_000,
 } as const
 
-export interface Form8959Lines {
-  /** W-2 wages (Box 1) subject to Medicare tax. */
-  wages: number
-  /** Filing-status threshold ($200k single / $250k MFJ). */
-  threshold: number
-  /** Wages above threshold (0 if wages ≤ threshold). */
-  excessWages: number
-  /** Additional Medicare Tax: 0.9% × excessWages. */
-  additionalTax: number
-}
+export type { Form8959Lines } from '@/types/finance/tax-return'
+import type { Form8959Lines } from '@/types/finance/tax-return'
 
-export function computeForm8959Lines(wages: number, isMarried: boolean): Form8959Lines {
+export function computeForm8959Lines(
+  wages: number,
+  isMarried: boolean,
+  sources: { label: string; wages: number }[] = [],
+): Form8959Lines {
   const threshold = isMarried ? ADDITIONAL_MEDICARE_THRESHOLD.mfj : ADDITIONAL_MEDICARE_THRESHOLD.single
   const excessWages = currency(Math.max(0, currency(wages).subtract(threshold).value)).value
   const additionalTax = currency(excessWages).multiply(0.009).value
-  return { wages, threshold, excessWages, additionalTax }
+  return { wages, threshold, excessWages, additionalTax, sources }
 }

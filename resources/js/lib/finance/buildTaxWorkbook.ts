@@ -369,12 +369,22 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
 
   // ── Form 8959 ────────────────────────────────────────────────────────────────
   const form8959Sheet = taxReturn.form8959 && taxReturn.form8959.additionalTax > 0
-    ? buildSheet('Form 8959', [
-        { line: '1', description: 'Line 1 — Medicare wages (W-2 Box 1 approx; exact = Box 5)', amount: taxReturn.form8959.wages, note: 'Box 5 (Medicare wages) may exceed Box 1 when 401k deferrals apply' },
-        { line: '5', description: `Line 5 — Threshold (${taxReturn.form8959.threshold === 200_000 ? 'Single/HOH' : 'MFJ'})`, amount: taxReturn.form8959.threshold },
-        { line: '6', description: 'Line 6 — Wages above threshold', amount: taxReturn.form8959.excessWages },
-        { line: '7', description: 'Line 7 — Additional Medicare Tax (0.9%) → Schedule 2 Line 11', amount: taxReturn.form8959.additionalTax, isTotal: true },
-      ])
+    ? (() => {
+        const f = taxReturn.form8959
+        const srcRows: XlsxRow[] = f.sources.length > 0
+          ? [
+              { isHeader: true, description: 'W-2 Sources (Box 1 wages)' },
+              ...f.sources.map(s => ({ description: s.label, amount: s.wages })),
+            ]
+          : []
+        return buildSheet('Form 8959', [
+          ...srcRows,
+          { line: '1', description: 'Line 1 — Medicare wages (W-2 Box 1 approx; exact = Box 5)', amount: f.wages, isTotal: srcRows.length > 0, note: 'Box 5 (Medicare wages) may exceed Box 1 when 401k deferrals apply' },
+          { line: '5', description: `Line 5 — Threshold (${f.threshold === 200_000 ? 'Single/HOH' : 'MFJ'})`, amount: f.threshold },
+          { line: '6', description: 'Line 6 — Wages above threshold', amount: f.excessWages },
+          { line: '7', description: 'Line 7 — Additional Medicare Tax (0.9%) → Schedule 2 Line 11', amount: f.additionalTax, isTotal: true },
+        ])
+      })()
     : null
 
   // ── Form 8960 ────────────────────────────────────────────────────────────────
@@ -383,10 +393,13 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
         const f = taxReturn.form8960
         const rows: XlsxRow[] = [
           { isHeader: true, description: 'Part I — Net Investment Income' },
-          { line: '1', description: 'Taxable interest (Schedule B)', amount: f.taxableInterest },
-          { line: '2', description: 'Ordinary dividends (Schedule B)', amount: f.ordinaryDividends },
+          ...f.interestSources.map(s => ({ description: `  ${s.label}`, amount: s.amount })),
+          { line: '1', description: 'Taxable interest (Schedule B)', amount: f.taxableInterest, isTotal: f.interestSources.length > 0 },
+          ...f.dividendSources.map(s => ({ description: `  ${s.label}`, amount: s.amount })),
+          { line: '2', description: 'Ordinary dividends (Schedule B)', amount: f.ordinaryDividends, isTotal: f.dividendSources.length > 0 },
           { line: '5a', description: 'Net capital gains (Schedule D, capped at 0)', amount: f.netCapGains },
-          { line: '4a', description: 'Net passive income (K-1 Schedule E)', amount: f.passiveIncome },
+          ...f.passiveSources.map(s => ({ description: `  ${s.label}`, amount: s.amount })),
+          { line: '4a', description: 'Net passive income (K-1 Schedule E)', amount: f.passiveIncome, isTotal: f.passiveSources.length > 0 },
           { line: '8', description: 'Line 8 — Gross NII', amount: f.grossNII, isTotal: true },
           { isHeader: true, description: 'Part II — Deductions' },
           { line: '9a', description: 'Investment interest expense (Form 4952)', amount: -f.investmentInterestExpense },

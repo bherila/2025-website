@@ -1,7 +1,59 @@
 'use client'
 
+import currency from 'currency.js'
+import { useState } from 'react'
+
 import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type { CapitalLossCarryoverLines, Form461Lines, Form8959Lines, Form8960Lines, Schedule2Lines } from '@/types/finance/tax-return'
+
+/** Reusable data-source drilldown modal. */
+function SourceModal({
+  title,
+  rows,
+  totalLabel,
+  total,
+  open,
+  onClose,
+}: {
+  title: string
+  rows: { label: string; amount: number }[]
+  totalLabel: string
+  total: number
+  open: boolean
+  onClose: () => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Source</TableHead>
+              <TableHead className="text-right">Amount</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((r, i) => (
+              <TableRow key={i}>
+                <TableCell className="text-sm">{r.label}</TableCell>
+                <TableCell className="text-right font-mono text-sm">{currency(r.amount).format()}</TableCell>
+              </TableRow>
+            ))}
+            <TableRow className="font-semibold bg-muted/50">
+              <TableCell>{totalLabel}</TableCell>
+              <TableCell className="text-right font-mono">{currency(total).format()}</TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 interface AdditionalTaxesPreviewProps {
   schedule2?: Schedule2Lines | undefined
@@ -12,6 +64,11 @@ interface AdditionalTaxesPreviewProps {
 }
 
 export default function AdditionalTaxesPreview({ schedule2, form8959, form8960, capitalLossCarryover, form461 }: AdditionalTaxesPreviewProps) {
+  const [wagesModal, setWagesModal] = useState(false)
+  const [interestModal, setInterestModal] = useState(false)
+  const [dividendModal, setDividendModal] = useState(false)
+  const [passiveModal, setPassiveModal] = useState(false)
+
   const hasContent =
     (form8959?.additionalTax ?? 0) > 0 ||
     (form8960?.magi ?? 0) > 0 ||
@@ -20,6 +77,7 @@ export default function AdditionalTaxesPreview({ schedule2, form8959, form8960, 
   if (!hasContent) return null
 
   return (
+    <>
     <div className="space-y-5">
       <div>
         <h2 className="text-base font-semibold mb-0.5">Additional Taxes &amp; Planning Items</h2>
@@ -48,7 +106,11 @@ export default function AdditionalTaxesPreview({ schedule2, form8959, form8960, 
       {/* Form 8959 — Additional Medicare Tax */}
       {form8959 && form8959.additionalTax > 0 && (
         <FormBlock title="Form 8959 — Additional Medicare Tax (0.9%)">
-          <FormLine label="W-2 wages (Box 1)" value={form8959.wages} />
+          <FormLine
+            label="W-2 wages (Box 1)"
+            value={form8959.wages}
+            {...(form8959.sources.length > 1 ? { onClick: () => setWagesModal(true) } : {})}
+          />
           <FormLine
             label={`Less: threshold (${fmtAmt(form8959.threshold, 0)} — ${form8959.threshold === 200_000 ? 'Single/HOH' : 'MFJ'})`}
             value={-form8959.threshold}
@@ -62,9 +124,21 @@ export default function AdditionalTaxesPreview({ schedule2, form8959, form8960, 
       {/* Form 8960 — Net Investment Income Tax */}
       {form8960 && form8960.niitTax > 0 && (
         <FormBlock title="Form 8960 — Net Investment Income Tax (NIIT, 3.8%)">
-          {form8960.components.map((c, i) => (
-            <FormLine key={i} label={c.label} value={c.amount} />
-          ))}
+          {form8960.components.map((c, i) => {
+            const isInterest = c.label.includes('interest') && !c.label.includes('investment interest')
+            const isDividend = c.label.includes('dividend')
+            const isPassive = c.label.includes('passive')
+            return (
+              <FormLine
+                key={i}
+                label={c.label}
+                value={c.amount}
+                {...(isInterest && form8960.interestSources.length > 1 ? { onClick: () => setInterestModal(true) } : {})}
+                {...(isDividend && form8960.dividendSources.length > 1 ? { onClick: () => setDividendModal(true) } : {})}
+                {...(isPassive && form8960.passiveSources.length > 1 ? { onClick: () => setPassiveModal(true) } : {})}
+              />
+            )
+          })}
           <FormTotalLine label="Net Investment Income (Line 12)" value={form8960.netInvestmentIncome} />
           <FormLine label="Modified AGI (estimated)" value={form8960.magi} />
           <FormLine label={`Less: threshold (${fmtAmt(form8960.threshold, 0)} — ${form8960.threshold === 200_000 ? 'Single/HOH' : 'MFJ'})`} value={-form8960.threshold} />
@@ -146,5 +220,46 @@ export default function AdditionalTaxesPreview({ schedule2, form8959, form8960, 
         </FormBlock>
       )}
     </div>
+
+    {/* Data source modals */}
+    {form8959 && (
+      <SourceModal
+        title="W-2 Wage Sources — Form 8959 Line 1"
+        rows={form8959.sources.map(s => ({ label: s.label, amount: s.wages }))}
+        totalLabel="Total W-2 wages (Box 1)"
+        total={form8959.wages}
+        open={wagesModal}
+        onClose={() => setWagesModal(false)}
+      />
+    )}
+    {form8960 && (
+      <>
+        <SourceModal
+          title="Taxable Interest Sources — Form 8960 Line 1"
+          rows={form8960.interestSources}
+          totalLabel="Total taxable interest"
+          total={form8960.taxableInterest}
+          open={interestModal}
+          onClose={() => setInterestModal(false)}
+        />
+        <SourceModal
+          title="Ordinary Dividend Sources — Form 8960 Line 2"
+          rows={form8960.dividendSources}
+          totalLabel="Total ordinary dividends"
+          total={form8960.ordinaryDividends}
+          open={dividendModal}
+          onClose={() => setDividendModal(false)}
+        />
+        <SourceModal
+          title="Passive Income Sources — Form 8960 Line 4 (K-1 Schedule E)"
+          rows={form8960.passiveSources}
+          totalLabel="Total net passive income"
+          total={form8960.passiveIncome}
+          open={passiveModal}
+          onClose={() => setPassiveModal(false)}
+        />
+      </>
+    )}
+    </>
   )
 }

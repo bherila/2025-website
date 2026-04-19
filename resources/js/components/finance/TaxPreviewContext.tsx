@@ -26,7 +26,7 @@ import { ExcessBusinessLossLimitation } from '@/lib/tax/ExcessBusinessLossLimita
 import { form461 } from '@/lib/tax/form461'
 import { buildCacheKey, getCachedTransactions, setCachedTransactions } from '@/services/transactionCache'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
-import type { EmploymentEntity, F1099DivParsedData, F1099IntParsedData, TaxDocument } from '@/types/finance/tax-document'
+import type { EmploymentEntity, F1099DivParsedData, F1099IntParsedData, TaxDocument, W2ParsedData } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 import type { OverviewRow, TaxReturn1040 } from '@/types/finance/tax-return'
 
@@ -530,7 +530,14 @@ export function TaxPreviewProvider({
       isMarried,
     }
 
-    const form8959 = computeForm8959Lines(w2GrossIncome.value, isMarried)
+    const w2Sources = reviewedW2Docs.map((doc) => {
+      const p = doc.parsed_data as W2ParsedData | null
+      const wages = p?.box1_wages ?? 0
+      const label = p?.employer_name ?? doc.employment_entity?.display_name ?? doc.original_filename ?? 'W-2'
+      return { label, wages }
+    }).filter(s => s.wages > 0)
+
+    const form8959 = computeForm8959Lines(w2GrossIncome.value, isMarried, w2Sources)
     const form8960 = computeForm8960Lines({
       taxableInterest: income1099.interestIncome.value,
       ordinaryDividends: income1099.dividendIncome.value,
@@ -544,6 +551,11 @@ export function TaxPreviewProvider({
         .add(scheduleE.grandTotal)
         .add(Math.max(scheduleD.schD.schD_line16, -3000)).value,
       isMarried,
+      interestSources: scheduleB.interestLines.map(l => ({ label: l.label, amount: l.amount })),
+      dividendSources: scheduleB.dividendLines.map(l => ({ label: l.label, amount: l.amount })),
+      passiveSources: scheduleE.partnerRows
+        .filter(r => r.netPassive !== 0)
+        .map(r => ({ label: r.partnerName, amount: r.netPassive })),
     })
     const schedule2 = {
       altMinimumTax: 0,

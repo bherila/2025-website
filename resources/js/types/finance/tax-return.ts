@@ -126,6 +126,8 @@ export interface Form8959Lines {
   threshold: number
   excessWages: number
   additionalTax: number
+  /** Per-W-2 document breakdown for the data source modal. */
+  sources: { label: string; wages: number }[]
 }
 
 export interface Form8960Lines {
@@ -142,6 +144,12 @@ export interface Form8960Lines {
   magiExcess: number
   niitTax: number
   components: { label: string; amount: number }[]
+  /** Per-payer interest sources for the data source modal. */
+  interestSources: { label: string; amount: number }[]
+  /** Per-payer dividend sources for the data source modal. */
+  dividendSources: { label: string; amount: number }[]
+  /** Per-K-1 passive income sources for the data source modal. */
+  passiveSources: { label: string; amount: number }[]
 }
 
 export interface CapitalLossCarryoverLines {
