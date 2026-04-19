@@ -1,7 +1,27 @@
 import currency from 'currency.js'
 
+import { ALL_K1_CODES, K1_SPEC_BY_BOX } from '@/components/finance/k1'
 import type { TaxReturn1040 } from '@/types/finance/tax-return'
 import type { XlsxRow, XlsxSheet, XlsxWorkbook } from '@/types/finance/xlsx-export'
+
+/**
+ * Routing notes for key K-1 boxes, showing where values come from (K-3 source)
+ * and where they flow on the return (destination forms/schedules).
+ */
+const K1_ROUTING_NOTES: Record<string, string> = {
+  '5':  '<< K-3, II, line 6 | >> Sch B line 1 / Form 1040 line 2b',
+  '21': '<< K-3, III, section 4 (see K-3 for country breakdown)',
+}
+
+/** Routing notes for specific box + code combinations. */
+const K1_CODE_ROUTING_NOTES: Record<string, Record<string, string>> = {
+  '11': { A: '<< K-3, II, line 20 | >> Form 6781 / Sch D line 4 or 11' },
+  '13': { L: '<< K-3, II, line 42 | >> Form 4952 line 1 / Sch A line 16 — do NOT enter on Form 8582' },
+  '20': {
+    A: '>> Form 4952, II, line 4a',
+    B: '>> Form 4952, II, line 5',
+  },
+}
 
 type IndexedSheet = XlsxSheet & { rowIndex: Map<string, number> }
 
@@ -389,19 +409,32 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
   // ── K-1 / K-3 / 1099 supplemental sheets ────────────────────────────────────
   const k1Sheets = (taxReturn.k1Docs ?? []).map((entry) => {
     const rows: XlsxRow[] = [
-      { isHeader: true, description: 'Fields' },
-      ...Object.entries(entry.fields).map(([key, value]) => ({
-        line: key,
-        description: `Field ${key}`,
-        amount: typeof value === 'number' ? value : undefined,
-        note: typeof value === 'string' ? value : undefined,
-      })),
-      { isHeader: true, description: 'Codes' },
-      ...Object.entries(entry.codes).flatMap(([box, items]) => items.map((item) => ({
-        line: box,
-        description: `Code ${item.code}`,
-        note: item.value,
-      }))),
+      { isHeader: true, description: 'Fields (Boxes A–O, 1–21)' },
+      ...Object.entries(entry.fields).map(([key, value]) => {
+        const spec = K1_SPEC_BY_BOX[key]
+        const label = spec ? spec.label : `Box ${key}`
+        const routing = K1_ROUTING_NOTES[key]
+        return {
+          line: key,
+          description: label,
+          amount: typeof value === 'number' ? value : undefined,
+          note: typeof value === 'string' ? value : routing,
+        }
+      }),
+      { isHeader: true, description: 'Coded Boxes (11, 13–20)' },
+      ...Object.entries(entry.codes).flatMap(([box, items]) =>
+        items.map((item) => {
+          const codeLabel = ALL_K1_CODES[box]?.[item.code.toUpperCase()]
+          const description = codeLabel ? `Box ${box} ${item.code} — ${codeLabel}` : `Box ${box} Code ${item.code}`
+          const routing = K1_CODE_ROUTING_NOTES[box]?.[item.code.toUpperCase()]
+          return {
+            line: `${box}${item.code}`,
+            description,
+            amount: isNaN(Number(item.value)) ? undefined : Number(item.value),
+            note: routing ?? (isNaN(Number(item.value)) ? item.value : undefined),
+          }
+        }),
+      ),
     ]
     return buildSheet(`K-1 ${entry.entityName}`, rows)
   })
