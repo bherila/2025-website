@@ -1,5 +1,10 @@
 # Client Management - Billing & Invoicing System
 
+## See also
+
+- **[Deferred billing](deferred-billing.md)** — per-entry flag that lets admins complete work now and bill for it only when retainer capacity exists. Deferred entries are never split and are force-billed at the hourly rate on the termination invoice.
+- **[Overpayment credits](overpayment-credits.md)** — any overpaid amount carries forward as a credit applied automatically to the next draft invoice(s); credits never expire.
+
 ## Overview
 The billing and invoicing system handles automatic invoice generation with prior-month billing, retainer-based pricing, rollover hours, and reimbursable expense tracking. Invoices are generated at the start of month M and include work from the prior month (M-1) plus the retainer fee for the current month (M).
 

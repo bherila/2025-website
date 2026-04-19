@@ -39,7 +39,7 @@
 
 ### Documentation
 - ✅ Updated `copilot-instructions.md`
-- ✅ Created comprehensive `docs/CLIENT_MANAGEMENT.md`
+- ✅ Created comprehensive `docs/client-management/overview.md`
 
 ## Next Steps
 
@@ -78,7 +78,7 @@ All future features should be organized in:
 - Models: `app/Models/ClientManagement/`
 - Controllers: `app/Http/Controllers/ClientManagement/`
 - Views: `resources/views/client-management/`
-- Components: `resources/js/components/client-management/`
+- Components: `resources/js/client-management/components/`
 
 ## File Locations
 
@@ -90,8 +90,8 @@ All future features should be organized in:
 
 **Frontend:**
 - `resources/views/client-management/`
-- `resources/js/client-management.tsx`
-- `resources/js/components/client-management/`
+- `resources/js/client-management/admin.tsx`
+- `resources/js/client-management/components/`
 - `resources/js/components/navbar.tsx` (updated)
 
 **Routes:**
@@ -99,5 +99,5 @@ All future features should be organized in:
 - `routes/api.php` (Client Management API section)
 
 **Documentation:**
-- `docs/CLIENT_MANAGEMENT.md`
+- `docs/client-management/overview.md`
 - `.github/copilot-instructions.md` (updated)

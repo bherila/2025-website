@@ -256,11 +256,11 @@ Location: `resources/views/client-management/portal/`
 - `project.blade.php`: Mounts `ClientPortalProjectPage` with project data attributes
 
 Vite entry points:
-- Admin: `resources/js/client-management.tsx`
-- Portal: `resources/js/client-portal.tsx`
+- Admin: `resources/js/client-management/admin.tsx`
+- Portal: `resources/js/client-management/portal.tsx`
 
 ### TypeScript Typings
-Shared TypeScript interfaces are generated within the `@/types/client-management/` directory to ensure type consistency across components. When adding new interfaces, create or update files in this directory and import them using type-only imports (`import type { InterfaceName } from '@/types/client-management/file'`).
+Shared TypeScript interfaces are generated within the `@/client-management/types/` directory to ensure type consistency across components. When adding new interfaces, create or update files in this directory and import them using type-only imports (`import type { InterfaceName } from '@/client-management/types/file'`).
 
 Hydration vs runtime schemas
 - We use two schema flavors for some payloads (notably invoices/payments): a **strict runtime schema** (`InvoiceSchema`, `ClientInvoicePaymentSchema`) that represents the app's authoritative contract, and a **relaxed hydration schema** (`InvoiceHydrationSchema`, `ClientInvoicePaymentHydrationSchema`) that tolerates real-world server payload shapes (missing keys, numeric totals, omitted timestamps).
@@ -268,7 +268,7 @@ Hydration vs runtime schemas
 
 
 #### React Components
-Location: `resources/js/components/client-management/`
+Location: `resources/js/client-management/components/`
 
 **Admin Components:**
 
@@ -301,7 +301,7 @@ Location: `resources/js/components/client-management/`
 - Uses shadcn/ui Dialog, Button, Label components
 
 **Portal Components:**
-Location: `resources/js/components/client-management/portal/`
+Location: `resources/js/client-management/components/portal/`
 
 **ClientPortalIndexPage.tsx**
 - Main portal page showing projects, recent time entries, and active agreement
@@ -589,7 +589,7 @@ const fileManager = useFileManagement({
 
 ## Billing & Invoicing System
 
-> **Note:** Detailed documentation for the Billing & Invoicing system has been moved to [CLIENT_MANAGEMENT_BILLING.md](CLIENT_MANAGEMENT_BILLING.md).
+> **Note:** Detailed documentation for the Billing & Invoicing system has been moved to [billing.md](billing.md).
 
 ### Quick Summary
 - **Model**: Prior-month billing ("Give and Take")
@@ -1435,7 +1435,7 @@ GET /client/portal/{slug}/expenses → ClientPortalExpensesPage (Admin only)
 ### Components
 
 #### ClientPortalExpensesPage
-Location: `resources/js/components/client-management/portal/ClientPortalExpensesPage.tsx`
+Location: `resources/js/client-management/components/portal/ClientPortalExpensesPage.tsx`
 
 Features:
 - Summary cards showing total, reimbursable, pending, and non-reimbursable amounts
@@ -1445,7 +1445,7 @@ Features:
 - Click row to edit expense
 
 #### NewExpenseModal
-Location: `resources/js/components/client-management/portal/NewExpenseModal.tsx`
+Location: `resources/js/client-management/components/portal/NewExpenseModal.tsx`
 
 Features:
 - Create and edit expenses
