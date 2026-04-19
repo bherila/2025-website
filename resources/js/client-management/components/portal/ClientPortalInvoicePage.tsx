@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from "react";
 
 import type { ClientInvoicePayment, Invoice, InvoiceLine } from "@/client-management/types";
 import { Badge } from "@/components/ui/badge";
+import { DeferredBadge } from './PortalBadges'
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -358,9 +359,7 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                                                                         <span className="text-muted-foreground/70 mr-2">•</span>
                                                                         {entry.name || '—'}
                                                                         {entry.is_deferred_billing && isAdmin && (
-                                                                            <Badge variant="outline" className="ml-2 text-[9px] px-1 py-0 h-3.5 border-amber-600 text-amber-700 bg-amber-50 font-bold uppercase dark:border-amber-500 dark:text-amber-400 dark:bg-amber-950">
-                                                                                Deferred
-                                                                            </Badge>
+                                                                            <DeferredBadge className="ml-2" />
                                                                         )}
                                                                     </td>
                                                                     <td className="py-0.5 pr-4 text-right tabular-nums whitespace-nowrap">
@@ -386,9 +385,7 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                         {isAdmin && invoice.deferred_pending && invoice.deferred_pending.length > 0 && (
                             <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm dark:border-amber-700 dark:bg-amber-950">
                                 <div className="mb-2 flex items-center gap-2">
-                                    <Badge variant="outline" className="border-amber-600 text-amber-700 bg-amber-50 font-bold uppercase text-[9px] px-1 py-0 h-3.5 dark:border-amber-500 dark:text-amber-400 dark:bg-amber-950">
-                                        Deferred
-                                    </Badge>
+                                    <DeferredBadge />
                                     <span className="font-medium text-amber-900 dark:text-amber-200">
                                         {invoice.deferred_pending.length} entr{invoice.deferred_pending.length === 1 ? 'y' : 'ies'} deferred to a future invoice
                                     </span>

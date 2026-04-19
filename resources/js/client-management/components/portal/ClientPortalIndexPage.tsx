@@ -17,7 +17,8 @@ import { useIsUserAdmin } from '@/hooks/useAppInitialData'
 import { abbreviateName } from '@/lib/nameUtils'
 import type { FileRecord } from '@/types/files'
 
- import ClientPortalNav from './ClientPortalNav'
+import ClientPortalNav from './ClientPortalNav'
+import { BillabilityBadge, InvoicedBadge, ProjectBadge } from './PortalBadges'
 import DisabledEditButton from './DisabledEditButton'
  import NewProjectModal from './NewProjectModal'
  import NewTimeEntryModal from './NewTimeEntryModal'
@@ -216,19 +217,11 @@ export default function ClientPortalIndexPage({
                                   <span className="text-sm leading-tight mb-2">{entry.name || '--'}</span>
                                   <div className="flex items-center gap-2 flex-wrap">
                                     {entry.is_billable && entry.is_invoiced ? (
-                                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-green-600 text-green-600 font-bold shrink-0">
-                                        INVOICED
-                                      </Badge>
+                                      <InvoicedBadge />
                                     ) : (
-                                      <Badge variant={entry.is_billable ? 'default' : 'secondary'} className="text-[9px] px-1 py-0 h-3.5 font-bold shrink-0">
-                                        {entry.is_billable ? 'BILLABLE' : 'NON-BILLABLE'}
-                                      </Badge>
+                                      <BillabilityBadge isBillable={entry.is_billable} />
                                     )}
-                                    {entry.project && (
-                                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 font-medium border-muted-foreground/30 text-muted-foreground shrink-0">
-                                        {entry.project.name}
-                                      </Badge>
-                                    )}
+                                    {entry.project && <ProjectBadge name={entry.project.name} />}
                                   </div>
                                 </div>
                               </td>

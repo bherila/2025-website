@@ -3,8 +3,8 @@ import { useCallback, useEffect, useState } from 'react'
 
 import type { ClientCompany } from '@/client-management/types/common'
 import type { Invoice, InvoiceListItem } from '@/client-management/types/invoice'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { InvoiceListStatusBadge } from './PortalBadges'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -98,28 +98,6 @@ export default function ClientPortalInvoicesPage({ slug, companyName, companyId,
       alert('An error occurred while generating invoices')
     } finally {
       setGenerating(false)
-    }
-  }
-
-  const getStatusBadge = (status: string, invoice: Invoice | InvoiceListItem) => {
-    // For draft invoices with period_end in the future, show "Upcoming"
-    if (status === 'draft' && invoice.period_end) {
-      const periodEnd = new Date(invoice.period_end);
-      const now = new Date();
-      if (periodEnd > now) {
-        return <Badge variant="outline" className="border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400">Upcoming</Badge>
-      }
-    }
-
-    switch (status) {
-      case 'paid':
-        return <Badge variant="default" className="bg-green-600">Paid</Badge>
-      case 'issued':
-        return <Badge variant="secondary">Issued</Badge>
-      case 'void':
-        return <Badge variant="destructive">Void</Badge>
-      default:
-        return <Badge variant="outline">Draft</Badge>
     }
   }
 
@@ -228,7 +206,7 @@ export default function ClientPortalInvoicesPage({ slug, companyName, companyId,
                       ) : '-'}
                     </TableCell>
                     <TableCell className="py-3">
-                      {getStatusBadge(invoice.status, invoice)}
+                      <InvoiceListStatusBadge status={invoice.status} periodEnd={invoice.period_end} />
                     </TableCell>
                     <TableCell className="text-right py-3 font-semibold">
                       ${parseFloat(invoice.invoice_total).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

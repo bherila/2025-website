@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { Project, User } from '@/client-management/types/common'
 import type { TimeEntriesResponse, TimeEntry } from '@/client-management/types/time-entry'
 import { Badge } from '@/components/ui/badge'
+import { BillabilityBadge, DeferrableBadge, InvoicedBadge, ProjectBadge, UpcomingMicroBadge } from './PortalBadges'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -370,38 +371,15 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, ini
                                         <div className="flex items-center gap-2 flex-wrap">
                                           {entry.is_billable && entry.client_invoice ? (
                                             entry.client_invoice.status === 'draft' ? (
-                                              // Draft/upcoming invoice - show Upcoming badge in blue
-                                              <a href={`/client/portal/${slug}/invoices/${entry.client_invoice.client_invoice_id}`} className="no-underline">
-                                                <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-blue-600 text-blue-600 font-bold shrink-0 uppercase hover:bg-blue-50 dark:border-blue-400 dark:text-blue-400 dark:hover:bg-blue-950">
-                                                  Upcoming
-                                                </Badge>
-                                              </a>
+                                              <UpcomingMicroBadge href={`/client/portal/${slug}/invoices/${entry.client_invoice.client_invoice_id}`} />
                                             ) : (
-                                              // Issued/paid invoice - show Invoiced badge in green
-                                              <a href={`/client/portal/${slug}/invoices/${entry.client_invoice.client_invoice_id}`} className="no-underline">
-                                                <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-green-600 text-green-600 font-bold shrink-0 uppercase hover:bg-green-50 dark:border-green-400 dark:text-green-400 dark:hover:bg-green-950">
-                                                  Invoiced
-                                                </Badge>
-                                              </a>
+                                              <InvoicedBadge href={`/client/portal/${slug}/invoices/${entry.client_invoice.client_invoice_id}`} />
                                             )
                                           ) : (
-                                            <Badge variant={entry.is_billable ? 'default' : 'secondary'} className="text-[9px] px-1 py-0 h-3.5 font-bold shrink-0">
-                                              {entry.is_billable ? 'BILLABLE' : 'NON-BILLABLE'}
-                                            </Badge>
+                                            <BillabilityBadge isBillable={entry.is_billable} />
                                           )}
-                                          {entry.is_deferred_billing && (
-                                            <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-amber-600 text-amber-700 font-bold shrink-0 uppercase dark:border-amber-500 dark:text-amber-400">
-                                              Deferable
-                                            </Badge>
-                                          )}
-                                          {entry.project && (
-                                            <Badge
-                                              variant="outline"
-                                              className="text-[9px] px-1 py-0 h-3.5 font-medium border-muted-foreground/30 text-muted-foreground shrink-0"
-                                            >
-                                              {entry.project.name}
-                                            </Badge>
-                                          )}
+                                          {isAdmin && entry.is_deferred_billing && <DeferrableBadge />}
+                                          {entry.project && <ProjectBadge name={entry.project.name} />}
                                         </div>
                                       </div>
                                     </TableCell>
