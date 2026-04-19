@@ -129,7 +129,7 @@ The React mini-SPA is wrapped in `TaxPreviewProvider`, which loads `/api/finance
 ### Tab Structure
 
 ```
-Overview | Schedules | Schedule A | Schedule E | Capital Gains | Form 1116 | Schedule C | Tax Estimate | Action Items
+Overview | Schedules | Schedule A | Schedule E | Capital Gains | Form 1116 | Form 8995 | Schedule C | Tax Estimate | Action Items
 ```
 
 | Tab | Component(s) | Description |
@@ -140,6 +140,7 @@ Overview | Schedules | Schedule A | Schedule E | Capital Gains | Form 1116 | Sch
 | Schedule E | `ScheduleEPreview` | Partnership/S-corp income from K-1 — Box 1 ordinary, Box 2/3 rental, Box 4 guaranteed payments |
 | Capital Gains | `ScheduleDPreview` | Form 6781 + Schedule D |
 | Form 1116 | `Form1116Preview` | Passive foreign tax credit |
+| Form 8995 | `Form8995Preview` | Sec. 199A QBI deduction — per-partnership breakdown, threshold check, estimated deduction |
 | Schedule C | `ScheduleCTab` | Self-employment income/expenses + Form 8829 home office |
 | Tax Estimate | `Form1040Preview` + `TotalsTable` | Form 1040 preview + federal/state tax tables |
 | Action Items | `ActionItemsTab` | Resolved/outstanding alerts |
@@ -522,6 +523,39 @@ When `form_type === 'k1'` and the data contains `schemaVersion`, the modal rende
 - `FK1StructuredData` — canonical structured format (defined in `@/types/finance/k1-data`, re-exported from `@/types/finance`)
 - `FK1ParsedData` — legacy flat format (kept for backward compat with pre-2026.1 documents)
 - `isFK1StructuredData(data)` — type guard to detect new-format documents
+
+### Form 8995 (QBI Deduction) Support
+
+**Directory: `resources/js/finance/8995/`**
+
+| File | Purpose |
+|------|---------|
+| `k1-to-8995.ts` | `extractQBIFromK1`, `computeForm8995Lines`, `qbiThreshold` |
+| `__tests__/k1-to-8995.test.ts` | Unit tests |
+
+**K-1 Box 20 code mapping:**
+- Code S → QBI income/loss from the activity (value); W-2 wages + SSTB flag in `notes`
+- Code V → UBIA of qualified property
+
+**Computation (`computeForm8995Lines`):**
+- Accepts K-1 data array, `totalIncome` (Form 1040 Line 9 estimate), `year`, and `isMarried`
+- Estimates taxable income = total income − standard deduction (year + filing status lookup)
+- QBI component = 20% × max(QBI income, 0) per partnership
+- Deduction = min(total QBI component, 20% × estimated taxable income)
+- Flags `aboveThreshold` when estimated taxable income exceeds the Sec. 199A phase-in threshold (W-2 wage/UBIA limitation applies above threshold — use Form 8995-A)
+
+**Historical thresholds and standard deductions** are built into `k1-to-8995.ts` for years 2018–2025 (IRS Rev. Proc. sources).
+
+**UI:** `Form8995Preview` component mirrors `Form1116Preview`. Rendered on the **Form 8995** tab in `TaxPreviewPage`. Includes callouts for:
+- NIIT (QBI deduction does NOT reduce NII)
+- AMT (no add-back required post-TCJA)
+- State conformity (CA, NY, NJ, MA, IL and others do not conform)
+
+**XLSX:** Form 8995 sheet added to `buildTaxWorkbook`. Form 1040 Line 13 is cross-referenced via Excel formula. Box 20 S/V routing notes added to `K1_CODE_ROUTING_NOTES`.
+
+**Extraction prompt:** `TaxDocumentPromptTemplate.php` now explicitly instructs the AI to extract Box 20 Code S (QBI amount + full Section 199A statement notes) and Code V (UBIA).
+
+---
 
 ### Form 1116 (Foreign Tax Credit) Support
 

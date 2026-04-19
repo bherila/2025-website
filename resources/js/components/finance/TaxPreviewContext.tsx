@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { computeForm1040Lines } from '@/components/finance/Form1040Preview'
 import { computeForm1116Lines } from '@/components/finance/Form1116Preview'
 import { computeForm4952Lines } from '@/components/finance/Form4952Preview'
+import { computeForm8995 } from '@/components/finance/Form8995Preview'
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { computeScheduleALines } from '@/components/finance/ScheduleAPreview'
 import { computeScheduleB } from '@/components/finance/ScheduleBPreview'
@@ -74,6 +75,8 @@ interface TaxPreviewContextValue {
     dividendIncome: currency
     qualifiedDividends: currency
   }
+  /** Whether the user is married for the selected tax year (from marriage status settings). */
+  isMarried: boolean
   /** Aggregated short dividend summary across all active accounts, or null if not yet loaded. */
   shortDividendSummary: ShortDividendSummary | null
   taxReturn: TaxReturn1040
@@ -157,6 +160,7 @@ export function TaxPreviewProvider({
   const [accounts, setAccounts] = useState<TaxPreviewAccount[]>([])
   const [activeAccountIds, setActiveAccountIds] = useState<number[]>([])
   const [shortDividendSummary, setShortDividendSummary] = useState<ShortDividendSummary | null>(null)
+  const [isMarried, setIsMarried] = useState(false)
 
   const refreshAll = useCallback(async () => {
     if (!hasLoadedOnce.current) {
@@ -185,6 +189,26 @@ export function TaxPreviewProvider({
   useEffect(() => {
     void refreshAll()
   }, [refreshAll])
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const status = (await fetchWrapper.get('/api/finance/marriage-status')) as Record<string, boolean>
+        if (String(year) in status) {
+          setIsMarried(status[String(year)] ?? false)
+        } else {
+          // Carry forward the most recent prior year's status
+          const priorYear = Object.keys(status)
+            .map(Number)
+            .filter(y => y < year)
+            .sort((a, b) => b - a)[0]
+          setIsMarried(priorYear !== undefined ? (status[String(priorYear)] ?? false) : false)
+        }
+      } catch {
+        // Non-fatal — default to false (single)
+      }
+    })()
+  }, [year])
 
   const allDocuments = useMemo(
     () => [...w2Documents, ...accountDocuments],
@@ -500,6 +524,17 @@ export function TaxPreviewProvider({
       },
       form4952,
       form1116: computeForm1116Lines({ reviewedK1Docs, reviewed1099Docs }),
+      form8995: computeForm8995({
+        reviewedK1Docs,
+        totalIncome: w2GrossIncome
+          .add(income1099.interestIncome)
+          .add(income1099.dividendIncome)
+          .add(scheduleCNetIncome.total)
+          .add(scheduleE.grandTotal)
+          .add(Math.max(scheduleD.schD.schD_line16, -3000)).value,
+        selectedYear: year,
+        isMarried,
+      }),
       k1Docs: toTaxReturnYearK1Entries(reviewedK1Docs),
       k3Docs: reviewedK1Docs
         .map((doc) => {
@@ -539,6 +574,7 @@ export function TaxPreviewProvider({
     w2GrossIncome,
     payslips,
     shortDividendSummary,
+    isMarried,
   ])
 
   const value = useMemo<TaxPreviewContextValue>(() => ({
@@ -559,6 +595,7 @@ export function TaxPreviewProvider({
     accounts,
     activeAccountIds,
     income1099,
+    isMarried,
     shortDividendSummary,
     taxReturn,
     setPayslips,
@@ -588,6 +625,7 @@ export function TaxPreviewProvider({
     accounts,
     activeAccountIds,
     income1099,
+    isMarried,
     shortDividendSummary,
     taxReturn,
     refreshAll,

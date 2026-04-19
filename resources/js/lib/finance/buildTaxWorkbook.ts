@@ -20,6 +20,8 @@ const K1_CODE_ROUTING_NOTES: Record<string, Record<string, string>> = {
   '20': {
     A: '>> Form 4952, II, line 4a',
     B: '>> Form 4952, II, line 5',
+    S: '>> Form 8995 / 8995-A — QBI deduction (20% of qualified income) | >> Form 1040 Line 13',
+    V: '>> Form 8995-A — UBIA of qualified property (W-2 wage/UBIA limitation)',
   },
 }
 
@@ -302,6 +304,62 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
       })()
     : null
 
+  // ── Form 8995 ────────────────────────────────────────────────────────────────
+  const form8995Sheet = taxReturn.form8995
+    ? (() => {
+        const f = taxReturn.form8995
+        const entryStart = 3
+        const entryEnd = entryStart + f.entries.length - 1
+        const rows: XlsxRow[] = [
+          { isHeader: true, description: 'Per-Partnership QBI (Box 20 Code S)' },
+          ...f.entries.map((e) => ({ description: `${e.label} — QBI income`, amount: e.qbiIncome })),
+          {
+            line: '1',
+            description: 'Line 1 — Total qualified business income',
+            amount: f.totalQBI,
+            formula: f.entries.length > 0 ? sumFormula(entryStart, entryEnd) : undefined,
+            isTotal: true,
+          },
+          {
+            line: '15',
+            description: 'Line 15 — Estimated taxable income',
+            amount: f.estimatedTaxableIncome,
+            note: 'Total income minus estimated standard deduction',
+          },
+          {
+            line: '16',
+            description: 'Line 16 — Net capital gains (enter from Schedule D)',
+            note: 'Enter from return — reduces taxable income cap',
+          },
+          {
+            line: '17',
+            description: 'Line 17 — Taxable income cap (20% × Line 15)',
+            amount: f.taxableIncomeCap,
+            isTotal: true,
+          },
+          {
+            line: '13',
+            description: 'Line 13 — 20% × total QBI (after netting losses)',
+            amount: f.totalQBIComponent,
+          },
+          {
+            line: '13',
+            description: 'QBI Deduction — lesser of 20% QBI or taxable income cap',
+            amount: f.estimatedDeduction,
+            isTotal: true,
+            note: '→ Form 1040 Line 13',
+          },
+        ]
+        if (f.aboveThreshold) {
+          rows.push({
+            description: '⚠ Above threshold — use Form 8995-A; W-2 wage/UBIA limitation applies',
+            note: `Threshold: Single $${f.thresholdSingle.toLocaleString()} / MFJ $${f.thresholdMFJ.toLocaleString()}`,
+          })
+        }
+        return buildSheet('Form 8995', rows)
+      })()
+    : null
+
   // ── Short Dividends ──────────────────────────────────────────────────────────
   const shortDivSheet = taxReturn.shortDividends
     ? buildSheet('Short Dividends', [
@@ -319,6 +377,7 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
   const scheduleCNetIncome = scheduleCSheet?.rowIndex.get('Net income / (loss)')
   const scheduleECombined = scheduleESheet?.rowIndex.get('Schedule E combined total')
   const form1116Line2 = form1116Sheet?.rowIndex.get('Total foreign taxes paid')
+  const form8995Line13 = form8995Sheet?.rowIndex.get('QBI Deduction — lesser of 20% QBI or taxable income cap')
 
   const line1a = taxReturn.form1040?.find((line) => line.line === '1a')?.value ?? undefined
   const line2b = scheduleBLine4 ? taxReturn.scheduleB?.interestTotal : undefined
@@ -397,6 +456,13 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
           isTotal: true,
         },
         {
+          line: '13',
+          description: 'Qualified business income deduction (Form 8995)',
+          amount: taxReturn.form8995?.estimatedDeduction,
+          formula: form8995Line13 ? formulaRef('Form 8995', form8995Line13) : undefined,
+          note: form8995Line13 ? '→ Form 8995' : undefined,
+        },
+        {
           line: '20',
           description: 'Foreign tax credit (Form 1116)',
           amount: taxReturn.form1116?.totalForeignTaxes,
@@ -468,6 +534,7 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
     scheduleDSheet,
     scheduleESheet,
     form1116Sheet,
+    form8995Sheet,
     form4952Sheet,
     shortDivSheet,
     ...k1Sheets,

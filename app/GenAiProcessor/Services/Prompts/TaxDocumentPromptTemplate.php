@@ -84,7 +84,10 @@ PROMPT;
      * The tool definition carries all the structural detail, so the prompt can be concise.
      * Structured output (schemaVersion "2026.1") is stored directly in parsed_data.
      *
-     * Future extension: Box 16 (foreign transactions) feeds into Form 1116 when that support is added.
+     * Key coded-box routing for downstream computation:
+     * - Box 16 codes A/B/C/I/J → Form 1116 (Foreign Tax Credit)
+     * - Box 20 codes S/V → Form 8995 / 8995-A (QBI Deduction)
+     * - Box 13 code G/L → Form 4952 (Investment Interest Expense)
      */
     private function buildK1Prompt(int $taxYear): string
     {
@@ -156,19 +159,31 @@ EXTRACTION RULES:
    (`k3_part5_notes` through `k3_part13_notes`). Do NOT leave these blank if the page
    has content for that part.
 
-7. WARNINGS:
+7. KEY CODED BOXES — EXTRACT WITH HIGH PRIORITY:
+   Box 16 (Foreign Transactions):
+     Code A = country name, Code B = passive gross income, Code C = general gross income,
+     Code I = foreign taxes paid, Code J = foreign taxes withheld at source.
+   Box 20 (Other Information) — critical for QBI deduction:
+     Code S = Section 199A information (QBI income/loss from the activity). The value is the
+     QBI amount; record the full Section 199A statement (W-2 wages, UBIA, SSTB flag) in `notes`.
+     Code V = Section 199A UBIA of qualified property (enter the dollar amount).
+   Box 13 (Other Deductions):
+     Code G = investment interest expense (→ Form 4952 Line 1).
+     Code L = portfolio deductions not subject to 2% floor (→ Schedule A or Form 4952).
+
+8. WARNINGS:
    Add a warning string for: (a) any item whose tax character is ambiguous,
    (b) any K-3 section that has data but couldn't be fully parsed,
    (c) any footnote that overrides standard treatment (e.g., "report on Schedule E,
    not Schedule D" for swap losses).
 
-8. NORMALIZATION:
+9. NORMALIZATION:
    - Flat monetary fields: JSON numbers. Coded-box `value` fields: strings matching the tool schema. Parentheses = negative.
    - All percentages: store as decimal (e.g., 0.042400 not 4.2400).
    - All dates: YYYY-MM-DD.
    - Partner number / form ID: capture from header if present.
 
-CRITICAL COMPLETENESS CHECK: Before returning, verify that if a Schedule K-3 is attached,
+CRITICAL COMPLETENESS CHECK (10): Before returning, verify that if a Schedule K-3 is attached,
 at minimum `k3_part2_rows`, `k3_part3_asset_rows`, and `k3_part3_foreign_taxes` are
 non-empty. If any of these are empty despite the K-3 having that section, add a warning.
 PROMPT;
