@@ -354,6 +354,7 @@ function IncomeItemsBlock({
       <div className="divide-y divide-dashed divide-border/50">
         {incomeFieldLines.map(({ box, spec, val, notes }) => {
           const noteKey = `field-${box}`
+          const hasK3Part2 = box === '5' && data.k3?.sections.some(s => s.sectionId === 'part2_section1')
           return (
             <div key={box}>
               <LineItem
@@ -368,6 +369,9 @@ function IncomeItemsBlock({
               )}
               {notes && openNote !== noteKey && (
                 <SubLine text={notes.length > 120 ? notes.substring(0, 120) + '…' : notes} />
+              )}
+              {hasK3Part2 && (
+                <SubLine text="← K-3 Part II, Line 6 shows U.S. vs. foreign breakdown. Use K-3 passive amount on Form 1116, not this box total." />
               )}
             </div>
           )
@@ -443,23 +447,37 @@ function DeductionItemsBlock({
           }, currency(0)).value
           const uniqueCodes = [...new Set(box13Items.map((i) => i.code))].filter((c): c is string => Boolean(c))
           const firstCode = uniqueCodes[0] ?? ''
+          const hasCodeL = box13Items.some(i => i.code.toUpperCase() === 'L')
           const label = uniqueCodes.length === 1
             ? (BOX13_CODES[firstCode] ?? `Other deductions (code ${firstCode})`)
             : `Other deductions (${uniqueCodes.length} codes)`
           return (
-            <LineItem
-              boxRef={uniqueCodes.length === 1 ? `Box 13${firstCode}` : 'Box 13'}
-              label={label}
-              value={total}
-              onDetails={() => onOpenCodes('13')}
-            />
+            <>
+              <LineItem
+                boxRef={uniqueCodes.length === 1 ? `Box 13${firstCode}` : 'Box 13'}
+                label={label}
+                value={total}
+                onDetails={() => onOpenCodes('13')}
+              />
+              {hasCodeL && (
+                <SubLine text="Box 13L → Form 4952, I, line 1 → Sch A line 16. Do NOT enter on Form 8582." />
+              )}
+              {hasCodeL && data.k3?.sections.some(s => s.sectionId === 'part2_section2') && (
+                <SubLine text="← K-3 Part II, Line 42 provides allocable portfolio interest expense detail" />
+              )}
+            </>
           )
         })()}
         {box12Val !== null && box12Val !== 0 && (
           <LineItem boxRef="Box 12" label="Section 179 deduction" value={-Math.abs(box12Val)} />
         )}
         {box21Val !== null && box21Val !== 0 && (
-          <LineItem boxRef="Box 21" label="Foreign taxes (WHTD, all passive) → Form 1116" value={box21Val} />
+          <>
+            <LineItem boxRef="Box 21" label="Foreign taxes paid/accrued → Form 1116" value={box21Val} />
+            {data.k3?.sections.some(s => s.sectionId === 'part3_section4') && (
+              <SubLine text="← K-3 Part III, Section 4 provides per-country/basket breakdown for Form 1116" />
+            )}
+          </>
         )}
         <TotalLine label="Total deductions" value={totalBoxDeductions} />
         <TotalLine label="Net K-1 income/(loss)" value={netK1} double />
@@ -471,10 +489,15 @@ function DeductionItemsBlock({
 // ── Box 20 Supplemental block ─────────────────────────────────────────────────
 
 const BOX20_LABELS: Record<string, string> = {
-  A: 'Investment income (Form 4952 reference)',
-  B: 'Investment expenses (informational)',
+  A: 'Investment income (Form 4952, II, line 4a)',
+  B: 'Investment expenses (Form 4952, II, line 5)',
   AA: 'Sec. 704(c) — already embedded in K-1 boxes',
   AJ: '§461(l) excess business loss components',
+}
+
+const BOX20_ROUTING: Record<string, string> = {
+  A: '→ Form 4952, Part II, line 4a (informational — does not flow to Form 1040 directly)',
+  B: '→ Form 4952, Part II, line 5 (informational — does not flow to Form 1040 directly)',
 }
 
 function SupplementalBlock({
@@ -506,14 +529,18 @@ function SupplementalBlock({
           const label = uniqueCodes.length === 1
             ? (BOX20_LABELS[firstCode] ?? `Other information (code ${firstCode})`)
             : `Supplemental information (${uniqueCodes.length} codes)`
+          const singleRouting = uniqueCodes.length === 1 ? BOX20_ROUTING[firstCode] : undefined
           return (
-            <LineItem
-              boxRef={uniqueCodes.length === 1 ? `20${firstCode}` : 'Box 20'}
-              label={label}
-              value={total}
-              raw={allStmt ? 'STMT' : undefined}
-              onDetails={() => onOpenCodes('20')}
-            />
+            <>
+              <LineItem
+                boxRef={uniqueCodes.length === 1 ? `20${firstCode}` : 'Box 20'}
+                label={label}
+                value={total}
+                raw={allStmt ? 'STMT' : undefined}
+                onDetails={() => onOpenCodes('20')}
+              />
+              {singleRouting && <SubLine text={singleRouting} />}
+            </>
           )
         })()}
       </div>
