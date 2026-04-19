@@ -492,10 +492,17 @@ export function TaxPreviewProvider({
     const scheduleB = computeScheduleB(reviewedK1Docs, reviewed1099Docs, income1099)
     const scheduleD = computeScheduleD(reviewedK1Docs, reviewed1099Docs)
     const scheduleE = computeScheduleELines(reviewedK1Docs)
+    const saltPaid = reviewedW2Docs.reduce((acc, doc) => {
+      const p = doc.parsed_data as { box17_state_tax?: number | null } | null
+      return acc + (p?.box17_state_tax ?? 0)
+    }, 0)
     const scheduleA = computeScheduleALines({
       reviewedK1Docs,
       reviewed1099Docs,
       ...(shortDividendSummary ? { shortDividendSummary } : {}),
+      saltPaid,
+      year,
+      isMarried,
     })
     const form4952 = computeForm4952Lines({
       reviewedK1Docs,

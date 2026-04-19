@@ -29,14 +29,35 @@ interface InvIntSource {
   amount: number
 }
 
+const SALT_CAP = 10_000
+
+// Standard deductions by year (single / MFJ) — IRS Rev. Proc.
+const STANDARD_DEDUCTIONS: Record<number, { single: number; mfj: number }> = {
+  2023: { single: 13_850, mfj: 27_700 },
+  2024: { single: 14_600, mfj: 29_200 },
+  2025: { single: 15_000, mfj: 30_000 },
+}
+
+function getStandardDeduction(year: number, isMarried: boolean): number {
+  const row = STANDARD_DEDUCTIONS[year] ?? STANDARD_DEDUCTIONS[2025] ?? { single: 15_000, mfj: 30_000 }
+  return isMarried ? row.mfj : row.single
+}
+
 export function computeScheduleALines({
   reviewedK1Docs = [],
   reviewed1099Docs = [],
   shortDividendSummary,
+  saltPaid = 0,
+  year = new Date().getFullYear(),
+  isMarried = false,
 }: {
   reviewedK1Docs?: TaxDocument[]
   reviewed1099Docs?: TaxDocument[]
   shortDividendSummary?: ShortDividendSummary
+  /** State and local taxes paid (will be capped at $10,000). */
+  saltPaid?: number
+  year?: number
+  isMarried?: boolean
 }): ScheduleALines {
   const invIntSources: InvIntSource[] = []
 
@@ -89,9 +110,18 @@ export function computeScheduleALines({
     currency(0),
   ).value
 
+  const saltDeduction = Math.min(saltPaid, SALT_CAP)
+  const totalItemizedDeductions = currency(totalInvIntExpense).add(saltDeduction).value
+  const standardDeduction = getStandardDeduction(year, isMarried)
+  const shouldItemize = totalItemizedDeductions > standardDeduction
+
   return {
     invIntSources,
     totalInvIntExpense,
+    saltDeduction,
+    totalItemizedDeductions,
+    standardDeduction,
+    shouldItemize,
   }
 }
 
@@ -99,12 +129,10 @@ interface ScheduleAPreviewProps {
   selectedYear: number
   reviewedK1Docs?: TaxDocument[]
   reviewed1099Docs?: TaxDocument[]
-  /**
-   * Short dividend analysis result from analyzeShortDividends().
-   * The itemized deduction portion (held > 45 days) feeds into
-   * investment interest expense on Schedule A Line 9 via Form 4952.
-   */
   shortDividendSummary?: ShortDividendSummary
+  /** State and local taxes paid (from W-2 Box 17). Capped at $10,000 on the form. */
+  saltPaid?: number
+  isMarried?: boolean
 }
 
 /** Modal showing all sources that contribute to investment interest expense. */
@@ -169,14 +197,19 @@ export default function ScheduleAPreview({
   reviewedK1Docs = [],
   reviewed1099Docs = [],
   shortDividendSummary,
+  saltPaid = 0,
+  isMarried = false,
 }: ScheduleAPreviewProps) {
   const [showInvIntModal, setShowInvIntModal] = useState(false)
 
   const shortDivDeduction = shortDividendSummary?.totalItemizedDeduction ?? 0
-  const { invIntSources, totalInvIntExpense } = computeScheduleALines({
+  const { invIntSources, totalInvIntExpense, saltDeduction, totalItemizedDeductions, standardDeduction, shouldItemize } = computeScheduleALines({
     reviewedK1Docs,
     reviewed1099Docs,
     ...(shortDividendSummary ? { shortDividendSummary } : {}),
+    saltPaid,
+    year: selectedYear,
+    isMarried,
   })
 
   return (
@@ -195,10 +228,18 @@ export default function ScheduleAPreview({
 
         {/* Part II — Taxes */}
         <FormBlock title="Part II — Taxes You Paid">
-          <FormLine label="Line 5a — State and local income taxes" raw="—" />
-          <FormLine label="Line 5b — General sales taxes" raw="—" />
-          <FormLine label="Line 6 — Real estate taxes" raw="—" />
-          <FormTotalLine label="Line 7 — Total taxes (SALT cap $10,000)" value={0} />
+          <FormLine
+            label="Line 5a — State income tax withheld (W-2 Box 17)"
+            {...(saltPaid > 0 ? { value: saltPaid } : { raw: '—' })}
+          />
+          <FormLine label="Line 6 — Real estate taxes" raw="Enter from records" />
+          <FormTotalLine
+            label={`Line 7 — Total SALT (capped at $${SALT_CAP.toLocaleString()})`}
+            value={saltDeduction}
+          />
+          {saltPaid >= SALT_CAP && (
+            <FormLine label="Note" raw={`SALT cap reached — state taxes above $${SALT_CAP.toLocaleString()} are not deductible`} />
+          )}
         </FormBlock>
 
         {/* Part IV — Interest */}
@@ -241,6 +282,31 @@ export default function ScheduleAPreview({
           dividends (from account Lots tab) will appear here when available.
         </p>
       )}
+
+      {/* Standard vs. itemized comparison */}
+      <FormBlock title="Standard Deduction vs. Itemized — Which Is Better?">
+        <FormLine label={`Standard deduction (${selectedYear} ${isMarried ? 'MFJ' : 'Single'})`} value={standardDeduction} />
+        <FormLine label="Itemized deductions (Schedule A total)" value={totalItemizedDeductions} />
+        <FormLine label="Investment interest (Line 9)" value={totalInvIntExpense} />
+        <FormLine
+          label="SALT (Line 7)"
+          {...(saltDeduction > 0 ? { value: saltDeduction } : { raw: '—' })}
+        />
+        <FormLine label="Other (mortgage, charitable, medical)" raw="Enter from records — not yet computed" />
+        <FormTotalLine
+          label={shouldItemize
+            ? '✓ Itemizing saves more — use Schedule A'
+            : `Standard deduction is larger by ${currency(standardDeduction - totalItemizedDeductions).format()}`}
+          value={shouldItemize ? totalItemizedDeductions : standardDeduction}
+          double
+        />
+        {!shouldItemize && (
+          <FormLine
+            label="Note"
+            raw="Additional deductions (mortgage interest, charitable, property tax) may make itemizing beneficial. See SALT issue for planned support."
+          />
+        )}
+      </FormBlock>
 
       {/* Investment interest drilldown modal */}
       <InvIntSourcesModal

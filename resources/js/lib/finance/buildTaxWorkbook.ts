@@ -223,13 +223,29 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
   const scheduleASheet = taxReturn.scheduleA
     ? buildSheet('Schedule A', [
         {
+          line: '7',
+          description: 'Line 7 — State and local taxes paid (SALT, capped at $10,000)',
+          amount: taxReturn.scheduleA.saltDeduction,
+          note: 'From W-2 Box 17 state withholding. Real estate taxes add separately.',
+        },
+        {
           line: '9',
           description: 'Line 9 — Investment interest expense (from Form 4952)',
           amount: taxReturn.scheduleA.totalInvIntExpense,
           formula: form4952Sheet?.rowIndex.get('Line 6 — Deductible investment interest expense')
             ? formulaRef('Form 4952', form4952Sheet.rowIndex.get('Line 6 — Deductible investment interest expense')!)
             : undefined,
+        },
+        {
+          line: '17',
+          description: 'Line 17 — Total itemized deductions',
+          amount: taxReturn.scheduleA.totalItemizedDeductions,
           isTotal: true,
+        },
+        {
+          description: `Standard deduction (${taxReturn.scheduleA.shouldItemize ? 'LOWER' : 'HIGHER'} — ${taxReturn.scheduleA.shouldItemize ? 'itemize' : 'take standard'})`,
+          amount: taxReturn.scheduleA.standardDeduction,
+          note: taxReturn.scheduleA.shouldItemize ? 'Use Schedule A' : 'Use standard deduction',
         },
       ])
     : null

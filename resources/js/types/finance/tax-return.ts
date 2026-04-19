@@ -18,6 +18,14 @@ export interface Form1040LineItem {
 export interface ScheduleALines {
   invIntSources: { label: string; amount: number }[]
   totalInvIntExpense: number
+  /** SALT paid (state/local income or sales tax + property tax), capped at $10,000. */
+  saltDeduction: number
+  /** Total itemized deductions (investment interest + SALT + other). */
+  totalItemizedDeductions: number
+  /** Standard deduction for the year and filing status. */
+  standardDeduction: number
+  /** True when itemized > standard. */
+  shouldItemize: boolean
 }
 
 export interface ScheduleBSourceLine {

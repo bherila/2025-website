@@ -23,7 +23,7 @@ describe('buildTaxWorkbook', () => {
     const taxReturn: TaxReturn1040 = {
       year: 2025,
       form1040: [{ line: '1a', label: 'Wages, salaries, tips (W-2, box 1)', value: 100000 }],
-      scheduleA: { invIntSources: [], totalInvIntExpense: 20 },
+      scheduleA: { invIntSources: [], totalInvIntExpense: 20, saltDeduction: 0, totalItemizedDeductions: 20, standardDeduction: 15_000, shouldItemize: false },
       scheduleB: {
         interestTotal: 100,
         dividendTotal: 50,
