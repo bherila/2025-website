@@ -8,6 +8,8 @@ use App\Services\ClientManagement\OverpaymentCreditService;
 use App\Traits\SerializesDatesAsLocal;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ClientInvoice extends Model
@@ -74,32 +76,40 @@ class ClientInvoice extends Model
 
     /**
      * Get the client company for this invoice.
+     *
+     * @return BelongsTo<ClientCompany, self>
      */
-    public function clientCompany()
+    public function clientCompany(): BelongsTo
     {
         return $this->belongsTo(ClientCompany::class, 'client_company_id');
     }
 
     /**
      * Get the agreement this invoice is associated with.
+     *
+     * @return BelongsTo<ClientAgreement, self>
      */
-    public function agreement()
+    public function agreement(): BelongsTo
     {
         return $this->belongsTo(ClientAgreement::class, 'client_agreement_id');
     }
 
     /**
      * Get the line items for this invoice.
+     *
+     * @return HasMany<ClientInvoiceLine, self>
      */
-    public function lineItems()
+    public function lineItems(): HasMany
     {
         return $this->hasMany(ClientInvoiceLine::class, 'client_invoice_id', 'client_invoice_id');
     }
 
     /**
      * Get the payments for this invoice.
+     *
+     * @return HasMany<ClientInvoicePayment, self>
      */
-    public function payments()
+    public function payments(): HasMany
     {
         return $this->hasMany(ClientInvoicePayment::class, 'client_invoice_id', 'client_invoice_id');
     }
@@ -107,17 +117,17 @@ class ClientInvoice extends Model
     /**
      * Accessor for the total of all payments.
      */
-    public function getPaymentsTotalAttribute()
+    public function getPaymentsTotalAttribute(): float
     {
-        return $this->payments->sum('amount');
+        return (float) $this->payments->sum('amount');
     }
 
     /**
      * Accessor for the remaining balance.
      */
-    public function getRemainingBalanceAttribute()
+    public function getRemainingBalanceAttribute(): float
     {
-        return $this->invoice_total - $this->payments_total;
+        return (float) $this->invoice_total - (float) $this->payments_total;
     }
 
     /**

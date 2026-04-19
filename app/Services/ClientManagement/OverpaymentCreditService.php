@@ -83,7 +83,7 @@ class OverpaymentCreditService
         $totalRemaining = round(max(0.0, $totalOverpaid - $totalConsumed), 2);
 
         return new OverpaymentLedger(
-            entries: array_values($entries),
+            entries: $entries,
             totalRemaining: $totalRemaining,
         );
     }

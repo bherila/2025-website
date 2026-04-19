@@ -4,6 +4,7 @@ namespace App\Models\ClientManagement;
 
 use App\Models\User;
 use App\Traits\SerializesDatesAsLocal;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -132,16 +133,22 @@ class ClientTimeEntry extends Model
 
     /**
      * Scope a query to only deferred-billing entries.
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
      */
-    public function scopeDeferred($query)
+    public function scopeDeferred(Builder $query): Builder
     {
         return $query->where('is_deferred_billing', true);
     }
 
     /**
      * Scope a query to only non-deferred entries (the default billing path).
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
      */
-    public function scopeNotDeferred($query)
+    public function scopeNotDeferred(Builder $query): Builder
     {
         return $query->where('is_deferred_billing', false);
     }
