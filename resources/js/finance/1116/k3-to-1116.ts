@@ -306,15 +306,22 @@ export function extractForeignTaxSummaries(
   const breakdown = extractK3IncomeBreakdown(data)
   const electionSBPasUS = data.k3Elections?.sourcedByPartnerAsUSSource ?? false
 
+  // When the SBP election is NOT active, col_f (sourced-by-partner) amounts are
+  // treated as foreign-source and added to passive income for Form 1116 purposes.
+  // When the election IS active, they are US-source — excluded from foreign income.
+  const effectivePassiveIncome = electionSBPasUS
+    ? breakdown.passiveIncome
+    : currency(breakdown.passiveIncome).add(breakdown.sourcedByPartner).value
+
   const results: ForeignTaxSummary[] = []
 
-  if (breakdown.passiveIncome !== 0 || breakdown.generalIncome !== 0) {
+  if (effectivePassiveIncome !== 0 || breakdown.generalIncome !== 0) {
     // Passive category
-    if (breakdown.passiveIncome !== 0) {
+    if (effectivePassiveIncome !== 0) {
       results.push({
         totalForeignTaxPaid,
         category: 'passive',
-        grossForeignIncome: breakdown.passiveIncome,
+        grossForeignIncome: effectivePassiveIncome,
         sourcedByPartner: breakdown.sourcedByPartner,
         electionSBPasUS,
         sourceType: 'k1',

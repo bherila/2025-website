@@ -139,7 +139,11 @@ export function computeForm1116Lines({
         }
       : null
 
+  const totalK1Box5 = k1Parsed.reduce((acc, { data }) => currency(acc).add(pk1(data, '5')).value, 0)
+  const turboTaxAlert = totalK1Box5 > 0 && totalPassiveIncome < totalK1Box5 * 0.5
+
   return {
+    totalK1Box5,
     incomeSources,
     taxSources,
     totalPassiveIncome,
@@ -150,6 +154,7 @@ export function computeForm1116Lines({
     totalLine4b,
     niit,
     creditVsDeduction,
+    turboTaxAlert,
   }
 }
 
@@ -169,17 +174,12 @@ export default function Form1116Preview({
     totalLine4b,
     niit,
     creditVsDeduction,
+    turboTaxAlert,
+    totalK1Box5 = 0,
   } = computed
-
-  const k1Parsed = reviewedK1Docs
-    .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
-    .filter((x): x is { doc: TaxDocument; data: FK1StructuredData } => x.data !== null)
 
   const simplifiedElectionThreshold = 300
   const aboveSimplifiedThreshold = totalForeignTaxes > simplifiedElectionThreshold
-
-  const totalK1Box5 = k1Parsed.reduce((acc, { data }) => currency(acc).add(pk1(data, '5')).value, 0)
-  const turboTaxAlert = totalK1Box5 > 0 && totalPassiveIncome < totalK1Box5 * 0.5
 
   if (totalForeignTaxes === 0 && totalPassiveIncome === 0) {
     return (

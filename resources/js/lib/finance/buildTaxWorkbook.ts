@@ -427,11 +427,13 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
           const codeLabel = ALL_K1_CODES[box]?.[item.code.toUpperCase()]
           const description = codeLabel ? `Box ${box} ${item.code} — ${codeLabel}` : `Box ${box} Code ${item.code}`
           const routing = K1_CODE_ROUTING_NOTES[box]?.[item.code.toUpperCase()]
+          const numVal = Number(item.value)
+          const isNumeric = item.value !== '' && !isNaN(numVal)
           return {
             line: `${box}${item.code}`,
             description,
-            amount: isNaN(Number(item.value)) ? undefined : Number(item.value),
-            note: routing ?? (isNaN(Number(item.value)) ? item.value : undefined),
+            amount: isNumeric ? numVal : undefined,
+            note: routing ?? (isNumeric ? undefined : item.value || undefined),
           }
         }),
       ),

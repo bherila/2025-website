@@ -1316,6 +1316,7 @@ PROMPT;
             'k3_part6_notes' => ['part6', 'Part VI – Information on Partners\' Sec. 951(a)(1) and Sec. 951A Inclusions', []],
             'k3_part7_notes' => ['part7', 'Part VII – Information on Partners\' Sec. 951A Inclusions', []],
             'k3_part8_notes' => ['part8', 'Part VIII – Alternative Calculation for Transition Year', []],
+            // Third element carries $part9NumericData (line1/line5 fields) alongside the free-form notes.
             'k3_part9_notes' => ['part9', 'Part IX – Partners\' Information on Tax-Exempt Income From a Foreign Partnership', $part9NumericData],
             'k3_part10_notes' => ['part10', 'Part X – Foreign Partner\'s Character and Source of Income and Deductions', []],
             'k3_part11_notes' => ['part11', 'Part XI – Foreign Partner\'s Distributive Share of Deemed Sale Items on Transfer', []],
@@ -1761,30 +1762,30 @@ PROMPT;
                 ),
 
                 // ── Schedule K-3 Part III Section 5: Sec. 743(b) basis adjustments ─
-                'k3_part3_section5_sec743b_positive' => Schema::number(),
-                'k3_part3_section5_sec743b_negative' => Schema::number(),
+                'k3_part3_section5_sec743b_positive' => Schema::number('Positive Sec. 743(b) basis adjustment amount from Part III Section 5'),
+                'k3_part3_section5_sec743b_negative' => Schema::number('Negative Sec. 743(b) basis adjustment amount from Part III Section 5'),
 
                 // ── Schedule K-3 Part IV: FDII and Sec. 250 deduction ─────────────
-                'k3_part4_net_income_loss' => Schema::number(),
-                'k3_part4_dei_gross_receipts' => Schema::number(),
-                'k3_part4_dei_allocated_deductions' => Schema::number(),
-                'k3_part4_other_interest_expense_dei' => Schema::number(),
-                'k3_part4_total_average_assets' => Schema::number(),
+                'k3_part4_net_income_loss' => Schema::number('Net income or loss from Part IV (FDII / Sec. 250 deduction)'),
+                'k3_part4_dei_gross_receipts' => Schema::number('Deduction eligible income (DEI) — gross receipts from Part IV'),
+                'k3_part4_dei_allocated_deductions' => Schema::number('DEI — allocated deductions from Part IV'),
+                'k3_part4_other_interest_expense_dei' => Schema::number('Other interest expense allocable to DEI from Part IV'),
+                'k3_part4_total_average_assets' => Schema::number('Total average assets reported in Part IV'),
 
                 // ── Schedule K-3 Part IX key numeric fields ───────────────────────
-                'k3_part9_line1_gross_receipts' => Schema::number(),
-                'k3_part9_line5_denominator_amounts' => Schema::number(),
+                'k3_part9_line1_gross_receipts' => Schema::number('Part IX Line 1 — gross receipts from a foreign partnership for Sec. 954(c)(3) exclusion'),
+                'k3_part9_line5_denominator_amounts' => Schema::number('Part IX Line 5 — denominator amounts for tax-exempt income computation'),
 
                 // ── Schedule K-3 Parts V–XIII free-form notes ─────────────────────
-                'k3_part5_notes' => Schema::string(),
-                'k3_part6_notes' => Schema::string(),
-                'k3_part7_notes' => Schema::string(),
-                'k3_part8_notes' => Schema::string(),
-                'k3_part9_notes' => Schema::string(),
-                'k3_part10_notes' => Schema::string(),
-                'k3_part11_notes' => Schema::string(),
-                'k3_part12_notes' => Schema::string(),
-                'k3_part13_notes' => Schema::string(),
+                'k3_part5_notes' => Schema::string('Summarize any notable amounts or elections in K-3 Part V (distributions from foreign corporations)'),
+                'k3_part6_notes' => Schema::string('Summarize any Sec. 951(a)(1) or Sec. 951A inclusions reported in K-3 Part VI'),
+                'k3_part7_notes' => Schema::string('Summarize any Sec. 951A GILTI inclusions reported in K-3 Part VII'),
+                'k3_part8_notes' => Schema::string('Summarize any alternative transition-year calculation details from K-3 Part VIII'),
+                'k3_part9_notes' => Schema::string('Summarize key tax-exempt income amounts and elections from K-3 Part IX'),
+                'k3_part10_notes' => Schema::string('Summarize character and source of income/deductions for foreign partners from K-3 Part X'),
+                'k3_part11_notes' => Schema::string('Summarize deemed sale items on transfer reported in K-3 Part XI'),
+                'k3_part12_notes' => Schema::string('Summarize BEAT-related partner information from K-3 Part XII'),
+                'k3_part13_notes' => Schema::string('Summarize ECTI distributive share amounts for foreign partners from K-3 Part XIII'),
 
                 // ── Schedule K-3 parts applicability checkboxes ───────────────────
                 'k3_parts_applicable' => Schema::object([

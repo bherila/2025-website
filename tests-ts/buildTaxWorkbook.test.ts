@@ -94,6 +94,7 @@ describe('buildTaxWorkbook', () => {
         totalLine4b: 0,
         niit: null,
         creditVsDeduction: null,
+        turboTaxAlert: false,
       },
       form4952: {
         invIntSources: [],
