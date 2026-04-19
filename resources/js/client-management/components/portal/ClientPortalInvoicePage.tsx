@@ -20,6 +20,21 @@ import ClientPortalNav from "./ClientPortalNav";
 import LineItemEditModal from "./LineItemEditModal";
 import TimeTrackingMonthSummaryRow from "./TimeTrackingMonthSummaryRow";
 
+/** Renders a quantity string for display. "h:mm" → "3h45m", empty/zero → "—", plain numbers unchanged. */
+function renderQuantity(qty: string): string {
+    if (!qty || qty === '0') return '—'
+    if (qty.includes(':')) {
+        const [hStr, mStr] = qty.split(':')
+        const h = parseInt(hStr, 10)
+        const m = parseInt(mStr, 10)
+        if (!isNaN(h) && !isNaN(m)) {
+            if (h === 0 && m === 0) return '—'
+            return m === 0 ? `${h}h` : `${h}h${m}m`
+        }
+    }
+    return qty
+}
+
 interface ClientPortalInvoicePageProps {
     slug: string;
     companyName: string;
@@ -321,7 +336,7 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                                             onClick={() => isAdmin && isEditable && !isRefreshing && (setSelectedLineItem(item), setLineItemModalOpen(true))}
                                         >
                                             <TableCell>{item.description}</TableCell>
-                                            <TableCell className="text-right">{item.quantity}</TableCell>
+                                            <TableCell className="text-right">{renderQuantity(item.quantity)}</TableCell>
                                             <TableCell className="text-right">
                                                 {parseFloat(item.unit_price) === 0 ? '-' : `$${parseFloat(item.unit_price).toFixed(2)}`}
                                             </TableCell>
@@ -353,7 +368,7 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                                                 <TableCell colSpan={isAdmin ? 5 : 4} className="bg-muted/30 py-2 px-4">
                                                     <table className="w-full text-sm text-muted-foreground">
                                                         <tbody>
-                                                            {item.time_entries.map((entry, idx) => (
+                                                            {[...item.time_entries].sort((a, b) => (a.date_worked ?? '').localeCompare(b.date_worked ?? '')).map((entry, idx) => (
                                                                 <tr key={idx} className="align-top">
                                                                     <td className="py-0.5 pr-4 w-full">
                                                                         <span className="text-muted-foreground/70 mr-2">•</span>
@@ -392,7 +407,7 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                                 </div>
                                 <table className="w-full text-muted-foreground">
                                     <tbody>
-                                        {invoice.deferred_pending.map(p => (
+                                        {[...invoice.deferred_pending].sort((a, b) => a.date_worked.localeCompare(b.date_worked)).map(p => (
                                             <tr key={p.id} className="align-top">
                                                 <td className="py-0.5 pr-4 w-full">
                                                     <span className="text-muted-foreground/70 mr-2">•</span>

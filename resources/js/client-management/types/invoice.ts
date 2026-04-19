@@ -25,7 +25,7 @@ export type DeferredPendingEntry = z.infer<typeof DeferredPendingEntrySchema>
 export const InvoiceLineSchema = z.object({
   client_invoice_line_id: z.number(),
   description: z.string(),
-  quantity: coerceNumberLike('0'),
+  quantity: z.preprocess((v) => (v == null ? '' : String(v)), z.string()),
   unit_price: coerceMoney('0.00'),
   line_total: coerceMoney('0.00'),
   line_type: z.string(),

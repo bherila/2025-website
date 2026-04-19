@@ -1,4 +1,4 @@
-import { InvoiceHydrationSchema,InvoiceSchema } from '@/client-management/types/invoice'
+import { InvoiceHydrationSchema, InvoiceLineSchema, InvoiceSchema } from '@/client-management/types/invoice'
 
 describe('InvoiceSchema (zod)', () => {
   it('parses a valid invoice', () => {
@@ -58,5 +58,41 @@ describe('InvoiceSchema (zod)', () => {
     const bad = { foo: 'bar' }
     const result = InvoiceSchema.safeParse(bad)
     expect(result.success).toBe(false)
+  })
+})
+
+describe('InvoiceLineSchema quantity field', () => {
+  const base = {
+    client_invoice_line_id: 1,
+    description: 'Test line',
+    unit_price: '100.00',
+    line_total: '0.00',
+    line_type: 'additional_hours',
+    hours: null,
+    line_date: null,
+  }
+
+  it('preserves h:mm time strings verbatim', () => {
+    const result = InvoiceLineSchema.safeParse({ ...base, quantity: '3:45' })
+    expect(result.success).toBe(true)
+    expect(result.data?.quantity).toBe('3:45')
+  })
+
+  it('preserves plain numeric strings', () => {
+    const result = InvoiceLineSchema.safeParse({ ...base, quantity: '1' })
+    expect(result.success).toBe(true)
+    expect(result.data?.quantity).toBe('1')
+  })
+
+  it('coerces empty string to empty string', () => {
+    const result = InvoiceLineSchema.safeParse({ ...base, quantity: '' })
+    expect(result.success).toBe(true)
+    expect(result.data?.quantity).toBe('')
+  })
+
+  it('coerces null to empty string', () => {
+    const result = InvoiceLineSchema.safeParse({ ...base, quantity: null })
+    expect(result.success).toBe(true)
+    expect(result.data?.quantity).toBe('')
   })
 })
