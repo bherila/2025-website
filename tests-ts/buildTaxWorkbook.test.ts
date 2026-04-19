@@ -92,7 +92,6 @@ describe('buildTaxWorkbook', () => {
         totalGeneralIncome: 0,
         line4bApportionment: [],
         totalLine4b: 0,
-        niit: null,
         creditVsDeduction: null,
         turboTaxAlert: false,
       },

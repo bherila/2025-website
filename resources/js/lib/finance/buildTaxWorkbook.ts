@@ -284,15 +284,6 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
           rows.push({ line: '4b', description: 'Total apportioned interest (Line 4b)', amount: f.totalLine4b, isTotal: true })
         }
 
-        if (f.niit) {
-          rows.push({ isHeader: true, description: 'Form 8960 — Net Investment Income Tax Estimate' })
-          for (const c of f.niit.niiComponents) {
-            rows.push({ description: c.label, amount: c.amount })
-          }
-          rows.push({ description: 'Total Net Investment Income', amount: f.niit.totalNII, isTotal: true })
-          rows.push({ description: 'Estimated NIIT (3.8% × NII)', amount: f.niit.niitEstimate })
-        }
-
         if (f.creditVsDeduction) {
           rows.push({ isHeader: true, description: 'Credit vs. Deduction Comparison' })
           rows.push({ description: 'Foreign Tax Credit (Form 1116) — dollar-for-dollar', amount: f.creditVsDeduction.creditValue })
