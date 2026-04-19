@@ -164,10 +164,11 @@ Only admin users can set or modify the `milestone_price` field. Non-admin users 
 The invoice page includes a "Show Detail" toggle switch in the top-right corner (default: ON). When enabled, it displays the underlying time entry descriptions for each line item as an indented bullet list, showing the description, hours, and original date_worked for each entry.
 
 ## Time Entry Badge Display
-On the time entries page, each billable entry linked to an invoice shows a badge:
+On the **Time Records** page, each billable entry linked to an invoice shows a badge:
 - **Upcoming** (blue): Entry is on a **draft** invoice — clickable link to the draft invoice
 - **Invoiced** (green): Entry is on an **issued** or **paid** invoice — clickable link to the issued invoice
 - **BILLABLE** / **NON-BILLABLE**: Entry is not yet linked to any invoice
+- **Deferable** (amber, admin-only): Entry is flagged `is_deferred_billing = true` — shown alongside the billing status badge
 
 Entries on draft invoices remain fully editable (edit button visible, row clickable). Only entries on issued/paid invoices are locked.
 

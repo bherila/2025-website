@@ -107,7 +107,7 @@ export default function ClientPortalInvoicesPage({ slug, companyName, companyId,
       const periodEnd = new Date(invoice.period_end);
       const now = new Date();
       if (periodEnd > now) {
-        return <Badge variant="outline" className="border-blue-600 text-blue-600">Upcoming</Badge>
+        return <Badge variant="outline" className="border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400">Upcoming</Badge>
       }
     }
 

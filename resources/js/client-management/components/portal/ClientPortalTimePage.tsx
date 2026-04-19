@@ -205,7 +205,7 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, ini
           <div className="mb-6">
             <div className="flex justify-between items-center">
               <div>
-                <h1 className="text-3xl font-bold">Time Tracking</h1>
+                <h1 className="text-3xl font-bold">Time Records</h1>
               </div>
               <div className="flex gap-2">
                 {data?.entries && data.entries.length > 0 && (
@@ -372,14 +372,14 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, ini
                                             entry.client_invoice.status === 'draft' ? (
                                               // Draft/upcoming invoice - show Upcoming badge in blue
                                               <a href={`/client/portal/${slug}/invoices/${entry.client_invoice.client_invoice_id}`} className="no-underline">
-                                                <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-blue-600 text-blue-600 font-bold shrink-0 text-uppercase hover:bg-blue-50">
+                                                <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-blue-600 text-blue-600 font-bold shrink-0 uppercase hover:bg-blue-50 dark:border-blue-400 dark:text-blue-400 dark:hover:bg-blue-950">
                                                   Upcoming
                                                 </Badge>
                                               </a>
                                             ) : (
                                               // Issued/paid invoice - show Invoiced badge in green
                                               <a href={`/client/portal/${slug}/invoices/${entry.client_invoice.client_invoice_id}`} className="no-underline">
-                                                <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-green-600 text-green-600 font-bold shrink-0 text-uppercase hover:bg-green-50">
+                                                <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-green-600 text-green-600 font-bold shrink-0 uppercase hover:bg-green-50 dark:border-green-400 dark:text-green-400 dark:hover:bg-green-950">
                                                   Invoiced
                                                 </Badge>
                                               </a>
@@ -387,6 +387,11 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, ini
                                           ) : (
                                             <Badge variant={entry.is_billable ? 'default' : 'secondary'} className="text-[9px] px-1 py-0 h-3.5 font-bold shrink-0">
                                               {entry.is_billable ? 'BILLABLE' : 'NON-BILLABLE'}
+                                            </Badge>
+                                          )}
+                                          {entry.is_deferred_billing && (
+                                            <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-amber-600 text-amber-700 font-bold shrink-0 uppercase dark:border-amber-500 dark:text-amber-400">
+                                              Deferable
                                             </Badge>
                                           )}
                                           {entry.project && (

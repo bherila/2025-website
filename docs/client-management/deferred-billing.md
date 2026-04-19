@@ -50,8 +50,9 @@ No special handling is needed. A deferred entry that fit on last night's draft m
 ## UI
 
 - **New Time Entry / Edit Time Entry modal** (admin only): a "Defer billing" checkbox appears under "Billable". It is disabled and cleared when "Billable" is off.
-- **Time entry list**: entries with `is_deferred_billing = true` render a small "Deferred" badge.
-- **Invoice detail page**: after the main line-item table, a "Deferred to future invoice" section lists any outstanding deferred entries for this period so admins know what's pending.
+- **Time Records page**: entries with `is_deferred_billing = true` render a small amber **"Deferable"** badge alongside the billing status badge (admin-only).
+- **Invoice detail page** (line items): each time entry sub-row with `is_deferred_billing = true` shows a small amber **"Deferred"** badge (admin-only).
+- **Invoice detail page** (deferred-pending section): after the main line-item table, an amber panel lists any outstanding deferred entries that did not fit this cycle's capacity, so admins can see what is pending for a future invoice.
 
 ## Invariants & tests
 

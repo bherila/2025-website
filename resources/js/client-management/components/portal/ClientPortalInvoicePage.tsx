@@ -358,7 +358,7 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                                                                         <span className="text-muted-foreground/70 mr-2">•</span>
                                                                         {entry.name || '—'}
                                                                         {entry.is_deferred_billing && isAdmin && (
-                                                                            <Badge variant="outline" className="ml-2 text-[9px] px-1 py-0 h-3.5 border-amber-600 text-amber-700 bg-amber-50 font-bold uppercase">
+                                                                            <Badge variant="outline" className="ml-2 text-[9px] px-1 py-0 h-3.5 border-amber-600 text-amber-700 bg-amber-50 font-bold uppercase dark:border-amber-500 dark:text-amber-400 dark:bg-amber-950">
                                                                                 Deferred
                                                                             </Badge>
                                                                         )}
@@ -384,12 +384,12 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                         {/* Deferred-to-future-invoice note (admin only). Shows only when a draft
                           invoice has deferred entries that did not fit this cycle's capacity. */}
                         {isAdmin && invoice.deferred_pending && invoice.deferred_pending.length > 0 && (
-                            <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm">
+                            <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm dark:border-amber-700 dark:bg-amber-950">
                                 <div className="mb-2 flex items-center gap-2">
-                                    <Badge variant="outline" className="border-amber-600 text-amber-700 bg-amber-50 font-bold uppercase text-[9px] px-1 py-0 h-3.5">
+                                    <Badge variant="outline" className="border-amber-600 text-amber-700 bg-amber-50 font-bold uppercase text-[9px] px-1 py-0 h-3.5 dark:border-amber-500 dark:text-amber-400 dark:bg-amber-950">
                                         Deferred
                                     </Badge>
-                                    <span className="font-medium text-amber-900">
+                                    <span className="font-medium text-amber-900 dark:text-amber-200">
                                         {invoice.deferred_pending.length} entr{invoice.deferred_pending.length === 1 ? 'y' : 'ies'} deferred to a future invoice
                                     </span>
                                 </div>
@@ -411,7 +411,7 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                                         ))}
                                     </tbody>
                                 </table>
-                                <p className="mt-2 text-xs text-amber-800/80">
+                                <p className="mt-2 text-xs text-amber-800/80 dark:text-amber-300/80">
                                     These entries will roll forward until a future invoice has retainer capacity
                                     (or until the agreement is terminated, at which point they are billed at the hourly rate).
                                 </p>
