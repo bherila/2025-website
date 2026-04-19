@@ -4,6 +4,7 @@ namespace App\Models\ClientManagement;
 
 use App\Models\User;
 use App\Traits\SerializesDatesAsLocal;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -26,6 +27,7 @@ class ClientTimeEntry extends Model
         'user_id',
         'creator_user_id',
         'is_billable',
+        'is_deferred_billing',
         'job_type',
         'client_invoice_line_id',
     ];
@@ -33,6 +35,7 @@ class ClientTimeEntry extends Model
     protected $casts = [
         'date_worked' => 'date',
         'is_billable' => 'boolean',
+        'is_deferred_billing' => 'boolean',
         'minutes_worked' => 'integer',
     ];
 
@@ -126,6 +129,28 @@ class ClientTimeEntry extends Model
     public function isLinkedToInvoice(): bool
     {
         return $this->client_invoice_line_id !== null;
+    }
+
+    /**
+     * Scope a query to only deferred-billing entries.
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    public function scopeDeferred(Builder $query): Builder
+    {
+        return $query->where('is_deferred_billing', true);
+    }
+
+    /**
+     * Scope a query to only non-deferred entries (the default billing path).
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    public function scopeNotDeferred(Builder $query): Builder
+    {
+        return $query->where('is_deferred_billing', false);
     }
 
     /**

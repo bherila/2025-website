@@ -223,18 +223,6 @@ parameters:
 			path: app/Http/Controllers/ClientManagement/ClientInvoiceApiController.php
 
 		-
-			message: '#^Relation ''agreement'' is not found in App\\Models\\ClientManagement\\ClientInvoice model\.$#'
-			identifier: larastan.relationExistence
-			count: 1
-			path: app/Http/Controllers/ClientManagement/ClientInvoiceApiController.php
-
-		-
-			message: '#^Relation ''lineItems'' is not found in App\\Models\\ClientManagement\\ClientInvoice model\.$#'
-			identifier: larastan.relationExistence
-			count: 1
-			path: app/Http/Controllers/ClientManagement/ClientInvoiceApiController.php
-
-		-
 			message: '#^Method App\\Http\\Controllers\\ClientManagement\\ClientPortalAgreementApiController\:\:getInvoices\(\) return type with generic class Illuminate\\Database\\Eloquent\\Collection does not specify its types\: TKey, TModel$#'
 			identifier: missingType.generics
 			count: 1
@@ -247,7 +235,7 @@ parameters:
 			path: app/Http/Controllers/ClientManagement/ClientPortalAgreementApiController.php
 
 		-
-			message: '#^Relation ''lineItems'' is not found in App\\Models\\ClientManagement\\ClientInvoice model\.$#'
+			message: '#^Relation ''timeEntries'' is not found in App\\Models\\ClientManagement\\ClientInvoiceLine model\.$#'
 			identifier: larastan.relationExistence
 			count: 1
 			path: app/Http/Controllers/ClientManagement/ClientPortalAgreementApiController.php
@@ -343,7 +331,7 @@ parameters:
 			path: app/Http/Controllers/ClientManagement/ClientPortalController.php
 
 		-
-			message: '#^Relation ''lineItems'' is not found in App\\Models\\ClientManagement\\ClientInvoice model\.$#'
+			message: '#^Relation ''timeEntries'' is not found in App\\Models\\ClientManagement\\ClientInvoiceLine model\.$#'
 			identifier: larastan.relationExistence
 			count: 1
 			path: app/Http/Controllers/ClientManagement/ClientPortalController.php
@@ -1081,56 +1069,32 @@ parameters:
 			path: app/Models/ClientManagement/ClientExpense.php
 
 		-
-			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientInvoice\:\:\$agreement\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Models/ClientManagement/ClientInvoice.php
-
-		-
-			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientInvoice\:\:\$lineItems\.$#'
+			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientInvoiceLine\:\:\$timeEntries\.$#'
 			identifier: property.notFound
 			count: 3
 			path: app/Models/ClientManagement/ClientInvoice.php
 
 		-
-			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientInvoice\:\:\$payments\.$#'
-			identifier: property.notFound
-			count: 2
-			path: app/Models/ClientManagement/ClientInvoice.php
-
-		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientInvoice\:\:agreement\(\) has no return type specified\.$#'
-			identifier: missingType.return
+			message: '#^Method App\\Models\\ClientManagement\\ClientInvoice\:\:agreement\(\) should return Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\ClientManagement\\ClientAgreement, App\\Models\\ClientManagement\\ClientInvoice\> but returns Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\ClientManagement\\ClientAgreement, \$this\(App\\Models\\ClientManagement\\ClientInvoice\)\>\.$#'
+			identifier: return.type
 			count: 1
 			path: app/Models/ClientManagement/ClientInvoice.php
 
 		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientInvoice\:\:clientCompany\(\) has no return type specified\.$#'
-			identifier: missingType.return
+			message: '#^Method App\\Models\\ClientManagement\\ClientInvoice\:\:clientCompany\(\) should return Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\ClientManagement\\ClientCompany, App\\Models\\ClientManagement\\ClientInvoice\> but returns Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\ClientManagement\\ClientCompany, \$this\(App\\Models\\ClientManagement\\ClientInvoice\)\>\.$#'
+			identifier: return.type
 			count: 1
 			path: app/Models/ClientManagement/ClientInvoice.php
 
 		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientInvoice\:\:getPaymentsTotalAttribute\(\) has no return type specified\.$#'
-			identifier: missingType.return
+			message: '#^Method App\\Models\\ClientManagement\\ClientInvoice\:\:lineItems\(\) should return Illuminate\\Database\\Eloquent\\Relations\\HasMany\<App\\Models\\ClientManagement\\ClientInvoiceLine, App\\Models\\ClientManagement\\ClientInvoice\> but returns Illuminate\\Database\\Eloquent\\Relations\\HasMany\<App\\Models\\ClientManagement\\ClientInvoiceLine, \$this\(App\\Models\\ClientManagement\\ClientInvoice\)\>\.$#'
+			identifier: return.type
 			count: 1
 			path: app/Models/ClientManagement/ClientInvoice.php
 
 		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientInvoice\:\:getRemainingBalanceAttribute\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/ClientManagement/ClientInvoice.php
-
-		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientInvoice\:\:lineItems\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/ClientManagement/ClientInvoice.php
-
-		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientInvoice\:\:payments\(\) has no return type specified\.$#'
-			identifier: missingType.return
+			message: '#^Method App\\Models\\ClientManagement\\ClientInvoice\:\:payments\(\) should return Illuminate\\Database\\Eloquent\\Relations\\HasMany\<App\\Models\\ClientManagement\\ClientInvoicePayment, App\\Models\\ClientManagement\\ClientInvoice\> but returns Illuminate\\Database\\Eloquent\\Relations\\HasMany\<App\\Models\\ClientManagement\\ClientInvoicePayment, \$this\(App\\Models\\ClientManagement\\ClientInvoice\)\>\.$#'
+			identifier: return.type
 			count: 1
 			path: app/Models/ClientManagement/ClientInvoice.php
 
@@ -1941,18 +1905,6 @@ parameters:
 		-
 			message: '#^Method App\\Services\\ClientManagement\\ClientInvoicingService\:\:linkTimeEntriesToLine\(\) has parameter \$entries with no type specified\.$#'
 			identifier: missingType.parameter
-			count: 1
-			path: app/Services/ClientManagement/ClientInvoicingService.php
-
-		-
-			message: '#^Relation ''agreement'' is not found in App\\Models\\ClientManagement\\ClientInvoice model\.$#'
-			identifier: larastan.relationExistence
-			count: 1
-			path: app/Services/ClientManagement/ClientInvoicingService.php
-
-		-
-			message: '#^Relation ''lineItems'' is not found in App\\Models\\ClientManagement\\ClientInvoice model\.$#'
-			identifier: larastan.relationExistence
 			count: 1
 			path: app/Services/ClientManagement/ClientInvoicingService.php
 

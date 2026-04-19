@@ -1,4 +1,4 @@
-import { AppInitialDataSchema } from '@/types/client-management/hydration-schemas'
+import { AppInitialDataSchema } from '@/client-management/types/hydration-schemas'
 
 /**
  * Resolves whether the current user is an admin based on hydrated app data.

@@ -2,7 +2,7 @@
 
 namespace App\Services\ClientManagement\DataTransferObjects;
 
-class ClosingBalance
+readonly class ClosingBalance
 {
     public function __construct(
         public float $hoursUsedFromRetainer,

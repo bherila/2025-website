@@ -1,4 +1,4 @@
-import type { NavDropdownChild } from '@/types/client-management/hydration-schemas'
+import type { NavDropdownChild } from '@/client-management/types/hydration-schemas'
 
 import { safeHref } from './safeHref'
 

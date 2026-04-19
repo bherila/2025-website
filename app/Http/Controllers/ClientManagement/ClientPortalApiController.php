@@ -498,8 +498,15 @@ class ClientPortalApiController extends Controller
             'date_worked' => ($isUpdate ? 'sometimes|' : '').'required|date',
             'user_id' => 'nullable|exists:users,id',
             'is_billable' => 'boolean',
+            'is_deferred_billing' => 'boolean',
             'job_type' => 'nullable|string|max:255',
         ]);
+
+        // Deferred billing only applies to billable entries — if billable is
+        // being cleared, clear deferred too.
+        if (array_key_exists('is_billable', $validated) && $validated['is_billable'] === false) {
+            $validated['is_deferred_billing'] = false;
+        }
 
         if (isset($validated['project_id'])) {
             // Verify project belongs to this company
@@ -560,6 +567,7 @@ class ClientPortalApiController extends Controller
                 'user_id' => $validated['user_id'] ?? Auth::id(),
                 'creator_user_id' => Auth::id(),
                 'is_billable' => $validated['is_billable'] ?? true,
+                'is_deferred_billing' => $validated['is_deferred_billing'] ?? false,
                 'job_type' => $validated['job_type'] ?? 'Software Development',
             ]);
         }

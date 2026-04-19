@@ -1,7 +1,7 @@
 import { ChevronDown } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
-import type { NavItemDropdown } from '@/types/client-management/hydration-schemas'
+import type { NavItemDropdown } from '@/client-management/types/hydration-schemas'
 
 import { NavDropdownChildren } from './NavDropdownChildren'
 

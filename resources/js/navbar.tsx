@@ -1,8 +1,8 @@
 import { createRoot } from 'react-dom/client';
 
+import type { NavItem } from '@/client-management/types/hydration-schemas';
+import { AppInitialDataSchema } from '@/client-management/types/hydration-schemas';
 import Navbar from '@/components/navbar';
-import type { NavItem } from '@/types/client-management/hydration-schemas';
-import { AppInitialDataSchema } from '@/types/client-management/hydration-schemas';
 
 const initNavbar = () => {
   const mount = document.getElementById('navbar');

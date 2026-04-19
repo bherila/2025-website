@@ -2,7 +2,7 @@
 
 namespace App\Services\ClientManagement\DataTransferObjects;
 
-class InvoiceHoursBreakdown
+readonly class InvoiceHoursBreakdown
 {
     public function __construct(
         public float $carriedInHours,

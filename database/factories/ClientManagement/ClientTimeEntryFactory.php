@@ -35,6 +35,7 @@ class ClientTimeEntryFactory extends Factory
                 return $attributes['user_id'];
             },
             'is_billable' => true,
+            'is_deferred_billing' => false,
             'job_type' => fake()->randomElement([
                 'Software Development',
                 'Project Management',
@@ -44,5 +45,16 @@ class ClientTimeEntryFactory extends Factory
             ]),
             'client_invoice_line_id' => null,
         ];
+    }
+
+    /**
+     * Indicate that the time entry is deferred for later billing.
+     */
+    public function deferred(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'is_deferred_billing' => true,
+            'is_billable' => true,
+        ]);
     }
 }
