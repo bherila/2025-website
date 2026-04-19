@@ -22,9 +22,10 @@ import { computeForm8959Lines } from '@/finance/8959/form8959'
 import { computeForm8960Lines } from '@/finance/8960/form8960'
 import { computeCapitalLossCarryover } from '@/finance/capitalLoss/capitalLossCarryover'
 import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
+import { form461 } from '@/lib/tax/form461'
 import { buildCacheKey, getCachedTransactions, setCachedTransactions } from '@/services/transactionCache'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
-import type { EmploymentEntity, F1099DivParsedData, F1099IntParsedData, TaxDocument } from '@/types/finance/tax-document'
+import type { EmploymentEntity, F1099DivParsedData, F1099IntParsedData, TaxDocument, W2ParsedData } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 import type { OverviewRow, TaxReturn1040 } from '@/types/finance/tax-return'
 
@@ -492,10 +493,17 @@ export function TaxPreviewProvider({
     const scheduleB = computeScheduleB(reviewedK1Docs, reviewed1099Docs, income1099)
     const scheduleD = computeScheduleD(reviewedK1Docs, reviewed1099Docs)
     const scheduleE = computeScheduleELines(reviewedK1Docs)
+    const saltPaid = reviewedW2Docs.reduce((acc, doc) => {
+      const p = doc.parsed_data as { box17_state_tax?: number | null } | null
+      return currency(acc).add(p?.box17_state_tax ?? 0).value
+    }, 0)
     const scheduleA = computeScheduleALines({
       reviewedK1Docs,
       reviewed1099Docs,
       ...(shortDividendSummary ? { shortDividendSummary } : {}),
+      saltPaid,
+      year,
+      isMarried,
     })
     const form4952 = computeForm4952Lines({
       reviewedK1Docs,
@@ -503,6 +511,56 @@ export function TaxPreviewProvider({
       income1099,
       shortDividendDeduction: shortDividendSummary?.totalItemizedDeduction ?? 0,
     })
+
+    const eblData = form461({
+      taxYear: year,
+      isSingle: !isMarried,
+      schedule1_line3: scheduleCNetIncome.total,
+      schedule1_line5: scheduleE.grandTotal,
+      scheduleDData: scheduleD.schD,
+      override_f461_line15: null,
+    })
+    const form461Lines = {
+      aggregateBusinessIncomeLoss: eblData.f461_line9,
+      eblLimit: eblData.f461_line15, // form461() already computes the limit via ExcessBusinessLossLimitation()
+      excessBusinessLoss: eblData.f461_line16,
+      isTriggered: eblData.f461_line16 > 0,
+      isMarried,
+    }
+
+    const w2Sources = reviewedW2Docs.map((doc) => {
+      const p = doc.parsed_data as W2ParsedData | null
+      const wages = p?.box1_wages ?? 0
+      const label = p?.employer_name ?? doc.employment_entity?.display_name ?? doc.original_filename ?? 'W-2'
+      return { label, wages }
+    }).filter(s => s.wages > 0)
+
+    const form8959 = computeForm8959Lines(w2GrossIncome.value, isMarried, w2Sources)
+    const form8960 = computeForm8960Lines({
+      taxableInterest: income1099.interestIncome.value,
+      ordinaryDividends: income1099.dividendIncome.value,
+      netCapGainsRaw: scheduleD.schD.schD_line16,
+      passiveIncome: scheduleE.totalPassive,
+      investmentInterestExpense: form4952.deductibleInvestmentInterestExpense,
+      magi: w2GrossIncome
+        .add(income1099.interestIncome)
+        .add(income1099.dividendIncome)
+        .add(scheduleCNetIncome.total)
+        .add(scheduleE.grandTotal)
+        .add(Math.max(scheduleD.schD.schD_line16, -3000)).value,
+      isMarried,
+      interestSources: scheduleB.interestLines.map(l => ({ label: l.label, amount: l.amount })),
+      dividendSources: scheduleB.dividendLines.map(l => ({ label: l.label, amount: l.amount })),
+      passiveSources: scheduleE.partnerRows
+        .filter(r => r.netPassive !== 0)
+        .map(r => ({ label: r.partnerName, amount: r.netPassive })),
+    })
+    const schedule2 = {
+      altMinimumTax: 0,
+      additionalMedicareTax: form8959.additionalTax,
+      niit: form8960.niitTax,
+      totalAdditionalTaxes: currency(form8959.additionalTax).add(form8960.niitTax).value,
+    }
 
     return {
       year,
@@ -527,21 +585,10 @@ export function TaxPreviewProvider({
       },
       form4952,
       form1116: computeForm1116Lines({ reviewedK1Docs, reviewed1099Docs }),
-      form8959: computeForm8959Lines(w2GrossIncome.value, isMarried),
-      form8960: computeForm8960Lines({
-        taxableInterest: income1099.interestIncome.value,
-        ordinaryDividends: income1099.dividendIncome.value,
-        netCapGainsRaw: scheduleD.schD.schD_line16,
-        passiveIncome: scheduleE.totalPassive,
-        investmentInterestExpense: form4952.deductibleInvestmentInterestExpense,
-        magi: w2GrossIncome
-          .add(income1099.interestIncome)
-          .add(income1099.dividendIncome)
-          .add(scheduleCNetIncome.total)
-          .add(scheduleE.grandTotal)
-          .add(Math.max(scheduleD.schD.schD_line16, -3000)).value,
-        isMarried,
-      }),
+      schedule2,
+      form8959,
+      form8960,
+      form461: form461Lines,
       capitalLossCarryover: computeCapitalLossCarryover(
         scheduleD.schD.schD_line7,
         scheduleD.schD.schD_line15,

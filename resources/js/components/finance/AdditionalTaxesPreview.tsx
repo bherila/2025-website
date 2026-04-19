@@ -1,19 +1,83 @@
 'use client'
 
+import currency from 'currency.js'
+import { useState } from 'react'
+
 import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
-import type { CapitalLossCarryoverLines, Form8959Lines, Form8960Lines } from '@/types/finance/tax-return'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import type { CapitalLossCarryoverLines, Form461Lines, Form8959Lines, Form8960Lines, Schedule2Lines } from '@/types/finance/tax-return'
+
+/** Reusable data-source drilldown modal. */
+function SourceModal({
+  title,
+  rows,
+  totalLabel,
+  total,
+  open,
+  onClose,
+}: {
+  title: string
+  rows: { label: string; amount: number }[]
+  totalLabel: string
+  total: number
+  open: boolean
+  onClose: () => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Source</TableHead>
+              <TableHead className="text-right">Amount</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((r, i) => (
+              <TableRow key={i}>
+                <TableCell className="text-sm">{r.label}</TableCell>
+                <TableCell className="text-right font-mono text-sm">{currency(r.amount).format()}</TableCell>
+              </TableRow>
+            ))}
+            <TableRow className="font-semibold bg-muted/50">
+              <TableCell>{totalLabel}</TableCell>
+              <TableCell className="text-right font-mono">{currency(total).format()}</TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 interface AdditionalTaxesPreviewProps {
+  schedule2?: Schedule2Lines | undefined
   form8959?: Form8959Lines | undefined
   form8960?: Form8960Lines | undefined
   capitalLossCarryover?: CapitalLossCarryoverLines | undefined
+  form461?: Form461Lines | undefined
 }
 
-export default function AdditionalTaxesPreview({ form8959, form8960, capitalLossCarryover }: AdditionalTaxesPreviewProps) {
-  const hasContent = form8959?.additionalTax || form8960?.niitTax || capitalLossCarryover?.hasCarryover
+export default function AdditionalTaxesPreview({ schedule2, form8959, form8960, capitalLossCarryover, form461 }: AdditionalTaxesPreviewProps) {
+  const [wagesModal, setWagesModal] = useState(false)
+  const [interestModal, setInterestModal] = useState(false)
+  const [dividendModal, setDividendModal] = useState(false)
+  const [passiveModal, setPassiveModal] = useState(false)
+
+  const hasContent =
+    (form8959?.additionalTax ?? 0) > 0 ||
+    (form8960?.magi ?? 0) > 0 ||
+    (capitalLossCarryover?.combined ?? 0) < 0 ||
+    (form461?.aggregateBusinessIncomeLoss ?? 0) !== 0
   if (!hasContent) return null
 
   return (
+    <>
     <div className="space-y-5">
       <div>
         <h2 className="text-base font-semibold mb-0.5">Additional Taxes &amp; Planning Items</h2>
@@ -22,29 +86,64 @@ export default function AdditionalTaxesPreview({ form8959, form8960, capitalLoss
         </p>
       </div>
 
+      {/* Schedule 2 — Additional Taxes rollup */}
+      {schedule2 && schedule2.totalAdditionalTaxes > 0 && (
+        <FormBlock title="Schedule 2 — Additional Taxes (Form 1040 Line 17)">
+          {schedule2.altMinimumTax > 0 && (
+            <FormLine label="Line 2 — Alternative Minimum Tax (Form 6251)" value={schedule2.altMinimumTax} />
+          )}
+          {schedule2.additionalMedicareTax > 0 && (
+            <FormLine label="Line 11 — Additional Medicare Tax (Form 8959)" value={schedule2.additionalMedicareTax} />
+          )}
+          {schedule2.niit > 0 && (
+            <FormLine label="Line 12 — Net Investment Income Tax (Form 8960)" value={schedule2.niit} />
+          )}
+          <FormTotalLine label="Total additional taxes → Form 1040 Line 17" value={schedule2.totalAdditionalTaxes} double />
+          {schedule2.altMinimumTax === 0 && (
+            <FormLine label="Note" raw="AMT (Line 2) not computed — see Form 6251 if your income exceeds the AMT exemption." />
+          )}
+        </FormBlock>
+      )}
+
       {/* Form 8959 — Additional Medicare Tax */}
       {form8959 && form8959.additionalTax > 0 && (
         <FormBlock title="Form 8959 — Additional Medicare Tax (0.9%)">
-          <FormLine label="W-2 wages (Box 1)" value={form8959.wages} />
           <FormLine
-            label={`Less: threshold (${fmtAmt(form8959.threshold, 0)} — ${form8959.threshold === 200_000 ? 'Single/MFS/HOH' : 'MFJ'})`}
+            label="W-2 wages (Box 1)"
+            value={form8959.wages}
+            {...(form8959.sources.length > 1 ? { onClick: () => setWagesModal(true) } : {})}
+          />
+          <FormLine
+            label={`Less: threshold (${fmtAmt(form8959.threshold, 0)} — ${form8959.threshold === 200_000 ? 'Single/HOH' : 'MFJ'})`}
             value={-form8959.threshold}
           />
           <FormLine label="Wages above threshold" value={form8959.excessWages} />
           <FormTotalLine label="Additional Medicare Tax (0.9% × excess) — Schedule 2 Line 11" value={form8959.additionalTax} double />
-          <FormLine label="Note" raw="Withheld at source (W-2 Box 6) does not include the 0.9% — you may owe this at filing unless employer withheld extra." />
+          <FormLine label="Note" raw="Employers must withhold the 0.9% once wages from that employer exceed $200,000 — that withholding is in W-2 Box 6. Your actual liability is reconciled on Form 8959 at filing and may differ if you have multiple jobs or a spouse with income." />
         </FormBlock>
       )}
 
       {/* Form 8960 — Net Investment Income Tax */}
       {form8960 && form8960.niitTax > 0 && (
         <FormBlock title="Form 8960 — Net Investment Income Tax (NIIT, 3.8%)">
-          {form8960.components.map((c, i) => (
-            <FormLine key={i} label={c.label} value={c.amount} />
-          ))}
+          {form8960.components.map((c, i) => {
+            const isInterest = c.label.includes('interest') && !c.label.includes('investment interest')
+            const isDividend = c.label.includes('dividend')
+            const isPassive = c.label.includes('passive')
+            return (
+              <FormLine
+                key={i}
+                label={c.label}
+                value={c.amount}
+                {...(isInterest && form8960.interestSources.length > 1 ? { onClick: () => setInterestModal(true) } : {})}
+                {...(isDividend && form8960.dividendSources.length > 1 ? { onClick: () => setDividendModal(true) } : {})}
+                {...(isPassive && form8960.passiveSources.length > 1 ? { onClick: () => setPassiveModal(true) } : {})}
+              />
+            )
+          })}
           <FormTotalLine label="Net Investment Income (Line 12)" value={form8960.netInvestmentIncome} />
           <FormLine label="Modified AGI (estimated)" value={form8960.magi} />
-          <FormLine label={`Less: threshold (${fmtAmt(form8960.threshold, 0)} — ${form8960.threshold === 200_000 ? 'Single/MFS/HOH' : 'MFJ'})`} value={-form8960.threshold} />
+          <FormLine label={`Less: threshold (${fmtAmt(form8960.threshold, 0)} — ${form8960.threshold === 200_000 ? 'Single/HOH' : 'MFJ'})`} value={-form8960.threshold} />
           <FormLine label="Excess MAGI over threshold" value={form8960.magiExcess} />
           <FormLine label="NIIT base (lesser of NII or MAGI excess)" value={Math.min(form8960.netInvestmentIncome, form8960.magiExcess)} />
           <FormTotalLine label="NIIT (3.8% × base) — Schedule 2 Line 12" value={form8960.niitTax} double />
@@ -57,6 +156,36 @@ export default function AdditionalTaxesPreview({ form8959, form8960, capitalLoss
           <FormLine label="MAGI (estimated)" value={form8960.magi} />
           <FormLine label={`Threshold (${form8960.threshold === 200_000 ? 'Single' : 'MFJ'})`} value={form8960.threshold} />
           <FormLine label="NIIT" raw="$0 — MAGI does not exceed the threshold" />
+        </FormBlock>
+      )}
+
+      {/* Form 461 — Excess Business Loss */}
+      {form461 && (
+        <FormBlock title={`Form 461 — Excess Business Loss Limitation (${form461.isTriggered ? '⚠ EBL Applies' : '✓ Within Limit'})`}>
+          <FormLine label="Aggregate trade/business income (loss)" value={form461.aggregateBusinessIncomeLoss} />
+          <FormLine label={`EBL limit (${fmtAmt(form461.eblLimit, 0)} — ${form461.isMarried ? 'MFJ' : 'Single'})`} value={form461.eblLimit} />
+          {form461.isTriggered ? (
+            <>
+              <FormTotalLine label="Excess business loss — disallowed this year" value={-form461.excessBusinessLoss} double />
+              <FormLine label="Disallowed loss converts to NOL carryforward" raw="Enter on Schedule 1 Line 8p — reduces future year ordinary income" />
+              <Callout kind="warn" title="⚠ Excess Business Loss Applies — Schedule 1 Line 8p">
+                <p>
+                  Business losses of <strong>{fmtAmt(form461.aggregateBusinessIncomeLoss, 0)}</strong> exceed
+                  the EBL limit of <strong>{fmtAmt(form461.eblLimit, 0)}</strong>. The excess{' '}
+                  <strong>{fmtAmt(form461.excessBusinessLoss, 0)}</strong> is disallowed this year and
+                  converts to a Net Operating Loss (NOL) carryforward. Enter as a positive number on
+                  Schedule 1 (Form 1040) Line 8p.
+                </p>
+              </Callout>
+            </>
+          ) : (
+            <FormLine
+              label="EBL status"
+              raw={form461.aggregateBusinessIncomeLoss >= 0
+                ? '✓ Net business income — EBL does not apply'
+                : `✓ Loss of ${fmtAmt(Math.abs(form461.aggregateBusinessIncomeLoss), 0)} is within the ${fmtAmt(form461.eblLimit, 0)} limit`}
+            />
+          )}
         </FormBlock>
       )}
 
@@ -93,5 +222,46 @@ export default function AdditionalTaxesPreview({ form8959, form8960, capitalLoss
         </FormBlock>
       )}
     </div>
+
+    {/* Data source modals */}
+    {form8959 && (
+      <SourceModal
+        title="W-2 Wage Sources — Form 8959 Line 1"
+        rows={form8959.sources.map(s => ({ label: s.label, amount: s.wages }))}
+        totalLabel="Total W-2 wages (Box 1)"
+        total={form8959.wages}
+        open={wagesModal}
+        onClose={() => setWagesModal(false)}
+      />
+    )}
+    {form8960 && (
+      <>
+        <SourceModal
+          title="Taxable Interest Sources — Form 8960 Line 1"
+          rows={form8960.interestSources}
+          totalLabel="Total taxable interest"
+          total={form8960.taxableInterest}
+          open={interestModal}
+          onClose={() => setInterestModal(false)}
+        />
+        <SourceModal
+          title="Ordinary Dividend Sources — Form 8960 Line 2"
+          rows={form8960.dividendSources}
+          totalLabel="Total ordinary dividends"
+          total={form8960.ordinaryDividends}
+          open={dividendModal}
+          onClose={() => setDividendModal(false)}
+        />
+        <SourceModal
+          title="Passive Income Sources — Form 8960 Line 4 (K-1 Schedule E)"
+          rows={form8960.passiveSources}
+          totalLabel="Total net passive income"
+          total={form8960.passiveIncome}
+          open={passiveModal}
+          onClose={() => setPassiveModal(false)}
+        />
+      </>
+    )}
+    </>
   )
 }

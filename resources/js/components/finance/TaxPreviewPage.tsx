@@ -861,6 +861,8 @@ function TaxPreviewPageContent() {
             selectedYear={selectedYear}
             reviewedK1Docs={reviewedK1Docs}
             reviewed1099Docs={reviewed1099Docs}
+            saltPaid={taxReturn.scheduleA?.saltPaid ?? 0}
+            isMarried={isMarried}
             {...(shortDividendSummary ? { shortDividendSummary } : {})}
           />
         </TabsContent>
@@ -907,9 +909,11 @@ function TaxPreviewPageContent() {
 
         <TabsContent value={TAX_TABS.estimate} className="space-y-6 mt-0">
           <AdditionalTaxesPreview
+            schedule2={taxReturn.schedule2}
             form8959={taxReturn.form8959}
             form8960={taxReturn.form8960}
             capitalLossCarryover={taxReturn.capitalLossCarryover}
+            form461={taxReturn.form461}
           />
           <Form1040Preview
             w2Income={w2GrossIncome}

@@ -18,6 +18,16 @@ export interface Form1040LineItem {
 export interface ScheduleALines {
   invIntSources: { label: string; amount: number }[]
   totalInvIntExpense: number
+  /** Raw SALT paid before the $10,000 cap (W-2 Box 17 + other sources). */
+  saltPaid: number
+  /** SALT paid (state/local income or sales tax + property tax), capped at $10,000. */
+  saltDeduction: number
+  /** Itemized deductions subtotal (investment interest gross + SALT only; mortgage, charitable, medical not yet included). */
+  totalItemizedDeductions: number
+  /** Standard deduction for the year and filing status. */
+  standardDeduction: number
+  /** True when itemized > standard. */
+  shouldItemize: boolean
 }
 
 export interface ScheduleBSourceLine {
@@ -116,6 +126,8 @@ export interface Form8959Lines {
   threshold: number
   excessWages: number
   additionalTax: number
+  /** Per-W-2 document breakdown for the data source modal. */
+  sources: { label: string; wages: number }[]
 }
 
 export interface Form8960Lines {
@@ -132,6 +144,12 @@ export interface Form8960Lines {
   magiExcess: number
   niitTax: number
   components: { label: string; amount: number }[]
+  /** Per-payer interest sources for the data source modal. */
+  interestSources: { label: string; amount: number }[]
+  /** Per-payer dividend sources for the data source modal. */
+  dividendSources: { label: string; amount: number }[]
+  /** Per-K-1 passive income sources for the data source modal. */
+  passiveSources: { label: string; amount: number }[]
 }
 
 export interface CapitalLossCarryoverLines {
@@ -145,10 +163,35 @@ export interface CapitalLossCarryoverLines {
   hasCarryover: boolean
 }
 
+export interface Schedule2Lines {
+  /** Line 2 — Alternative Minimum Tax (Form 6251). 0 if not applicable. */
+  altMinimumTax: number
+  /** Line 11 — Additional Medicare Tax (Form 8959). */
+  additionalMedicareTax: number
+  /** Line 12 — Net Investment Income Tax (Form 8960). */
+  niit: number
+  /** Line 21 total → Form 1040 Line 17. */
+  totalAdditionalTaxes: number
+}
+
+export interface Form461Lines {
+  /** Aggregate trade/business income (loss) — Form 461 Line 9. */
+  aggregateBusinessIncomeLoss: number
+  /** EBL threshold for the year and filing status — Form 461 Line 15. */
+  eblLimit: number
+  /** Disallowed excess loss → NOL carryforward (Form 461 Line 16, 0 if not triggered). */
+  excessBusinessLoss: number
+  /** True when business losses exceed the EBL limit. */
+  isTriggered: boolean
+  /** Filing status used for the threshold lookup. */
+  isMarried: boolean
+}
+
 export interface TaxReturn1040 {
   year: number
   overviewSections?: OverviewSection[] | undefined
   form1040?: Form1040LineItem[]
+  schedule2?: Schedule2Lines
   scheduleA?: ScheduleALines
   scheduleB?: ScheduleBLines
   scheduleC?: ScheduleCNetIncome
@@ -160,6 +203,7 @@ export interface TaxReturn1040 {
   form8960?: Form8960Lines
   form8995?: Form8995Lines
   capitalLossCarryover?: CapitalLossCarryoverLines
+  form461?: Form461Lines
   k1Docs?: K1ExportEntry[]
   k3Docs?: K3ExportEntry[]
   docs1099?: Doc1099ExportEntry[]

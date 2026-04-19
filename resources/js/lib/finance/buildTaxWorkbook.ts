@@ -223,13 +223,29 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
   const scheduleASheet = taxReturn.scheduleA
     ? buildSheet('Schedule A', [
         {
+          line: '7',
+          description: 'Line 7 — State and local taxes paid (SALT, capped at $10,000)',
+          amount: taxReturn.scheduleA.saltDeduction,
+          note: 'From W-2 Box 17 state withholding. Real estate taxes add separately.',
+        },
+        {
           line: '9',
           description: 'Line 9 — Investment interest expense (from Form 4952)',
           amount: taxReturn.scheduleA.totalInvIntExpense,
           formula: form4952Sheet?.rowIndex.get('Line 6 — Deductible investment interest expense')
             ? formulaRef('Form 4952', form4952Sheet.rowIndex.get('Line 6 — Deductible investment interest expense')!)
             : undefined,
+        },
+        {
+          line: '17',
+          description: 'Line 17 — Total itemized deductions',
+          amount: taxReturn.scheduleA.totalItemizedDeductions,
           isTotal: true,
+        },
+        {
+          description: `Standard deduction (${taxReturn.scheduleA.shouldItemize ? 'LOWER' : 'HIGHER'} — ${taxReturn.scheduleA.shouldItemize ? 'itemize' : 'take standard'})`,
+          amount: taxReturn.scheduleA.standardDeduction,
+          note: taxReturn.scheduleA.shouldItemize ? 'Use Schedule A' : 'Use standard deduction',
         },
       ])
     : null
@@ -353,12 +369,22 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
 
   // ── Form 8959 ────────────────────────────────────────────────────────────────
   const form8959Sheet = taxReturn.form8959 && taxReturn.form8959.additionalTax > 0
-    ? buildSheet('Form 8959', [
-        { line: '1', description: 'Line 1 — Medicare wages (W-2 Box 1)', amount: taxReturn.form8959.wages },
-        { line: '5', description: `Line 5 — Threshold (${taxReturn.form8959.threshold === 200_000 ? 'Single/MFS/HOH' : 'MFJ'})`, amount: taxReturn.form8959.threshold },
-        { line: '6', description: 'Line 6 — Wages above threshold', amount: taxReturn.form8959.excessWages },
-        { line: '7', description: 'Line 7 — Additional Medicare Tax (0.9%) → Schedule 2 Line 11', amount: taxReturn.form8959.additionalTax, isTotal: true },
-      ])
+    ? (() => {
+        const f = taxReturn.form8959
+        const srcRows: XlsxRow[] = f.sources.length > 0
+          ? [
+              { isHeader: true, description: 'W-2 Sources (Box 1 wages)' },
+              ...f.sources.map(s => ({ description: s.label, amount: s.wages })),
+            ]
+          : []
+        return buildSheet('Form 8959', [
+          ...srcRows,
+          { line: '1', description: 'Line 1 — Medicare wages (W-2 Box 1 approx; exact = Box 5)', amount: f.wages, isTotal: srcRows.length > 0, note: 'Box 5 (Medicare wages) may exceed Box 1 when 401k deferrals apply' },
+          { line: '5', description: `Line 5 — Threshold (${f.threshold === 200_000 ? 'Single/HOH' : 'MFJ'})`, amount: f.threshold },
+          { line: '6', description: 'Line 6 — Wages above threshold', amount: f.excessWages },
+          { line: '7', description: 'Line 7 — Additional Medicare Tax (0.9%) → Schedule 2 Line 11', amount: f.additionalTax, isTotal: true },
+        ])
+      })()
     : null
 
   // ── Form 8960 ────────────────────────────────────────────────────────────────
@@ -367,10 +393,13 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
         const f = taxReturn.form8960
         const rows: XlsxRow[] = [
           { isHeader: true, description: 'Part I — Net Investment Income' },
-          { line: '1', description: 'Taxable interest (Schedule B)', amount: f.taxableInterest },
-          { line: '2', description: 'Ordinary dividends (Schedule B)', amount: f.ordinaryDividends },
+          ...f.interestSources.map(s => ({ description: `  ${s.label}`, amount: s.amount })),
+          { line: '1', description: 'Taxable interest (Schedule B)', amount: f.taxableInterest, isTotal: f.interestSources.length > 0 },
+          ...f.dividendSources.map(s => ({ description: `  ${s.label}`, amount: s.amount })),
+          { line: '2', description: 'Ordinary dividends (Schedule B)', amount: f.ordinaryDividends, isTotal: f.dividendSources.length > 0 },
           { line: '5a', description: 'Net capital gains (Schedule D, capped at 0)', amount: f.netCapGains },
-          { line: '4a', description: 'Net passive income (K-1 Schedule E)', amount: f.passiveIncome },
+          ...f.passiveSources.map(s => ({ description: `  ${s.label}`, amount: s.amount })),
+          { line: '4a', description: 'Net passive income (K-1 Schedule E)', amount: f.passiveIncome, isTotal: f.passiveSources.length > 0 },
           { line: '8', description: 'Line 8 — Gross NII', amount: f.grossNII, isTotal: true },
           { isHeader: true, description: 'Part II — Deductions' },
           { line: '9a', description: 'Investment interest expense (Form 4952)', amount: -f.investmentInterestExpense },
@@ -378,7 +407,7 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
           { isHeader: true, description: 'Part III — NIIT Computation' },
           { line: '12', description: 'Net Investment Income (Line 8 − 11)', amount: f.netInvestmentIncome, isTotal: true },
           { line: '13', description: 'Modified AGI (estimated)', amount: f.magi },
-          { line: '14', description: `Threshold (${f.threshold === 200_000 ? 'Single/MFS/HOH' : 'MFJ'})`, amount: f.threshold },
+          { line: '14', description: `Threshold (${f.threshold === 200_000 ? 'Single/HOH' : 'MFJ'})`, amount: f.threshold },
           { line: '15', description: 'MAGI excess over threshold', amount: f.magiExcess },
           { line: '17', description: 'NIIT (3.8% × lesser of Line 12 or 15) → Schedule 2 Line 12', amount: f.niitTax, isTotal: true },
         ]
@@ -402,6 +431,22 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
       })()
     : null
 
+  // ── Form 461 ─────────────────────────────────────────────────────────────────
+  const form461Sheet = taxReturn.form461
+    ? buildSheet('Form 461', [
+        { line: '9', description: 'Line 9 — Aggregate trade/business income (loss)', amount: taxReturn.form461.aggregateBusinessIncomeLoss, isTotal: true },
+        { line: '15', description: 'Line 15 — EBL limit (filing-status threshold)', amount: taxReturn.form461.eblLimit },
+        {
+          line: '16',
+          description: taxReturn.form461.isTriggered
+            ? 'Line 16 — Excess business loss → Schedule 1 Line 8p (NOL carryforward)'
+            : 'Line 16 — No excess (within limit)',
+          amount: taxReturn.form461.isTriggered ? -taxReturn.form461.excessBusinessLoss : 0,
+          isTotal: true,
+        },
+      ])
+    : null
+
   // ── Short Dividends ──────────────────────────────────────────────────────────
   const shortDivSheet = taxReturn.shortDividends
     ? buildSheet('Short Dividends', [
@@ -420,6 +465,8 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
   const scheduleECombined = scheduleESheet?.rowIndex.get('Schedule E combined total')
   const form1116Line2 = form1116Sheet?.rowIndex.get('Total foreign taxes paid')
   const form8995Line13 = form8995Sheet?.rowIndex.get('QBI Deduction — lesser of 20% QBI or taxable income cap')
+  const form8959Line7 = form8959Sheet?.rowIndex.get('Line 7 — Additional Medicare Tax (0.9%) → Schedule 2 Line 11')
+  const form8960Line17 = form8960Sheet?.rowIndex.get('NIIT (3.8% × lesser of Line 12 or 15) → Schedule 2 Line 12')
 
   const line1a = taxReturn.form1040?.find((line) => line.line === '1a')?.value ?? undefined
   const line2b = scheduleBLine4 ? taxReturn.scheduleB?.interestTotal : undefined
@@ -505,6 +552,19 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
           note: form8995Line13 ? '→ Form 8995' : undefined,
         },
         {
+          line: '17',
+          description: 'Other taxes (Schedule 2)',
+          amount: taxReturn.schedule2?.totalAdditionalTaxes,
+          formula: (form8959Line7 && form8960Line17)
+            ? `=${formulaRef('Form 8959', form8959Line7).slice(1)}+${formulaRef('Form 8960', form8960Line17).slice(1)}`
+            : form8959Line7
+              ? formulaRef('Form 8959', form8959Line7)
+              : form8960Line17
+                ? formulaRef('Form 8960', form8960Line17)
+                : undefined,
+          note: '→ Form 8959 (Medicare) + Form 8960 (NIIT)',
+        },
+        {
           line: '20',
           description: 'Foreign tax credit (Form 1116)',
           amount: taxReturn.form1116?.totalForeignTaxes,
@@ -581,6 +641,7 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
     form8995Sheet,
     form4952Sheet,
     capitalLossSheet,
+    form461Sheet,
     shortDivSheet,
     ...k1Sheets,
     ...k3Sheets,
