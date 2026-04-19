@@ -23,7 +23,7 @@ class UserDeductionController extends Controller
             ->orderBy('id')
             ->get(['id', 'category', 'description', 'amount']);
 
-        return response()->json($deductions);
+        return response()->json($deductions->map(fn (UserDeduction $deduction): array => $this->toResponseArray($deduction)));
     }
 
     /** POST /api/finance/user-deductions — add a deduction. */
@@ -34,7 +34,7 @@ class UserDeductionController extends Controller
             ...$request->validated(),
         ]);
 
-        return response()->json($deduction, 201);
+        return response()->json($this->toResponseArray($deduction), 201);
     }
 
     /** PUT /api/finance/user-deductions/{id} — update a deduction. */
@@ -46,7 +46,7 @@ class UserDeductionController extends Controller
 
         $deduction->update($request->validated());
 
-        return response()->json($deduction);
+        return response()->json($this->toResponseArray($deduction));
     }
 
     /** DELETE /api/finance/user-deductions/{id} — remove a deduction. */
@@ -58,5 +58,16 @@ class UserDeductionController extends Controller
             ->delete();
 
         return response()->json(['ok' => true]);
+    }
+
+    /** @return array{id:int,category:string,description:?string,amount:float} */
+    private function toResponseArray(UserDeduction $deduction): array
+    {
+        return [
+            'id' => $deduction->id,
+            'category' => $deduction->category,
+            'description' => $deduction->description,
+            'amount' => round((float) $deduction->amount, 2),
+        ];
     }
 }

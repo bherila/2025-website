@@ -34,7 +34,7 @@ class UserDeductionControllerTest extends TestCase
             'description' => '123 Main St',
             'amount' => 4500.00,
         ])->assertCreated()
-            ->assertJsonFragment(['category' => 'real_estate_tax', 'amount' => '4500.00']);
+            ->assertJsonFragment(['category' => 'real_estate_tax', 'amount' => 4500.0]);
 
         $this->assertDatabaseHas('fin_user_deductions', [
             'user_id' => $this->user->id,
@@ -65,7 +65,7 @@ class UserDeductionControllerTest extends TestCase
 
         $this->putJson("/api/finance/user-deductions/{$id}", ['amount' => 2500])
             ->assertOk()
-            ->assertJsonFragment(['amount' => '2500.00']);
+            ->assertJsonFragment(['amount' => 2500.0]);
     }
 
     public function test_destroy_removes_deduction(): void

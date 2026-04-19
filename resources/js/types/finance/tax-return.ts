@@ -19,7 +19,7 @@ export interface UserDeductionEntry {
   id: number
   category: string
   description: string | null
-  amount: number | string
+  amount: number
 }
 
 export interface ScheduleALines {
