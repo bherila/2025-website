@@ -1,5 +1,7 @@
 import { useEffect,useState } from 'react'
 
+import type { Project } from '@/client-management/types/common'
+import type { ClientExpense, ClientExpenseFormData } from '@/client-management/types/expense'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -19,8 +21,6 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
-import type { Project } from '@/types/client-management/common'
-import type { ClientExpense, ClientExpenseFormData } from '@/types/client-management/expense'
 
 interface NewExpenseModalProps {
   open: boolean

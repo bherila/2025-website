@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 
-import TimeTrackingMonthSummaryRow from '@/components/client-management/portal/TimeTrackingMonthSummaryRow'
+import TimeTrackingMonthSummaryRow from '@/client-management/components/portal/TimeTrackingMonthSummaryRow'
 
 describe('TimeTrackingMonthSummaryRow', () => {
   it('shows Catch-up Hours Billed and Remaining Balance on invoice page (including zero values)', () => {

@@ -1,6 +1,6 @@
 import { act, render, screen } from '@testing-library/react'
 
-import { getPagePathSuffix } from '@/components/client-management/portal/ClientPortalNav'
+import { getPagePathSuffix } from '@/client-management/components/portal/ClientPortalNav'
 import { _resetCache } from '@/hooks/useAppInitialData'
 
 describe('getPagePathSuffix', () => {
@@ -56,7 +56,7 @@ describe('ClientPortalNav renders without errors', () => {
   })
 
   it('renders company name as dropdown trigger', async () => {
-    const ClientPortalNav = (await import('@/components/client-management/portal/ClientPortalNav')).default
+    const ClientPortalNav = (await import('@/client-management/components/portal/ClientPortalNav')).default
     await act(async () => {
       render(
         <ClientPortalNav
@@ -73,7 +73,7 @@ describe('ClientPortalNav renders without errors', () => {
   })
 
   it('renders Invoices nav link for current company', async () => {
-    const ClientPortalNav = (await import('@/components/client-management/portal/ClientPortalNav')).default
+    const ClientPortalNav = (await import('@/client-management/components/portal/ClientPortalNav')).default
     await act(async () => {
       render(
         <ClientPortalNav
@@ -94,7 +94,7 @@ describe('ClientPortalNav renders without errors', () => {
   })
 
   it('inactive nav links use text-foreground (not gold text-primary)', async () => {
-    const ClientPortalNav = (await import('@/components/client-management/portal/ClientPortalNav')).default
+    const ClientPortalNav = (await import('@/client-management/components/portal/ClientPortalNav')).default
     await act(async () => {
       render(
         <ClientPortalNav
@@ -121,7 +121,7 @@ describe('ClientPortalNav renders without errors', () => {
   })
 
   it('active nav link uses bg-accent and text-accent-foreground', async () => {
-    const ClientPortalNav = (await import('@/components/client-management/portal/ClientPortalNav')).default
+    const ClientPortalNav = (await import('@/client-management/components/portal/ClientPortalNav')).default
     await act(async () => {
       render(
         <ClientPortalNav
@@ -140,7 +140,7 @@ describe('ClientPortalNav renders without errors', () => {
   })
 
   it('nav links have hover:no-underline to suppress global a:hover underline', async () => {
-    const ClientPortalNav = (await import('@/components/client-management/portal/ClientPortalNav')).default
+    const ClientPortalNav = (await import('@/client-management/components/portal/ClientPortalNav')).default
     await act(async () => {
       render(
         <ClientPortalNav

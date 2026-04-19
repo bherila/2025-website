@@ -1,4 +1,4 @@
-import { InvoiceHydrationSchema,InvoiceSchema } from '@/types/client-management/invoice'
+import { InvoiceHydrationSchema,InvoiceSchema } from '@/client-management/types/invoice'
 
 describe('InvoiceSchema (zod)', () => {
   it('parses a valid invoice', () => {

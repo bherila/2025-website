@@ -1,5 +1,6 @@
 import { Pencil } from 'lucide-react'
 
+import type { TimeEntry } from '@/client-management/types/time-entry'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -8,7 +9,6 @@ import {
 } from "@/components/ui/table"
 import { useIsUserAdmin } from '@/hooks/useAppInitialData'
 import { abbreviateName } from '@/lib/nameUtils'
-import type { TimeEntry } from '@/types/client-management/time-entry'
 
 import DisabledEditButton from './DisabledEditButton'
 

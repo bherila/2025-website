@@ -1,11 +1,11 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
 
-import ClientPortalAgreementPage from '@/components/client-management/portal/ClientPortalAgreementPage'
-import ClientPortalIndexPage from '@/components/client-management/portal/ClientPortalIndexPage'
-import ClientPortalInvoicePage from '@/components/client-management/portal/ClientPortalInvoicePage'
-import ClientPortalInvoicesPage from '@/components/client-management/portal/ClientPortalInvoicesPage'
-import ClientPortalProjectPage from '@/components/client-management/portal/ClientPortalProjectPage'
-import ClientPortalTimePage from '@/components/client-management/portal/ClientPortalTimePage'
+import ClientPortalAgreementPage from '@/client-management/components/portal/ClientPortalAgreementPage'
+import ClientPortalIndexPage from '@/client-management/components/portal/ClientPortalIndexPage'
+import ClientPortalInvoicePage from '@/client-management/components/portal/ClientPortalInvoicePage'
+import ClientPortalInvoicesPage from '@/client-management/components/portal/ClientPortalInvoicesPage'
+import ClientPortalProjectPage from '@/client-management/components/portal/ClientPortalProjectPage'
+import ClientPortalTimePage from '@/client-management/components/portal/ClientPortalTimePage'
 import { _resetCache } from '@/hooks/useAppInitialData'
 import { makePortalFetchMock } from '@/test-utils/portalFetchMock'
 

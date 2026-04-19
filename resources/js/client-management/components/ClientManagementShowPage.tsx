@@ -1,8 +1,9 @@
 import { ArrowLeft, ExternalLink, FileText, Plus, X } from 'lucide-react'
 import { useCallback,useEffect,useState } from 'react'
 
-import InvitePeopleModal from '@/components/client-management/InvitePeopleModal'
-import ClientPortalNav from '@/components/client-management/portal/ClientPortalNav'
+import InvitePeopleModal from '@/client-management/components/InvitePeopleModal'
+import ClientPortalNav from '@/client-management/components/portal/ClientPortalNav'
+import type {ClientCompany } from '@/client-management/types/common'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -11,7 +12,6 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import type {ClientCompany } from '@/types/client-management/common'
 
 interface ClientManagementShowPageProps {
   companyId: number

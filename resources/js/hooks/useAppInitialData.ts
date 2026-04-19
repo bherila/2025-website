@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 
+import { type AppInitialData,AppInitialDataSchema } from '@/client-management/types/hydration-schemas'
 import { resolveIsAdmin } from '@/lib/authUtils'
-import { type AppInitialData,AppInitialDataSchema } from '@/types/client-management/hydration-schemas'
 
 let cachedData: (AppInitialData & { isAdmin: boolean }) | null = null
 

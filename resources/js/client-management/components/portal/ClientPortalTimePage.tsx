@@ -1,6 +1,8 @@
 import { ChevronDown, ChevronRight, Clock, Download, Info, Pencil, Plus } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
+import type { Project, User } from '@/client-management/types/common'
+import type { TimeEntriesResponse, TimeEntry } from '@/client-management/types/time-entry'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -17,8 +19,6 @@ import {
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useIsUserAdmin } from '@/hooks/useAppInitialData'
 import { formatHours } from '@/lib/formatHours'
-import type { Project, User } from '@/types/client-management/common'
-import type { TimeEntriesResponse, TimeEntry } from '@/types/client-management/time-entry'
 
  import ClientPortalNav from './ClientPortalNav'
 import DisabledEditButton from './DisabledEditButton'

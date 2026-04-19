@@ -2,8 +2,8 @@ import { ChevronDown, Menu, X } from 'lucide-react';
 import * as React from 'react';
 import { useRef, useState } from 'react';
 
+import type { NavItem } from '@/client-management/types/hydration-schemas';
 import { useTheme } from '@/hooks/useTheme';
-import type { NavItem } from '@/types/client-management/hydration-schemas';
 
 import { NavDesktopDropdown } from './nav/NavDesktopDropdown';
 import { NavMobileDropdown } from './nav/NavMobileDropdown';

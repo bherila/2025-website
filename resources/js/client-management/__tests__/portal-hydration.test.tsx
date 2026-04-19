@@ -47,7 +47,7 @@ describe('client-portal entrypoint hydration validation', () => {
     const fetchMock = (window as any).fetch = makePortalFetchMock()
 
     // import the entrypoint (registers DOMContentLoaded listener)
-    await import('@/client-portal')
+    await import('@/client-management/portal')
 
     // trigger mount
     fireEvent(document, new Event('DOMContentLoaded'))
@@ -84,7 +84,7 @@ describe('client-portal entrypoint hydration validation', () => {
 
     const fetchMock = (window as any).fetch = makePortalFetchMock()
 
-    await import('@/client-portal')
+    await import('@/client-management/portal')
     fireEvent(document, new Event('DOMContentLoaded'))
 
     await waitFor(() => expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Invalid hydrated companyUsers for time page'), expect.anything()))
@@ -124,7 +124,7 @@ describe('client-portal entrypoint hydration validation', () => {
 
     const fetchMock = (window as any).fetch = makePortalFetchMock()
 
-    await import('@/client-portal')
+    await import('@/client-management/portal')
     fireEvent(document, new Event('DOMContentLoaded'))
 
     await waitFor(() => expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Invalid hydrated currentUser payload'), expect.anything()))

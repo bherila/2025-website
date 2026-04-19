@@ -1,11 +1,11 @@
 import { Ban, List, PlusCircle, RotateCcw, Send, Trash2, Undo2 } from "lucide-react";
 
+import type { Invoice } from "@/client-management/types";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIsUserAdmin } from "@/hooks/useAppInitialData";
 import { cn } from "@/lib/utils";
-import type { Invoice } from "@/types/client-management";
 
 interface ClientPortalInvoiceActionButtonRowProps {
     slug: string;

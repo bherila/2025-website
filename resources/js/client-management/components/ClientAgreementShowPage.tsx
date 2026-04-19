@@ -1,6 +1,7 @@
 import { AlertCircle, ArrowLeft, Check, FileText, X } from 'lucide-react'
 import { useCallback,useEffect,useState } from 'react'
 
+import type { ClientAgreement } from '@/client-management/types/client-agreement'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -10,7 +11,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
-import type { ClientAgreement } from '@/types/client-management/client-agreement'
 
 interface ClientAgreementShowPageProps {
   agreementId: number

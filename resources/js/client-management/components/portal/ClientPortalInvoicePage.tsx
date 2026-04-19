@@ -2,6 +2,7 @@ import { format } from 'date-fns'
 import { ChevronLeft, ChevronRight, Pencil } from "lucide-react";
 import React, { useCallback, useEffect, useState } from "react";
 
+import type { ClientInvoicePayment, Invoice, InvoiceLine } from "@/client-management/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -11,7 +12,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { fetchWrapper } from "@/fetchWrapper";
 import { useIsUserAdmin } from "@/hooks/useAppInitialData";
 import { formatHours } from "@/lib/formatHours";
-import type { ClientInvoicePayment, Invoice, InvoiceLine } from "@/types/client-management";
 
 import AddPaymentModal from "./AddPaymentModal";
 import ClientPortalInvoiceActionButtonRow from "./ClientPortalInvoiceActionButtonRow";

@@ -1,6 +1,8 @@
 import { ChevronRight, FileText, Loader2, Receipt, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
+import type { ClientCompany } from '@/client-management/types/common'
+import type { Invoice, InvoiceListItem } from '@/client-management/types/invoice'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -14,8 +16,6 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useIsUserAdmin } from '@/hooks/useAppInitialData'
-import type { ClientCompany } from '@/types/client-management/common'
-import type { Invoice, InvoiceListItem } from '@/types/client-management/invoice'
 
 import ClientPortalNav from './ClientPortalNav'
 

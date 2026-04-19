@@ -10,6 +10,8 @@ import {
 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
+import type { Project } from '@/client-management/types/common'
+import type { ClientExpense, ExpensesResponse } from '@/client-management/types/expense'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -24,8 +26,6 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useIsUserAdmin } from '@/hooks/useAppInitialData'
-import type { Project } from '@/types/client-management/common'
-import type { ClientExpense, ExpensesResponse } from '@/types/client-management/expense'
 
 import ClientPortalNav from './ClientPortalNav'
 import DeleteExpenseDialog from './DeleteExpenseDialog'

@@ -1,6 +1,7 @@
 import { CheckCircle2, Clock,Loader2, XCircle } from 'lucide-react'
 import { useState } from 'react'
 
+import type { ClientAdminActionsProps } from '@/client-management/types/invoice'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -10,7 +11,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import type { ClientAdminActionsProps } from '@/types/client-management/invoice'
 
 interface GenerateAllResults {
   generated: Array<{ period: string; invoice_id: number; invoice_number: string }>

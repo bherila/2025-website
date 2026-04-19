@@ -1,6 +1,7 @@
 import { AlertCircle, Check, FileText, HelpCircle } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
+import type { ClientAgreement } from '@/client-management/types/client-agreement'
 import { DeleteFileModal, FileHistoryModal, FileList, FileUploadButton, useFileManagement } from '@/components/shared/FileManager'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -11,7 +12,6 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useIsUserAdmin } from '@/hooks/useAppInitialData'
-import type { ClientAgreement } from '@/types/client-management/client-agreement'
 import type { FileRecord } from '@/types/files'
 
 import ClientPortalNav from './ClientPortalNav'

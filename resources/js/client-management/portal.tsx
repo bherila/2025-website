@@ -1,14 +1,14 @@
 import { createRoot } from 'react-dom/client'
 
-import ClientPortalAgreementPage from '@/components/client-management/portal/ClientPortalAgreementPage'
-import ClientPortalExpensesPage from '@/components/client-management/portal/ClientPortalExpensesPage'
-import ClientPortalIndexPage from '@/components/client-management/portal/ClientPortalIndexPage'
-import ClientPortalInvoicePage from '@/components/client-management/portal/ClientPortalInvoicePage'
-import ClientPortalInvoicesPage from '@/components/client-management/portal/ClientPortalInvoicesPage'
-import ClientPortalProjectPage from '@/components/client-management/portal/ClientPortalProjectPage'
-import ClientPortalTimePage from '@/components/client-management/portal/ClientPortalTimePage'
-import { AgreementSchema, AppInitialDataSchema, ProjectSchema, TimeEntrySchema, UserSchema } from '@/types/client-management/hydration-schemas'
-import { InvoiceHydrationSchema,InvoiceListItemSchema, InvoiceSchema } from '@/types/client-management/invoice'
+import ClientPortalAgreementPage from '@/client-management/components/portal/ClientPortalAgreementPage'
+import ClientPortalExpensesPage from '@/client-management/components/portal/ClientPortalExpensesPage'
+import ClientPortalIndexPage from '@/client-management/components/portal/ClientPortalIndexPage'
+import ClientPortalInvoicePage from '@/client-management/components/portal/ClientPortalInvoicePage'
+import ClientPortalInvoicesPage from '@/client-management/components/portal/ClientPortalInvoicesPage'
+import ClientPortalProjectPage from '@/client-management/components/portal/ClientPortalProjectPage'
+import ClientPortalTimePage from '@/client-management/components/portal/ClientPortalTimePage'
+import { AgreementSchema, AppInitialDataSchema, ProjectSchema, TimeEntrySchema, UserSchema } from '@/client-management/types/hydration-schemas'
+import { InvoiceHydrationSchema,InvoiceListItemSchema, InvoiceSchema } from '@/client-management/types/invoice'
 
 document.addEventListener('DOMContentLoaded', () => {
   // Parse app-level head JSON once (id="app-initial-data") and validate it.

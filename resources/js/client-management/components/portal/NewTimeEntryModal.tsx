@@ -1,6 +1,8 @@
 import { Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
+import type { Project,User } from '@/client-management/types/common'
+import type { TimeEntry } from '@/client-management/types/time-entry'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogFooter,DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -9,8 +11,6 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useCurrentUser } from '@/hooks/useAppInitialData'
 import { usePortalInitialData } from '@/hooks/usePortalInitialData'
-import type { Project,User } from '@/types/client-management/common'
-import type { TimeEntry } from '@/types/client-management/time-entry'
 
 function getLocalISODate(): string {
 // ... existing getLocalISODate function ...

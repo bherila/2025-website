@@ -1,6 +1,8 @@
 import { Clock, ExternalLink, FolderOpen, Pencil,Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
+import type { Agreement, Project, User } from '@/client-management/types/common'
+import type { TimeEntry } from '@/client-management/types/time-entry'
 import {
   DeleteFileModal,
   FileHistoryModal,
@@ -13,8 +15,6 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useIsUserAdmin } from '@/hooks/useAppInitialData'
 import { abbreviateName } from '@/lib/nameUtils'
-import type { Agreement, Project, User } from '@/types/client-management/common'
-import type { TimeEntry } from '@/types/client-management/time-entry'
 import type { FileRecord } from '@/types/files'
 
  import ClientPortalNav from './ClientPortalNav'

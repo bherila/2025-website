@@ -1,3 +1,4 @@
+import type { ClientExpense } from '@/client-management/types/expense'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -8,7 +9,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import type { ClientExpense } from '@/types/client-management/expense'
 
 interface DeleteExpenseDialogProps {
   open: boolean

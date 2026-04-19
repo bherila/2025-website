@@ -1,12 +1,12 @@
 import { AlertCircle } from 'lucide-react'
 import { useEffect,useState } from 'react'
 
+import type { ClientCompany,User } from '@/client-management/types/common'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter,DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import type { ClientCompany,User } from '@/types/client-management/common'
 
 interface InvitePeopleModalProps {
   open: boolean

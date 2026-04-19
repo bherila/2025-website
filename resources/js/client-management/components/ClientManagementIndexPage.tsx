@@ -2,12 +2,12 @@ import currency from 'currency.js'
 import { ChevronDown, ChevronUp, Clock, DollarSign, ExternalLink, FileText, Package, Plus, TrendingUp, Wrench } from 'lucide-react'
 import { useEffect,useState } from 'react'
 
-import InvitePeopleModal from '@/components/client-management/InvitePeopleModal'
+import InvitePeopleModal from '@/client-management/components/InvitePeopleModal'
+import type { ClientCompany } from '@/client-management/types/common'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { ClientCompany } from '@/types/client-management/common'
 
 function formatLastLogin(lastLogin: string | null | undefined): string {
   if (!lastLogin) return 'never logged in'
