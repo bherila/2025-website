@@ -30,6 +30,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { fetchWrapper } from '@/fetchWrapper'
 import { buildTaxWorkbook } from '@/lib/finance/buildTaxWorkbook'
+import { parseK1Field } from '@/lib/finance/k1Utils'
 import { type FilingStatus, getStandardDeduction } from '@/lib/tax/standardDeductions'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
@@ -44,36 +45,6 @@ import { YearSelectorWithNav } from './YearSelectorWithNav'
 export type TaxPreviewPreload = TaxPreviewShellData
 
 // ── Income Overview helpers ───────────────────────────────────────────────────
-
-function parseK1Field(data: FK1StructuredData, box: string): number {
-  const v = data.fields[box]?.value
-  if (!v) return 0
-  const n = parseFloat(v)
-  return isNaN(n) ? 0 : n
-}
-
-function parseK1Codes(data: FK1StructuredData, box: string): number {
-  const items = data.codes[box] ?? []
-
-  return items.reduce((acc, item) => {
-    const n = parseFloat(item.value)
-    return isNaN(n) ? acc : acc.add(n)
-  }, currency(0)).value
-}
-
-function k1NetIncome(data: FK1StructuredData): number {
-  const INCOME_BOXES = ['1', '2', '3', '4', '5', '6a', '6b', '6c', '7', '8', '9a', '9b', '9c', '10']
-  const incomeTotal = INCOME_BOXES.reduce((acc, box) => acc.add(parseK1Field(data, box)), currency(0))
-    .add(parseK1Codes(data, '11'))
-  const box12 = parseK1Field(data, '12')
-  const box21 = parseK1Field(data, '21')
-  const deductionTotal = currency(0)
-    .add(box12 !== 0 ? -Math.abs(box12) : 0)
-    .add(parseK1Codes(data, '13'))
-    .add(box21 !== 0 ? -Math.abs(box21) : 0)
-
-  return incomeTotal.add(deductionTotal).value
-}
 
 function fmtOverview(n: number, precision = 0): string {
   const abs = currency(Math.abs(n), { precision }).format()
@@ -164,7 +135,7 @@ function TaxIncomeOverview({
   const totalOrdinaryDiv = income1099.dividendIncome.add(k1OrdinaryDiv).value
   const totalQualifiedDiv = income1099.qualifiedDividends.add(k1QualifiedDiv).value
   const totalForeignTax = currency(k1ForeignTax).add(div1099ForeignTax).value
-const totalInvestmentIncome = currency(totalInterest).add(totalOrdinaryDiv).value
+  const totalInvestmentIncome = currency(totalInterest).add(totalOrdinaryDiv).value
   const totalCapitalGains = currency(k1StCapital).add(k1LtCapital).value
 
   const fedWH = payslips.reduce((acc, row) => acc

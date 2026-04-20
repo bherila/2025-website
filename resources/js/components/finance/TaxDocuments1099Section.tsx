@@ -34,6 +34,7 @@ import {
   WorksheetModal,
 } from '@/finance/1116'
 import { useReviewModal } from '@/hooks/useReviewModal'
+import { k1NetIncome } from '@/lib/finance/k1Utils'
 import { hasReviewedContent, iterateReviewedBrokerEntries } from '@/lib/finance/taxDocumentUtils'
 import type { F1099DivParsedData, F1099IntParsedData, FK1StructuredData, TaxDocument, TaxDocumentAccountLink } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS, isFK1StructuredData } from '@/types/finance/tax-document'
@@ -355,7 +356,15 @@ export default function TaxDocuments1099Section({
     let amountStr: string | null = null
     if (effectiveReviewed && doc.parsed_data) {
       const p = doc.parsed_data as Record<string, unknown>
-      if (effectiveFormType === '1099_int' || effectiveFormType === '1099_int_c') {
+      if (doc.form_type === 'broker_1099') {
+        // Consolidated broker PDF: amounts are in aggregate parent fields regardless of link form type.
+        const interest = p.int_1_interest_income as number | undefined
+        const ordDiv = p.div_1a_total_ordinary as number | undefined
+        const parts: string[] = []
+        if (interest && interest !== 0) parts.push(`Int ${currency(interest).format()}`)
+        if (ordDiv && ordDiv !== 0) parts.push(`Div ${currency(ordDiv).format()}`)
+        if (parts.length > 0) amountStr = parts.join(' · ')
+      } else if (effectiveFormType === '1099_int' || effectiveFormType === '1099_int_c') {
         const amt = p.box1_interest as number | undefined
         if (amt != null) amountStr = `Int ${currency(amt).format()}`
       } else if (effectiveFormType === '1099_div' || effectiveFormType === '1099_div_c') {
@@ -365,24 +374,8 @@ export default function TaxDocuments1099Section({
         const amt = (p.box3_other_income ?? p.box3_other ?? p.box7_nonemployee ?? p.total_amount) as number | undefined
         if (amt != null) amountStr = currency(amt).format()
       } else if (effectiveFormType === 'k1' && isFK1StructuredData(doc.parsed_data)) {
-        const data = doc.parsed_data as FK1StructuredData
-        const getField = (box: string): number => {
-          const v = data.fields[box]?.value
-          if (!v) return 0
-          const n = parseFloat(v)
-          return isNaN(n) ? 0 : n
-        }
-        const net = ['1', '2', '3', '4', '5', '6a', '8', '9a', '9b', '9c', '10'].reduce(
-          (acc, box) => currency(acc).add(getField(box)).value, 0,
-        )
+        const net = k1NetIncome(doc.parsed_data as FK1StructuredData)
         if (net !== 0) amountStr = `Net ${currency(net).format()}`
-      } else if (effectiveFormType === 'broker_1099') {
-        const interest = p.int_1_interest_income as number | undefined
-        const ordDiv = p.div_1a_total_ordinary as number | undefined
-        const parts: string[] = []
-        if (interest && interest !== 0) parts.push(`Int ${currency(interest).format()}`)
-        if (ordDiv && ordDiv !== 0) parts.push(`Div ${currency(ordDiv).format()}`)
-        if (parts.length > 0) amountStr = parts.join(' · ')
       }
     }
 
