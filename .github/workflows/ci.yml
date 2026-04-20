@@ -122,7 +122,7 @@ jobs:
         with:
           name: frontend-build
           path: public/build/
-          retention-days: 1
+          retention-days: 2
 
   deploy:
     name: Deploy to Production

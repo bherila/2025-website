@@ -50,15 +50,15 @@ class FinanceLotsImportCommandTest extends TestCase
     public function test_json_import_inserts_lots(): void
     {
         $payload = $this->sampleJsonPayload();
-        $tmpFile = tempnam(sys_get_temp_dir(), 'lots_') . '.json';
+        $tmpFile = tempnam(sys_get_temp_dir(), 'lots_').'.json';
         file_put_contents($tmpFile, json_encode($payload));
 
         $this->artisan('finance:lots-import', [
             '--account' => $this->acctId,
             '--file' => $tmpFile,
         ])->assertSuccessful()
-          ->expectsOutputToContain('Parsed 3 lot record(s)')
-          ->expectsOutputToContain('Imported: 3 inserted');
+            ->expectsOutputToContain('Parsed 3 lot record(s)')
+            ->expectsOutputToContain('Imported: 3 inserted');
 
         $this->assertDatabaseCount('fin_account_lots', 3);
 
@@ -83,7 +83,7 @@ class FinanceLotsImportCommandTest extends TestCase
     public function test_json_import_skips_duplicates(): void
     {
         $payload = $this->sampleJsonPayload();
-        $tmpFile = tempnam(sys_get_temp_dir(), 'lots_') . '.json';
+        $tmpFile = tempnam(sys_get_temp_dir(), 'lots_').'.json';
         file_put_contents($tmpFile, json_encode($payload));
 
         // First import
@@ -98,7 +98,7 @@ class FinanceLotsImportCommandTest extends TestCase
             '--account' => $this->acctId,
             '--file' => $tmpFile,
         ])->assertSuccessful()
-          ->expectsOutputToContain('Imported: 0 inserted, 3 skipped (duplicate)');
+            ->expectsOutputToContain('Imported: 0 inserted, 3 skipped (duplicate)');
 
         $this->assertDatabaseCount('fin_account_lots', 3);
 
@@ -108,7 +108,7 @@ class FinanceLotsImportCommandTest extends TestCase
     public function test_json_import_dry_run_does_not_write(): void
     {
         $payload = $this->sampleJsonPayload();
-        $tmpFile = tempnam(sys_get_temp_dir(), 'lots_') . '.json';
+        $tmpFile = tempnam(sys_get_temp_dir(), 'lots_').'.json';
         file_put_contents($tmpFile, json_encode($payload));
 
         $this->artisan('finance:lots-import', [
@@ -116,7 +116,7 @@ class FinanceLotsImportCommandTest extends TestCase
             '--file' => $tmpFile,
             '--dry-run' => true,
         ])->assertSuccessful()
-          ->expectsOutputToContain('Dry-run mode');
+            ->expectsOutputToContain('Dry-run mode');
 
         $this->assertDatabaseCount('fin_account_lots', 0);
 
@@ -126,7 +126,7 @@ class FinanceLotsImportCommandTest extends TestCase
     public function test_json_import_clear_removes_existing_before_insert(): void
     {
         $payload = $this->sampleJsonPayload();
-        $tmpFile = tempnam(sys_get_temp_dir(), 'lots_') . '.json';
+        $tmpFile = tempnam(sys_get_temp_dir(), 'lots_').'.json';
         file_put_contents($tmpFile, json_encode($payload));
 
         $this->artisan('finance:lots-import', ['--account' => $this->acctId, '--file' => $tmpFile])->assertSuccessful();
@@ -137,7 +137,7 @@ class FinanceLotsImportCommandTest extends TestCase
             '--file' => $tmpFile,
             '--clear' => true,
         ])->assertSuccessful()
-          ->expectsOutputToContain('Cleared 3 existing lot record(s)');
+            ->expectsOutputToContain('Cleared 3 existing lot record(s)');
 
         $this->assertDatabaseCount('fin_account_lots', 3);
 
@@ -154,15 +154,15 @@ class FinanceLotsImportCommandTest extends TestCase
             'MSFT,"MICROSOFT CORP",5,2024-03-10,2025-06-15,1500.00,1200.00,300.00,0.00,false',
         ]);
 
-        $tmpFile = tempnam(sys_get_temp_dir(), 'lots_') . '.csv';
+        $tmpFile = tempnam(sys_get_temp_dir(), 'lots_').'.csv';
         file_put_contents($tmpFile, $csv);
 
         $this->artisan('finance:lots-import', [
             '--account' => $this->acctId,
             '--file' => $tmpFile,
         ])->assertSuccessful()
-          ->expectsOutputToContain('Parsed 2 lot record(s)')
-          ->expectsOutputToContain('Imported: 2 inserted');
+            ->expectsOutputToContain('Parsed 2 lot record(s)')
+            ->expectsOutputToContain('Imported: 2 inserted');
 
         $this->assertDatabaseCount('fin_account_lots', 2);
 
@@ -180,7 +180,7 @@ class FinanceLotsImportCommandTest extends TestCase
             'AAPL,10,2025-11-20',
         ]);
 
-        $tmpFile = tempnam(sys_get_temp_dir(), 'lots_') . '.csv';
+        $tmpFile = tempnam(sys_get_temp_dir(), 'lots_').'.csv';
         file_put_contents($tmpFile, $csv);
 
         $this->artisan('finance:lots-import', [
@@ -197,7 +197,7 @@ class FinanceLotsImportCommandTest extends TestCase
 
     public function test_rejects_missing_account_flag(): void
     {
-        $tmpFile = tempnam(sys_get_temp_dir(), 'lots_') . '.json';
+        $tmpFile = tempnam(sys_get_temp_dir(), 'lots_').'.json';
         file_put_contents($tmpFile, json_encode(['transactions' => []]));
 
         $this->artisan('finance:lots-import', ['--file' => $tmpFile])
@@ -209,7 +209,7 @@ class FinanceLotsImportCommandTest extends TestCase
     public function test_rejects_nonexistent_account(): void
     {
         $payload = $this->sampleJsonPayload();
-        $tmpFile = tempnam(sys_get_temp_dir(), 'lots_') . '.json';
+        $tmpFile = tempnam(sys_get_temp_dir(), 'lots_').'.json';
         file_put_contents($tmpFile, json_encode($payload));
 
         $this->artisan('finance:lots-import', [

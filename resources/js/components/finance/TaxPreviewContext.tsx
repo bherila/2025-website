@@ -22,6 +22,7 @@ import { computeForm8582, type PalCarryforwardEntry } from '@/finance/8582/form8
 import { computeForm8959Lines } from '@/finance/8959/form8959'
 import { computeForm8960Lines } from '@/finance/8960/form8960'
 import { computeCapitalLossCarryover } from '@/finance/capitalLoss/capitalLossCarryover'
+import { computeEstimatedTaxPayments } from '@/lib/finance/estimatedTaxPayments'
 import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import { form461 } from '@/lib/tax/form461'
 import { buildCacheKey, getCachedTransactions, setCachedTransactions } from '@/services/transactionCache'
@@ -96,6 +97,14 @@ interface TaxPreviewContextValue {
   setPalCarryforwards: Dispatch<SetStateAction<PalCarryforwardEntry[]>>
   /** Aggregated short dividend summary across all active accounts, or null if not yet loaded. */
   shortDividendSummary: ShortDividendSummary | null
+  /** Prior year total tax — user-entered for safe-harbor estimated payment planning. */
+  priorYearTax: number
+  /** Setter for priorYearTax — persisted to localStorage per tax year. */
+  setPriorYearTax: Dispatch<SetStateAction<number>>
+  /** Prior year AGI — user-entered for safe-harbor threshold planning. */
+  priorYearAgi: number
+  /** Setter for priorYearAgi — persisted to localStorage per tax year. */
+  setPriorYearAgi: Dispatch<SetStateAction<number>>
   taxReturn: TaxReturn1040
   setPayslips: Dispatch<SetStateAction<fin_payslip[]>>
   setPendingReviewCount: Dispatch<SetStateAction<number>>
@@ -181,6 +190,47 @@ export function TaxPreviewProvider({
   const [activeTaxStates, setActiveTaxStates] = useState<string[]>([])
   const [userDeductions, setUserDeductions] = useState<UserDeductionEntry[]>([])
   const [palCarryforwards, setPalCarryforwards] = useState<PalCarryforwardEntry[]>([])
+
+  const priorYearTaxKey = `tax-preview-prior-year-tax-${year}`
+  const [priorYearTax, setPriorYearTaxRaw] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0
+    const stored = localStorage.getItem(priorYearTaxKey)
+    if (stored === null) return 0
+    const n = parseFloat(stored)
+    return isNaN(n) ? 0 : n
+  })
+  const setPriorYearTax: Dispatch<SetStateAction<number>> = useCallback(
+    (value) => {
+      setPriorYearTaxRaw((prev) => {
+        const next = typeof value === 'function' ? value(prev) : value
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(priorYearTaxKey, String(next))
+        }
+        return next
+      })
+    },
+    [priorYearTaxKey],
+  )
+  const priorYearAgiKey = `tax-preview-prior-year-agi-${year}`
+  const [priorYearAgi, setPriorYearAgiRaw] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0
+    const stored = localStorage.getItem(priorYearAgiKey)
+    if (stored === null) return 0
+    const n = parseFloat(stored)
+    return isNaN(n) ? 0 : n
+  })
+  const setPriorYearAgi: Dispatch<SetStateAction<number>> = useCallback(
+    (value) => {
+      setPriorYearAgiRaw((prev) => {
+        const next = typeof value === 'function' ? value(prev) : value
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(priorYearAgiKey, String(next))
+        }
+        return next
+      })
+    },
+    [priorYearAgiKey],
+  )
 
   const refreshAll = useCallback(async () => {
     if (!hasLoadedOnce.current) {
@@ -637,6 +687,16 @@ export function TaxPreviewProvider({
       palCarryforwards,
     })
 
+    const estimatedTaxPayments = !isMarried && priorYearTax > 0
+      ? computeEstimatedTaxPayments({
+          selectedYear: year,
+          priorYearTax,
+          priorYearAgi,
+          expectedWithholding: fedWH,
+          isMarriedFilingSeparately: false,
+        })
+      : undefined
+
     return {
       year,
       ...(overviewSections.length > 0 ? { overviewSections } : {}),
@@ -708,6 +768,9 @@ export function TaxPreviewProvider({
         }
       }),
       ...(shortDividendSummary ? { shortDividends: shortDividendSummary } : {}),
+      // Marriage settings only distinguish married vs single today, not MFJ vs MFS.
+      // TODO: plumb a dedicated MFS setting through tax preview once that path exists.
+      ...(estimatedTaxPayments ? { estimatedTaxPayments } : {}),
     }
   }, [
     year,
@@ -722,6 +785,8 @@ export function TaxPreviewProvider({
     isMarried,
     userDeductions,
     palCarryforwards,
+    priorYearAgi,
+    priorYearTax,
   ])
 
   const value = useMemo<TaxPreviewContextValue>(() => ({
@@ -750,6 +815,10 @@ export function TaxPreviewProvider({
     palCarryforwards,
     setPalCarryforwards,
     shortDividendSummary,
+    priorYearAgi,
+    setPriorYearAgi,
+    priorYearTax,
+    setPriorYearTax,
     taxReturn,
     setPayslips,
     setPendingReviewCount,
@@ -783,6 +852,10 @@ export function TaxPreviewProvider({
     userDeductions,
     palCarryforwards,
     shortDividendSummary,
+    priorYearAgi,
+    setPriorYearAgi,
+    priorYearTax,
+    setPriorYearTax,
     taxReturn,
     refreshAll,
   ])

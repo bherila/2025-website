@@ -1,6 +1,8 @@
 import type { ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import type { ScheduleDData } from '@/lib/tax/scheduleD'
 
+export type { EstimatedTaxPaymentsData } from '@/lib/finance/estimatedTaxPayments'
+
 // These interfaces duplicate the ones exported from the component files.
 // They live here (in types/) so that the domain type layer does not depend on the UI layer.
 // The component files re-export these for backward-compatibility.
@@ -264,6 +266,7 @@ export interface TaxReturn1040 {
   capitalLossCarryover?: CapitalLossCarryoverLines
   form461?: Form461Lines
   form8582?: Form8582Lines
+  estimatedTaxPayments?: import('@/lib/finance/estimatedTaxPayments').EstimatedTaxPaymentsData
   k1Docs?: K1ExportEntry[]
   k3Docs?: K3ExportEntry[]
   docs1099?: Doc1099ExportEntry[]
