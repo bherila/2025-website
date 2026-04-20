@@ -1,5 +1,4 @@
 import { computeForm8582Lines, RENTAL_PHASEOUT_END, RENTAL_PHASEOUT_START, RENTAL_SPECIAL_ALLOWANCE, RENTAL_SPECIAL_ALLOWANCE_MFS } from '../form8582'
-import type { ActivityInput } from '../form8582'
 
 const noActivities = { activities: [], magi: 100_000, isMarried: false }
 

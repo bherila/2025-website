@@ -1,6 +1,6 @@
-import { buildTaxWorkbook } from '../buildTaxWorkbook'
-
 import type { Form8582Lines, TaxReturn1040 } from '@/types/finance/tax-return'
+
+import { buildTaxWorkbook } from '../buildTaxWorkbook'
 
 function makeForm8582(overrides: Partial<Form8582Lines> = {}): Form8582Lines {
   return {

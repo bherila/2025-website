@@ -113,9 +113,8 @@ export function extractForm8582Activities(
 
     // Detect limited partnership from K-1 Part I checkbox (field 'G2' or entity type)
     // Limited partners never qualify for active participation.
-    const isLimitedPartner = data.fields['G2']?.value === 'true' ||
-      data.fields['G2']?.value === 'X' ||
-      data.fields['G2']?.value === 'Yes'
+    const g2Val = (data.fields['G2']?.value ?? '').toLowerCase()
+    const isLimitedPartner = g2Val === 'true' || g2Val === 'x' || g2Val === 'yes'
 
     const box2 = parseK1Field(data, '2')
     const box3 = parseK1Field(data, '3')
@@ -211,7 +210,7 @@ export function computeForm8582Lines({
   // When taxpayer is a real estate professional, rental RE activities with active participation
   // are treated as non-passive and excluded from Form 8582 entirely.
   const filteredActivities = realEstateProfessional
-    ? activities.filter((a) => !(a.isRentalRealEstate && (a.activeParticipation ?? true)))
+    ? activities.filter((a) => !a.isRentalRealEstate || !(a.activeParticipation ?? true))
     : activities
 
   const activityLines: Form8582ActivityLine[] = filteredActivities.map((a) => ({
