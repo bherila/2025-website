@@ -1,4 +1,5 @@
 import { computeForm8582Lines, RENTAL_PHASEOUT_END, RENTAL_PHASEOUT_START, RENTAL_SPECIAL_ALLOWANCE, RENTAL_SPECIAL_ALLOWANCE_MFS } from '../form8582'
+import type { ActivityInput } from '../form8582'
 
 const noActivities = { activities: [], magi: 100_000, isMarried: false }
 
@@ -264,5 +265,208 @@ describe('computeForm8582Lines', () => {
     expect(r.activities[0]!.suspendedLossCarryforward).toBe(0)
     expect(r.activities[1]!.allowedLossThisYear).toBe(10_000)
     expect(r.activities[1]!.suspendedLossCarryforward).toBe(10_000)
+  })
+
+  // ── netDeductionToReturn tests (B.9) ──────────────────────────────────────
+
+  it('netDeductionToReturn is 0 when income exceeds losses (no net deduction)', () => {
+    const r = computeForm8582Lines({
+      activities: [
+        { activityName: 'LP A', isRentalRealEstate: false, currentIncome: 50_000, currentLoss: 0, priorYearUnallowed: 0 },
+        { activityName: 'LP B', isRentalRealEstate: false, currentIncome: 0, currentLoss: -30_000, priorYearUnallowed: 0 },
+      ],
+      magi: 100_000,
+      isMarried: false,
+    })
+    expect(r.netPassiveResult).toBe(20_000)
+    expect(r.netDeductionToReturn).toBe(0)
+  })
+
+  it('netDeductionToReturn equals totalAllowedLoss when losses are limited', () => {
+    const r = computeForm8582Lines({
+      activities: [
+        { activityName: 'Rental', isRentalRealEstate: true, currentIncome: 0, currentLoss: -30_000, priorYearUnallowed: 0 },
+      ],
+      magi: 80_000,
+      isMarried: false,
+    })
+    expect(r.netDeductionToReturn).toBe(r.totalAllowedLoss)
+    expect(r.netDeductionToReturn).toBe(25_000)
+  })
+
+  // ── Active participation tests (B.7 / D.1) ──────────────────────────────
+
+  it('denies $25k allowance when rental activity has no active participation (LP)', () => {
+    const r = computeForm8582Lines({
+      activities: [
+        { activityName: 'LP Rental', isRentalRealEstate: true, activeParticipation: false, currentIncome: 0, currentLoss: -30_000, priorYearUnallowed: 0 },
+      ],
+      magi: 50_000,
+      isMarried: false,
+    })
+    // isRentalRealEstate=true but activeParticipation=false → no $25k allowance
+    expect(r.rentalAllowance).toBe(0)
+    expect(r.totalAllowedLoss).toBe(0)
+    expect(r.totalSuspendedLoss).toBe(30_000)
+    expect(r.isLossLimited).toBe(true)
+  })
+
+  it('grants $25k allowance only to active-participation rental activities in mixed portfolio', () => {
+    const r = computeForm8582Lines({
+      activities: [
+        { activityName: 'Active Rental', isRentalRealEstate: true, activeParticipation: true, currentIncome: 0, currentLoss: -20_000, priorYearUnallowed: 0 },
+        { activityName: 'LP Rental', isRentalRealEstate: true, activeParticipation: false, currentIncome: 0, currentLoss: -20_000, priorYearUnallowed: 0 },
+      ],
+      magi: 80_000,
+      isMarried: false,
+    })
+    // Only active rental qualifies for $25k allowance
+    expect(r.rentalAllowance).toBe(20_000) // capped at net active rental loss of $20k
+    expect(r.totalAllowedLoss).toBe(20_000)
+    expect(r.totalSuspendedLoss).toBe(20_000) // LP rental loss fully suspended
+  })
+
+  it('defaults activeParticipation to true when not specified', () => {
+    const r = computeForm8582Lines({
+      activities: [
+        { activityName: 'Rental', isRentalRealEstate: true, currentIncome: 0, currentLoss: -10_000, priorYearUnallowed: 0 },
+      ],
+      magi: 80_000,
+      isMarried: false,
+    })
+    expect(r.activities[0]!.activeParticipation).toBe(true)
+    expect(r.rentalAllowance).toBe(10_000)
+    expect(r.isLossLimited).toBe(false)
+  })
+
+  // ── Real estate professional tests (B.8 / D.1) ────────────────────────────
+
+  it('excludes rental RE activities with active participation when realEstateProfessional = true', () => {
+    const r = computeForm8582Lines({
+      activities: [
+        { activityName: 'Direct Rental', isRentalRealEstate: true, activeParticipation: true, currentIncome: 0, currentLoss: -50_000, priorYearUnallowed: 0 },
+        { activityName: 'LP Fund', isRentalRealEstate: false, activeParticipation: true, currentIncome: 0, currentLoss: -10_000, priorYearUnallowed: 0 },
+      ],
+      magi: 80_000,
+      isMarried: false,
+      realEstateProfessional: true,
+    })
+    // Direct Rental excluded (RE pro + active participation)
+    // Only LP Fund remains in Form 8582
+    expect(r.activities).toHaveLength(1)
+    expect(r.activities[0]!.activityName).toBe('LP Fund')
+    expect(r.totalPassiveLoss).toBe(-10_000)
+    expect(r.totalSuspendedLoss).toBe(10_000)
+    expect(r.realEstateProfessional).toBe(true)
+  })
+
+  it('keeps LP rental activities even when realEstateProfessional = true (no active participation)', () => {
+    const r = computeForm8582Lines({
+      activities: [
+        { activityName: 'LP Rental', isRentalRealEstate: true, activeParticipation: false, currentIncome: 0, currentLoss: -30_000, priorYearUnallowed: 0 },
+      ],
+      magi: 80_000,
+      isMarried: false,
+      realEstateProfessional: true,
+    })
+    // LP Rental: isRentalRealEstate=true but activeParticipation=false → NOT excluded
+    expect(r.activities).toHaveLength(1)
+    expect(r.totalSuspendedLoss).toBe(30_000)
+  })
+
+  it('returns empty when RE professional has only active rental RE activities', () => {
+    const r = computeForm8582Lines({
+      activities: [
+        { activityName: 'Rental A', isRentalRealEstate: true, activeParticipation: true, currentIncome: 0, currentLoss: -50_000, priorYearUnallowed: 0 },
+        { activityName: 'Rental B', isRentalRealEstate: true, activeParticipation: true, currentIncome: 5_000, currentLoss: 0, priorYearUnallowed: 0 },
+      ],
+      magi: 80_000,
+      isMarried: false,
+      realEstateProfessional: true,
+    })
+    expect(r.activities).toHaveLength(0)
+    expect(r.totalPassiveIncome).toBe(0)
+    expect(r.totalPassiveLoss).toBe(0)
+  })
+
+  // ── Direct rental property tests (B.6 / D.1) ──────────────────────────────
+
+  it('single direct rental with $15k loss, no K-1s → full allowance, no suspension', () => {
+    const r = computeForm8582Lines({
+      activities: [
+        { activityName: '123 Main St', isRentalRealEstate: true, activeParticipation: true, currentIncome: 0, currentLoss: -15_000, priorYearUnallowed: 0 },
+      ],
+      magi: 80_000,
+      isMarried: false,
+    })
+    expect(r.rentalAllowance).toBe(15_000)
+    expect(r.totalAllowedLoss).toBe(15_000)
+    expect(r.totalSuspendedLoss).toBe(0)
+    expect(r.isLossLimited).toBe(false)
+  })
+
+  it('mixed direct rental + K-1 Box 2 — both counted against $25k pool', () => {
+    const r = computeForm8582Lines({
+      activities: [
+        { activityName: '123 Main St (direct)', isRentalRealEstate: true, activeParticipation: true, currentIncome: 0, currentLoss: -15_000, priorYearUnallowed: 0 },
+        { activityName: 'K-1 Rental', isRentalRealEstate: true, activeParticipation: true, currentIncome: 0, currentLoss: -15_000, priorYearUnallowed: 0 },
+      ],
+      magi: 80_000,
+      isMarried: false,
+    })
+    // Both are rental RE with active participation → combined $30k loss against $25k pool
+    expect(r.rentalAllowance).toBe(25_000)
+    expect(r.totalAllowedLoss).toBe(25_000)
+    expect(r.totalSuspendedLoss).toBe(5_000)
+    expect(r.isLossLimited).toBe(true)
+  })
+
+  // ── MAGI boundary tests (D.2) ────────────────────────────────────────────
+
+  it('MAGI exactly at phaseout start gives full allowance (boundary)', () => {
+    const r = computeForm8582Lines({
+      activities: [
+        { activityName: 'Rental', isRentalRealEstate: true, currentIncome: 0, currentLoss: -50_000, priorYearUnallowed: 0 },
+      ],
+      magi: RENTAL_PHASEOUT_START,
+      isMarried: false,
+    })
+    expect(r.rentalAllowance).toBe(RENTAL_SPECIAL_ALLOWANCE)
+  })
+
+  it('MAGI $1 above phaseout start reduces allowance by $0.50', () => {
+    const r = computeForm8582Lines({
+      activities: [
+        { activityName: 'Rental', isRentalRealEstate: true, currentIncome: 0, currentLoss: -50_000, priorYearUnallowed: 0 },
+      ],
+      magi: RENTAL_PHASEOUT_START + 1,
+      isMarried: false,
+    })
+    // 50% × $1 = $0.50 reduction → allowance = $24,999.50
+    expect(r.rentalAllowance).toBe(24_999.5)
+  })
+
+  it('MAGI exactly at phaseout end gives zero allowance (boundary)', () => {
+    const r = computeForm8582Lines({
+      activities: [
+        { activityName: 'Rental', isRentalRealEstate: true, currentIncome: 0, currentLoss: -50_000, priorYearUnallowed: 0 },
+      ],
+      magi: RENTAL_PHASEOUT_END,
+      isMarried: false,
+    })
+    expect(r.rentalAllowance).toBe(0)
+    expect(r.totalSuspendedLoss).toBe(50_000)
+  })
+
+  it('MAGI $1 below phaseout end gives $0.50 allowance', () => {
+    const r = computeForm8582Lines({
+      activities: [
+        { activityName: 'Rental', isRentalRealEstate: true, currentIncome: 0, currentLoss: -50_000, priorYearUnallowed: 0 },
+      ],
+      magi: RENTAL_PHASEOUT_END - 1,
+      isMarried: false,
+    })
+    // 50% × ($149,999 - $100,000) = $24,999.50 reduction → allowance = $0.50
+    expect(r.rentalAllowance).toBe(0.5)
   })
 })

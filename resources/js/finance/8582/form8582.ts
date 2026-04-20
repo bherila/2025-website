@@ -24,6 +24,8 @@
 
 import currency from 'currency.js'
 
+import { isFK1StructuredData } from '@/components/finance/k1'
+import { parseK1Field } from '@/lib/finance/k1Utils'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import type { Form8582ActivityLine, Form8582Lines } from '@/types/finance/tax-return'
@@ -41,15 +43,6 @@ export const RENTAL_SPECIAL_ALLOWANCE_MFS = 12_500
 export const RENTAL_PHASEOUT_START_MFS = 50_000
 export const RENTAL_PHASEOUT_END_MFS = 75_000
 
-// ── K-1 field helpers ─────────────────────────────────────────────────────────
-
-function parseK1Field(data: FK1StructuredData, box: string): number {
-  const v = data.fields[box]?.value
-  if (!v) return 0
-  const n = parseFloat(v)
-  return isNaN(n) ? 0 : n
-}
-
 // ── K-1 → activities extraction ─────────────────────────────────────────────
 
 export interface PalCarryforwardEntry {
@@ -61,46 +54,68 @@ export interface PalCarryforwardEntry {
   long_term_carryover: number
 }
 
+/** Input for a directly-owned rental property (Schedule E Part I). */
+export interface DirectRentalProperty {
+  propertyName: string
+  netIncome: number
+  netLoss: number
+}
+
 interface Form8582ComputeInput {
   reviewedK1Docs: TaxDocument[]
   magi: number
   isMarried: boolean
   palCarryforwards?: PalCarryforwardEntry[] | undefined
+  /** Directly-owned rental properties from Schedule E Part I. */
+  scheduleERentals?: DirectRentalProperty[] | undefined
+  /** When true, rental RE activities with material participation are excluded from Form 8582 (§469(c)(7)). */
+  realEstateProfessional?: boolean | undefined
 }
 
-function isFK1StructuredData(data: unknown): data is FK1StructuredData {
-  if (!data || typeof data !== 'object') return false
-  const d = data as Record<string, unknown>
-  return (
-    typeof d['schemaVersion'] === 'string' &&
-    d['fields'] !== null && typeof d['fields'] === 'object' && !Array.isArray(d['fields']) &&
-    d['codes'] !== null && typeof d['codes'] === 'object' && !Array.isArray(d['codes'])
-  )
+export interface ActivityInput {
+  activityName: string
+  ein?: string | undefined
+  isRentalRealEstate: boolean
+  /** Whether the taxpayer actively participates. Defaults to true for non-LP activities. */
+  activeParticipation?: boolean | undefined
+  currentIncome: number
+  currentLoss: number
+  priorYearUnallowed: number
 }
 
 /**
- * Extracts Form 8582 activities from reviewed K-1 docs and PAL carryforwards.
+ * Extracts Form 8582 activities from reviewed K-1 docs, direct rentals, and PAL carryforwards.
  *
  * Box 2 = net rental real estate income/loss — eligible for $25k special allowance.
  * Box 3 = other net rental income/loss — NOT eligible for $25k allowance.
  *
  * Each K-1 with a non-zero Box 2 produces one activity with isRentalRealEstate = true.
  * Each K-1 with a non-zero Box 3 produces a separate activity with isRentalRealEstate = false.
+ * Each direct rental property (Schedule E Part I) produces one activity with isRentalRealEstate = true.
+ *
+ * Limited partnerships (K-1 Part I) never qualify for active participation by statute.
  */
 export function extractForm8582Activities(
   reviewedK1Docs: TaxDocument[],
   palCarryforwards: PalCarryforwardEntry[] = [],
-): { activityName: string; ein?: string | undefined; isRentalRealEstate: boolean; currentIncome: number; currentLoss: number; priorYearUnallowed: number }[] {
+  scheduleERentals: DirectRentalProperty[] = [],
+): ActivityInput[] {
   const k1Parsed = reviewedK1Docs
     .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
     .filter((x): x is { doc: TaxDocument; data: FK1StructuredData } => x.data !== null)
 
-  const activities: { activityName: string; ein?: string | undefined; isRentalRealEstate: boolean; currentIncome: number; currentLoss: number; priorYearUnallowed: number }[] = []
+  const activities: ActivityInput[] = []
 
   for (const { doc, data } of k1Parsed) {
     const baseName =
       data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
     const ein = data.fields['A']?.value ?? undefined
+
+    // Detect limited partnership from K-1 Part I checkbox (field 'G2' or entity type)
+    // Limited partners never qualify for active participation.
+    const isLimitedPartner = data.fields['G2']?.value === 'true' ||
+      data.fields['G2']?.value === 'X' ||
+      data.fields['G2']?.value === 'Yes'
 
     const box2 = parseK1Field(data, '2')
     const box3 = parseK1Field(data, '3')
@@ -111,6 +126,7 @@ export function extractForm8582Activities(
         activityName: baseName,
         ein,
         isRentalRealEstate: true,
+        activeParticipation: !isLimitedPartner,
         currentIncome: Math.max(0, box2),
         currentLoss: Math.min(0, box2),
         priorYearUnallowed: carryforward,
@@ -124,11 +140,26 @@ export function extractForm8582Activities(
         activityName: name,
         ein,
         isRentalRealEstate: false,
+        activeParticipation: !isLimitedPartner,
         currentIncome: Math.max(0, box3),
         currentLoss: Math.min(0, box3),
         priorYearUnallowed: carryforward,
       })
     }
+  }
+
+  // Direct rental properties from Schedule E Part I
+  for (const rental of scheduleERentals) {
+    const carryforward = findCarryforward(palCarryforwards, rental.propertyName, undefined)
+    activities.push({
+      activityName: rental.propertyName,
+      ein: undefined,
+      isRentalRealEstate: true,
+      activeParticipation: true, // Direct rentals default to active participation
+      currentIncome: Math.max(0, rental.netIncome),
+      currentLoss: Math.min(0, rental.netLoss),
+      priorYearUnallowed: carryforward,
+    })
   }
 
   return activities
@@ -146,15 +177,21 @@ function findCarryforward(
 }
 
 /**
- * Compute wrapper: extracts activities from K-1 docs, merges PAL carryforwards,
- * and runs the Form 8582 computation.
+ * Compute wrapper: extracts activities from K-1 docs and direct rentals,
+ * merges PAL carryforwards, and runs the Form 8582 computation.
  */
 export function computeForm8582(input: Form8582ComputeInput): Form8582Lines {
   const activities = extractForm8582Activities(
     input.reviewedK1Docs,
     input.palCarryforwards ?? [],
+    input.scheduleERentals ?? [],
   )
-  return computeForm8582Lines({ activities, magi: input.magi, isMarried: input.isMarried })
+  return computeForm8582Lines({
+    activities,
+    magi: input.magi,
+    isMarried: input.isMarried,
+    realEstateProfessional: input.realEstateProfessional ?? false,
+  })
 }
 
 // ── Core computation ─────────────────────────────────────────────────────────
@@ -163,15 +200,25 @@ export function computeForm8582Lines({
   activities,
   magi,
   isMarried,
+  realEstateProfessional = false,
 }: {
-  activities: { activityName: string; ein?: string | undefined; isRentalRealEstate: boolean; currentIncome: number; currentLoss: number; priorYearUnallowed: number }[]
+  activities: ActivityInput[]
   magi: number
   isMarried: boolean
+  /** When true, rental RE activities with active participation are excluded from Form 8582 entirely (§469(c)(7)). */
+  realEstateProfessional?: boolean
 }): Form8582Lines {
-  const activityLines: Form8582ActivityLine[] = activities.map((a) => ({
+  // When taxpayer is a real estate professional, rental RE activities with active participation
+  // are treated as non-passive and excluded from Form 8582 entirely.
+  const filteredActivities = realEstateProfessional
+    ? activities.filter((a) => !(a.isRentalRealEstate && (a.activeParticipation ?? true)))
+    : activities
+
+  const activityLines: Form8582ActivityLine[] = filteredActivities.map((a) => ({
     activityName: a.activityName,
     ein: a.ein,
     isRentalRealEstate: a.isRentalRealEstate,
+    activeParticipation: a.activeParticipation ?? true,
     currentIncome: a.currentIncome,
     currentLoss: a.currentLoss,
     priorYearUnallowed: a.priorYearUnallowed,
@@ -209,21 +256,24 @@ export function computeForm8582Lines({
       rentalAllowance: 0,
       totalAllowedLoss: totalGrossLoss,
       totalSuspendedLoss: 0,
+      netDeductionToReturn: 0,
       isLossLimited: false,
       magi,
       isMarried,
+      realEstateProfessional,
     }
   }
 
   const totalLossAmount = Math.abs(netPassiveResult)
 
   // Rental allowance only applies to activities where isRentalRealEstate === true
+  // AND the taxpayer actively participates (§469(i)(6) — LPs never qualify).
   const rentalLossAmount = activityLines
-    .filter((a) => a.isRentalRealEstate)
+    .filter((a) => a.isRentalRealEstate && a.activeParticipation)
     .reduce((acc, a) => acc.add(Math.abs(a.currentLoss)).add(Math.abs(a.priorYearUnallowed)), currency(0))
     .value
   const netRentalLoss = Math.max(0, rentalLossAmount - activityLines
-    .filter((a) => a.isRentalRealEstate)
+    .filter((a) => a.isRentalRealEstate && a.activeParticipation)
     .reduce((acc, a) => acc.add(a.currentIncome), currency(0))
     .value)
 
@@ -253,9 +303,11 @@ export function computeForm8582Lines({
     rentalAllowance: effectiveAllowance,
     totalAllowedLoss,
     totalSuspendedLoss,
+    netDeductionToReturn: totalAllowedLoss,
     isLossLimited: totalSuspendedLoss > 0,
     magi,
     isMarried,
+    realEstateProfessional,
   }
 }
 

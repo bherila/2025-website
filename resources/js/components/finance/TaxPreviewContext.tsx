@@ -95,6 +95,10 @@ interface TaxPreviewContextValue {
   palCarryforwards: PalCarryforwardEntry[]
   /** Callback to replace the carryforward list after a mutation. */
   setPalCarryforwards: Dispatch<SetStateAction<PalCarryforwardEntry[]>>
+  /** Whether the taxpayer qualifies as a real estate professional (§469(c)(7)). Persisted to localStorage. */
+  realEstateProfessional: boolean
+  /** Setter for realEstateProfessional — persisted to localStorage per tax year. */
+  setRealEstateProfessional: Dispatch<SetStateAction<boolean>>
   /** Aggregated short dividend summary across all active accounts, or null if not yet loaded. */
   shortDividendSummary: ShortDividendSummary | null
   /** Prior year total tax — user-entered for safe-harbor estimated payment planning. */
@@ -230,6 +234,23 @@ export function TaxPreviewProvider({
       })
     },
     [priorYearAgiKey],
+  )
+  const realEstateProfessionalKey = `tax-preview-re-professional-${year}`
+  const [realEstateProfessional, setRealEstateProfessionalRaw] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem(realEstateProfessionalKey) === 'true'
+  })
+  const setRealEstateProfessional: Dispatch<SetStateAction<boolean>> = useCallback(
+    (value) => {
+      setRealEstateProfessionalRaw((prev) => {
+        const next = typeof value === 'function' ? value(prev) : value
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(realEstateProfessionalKey, String(next))
+        }
+        return next
+      })
+    },
+    [realEstateProfessionalKey],
   )
 
   const refreshAll = useCallback(async () => {
@@ -680,11 +701,16 @@ export function TaxPreviewProvider({
       .add(scheduleE.grandTotal)
       .add(Math.max(scheduleD.schD.schD_line16, -3000)).value
 
+    // Direct rental properties from Schedule E Part I would be passed here once the
+    // codebase has a rental property tracker (user-entered per-property data).
+    // Currently only K-1-based activities flow through Form 8582.
+    // See TODO B.6 — scheduleERentals is ready to accept DirectRentalProperty[] entries.
     const form8582 = computeForm8582({
       reviewedK1Docs,
       magi: form8582EstimatedMagi,
       isMarried,
       palCarryforwards,
+      realEstateProfessional,
     })
 
     const estimatedTaxPayments = !isMarried && priorYearTax > 0
@@ -785,6 +811,7 @@ export function TaxPreviewProvider({
     isMarried,
     userDeductions,
     palCarryforwards,
+    realEstateProfessional,
     priorYearAgi,
     priorYearTax,
   ])
@@ -814,6 +841,8 @@ export function TaxPreviewProvider({
     setUserDeductions,
     palCarryforwards,
     setPalCarryforwards,
+    realEstateProfessional,
+    setRealEstateProfessional,
     shortDividendSummary,
     priorYearAgi,
     setPriorYearAgi,
@@ -851,6 +880,8 @@ export function TaxPreviewProvider({
     activeTaxStates,
     userDeductions,
     palCarryforwards,
+    realEstateProfessional,
+    setRealEstateProfessional,
     shortDividendSummary,
     priorYearAgi,
     setPriorYearAgi,

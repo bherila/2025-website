@@ -546,8 +546,10 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
           { isHeader: true, description: 'Part II — Special Allowance' },
           { description: 'Modified AGI', amount: f.magi },
           { description: 'Rental real estate special allowance', amount: f.rentalAllowance },
+          ...(f.realEstateProfessional ? [{ description: 'Real estate professional election (§469(c)(7))', amount: 0 }] : []),
           { isHeader: true, description: 'Part III — Allowed vs. Suspended' },
           { description: 'Total allowed passive loss', amount: -f.totalAllowedLoss, isTotal: true },
+          { description: 'Net deduction to return', amount: -f.netDeductionToReturn },
           { description: 'Suspended loss — carried forward', amount: -f.totalSuspendedLoss, isTotal: f.isLossLimited },
           ...(carryforwardRows.length > 0 ? [
             { isHeader: true, description: 'Worksheet 5 — Per-Activity Allocation' },

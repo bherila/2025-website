@@ -449,6 +449,8 @@ function TaxPreviewPageContent() {
     setUserDeductions,
     palCarryforwards,
     setPalCarryforwards,
+    realEstateProfessional,
+    setRealEstateProfessional,
     shortDividendSummary,
     priorYearAgi,
     setPriorYearAgi,
@@ -761,6 +763,8 @@ function TaxPreviewPageContent() {
               year={selectedYear}
               palCarryforwards={palCarryforwards}
               onCarryforwardsChange={setPalCarryforwards}
+              realEstateProfessional={realEstateProfessional}
+              onRealEstateProfessionalChange={setRealEstateProfessional}
             />
           ) : (
             <div className="py-12 text-center text-muted-foreground text-sm">

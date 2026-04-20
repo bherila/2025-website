@@ -17,6 +17,8 @@ interface Form8582PreviewProps {
   year: number
   palCarryforwards: PalCarryforwardEntry[]
   onCarryforwardsChange: (entries: PalCarryforwardEntry[]) => void
+  realEstateProfessional: boolean
+  onRealEstateProfessionalChange: (v: boolean) => void
 }
 
 export default function Form8582Preview({
@@ -24,6 +26,8 @@ export default function Form8582Preview({
   year,
   palCarryforwards,
   onCarryforwardsChange,
+  realEstateProfessional,
+  onRealEstateProfessionalChange,
 }: Form8582PreviewProps) {
   const {
     activities,
@@ -34,6 +38,7 @@ export default function Form8582Preview({
     rentalAllowance,
     totalAllowedLoss,
     totalSuspendedLoss,
+    netDeductionToReturn,
     isLossLimited,
     magi,
   } = form8582
@@ -57,19 +62,44 @@ export default function Form8582Preview({
         </p>
       </div>
 
+      {/* Real Estate Professional Election (§469(c)(7)) */}
+      <FormBlock title="Elections">
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={realEstateProfessional}
+            onChange={(e) => onRealEstateProfessionalChange(e.target.checked)}
+          />
+          Real estate professional (§469(c)(7)) — rental activities treated as non-passive
+        </label>
+        <p className="text-xs text-muted-foreground mt-1">
+          Requires: &gt;750 hours of material participation in real property trades/businesses AND more than half
+          of personal services in real property trades/businesses. When checked, rental RE activities with
+          active participation are excluded from passive activity limitations.
+        </p>
+      </FormBlock>
+
       {/* Part I — Per-Activity Breakdown */}
       <FormBlock title="Part I — Passive Activities">
+        {realEstateProfessional && (
+          <Callout kind="info" title="Real Estate Professional Election (§469(c)(7))">
+            <p>
+              Rental RE activities with active participation are treated as <strong>non-passive</strong> and
+              excluded from this form. They flow directly to Schedule E as non-passive income/loss.
+            </p>
+          </Callout>
+        )}
         {activities.map((a, i) => (
           <div key={i}>
             {a.currentIncome !== 0 && (
               <FormLine
-                label={`${a.activityName}${a.ein ? ` (EIN ${a.ein})` : ''}${a.isRentalRealEstate ? ' [Rental RE]' : ''} — income`}
+                label={`${a.activityName}${a.ein ? ` (EIN ${a.ein})` : ''}${a.isRentalRealEstate ? ' [Rental RE]' : ''}${!a.activeParticipation ? ' [No Active Participation]' : ''} — income`}
                 value={a.currentIncome}
               />
             )}
             {a.currentLoss !== 0 && (
               <FormLine
-                label={`${a.activityName}${a.ein ? ` (EIN ${a.ein})` : ''}${a.isRentalRealEstate ? ' [Rental RE]' : ''} — loss`}
+                label={`${a.activityName}${a.ein ? ` (EIN ${a.ein})` : ''}${a.isRentalRealEstate ? ' [Rental RE]' : ''}${!a.activeParticipation ? ' [No Active Participation]' : ''} — loss`}
                 value={a.currentLoss}
               />
             )}
@@ -106,6 +136,9 @@ export default function Form8582Preview({
       {/* Part III — Result */}
       <FormBlock title="Part III — Allowed vs. Suspended Losses">
         <FormLine label="Total allowed passive loss this year" value={-totalAllowedLoss} />
+        {netDeductionToReturn > 0 && (
+          <FormLine label="Net deduction to return (Schedule E)" value={-netDeductionToReturn} />
+        )}
         {isLossLimited ? (
           <>
             <FormTotalLine label="Suspended loss — carried forward" value={-totalSuspendedLoss} double />
