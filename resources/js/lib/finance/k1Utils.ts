@@ -1,6 +1,16 @@
 import currency from 'currency.js'
 
-import type { FK1StructuredData } from '@/types/finance/k1-data'
+import { type FK1StructuredData,isFK1StructuredData } from '@/types/finance/k1-data'
+
+/**
+ * Returns the K-3 "Sourced by Partner" election state for a K-1 document.
+ * Accepts `unknown` so it works with both typed FK1StructuredData and the
+ * untyped `parsed_data` / `editData` coming from the review modal.
+ */
+export function getSbpElection(data: unknown): boolean {
+  if (!isFK1StructuredData(data)) return false
+  return data.k3Elections?.sourcedByPartnerAsUSSource ?? false
+}
 
 export function parseK1Field(data: FK1StructuredData, box: string): number {
   const v = data.fields[box]?.value

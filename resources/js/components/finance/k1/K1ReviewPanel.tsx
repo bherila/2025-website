@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { getSbpElection } from '@/lib/finance/k1Utils'
 
 import { DetailsButton, fmtAmt, parseFieldVal } from '../tax-preview-primitives'
 import { BOX11_CODES, BOX13_CODES } from './k1-codes'
@@ -1154,13 +1155,11 @@ function K3FDIIPanel({ sections }: { sections: K3Section[] }) {
 function K3ElectionSection({
   data,
   onChange,
-  readOnly,
 }: {
   data: FK1StructuredData
   onChange: (updated: FK1StructuredData) => void
-  readOnly: boolean
 }) {
-  const elected = data.k3Elections?.sourcedByPartnerAsUSSource ?? false
+  const elected = getSbpElection(data)
 
   const hasFCol = (data.k3?.sections ?? []).some(sec => {
     const d = sec.data as Record<string, unknown>
@@ -1184,9 +1183,8 @@ function K3ElectionSection({
           id="k3-sbp-election"
           checked={elected}
           onCheckedChange={(c) => {
-            if (!readOnly) onChange({ ...data, k3Elections: { ...data.k3Elections, sourcedByPartnerAsUSSource: Boolean(c) } })
+            onChange({ ...data, k3Elections: { ...data.k3Elections, sourcedByPartnerAsUSSource: Boolean(c) } })
           }}
-          disabled={readOnly}
           className="mt-0.5"
         />
         <div>
@@ -1315,7 +1313,8 @@ export default function K1ReviewPanel({ data, onChange, readOnly = false }: K1Re
       {/* K-3 sections */}
       {k3Sections.length > 0 && (
         <div className="space-y-4">
-          <K3ElectionSection data={data} onChange={onChange} readOnly={readOnly} />
+          {/* SBP election is a user tax-planning preference, not extracted data — stays editable even after confirmation. */}
+          <K3ElectionSection data={data} onChange={onChange} />
           <K3GrossIncomeTable sections={k3Sections} />
           <K3DeductionsTable sections={k3Sections} electionActive={data.k3Elections?.sourcedByPartnerAsUSSource} />
           <K3AssetApportionmentTable sections={k3Sections} electionActive={data.k3Elections?.sourcedByPartnerAsUSSource} />

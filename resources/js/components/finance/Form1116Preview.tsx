@@ -9,11 +9,23 @@ import {
   extractK3IncomeBreakdown,
   extractK3Line4bApportionment,
 } from '@/finance/1116/k3-to-1116'
+import { getSbpElection } from '@/lib/finance/k1Utils'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import type { Form1116Lines } from '@/types/finance/tax-return'
 
 export type { Form1116Lines } from '@/types/finance/tax-return'
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+/**
+ * Assumed foreign withholding rate used to back-calculate an estimated foreign
+ * source income amount from the foreign tax withheld reported on a 1099-DIV or
+ * K-1 Box 21, when the underlying gross foreign income is not otherwise
+ * reported. Treaty rates vary, but 15% is the most common US/treaty rate for
+ * portfolio dividends and a reasonable default estimate.
+ */
+const ASSUMED_FOREIGN_WITHHOLDING_RATE = 0.15
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -60,7 +72,7 @@ export function computeForm1116Lines({
     if (breakdown.sourcedByPartner !== 0) {
       sbpElections.push({
         partnerName,
-        active: data.k3Elections?.sourcedByPartnerAsUSSource ?? false,
+        active: getSbpElection(data),
         sourcedByPartner: breakdown.sourcedByPartner,
       })
     }
@@ -82,7 +94,7 @@ export function computeForm1116Lines({
     } else {
       const box21 = pk1(data, '21')
       if (box21 > 0) {
-        incomeSources.push({ label: `${partnerName} — Box 21 (income estimated)`, amount: currency(box21).divide(0.15).value })
+        incomeSources.push({ label: `${partnerName} — Box 21 (income estimated)`, amount: currency(box21).divide(ASSUMED_FOREIGN_WITHHOLDING_RATE).value })
         taxSources.push({ label: `${partnerName} — K-1 Box 21`, amount: box21 })
       }
     }
@@ -105,8 +117,19 @@ export function computeForm1116Lines({
     const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? '1099-DIV'
     const foreignTax = p?.box7_foreign_tax as number | undefined
     if (foreignTax != null && foreignTax > 0) {
-      incomeSources.push({ label: `${payer} — 1099-DIV (estimated foreign source)`, amount: currency(foreignTax).divide(0.15).value })
+      incomeSources.push({ label: `${payer} — 1099-DIV (estimated foreign source)`, amount: currency(foreignTax).divide(ASSUMED_FOREIGN_WITHHOLDING_RATE).value })
       taxSources.push({ label: `${payer} — 1099-DIV Box 7`, amount: foreignTax })
+    }
+  }
+
+  for (const doc of reviewed1099Docs) {
+    if (doc.form_type !== 'broker_1099' || Array.isArray(doc.parsed_data) || !doc.is_reviewed) continue
+    const p = doc.parsed_data as Record<string, unknown>
+    const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? 'Consolidated 1099'
+    const foreignTax = p?.div_7_foreign_tax_paid as number | undefined
+    if (foreignTax != null && foreignTax > 0) {
+      incomeSources.push({ label: `${payer} — Consolidated 1099 DIV (estimated foreign source)`, amount: currency(foreignTax).divide(ASSUMED_FOREIGN_WITHHOLDING_RATE).value })
+      taxSources.push({ label: `${payer} — Consolidated 1099 DIV Box 7`, amount: foreignTax })
     }
   }
 
@@ -291,7 +314,7 @@ export default function Form1116Preview({
         <FormLine label="Actual foreign taxes paid (Part II)" value={totalForeignTaxes} />
         <FormTotalLine
           label={
-            totalPassiveIncome >= currency(totalForeignTaxes).divide(0.15).value
+            totalPassiveIncome >= currency(totalForeignTaxes).divide(ASSUMED_FOREIGN_WITHHOLDING_RATE).value
               ? 'Credit allowed — likely FULLY ALLOWED ✓'
               : 'Credit allowed (subject to limitation)'
           }

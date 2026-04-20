@@ -51,11 +51,6 @@ interface TaxDocuments1099SectionProps {
   activeAccountIds?: number[] | undefined
   isLoading?: boolean | undefined
   onDocumentsReload?: (() => void | Promise<void>) | undefined
-  onTotalsChange?: (totals: {
-    interestIncome: currency
-    dividendIncome: currency
-    qualifiedDividends: currency
-  }) => void
   /** Called whenever reviewed documents change (for Form 1040 data source drill-down). */
   onDocumentsChange?: (docs: TaxDocument[]) => void
 }
@@ -93,7 +88,6 @@ export default function TaxDocuments1099Section({
   activeAccountIds: controlledActiveAccountIds,
   isLoading: controlledLoading,
   onDocumentsReload,
-  onTotalsChange,
   onDocumentsChange,
 }: TaxDocuments1099SectionProps) {
   const [documents, setDocuments] = useState<TaxDocument[]>(controlledDocuments ?? [])
@@ -113,42 +107,8 @@ export default function TaxDocuments1099Section({
   const [worksheetOpen, setWorksheetOpen] = useState(false)
 
   useEffect(() => {
-    let interestIncome = currency(0)
-    let dividendIncome = currency(0)
-    let qualifiedDividends = currency(0)
-
-    for (const doc of documents) {
-      if (!doc.parsed_data) continue
-
-      if (doc.form_type === 'broker_1099') {
-        // Multi-account consolidated PDF: iterate per-entry, respect per-link review state.
-        for (const [entry] of iterateReviewedBrokerEntries(doc)) {
-          const pd = entry.parsed_data as Record<string, unknown>
-          if (entry.form_type === '1099_int' || entry.form_type === '1099_int_c') {
-            interestIncome = interestIncome.add((pd as F1099IntParsedData).box1_interest ?? 0)
-          }
-          if (entry.form_type === '1099_div' || entry.form_type === '1099_div_c') {
-            dividendIncome = dividendIncome.add((pd as F1099DivParsedData).box1a_ordinary ?? 0)
-            qualifiedDividends = qualifiedDividends.add((pd as F1099DivParsedData).box1b_qualified ?? 0)
-          }
-        }
-      } else {
-        // Single-form document: use parent-level review state.
-        if (!doc.is_reviewed) continue
-        const parsedData = doc.parsed_data
-        if (doc.form_type === '1099_int' || doc.form_type === '1099_int_c') {
-          interestIncome = interestIncome.add((parsedData as F1099IntParsedData).box1_interest ?? 0)
-        }
-        if (doc.form_type === '1099_div' || doc.form_type === '1099_div_c') {
-          dividendIncome = dividendIncome.add((parsedData as F1099DivParsedData).box1a_ordinary ?? 0)
-          qualifiedDividends = qualifiedDividends.add((parsedData as F1099DivParsedData).box1b_qualified ?? 0)
-        }
-      }
-    }
-
-    onTotalsChange?.({ interestIncome, dividendIncome, qualifiedDividends })
     onDocumentsChange?.(documents.filter(hasReviewedContent))
-  }, [documents, onDocumentsChange, onTotalsChange])
+  }, [documents, onDocumentsChange])
 
   /** Collect foreign tax summaries from all reviewed documents. */
   const foreignTaxSummaries = useMemo<ForeignTaxSummary[]>(() => {
