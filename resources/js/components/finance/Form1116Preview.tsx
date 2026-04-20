@@ -4,6 +4,7 @@ import currency from 'currency.js'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
+import { getSbpElection } from '@/lib/finance/k1Utils'
 import {
   extractForeignTaxSummaries,
   extractK3IncomeBreakdown,
@@ -71,7 +72,7 @@ export function computeForm1116Lines({
     if (breakdown.sourcedByPartner !== 0) {
       sbpElections.push({
         partnerName,
-        active: data.k3Elections?.sourcedByPartnerAsUSSource ?? false,
+        active: getSbpElection(data),
         sourcedByPartner: breakdown.sourcedByPartner,
       })
     }

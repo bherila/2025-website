@@ -31,6 +31,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { fetchWrapper } from '@/fetchWrapper'
 import { F1116ReviewPanel, isF1116Data } from '@/finance/1116'
+import { getSbpElection } from '@/lib/finance/k1Utils'
 import { extractLinkParsedData, patchLinkParsedDataInArray } from '@/lib/finance/taxDocumentUtils'
 import type { TaxDocument, TaxDocumentAccountLink, TaxDocumentParsedData, W2ParsedData } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
@@ -424,12 +425,8 @@ export default function TaxDocumentReviewModal({
   // the checkbox has been toggled relative to the saved value so we can surface a save
   // affordance — otherwise the user would have to "Reopen for Review" just to persist the
   // toggle, which is confusing.
-  const savedSbpElection = effectiveFormType === 'k1' && activeDoc?.parsed_data && !Array.isArray(activeDoc.parsed_data)
-    ? ((activeDoc.parsed_data as Record<string, unknown>)?.k3Elections as Record<string, unknown> | undefined)?.sourcedByPartnerAsUSSource ?? false
-    : false
-  const currentSbpElection = effectiveFormType === 'k1' && editData && !Array.isArray(editData)
-    ? ((editData as Record<string, unknown>)?.k3Elections as Record<string, unknown> | undefined)?.sourcedByPartnerAsUSSource ?? false
-    : false
+  const savedSbpElection = effectiveFormType === 'k1' ? getSbpElection(activeDoc?.parsed_data) : false
+  const currentSbpElection = effectiveFormType === 'k1' ? getSbpElection(editData) : false
   const hasUnsavedSbpElectionChange = Boolean(savedSbpElection) !== Boolean(currentSbpElection)
 
   const fetchPending = useCallback(async () => {
