@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests\Finance;
 
+use App\Enums\Finance\TaxState;
+use App\Support\Finance\TaxYearRange;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -27,8 +29,8 @@ class DeleteUserTaxStateRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'year' => ['required', 'integer', 'min:2018', 'max:2030'],
-            'state_code' => ['required', 'string', 'regex:/^[A-Z]{2}$/', Rule::in(['CA', 'NY'])],
+            'year' => ['required', 'integer', 'min:'.TaxYearRange::MIN, 'max:'.TaxYearRange::MAX],
+            'state_code' => ['required', 'string', 'regex:/^[A-Z]{2}$/', Rule::in(TaxState::values())],
         ];
     }
 }

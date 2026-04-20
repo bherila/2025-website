@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests\Finance;
 
+use App\Enums\Finance\DeductionCategory;
+use App\Support\Finance\TaxYearRange;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -16,11 +18,8 @@ class StoreUserDeductionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'tax_year' => ['required', 'integer', 'min:2018', 'max:2030'],
-            'category' => ['required', 'string', Rule::in([
-                'real_estate_tax', 'state_est_tax', 'sales_tax',
-                'mortgage_interest', 'charitable_cash', 'charitable_noncash', 'other',
-            ])],
+            'tax_year' => ['required', 'integer', 'min:'.TaxYearRange::MIN, 'max:'.TaxYearRange::MAX],
+            'category' => ['required', 'string', Rule::in(DeductionCategory::values())],
             'description' => ['nullable', 'string', 'max:255'],
             'amount' => ['required', 'numeric', 'min:0.01'],
         ];

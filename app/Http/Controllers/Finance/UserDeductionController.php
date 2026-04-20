@@ -67,7 +67,7 @@ class UserDeductionController extends Controller
             'id' => $deduction->id,
             'category' => $deduction->category,
             'description' => $deduction->description,
-            'amount' => round((float) $deduction->amount, 2),
+            'amount' => round($deduction->amount, 2),
         ];
     }
 }

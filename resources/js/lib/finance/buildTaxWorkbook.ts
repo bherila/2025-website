@@ -220,6 +220,7 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
     : null
 
   // ── Schedule A ───────────────────────────────────────────────────────────────
+  // Row order mirrors the IRS Schedule A: 7 → 8 → 9 → 10 → 11 → 16 → 17.
   const scheduleASheet = taxReturn.scheduleA
     ? buildSheet('Schedule A', [
         {
@@ -233,15 +234,6 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
           description: 'Line 8 — Mortgage interest',
           amount: taxReturn.scheduleA.mortgageInterest,
         }] : []),
-        ...(taxReturn.scheduleA.charitable > 0 ? [{
-          line: '11',
-          description: 'Lines 11–12 — Charitable contributions',
-          amount: taxReturn.scheduleA.charitable,
-        }] : []),
-        ...(taxReturn.scheduleA.otherDeductions > 0 ? [{
-          description: 'Other user-entered deductions',
-          amount: taxReturn.scheduleA.otherDeductions,
-        }] : []),
         {
           line: '9',
           description: 'Line 9 — Investment interest expense (from Form 4952)',
@@ -250,6 +242,22 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
             ? formulaRef('Form 4952', form4952Sheet.rowIndex.get('Line 6 — Deductible investment interest expense')!)
             : undefined,
         },
+        {
+          line: '10',
+          description: 'Line 10 — Total interest (mortgage + investment interest)',
+          amount: currency(taxReturn.scheduleA.mortgageInterest).add(taxReturn.scheduleA.totalInvIntExpense).value,
+          isTotal: true,
+        },
+        ...(taxReturn.scheduleA.charitable > 0 ? [{
+          line: '11',
+          description: 'Lines 11–12 — Charitable contributions',
+          amount: taxReturn.scheduleA.charitable,
+        }] : []),
+        ...(taxReturn.scheduleA.otherDeductions > 0 ? [{
+          line: '16',
+          description: 'Line 16 — Other itemized deductions',
+          amount: taxReturn.scheduleA.otherDeductions,
+        }] : []),
         {
           line: '17',
           description: 'Line 17 — Total itemized deductions',

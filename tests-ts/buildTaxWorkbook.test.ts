@@ -173,8 +173,15 @@ describe('buildTaxWorkbook', () => {
     const scheduleASheet = workbook.sheets.find(s => s.name === 'Schedule A')
     expect(scheduleASheet).toBeDefined()
     expect(scheduleASheet?.rows.some(r => r.line === '8' && r.amount === 6000)).toBe(true)
+    expect(scheduleASheet?.rows.some(r => r.line === '10' && r.amount === 7200)).toBe(true) // mortgage 6000 + inv int 1200
     expect(scheduleASheet?.rows.some(r => r.line === '11' && r.amount === 2500)).toBe(true)
-    expect(scheduleASheet?.rows.some(r => r.description === 'Other user-entered deductions' && r.amount === 300)).toBe(true)
+    expect(scheduleASheet?.rows.some(r => r.line === '16' && r.amount === 300)).toBe(true)
     expect(scheduleASheet?.rows.some(r => r.line === '7' && r.note?.includes('sales tax'))).toBe(true)
+
+    // Row order must follow IRS Schedule A: 7 → 8 → 9 → 10 → 11 → 16 → 17
+    const lineOrder = scheduleASheet!.rows
+      .map(r => r.line)
+      .filter((l): l is string => typeof l === 'string' && /^\d+$/.test(l))
+    expect(lineOrder).toEqual(['7', '8', '9', '10', '11', '16', '17'])
   })
 })

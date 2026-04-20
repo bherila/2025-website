@@ -2,6 +2,8 @@
 
 namespace App\Models\FinanceTool;
 
+use Database\Factories\FinanceTool\UserTaxStateFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -12,6 +14,9 @@ use Illuminate\Database\Eloquent\Model;
  */
 class UserTaxState extends Model
 {
+    /** @use HasFactory<UserTaxStateFactory> */
+    use HasFactory;
+
     protected $table = 'fin_user_tax_states';
 
     protected $fillable = ['user_id', 'tax_year', 'state_code'];

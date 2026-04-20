@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Finance;
 
+use App\Models\FinanceTool\UserTaxState;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -133,5 +134,19 @@ class UserTaxStateControllerTest extends TestCase
     public function test_destroy_rejects_unsupported_state_code(): void
     {
         $this->deleteJson('/api/finance/user-tax-states/TX?year=2025')->assertUnprocessable();
+    }
+
+    public function test_factory_can_create_persisted_state(): void
+    {
+        $state = UserTaxState::factory()->forYear(2025)->state_code('NY')->create([
+            'user_id' => $this->user->id,
+        ]);
+
+        $this->assertDatabaseHas('fin_user_tax_states', [
+            'id' => $state->id,
+            'user_id' => $this->user->id,
+            'tax_year' => 2025,
+            'state_code' => 'NY',
+        ]);
     }
 }

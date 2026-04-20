@@ -2,6 +2,8 @@
 
 namespace App\Models\FinanceTool;
 
+use Database\Factories\FinanceTool\UserDeductionFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -14,6 +16,9 @@ use Illuminate\Database\Eloquent\Model;
  */
 class UserDeduction extends Model
 {
+    /** @use HasFactory<UserDeductionFactory> */
+    use HasFactory;
+
     protected $table = 'fin_user_deductions';
 
     protected $fillable = ['user_id', 'tax_year', 'category', 'description', 'amount'];
@@ -22,7 +27,7 @@ class UserDeduction extends Model
     {
         return [
             'tax_year' => 'integer',
-            'amount' => 'decimal:2',
+            'amount' => 'float',
         ];
     }
 }

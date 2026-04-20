@@ -31,6 +31,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { fetchWrapper } from '@/fetchWrapper'
 import { buildTaxWorkbook } from '@/lib/finance/buildTaxWorkbook'
+import { type FilingStatus, getStandardDeduction } from '@/lib/tax/standardDeductions'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
@@ -734,6 +735,11 @@ function TaxPreviewPageContent() {
     return currency(acc).add(parsed?.box17_state_tax ?? 0).value
   }, 0)
 
+  // MFJ/MFS split isn't captured yet — treat isMarried as MFJ. TODO: add a toggle
+  // to the marriage-status settings once MFS becomes a supported path (MFS has a
+  // $5k SALT cap and roughly half-MFJ bracket thresholds).
+  const filingStatus: FilingStatus = isMarried ? 'Married Filing Jointly' : 'Single'
+
   return (
     <div>
       <div className="flex items-center gap-4 px-4 pt-4 pb-2 flex-wrap">
@@ -964,8 +970,8 @@ function TaxPreviewPageContent() {
                   taxConfig={{
                     year: String(selectedYear),
                     state: '',
-                    filingStatus: isMarried ? 'Married' : 'Single',
-                    standardDeduction: taxReturn.scheduleA?.standardDeduction ?? 0,
+                    filingStatus,
+                    standardDeduction: getStandardDeduction(selectedYear, filingStatus),
                   }}
                   extraIncome={scheduleCIncomeBySeries}
                 />
@@ -978,8 +984,8 @@ function TaxPreviewPageContent() {
                     taxConfig={{
                       year: String(selectedYear),
                       state: stateCode,
-                      filingStatus: isMarried ? 'Married' : 'Single',
-                      standardDeduction: taxReturn.scheduleA?.standardDeduction ?? 0,
+                      filingStatus,
+                      standardDeduction: getStandardDeduction(selectedYear, filingStatus, stateCode),
                     }}
                     extraIncome={scheduleCIncomeBySeries}
                   />

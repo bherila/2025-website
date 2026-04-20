@@ -9,17 +9,8 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
+import { DEDUCTION_CATEGORY_LABELS as CATEGORY_LABELS, labelForCategory } from '@/lib/tax/deductionCategories'
 import type { UserDeductionEntry } from '@/types/finance/tax-return'
-
-const CATEGORY_LABELS: Record<string, string> = {
-  real_estate_tax: 'Real estate / property tax',
-  state_est_tax: 'State estimated tax paid',
-  sales_tax: 'General sales tax',
-  mortgage_interest: 'Mortgage interest',
-  charitable_cash: 'Charitable — cash',
-  charitable_noncash: 'Charitable — non-cash',
-  other: 'Other deduction',
-}
 
 interface UserDeductionsSectionProps {
   year: number
@@ -108,15 +99,15 @@ export default function UserDeductionsSection({ year, deductions, onChange }: Us
           <TableBody>
             {deductions.map(d => (
               <TableRow key={d.id}>
-                <TableCell className="text-sm">{CATEGORY_LABELS[d.category] ?? d.category}</TableCell>
+                <TableCell className="text-sm">{labelForCategory(d.category)}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{d.description ?? '—'}</TableCell>
                 <TableCell className="text-right font-mono text-sm">{currency(d.amount).format()}</TableCell>
                 <TableCell>
                   <div className="flex gap-1 justify-end">
-                    <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(d)} aria-label={`Edit ${CATEGORY_LABELS[d.category] ?? d.category}`}>
+                    <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(d)} aria-label={`Edit ${labelForCategory(d.category)}`}>
                       <Pencil className="h-3 w-3" />
                     </Button>
-                    <Button type="button" size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleDelete(d.id, CATEGORY_LABELS[d.category] ?? d.category)} aria-label={`Delete ${CATEGORY_LABELS[d.category] ?? d.category}`}>
+                    <Button type="button" size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleDelete(d.id, labelForCategory(d.category))} aria-label={`Delete ${labelForCategory(d.category)}`}>
                       <Trash2 className="h-3 w-3" />
                     </Button>
                   </div>

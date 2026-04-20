@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Finance;
 
+use App\Enums\Finance\DeductionCategory;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -16,10 +17,7 @@ class UpdateUserDeductionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'category' => ['sometimes', 'string', Rule::in([
-                'real_estate_tax', 'state_est_tax', 'sales_tax',
-                'mortgage_interest', 'charitable_cash', 'charitable_noncash', 'other',
-            ])],
+            'category' => ['sometimes', 'string', Rule::in(DeductionCategory::values())],
             'description' => ['nullable', 'string', 'max:255'],
             'amount' => ['sometimes', 'numeric', 'min:0.01'],
             // tax_year is immutable after creation — silently ignored if sent

@@ -228,7 +228,8 @@ export function TaxPreviewProvider({
       try {
         const states = (await fetchWrapper.get(`/api/finance/user-tax-states?year=${year}`)) as string[]
         setActiveTaxStates(Array.isArray(states) ? states : [])
-      } catch {
+      } catch (err) {
+        console.error('Failed to load user tax states for year', year, err)
         setActiveTaxStates([])
       }
     })()
@@ -239,7 +240,8 @@ export function TaxPreviewProvider({
       try {
         const deductions = (await fetchWrapper.get(`/api/finance/user-deductions?year=${year}`)) as UserDeductionEntry[]
         setUserDeductions(Array.isArray(deductions) ? deductions : [])
-      } catch {
+      } catch (err) {
+        console.error('Failed to load user deductions for year', year, err)
         setUserDeductions([])
       }
     })()

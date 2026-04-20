@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Finance;
 
+use App\Models\FinanceTool\UserDeduction;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -151,5 +152,34 @@ class UserDeductionControllerTest extends TestCase
             'tax_year' => 2025, // unchanged
             'amount' => 2000,
         ]);
+    }
+
+    public function test_factory_can_create_persisted_deduction(): void
+    {
+        $deduction = UserDeduction::factory()->forYear(2025)->create([
+            'user_id' => $this->user->id,
+        ]);
+
+        $this->assertDatabaseHas('fin_user_deductions', [
+            'id' => $deduction->id,
+            'user_id' => $this->user->id,
+            'tax_year' => 2025,
+        ]);
+    }
+
+    public function test_response_amount_is_json_number_not_string(): void
+    {
+        $response = $this->postJson('/api/finance/user-deductions', [
+            'tax_year' => 2025,
+            'category' => 'real_estate_tax',
+            'amount' => 1234.56,
+        ]);
+
+        $response->assertCreated();
+        // Regression: decimal:2 cast used to serialise as a JSON string. The
+        // model now casts amount to float, so downstream TS `UserDeductionEntry.amount: number`
+        // lines up without coercion.
+        $this->assertIsFloat($response->json('amount'));
+        $this->assertEqualsWithDelta(1234.56, $response->json('amount'), 0.001);
     }
 }

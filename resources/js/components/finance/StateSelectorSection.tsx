@@ -6,12 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { fetchWrapper } from '@/fetchWrapper'
-
-/** States that have bracket data in taxBracket.ts. */
-const SUPPORTED_STATES: { code: string; name: string }[] = [
-  { code: 'CA', name: 'California' },
-  { code: 'NY', name: 'New York' },
-]
+import { SUPPORTED_TAX_STATES } from '@/lib/tax/supportedStates'
 
 interface StateSelectorSectionProps {
   year: number
@@ -24,7 +19,7 @@ export default function StateSelectorSection({ year, activeTaxStates, onChange }
   const [selected, setSelected] = useState('')
   const [error, setError] = useState<string | null>(null)
 
-  const availableToAdd = SUPPORTED_STATES.filter(s => !activeTaxStates.includes(s.code))
+  const availableToAdd = SUPPORTED_TAX_STATES.filter(s => !activeTaxStates.includes(s.code))
 
   async function addState(code: string) {
     try {
@@ -52,7 +47,7 @@ export default function StateSelectorSection({ year, activeTaxStates, onChange }
     <div className="flex items-center gap-2 flex-wrap">
       <span className="text-xs text-muted-foreground">State returns:</span>
       {activeTaxStates.map(code => {
-        const name = SUPPORTED_STATES.find(s => s.code === code)?.name ?? code
+        const name = SUPPORTED_TAX_STATES.find(s => s.code === code)?.name ?? code
         return (
           <Badge key={code} variant="secondary" className="gap-1">
             {name}

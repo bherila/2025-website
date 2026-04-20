@@ -15,6 +15,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import type { ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
+import { SALT_CATEGORIES } from '@/lib/tax/deductionCategories'
+import { type FilingStatus, getStandardDeduction } from '@/lib/tax/standardDeductions'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import type { ScheduleALines, UserDeductionEntry } from '@/types/finance/tax-return'
@@ -30,17 +32,15 @@ interface InvIntSource {
 }
 
 const SALT_CAP = 10_000
+const SALT_CATEGORIES_LIST: readonly string[] = Array.from(SALT_CATEGORIES)
 
-// Standard deductions by year (single / MFJ) — IRS Rev. Proc.
-const STANDARD_DEDUCTIONS: Record<number, { single: number; mfj: number }> = {
-  2023: { single: 13_850, mfj: 27_700 },
-  2024: { single: 14_600, mfj: 29_200 },
-  2025: { single: 15_000, mfj: 30_000 },
-}
-
-function getStandardDeduction(year: number, isMarried: boolean): number {
-  const row = STANDARD_DEDUCTIONS[year] ?? STANDARD_DEDUCTIONS[2025] ?? { single: 15_000, mfj: 30_000 }
-  return isMarried ? row.mfj : row.single
+/** Bucket user deductions by category in a single pass. */
+function bucketUserDeductions(userDeductions: UserDeductionEntry[]): Record<string, number> {
+  const buckets: Record<string, number> = {}
+  for (const d of userDeductions) {
+    buckets[d.category] = currency(buckets[d.category] ?? 0).add(d.amount).value
+  }
+  return buckets
 }
 
 export function computeScheduleALines({
@@ -112,20 +112,14 @@ export function computeScheduleALines({
     currency(0),
   ).value
 
-  // Aggregate user-entered deductions by category
-  const userSaltCategories = new Set(['real_estate_tax', 'state_est_tax', 'sales_tax'])
-  const userSalt = userDeductions
-    .filter(d => userSaltCategories.has(d.category))
-    .reduce((acc, d) => currency(acc).add(d.amount).value, 0)
-  const mortgageInterest = userDeductions
-    .filter(d => d.category === 'mortgage_interest')
-    .reduce((acc, d) => currency(acc).add(d.amount).value, 0)
-  const charitable = userDeductions
-    .filter(d => d.category === 'charitable_cash' || d.category === 'charitable_noncash')
-    .reduce((acc, d) => currency(acc).add(d.amount).value, 0)
-  const otherDeductions = userDeductions
-    .filter(d => d.category === 'other')
-    .reduce((acc, d) => currency(acc).add(d.amount).value, 0)
+  const buckets = bucketUserDeductions(userDeductions)
+  const userSalt = SALT_CATEGORIES_LIST.reduce(
+    (acc, cat) => currency(acc).add(buckets[cat] ?? 0).value,
+    0,
+  )
+  const mortgageInterest = buckets.mortgage_interest ?? 0
+  const charitable = currency(buckets.charitable_cash ?? 0).add(buckets.charitable_noncash ?? 0).value
+  const otherDeductions = buckets.other ?? 0
 
   const saltDeduction = Math.min(currency(saltPaid).add(userSalt).value, SALT_CAP)
   const totalItemizedDeductions = currency(totalInvIntExpense)
@@ -133,7 +127,11 @@ export function computeScheduleALines({
     .add(mortgageInterest)
     .add(charitable)
     .add(otherDeductions).value
-  const standardDeduction = getStandardDeduction(year, isMarried)
+  // MFJ/MFS sharing: isMarried collapses both into MFJ for now. MFS users should
+  // treat the $10k SALT cap as $5k and expect different brackets; unsupported until
+  // MFJ-vs-MFS is added to the marriage-status settings.
+  const filingStatus: FilingStatus = isMarried ? 'Married Filing Jointly' : 'Single'
+  const standardDeduction = getStandardDeduction(year, filingStatus)
   const shouldItemize = totalItemizedDeductions > standardDeduction
 
   return {
@@ -241,22 +239,12 @@ export default function ScheduleAPreview({
     userDeductions,
   })
 
-  const stateEstimatedTax = userDeductions
-    .filter(d => d.category === 'state_est_tax')
-    .reduce((acc, d) => currency(acc).add(d.amount).value, 0)
-  const realEstateTax = userDeductions
-    .filter(d => d.category === 'real_estate_tax')
-    .reduce((acc, d) => currency(acc).add(d.amount).value, 0)
-  const salesTax = userDeductions
-    .filter(d => d.category === 'sales_tax')
-    .reduce((acc, d) => currency(acc).add(d.amount).value, 0)
-  const charitableCash = userDeductions
-    .filter(d => d.category === 'charitable_cash')
-    .reduce((acc, d) => currency(acc).add(d.amount).value, 0)
-  const charitableNoncash = userDeductions
-    .filter(d => d.category === 'charitable_noncash')
-    .reduce((acc, d) => currency(acc).add(d.amount).value, 0)
-  const stateIncomeTax = currency(saltPaid).add(stateEstimatedTax).value
+  const buckets = bucketUserDeductions(userDeductions)
+  const realEstateTax = buckets.real_estate_tax ?? 0
+  const salesTax = buckets.sales_tax ?? 0
+  const charitableCash = buckets.charitable_cash ?? 0
+  const charitableNoncash = buckets.charitable_noncash ?? 0
+  const stateIncomeTax = currency(saltPaid).add(buckets.state_est_tax ?? 0).value
   const totalInterest = currency(mortgageInterest).add(totalInvIntExpense).value
 
   return (
@@ -355,7 +343,7 @@ export default function ScheduleAPreview({
 
       {/* Standard vs. itemized comparison */}
       <FormBlock title="Standard Deduction vs. Itemized — Which Is Better?">
-        <FormLine label={`Standard deduction (${selectedYear} ${isMarried ? 'MFJ' : 'Single'})`} value={standardDeduction} />
+        <FormLine label={`Standard deduction (${selectedYear} ${isMarried ? 'Married Filing Jointly' : 'Single'})`} value={standardDeduction} />
         <FormLine label="Itemized deductions (Schedule A total)" value={totalItemizedDeductions} />
         <FormLine label="Investment interest (Line 9)" value={totalInvIntExpense} />
         <FormLine
