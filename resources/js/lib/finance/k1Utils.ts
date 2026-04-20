@@ -33,10 +33,11 @@ export function k1NetIncome(data: FK1StructuredData): number {
   const incomeTotal = INCOME_BOXES.reduce((acc, box) => acc.add(parseK1Field(data, box)), currency(0))
     .add(parseK1Codes(data, '11'))
   const box12 = parseK1Field(data, '12')
+  const box13 = parseK1Codes(data, '13')
   const box21 = parseK1Field(data, '21')
   const deductionTotal = currency(0)
     .add(box12 !== 0 ? -Math.abs(box12) : 0)
-    .subtract(parseK1Codes(data, '13'))
+    .add(box13 !== 0 ? -Math.abs(box13) : 0)
     .add(box21 !== 0 ? -Math.abs(box21) : 0)
   return incomeTotal.add(deductionTotal).value
 }
