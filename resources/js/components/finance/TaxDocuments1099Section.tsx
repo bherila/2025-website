@@ -338,6 +338,57 @@ export default function TaxDocuments1099Section({
     return null
   }
 
+  /** Extract payer/fund name and key amounts for display alongside the review button. */
+  const getDocumentInfo = (doc: TaxDocument, link?: TaxDocumentAccountLink): { payerName: string | null; amountStr: string | null } => {
+    const effectiveFormType = link ? link.form_type : doc.form_type
+    const effectiveReviewed = link ? link.is_reviewed : doc.is_reviewed
+
+    let payerName: string | null = null
+    if (doc.parsed_data) {
+      if (doc.form_type === 'k1' && isFK1StructuredData(doc.parsed_data)) {
+        payerName = (doc.parsed_data as FK1StructuredData).fields['B']?.value?.split('\n')[0] ?? null
+      } else {
+        payerName = ((doc.parsed_data as Record<string, unknown>).payer_name as string | undefined) ?? null
+      }
+    }
+
+    let amountStr: string | null = null
+    if (effectiveReviewed && doc.parsed_data) {
+      const p = doc.parsed_data as Record<string, unknown>
+      if (effectiveFormType === '1099_int' || effectiveFormType === '1099_int_c') {
+        const amt = p.box1_interest as number | undefined
+        if (amt != null) amountStr = `Int ${currency(amt).format()}`
+      } else if (effectiveFormType === '1099_div' || effectiveFormType === '1099_div_c') {
+        const amt = (p.box1a_ordinary ?? p.box1_ordinary) as number | undefined
+        if (amt != null) amountStr = `Div ${currency(amt).format()}`
+      } else if (effectiveFormType === '1099_misc') {
+        const amt = (p.box3_other_income ?? p.box3_other ?? p.box7_nonemployee ?? p.total_amount) as number | undefined
+        if (amt != null) amountStr = currency(amt).format()
+      } else if (effectiveFormType === 'k1' && isFK1StructuredData(doc.parsed_data)) {
+        const data = doc.parsed_data as FK1StructuredData
+        const getField = (box: string): number => {
+          const v = data.fields[box]?.value
+          if (!v) return 0
+          const n = parseFloat(v)
+          return isNaN(n) ? 0 : n
+        }
+        const net = ['1', '2', '3', '4', '5', '6a', '8', '9a', '9b', '9c', '10'].reduce(
+          (acc, box) => currency(acc).add(getField(box)).value, 0,
+        )
+        if (net !== 0) amountStr = `Net ${currency(net).format()}`
+      } else if (effectiveFormType === 'broker_1099') {
+        const interest = p.int_1_interest_income as number | undefined
+        const ordDiv = p.div_1a_total_ordinary as number | undefined
+        const parts: string[] = []
+        if (interest && interest !== 0) parts.push(`Int ${currency(interest).format()}`)
+        if (ordDiv && ordDiv !== 0) parts.push(`Div ${currency(ordDiv).format()}`)
+        if (parts.length > 0) amountStr = parts.join(' · ')
+      }
+    }
+
+    return { payerName, amountStr }
+  }
+
   /**
    * Render a review/status button for a tax document.
    *
@@ -423,11 +474,9 @@ export default function TaxDocuments1099Section({
 
   /** Render the full document section for an account row (existing docs + add dropdown). */
   const renderAccountDocuments = (account: FinAccount) => {
-    // Collect all per-link buttons: one button per (document, account_link) pair where
-    // the link's account_id matches this account. This correctly handles consolidated
-    // broker_1099 documents that expose separate 1099-DIV, 1099-INT, 1099-B links
-    // for the same account — each gets its own button with the correct form_type/reviewed state.
-    const accountLinkButtons: JSX.Element[] = []
+    // One entry per (document, account_link) pair for this account. Handles consolidated
+    // broker_1099 docs that expose multiple per-form links for the same account.
+    const docEntries: JSX.Element[] = []
     const uploadedFormTypes = new Set<string>()
 
     for (const doc of documents) {
@@ -435,7 +484,14 @@ export default function TaxDocuments1099Section({
       if (links.length > 0) {
         for (const link of links) {
           if (link.account_id !== account.acct_id) continue
-          accountLinkButtons.push(renderTaxDocumentButton(doc, link))
+          const { payerName, amountStr } = getDocumentInfo(doc, link)
+          docEntries.push(
+            <div key={`link-${link.id}`} className="flex items-center gap-2 flex-wrap min-w-0">
+              {renderTaxDocumentButton(doc, link)}
+              {payerName && <span className="text-xs text-muted-foreground truncate max-w-40">{payerName}</span>}
+              {amountStr && <span className="text-xs font-mono text-muted-foreground whitespace-nowrap">{amountStr}</span>}
+            </div>,
+          )
           // Normalize corrected forms back to their base type for the "already uploaded" check.
           const baseType = link.form_type === '1099_int_c' ? '1099_int'
             : link.form_type === '1099_div_c' ? '1099_div'
@@ -444,7 +500,14 @@ export default function TaxDocuments1099Section({
         }
       } else if (doc.account_id === account.acct_id) {
         // Legacy path: document predates the join table and has no account_links.
-        accountLinkButtons.push(renderTaxDocumentButton(doc))
+        const { payerName, amountStr } = getDocumentInfo(doc)
+        docEntries.push(
+          <div key={`doc-${doc.id}`} className="flex items-center gap-2 flex-wrap min-w-0">
+            {renderTaxDocumentButton(doc)}
+            {payerName && <span className="text-xs text-muted-foreground truncate max-w-40">{payerName}</span>}
+            {amountStr && <span className="text-xs font-mono text-muted-foreground whitespace-nowrap">{amountStr}</span>}
+          </div>,
+        )
         const baseType = doc.form_type === '1099_int_c' ? '1099_int'
           : doc.form_type === '1099_div_c' ? '1099_div'
           : doc.form_type
@@ -453,8 +516,8 @@ export default function TaxDocuments1099Section({
     }
 
     return (
-      <div className="flex flex-wrap gap-1 items-center">
-        {accountLinkButtons}
+      <div className="space-y-1.5">
+        {docEntries}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 px-2">
@@ -668,7 +731,11 @@ export default function TaxDocuments1099Section({
           onClose={closeReviewModal}
           onDocumentReviewed={() => {
             closeReviewModal()
-            fetchDocuments()
+            if (onDocumentsReload) {
+              void onDocumentsReload()
+            } else {
+              void fetchDocuments()
+            }
           }}
         />
       )}
