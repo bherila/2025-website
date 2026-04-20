@@ -10,6 +10,7 @@ import EstimatedTaxPaymentsSection from '@/components/finance/EstimatedTaxPaymen
 import Form1040Preview from '@/components/finance/Form1040Preview'
 import Form1116Preview from '@/components/finance/Form1116Preview'
 import Form4952Preview from '@/components/finance/Form4952Preview'
+import Form8582Preview from '@/components/finance/Form8582Preview'
 import Form8995Preview from '@/components/finance/Form8995Preview'
 import { isFK1StructuredData } from '@/components/finance/k1'
 import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
@@ -446,6 +447,10 @@ function TaxPreviewPageContent() {
     setActiveTaxStates,
     userDeductions,
     setUserDeductions,
+    palCarryforwards,
+    setPalCarryforwards,
+    realEstateProfessional,
+    setRealEstateProfessional,
     shortDividendSummary,
     priorYearAgi,
     setPriorYearAgi,
@@ -620,6 +625,7 @@ function TaxPreviewPageContent() {
           <TabsTrigger value={TAX_TABS.scheduleE}>Schedule E</TabsTrigger>
           <TabsTrigger value={TAX_TABS.capitalGains}>Capital Gains</TabsTrigger>
           <TabsTrigger value={TAX_TABS.form1116}>Form 1116</TabsTrigger>
+          <TabsTrigger value={TAX_TABS.form8582}>Form 8582</TabsTrigger>
           <TabsTrigger value={TAX_TABS.form8995}>Form 8995</TabsTrigger>
           <TabsTrigger value={TAX_TABS.scheduleC}>Schedule C</TabsTrigger>
           <TabsTrigger value={TAX_TABS.estimate}>Tax Estimate</TabsTrigger>
@@ -748,6 +754,23 @@ function TaxPreviewPageContent() {
             selectedYear={selectedYear}
             isMarried={isMarried}
           />
+        </TabsContent>
+
+        <TabsContent value={TAX_TABS.form8582} className="mt-0">
+          {taxReturn.form8582 ? (
+            <Form8582Preview
+              form8582={taxReturn.form8582}
+              year={selectedYear}
+              palCarryforwards={palCarryforwards}
+              onCarryforwardsChange={setPalCarryforwards}
+              realEstateProfessional={realEstateProfessional}
+              onRealEstateProfessionalChange={setRealEstateProfessional}
+            />
+          ) : (
+            <div className="py-12 text-center text-muted-foreground text-sm">
+              No passive activity data found. Passive activities are reported in K-1 Box 2 (rental real estate) and Box 3 (other rental).
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value={TAX_TABS.scheduleC} className="space-y-6 mt-0">

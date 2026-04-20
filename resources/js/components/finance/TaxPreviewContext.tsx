@@ -18,6 +18,7 @@ import { computeScheduleELines } from '@/components/finance/ScheduleEPreview'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
+import { computeForm8582, type PalCarryforwardEntry } from '@/finance/8582/form8582'
 import { computeForm8959Lines } from '@/finance/8959/form8959'
 import { computeForm8960Lines } from '@/finance/8960/form8960'
 import { computeCapitalLossCarryover } from '@/finance/capitalLoss/capitalLossCarryover'
@@ -90,6 +91,14 @@ interface TaxPreviewContextValue {
   userDeductions: UserDeductionEntry[]
   /** Callback to replace the deductions list after a mutation. */
   setUserDeductions: Dispatch<SetStateAction<UserDeductionEntry[]>>
+  /** Per-activity PAL carryforward entries from prior years (Form 8582). */
+  palCarryforwards: PalCarryforwardEntry[]
+  /** Callback to replace the carryforward list after a mutation. */
+  setPalCarryforwards: Dispatch<SetStateAction<PalCarryforwardEntry[]>>
+  /** Whether the taxpayer qualifies as a real estate professional (§469(c)(7)). Persisted to localStorage. */
+  realEstateProfessional: boolean
+  /** Setter for realEstateProfessional — persisted to localStorage per tax year. */
+  setRealEstateProfessional: Dispatch<SetStateAction<boolean>>
   /** Aggregated short dividend summary across all active accounts, or null if not yet loaded. */
   shortDividendSummary: ShortDividendSummary | null
   /** Prior year total tax — user-entered for safe-harbor estimated payment planning. */
@@ -184,6 +193,7 @@ export function TaxPreviewProvider({
   const [isMarried, setIsMarried] = useState(false)
   const [activeTaxStates, setActiveTaxStates] = useState<string[]>([])
   const [userDeductions, setUserDeductions] = useState<UserDeductionEntry[]>([])
+  const [palCarryforwards, setPalCarryforwards] = useState<PalCarryforwardEntry[]>([])
 
   const priorYearTaxKey = `tax-preview-prior-year-tax-${year}`
   const [priorYearTax, setPriorYearTaxRaw] = useState<number>(() => {
@@ -224,6 +234,23 @@ export function TaxPreviewProvider({
       })
     },
     [priorYearAgiKey],
+  )
+  const realEstateProfessionalKey = `tax-preview-re-professional-${year}`
+  const [realEstateProfessional, setRealEstateProfessionalRaw] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem(realEstateProfessionalKey) === 'true'
+  })
+  const setRealEstateProfessional: Dispatch<SetStateAction<boolean>> = useCallback(
+    (value) => {
+      setRealEstateProfessionalRaw((prev) => {
+        const next = typeof value === 'function' ? value(prev) : value
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(realEstateProfessionalKey, String(next))
+        }
+        return next
+      })
+    },
+    [realEstateProfessionalKey],
   )
 
   const refreshAll = useCallback(async () => {
@@ -293,6 +320,18 @@ export function TaxPreviewProvider({
       } catch (err) {
         console.error('Failed to load user deductions for year', year, err)
         setUserDeductions([])
+      }
+    })()
+  }, [year])
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const cfs = (await fetchWrapper.get(`/api/finance/pal-carryforwards?year=${year}`)) as PalCarryforwardEntry[]
+        setPalCarryforwards(Array.isArray(cfs) ? cfs : [])
+      } catch (err) {
+        console.error('Failed to load PAL carryforwards for year', year, err)
+        setPalCarryforwards([])
       }
     })()
   }, [year])
@@ -620,18 +659,22 @@ export function TaxPreviewProvider({
     }).filter(s => s.wages > 0)
 
     const form8959 = computeForm8959Lines(w2GrossIncome.value, isMarried, w2Sources)
+
+    // Form 8960 MAGI = AGI + §911 foreign earned income exclusion addback.
+    const form8960EstimatedMagi = w2GrossIncome
+      .add(income1099.interestIncome)
+      .add(income1099.dividendIncome)
+      .add(scheduleCNetIncome.total)
+      .add(scheduleE.grandTotal)
+      .add(Math.max(scheduleD.schD.schD_line16, -3000)).value
+
     const form8960 = computeForm8960Lines({
       taxableInterest: income1099.interestIncome.value,
       ordinaryDividends: income1099.dividendIncome.value,
       netCapGainsRaw: scheduleD.schD.schD_line16,
       passiveIncome: scheduleE.totalPassive,
       investmentInterestExpense: form4952.deductibleInvestmentInterestExpense,
-      magi: w2GrossIncome
-        .add(income1099.interestIncome)
-        .add(income1099.dividendIncome)
-        .add(scheduleCNetIncome.total)
-        .add(scheduleE.grandTotal)
-        .add(Math.max(scheduleD.schD.schD_line16, -3000)).value,
+      magi: form8960EstimatedMagi,
       isMarried,
       interestSources: scheduleB.interestLines.map(l => ({ label: l.label, amount: l.amount })),
       dividendSources: scheduleB.dividendLines.map(l => ({ label: l.label, amount: l.amount })),
@@ -645,6 +688,30 @@ export function TaxPreviewProvider({
       niit: form8960.niitTax,
       totalAdditionalTaxes: currency(form8959.additionalTax).add(form8960.niitTax).value,
     }
+
+    // Form 8582 MAGI = AGI computed without the passive activity loss deduction,
+    // plus specific addbacks (IRA deduction, student loan interest, half SE tax, etc.).
+    // See Form 8582 Worksheet 1, lines 1–7.
+    // For now we approximate with the same base AGI; this is a reasonable approximation
+    // since most addbacks are small relative to the phase-out range ($100k–$150k).
+    const form8582EstimatedMagi = w2GrossIncome
+      .add(income1099.interestIncome)
+      .add(income1099.dividendIncome)
+      .add(scheduleCNetIncome.total)
+      .add(scheduleE.grandTotal)
+      .add(Math.max(scheduleD.schD.schD_line16, -3000)).value
+
+    // Direct rental properties from Schedule E Part I would be passed here once the
+    // codebase has a rental property tracker (user-entered per-property data).
+    // Currently only K-1-based activities flow through Form 8582.
+    // See TODO B.6 — scheduleERentals is ready to accept DirectRentalProperty[] entries.
+    const form8582 = computeForm8582({
+      reviewedK1Docs,
+      magi: form8582EstimatedMagi,
+      isMarried,
+      palCarryforwards,
+      realEstateProfessional,
+    })
 
     const estimatedTaxPayments = !isMarried && priorYearTax > 0
       ? computeEstimatedTaxPayments({
@@ -683,6 +750,7 @@ export function TaxPreviewProvider({
       form8959,
       form8960,
       form461: form461Lines,
+      form8582,
       capitalLossCarryover: computeCapitalLossCarryover(
         scheduleD.schD.schD_line7,
         scheduleD.schD.schD_line15,
@@ -742,6 +810,8 @@ export function TaxPreviewProvider({
     shortDividendSummary,
     isMarried,
     userDeductions,
+    palCarryforwards,
+    realEstateProfessional,
     priorYearAgi,
     priorYearTax,
   ])
@@ -769,6 +839,10 @@ export function TaxPreviewProvider({
     setActiveTaxStates,
     userDeductions,
     setUserDeductions,
+    palCarryforwards,
+    setPalCarryforwards,
+    realEstateProfessional,
+    setRealEstateProfessional,
     shortDividendSummary,
     priorYearAgi,
     setPriorYearAgi,
@@ -805,6 +879,9 @@ export function TaxPreviewProvider({
     isMarried,
     activeTaxStates,
     userDeductions,
+    palCarryforwards,
+    realEstateProfessional,
+    setRealEstateProfessional,
     shortDividendSummary,
     priorYearAgi,
     setPriorYearAgi,

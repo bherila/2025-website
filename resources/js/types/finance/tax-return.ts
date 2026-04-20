@@ -204,6 +204,64 @@ export interface Form461Lines {
   isMarried: boolean
 }
 
+export interface Form8582ActivityLine {
+  activityName: string
+  ein?: string | undefined
+  /** True if this is rental real estate (K-1 Box 2) — eligible for $25k special allowance. */
+  isRentalRealEstate: boolean
+  /** True if the taxpayer actively participates in this rental activity. Required for $25k allowance. */
+  activeParticipation: boolean
+  /** Current-year income from this activity (positive). */
+  currentIncome: number
+  /** Current-year loss from this activity (negative). */
+  currentLoss: number
+  /** Prior-year unallowed losses carried forward (negative). */
+  priorYearUnallowed: number
+  /** Net result = income + loss + priorYearUnallowed. */
+  overallGainOrLoss: number
+  /** Portion of total allowed loss allocated to this activity (Worksheet 5 col c). */
+  allowedLossThisYear: number
+  /** Portion of suspended loss allocated to this activity (Worksheet 5 col d). */
+  suspendedLossCarryforward: number
+}
+
+export interface Form8582Lines {
+  /** Per-activity breakdown. */
+  activities: Form8582ActivityLine[]
+  /** Sum of all current-year passive income (positive). */
+  totalPassiveIncome: number
+  /** Sum of all current-year passive losses (negative). */
+  totalPassiveLoss: number
+  /** Sum of all prior-year unallowed losses (negative or zero). */
+  totalPriorYearUnallowed: number
+  /** Net passive result: income + loss + prior-year. Negative = net loss. */
+  netPassiveResult: number
+  /** $25k rental real estate special allowance (after MAGI phase-out). */
+  rentalAllowance: number
+  /**
+   * Total gross passive losses that are deductible in aggregate this year.
+   * When netPassiveResult >= 0, this equals the full gross loss amount (income covers all losses).
+   * When limited, this = passive income + effective rental allowance.
+   */
+  totalAllowedLoss: number
+  /** Total passive loss that is suspended (carried forward). */
+  totalSuspendedLoss: number
+  /**
+   * Net deduction flowing to Schedule E / Form 1040.
+   * When passive income covers all losses: 0 (net income, not a deduction).
+   * When losses are limited: equals totalAllowedLoss (the deductible portion).
+   */
+  netDeductionToReturn: number
+  /** True when some loss is suspended. */
+  isLossLimited: boolean
+  /** Modified AGI used for the $25k phase-out calculation. */
+  magi: number
+  /** Filing status. */
+  isMarried: boolean
+  /** True when taxpayer qualifies as a real estate professional (§469(c)(7)). */
+  realEstateProfessional: boolean
+}
+
 export interface TaxReturn1040 {
   year: number
   overviewSections?: OverviewSection[] | undefined
@@ -221,6 +279,7 @@ export interface TaxReturn1040 {
   form8995?: Form8995Lines
   capitalLossCarryover?: CapitalLossCarryoverLines
   form461?: Form461Lines
+  form8582?: Form8582Lines
   estimatedTaxPayments?: import('@/lib/finance/estimatedTaxPayments').EstimatedTaxPaymentsData
   k1Docs?: K1ExportEntry[]
   k3Docs?: K3ExportEntry[]

@@ -517,6 +517,50 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
       ])
     : null
 
+  // ── Form 8582 ────────────────────────────────────────────────────────────────
+  const form8582Sheet = taxReturn.form8582 && taxReturn.form8582.activities.length > 0
+    ? (() => {
+        const f = taxReturn.form8582
+        const activityRows: XlsxRow[] = f.activities.flatMap((a) => [
+          ...(a.currentIncome !== 0 ? [{ description: `${a.activityName}${a.isRentalRealEstate ? ' [Rental RE]' : ''} — Line 1a (income)`, amount: a.currentIncome }] : []),
+          ...(a.currentLoss !== 0 ? [{ description: `${a.activityName}${a.isRentalRealEstate ? ' [Rental RE]' : ''} — Line 1b (loss)`, amount: a.currentLoss }] : []),
+          ...(a.priorYearUnallowed !== 0 ? [{ description: `${a.activityName} — Line 1c (prior-year unallowed)`, amount: a.priorYearUnallowed }] : []),
+        ])
+        const carryforwardRows: XlsxRow[] = f.activities
+          .filter((a) => a.allowedLossThisYear > 0 || a.suspendedLossCarryforward > 0)
+          .flatMap((a) => [
+            { description: `${a.activityName} — Allowed this year`, amount: a.allowedLossThisYear },
+            ...(a.suspendedLossCarryforward > 0 ? [{ description: `${a.activityName} — Suspended carryforward`, amount: a.suspendedLossCarryforward }] : []),
+          ])
+        const perActivityNetRows: XlsxRow[] = f.activities.map((a) => ({
+          description: `${a.activityName}${a.isRentalRealEstate ? ' [Rental RE]' : ''} — Net gain/loss`,
+          amount: a.overallGainOrLoss,
+        }))
+        return buildSheet('Form 8582', [
+          { isHeader: true, description: 'Part I — Passive Activities' },
+          ...activityRows,
+          { line: '1a', description: 'Total passive income', amount: f.totalPassiveIncome, isTotal: true },
+          { line: '1b', description: 'Total passive loss', amount: f.totalPassiveLoss },
+          ...(f.totalPriorYearUnallowed !== 0 ? [{ line: '1c', description: 'Prior-year unallowed losses', amount: f.totalPriorYearUnallowed }] : []),
+          { line: '1d', description: 'Net passive result', amount: f.netPassiveResult, isTotal: true },
+          { isHeader: true, description: 'Part II — Special Allowance' },
+          { description: 'Modified AGI', amount: f.magi },
+          { description: 'Rental real estate special allowance', amount: f.rentalAllowance },
+          ...(f.realEstateProfessional ? [{ description: 'Real estate professional election (§469(c)(7))', amount: 0 }] : []),
+          { isHeader: true, description: 'Part III — Allowed vs. Suspended' },
+          { description: 'Total allowed passive loss', amount: -f.totalAllowedLoss, isTotal: true },
+          { description: 'Net deduction to return', amount: -f.netDeductionToReturn },
+          { description: 'Suspended loss — carried forward', amount: -f.totalSuspendedLoss, isTotal: f.isLossLimited },
+          ...(carryforwardRows.length > 0 ? [
+            { isHeader: true, description: 'Worksheet 5 — Per-Activity Allocation' },
+            ...carryforwardRows,
+          ] : []),
+          { isHeader: true, description: 'Per-Activity Net Gain/Loss' },
+          ...perActivityNetRows,
+        ])
+      })()
+    : null
+
   // ── Short Dividends ──────────────────────────────────────────────────────────
   const shortDivSheet = taxReturn.shortDividends
     ? buildSheet('Short Dividends', [
@@ -715,6 +759,7 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
     form4952Sheet,
     capitalLossSheet,
     form461Sheet,
+    form8582Sheet,
     shortDivSheet,
     estTaxSheet,
     ...k1Sheets,
