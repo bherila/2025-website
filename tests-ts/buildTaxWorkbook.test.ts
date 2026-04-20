@@ -2,6 +2,52 @@ import { buildTaxWorkbook } from '../resources/js/lib/finance/buildTaxWorkbook'
 import type { TaxReturn1040 } from '../resources/js/types/finance/tax-return'
 
 describe('buildTaxWorkbook', () => {
+  it('Box 20 Code Z carries Form 8995 routing note (TY 2023+ QBI code)', () => {
+    const workbook = buildTaxWorkbook({
+      year: 2024,
+      k1Docs: [{
+        entityName: 'Acme LP',
+        fields: {},
+        codes: { '20': [{ code: 'Z', value: '50000' }] },
+      }],
+    })
+    const k1Sheet = workbook.sheets.find(s => s.name === 'K-1 Acme LP')
+    expect(k1Sheet).toBeDefined()
+    const zRow = k1Sheet!.rows.find(r => r.line === '20Z')
+    expect(zRow).toBeDefined()
+    expect(zRow!.note).toMatch(/Form 8995/)
+    expect(zRow!.note).toMatch(/QBI/)
+  })
+
+  it('Box 20 Code S has no Form 8995 routing note (pre-2023 code no longer routed)', () => {
+    const workbook = buildTaxWorkbook({
+      year: 2024,
+      k1Docs: [{
+        entityName: 'Old LP',
+        fields: {},
+        codes: { '20': [{ code: 'S', value: '99999' }] },
+      }],
+    })
+    const k1Sheet = workbook.sheets.find(s => s.name === 'K-1 Old LP')
+    const sRow = k1Sheet!.rows.find(r => r.line === '20S')
+    // S no longer has a routing note; the note should be undefined or not reference Form 8995
+    expect(sRow?.note ?? '').not.toMatch(/Form 8995/)
+  })
+
+  it('Box 20 Code V has no UBIA routing note (pre-2023 code no longer routed)', () => {
+    const workbook = buildTaxWorkbook({
+      year: 2024,
+      k1Docs: [{
+        entityName: 'Old LP',
+        fields: {},
+        codes: { '20': [{ code: 'V', value: '200000' }] },
+      }],
+    })
+    const k1Sheet = workbook.sheets.find(s => s.name === 'K-1 Old LP')
+    const vRow = k1Sheet!.rows.find(r => r.line === '20V')
+    expect(vRow?.note ?? '').not.toMatch(/UBIA/)
+  })
+
   it('emits only Schedule B when only scheduleB is populated', () => {
     const workbook = buildTaxWorkbook({
       year: 2025,

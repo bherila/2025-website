@@ -4,12 +4,11 @@
  * Extracts Section 199A / QBI deduction components from reviewed K-1 documents
  * and computes the estimated Qualified Business Income Deduction (Form 1040 Line 13).
  *
- * IRS Box 20 code reference (Form 1065 K-1):
- *   S  – Section 199A information (QBI income/loss from the activity)
- *   V  – Section 199A UBIA of qualified property
+ * IRS Box 20 code reference (Form 1065 K-1, TY 2023+):
+ *   Z  – Section 199A information (QBI income/loss from the activity, with Statement A attached)
  *
- * Note: W-2 wages are reported in the Section 199A attached statement (not as a
- * separate Box 20 code). They appear in the notes field of Code S when extracted.
+ * Note: W-2 wages and UBIA are reported in Statement A attached to Code Z.
+ * Full Statement A parsing (W-2 wages, UBIA, SSTB) is deferred to a follow-on issue.
  */
 
 import currency from 'currency.js'
@@ -101,26 +100,27 @@ function getCodeNotes(codes: FK1StructuredData['codes'], box: string, code: stri
 export interface QBIEntry {
   /** Partnership/entity display name. */
   label: string
-  /** Box 20 Code S — QBI income (loss) from this activity. */
+  /** Box 20 Code Z — QBI income (loss) from this activity (TY 2023+). */
   qbiIncome: number
-  /** Box 20 Code V — UBIA of qualified property. */
+  /** UBIA of qualified property — reported in Statement A attached to Code Z. Currently 0; full Statement A parsing is deferred. */
   ubia: number
-  /** Free-form notes from Box 20 Code S (may include W-2 wages from the Section 199A statement). */
+  /** Free-form notes from Box 20 Code Z (may include W-2 wages and SSTB flag from Statement A). */
   sectionNotes: string
   /** 20% × max(qbiIncome, 0) — the raw QBI component before any caps. */
   qbiComponent: number
 }
 
 export function extractQBIFromK1(data: FK1StructuredData, label: string): QBIEntry | null {
-  const qbiIncome = getCodeValue(data.codes, '20', 'S')
-  const ubia = getCodeValue(data.codes, '20', 'V')
-  if (qbiIncome === 0 && ubia === 0) return null
+  // TY 2023+: Section 199A information is reported in Box 20 Code Z (with Statement A attached).
+  // Pre-2023 codes S and V are no longer read — see issue #269 for the no-backwards-compat decision.
+  const qbiIncome = getCodeValue(data.codes, '20', 'Z')
+  if (qbiIncome === 0) return null
 
   return {
     label,
     qbiIncome,
-    ubia,
-    sectionNotes: getCodeNotes(data.codes, '20', 'S'),
+    ubia: 0, // UBIA is embedded in Statement A attached to Code Z; full parsing deferred to follow-on work.
+    sectionNotes: getCodeNotes(data.codes, '20', 'Z'),
     qbiComponent: currency(Math.max(qbiIncome, 0)).multiply(0.2).value,
   }
 }

@@ -157,7 +157,8 @@ export const BOX20_CODES: Record<string, string> = {
   W: 'Section 965 information',
   X: 'Section 461(l) excess business loss information',
   Y: 'Other information (see attached statement)',
-  Z: 'Section 1061 information (carried interest)',
+  Z: 'Section 199A information (QBI deduction — Statement A)',
+  AA: 'Section 704(c) information',
 }
 
 /** All coded-box definitions in one lookup keyed by box number. */

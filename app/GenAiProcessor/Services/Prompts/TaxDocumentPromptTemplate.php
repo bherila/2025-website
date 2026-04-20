@@ -164,9 +164,9 @@ EXTRACTION RULES:
      Code A = country name, Code B = passive gross income, Code C = general gross income,
      Code I = foreign taxes paid, Code J = foreign taxes withheld at source.
    Box 20 (Other Information) — critical for QBI deduction:
-     Code S = Section 199A information (QBI income/loss from the activity). The value is the
-     QBI amount; record the full Section 199A statement (W-2 wages, UBIA, SSTB flag) in `notes`.
-     Code V = Section 199A UBIA of qualified property (enter the dollar amount).
+     Code Z = Section 199A information (QBI income/loss from the activity, TY 2023+). The value is the
+     QBI amount; record the full Section 199A Statement A (W-2 wages, UBIA, SSTB flag) in `notes`.
+     (Pre-2023 forms used Code S for this field; for TY 2023+ use Code Z.)
    Box 13 (Other Deductions):
      Code G = investment interest expense (→ Form 4952 Line 1).
      Code L = portfolio deductions not subject to 2% floor (→ Schedule A or Form 4952).

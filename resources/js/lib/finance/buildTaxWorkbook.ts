@@ -36,8 +36,7 @@ const K1_CODE_ROUTING_NOTES: Record<string, Record<string, string>> = {
   '20': {
     A: '>> Form 4952, II, line 4a',
     B: '>> Form 4952, II, line 5 (investment expenses)',
-    S: '>> Form 8995 / 8995-A — QBI deduction (20% of qualified income) | >> Form 1040 Line 13',
-    V: '>> Form 8995-A — UBIA of qualified property (W-2 wage/UBIA limitation)',
+    Z: '>> Form 8995 / 8995-A — QBI deduction (20% of qualified income, Statement A) | >> Form 1040 Line 13',
   },
 }
 
