@@ -9,6 +9,7 @@ import AdditionalTaxesPreview from '@/components/finance/AdditionalTaxesPreview'
 import Form1040Preview from '@/components/finance/Form1040Preview'
 import Form1116Preview from '@/components/finance/Form1116Preview'
 import Form4952Preview from '@/components/finance/Form4952Preview'
+import Form8582Preview from '@/components/finance/Form8582Preview'
 import Form8995Preview from '@/components/finance/Form8995Preview'
 import { isFK1StructuredData } from '@/components/finance/k1'
 import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
@@ -799,6 +800,7 @@ function TaxPreviewPageContent() {
           <TabsTrigger value={TAX_TABS.capitalGains}>Capital Gains</TabsTrigger>
           <TabsTrigger value={TAX_TABS.form1116}>Form 1116</TabsTrigger>
           <TabsTrigger value={TAX_TABS.form8995}>Form 8995</TabsTrigger>
+          <TabsTrigger value={TAX_TABS.form8582}>Form 8582</TabsTrigger>
           <TabsTrigger value={TAX_TABS.scheduleC}>Schedule C</TabsTrigger>
           <TabsTrigger value={TAX_TABS.estimate}>Tax Estimate</TabsTrigger>
           <TabsTrigger value={TAX_TABS.actionItems}>Action Items</TabsTrigger>
@@ -925,6 +927,14 @@ function TaxPreviewPageContent() {
             totalIncome={taxReturn.form8995?.totalIncome
               ?? w2GrossIncome.add(income1099.interestIncome).add(income1099.dividendIncome).add(scheduleCNetIncome.total).value}
             selectedYear={selectedYear}
+            isMarried={isMarried}
+          />
+        </TabsContent>
+
+        <TabsContent value={TAX_TABS.form8582} className="mt-0">
+          <Form8582Preview
+            reviewedK1Docs={reviewedK1Docs}
+            magi={taxReturn.form8582?.magi ?? w2GrossIncome.add(income1099.interestIncome).add(income1099.dividendIncome).add(scheduleCNetIncome.total).value}
             isMarried={isMarried}
           />
         </TabsContent>

@@ -202,6 +202,44 @@ export interface Form461Lines {
   isMarried: boolean
 }
 
+export interface Form8582ActivityLine {
+  activityName: string
+  ein?: string | undefined
+  /** Current-year income from this activity (positive). */
+  currentIncome: number
+  /** Current-year loss from this activity (negative). */
+  currentLoss: number
+  /** Prior-year unallowed losses carried forward (negative). */
+  priorYearUnallowed: number
+  /** Net result = income + loss + priorYearUnallowed. */
+  overallGainOrLoss: number
+}
+
+export interface Form8582Lines {
+  /** Per-activity breakdown. */
+  activities: Form8582ActivityLine[]
+  /** Sum of all current-year passive income (positive). */
+  totalPassiveIncome: number
+  /** Sum of all current-year passive losses (negative). */
+  totalPassiveLoss: number
+  /** Sum of all prior-year unallowed losses (negative or zero). */
+  totalPriorYearUnallowed: number
+  /** Net passive result: income + loss + prior-year. Negative = net loss. */
+  netPassiveResult: number
+  /** $25k rental real estate special allowance (after MAGI phase-out). */
+  rentalAllowance: number
+  /** Total passive loss that is allowed (deductible) this year. */
+  totalAllowedLoss: number
+  /** Total passive loss that is suspended (carried forward). */
+  totalSuspendedLoss: number
+  /** True when some loss is suspended. */
+  isLossLimited: boolean
+  /** Modified AGI used for the $25k phase-out calculation. */
+  magi: number
+  /** Filing status. */
+  isMarried: boolean
+}
+
 export interface TaxReturn1040 {
   year: number
   overviewSections?: OverviewSection[] | undefined
@@ -219,6 +257,7 @@ export interface TaxReturn1040 {
   form8995?: Form8995Lines
   capitalLossCarryover?: CapitalLossCarryoverLines
   form461?: Form461Lines
+  form8582?: Form8582Lines
   k1Docs?: K1ExportEntry[]
   k3Docs?: K3ExportEntry[]
   docs1099?: Doc1099ExportEntry[]

@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { computeForm1040Lines } from '@/components/finance/Form1040Preview'
 import { computeForm1116Lines } from '@/components/finance/Form1116Preview'
 import { computeForm4952Lines } from '@/components/finance/Form4952Preview'
+import { computeForm8582 } from '@/components/finance/Form8582Preview'
 import { computeForm8995 } from '@/components/finance/Form8995Preview'
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { computeScheduleALines } from '@/components/finance/ScheduleAPreview'
@@ -570,18 +571,21 @@ export function TaxPreviewProvider({
     }).filter(s => s.wages > 0)
 
     const form8959 = computeForm8959Lines(w2GrossIncome.value, isMarried, w2Sources)
+
+    const estimatedMagi = w2GrossIncome
+      .add(income1099.interestIncome)
+      .add(income1099.dividendIncome)
+      .add(scheduleCNetIncome.total)
+      .add(scheduleE.grandTotal)
+      .add(Math.max(scheduleD.schD.schD_line16, -3000)).value
+
     const form8960 = computeForm8960Lines({
       taxableInterest: income1099.interestIncome.value,
       ordinaryDividends: income1099.dividendIncome.value,
       netCapGainsRaw: scheduleD.schD.schD_line16,
       passiveIncome: scheduleE.totalPassive,
       investmentInterestExpense: form4952.deductibleInvestmentInterestExpense,
-      magi: w2GrossIncome
-        .add(income1099.interestIncome)
-        .add(income1099.dividendIncome)
-        .add(scheduleCNetIncome.total)
-        .add(scheduleE.grandTotal)
-        .add(Math.max(scheduleD.schD.schD_line16, -3000)).value,
+      magi: estimatedMagi,
       isMarried,
       interestSources: scheduleB.interestLines.map(l => ({ label: l.label, amount: l.amount })),
       dividendSources: scheduleB.dividendLines.map(l => ({ label: l.label, amount: l.amount })),
@@ -595,6 +599,12 @@ export function TaxPreviewProvider({
       niit: form8960.niitTax,
       totalAdditionalTaxes: currency(form8959.additionalTax).add(form8960.niitTax).value,
     }
+
+    const form8582 = computeForm8582({
+      reviewedK1Docs,
+      magi: estimatedMagi,
+      isMarried,
+    })
 
     return {
       year,
@@ -623,6 +633,7 @@ export function TaxPreviewProvider({
       form8959,
       form8960,
       form461: form461Lines,
+      form8582,
       capitalLossCarryover: computeCapitalLossCarryover(
         scheduleD.schD.schD_line7,
         scheduleD.schD.schD_line15,

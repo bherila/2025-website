@@ -11,6 +11,7 @@ export const TAX_TABS = {
   capitalGains: 'capital-gains',
   form1116: 'form-1116',
   form8995: 'form-8995',
+  form8582: 'form-8582',
   scheduleC: 'schedule-c',
   estimate: 'estimate',
   actionItems: 'action-items',
