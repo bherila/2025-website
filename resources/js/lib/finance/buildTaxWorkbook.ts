@@ -376,6 +376,17 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
           rows.push({ description: 'Foreign Tax Deduction (Sch. A) — at 37% marginal', amount: f.creditVsDeduction.deductionValue })
         }
 
+        if (f.sbpElections && f.sbpElections.length > 0) {
+          rows.push({ isHeader: true, description: 'Sourced-by-Partner (Col f) Election' })
+          for (const e of f.sbpElections) {
+            rows.push({ description: `${e.partnerName} — Col (f) net`, amount: e.sourcedByPartner })
+            rows.push({
+              description: `${e.partnerName} — Treat col (f) as U.S. source`,
+              note: e.active ? 'Active — col (f) excluded from foreign income' : 'Inactive — col (f) included in foreign income',
+            })
+          }
+        }
+
         void taxEnd
         return buildSheet('Form 1116', rows)
       })()

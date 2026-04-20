@@ -157,16 +157,25 @@ export default function TaxDocuments1099Section({
       if (!doc.parsed_data) continue
 
       if (doc.form_type === 'broker_1099') {
-        // Multi-account: iterate per-entry and respect per-link review state.
-        for (const [entry, link] of iterateReviewedBrokerEntries(doc)) {
-          const pd = entry.parsed_data as Record<string, unknown>
-          if (entry.form_type === '1099_div' || entry.form_type === '1099_div_c') {
-            const s = extractForeignTaxFrom1099Div(pd, link.account_id)
-            if (s) summaries.push(s)
-          } else if (entry.form_type === '1099_int' || entry.form_type === '1099_int_c') {
-            const s = extractForeignTaxFrom1099Int(pd, link.account_id)
-            if (s) summaries.push(s)
+        if (Array.isArray(doc.parsed_data)) {
+          // Multi-account array format: iterate per-entry and respect per-link review state.
+          for (const [entry, link] of iterateReviewedBrokerEntries(doc)) {
+            const pd = entry.parsed_data as Record<string, unknown>
+            if (entry.form_type === '1099_div' || entry.form_type === '1099_div_c') {
+              const s = extractForeignTaxFrom1099Div(pd, link.account_id)
+              if (s) summaries.push(s)
+            } else if (entry.form_type === '1099_int' || entry.form_type === '1099_int_c') {
+              const s = extractForeignTaxFrom1099Int(pd, link.account_id)
+              if (s) summaries.push(s)
+            }
           }
+        } else if (doc.is_reviewed) {
+          // Flat-dict format (single-account consolidated 1099): read div_7 directly.
+          const pd = doc.parsed_data as Record<string, unknown>
+          const accountId = doc.account_links?.find(l => l.account_id != null)?.account_id ?? doc.account_id
+          const divFt = { box7_foreign_tax: pd.div_7_foreign_tax_paid }
+          const s = extractForeignTaxFrom1099Div(divFt, accountId)
+          if (s) summaries.push(s)
         }
       } else {
         // Single-form document.
