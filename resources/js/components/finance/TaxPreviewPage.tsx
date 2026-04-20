@@ -6,6 +6,7 @@ import { useCallback, useState } from 'react'
 
 import ActionItemsTab from '@/components/finance/ActionItemsTab'
 import AdditionalTaxesPreview from '@/components/finance/AdditionalTaxesPreview'
+import EstimatedTaxPaymentsSection from '@/components/finance/EstimatedTaxPaymentsSection'
 import Form1040Preview from '@/components/finance/Form1040Preview'
 import Form1116Preview from '@/components/finance/Form1116Preview'
 import Form4952Preview from '@/components/finance/Form4952Preview'
@@ -626,6 +627,8 @@ function TaxPreviewPageContent() {
     userDeductions,
     setUserDeductions,
     shortDividendSummary,
+    priorYearTax,
+    setPriorYearTax,
     taxReturn,
     refreshAll,
   } = useTaxPreview()
@@ -992,6 +995,15 @@ function TaxPreviewPageContent() {
                 </div>
               ))}
             </div>
+          )}
+
+          {taxReturn.estimatedTaxPayments && (
+            <EstimatedTaxPaymentsSection
+              selectedYear={selectedYear}
+              priorYearTax={priorYearTax}
+              onPriorYearTaxChange={setPriorYearTax}
+              estimatedTaxPayments={taxReturn.estimatedTaxPayments}
+            />
           )}
         </TabsContent>
 

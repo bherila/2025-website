@@ -21,6 +21,7 @@ import { fetchWrapper } from '@/fetchWrapper'
 import { computeForm8959Lines } from '@/finance/8959/form8959'
 import { computeForm8960Lines } from '@/finance/8960/form8960'
 import { computeCapitalLossCarryover } from '@/finance/capitalLoss/capitalLossCarryover'
+import { computeEstimatedTaxPayments } from '@/lib/finance/estimatedTaxPayments'
 import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import { form461 } from '@/lib/tax/form461'
 import { buildCacheKey, getCachedTransactions, setCachedTransactions } from '@/services/transactionCache'
@@ -91,6 +92,10 @@ interface TaxPreviewContextValue {
   setUserDeductions: Dispatch<SetStateAction<UserDeductionEntry[]>>
   /** Aggregated short dividend summary across all active accounts, or null if not yet loaded. */
   shortDividendSummary: ShortDividendSummary | null
+  /** Prior year total tax — user-entered for safe-harbor estimated payment planning. */
+  priorYearTax: number
+  /** Setter for priorYearTax — persisted to localStorage per tax year. */
+  setPriorYearTax: Dispatch<SetStateAction<number>>
   taxReturn: TaxReturn1040
   setPayslips: Dispatch<SetStateAction<fin_payslip[]>>
   setPendingReviewCount: Dispatch<SetStateAction<number>>
@@ -175,6 +180,27 @@ export function TaxPreviewProvider({
   const [isMarried, setIsMarried] = useState(false)
   const [activeTaxStates, setActiveTaxStates] = useState<string[]>([])
   const [userDeductions, setUserDeductions] = useState<UserDeductionEntry[]>([])
+
+  const priorYearTaxKey = `tax-preview-prior-year-tax-${year}`
+  const [priorYearTax, setPriorYearTaxRaw] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0
+    const stored = localStorage.getItem(priorYearTaxKey)
+    if (stored === null) return 0
+    const n = parseFloat(stored)
+    return isNaN(n) ? 0 : n
+  })
+  const setPriorYearTax: Dispatch<SetStateAction<number>> = useCallback(
+    (value) => {
+      setPriorYearTaxRaw((prev) => {
+        const next = typeof value === 'function' ? value(prev) : value
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(priorYearTaxKey, String(next))
+        }
+        return next
+      })
+    },
+    [priorYearTaxKey],
+  )
 
   const refreshAll = useCallback(async () => {
     if (!hasLoadedOnce.current) {
@@ -666,6 +692,11 @@ export function TaxPreviewProvider({
         }
       }),
       ...(shortDividendSummary ? { shortDividends: shortDividendSummary } : {}),
+      estimatedTaxPayments: computeEstimatedTaxPayments({
+        selectedYear: year,
+        priorYearTax,
+        expectedWithholding: fedWH,
+      }),
     }
   }, [
     year,
@@ -679,6 +710,7 @@ export function TaxPreviewProvider({
     shortDividendSummary,
     isMarried,
     userDeductions,
+    priorYearTax,
   ])
 
   const value = useMemo<TaxPreviewContextValue>(() => ({
@@ -705,6 +737,8 @@ export function TaxPreviewProvider({
     userDeductions,
     setUserDeductions,
     shortDividendSummary,
+    priorYearTax,
+    setPriorYearTax,
     taxReturn,
     setPayslips,
     setPendingReviewCount,
@@ -737,6 +771,8 @@ export function TaxPreviewProvider({
     activeTaxStates,
     userDeductions,
     shortDividendSummary,
+    priorYearTax,
+    setPriorYearTax,
     taxReturn,
     refreshAll,
   ])

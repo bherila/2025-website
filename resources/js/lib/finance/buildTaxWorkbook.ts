@@ -1,6 +1,7 @@
 import currency from 'currency.js'
 
 import { ALL_K1_CODES, K1_SPEC_BY_BOX } from '@/components/finance/k1'
+import type { EstimatedTaxPaymentsData } from '@/types/finance/tax-return'
 import type { TaxReturn1040 } from '@/types/finance/tax-return'
 import type { XlsxRow, XlsxSheet, XlsxWorkbook } from '@/types/finance/xlsx-export'
 
@@ -649,6 +650,41 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
     })),
   ))
 
+  // ── Estimated Tax Payments ───────────────────────────────────────────────────
+  const estTaxSheet = taxReturn.estimatedTaxPayments && taxReturn.estimatedTaxPayments.priorYearTax > 0
+    ? (() => {
+        const e = taxReturn.estimatedTaxPayments!
+        const rows: XlsxRow[] = [
+          { isHeader: true, description: `Safe Harbor Method — 110% of ${e.planningYear - 1} Tax` },
+          {
+            description: `${e.planningYear - 1} total tax (prior year)`,
+            amount: e.priorYearTax,
+          },
+          {
+            description: 'Safe harbor amount (110%)',
+            amount: e.safeHarborAmount,
+            isTotal: true,
+          },
+          {
+            description: `Expected ${e.planningYear} federal withholding`,
+            amount: e.expectedWithholding,
+          },
+          {
+            description: 'Net estimated tax due',
+            amount: e.netDue,
+            isTotal: true,
+          },
+          { isHeader: true, description: `${e.planningYear} Payment Schedule` },
+          ...e.quarterlyPayments.map((p: EstimatedTaxPaymentsData['quarterlyPayments'][number]) => ({
+            line: `Q${p.paymentNumber}`,
+            description: `Payment ${p.paymentNumber} — Due ${p.dueDate}`,
+            amount: p.amount,
+          })),
+        ]
+        return buildSheet('Est. Tax Payments', rows)
+      })()
+    : null
+
   const orderedSheets = [
     overviewSheet,
     form1040Sheet,
@@ -665,6 +701,7 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
     capitalLossSheet,
     form461Sheet,
     shortDivSheet,
+    estTaxSheet,
     ...k1Sheets,
     ...k3Sheets,
     ...docs1099Sheets,
