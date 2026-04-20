@@ -10,6 +10,7 @@ use App\Http\Controllers\ClientManagement\ClientInvoiceApiController;
 use App\Http\Controllers\ClientManagement\ClientPortalAgreementApiController;
 use App\Http\Controllers\ClientManagement\ClientPortalApiController;
 use App\Http\Controllers\FileController;
+use App\Http\Controllers\Finance\PalCarryforwardController;
 use App\Http\Controllers\Finance\TaxPreviewDataController;
 use App\Http\Controllers\Finance\UserDeductionController;
 use App\Http\Controllers\Finance\UserTaxStateController;
@@ -95,6 +96,12 @@ Route::middleware(['web', 'auth'])->get('/finance/user-deductions', [UserDeducti
 Route::middleware(['web', 'auth'])->post('/finance/user-deductions', [UserDeductionController::class, 'store']);
 Route::middleware(['web', 'auth'])->put('/finance/user-deductions/{id}', [UserDeductionController::class, 'update']);
 Route::middleware(['web', 'auth'])->delete('/finance/user-deductions/{id}', [UserDeductionController::class, 'destroy']);
+
+// Per-year per-activity PAL carryforwards (Form 8582 suspended losses from prior years)
+Route::middleware(['web', 'auth'])->get('/finance/pal-carryforwards', [PalCarryforwardController::class, 'index']);
+Route::middleware(['web', 'auth'])->post('/finance/pal-carryforwards', [PalCarryforwardController::class, 'store']);
+Route::middleware(['web', 'auth'])->put('/finance/pal-carryforwards/{id}', [PalCarryforwardController::class, 'update']);
+Route::middleware(['web', 'auth'])->delete('/finance/pal-carryforwards/{id}', [PalCarryforwardController::class, 'destroy']);
 
 Route::middleware(['web', 'auth'])->post('/finance/transactions/batch-delete', [FinanceTransactionsApiController::class, 'batchDelete']);
 Route::middleware(['web', 'auth'])->post('/finance/transactions/batch-update', [FinanceTransactionsApiController::class, 'batchUpdate']);
