@@ -74,7 +74,8 @@ describe('computeForm4952Lines — §67(g) suspension (Issue 1)', () => {
     // 13H should be in invIntSources, 13K should not (it's suspended)
     const hSource = result.invIntSources.find((s) => s.label.includes('Box 13H'))
     expect(hSource).toBeDefined()
-    expect(hSource!.amount).toBe(5000)
+    // Normalized to -Math.abs for consistency with other expense sources
+    expect(hSource!.amount).toBe(-5000)
     // K is suspended, should not appear in invIntSources
     const kSource = result.invIntSources.find((s) => s.label.includes('Box 13K'))
     expect(kSource).toBeUndefined()
@@ -166,7 +167,7 @@ describe('computeForm4952Lines — Box 13AC (Issue 2)', () => {
     })
     const acSource = result.invIntSources.find((s) => s.label.includes('Box 13AC'))
     expect(acSource).toBeDefined()
-    expect(acSource!.amount).toBe(5000)
+    expect(acSource!.amount).toBe(-5000)
     expect(result.totalInvIntExpense).toBe(5000)
   })
 })
@@ -190,7 +191,40 @@ describe('computeForm4952Lines — Box 13AD (Issue 7)', () => {
     })
     const adSource = result.invIntSources.find((s) => s.label.includes('Box 13AD'))
     expect(adSource).toBeDefined()
-    expect(adSource!.amount).toBe(3000)
+    expect(adSource!.amount).toBe(-3000)
+  })
+})
+
+describe('computeForm4952Lines — sign normalization (defense-in-depth)', () => {
+  it('normalizes negatively-stored Box 13H so it cannot cancel against -Math.abs siblings', () => {
+    // GenAI extraction does not guarantee positive values. If 13H arrives
+    // negative, the pre-fix code pushed raw n, which would cancel against
+    // already-negative 1099-INT Box 5 entries and understate totalInvIntExpense.
+    const data = makeK1Data({
+      fields: { '5': { value: '10000' } },
+      codes: {
+        '13': [{ code: 'H', value: '-5000' }],
+      },
+    })
+    const doc = makeK1Doc(data)
+    const oneKDoc = {
+      ...doc,
+      parsed_data: {
+        payer_name: 'Acme Broker',
+        box5_investment_expense: 1000,
+      },
+    } as unknown as TaxDocument
+
+    const result = computeForm4952Lines({
+      reviewedK1Docs: [doc],
+      reviewed1099Docs: [oneKDoc],
+      income1099: defaultIncome1099,
+    })
+    // 13H should be -5000 after normalization (not +5000 from raw parse)
+    const hSource = result.invIntSources.find((s) => s.label.includes('Box 13H'))
+    expect(hSource!.amount).toBe(-5000)
+    // Total = |-5000 + -1000| = 6000 (no cancellation)
+    expect(result.totalInvIntExpense).toBe(6000)
   })
 })
 

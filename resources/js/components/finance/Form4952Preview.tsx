@@ -75,7 +75,7 @@ export function computeForm4952Lines({
       if (item.code === 'H' || item.code === 'G' || item.code === 'AC' || item.code === 'AD') {
         const n = parseFloat(item.value)
         if (!isNaN(n) && n !== 0) {
-          invIntSources.push({ label: `${partnerName} — Box 13${item.code}`, amount: n })
+          invIntSources.push({ label: `${partnerName} — Box 13${item.code}`, amount: -Math.abs(n) })
         }
       }
     }
@@ -206,7 +206,7 @@ export default function Form4952Preview({
       if ((item.code === 'K' || item.code === 'AE') && item.value) {
         const n = parseFloat(item.value)
         if (!isNaN(n) && n !== 0) {
-          suspendedLines.push({ label: `${partnerName} — Box 13${item.code} (§67(g) suspended)`, amount: n })
+          suspendedLines.push({ label: `${partnerName} — Box 13${item.code} (§67(g) suspended)`, amount: Math.abs(n) })
         }
       }
     }
