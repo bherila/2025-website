@@ -1,6 +1,6 @@
 import currency from 'currency.js'
 
-import { isFK1StructuredData, type FK1StructuredData } from '@/types/finance/k1-data'
+import { type FK1StructuredData,isFK1StructuredData } from '@/types/finance/k1-data'
 
 /**
  * Returns the K-3 "Sourced by Partner" election state for a K-1 document.

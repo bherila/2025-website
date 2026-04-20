@@ -4,12 +4,12 @@ import currency from 'currency.js'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
-import { getSbpElection } from '@/lib/finance/k1Utils'
 import {
   extractForeignTaxSummaries,
   extractK3IncomeBreakdown,
   extractK3Line4bApportionment,
 } from '@/finance/1116/k3-to-1116'
+import { getSbpElection } from '@/lib/finance/k1Utils'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import type { Form1116Lines } from '@/types/finance/tax-return'
