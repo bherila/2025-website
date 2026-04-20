@@ -18,14 +18,15 @@ export function parseK1Codes(data: FK1StructuredData, box: string): number {
 }
 
 export function k1NetIncome(data: FK1StructuredData): number {
-  const INCOME_BOXES = ['1', '2', '3', '4', '5', '6a', '6b', '6c', '7', '8', '9a', '9b', '9c', '10']
+  // Box 6b (qualified dividends) is a subset of Box 6a (ordinary dividends) — exclude to avoid double-counting.
+  const INCOME_BOXES = ['1', '2', '3', '4', '5', '6a', '6c', '7', '8', '9a', '9b', '9c', '10']
   const incomeTotal = INCOME_BOXES.reduce((acc, box) => acc.add(parseK1Field(data, box)), currency(0))
     .add(parseK1Codes(data, '11'))
   const box12 = parseK1Field(data, '12')
   const box21 = parseK1Field(data, '21')
   const deductionTotal = currency(0)
     .add(box12 !== 0 ? -Math.abs(box12) : 0)
-    .add(parseK1Codes(data, '13'))
+    .subtract(parseK1Codes(data, '13'))
     .add(box21 !== 0 ? -Math.abs(box21) : 0)
   return incomeTotal.add(deductionTotal).value
 }

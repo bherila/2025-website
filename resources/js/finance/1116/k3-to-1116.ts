@@ -299,7 +299,9 @@ export function extractForeignTaxSummaries(
   const box21 = toNum(data.fields['21']?.value)
   const box16I = getCodeValue(data.codes, '16', 'I')
   const box16J = getCodeValue(data.codes, '16', 'J')
-  const totalForeignTaxPaid = currency(box21 > 0 ? box21 : box16I).add(box16J).value
+  // When Box 21 and Box 16 I/J are absent, fall back to K-3 Part III Section 4 (common for fund K-1s).
+  const boxTotal = currency(box21 > 0 ? box21 : box16I).add(box16J).value
+  const totalForeignTaxPaid = boxTotal !== 0 ? boxTotal : extractK3ForeignTaxTotal(data)
 
   if (totalForeignTaxPaid === 0) return []
 

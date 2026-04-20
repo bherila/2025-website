@@ -249,6 +249,40 @@ describe('extractForeignTaxSummaries — SBP election', () => {
     const data = makeData()
     expect(extractForeignTaxSummaries(data)).toHaveLength(0)
   })
+
+  it('falls back to K-3 Part III Section 4 when Box 21 and Box 16 I/J are absent', () => {
+    // Delphi Plus-style K-1: foreign taxes reported ONLY in K-3 Part III Section 4,
+    // not in Box 21 or Box 16 codes I/J. This is common for fund K-1s.
+    const data = makeData({
+      k3: {
+        sections: [
+          canonicalSection('part2_section1', {
+            line7_ordinaryDividends: {
+              rows: [
+                { country: 'US', c: 0, d: 0, f: 0 },
+                { country: 'DE', c: 500, d: 0, f: 0 },
+                { country: 'JP', c: 742, d: 0, f: 0 },
+              ],
+            },
+          }),
+          canonicalSection('part3_section4', {
+            line1_foreignTaxesPaid: {
+              countries: [
+                { code: 'DE', passiveForeign: 700, total: 700 },
+                { code: 'JP', passiveForeign: 542, total: 542 },
+              ],
+            },
+          }),
+        ],
+      },
+    })
+    const summaries = extractForeignTaxSummaries(data)
+    expect(summaries).toHaveLength(1)
+    const s = summaries[0]
+    if (!s) throw new Error('expected summary')
+    expect(s.totalForeignTaxPaid).toBe(1242)
+    expect(s.category).toBe('passive')
+  })
 })
 
 // ── extractK1NIIComponents ────────────────────────────────────────────────────
