@@ -233,8 +233,7 @@ function PalCarryforwardInput({ year, carryforwards, onChange }: PalCarryforward
     }
   }
 
-  async function handleDelete(entry: PalCarryforwardEntry & { id?: number }): Promise<void> {
-    if (!entry.id) return
+  async function handleDelete(entry: PalCarryforwardEntry & { id: number }): Promise<void> {
     try {
       await fetchWrapper.delete(`/api/finance/pal-carryforwards/${entry.id}`, {})
       const updated = (await fetchWrapper.get(`/api/finance/pal-carryforwards?year=${year}`)) as PalCarryforwardEntry[]
@@ -272,7 +271,7 @@ function PalCarryforwardInput({ year, carryforwards, onChange }: PalCarryforward
                     <button
                       type="button"
                       className="text-xs text-red-500 hover:text-red-700"
-                      onClick={() => handleDelete(cf as PalCarryforwardEntry & { id?: number })}
+                      onClick={() => handleDelete(cf as PalCarryforwardEntry & { id: number })}
                     >
                       ✕
                     </button>
