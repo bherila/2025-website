@@ -27,7 +27,7 @@ import { buildCacheKey, getCachedTransactions, setCachedTransactions } from '@/s
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { EmploymentEntity, F1099DivParsedData, F1099IntParsedData, TaxDocument, W2ParsedData } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
-import type { OverviewRow, TaxReturn1040 } from '@/types/finance/tax-return'
+import type { OverviewRow, TaxReturn1040, UserDeductionEntry } from '@/types/finance/tax-return'
 
 import type { ScheduleCResponse, YearData } from './ScheduleCPreview'
 
@@ -81,6 +81,14 @@ interface TaxPreviewContextValue {
   }
   /** Whether the user is married for the selected tax year (from marriage status settings). */
   isMarried: boolean
+  /** State codes the user filed in for the selected tax year (e.g. ['CA', 'NY']). */
+  activeTaxStates: string[]
+  /** Callback to add/remove a state — triggers a re-fetch. */
+  setActiveTaxStates: Dispatch<SetStateAction<string[]>>
+  /** User-entered Schedule A deductions for the year (property tax, mortgage, etc.). */
+  userDeductions: UserDeductionEntry[]
+  /** Callback to replace the deductions list after a mutation. */
+  setUserDeductions: Dispatch<SetStateAction<UserDeductionEntry[]>>
   /** Aggregated short dividend summary across all active accounts, or null if not yet loaded. */
   shortDividendSummary: ShortDividendSummary | null
   taxReturn: TaxReturn1040
@@ -165,6 +173,8 @@ export function TaxPreviewProvider({
   const [activeAccountIds, setActiveAccountIds] = useState<number[]>([])
   const [shortDividendSummary, setShortDividendSummary] = useState<ShortDividendSummary | null>(null)
   const [isMarried, setIsMarried] = useState(false)
+  const [activeTaxStates, setActiveTaxStates] = useState<string[]>([])
+  const [userDeductions, setUserDeductions] = useState<UserDeductionEntry[]>([])
 
   const refreshAll = useCallback(async () => {
     if (!hasLoadedOnce.current) {
@@ -201,7 +211,6 @@ export function TaxPreviewProvider({
         if (String(year) in status) {
           setIsMarried(status[String(year)] ?? false)
         } else {
-          // Carry forward the most recent prior year's status
           const priorYear = Object.keys(status)
             .map(Number)
             .filter(y => y < year)
@@ -210,6 +219,30 @@ export function TaxPreviewProvider({
         }
       } catch {
         // Non-fatal — default to false (single)
+      }
+    })()
+  }, [year])
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const states = (await fetchWrapper.get(`/api/finance/user-tax-states?year=${year}`)) as string[]
+        setActiveTaxStates(Array.isArray(states) ? states : [])
+      } catch (err) {
+        console.error('Failed to load user tax states for year', year, err)
+        setActiveTaxStates([])
+      }
+    })()
+  }, [year])
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const deductions = (await fetchWrapper.get(`/api/finance/user-deductions?year=${year}`)) as UserDeductionEntry[]
+        setUserDeductions(Array.isArray(deductions) ? deductions : [])
+      } catch (err) {
+        console.error('Failed to load user deductions for year', year, err)
+        setUserDeductions([])
       }
     })()
   }, [year])
@@ -504,6 +537,7 @@ export function TaxPreviewProvider({
       saltPaid,
       year,
       isMarried,
+      userDeductions,
     })
     const form4952 = computeForm4952Lines({
       reviewedK1Docs,
@@ -644,6 +678,7 @@ export function TaxPreviewProvider({
     payslips,
     shortDividendSummary,
     isMarried,
+    userDeductions,
   ])
 
   const value = useMemo<TaxPreviewContextValue>(() => ({
@@ -665,6 +700,10 @@ export function TaxPreviewProvider({
     activeAccountIds,
     income1099,
     isMarried,
+    activeTaxStates,
+    setActiveTaxStates,
+    userDeductions,
+    setUserDeductions,
     shortDividendSummary,
     taxReturn,
     setPayslips,
@@ -695,6 +734,8 @@ export function TaxPreviewProvider({
     activeAccountIds,
     income1099,
     isMarried,
+    activeTaxStates,
+    userDeductions,
     shortDividendSummary,
     taxReturn,
     refreshAll,

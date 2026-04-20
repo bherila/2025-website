@@ -220,14 +220,20 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
     : null
 
   // ── Schedule A ───────────────────────────────────────────────────────────────
+  // Row order mirrors the IRS Schedule A: 7 → 8 → 9 → 10 → 11 → 16 → 17.
   const scheduleASheet = taxReturn.scheduleA
     ? buildSheet('Schedule A', [
         {
           line: '7',
           description: 'Line 7 — State and local taxes paid (SALT, capped at $10,000)',
           amount: taxReturn.scheduleA.saltDeduction,
-          note: 'From W-2 Box 17 state withholding. Real estate taxes add separately.',
+          note: 'W-2 Box 17 + user-entered SALT (state est tax, property tax, sales tax)',
         },
+        ...(taxReturn.scheduleA.mortgageInterest > 0 ? [{
+          line: '8',
+          description: 'Line 8 — Mortgage interest',
+          amount: taxReturn.scheduleA.mortgageInterest,
+        }] : []),
         {
           line: '9',
           description: 'Line 9 — Investment interest expense (from Form 4952)',
@@ -236,6 +242,22 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
             ? formulaRef('Form 4952', form4952Sheet.rowIndex.get('Line 6 — Deductible investment interest expense')!)
             : undefined,
         },
+        {
+          line: '10',
+          description: 'Line 10 — Total interest (mortgage + investment interest)',
+          amount: currency(taxReturn.scheduleA.mortgageInterest).add(taxReturn.scheduleA.totalInvIntExpense).value,
+          isTotal: true,
+        },
+        ...(taxReturn.scheduleA.charitable > 0 ? [{
+          line: '11',
+          description: 'Lines 11–12 — Charitable contributions',
+          amount: taxReturn.scheduleA.charitable,
+        }] : []),
+        ...(taxReturn.scheduleA.otherDeductions > 0 ? [{
+          line: '16',
+          description: 'Line 16 — Other itemized deductions',
+          amount: taxReturn.scheduleA.otherDeductions,
+        }] : []),
         {
           line: '17',
           description: 'Line 17 — Total itemized deductions',

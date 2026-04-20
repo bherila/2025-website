@@ -44,3 +44,10 @@
 - Consider using Laravel JSON script helpers consistently anywhere server state is embedded in Blade.
 - Add stricter validation for tax-preview query params and explicit bounds checking on years.
 - Audit all tax-preview monetary calculations periodically to ensure `currency.js` remains the only arithmetic path.
+
+## State Filings & Deductions (follow-ups to #257)
+
+- Split `isMarried` into MFJ vs. MFS in the marriage-status settings — MFS has a $5k SALT cap and roughly half-MFJ bracket thresholds. Today both collapse to `'Married Filing Jointly'`.
+- Extend state support beyond CA/NY: add bracket data to `taxBracket.ts`, state standard deductions to `standardDeductions.ts`, and register the code in both `App\Enums\Finance\TaxState` and `resources/js/lib/tax/supportedStates.ts` (kept in sync manually — consider codegen if the list grows).
+- Render full state-return forms (CA-540, NY IT-201) rather than only the TotalsTable bracket summary. Tracked in #256.
+- Surface load failures from `/api/finance/user-tax-states` and `/api/finance/user-deductions` via toast instead of console-only logs so failed year loads are visible to the user.

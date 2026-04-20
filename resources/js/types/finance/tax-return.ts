@@ -15,14 +15,29 @@ export interface Form1040LineItem {
   navTab?: string
 }
 
+export interface UserDeductionEntry {
+  id: number
+  category: string
+  description: string | null
+  amount: number
+}
+
 export interface ScheduleALines {
   invIntSources: { label: string; amount: number }[]
   totalInvIntExpense: number
-  /** Raw SALT paid before the $10,000 cap (W-2 Box 17 + other sources). */
+  /** Raw SALT paid before the $10,000 cap (W-2 Box 17 + user-entered SALT categories). */
   saltPaid: number
-  /** SALT paid (state/local income or sales tax + property tax), capped at $10,000. */
+  /** SALT paid capped at $10,000. */
   saltDeduction: number
-  /** Itemized deductions subtotal (investment interest gross + SALT only; mortgage, charitable, medical not yet included). */
+  /** User-entered mortgage interest. */
+  mortgageInterest: number
+  /** User-entered charitable contributions (cash + non-cash). */
+  charitable: number
+  /** Other user-entered deductions. */
+  otherDeductions: number
+  /** All user-entered deduction entries for the inline UI. */
+  userDeductions: UserDeductionEntry[]
+  /** Total itemized deductions (investment interest + SALT + mortgage + charitable + other). */
   totalItemizedDeductions: number
   /** Standard deduction for the year and filing status. */
   standardDeduction: number

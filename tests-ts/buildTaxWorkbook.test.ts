@@ -23,7 +23,7 @@ describe('buildTaxWorkbook', () => {
     const taxReturn: TaxReturn1040 = {
       year: 2025,
       form1040: [{ line: '1a', label: 'Wages, salaries, tips (W-2, box 1)', value: 100000 }],
-      scheduleA: { invIntSources: [], totalInvIntExpense: 20, saltPaid: 0, saltDeduction: 0, totalItemizedDeductions: 20, standardDeduction: 15_000, shouldItemize: false },
+      scheduleA: { invIntSources: [], totalInvIntExpense: 20, saltPaid: 0, saltDeduction: 0, mortgageInterest: 0, charitable: 0, otherDeductions: 0, userDeductions: [], totalItemizedDeductions: 20, standardDeduction: 15_000, shouldItemize: false },
       scheduleB: {
         interestTotal: 100,
         dividendTotal: 50,
@@ -150,5 +150,38 @@ describe('buildTaxWorkbook', () => {
     const form1040 = workbook.sheets.find(s => s.name === 'Form 1040')
     const line20 = form1040?.rows.find(r => r.line === '20')
     expect(line20?.amount).toBeUndefined()
+  })
+
+  it('includes complete Schedule A deduction rows in workbook export', () => {
+    const workbook = buildTaxWorkbook({
+      year: 2025,
+      scheduleA: {
+        invIntSources: [],
+        totalInvIntExpense: 1200,
+        saltPaid: 9000,
+        saltDeduction: 10_000,
+        mortgageInterest: 6000,
+        charitable: 2500,
+        otherDeductions: 300,
+        userDeductions: [],
+        totalItemizedDeductions: 20_000,
+        standardDeduction: 15_000,
+        shouldItemize: true,
+      },
+    })
+
+    const scheduleASheet = workbook.sheets.find(s => s.name === 'Schedule A')
+    expect(scheduleASheet).toBeDefined()
+    expect(scheduleASheet?.rows.some(r => r.line === '8' && r.amount === 6000)).toBe(true)
+    expect(scheduleASheet?.rows.some(r => r.line === '10' && r.amount === 7200)).toBe(true) // mortgage 6000 + inv int 1200
+    expect(scheduleASheet?.rows.some(r => r.line === '11' && r.amount === 2500)).toBe(true)
+    expect(scheduleASheet?.rows.some(r => r.line === '16' && r.amount === 300)).toBe(true)
+    expect(scheduleASheet?.rows.some(r => r.line === '7' && r.note?.includes('sales tax'))).toBe(true)
+
+    // Row order must follow IRS Schedule A: 7 → 8 → 9 → 10 → 11 → 16 → 17
+    const lineOrder = scheduleASheet!.rows
+      .map(r => r.line)
+      .filter((l): l is string => typeof l === 'string' && /^\d+$/.test(l))
+    expect(lineOrder).toEqual(['7', '8', '9', '10', '11', '16', '17'])
   })
 })

@@ -15,9 +15,11 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import type { ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
+import { SALT_CATEGORIES } from '@/lib/tax/deductionCategories'
+import { type FilingStatus, getStandardDeduction } from '@/lib/tax/standardDeductions'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
-import type { ScheduleALines } from '@/types/finance/tax-return'
+import type { ScheduleALines, UserDeductionEntry } from '@/types/finance/tax-return'
 
 import { ShortDividendSummaryCard } from './ShortDividendDetailModal'
 
@@ -30,17 +32,15 @@ interface InvIntSource {
 }
 
 const SALT_CAP = 10_000
+const SALT_CATEGORIES_LIST: readonly string[] = Array.from(SALT_CATEGORIES)
 
-// Standard deductions by year (single / MFJ) — IRS Rev. Proc.
-const STANDARD_DEDUCTIONS: Record<number, { single: number; mfj: number }> = {
-  2023: { single: 13_850, mfj: 27_700 },
-  2024: { single: 14_600, mfj: 29_200 },
-  2025: { single: 15_000, mfj: 30_000 },
-}
-
-function getStandardDeduction(year: number, isMarried: boolean): number {
-  const row = STANDARD_DEDUCTIONS[year] ?? STANDARD_DEDUCTIONS[2025] ?? { single: 15_000, mfj: 30_000 }
-  return isMarried ? row.mfj : row.single
+/** Bucket user deductions by category in a single pass. */
+function bucketUserDeductions(userDeductions: UserDeductionEntry[]): Record<string, number> {
+  const buckets: Record<string, number> = {}
+  for (const d of userDeductions) {
+    buckets[d.category] = currency(buckets[d.category] ?? 0).add(d.amount).value
+  }
+  return buckets
 }
 
 export function computeScheduleALines({
@@ -50,14 +50,16 @@ export function computeScheduleALines({
   saltPaid = 0,
   year = new Date().getFullYear(),
   isMarried = false,
+  userDeductions = [],
 }: {
   reviewedK1Docs?: TaxDocument[]
   reviewed1099Docs?: TaxDocument[]
   shortDividendSummary?: ShortDividendSummary
-  /** State and local taxes paid (will be capped at $10,000). */
+  /** W-2 Box 17 state tax withheld. User-entered SALT is added separately. */
   saltPaid?: number
   year?: number
   isMarried?: boolean
+  userDeductions?: UserDeductionEntry[]
 }): ScheduleALines {
   const invIntSources: InvIntSource[] = []
 
@@ -110,16 +112,37 @@ export function computeScheduleALines({
     currency(0),
   ).value
 
-  const saltDeduction = Math.min(saltPaid, SALT_CAP)
-  const totalItemizedDeductions = currency(totalInvIntExpense).add(saltDeduction).value
-  const standardDeduction = getStandardDeduction(year, isMarried)
+  const buckets = bucketUserDeductions(userDeductions)
+  const userSalt = SALT_CATEGORIES_LIST.reduce(
+    (acc, cat) => currency(acc).add(buckets[cat] ?? 0).value,
+    0,
+  )
+  const mortgageInterest = buckets.mortgage_interest ?? 0
+  const charitable = currency(buckets.charitable_cash ?? 0).add(buckets.charitable_noncash ?? 0).value
+  const otherDeductions = buckets.other ?? 0
+
+  const saltDeduction = Math.min(currency(saltPaid).add(userSalt).value, SALT_CAP)
+  const totalItemizedDeductions = currency(totalInvIntExpense)
+    .add(saltDeduction)
+    .add(mortgageInterest)
+    .add(charitable)
+    .add(otherDeductions).value
+  // MFJ/MFS sharing: isMarried collapses both into MFJ for now. MFS users should
+  // treat the $10k SALT cap as $5k and expect different brackets; unsupported until
+  // MFJ-vs-MFS is added to the marriage-status settings.
+  const filingStatus: FilingStatus = isMarried ? 'Married Filing Jointly' : 'Single'
+  const standardDeduction = getStandardDeduction(year, filingStatus)
   const shouldItemize = totalItemizedDeductions > standardDeduction
 
   return {
     invIntSources,
     totalInvIntExpense,
-    saltPaid,
+    saltPaid: currency(saltPaid).add(userSalt).value,
     saltDeduction,
+    mortgageInterest,
+    charitable,
+    otherDeductions,
+    userDeductions,
     totalItemizedDeductions,
     standardDeduction,
     shouldItemize,
@@ -134,6 +157,7 @@ interface ScheduleAPreviewProps {
   /** State and local taxes paid (from W-2 Box 17). Capped at $10,000 on the form. */
   saltPaid?: number
   isMarried?: boolean
+  userDeductions?: UserDeductionEntry[]
 }
 
 /** Modal showing all sources that contribute to investment interest expense. */
@@ -200,18 +224,28 @@ export default function ScheduleAPreview({
   shortDividendSummary,
   saltPaid = 0,
   isMarried = false,
+  userDeductions = [],
 }: ScheduleAPreviewProps) {
   const [showInvIntModal, setShowInvIntModal] = useState(false)
 
   const shortDivDeduction = shortDividendSummary?.totalItemizedDeduction ?? 0
-  const { invIntSources, totalInvIntExpense, saltDeduction, totalItemizedDeductions, standardDeduction, shouldItemize } = computeScheduleALines({
+  const { invIntSources, totalInvIntExpense, saltPaid: totalSaltPaidBeforeCap, saltDeduction, mortgageInterest, charitable, otherDeductions, totalItemizedDeductions, standardDeduction, shouldItemize } = computeScheduleALines({
     reviewedK1Docs,
     reviewed1099Docs,
     ...(shortDividendSummary ? { shortDividendSummary } : {}),
     saltPaid,
     year: selectedYear,
     isMarried,
+    userDeductions,
   })
+
+  const buckets = bucketUserDeductions(userDeductions)
+  const realEstateTax = buckets.real_estate_tax ?? 0
+  const salesTax = buckets.sales_tax ?? 0
+  const charitableCash = buckets.charitable_cash ?? 0
+  const charitableNoncash = buckets.charitable_noncash ?? 0
+  const stateIncomeTax = currency(saltPaid).add(buckets.state_est_tax ?? 0).value
+  const totalInterest = currency(mortgageInterest).add(totalInvIntExpense).value
 
   return (
     <div className="space-y-4">
@@ -230,36 +264,59 @@ export default function ScheduleAPreview({
         {/* Part II — Taxes */}
         <FormBlock title="Part II — Taxes You Paid">
           <FormLine
-            label="Line 5a — State income tax withheld (W-2 Box 17)"
-            {...(saltPaid > 0 ? { value: saltPaid } : { raw: '—' })}
+            label="Line 5a — State income tax withheld / estimated tax paid"
+            {...(stateIncomeTax > 0 ? { value: stateIncomeTax } : { raw: '—' })}
           />
-          <FormLine label="Line 6 — Real estate taxes" raw="Enter from records" />
+          <FormLine
+            label="Line 5c — State/local general sales taxes"
+            {...(salesTax > 0 ? { value: salesTax } : { raw: '—' })}
+          />
+          <FormLine
+            label="Line 6 — Real estate taxes"
+            {...(realEstateTax > 0 ? { value: realEstateTax } : { raw: '—' })}
+          />
           <FormTotalLine
             label={`Line 7 — Total SALT (capped at $${SALT_CAP.toLocaleString()})`}
             value={saltDeduction}
           />
-          {saltPaid >= SALT_CAP && (
+          {totalSaltPaidBeforeCap >= SALT_CAP && (
             <FormLine label="Note" raw={`SALT cap reached — state taxes above $${SALT_CAP.toLocaleString()} are not deductible`} />
           )}
         </FormBlock>
 
         {/* Part IV — Interest */}
         <FormBlock title="Part IV — Interest You Paid">
-          <FormLine label="Line 8 — Home mortgage interest" raw="—" />
+          <FormLine
+            label="Line 8 — Home mortgage interest"
+            {...(mortgageInterest > 0 ? { value: mortgageInterest } : { raw: '—' })}
+          />
           <FormLine
             label="Line 9 — Investment interest expense (from Form 4952)"
             value={totalInvIntExpense > 0 ? totalInvIntExpense : null}
             {...(totalInvIntExpense === 0 ? { raw: '—' } : {})}
             {...(invIntSources.length > 0 ? { onClick: () => setShowInvIntModal(true) } : {})}
           />
-          <FormTotalLine label="Line 10 — Total interest" value={totalInvIntExpense} />
+          <FormTotalLine label="Line 10 — Total interest" value={totalInterest} />
         </FormBlock>
 
         {/* Part V — Gifts */}
         <FormBlock title="Part V — Gifts to Charity">
-          <FormLine label="Line 11 — Cash contributions" raw="—" />
-          <FormLine label="Line 12 — Non-cash contributions" raw="—" />
-          <FormTotalLine label="Line 14 — Total gifts" value={0} />
+          <FormLine
+            label="Line 11 — Cash contributions"
+            {...(charitableCash > 0 ? { value: charitableCash } : { raw: '—' })}
+          />
+          <FormLine
+            label="Line 12 — Non-cash contributions"
+            {...(charitableNoncash > 0 ? { value: charitableNoncash } : { raw: '—' })}
+          />
+          <FormTotalLine label="Line 14 — Total gifts" value={charitable} />
+        </FormBlock>
+
+        <FormBlock title="Other Itemized Deductions">
+          <FormLine
+            label="Line 16 — Other itemized deductions"
+            {...(otherDeductions > 0 ? { value: otherDeductions } : { raw: '—' })}
+          />
         </FormBlock>
       </div>
 
@@ -286,14 +343,17 @@ export default function ScheduleAPreview({
 
       {/* Standard vs. itemized comparison */}
       <FormBlock title="Standard Deduction vs. Itemized — Which Is Better?">
-        <FormLine label={`Standard deduction (${selectedYear} ${isMarried ? 'MFJ' : 'Single'})`} value={standardDeduction} />
+        <FormLine label={`Standard deduction (${selectedYear} ${isMarried ? 'Married Filing Jointly' : 'Single'})`} value={standardDeduction} />
         <FormLine label="Itemized deductions (Schedule A total)" value={totalItemizedDeductions} />
         <FormLine label="Investment interest (Line 9)" value={totalInvIntExpense} />
         <FormLine
           label="SALT (Line 7)"
           {...(saltDeduction > 0 ? { value: saltDeduction } : { raw: '—' })}
         />
-        <FormLine label="Other (mortgage, charitable, medical)" raw="Enter from records — not yet computed" />
+        {mortgageInterest > 0 && <FormLine label="Mortgage interest (Line 8)" value={mortgageInterest} />}
+        {charitable > 0 && <FormLine label="Charitable contributions (Lines 11–12)" value={charitable} />}
+        {otherDeductions > 0 && <FormLine label="Other deductions" value={otherDeductions} />}
+        <FormLine label="Medical, casualty, other" raw="Enter below — not yet computed" />
         <FormTotalLine
           label={shouldItemize
             ? '✓ Itemizing saves more — use Schedule A'
@@ -304,7 +364,7 @@ export default function ScheduleAPreview({
         {!shouldItemize && (
           <FormLine
             label="Note"
-            raw="Additional deductions (mortgage interest, charitable, property tax) may make itemizing beneficial. See SALT issue for planned support."
+            raw="Additional deductions may still make itemizing beneficial as entries change throughout the year."
           />
         )}
       </FormBlock>

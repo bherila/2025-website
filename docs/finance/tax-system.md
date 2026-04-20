@@ -9,6 +9,8 @@ See `/database/schema/mysql-schema.sql` for the full database schema. Relevant t
 - `fin_account_tag` — transaction tags with optional `tax_characteristic` and `employment_entity_id`
 - `fin_payslip` — payslips linked to employment entities
 - `users.marriage_status_by_year` — JSON column with per-year filing status
+- `fin_user_tax_states` — per-year list of states the user files in (drives which state tax tables render in Tax Estimate)
+- `fin_user_deductions` — per-year user-entered Schedule A deductions (property tax, mortgage interest, charitable, etc.)
 
 ---
 
@@ -136,7 +138,7 @@ Overview | Schedules | Schedule A | Schedule E | Capital Gains | Form 1116 | For
 |-----|---|---|
 | Overview | `TaxIncomeOverview` | Income card grid + unified Tax Documents & Estimated Positions table + W-2 Income Summary |
 | Schedules | `ScheduleBPreview` + `Form4952Preview` | Schedule B (interest/dividends) + Form 4952 (investment interest) |
-| Schedule A | `ScheduleAPreview` | Itemized deductions — investment interest (K-1, 1099, short dividends) with drilldown modal |
+| Schedule A | `ScheduleAPreview` + `UserDeductionsSection` | Itemized deductions — investment interest (K-1, 1099, short dividends) + user-entered SALT/mortgage/charitable via `fin_user_deductions` |
 | Schedule E | `ScheduleEPreview` | Partnership/S-corp income from K-1 — Box 1 ordinary, Box 2/3 rental, Box 4 guaranteed payments |
 | Capital Gains | `ScheduleDPreview` | Form 6781 + Schedule D |
 | Form 1116 | `Form1116Preview` | Passive foreign tax credit |
@@ -661,7 +663,7 @@ The Tax Preview page (`TaxPreviewPage.tsx`) uses a structured grid layout:
 
 ### Remaining Sections
 - Federal Taxes (quarterly estimates)
-- California State Taxes (quarterly estimates)
+- State Taxes (quarterly estimates for each state the user selected via `StateSelectorSection` — backed by `fin_user_tax_states`; supported states are `CA`, `NY`)
 - Schedule C Preview (per-entity income/expense detail)
 
 ### Frontend Components

@@ -167,7 +167,7 @@ export default function TotalsTable({
   taxConfig: {
     year: string
     state: string
-    filingStatus: 'Single' | 'Married' | 'Married Filing Separately' | 'Head of Household'
+    filingStatus: 'Single' | 'Married Filing Jointly' | 'Married Filing Separately' | 'Head of Household'
     standardDeduction: number
   }
   extraIncome?: number | Record<string, number>

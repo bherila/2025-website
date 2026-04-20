@@ -11,6 +11,8 @@ use App\Http\Controllers\ClientManagement\ClientPortalAgreementApiController;
 use App\Http\Controllers\ClientManagement\ClientPortalApiController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\Finance\TaxPreviewDataController;
+use App\Http\Controllers\Finance\UserDeductionController;
+use App\Http\Controllers\Finance\UserTaxStateController;
 use App\Http\Controllers\FinanceTool\FinanceApiController;
 use App\Http\Controllers\FinanceTool\FinanceEmploymentEntityController;
 use App\Http\Controllers\FinanceTool\FinanceLotsController;
@@ -82,6 +84,17 @@ Route::middleware(['web', 'auth'])->delete('/finance/employment-entities/{id}', 
 // Marriage status routes
 Route::middleware(['web', 'auth'])->get('/finance/marriage-status', [FinanceEmploymentEntityController::class, 'getMarriageStatus']);
 Route::middleware(['web', 'auth'])->post('/finance/marriage-status', [FinanceEmploymentEntityController::class, 'updateMarriageStatus']);
+
+// Per-year active state filings
+Route::middleware(['web', 'auth'])->get('/finance/user-tax-states', [UserTaxStateController::class, 'index']);
+Route::middleware(['web', 'auth'])->post('/finance/user-tax-states', [UserTaxStateController::class, 'store']);
+Route::middleware(['web', 'auth'])->delete('/finance/user-tax-states/{stateCode}', [UserTaxStateController::class, 'destroy']);
+
+// Per-year user-entered deductions (Schedule A: SALT, mortgage, charitable, etc.)
+Route::middleware(['web', 'auth'])->get('/finance/user-deductions', [UserDeductionController::class, 'index']);
+Route::middleware(['web', 'auth'])->post('/finance/user-deductions', [UserDeductionController::class, 'store']);
+Route::middleware(['web', 'auth'])->put('/finance/user-deductions/{id}', [UserDeductionController::class, 'update']);
+Route::middleware(['web', 'auth'])->delete('/finance/user-deductions/{id}', [UserDeductionController::class, 'destroy']);
 
 Route::middleware(['web', 'auth'])->post('/finance/transactions/batch-delete', [FinanceTransactionsApiController::class, 'batchDelete']);
 Route::middleware(['web', 'auth'])->post('/finance/transactions/batch-update', [FinanceTransactionsApiController::class, 'batchUpdate']);
