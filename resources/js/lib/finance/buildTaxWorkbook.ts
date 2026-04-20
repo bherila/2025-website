@@ -1,7 +1,7 @@
 import currency from 'currency.js'
 
 import { ALL_K1_CODES, K1_SPEC_BY_BOX } from '@/components/finance/k1'
-import type { TaxReturn1040 } from '@/types/finance/tax-return'
+import type { EstimatedTaxPaymentsData, TaxReturn1040 } from '@/types/finance/tax-return'
 import type { XlsxRow, XlsxSheet, XlsxWorkbook } from '@/types/finance/xlsx-export'
 
 /**
@@ -81,6 +81,54 @@ function formulaRef(sheetName: string, row: number): string {
 /** Build a SUM formula over a range of detail rows (header row excluded), falling back to the computed value. */
 function sumFormula(firstDetailExcelRow: number, lastDetailExcelRow: number): string {
   return `=SUM(C${firstDetailExcelRow}:C${lastDetailExcelRow})`
+}
+
+function buildEstimatedTaxSheet(estimatedTaxPayments?: EstimatedTaxPaymentsData): IndexedSheet | null {
+  if (!estimatedTaxPayments || estimatedTaxPayments.priorYearTax <= 0) {
+    return null
+  }
+
+  const multiplierPercent = Math.round(estimatedTaxPayments.multiplier * 100)
+  const agiThresholdMessage = estimatedTaxPayments.priorYearAgi > estimatedTaxPayments.agiThresholdApplied
+    ? `Above ${currency(estimatedTaxPayments.agiThresholdApplied).format()} threshold → ${multiplierPercent}% method`
+    : `At or below ${currency(estimatedTaxPayments.agiThresholdApplied).format()} threshold → ${multiplierPercent}% method`
+  const rows: XlsxRow[] = [
+    {
+      isHeader: true,
+      description: `Safe Harbor Method — ${multiplierPercent}% of ${estimatedTaxPayments.planningYear - 1} Tax`,
+    },
+    {
+      description: `${estimatedTaxPayments.planningYear - 1} AGI (prior year)`,
+      amount: estimatedTaxPayments.priorYearAgi,
+      note: agiThresholdMessage,
+    },
+    {
+      description: `${estimatedTaxPayments.planningYear - 1} total tax (prior year)`,
+      amount: estimatedTaxPayments.priorYearTax,
+    },
+    {
+      description: `Safe harbor amount (${multiplierPercent}%)`,
+      amount: estimatedTaxPayments.safeHarborAmount,
+      isTotal: true,
+    },
+    {
+      description: `Expected ${estimatedTaxPayments.planningYear} federal withholding`,
+      amount: estimatedTaxPayments.expectedWithholding,
+    },
+    {
+      description: 'Net estimated tax due',
+      amount: estimatedTaxPayments.netDue,
+      isTotal: true,
+    },
+    { isHeader: true, description: `${estimatedTaxPayments.planningYear} Payment Schedule` },
+    ...estimatedTaxPayments.quarterlyPayments.map((payment: EstimatedTaxPaymentsData['quarterlyPayments'][number]) => ({
+      line: `Q${payment.paymentNumber}`,
+      description: `Payment ${payment.paymentNumber} — Due ${payment.dueDate}`,
+      amount: payment.amount,
+    })),
+  ]
+
+  return buildSheet('Est. Tax Payments', rows)
 }
 
 export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
@@ -649,6 +697,9 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
     })),
   ))
 
+  // ── Estimated Tax Payments ───────────────────────────────────────────────────
+  const estTaxSheet = buildEstimatedTaxSheet(taxReturn.estimatedTaxPayments)
+
   const orderedSheets = [
     overviewSheet,
     form1040Sheet,
@@ -665,6 +716,7 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
     capitalLossSheet,
     form461Sheet,
     shortDivSheet,
+    estTaxSheet,
     ...k1Sheets,
     ...k3Sheets,
     ...docs1099Sheets,

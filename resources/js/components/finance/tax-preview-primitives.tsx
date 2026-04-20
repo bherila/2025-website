@@ -14,6 +14,17 @@ export function parseFieldVal(v: string | null | undefined): number | null {
   return isNaN(n) ? null : n
 }
 
+export function parseCurrencyInput(raw: string): number {
+  const sanitized = raw.replace(/[^0-9.]/g, '')
+  const [whole = '', ...decimals] = sanitized.split('.')
+  const normalized = decimals.length > 0
+    ? `${whole}.${decimals.join('')}`
+    : whole
+  if (normalized === '') return 0
+  const n = parseFloat(normalized)
+  return isNaN(n) ? 0 : n
+}
+
 export function fmtAmt(n: number, precision = 0): string {
   const abs = currency(Math.abs(n), { precision }).format()
   return n < 0 ? `(${abs})` : abs

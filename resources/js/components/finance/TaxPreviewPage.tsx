@@ -6,6 +6,7 @@ import { useCallback, useState } from 'react'
 
 import ActionItemsTab from '@/components/finance/ActionItemsTab'
 import AdditionalTaxesPreview from '@/components/finance/AdditionalTaxesPreview'
+import EstimatedTaxPaymentsSection from '@/components/finance/EstimatedTaxPaymentsSection'
 import Form1040Preview from '@/components/finance/Form1040Preview'
 import Form1116Preview from '@/components/finance/Form1116Preview'
 import Form4952Preview from '@/components/finance/Form4952Preview'
@@ -446,6 +447,10 @@ function TaxPreviewPageContent() {
     userDeductions,
     setUserDeductions,
     shortDividendSummary,
+    priorYearAgi,
+    setPriorYearAgi,
+    priorYearTax,
+    setPriorYearTax,
     taxReturn,
     refreshAll,
   } = useTaxPreview()
@@ -809,6 +814,16 @@ function TaxPreviewPageContent() {
               ))}
             </div>
           )}
+
+          <EstimatedTaxPaymentsSection
+            planningYear={selectedYear + 1}
+            priorYearAgi={priorYearAgi}
+            priorYearTax={priorYearTax}
+            onPriorYearAgiChange={setPriorYearAgi}
+            onPriorYearTaxChange={setPriorYearTax}
+            estimatedTaxPayments={taxReturn.estimatedTaxPayments}
+            showMfsUnsupportedNotice={isMarried}
+          />
         </TabsContent>
 
         <TabsContent value={TAX_TABS.actionItems} className="mt-0">
