@@ -205,6 +205,8 @@ export interface Form461Lines {
 export interface Form8582ActivityLine {
   activityName: string
   ein?: string | undefined
+  /** True if this is rental real estate (K-1 Box 2) — eligible for $25k special allowance. */
+  isRentalRealEstate: boolean
   /** Current-year income from this activity (positive). */
   currentIncome: number
   /** Current-year loss from this activity (negative). */
@@ -213,6 +215,10 @@ export interface Form8582ActivityLine {
   priorYearUnallowed: number
   /** Net result = income + loss + priorYearUnallowed. */
   overallGainOrLoss: number
+  /** Portion of total allowed loss allocated to this activity (Worksheet 5 col c). */
+  allowedLossThisYear: number
+  /** Portion of suspended loss allocated to this activity (Worksheet 5 col d). */
+  suspendedLossCarryforward: number
 }
 
 export interface Form8582Lines {

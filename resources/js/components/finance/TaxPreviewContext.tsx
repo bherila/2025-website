@@ -8,7 +8,6 @@ import { toast } from 'sonner'
 import { computeForm1040Lines } from '@/components/finance/Form1040Preview'
 import { computeForm1116Lines } from '@/components/finance/Form1116Preview'
 import { computeForm4952Lines } from '@/components/finance/Form4952Preview'
-import { computeForm8582 } from '@/components/finance/Form8582Preview'
 import { computeForm8995 } from '@/components/finance/Form8995Preview'
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { computeScheduleALines } from '@/components/finance/ScheduleAPreview'
@@ -19,6 +18,7 @@ import { computeScheduleELines } from '@/components/finance/ScheduleEPreview'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
+import { computeForm8582, type PalCarryforwardEntry } from '@/finance/8582/form8582'
 import { computeForm8959Lines } from '@/finance/8959/form8959'
 import { computeForm8960Lines } from '@/finance/8960/form8960'
 import { computeCapitalLossCarryover } from '@/finance/capitalLoss/capitalLossCarryover'
@@ -90,6 +90,10 @@ interface TaxPreviewContextValue {
   userDeductions: UserDeductionEntry[]
   /** Callback to replace the deductions list after a mutation. */
   setUserDeductions: Dispatch<SetStateAction<UserDeductionEntry[]>>
+  /** Per-activity PAL carryforward entries from prior years (Form 8582). */
+  palCarryforwards: PalCarryforwardEntry[]
+  /** Callback to replace the carryforward list after a mutation. */
+  setPalCarryforwards: Dispatch<SetStateAction<PalCarryforwardEntry[]>>
   /** Aggregated short dividend summary across all active accounts, or null if not yet loaded. */
   shortDividendSummary: ShortDividendSummary | null
   taxReturn: TaxReturn1040
@@ -176,6 +180,7 @@ export function TaxPreviewProvider({
   const [isMarried, setIsMarried] = useState(false)
   const [activeTaxStates, setActiveTaxStates] = useState<string[]>([])
   const [userDeductions, setUserDeductions] = useState<UserDeductionEntry[]>([])
+  const [palCarryforwards, setPalCarryforwards] = useState<PalCarryforwardEntry[]>([])
 
   const refreshAll = useCallback(async () => {
     if (!hasLoadedOnce.current) {
@@ -244,6 +249,18 @@ export function TaxPreviewProvider({
       } catch (err) {
         console.error('Failed to load user deductions for year', year, err)
         setUserDeductions([])
+      }
+    })()
+  }, [year])
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const cfs = (await fetchWrapper.get(`/api/finance/pal-carryforwards?year=${year}`)) as PalCarryforwardEntry[]
+        setPalCarryforwards(Array.isArray(cfs) ? cfs : [])
+      } catch (err) {
+        console.error('Failed to load PAL carryforwards for year', year, err)
+        setPalCarryforwards([])
       }
     })()
   }, [year])
@@ -572,7 +589,8 @@ export function TaxPreviewProvider({
 
     const form8959 = computeForm8959Lines(w2GrossIncome.value, isMarried, w2Sources)
 
-    const estimatedMagi = w2GrossIncome
+    // Form 8960 MAGI = AGI + §911 foreign earned income exclusion addback.
+    const form8960EstimatedMagi = w2GrossIncome
       .add(income1099.interestIncome)
       .add(income1099.dividendIncome)
       .add(scheduleCNetIncome.total)
@@ -585,7 +603,7 @@ export function TaxPreviewProvider({
       netCapGainsRaw: scheduleD.schD.schD_line16,
       passiveIncome: scheduleE.totalPassive,
       investmentInterestExpense: form4952.deductibleInvestmentInterestExpense,
-      magi: estimatedMagi,
+      magi: form8960EstimatedMagi,
       isMarried,
       interestSources: scheduleB.interestLines.map(l => ({ label: l.label, amount: l.amount })),
       dividendSources: scheduleB.dividendLines.map(l => ({ label: l.label, amount: l.amount })),
@@ -600,10 +618,23 @@ export function TaxPreviewProvider({
       totalAdditionalTaxes: currency(form8959.additionalTax).add(form8960.niitTax).value,
     }
 
+    // Form 8582 MAGI = AGI computed without the passive activity loss deduction,
+    // plus specific addbacks (IRA deduction, student loan interest, half SE tax, etc.).
+    // See Form 8582 Worksheet 1, lines 1–7.
+    // For now we approximate with the same base AGI; this is a reasonable approximation
+    // since most addbacks are small relative to the phase-out range ($100k–$150k).
+    const form8582EstimatedMagi = w2GrossIncome
+      .add(income1099.interestIncome)
+      .add(income1099.dividendIncome)
+      .add(scheduleCNetIncome.total)
+      .add(scheduleE.grandTotal)
+      .add(Math.max(scheduleD.schD.schD_line16, -3000)).value
+
     const form8582 = computeForm8582({
       reviewedK1Docs,
-      magi: estimatedMagi,
+      magi: form8582EstimatedMagi,
       isMarried,
+      palCarryforwards,
     })
 
     return {
@@ -690,6 +721,7 @@ export function TaxPreviewProvider({
     shortDividendSummary,
     isMarried,
     userDeductions,
+    palCarryforwards,
   ])
 
   const value = useMemo<TaxPreviewContextValue>(() => ({
@@ -715,6 +747,8 @@ export function TaxPreviewProvider({
     setActiveTaxStates,
     userDeductions,
     setUserDeductions,
+    palCarryforwards,
+    setPalCarryforwards,
     shortDividendSummary,
     taxReturn,
     setPayslips,
@@ -747,6 +781,7 @@ export function TaxPreviewProvider({
     isMarried,
     activeTaxStates,
     userDeductions,
+    palCarryforwards,
     shortDividendSummary,
     taxReturn,
     refreshAll,

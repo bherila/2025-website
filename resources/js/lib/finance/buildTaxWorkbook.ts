@@ -474,10 +474,20 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
     ? (() => {
         const f = taxReturn.form8582
         const activityRows: XlsxRow[] = f.activities.flatMap((a) => [
-          ...(a.currentIncome !== 0 ? [{ description: `${a.activityName} — Line 1a (income)`, amount: a.currentIncome }] : []),
-          ...(a.currentLoss !== 0 ? [{ description: `${a.activityName} — Line 1b (loss)`, amount: a.currentLoss }] : []),
+          ...(a.currentIncome !== 0 ? [{ description: `${a.activityName}${a.isRentalRealEstate ? ' [Rental RE]' : ''} — Line 1a (income)`, amount: a.currentIncome }] : []),
+          ...(a.currentLoss !== 0 ? [{ description: `${a.activityName}${a.isRentalRealEstate ? ' [Rental RE]' : ''} — Line 1b (loss)`, amount: a.currentLoss }] : []),
           ...(a.priorYearUnallowed !== 0 ? [{ description: `${a.activityName} — Line 1c (prior-year unallowed)`, amount: a.priorYearUnallowed }] : []),
         ])
+        const carryforwardRows: XlsxRow[] = f.activities
+          .filter((a) => a.allowedLossThisYear > 0 || a.suspendedLossCarryforward > 0)
+          .flatMap((a) => [
+            { description: `${a.activityName} — Allowed this year`, amount: a.allowedLossThisYear },
+            ...(a.suspendedLossCarryforward > 0 ? [{ description: `${a.activityName} — Suspended carryforward`, amount: a.suspendedLossCarryforward }] : []),
+          ])
+        const perActivityNetRows: XlsxRow[] = f.activities.map((a) => ({
+          description: `${a.activityName}${a.isRentalRealEstate ? ' [Rental RE]' : ''} — Net gain/loss`,
+          amount: a.overallGainOrLoss,
+        }))
         return buildSheet('Form 8582', [
           { isHeader: true, description: 'Part I — Passive Activities' },
           ...activityRows,
@@ -491,6 +501,12 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
           { isHeader: true, description: 'Part III — Allowed vs. Suspended' },
           { description: 'Total allowed passive loss', amount: -f.totalAllowedLoss, isTotal: true },
           { description: 'Suspended loss — carried forward', amount: -f.totalSuspendedLoss, isTotal: f.isLossLimited },
+          ...(carryforwardRows.length > 0 ? [
+            { isHeader: true, description: 'Worksheet 5 — Per-Activity Allocation' },
+            ...carryforwardRows,
+          ] : []),
+          { isHeader: true, description: 'Per-Activity Net Gain/Loss' },
+          ...perActivityNetRows,
         ])
       })()
     : null

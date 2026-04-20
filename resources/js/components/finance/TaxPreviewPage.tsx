@@ -446,6 +446,8 @@ function TaxPreviewPageContent() {
     setActiveTaxStates,
     userDeductions,
     setUserDeductions,
+    palCarryforwards,
+    setPalCarryforwards,
     shortDividendSummary,
     taxReturn,
     refreshAll,
@@ -616,8 +618,8 @@ function TaxPreviewPageContent() {
           <TabsTrigger value={TAX_TABS.scheduleE}>Schedule E</TabsTrigger>
           <TabsTrigger value={TAX_TABS.capitalGains}>Capital Gains</TabsTrigger>
           <TabsTrigger value={TAX_TABS.form1116}>Form 1116</TabsTrigger>
-          <TabsTrigger value={TAX_TABS.form8995}>Form 8995</TabsTrigger>
           <TabsTrigger value={TAX_TABS.form8582}>Form 8582</TabsTrigger>
+          <TabsTrigger value={TAX_TABS.form8995}>Form 8995</TabsTrigger>
           <TabsTrigger value={TAX_TABS.scheduleC}>Schedule C</TabsTrigger>
           <TabsTrigger value={TAX_TABS.estimate}>Tax Estimate</TabsTrigger>
           <TabsTrigger value={TAX_TABS.actionItems}>Action Items</TabsTrigger>
@@ -748,11 +750,18 @@ function TaxPreviewPageContent() {
         </TabsContent>
 
         <TabsContent value={TAX_TABS.form8582} className="mt-0">
-          <Form8582Preview
-            reviewedK1Docs={reviewedK1Docs}
-            magi={taxReturn.form8582?.magi ?? w2GrossIncome.add(income1099.interestIncome).add(income1099.dividendIncome).add(scheduleCNetIncome.total).value}
-            isMarried={isMarried}
-          />
+          {taxReturn.form8582 ? (
+            <Form8582Preview
+              form8582={taxReturn.form8582}
+              year={selectedYear}
+              palCarryforwards={palCarryforwards}
+              onCarryforwardsChange={setPalCarryforwards}
+            />
+          ) : (
+            <div className="py-12 text-center text-muted-foreground text-sm">
+              No passive activity data found. Passive activities are reported in K-1 Box 2 (rental real estate) and Box 3 (other rental).
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value={TAX_TABS.scheduleC} className="space-y-6 mt-0">
