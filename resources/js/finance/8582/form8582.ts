@@ -53,6 +53,7 @@ function parseK1Field(data: FK1StructuredData, box: string): number {
 // ── K-1 → activities extraction ─────────────────────────────────────────────
 
 export interface PalCarryforwardEntry {
+  id?: number
   activity_name: string
   activity_ein?: string | null | undefined
   ordinary_carryover: number
