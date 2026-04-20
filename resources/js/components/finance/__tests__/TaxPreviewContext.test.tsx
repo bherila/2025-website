@@ -194,4 +194,34 @@ describe('TaxPreviewContext', () => {
 
     expect(result.current.taxReturn.estimatedTaxPayments).toBeUndefined()
   })
+
+  it('includes flat-dict broker_1099 income in income1099', async () => {
+    // Flat-dict broker_1099 documents (single-account consolidated 1099) store
+    // aggregate fields directly instead of a per-account array. They must flow
+    // into income1099 so Schedule B, Form 4952, and 1040 estimates are correct.
+    const brokerDoc = {
+      id: 50,
+      form_type: 'broker_1099',
+      genai_status: 'parsed',
+      is_reviewed: true,
+      tax_year: 2025,
+      account_id: 33,
+      parsed_data: {
+        int_1_interest_income: 100,
+        div_1a_total_ordinary: 500,
+        div_1b_qualified: 400,
+        div_7_foreign_tax_paid: 0,
+      },
+    };
+    (fetchWrapper.get as jest.Mock)
+      .mockResolvedValueOnce(makeResponse([brokerDoc]))
+      .mockResolvedValue([])
+
+    const { result } = renderHook(() => useTaxPreview(), { wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    expect(result.current.income1099.interestIncome.value).toBe(100)
+    expect(result.current.income1099.dividendIncome.value).toBe(500)
+    expect(result.current.income1099.qualifiedDividends.value).toBe(400)
+  })
 })

@@ -6,6 +6,7 @@ import { isFK1StructuredData } from '@/components/finance/k1'
 import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
 import {
   extractForeignTaxSummaries,
+  extractK3IncomeBreakdown,
   extractK3Line4bApportionment,
 } from '@/finance/1116/k3-to-1116'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
@@ -47,11 +48,22 @@ export function computeForm1116Lines({
   const generalIncomeSources: { label: string; amount: number }[] = []
   const taxSources: { label: string; amount: number }[] = []
   const line4bApportionment: { label: string; interestExpense: number; ratio: number; line4b: number }[] = []
+  const sbpElections: { partnerName: string; active: boolean; sourcedByPartner: number }[] = []
   for (const { doc, data } of k1Parsed) {
     const partnerName =
       data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
 
     const summaries = extractForeignTaxSummaries(data, doc.account_id)
+
+    // Collect SBP election state for any K-1 with col-f (Sourced by Partner) amounts.
+    const breakdown = extractK3IncomeBreakdown(data)
+    if (breakdown.sourcedByPartner !== 0) {
+      sbpElections.push({
+        partnerName,
+        active: data.k3Elections?.sourcedByPartnerAsUSSource ?? false,
+        sourcedByPartner: breakdown.sourcedByPartner,
+      })
+    }
 
     if (summaries.length > 0) {
       let taxAdded = false
@@ -136,6 +148,7 @@ export function computeForm1116Lines({
     totalLine4b,
     creditVsDeduction,
     turboTaxAlert,
+    sbpElections,
   }
 }
 
@@ -156,6 +169,7 @@ export default function Form1116Preview({
     creditVsDeduction,
     turboTaxAlert,
     totalK1Box5 = 0,
+    sbpElections = [],
   } = computed
 
   const simplifiedElectionThreshold = 300
@@ -313,6 +327,35 @@ export default function Form1116Preview({
           <FormLine
             label="Exception"
             raw="Use deduction only if FTC is fully limited (rare) or under AMT"
+          />
+        </FormBlock>
+      )}
+
+      {sbpElections.length > 0 && (
+        <FormBlock title="Sourced-by-Partner (Col f) Election — Form 1116 Impact">
+          <FormLine
+            label="What is this?"
+            raw="K-3 Part II column (f) amounts are classified 'Sourced by Partner'. By default they are treated as foreign-source income, increasing your FTC base."
+          />
+          <FormLine
+            label="Election available"
+            raw="You may elect (per Treas. Reg. §1.861-9T) to treat these amounts as U.S.-source, which reduces FTC base but may be required if you are not subject to a tax treaty or §901(j) override."
+          />
+          {sbpElections.map((e, i) => (
+            <div key={i} className="space-y-0.5">
+              <FormLine
+                label={`${e.partnerName} — Col (f) net`}
+                value={e.sourcedByPartner}
+              />
+              <FormLine
+                label={`${e.partnerName} — Election: treat col (f) as U.S. source`}
+                raw={e.active ? '✓ Active — col (f) excluded from foreign income' : '✗ Inactive — col (f) included in foreign income'}
+              />
+            </div>
+          ))}
+          <FormLine
+            label="To change this election"
+            raw="Open the K-1 review modal → scroll to the K-3 section → toggle the checkbox"
           />
         </FormBlock>
       )}

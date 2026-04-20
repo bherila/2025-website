@@ -1,0 +1,156 @@
+import type { FK1StructuredData } from '@/types/finance/k1-data'
+
+import { k1NetIncome, parseK1Codes, parseK1Field } from '../k1Utils'
+
+function makeData(overrides: Partial<FK1StructuredData> = {}): FK1StructuredData {
+  return {
+    schemaVersion: '2026.1',
+    formType: 'K-1-1065',
+    fields: {},
+    codes: {},
+    ...overrides,
+  }
+}
+
+describe('parseK1Field', () => {
+  it('returns 0 when field is absent', () => {
+    expect(parseK1Field(makeData(), '5')).toBe(0)
+  })
+
+  it('parses numeric string', () => {
+    expect(parseK1Field(makeData({ fields: { '5': { value: '9865' } } }), '5')).toBe(9865)
+  })
+
+  it('parses negative value', () => {
+    expect(parseK1Field(makeData({ fields: { '8': { value: '-500' } } }), '8')).toBe(-500)
+  })
+})
+
+describe('parseK1Codes', () => {
+  it('returns 0 when box is absent', () => {
+    expect(parseK1Codes(makeData(), '11')).toBe(0)
+  })
+
+  it('sums all code values for a box', () => {
+    const data = makeData({
+      codes: {
+        '11': [
+          { code: 'C', value: '32545' },
+          { code: 'ZZ', value: '-23167' },
+          { code: 'ZZ', value: '-54237' },
+          { code: 'ZZ', value: '3198' },
+        ],
+      },
+    })
+    expect(parseK1Codes(data, '11')).toBeCloseTo(-41661)
+  })
+})
+
+describe('k1NetIncome', () => {
+  it('returns 0 when no data', () => {
+    expect(k1NetIncome(makeData())).toBe(0)
+  })
+
+  it('sums basic income boxes', () => {
+    const data = makeData({
+      fields: {
+        '5': { value: '1000' },
+        '6a': { value: '2000' },
+      },
+    })
+    expect(k1NetIncome(data)).toBe(3000)
+  })
+
+  it('does NOT double-count Box 6b (qualified dividends are a subset of Box 6a)', () => {
+    // Box 6b = qualified dividends — a subset of Box 6a ordinary dividends.
+    // Including 6b separately inflates net income by the qualified dividend amount.
+    const data = makeData({
+      fields: {
+        '6a': { value: '1000' }, // ordinary dividends
+        '6b': { value: '800' },  // 800 of the 1000 is qualified — NOT additional income
+      },
+    })
+    // Net income should be 1000 (from 6a), NOT 1800 (6a + 6b)
+    expect(k1NetIncome(data)).toBe(1000)
+  })
+
+  it('subtracts Box 13 deductions (not adds them)', () => {
+    // Box 13 codes are DEDUCTIONS — investment interest expense, trader deductions, etc.
+    // They should REDUCE net income, not increase it.
+    const data = makeData({
+      fields: { '5': { value: '10000' } }, // interest income
+      codes: {
+        '13': [
+          { code: 'H', value: '3000' }, // investment interest expense (deduction)
+          { code: 'ZZ', value: '500' },  // other deduction
+        ],
+      },
+    })
+    // Net income = 10000 - 3000 - 500 = 6500
+    // Bug: returns 10000 + 3000 + 500 = 13500
+    expect(k1NetIncome(data)).toBe(6500)
+  })
+
+  it('computes correct net for Delphi Plus-style K-1 (complex real-world case)', () => {
+    // AQR TA DELPHI PLUS FUND, LLC — 2025 K-1 (simplified from training data)
+    // Box 5 interest: 9865
+    // Box 6a ordinary div: 20237
+    // Box 6b qualified div: 16047 (subset of 6a — must NOT be added again)
+    // Box 11C (sec1256): 32545
+    // Box 11S (non-portfolio, multiple): -101298 + 62473 + 7562 = -31263
+    // Box 11ZZ (section 988, swap, PFIC): -23167 + -54237 + 3198 = -74206
+    // Box 13H (inv interest): 9776 + 13176 + 3368 = 26320 (deduction)
+    // Box 13ZZ (trader/admin): 8893 + 258 = 9151 (deduction)
+    //
+    // Expected net = (9865 + 20237) + (32545 - 31263 - 74206) - (26320 + 9151)
+    //              = 30102 + (-72924) - 35471
+    //              = 30102 - 72924 - 35471
+    //              = -78293
+    const data = makeData({
+      fields: {
+        '5': { value: '9865' },
+        '6a': { value: '20237' },
+        '6b': { value: '16047' }, // qualified div — subset of 6a
+      },
+      codes: {
+        '11': [
+          { code: 'C', value: '32545' },
+          { code: 'S', value: '-101298' },
+          { code: 'S', value: '62473' },
+          { code: 'S', value: '7562' },
+          { code: 'ZZ', value: '-23167' },
+          { code: 'ZZ', value: '-54237' },
+          { code: 'ZZ', value: '3198' },
+        ],
+        '13': [
+          { code: 'H', value: '9776' },
+          { code: 'H', value: '13176' },
+          { code: 'H', value: '3368' },
+          { code: 'ZZ', value: '8893' },
+          { code: 'ZZ', value: '258' },
+        ],
+      },
+    })
+    expect(k1NetIncome(data)).toBe(-78293)
+  })
+
+  it('subtracts Box 12 (section 179 deduction)', () => {
+    const data = makeData({
+      fields: {
+        '1': { value: '10000' },
+        '12': { value: '2000' },
+      },
+    })
+    expect(k1NetIncome(data)).toBe(8000)
+  })
+
+  it('subtracts Box 21 (foreign taxes)', () => {
+    const data = makeData({
+      fields: {
+        '5': { value: '5000' },
+        '21': { value: '500' },
+      },
+    })
+    expect(k1NetIncome(data)).toBe(4500)
+  })
+})

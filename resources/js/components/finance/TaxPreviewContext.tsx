@@ -23,6 +23,7 @@ import { computeForm8959Lines } from '@/finance/8959/form8959'
 import { computeForm8960Lines } from '@/finance/8960/form8960'
 import { computeCapitalLossCarryover } from '@/finance/capitalLoss/capitalLossCarryover'
 import { computeEstimatedTaxPayments } from '@/lib/finance/estimatedTaxPayments'
+import { k1NetIncome } from '@/lib/finance/k1Utils'
 import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import { form461 } from '@/lib/tax/form461'
 import { buildCacheKey, getCachedTransactions, setCachedTransactions } from '@/services/transactionCache'
@@ -448,10 +449,15 @@ export function TaxPreviewProvider({
       if (!doc.parsed_data) continue
       if (doc.form_type === '1099_int' || doc.form_type === '1099_int_c') {
         interestIncome = interestIncome.add((doc.parsed_data as F1099IntParsedData).box1_interest ?? 0)
-      }
-      if (doc.form_type === '1099_div' || doc.form_type === '1099_div_c') {
+      } else if (doc.form_type === '1099_div' || doc.form_type === '1099_div_c') {
         dividendIncome = dividendIncome.add((doc.parsed_data as F1099DivParsedData).box1a_ordinary ?? 0)
         qualifiedDividends = qualifiedDividends.add((doc.parsed_data as F1099DivParsedData).box1b_qualified ?? 0)
+      } else if (doc.form_type === 'broker_1099' && !Array.isArray(doc.parsed_data)) {
+        // Flat-dict broker_1099 (single-account consolidated 1099): read aggregate fields directly.
+        const p = doc.parsed_data as Record<string, unknown>
+        interestIncome = interestIncome.add((p.int_1_interest_income as number | undefined) ?? 0)
+        dividendIncome = dividendIncome.add((p.div_1a_total_ordinary as number | undefined) ?? 0)
+        qualifiedDividends = qualifiedDividends.add((p.div_1b_qualified as number | undefined) ?? 0)
       }
     }
 
@@ -489,26 +495,6 @@ export function TaxPreviewProvider({
       if (!v) return 0
       const n = parseFloat(v)
       return isNaN(n) ? 0 : n
-    }
-
-    function parseK1CodesLocal(data: FK1StructuredData, box: string): number {
-      const items = data.codes[box] ?? []
-      return items.reduce((acc, item) => {
-        const n = parseFloat(item.value)
-        return isNaN(n) ? acc : acc.add(n)
-      }, currency(0)).value
-    }
-
-    function k1NetIncomeLocal(data: FK1StructuredData): number {
-      const INCOME_BOXES = ['1', '2', '3', '4', '5', '6a', '6b', '6c', '7', '8', '9a', '9b', '9c', '10']
-      const incomeTotal = INCOME_BOXES.reduce((acc, box) => acc.add(parseK1FieldLocal(data, box)), currency(0))
-        .add(parseK1CodesLocal(data, '11'))
-      const box12 = parseK1FieldLocal(data, '12')
-      const box21 = parseK1FieldLocal(data, '21')
-      return incomeTotal
-        .add(box12 !== 0 ? -Math.abs(box12) : 0)
-        .add(parseK1CodesLocal(data, '13'))
-        .add(box21 !== 0 ? -Math.abs(box21) : 0).value
     }
 
     const k1Parsed = reviewedK1Docs
@@ -565,7 +551,7 @@ export function TaxPreviewProvider({
     // K-1 documents
     for (const { doc, data } of k1Parsed) {
       const partnerName = data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership K-1'
-      const net = k1NetIncomeLocal(data)
+      const net = k1NetIncome(data)
       const interest = parseK1FieldLocal(data, '5')
       const foreignTax = parseK1FieldLocal(data, '21')
       const noteParts = [

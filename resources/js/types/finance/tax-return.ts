@@ -93,6 +93,8 @@ export interface Form1116Lines {
   creditVsDeduction: { creditValue: number; deductionValue: number; recommendation: 'credit' } | null
   turboTaxAlert: boolean
   totalK1Box5?: number
+  /** K-1 funds that have "Sourced by Partner" (col f) amounts in K-3 Part II, and whether the election to treat them as U.S. source is active. */
+  sbpElections?: { partnerName: string; active: boolean; sourcedByPartner: number }[]
 }
 
 export interface K1ExportEntry {
