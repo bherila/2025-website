@@ -176,7 +176,7 @@ function K1Card({ doc, data }: { doc: TaxDocument; data: FK1StructuredData }) {
 
   // Box 13 code items
   const box13Items = data.codes['13'] ?? []
-  const box13Suspended = box13Items.filter((i) => i.code === 'L' || i.code === 'AE')
+  const box13Suspended = box13Items.filter((i) => i.code === 'K' || i.code === 'AE')
 
   // K-3
   const k3Sections = data.k3?.sections ?? []
@@ -384,7 +384,7 @@ export default function K1DetailsTab({ reviewedK1Docs, selectedYear }: K1Details
     const partnerName =
       data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
     return (data.codes['13'] ?? [])
-      .filter((i) => i.code === 'L' || i.code === 'AE')
+      .filter((i) => i.code === 'K' || i.code === 'AE')
       .map((i) => ({
         fund: partnerName,
         code: i.code,

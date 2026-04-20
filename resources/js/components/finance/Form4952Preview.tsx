@@ -72,10 +72,24 @@ export function computeForm4952Lines({
     const partnerName =
       data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
     for (const item of data.codes['13'] ?? []) {
-      if (item.code === 'H' || item.code === 'G') {
+      if (item.code === 'H' || item.code === 'G' || item.code === 'AC' || item.code === 'AD') {
         const n = parseFloat(item.value)
         if (!isNaN(n) && n !== 0) {
           invIntSources.push({ label: `${partnerName} — Box 13${item.code}`, amount: n })
+        }
+      }
+    }
+  }
+
+  // K-1 Box 20B (investment expenses → Form 4952 Line 5)
+  for (const { doc, data } of k1Parsed) {
+    const partnerName =
+      data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
+    for (const item of data.codes['20'] ?? []) {
+      if (item.code === 'B') {
+        const n = parseFloat(item.value)
+        if (!isNaN(n) && n !== 0) {
+          invIntSources.push({ label: `${partnerName} — Box 20B (investment expenses)`, amount: -Math.abs(n) })
         }
       }
     }
@@ -182,14 +196,14 @@ export default function Form4952Preview({
     currency(0),
   ).value
 
-  // §67(g) suspended investment expenses (Box 13L, 13AE) — shown on Form 4952 Line 5 but not deductible
+  // §67(g) suspended investment expenses (Box 13K, 13AE) — shown on Form 4952 Line 5 but not deductible
   type SuspendedLine = { label: string; amount: number }
   const suspendedLines: SuspendedLine[] = []
   for (const { doc, data } of k1Parsed) {
     const partnerName =
       data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
     for (const item of data.codes['13'] ?? []) {
-      if ((item.code === 'L' || item.code === 'AE') && item.value) {
+      if ((item.code === 'K' || item.code === 'AE') && item.value) {
         const n = parseFloat(item.value)
         if (!isNaN(n) && n !== 0) {
           suspendedLines.push({ label: `${partnerName} — Box 13${item.code} (§67(g) suspended)`, amount: n })

@@ -153,4 +153,32 @@ describe('k1NetIncome', () => {
     })
     expect(k1NetIncome(data)).toBe(4500)
   })
+
+  it('treats negative Box 13 as a deduction (not income) — consistent sign handling (Issue 5)', () => {
+    // If a Box 13 code is stored as negative (e.g., reversal), it should still reduce net income
+    const data = makeData({
+      fields: { '5': { value: '10000' } },
+      codes: {
+        '13': [
+          { code: 'H', value: '-5000' },
+        ],
+      },
+    })
+    // With -Math.abs() convention: deduction = -5000, net = 10000 - 5000 = 5000
+    expect(k1NetIncome(data)).toBe(5000)
+  })
+
+  it('treats positive Box 13 the same as negative — both reduce income (Issue 5)', () => {
+    // Box 13 values of +5000 and -5000 should both produce the same deduction
+    const dataPositive = makeData({
+      fields: { '5': { value: '10000' } },
+      codes: { '13': [{ code: 'H', value: '5000' }] },
+    })
+    const dataNegative = makeData({
+      fields: { '5': { value: '10000' } },
+      codes: { '13': [{ code: 'H', value: '-5000' }] },
+    })
+    expect(k1NetIncome(dataPositive)).toBe(5000)
+    expect(k1NetIncome(dataNegative)).toBe(5000)
+  })
 })

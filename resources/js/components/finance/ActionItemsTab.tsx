@@ -54,7 +54,7 @@ export default function ActionItemsTab({
     const partnerName =
       data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
     return (data.codes['13'] ?? [])
-      .filter((i) => i.code === 'L' || i.code === 'AE')
+      .filter((i) => i.code === 'K' || i.code === 'AE')
       .map((i) => ({
         fund: partnerName,
         box: `13${i.code}`,
@@ -64,6 +64,37 @@ export default function ActionItemsTab({
   })
   const totalSuspended = suspendedItems.reduce((acc, i) => acc.add(i.amount), currency(0)).value
   const hasSuspendedDeductions = suspendedItems.length > 0
+
+  // Box 13 codes requiring taxpayer election or manual routing
+  const electionItems = k1Parsed.flatMap(({ doc, data }) => {
+    const partnerName =
+      data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
+    return (data.codes['13'] ?? [])
+      .filter((i) => i.code === 'F' || i.code === 'ZZ')
+      .map((i) => ({
+        fund: partnerName,
+        code: i.code,
+        box: `13${i.code}`,
+        description: i.code === 'F'
+          ? '§59(e)(2) expenditures — elect to amortize or deduct (Form 4562 or Sch A)'
+          : 'Other deductions — check K-1 attached statement for destination',
+        amount: Math.abs(parseFieldVal(i.value) ?? 0),
+      }))
+  })
+  const hasElectionItems = electionItems.length > 0
+
+  // Box 13T (§163(j) excess business interest) — informational carryover
+  const box13TItems = k1Parsed.flatMap(({ doc, data }) => {
+    const partnerName =
+      data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
+    return (data.codes['13'] ?? [])
+      .filter((i) => i.code === 'T')
+      .map((i) => ({
+        fund: partnerName,
+        amount: Math.abs(parseFieldVal(i.value) ?? 0),
+      }))
+  })
+  const hasBox13T = box13TItems.length > 0
 
   // TurboTax FTC Line 1d issue
   const totalK1Box5 = k1Parsed.reduce((acc, { data }) => acc.add(pk1(data, '5')), currency(0)).value
@@ -266,6 +297,42 @@ export default function ActionItemsTab({
           entries. Confirm with {fund.name} that the tax is creditable under §901, and obtain country code and
           date paid before filing Form 1116.
         </p>
+      ),
+    })
+  }
+
+  if (hasElectionItems) {
+    outstandingAlerts.push({
+      severity: 'warn',
+      title: 'Box 13 Codes Requiring Taxpayer Election',
+      body: (
+        <div className="space-y-1">
+          <p>The following K-1 codes require a taxpayer decision on how to report:</p>
+          <ul className="list-disc list-inside space-y-0.5">
+            {electionItems.map((item, i) => (
+              <li key={i}>
+                <strong>{item.fund}</strong> — Box {item.box}: {fmtAmt(item.amount)} — {item.description}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ),
+    })
+  }
+
+  if (hasBox13T) {
+    outstandingAlerts.push({
+      severity: 'info',
+      title: '§163(j) Excess Business Interest — Carryover Tracking',
+      body: (
+        <div className="space-y-1">
+          <p>The following K-1s report excess business interest expense under §163(j). This amount is not deducted in the current year but carries forward:</p>
+          <ul className="list-disc list-inside space-y-0.5">
+            {box13TItems.map((item, i) => (
+              <li key={i}><strong>{item.fund}</strong>: {fmtAmt(item.amount)}</li>
+            ))}
+          </ul>
+        </div>
       ),
     })
   }

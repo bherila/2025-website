@@ -142,6 +142,16 @@ export function computeForm1116Lines({
     }
   }
 
+  for (const doc of reviewed1099Docs) {
+    if (doc.form_type !== 'broker_1099' || Array.isArray(doc.parsed_data) || !doc.is_reviewed) continue
+    const p = doc.parsed_data as Record<string, unknown>
+    const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? 'Consolidated 1099'
+    const intForeignTax = p?.int_6_foreign_tax_paid as number | undefined
+    if (intForeignTax != null && intForeignTax > 0) {
+      taxSources.push({ label: `${payer} — Consolidated 1099 INT Box 6`, amount: intForeignTax })
+    }
+  }
+
   const totalPassiveIncome = incomeSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value
   const totalGeneralIncome = generalIncomeSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value
   const totalForeignTaxes = taxSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value

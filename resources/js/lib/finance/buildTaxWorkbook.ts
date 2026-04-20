@@ -15,11 +15,27 @@ const K1_ROUTING_NOTES: Record<string, string> = {
 
 /** Routing notes for specific box + code combinations. */
 const K1_CODE_ROUTING_NOTES: Record<string, Record<string, string>> = {
-  '11': { A: '<< K-3, II, line 20 | >> Form 6781 / Sch D line 4 or 11' },
-  '13': { L: '<< K-3, II, line 42 | >> Form 4952 line 1 / Sch A line 16 — do NOT enter on Form 8582' },
+  '11': {
+    A: '>> Sch E Part II / Sch B (other portfolio income)',
+    C: '>> Form 6781 line 1 / Sch D line 4 (ST 40%) + line 11 (LT 60%)',
+  },
+  '13': {
+    F: '>> Form 4562 or Sch A (§59(e)(2) — taxpayer election required)',
+    G: '>> Form 4952 line 1 (investment interest expense)',
+    H: '>> Form 4952 line 1 (investment interest expense)',
+    K: '§67(g) suspended (2% floor misc itemized deduction) — not deductible TY 2018–2025',
+    L: '>> Sch A line 16 (portfolio deduction, no 2% floor) — do NOT enter on Form 8582',
+    T: '§163(j) excess business interest expense — carryover tracking only',
+    V: 'Basis adjustment (§743(b)) — not a current-year deduction',
+    W: '>> Sch F line 12 or Sch E (soil & water conservation)',
+    AC: '>> Form 4952 line 1 (debt-financed distribution interest expense)',
+    AD: '>> Form 4952 line 1 (interest expense on oil/gas)',
+    AE: '§67(g) suspended (portfolio income deduction, 2% floor) — not deductible TY 2018–2025',
+    ZZ: 'Other deductions — varies by footnote; check K-1 attached statement',
+  },
   '20': {
     A: '>> Form 4952, II, line 4a',
-    B: '>> Form 4952, II, line 5',
+    B: '>> Form 4952, II, line 5 (investment expenses)',
     S: '>> Form 8995 / 8995-A — QBI deduction (20% of qualified income) | >> Form 1040 Line 13',
     V: '>> Form 8995-A — UBIA of qualified property (W-2 wage/UBIA limitation)',
   },

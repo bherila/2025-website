@@ -303,10 +303,11 @@ export function extractForeignTaxSummaries(
   const boxTotal = currency(box21 > 0 ? box21 : box16I).add(box16J).value
   const totalForeignTaxPaid = boxTotal !== 0 ? boxTotal : extractK3ForeignTaxTotal(data)
 
-  if (totalForeignTaxPaid === 0) return []
-
   const breakdown = extractK3IncomeBreakdown(data)
   const electionSBPasUS = data.k3Elections?.sourcedByPartnerAsUSSource ?? false
+
+  // When foreign tax is zero and there's no col-f income requiring Form 1116 reporting, skip.
+  if (totalForeignTaxPaid === 0 && (breakdown.sourcedByPartner === 0 || electionSBPasUS)) return []
 
   // When the SBP election is NOT active, col_f (sourced-by-partner) amounts are
   // treated as foreign-source and added to passive income for Form 1116 purposes.

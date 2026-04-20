@@ -181,3 +181,41 @@ describe('computeForm1116Lines — flat-dict broker_1099 foreign tax', () => {
     expect(result.totalForeignTaxes).toBe(0)
   })
 })
+
+// ── Issue 4: flat-dict broker_1099 INT Box 6 ──────────────────────────────────
+
+describe('computeForm1116Lines — flat-dict broker_1099 INT foreign tax (Issue 4)', () => {
+  it('includes int_6_foreign_tax_paid from reviewed flat-dict broker_1099 in taxSources', () => {
+    const doc = makeBroker1099Doc({
+      payer_name: 'My Broker INT',
+      int_6_foreign_tax_paid: 85,
+    })
+    const result = computeForm1116Lines({ reviewedK1Docs: [], reviewed1099Docs: [doc] })
+    expect(result.totalForeignTaxes).toBe(85)
+    const taxEntry = result.taxSources.find((s) => s.label.includes('INT Box 6'))
+    expect(taxEntry).toBeDefined()
+    expect(taxEntry!.amount).toBe(85)
+  })
+
+  it('skips unreviewed flat-dict broker_1099 for int_6_foreign_tax_paid', () => {
+    const doc = makeBroker1099Doc({ int_6_foreign_tax_paid: 200 }, false)
+    const result = computeForm1116Lines({ reviewedK1Docs: [], reviewed1099Docs: [doc] })
+    expect(result.totalForeignTaxes).toBe(0)
+  })
+
+  it('skips array-format broker_1099 for int_6_foreign_tax_paid', () => {
+    const arrayDoc = makeBroker1099Doc([{ form_type: '1099_int', parsed_data: { box6_foreign_tax: 500 } }] as never)
+    const result = computeForm1116Lines({ reviewedK1Docs: [], reviewed1099Docs: [arrayDoc] })
+    expect(result.totalForeignTaxes).toBe(0)
+  })
+
+  it('includes both div_7 and int_6 when both present', () => {
+    const doc = makeBroker1099Doc({
+      payer_name: 'Full Broker',
+      div_7_foreign_tax_paid: 120,
+      int_6_foreign_tax_paid: 80,
+    })
+    const result = computeForm1116Lines({ reviewedK1Docs: [], reviewed1099Docs: [doc] })
+    expect(result.totalForeignTaxes).toBe(200)
+  })
+})

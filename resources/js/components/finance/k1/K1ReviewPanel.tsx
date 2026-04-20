@@ -322,7 +322,7 @@ function NoteDetail({ notes, onClose }: { notes: string; onClose: () => void }) 
 
 // ── Income Items block ────────────────────────────────────────────────────────
 
-const INCOME_BOXES = ['1', '2', '3', '4', '5', '6a', '6b', '6c', '7', '8', '9a', '9b', '9c', '10']
+const INCOME_BOXES = ['1', '2', '3', '4', '5', '6a', '6c', '7', '8', '9a', '9b', '9c', '10']
 const specByBox = Object.fromEntries(K1_SPEC.map((s) => [s.box, s]))
 
 function IncomeItemsBlock({
@@ -356,6 +356,7 @@ function IncomeItemsBlock({
         {incomeFieldLines.map(({ box, spec, val, notes }) => {
           const noteKey = `field-${box}`
           const hasK3Part2 = box === '5' && data.k3?.sections.some(s => s.sectionId === 'part2_section1')
+          const box6bVal = box === '6a' ? parseFieldVal(data.fields['6b']?.value) : null
           return (
             <div key={box}>
               <LineItem
@@ -373,6 +374,9 @@ function IncomeItemsBlock({
               )}
               {hasK3Part2 && (
                 <SubLine text="← K-3 Part II, Line 6 shows U.S. vs. foreign breakdown. Use K-3 passive amount on Form 1116, not this box total." />
+              )}
+              {box6bVal != null && box6bVal !== 0 && (
+                <SubLine text={`Box 6b (qualified portion of 6a): ${fmtAmt(box6bVal)} — not added to subtotal`} />
               )}
             </div>
           )

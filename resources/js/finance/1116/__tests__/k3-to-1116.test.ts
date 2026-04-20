@@ -283,6 +283,41 @@ describe('extractForeignTaxSummaries — SBP election', () => {
     expect(s.totalForeignTaxPaid).toBe(1242)
     expect(s.category).toBe('passive')
   })
+
+  it('Issue 6: returns summary with col-f income when foreign tax is zero and SBP inactive', () => {
+    const data = makeData({
+      k3: {
+        sections: [
+          toolSection('part2_section1', [
+            { country: 'DE', col_c_passive: 0, col_d_general: 0, col_f_sourced_by_partner: 500 },
+          ]),
+        ],
+      },
+      k3Elections: { sourcedByPartnerAsUSSource: false },
+    })
+    const summaries = extractForeignTaxSummaries(data)
+    expect(summaries).toHaveLength(1)
+    const s = summaries[0]
+    if (!s) throw new Error('expected summary')
+    expect(s.totalForeignTaxPaid).toBe(0)
+    expect(s.grossForeignIncome).toBe(500)
+    expect(s.category).toBe('passive')
+  })
+
+  it('Issue 6: returns empty when col-f income exists but SBP election is active', () => {
+    const data = makeData({
+      k3: {
+        sections: [
+          toolSection('part2_section1', [
+            { country: 'DE', col_c_passive: 0, col_d_general: 0, col_f_sourced_by_partner: 500 },
+          ]),
+        ],
+      },
+      k3Elections: { sourcedByPartnerAsUSSource: true },
+    })
+    const summaries = extractForeignTaxSummaries(data)
+    expect(summaries).toHaveLength(0)
+  })
 })
 
 // ── extractK1NIIComponents ────────────────────────────────────────────────────
