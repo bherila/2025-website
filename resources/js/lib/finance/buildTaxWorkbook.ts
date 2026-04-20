@@ -1,8 +1,7 @@
 import currency from 'currency.js'
 
 import { ALL_K1_CODES, K1_SPEC_BY_BOX } from '@/components/finance/k1'
-import type { EstimatedTaxPaymentsData } from '@/types/finance/tax-return'
-import type { TaxReturn1040 } from '@/types/finance/tax-return'
+import type { EstimatedTaxPaymentsData, TaxReturn1040 } from '@/types/finance/tax-return'
 import type { XlsxRow, XlsxSheet, XlsxWorkbook } from '@/types/finance/xlsx-export'
 
 /**
@@ -654,14 +653,23 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
   const estTaxSheet = taxReturn.estimatedTaxPayments && taxReturn.estimatedTaxPayments.priorYearTax > 0
     ? (() => {
         const e = taxReturn.estimatedTaxPayments!
+        const multiplierPercent = Math.round(e.multiplier * 100)
+        const agiThresholdMessage = e.priorYearAgi > e.agiThresholdApplied
+          ? `Above ${currency(e.agiThresholdApplied).format()} threshold → ${multiplierPercent}% method`
+          : `At or below ${currency(e.agiThresholdApplied).format()} threshold → ${multiplierPercent}% method`
         const rows: XlsxRow[] = [
-          { isHeader: true, description: `Safe Harbor Method — 110% of ${e.planningYear - 1} Tax` },
+          { isHeader: true, description: `Safe Harbor Method — ${multiplierPercent}% of ${e.planningYear - 1} Tax` },
+          {
+            description: `${e.planningYear - 1} AGI (prior year)`,
+            amount: e.priorYearAgi,
+            note: agiThresholdMessage,
+          },
           {
             description: `${e.planningYear - 1} total tax (prior year)`,
             amount: e.priorYearTax,
           },
           {
-            description: 'Safe harbor amount (110%)',
+            description: `Safe harbor amount (${multiplierPercent}%)`,
             amount: e.safeHarborAmount,
             isTotal: true,
           },

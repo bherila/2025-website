@@ -96,6 +96,10 @@ interface TaxPreviewContextValue {
   priorYearTax: number
   /** Setter for priorYearTax — persisted to localStorage per tax year. */
   setPriorYearTax: Dispatch<SetStateAction<number>>
+  /** Prior year AGI — user-entered for safe-harbor threshold planning. */
+  priorYearAgi: number
+  /** Setter for priorYearAgi — persisted to localStorage per tax year. */
+  setPriorYearAgi: Dispatch<SetStateAction<number>>
   taxReturn: TaxReturn1040
   setPayslips: Dispatch<SetStateAction<fin_payslip[]>>
   setPendingReviewCount: Dispatch<SetStateAction<number>>
@@ -200,6 +204,26 @@ export function TaxPreviewProvider({
       })
     },
     [priorYearTaxKey],
+  )
+  const priorYearAgiKey = `tax-preview-prior-year-agi-${year}`
+  const [priorYearAgi, setPriorYearAgiRaw] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0
+    const stored = localStorage.getItem(priorYearAgiKey)
+    if (stored === null) return 0
+    const n = parseFloat(stored)
+    return isNaN(n) ? 0 : n
+  })
+  const setPriorYearAgi: Dispatch<SetStateAction<number>> = useCallback(
+    (value) => {
+      setPriorYearAgiRaw((prev) => {
+        const next = typeof value === 'function' ? value(prev) : value
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(priorYearAgiKey, String(next))
+        }
+        return next
+      })
+    },
+    [priorYearAgiKey],
   )
 
   const refreshAll = useCallback(async () => {
@@ -692,10 +716,14 @@ export function TaxPreviewProvider({
         }
       }),
       ...(shortDividendSummary ? { shortDividends: shortDividendSummary } : {}),
+      // Marriage settings only distinguish married vs single today, not MFJ vs MFS.
+      // TODO: plumb a dedicated MFS setting through tax preview once that path exists.
       estimatedTaxPayments: computeEstimatedTaxPayments({
         selectedYear: year,
         priorYearTax,
+        priorYearAgi,
         expectedWithholding: fedWH,
+        isMarriedFilingSeparately: false,
       }),
     }
   }, [
@@ -710,6 +738,7 @@ export function TaxPreviewProvider({
     shortDividendSummary,
     isMarried,
     userDeductions,
+    priorYearAgi,
     priorYearTax,
   ])
 
@@ -737,6 +766,8 @@ export function TaxPreviewProvider({
     userDeductions,
     setUserDeductions,
     shortDividendSummary,
+    priorYearAgi,
+    setPriorYearAgi,
     priorYearTax,
     setPriorYearTax,
     taxReturn,
@@ -771,6 +802,8 @@ export function TaxPreviewProvider({
     activeTaxStates,
     userDeductions,
     shortDividendSummary,
+    priorYearAgi,
+    setPriorYearAgi,
     priorYearTax,
     setPriorYearTax,
     taxReturn,

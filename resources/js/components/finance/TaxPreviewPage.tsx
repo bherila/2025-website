@@ -627,6 +627,8 @@ function TaxPreviewPageContent() {
     userDeductions,
     setUserDeductions,
     shortDividendSummary,
+    priorYearAgi,
+    setPriorYearAgi,
     priorYearTax,
     setPriorYearTax,
     taxReturn,
@@ -1000,7 +1002,9 @@ function TaxPreviewPageContent() {
           {taxReturn.estimatedTaxPayments && (
             <EstimatedTaxPaymentsSection
               selectedYear={selectedYear}
+              priorYearAgi={priorYearAgi}
               priorYearTax={priorYearTax}
+              onPriorYearAgiChange={setPriorYearAgi}
               onPriorYearTaxChange={setPriorYearTax}
               estimatedTaxPayments={taxReturn.estimatedTaxPayments}
             />
