@@ -19,7 +19,6 @@ import ScheduleCTab from '@/components/finance/ScheduleCTab'
 import ScheduleDPreview from '@/components/finance/ScheduleDPreview'
 import ScheduleEPreview from '@/components/finance/ScheduleEPreview'
 import StateSelectorSection from '@/components/finance/StateSelectorSection'
-import { DetailsButton } from '@/components/finance/tax-preview-primitives'
 import TaxDocumentReviewModal from '@/components/finance/TaxDocumentReviewModal'
 import TaxDocuments1099Section from '@/components/finance/TaxDocuments1099Section'
 import TaxDocumentsSection from '@/components/finance/TaxDocumentsSection'
@@ -32,10 +31,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { fetchWrapper } from '@/fetchWrapper'
 import { buildTaxWorkbook } from '@/lib/finance/buildTaxWorkbook'
+import { parseK1Field } from '@/lib/finance/k1Utils'
 import { type FilingStatus, getStandardDeduction } from '@/lib/tax/standardDeductions'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
-import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
 import { TAX_TABS } from './tax-tab-ids'
 import { TaxPreviewProvider, type TaxPreviewShellData, useTaxPreview } from './TaxPreviewContext'
@@ -47,36 +46,6 @@ import { YearSelectorWithNav } from './YearSelectorWithNav'
 export type TaxPreviewPreload = TaxPreviewShellData
 
 // ── Income Overview helpers ───────────────────────────────────────────────────
-
-function parseK1Field(data: FK1StructuredData, box: string): number {
-  const v = data.fields[box]?.value
-  if (!v) return 0
-  const n = parseFloat(v)
-  return isNaN(n) ? 0 : n
-}
-
-function parseK1Codes(data: FK1StructuredData, box: string): number {
-  const items = data.codes[box] ?? []
-
-  return items.reduce((acc, item) => {
-    const n = parseFloat(item.value)
-    return isNaN(n) ? acc : acc.add(n)
-  }, currency(0)).value
-}
-
-function k1NetIncome(data: FK1StructuredData): number {
-  const INCOME_BOXES = ['1', '2', '3', '4', '5', '6a', '6b', '6c', '7', '8', '9a', '9b', '9c', '10']
-  const incomeTotal = INCOME_BOXES.reduce((acc, box) => acc.add(parseK1Field(data, box)), currency(0))
-    .add(parseK1Codes(data, '11'))
-  const box12 = parseK1Field(data, '12')
-  const box21 = parseK1Field(data, '21')
-  const deductionTotal = currency(0)
-    .add(box12 !== 0 ? -Math.abs(box12) : 0)
-    .add(parseK1Codes(data, '13'))
-    .add(box21 !== 0 ? -Math.abs(box21) : 0)
-
-  return incomeTotal.add(deductionTotal).value
-}
 
 function fmtOverview(n: number, precision = 0): string {
   const abs = currency(Math.abs(n), { precision }).format()
@@ -114,7 +83,6 @@ interface TaxIncomeOverviewProps {
   reviewedW2Docs: TaxDocument[]
   reviewed1099Docs: TaxDocument[]
   reviewedK1Docs: TaxDocument[]
-  onOpenDoc: (doc: TaxDocument) => void
 }
 
 function TaxIncomeOverview({
@@ -125,7 +93,6 @@ function TaxIncomeOverview({
   reviewedW2Docs,
   reviewed1099Docs,
   reviewedK1Docs,
-  onOpenDoc,
 }: TaxIncomeOverviewProps) {
   // Aggregate K-1 data
   const k1Parsed = reviewedK1Docs
@@ -169,7 +136,6 @@ function TaxIncomeOverview({
   const totalOrdinaryDiv = income1099.dividendIncome.add(k1OrdinaryDiv).value
   const totalQualifiedDiv = income1099.qualifiedDividends.add(k1QualifiedDiv).value
   const totalForeignTax = currency(k1ForeignTax).add(div1099ForeignTax).value
-  const totalK1Net = k1Parsed.reduce((acc, { data }) => acc.add(k1NetIncome(data)), currency(0)).value
   const totalInvestmentIncome = currency(totalInterest).add(totalOrdinaryDiv).value
   const totalCapitalGains = currency(k1StCapital).add(k1LtCapital).value
 
@@ -182,26 +148,6 @@ function TaxIncomeOverview({
   const hasData = reviewedW2Docs.length + reviewed1099Docs.length + reviewedK1Docs.length > 0
 
   if (!hasData) return null
-
-  // All-document rows
-  const w2Rows = reviewedW2Docs.map((doc) => {
-    const p = doc.parsed_data as Record<string, unknown>
-    const wages = p?.box1_wages as number | undefined
-    const fedTax = p?.box2_fed_tax as number | undefined
-    return { doc, wages, fedTax }
-  })
-
-  const k1Rows = k1Parsed.map(({ doc, data }) => {
-    const net = k1NetIncome(data)
-    const partnerName = data.fields['B']?.value?.split('\n')[0] ?? null
-    const ein = data.fields['A']?.value ?? null
-    return { doc, net, partnerName, ein }
-  })
-
-  const f1099Rows = reviewed1099Docs.map((doc) => {
-    const p = doc.parsed_data as Record<string, unknown>
-    return { doc, p }
-  })
 
   return (
     <div className="space-y-6">
@@ -252,214 +198,88 @@ function TaxIncomeOverview({
         </div>
       </div>
 
-      {/* Tax Documents & Estimated Positions — merged table */}
-      <div>
-        <h2 className="text-base font-semibold mb-3">Tax Documents &amp; Estimated Positions</h2>
-        <div className="border rounded-lg overflow-hidden">
-          <Table className="text-sm">
-            <TableHeader className="bg-muted/20">
-              <TableRow>
-                <TableHead className="text-xs">Payer / Fund</TableHead>
-                <TableHead className="text-xs">Document</TableHead>
-                <TableHead className="text-xs">Account / EIN</TableHead>
-                <TableHead className="text-xs text-right">Key Amounts</TableHead>
-                <TableHead className="text-xs">Notes</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {/* W-2 section */}
-              {w2Rows.length > 0 && (
-                <>
-                  <TableRow className="bg-muted/20">
-                    <TableCell colSpan={5} className="py-1.5 text-xs font-semibold text-muted-foreground">W-2 Employment Income</TableCell>
+      {/* Estimated Tax Positions — aggregate income and withholding summary */}
+      {(w2GrossIncome.value > 0 || totalInvestmentIncome !== 0 || k1StCapital !== 0 || k1LtCapital !== 0 || k1InvInterest !== 0 || totalForeignTax !== 0 || fedWH > 0) && (
+        <div>
+          <h2 className="text-base font-semibold mb-3">Estimated Tax Positions</h2>
+          <div className="border rounded-lg overflow-hidden">
+            <Table className="text-sm">
+              <TableHeader className="bg-muted/20">
+                <TableRow>
+                  <TableHead className="text-xs">Line Item</TableHead>
+                  <TableHead className="text-xs text-right">Amount</TableHead>
+                  <TableHead className="text-xs">Notes</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {w2GrossIncome.value > 0 && (
+                  <TableRow>
+                    <TableCell className="py-2">W-2 Wages</TableCell>
+                    <TableCell className="py-2 text-right font-mono text-xs">
+                      <div className="text-emerald-600 dark:text-emerald-500">{w2GrossIncome.format()}</div>
+                    </TableCell>
+                    <TableCell className="py-2 text-xs text-muted-foreground">Box 1 — includes RSU vesting and bonuses</TableCell>
                   </TableRow>
-                  {w2Rows.map(({ doc, wages, fedTax }) => {
-                    const p = doc.parsed_data as Record<string, unknown>
-                    return (
-                      <TableRow key={doc.id}>
-                        <TableCell className="py-2">{(p?.employer_name as string) ?? doc.employment_entity?.display_name ?? doc.account?.acct_name ?? '—'}</TableCell>
-                        <TableCell className="py-2">
-                          <span className="flex items-center gap-1">
-                            <DetailsButton onClick={() => onOpenDoc(doc)} isReviewed={doc.is_reviewed} />
-                            {FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type}
-                          </span>
-                        </TableCell>
-                        <TableCell className="py-2 font-mono text-xs">{p?.employer_ein as string ?? '—'}</TableCell>
-                        <TableCell className="py-2 text-right font-mono text-xs">
-                          {wages != null && <div className="text-emerald-600 dark:text-emerald-500">{fmtOverview(wages)} wages</div>}
-                          {fedTax != null && <div>{fmtOverview(fedTax)} fed WH</div>}
-                        </TableCell>
-                        <TableCell className="py-2 text-xs text-muted-foreground">{doc.notes ?? '—'}</TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </>
-              )}
-              {/* K-1 section */}
-              {k1Rows.length > 0 && (
-                <>
-                  <TableRow className="bg-muted/20">
-                    <TableCell colSpan={5} className="py-1.5 text-xs font-semibold text-muted-foreground">Partnership K-1s</TableCell>
+                )}
+                {totalInvestmentIncome !== 0 && (
+                  <TableRow>
+                    <TableCell className="py-2">Net investment income (interest + divs)</TableCell>
+                    <TableCell className="py-2 text-right font-mono text-xs">
+                      <div className="text-emerald-600 dark:text-emerald-500">{fmtOverview(totalInvestmentIncome)}</div>
+                    </TableCell>
+                    <TableCell className="py-2 text-xs text-muted-foreground">Before deductions; subject to NIIT (3.8%)</TableCell>
                   </TableRow>
-                  {k1Rows.map(({ doc, net, partnerName, ein }) => {
-                    const data = doc.parsed_data as FK1StructuredData
-                    const interest = parseK1Field(data, '5')
-                    const foreignTax = parseK1Field(data, '21')
-                    return (
-                      <TableRow key={doc.id}>
-                        <TableCell className="py-2">{partnerName ?? doc.employment_entity?.display_name ?? doc.account?.acct_name ?? '—'}</TableCell>
-                        <TableCell className="py-2">
-                          <span className="flex items-center gap-1">
-                            <DetailsButton onClick={() => onOpenDoc(doc)} isReviewed={doc.is_reviewed} />
-                            {FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type}
-                          </span>
-                        </TableCell>
-                        <TableCell className="py-2 font-mono text-xs">{ein ?? '—'}</TableCell>
-                        <TableCell className="py-2 text-right font-mono text-xs">
-                          <div className={net < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'}>
-                            Net {fmtOverview(net)}
-                          </div>
-                          {interest !== 0 && <div>Interest {fmtOverview(interest)}</div>}
-                          {foreignTax !== 0 && <div>Foreign tax {fmtOverview(foreignTax)}</div>}
-                        </TableCell>
-                        <TableCell className="py-2 text-xs text-muted-foreground">{doc.notes ?? '—'}</TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </>
-              )}
-              {/* 1099 section */}
-              {f1099Rows.length > 0 && (
-                <>
-                  <TableRow className="bg-muted/20">
-                    <TableCell colSpan={5} className="py-1.5 text-xs font-semibold text-muted-foreground">Brokerage / 1099 Accounts</TableCell>
+                )}
+                {(k1StCapital !== 0 || k1LtCapital !== 0) && (
+                  <TableRow>
+                    <TableCell className="py-2">Net capital gain (loss) — K-1s</TableCell>
+                    <TableCell className="py-2 text-right font-mono text-xs">
+                      <div className={totalCapitalGains < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'}>{fmtOverview(totalCapitalGains)}</div>
+                    </TableCell>
+                    <TableCell className="py-2 text-xs text-muted-foreground">S/T {fmtOverview(k1StCapital)} · L/T {fmtOverview(k1LtCapital)}</TableCell>
                   </TableRow>
-                  {f1099Rows.map(({ doc, p }) => {
-                    const isBroker = doc.form_type === 'broker_1099'
-                    const payer = p?.payer_name as string | undefined
-                    const acct = p?.account_number as string | undefined
-                    // broker_1099 uses div_/int_ prefixes; standard 1099 uses box_ prefixes
-                    const interest = isBroker
-                      ? (p?.int_1_interest_income as number | undefined)
-                      : (p?.box1_interest as number | undefined)
-                    const ordDiv = isBroker
-                      ? (p?.div_1a_total_ordinary as number | undefined)
-                      : (p?.box1a_ordinary as number | undefined)
-                    const foreignTax = isBroker
-                      ? (p?.div_7_foreign_tax_paid as number | undefined)
-                      : ((p?.box7_foreign_tax ?? p?.box6_foreign_tax) as number | undefined)
-                    const capGainLoss = isBroker ? (p?.b_total_gain_loss as number | undefined) : undefined
-                    return (
-                      <TableRow key={doc.id}>
-                        <TableCell className="py-2">{payer ?? doc.employment_entity?.display_name ?? doc.account?.acct_name ?? '—'}</TableCell>
-                        <TableCell className="py-2">
-                          <span className="flex items-center gap-1">
-                            <DetailsButton onClick={() => onOpenDoc(doc)} isReviewed={doc.is_reviewed} />
-                            {FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type}
-                          </span>
-                        </TableCell>
-                        <TableCell className="py-2 font-mono text-xs">{acct ?? '—'}</TableCell>
-                        <TableCell className="py-2 text-right font-mono text-xs">
-                          {interest != null && interest !== 0 && <div className="text-emerald-600 dark:text-emerald-500">Interest {fmtOverview(interest)}</div>}
-                          {ordDiv != null && ordDiv !== 0 && <div className="text-emerald-600 dark:text-emerald-500">Ord div {fmtOverview(ordDiv)}</div>}
-                          {capGainLoss != null && capGainLoss !== 0 && <div className={capGainLoss < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'}>Cap G/L {fmtOverview(capGainLoss)}</div>}
-                          {foreignTax != null && foreignTax !== 0 && <div>Foreign tax {fmtOverview(foreignTax, 2)}</div>}
-                        </TableCell>
-                        <TableCell className="py-2 text-xs text-muted-foreground">{doc.notes ?? '—'}</TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </>
-              )}
-              {/* Estimated tax positions — aggregate and calculated rows */}
-              {(w2GrossIncome.value > 0 || totalInvestmentIncome !== 0 || k1StCapital !== 0 || k1LtCapital !== 0 || k1InvInterest !== 0 || totalForeignTax !== 0 || fedWH > 0) && (
-                <>
-                  <TableRow className="bg-muted/20">
-                    <TableCell colSpan={5} className="py-1.5 text-xs font-semibold text-muted-foreground">Estimated Tax Positions</TableCell>
+                )}
+                {k1InvInterest !== 0 && (
+                  <TableRow>
+                    <TableCell className="py-2">Investment interest deduction (Form 4952)</TableCell>
+                    <TableCell className="py-2 text-right font-mono text-xs">
+                      <div className={k1InvInterest < 0 ? 'text-destructive' : ''}>{fmtOverview(k1InvInterest)}</div>
+                    </TableCell>
+                    <TableCell className="py-2 text-xs text-muted-foreground">From K-1 Box 13G/H — flows to Schedule E</TableCell>
                   </TableRow>
-                  {w2GrossIncome.value > 0 && (
-                    <TableRow>
-                      <TableCell className="py-2">W-2 Wages</TableCell>
-                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
-                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
-                      <TableCell className="py-2 text-right font-mono text-xs">
-                        <div className="text-emerald-600 dark:text-emerald-500">{w2GrossIncome.format()} wages</div>
-                      </TableCell>
-                      <TableCell className="py-2 text-xs text-muted-foreground">Box 1 — includes RSU vesting and bonuses</TableCell>
-                    </TableRow>
-                  )}
-                  {totalInvestmentIncome !== 0 && (
-                    <TableRow>
-                      <TableCell className="py-2">Net investment income (interest + divs)</TableCell>
-                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
-                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
-                      <TableCell className="py-2 text-right font-mono text-xs">
-                        <div className="text-emerald-600 dark:text-emerald-500">{fmtOverview(totalInvestmentIncome)}</div>
-                      </TableCell>
-                      <TableCell className="py-2 text-xs text-muted-foreground">Before deductions; subject to NIIT (3.8%)</TableCell>
-                    </TableRow>
-                  )}
-                  {(k1StCapital !== 0 || k1LtCapital !== 0) && (
-                    <TableRow>
-                      <TableCell className="py-2">Net capital gain (loss) — K-1s</TableCell>
-                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
-                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
-                      <TableCell className="py-2 text-right font-mono text-xs">
-                        <div className={totalCapitalGains < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'}>{fmtOverview(totalCapitalGains)}</div>
-                      </TableCell>
-                      <TableCell className="py-2 text-xs text-muted-foreground">S/T {fmtOverview(k1StCapital)} · L/T {fmtOverview(k1LtCapital)}</TableCell>
-                    </TableRow>
-                  )}
-                  {k1InvInterest !== 0 && (
-                    <TableRow>
-                      <TableCell className="py-2">Investment interest deduction (Form 4952)</TableCell>
-                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
-                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
-                      <TableCell className="py-2 text-right font-mono text-xs">
-                        <div className={k1InvInterest < 0 ? 'text-destructive' : ''}>{fmtOverview(k1InvInterest)}</div>
-                      </TableCell>
-                      <TableCell className="py-2 text-xs text-muted-foreground">From K-1 Box 13G/H — flows to Schedule E</TableCell>
-                    </TableRow>
-                  )}
-                  {totalForeignTax !== 0 && (
-                    <TableRow>
-                      <TableCell className="py-2">Foreign tax credit (Form 1116)</TableCell>
-                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
-                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
-                      <TableCell className="py-2 text-right font-mono text-xs">
-                        <div className="text-emerald-600 dark:text-emerald-500">{fmtOverview(totalForeignTax)} credit</div>
-                      </TableCell>
-                      <TableCell className="py-2 text-xs text-muted-foreground">Dollar-for-dollar vs. income tax</TableCell>
-                    </TableRow>
-                  )}
-                  {fedWH > 0 && (
-                    <TableRow>
-                      <TableCell className="py-2">Federal withholding (W-2 Box 2)</TableCell>
-                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
-                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
-                      <TableCell className="py-2 text-right font-mono text-xs">
-                        <div>{fmtOverview(fedWH)}</div>
-                      </TableCell>
-                      <TableCell className="py-2 text-xs text-muted-foreground">Already paid — compare to final liability</TableCell>
-                    </TableRow>
-                  )}
-                  {w2GrossIncome.value > 200000 && (
-                    <TableRow>
-                      <TableCell className="py-2">Additional Medicare Tax (Form 8959)</TableCell>
-                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
-                      <TableCell className="py-2 text-muted-foreground text-xs">—</TableCell>
-                      <TableCell className="py-2 text-right font-mono text-xs">
-                        <div className="text-destructive">({fmtOverview(addlMedicare)})</div>
-                      </TableCell>
-                      <TableCell className="py-2 text-xs text-muted-foreground">0.9% on wages over $200K threshold</TableCell>
-                    </TableRow>
-                  )}
-                </>
-              )}
-            </TableBody>
-          </Table>
+                )}
+                {totalForeignTax !== 0 && (
+                  <TableRow>
+                    <TableCell className="py-2">Foreign tax credit (Form 1116)</TableCell>
+                    <TableCell className="py-2 text-right font-mono text-xs">
+                      <div className="text-emerald-600 dark:text-emerald-500">{fmtOverview(totalForeignTax)} credit</div>
+                    </TableCell>
+                    <TableCell className="py-2 text-xs text-muted-foreground">Dollar-for-dollar vs. income tax</TableCell>
+                  </TableRow>
+                )}
+                {fedWH > 0 && (
+                  <TableRow>
+                    <TableCell className="py-2">Federal withholding (W-2 Box 2)</TableCell>
+                    <TableCell className="py-2 text-right font-mono text-xs">
+                      <div>{fmtOverview(fedWH)}</div>
+                    </TableCell>
+                    <TableCell className="py-2 text-xs text-muted-foreground">Already paid — compare to final liability</TableCell>
+                  </TableRow>
+                )}
+                {w2GrossIncome.value > 200000 && (
+                  <TableRow>
+                    <TableCell className="py-2">Additional Medicare Tax (Form 8959)</TableCell>
+                    <TableCell className="py-2 text-right font-mono text-xs">
+                      <div className="text-destructive">({fmtOverview(addlMedicare)})</div>
+                    </TableCell>
+                    <TableCell className="py-2 text-xs text-muted-foreground">0.9% on wages over $200K threshold</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
@@ -632,7 +452,6 @@ function TaxPreviewPageContent() {
   } = useTaxPreview()
 
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
-  const [reviewingDoc, setReviewingDoc] = useState<TaxDocument | undefined>(undefined)
   const [activeTab, setActiveTab] = useState<string>(TAX_TABS.overview)
   const [isExporting, setIsExporting] = useState(false)
 
@@ -782,11 +601,9 @@ function TaxPreviewPageContent() {
       <TaxDocumentReviewModal
         open={reviewModalOpen}
         taxYear={selectedYear}
-        {...(reviewingDoc ? { document: reviewingDoc } : {})}
-        onClose={() => { setReviewModalOpen(false); setReviewingDoc(undefined) }}
+        onClose={() => setReviewModalOpen(false)}
         onDocumentReviewed={() => {
           setReviewModalOpen(false)
-          setReviewingDoc(undefined)
           void refreshAll()
         }}
       />
@@ -815,7 +632,6 @@ function TaxPreviewPageContent() {
             reviewedW2Docs={reviewedW2Docs}
             reviewed1099Docs={reviewed1099Docs}
             reviewedK1Docs={reviewedK1Docs}
-            onOpenDoc={(doc) => { setReviewingDoc(doc); setReviewModalOpen(true) }}
           />
 
           {showTaxTables ? (
