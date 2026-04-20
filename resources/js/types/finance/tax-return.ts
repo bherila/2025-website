@@ -37,6 +37,10 @@ export interface ScheduleALines {
   charitable: number
   /** Other user-entered deductions. */
   otherDeductions: number
+  /** K-1 Box 13L (portfolio deduction, no 2% floor) sources flowing to Sch A Line 16. */
+  otherItemizedSources: { label: string; amount: number }[]
+  /** Sum of otherItemizedSources (K-1 Box 13L) — included in totalItemizedDeductions. */
+  totalOtherItemized: number
   /** All user-entered deduction entries for the inline UI. */
   userDeductions: UserDeductionEntry[]
   /** Total itemized deductions (investment interest + SALT + mortgage + charitable + other). */

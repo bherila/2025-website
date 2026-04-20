@@ -317,10 +317,10 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
           description: 'Lines 11–12 — Charitable contributions',
           amount: taxReturn.scheduleA.charitable,
         }] : []),
-        ...(taxReturn.scheduleA.otherDeductions > 0 ? [{
+        ...(currency(taxReturn.scheduleA.otherDeductions).add(taxReturn.scheduleA.totalOtherItemized).value > 0 ? [{
           line: '16',
-          description: 'Line 16 — Other itemized deductions',
-          amount: taxReturn.scheduleA.otherDeductions,
+          description: 'Line 16 — Other itemized deductions (user-entered + K-1 Box 13L)',
+          amount: currency(taxReturn.scheduleA.otherDeductions).add(taxReturn.scheduleA.totalOtherItemized).value,
         }] : []),
         {
           line: '17',

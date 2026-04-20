@@ -62,6 +62,7 @@ export function computeScheduleALines({
   userDeductions?: UserDeductionEntry[]
 }): ScheduleALines {
   const invIntSources: InvIntSource[] = []
+  const otherItemizedSources: { label: string; amount: number }[] = []
 
   const k1Parsed = reviewedK1Docs
     .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
@@ -82,6 +83,17 @@ export function computeScheduleALines({
       const n = parseFloat(item.value)
       if (!isNaN(n) && n !== 0) {
         invIntSources.push({ label: `${partnerName} — K-1 Box 13G (investment interest)`, amount: -Math.abs(n) })
+      }
+    }
+    // Box 13L — portfolio deduction (no 2% floor) → Sch A Line 16
+    const lItems = (data.codes['13'] ?? []).filter((item) => item.code === 'L')
+    for (const item of lItems) {
+      const n = parseFloat(item.value)
+      if (!isNaN(n) && n !== 0) {
+        otherItemizedSources.push({
+          label: `${partnerName} — K-1 Box 13L (portfolio deduction, no 2% floor)`,
+          amount: Math.abs(n),
+        })
       }
     }
   }
@@ -122,11 +134,16 @@ export function computeScheduleALines({
   const otherDeductions = buckets.other ?? 0
 
   const saltDeduction = Math.min(currency(saltPaid).add(userSalt).value, SALT_CAP)
+  const totalOtherItemized = otherItemizedSources.reduce(
+    (acc, s) => acc.add(s.amount),
+    currency(0),
+  ).value
   const totalItemizedDeductions = currency(totalInvIntExpense)
     .add(saltDeduction)
     .add(mortgageInterest)
     .add(charitable)
-    .add(otherDeductions).value
+    .add(otherDeductions)
+    .add(totalOtherItemized).value
   // MFJ/MFS sharing: isMarried collapses both into MFJ for now. MFS users should
   // treat the $10k SALT cap as $5k and expect different brackets; unsupported until
   // MFJ-vs-MFS is added to the marriage-status settings.
@@ -142,6 +159,8 @@ export function computeScheduleALines({
     mortgageInterest,
     charitable,
     otherDeductions,
+    otherItemizedSources,
+    totalOtherItemized,
     userDeductions,
     totalItemizedDeductions,
     standardDeduction,
@@ -229,7 +248,7 @@ export default function ScheduleAPreview({
   const [showInvIntModal, setShowInvIntModal] = useState(false)
 
   const shortDivDeduction = shortDividendSummary?.totalItemizedDeduction ?? 0
-  const { invIntSources, totalInvIntExpense, saltPaid: totalSaltPaidBeforeCap, saltDeduction, mortgageInterest, charitable, otherDeductions, totalItemizedDeductions, standardDeduction, shouldItemize } = computeScheduleALines({
+  const { invIntSources, totalInvIntExpense, saltPaid: totalSaltPaidBeforeCap, saltDeduction, mortgageInterest, charitable, otherDeductions, otherItemizedSources, totalOtherItemized, totalItemizedDeductions, standardDeduction, shouldItemize } = computeScheduleALines({
     reviewedK1Docs,
     reviewed1099Docs,
     ...(shortDividendSummary ? { shortDividendSummary } : {}),
@@ -313,9 +332,15 @@ export default function ScheduleAPreview({
         </FormBlock>
 
         <FormBlock title="Other Itemized Deductions">
-          <FormLine
+          {otherDeductions > 0 && (
+            <FormLine label="User-entered other deductions" value={otherDeductions} />
+          )}
+          {otherItemizedSources.map((src, i) => (
+            <FormLine key={`k1-oth-${i}`} label={src.label} value={src.amount} />
+          ))}
+          <FormTotalLine
             label="Line 16 — Other itemized deductions"
-            {...(otherDeductions > 0 ? { value: otherDeductions } : { raw: '—' })}
+            value={currency(otherDeductions).add(totalOtherItemized).value}
           />
         </FormBlock>
       </div>
@@ -353,6 +378,7 @@ export default function ScheduleAPreview({
         {mortgageInterest > 0 && <FormLine label="Mortgage interest (Line 8)" value={mortgageInterest} />}
         {charitable > 0 && <FormLine label="Charitable contributions (Lines 11–12)" value={charitable} />}
         {otherDeductions > 0 && <FormLine label="Other deductions" value={otherDeductions} />}
+        {totalOtherItemized > 0 && <FormLine label="K-1 Box 13L portfolio deductions (Line 16)" value={totalOtherItemized} />}
         <FormLine label="Medical, casualty, other" raw="Enter below — not yet computed" />
         <FormTotalLine
           label={shouldItemize
