@@ -419,6 +419,19 @@ export default function TaxDocumentReviewModal({
   const effectiveFormType = isLinkReview ? propAccountLink!.form_type : activeDoc?.form_type
   const effectiveReviewed = isLinkReview ? propAccountLink!.is_reviewed : activeDoc?.is_reviewed ?? false
 
+  // When a K-1 is already confirmed, every section is rendered read-only EXCEPT the K-3 SBP
+  // election checkbox (it's a user tax-planning preference, not extracted data). Detect when
+  // the checkbox has been toggled relative to the saved value so we can surface a save
+  // affordance — otherwise the user would have to "Reopen for Review" just to persist the
+  // toggle, which is confusing.
+  const savedSbpElection = effectiveFormType === 'k1' && activeDoc?.parsed_data && !Array.isArray(activeDoc.parsed_data)
+    ? ((activeDoc.parsed_data as Record<string, unknown>)?.k3Elections as Record<string, unknown> | undefined)?.sourcedByPartnerAsUSSource ?? false
+    : false
+  const currentSbpElection = effectiveFormType === 'k1' && editData && !Array.isArray(editData)
+    ? ((editData as Record<string, unknown>)?.k3Elections as Record<string, unknown> | undefined)?.sourcedByPartnerAsUSSource ?? false
+    : false
+  const hasUnsavedSbpElectionChange = Boolean(savedSbpElection) !== Boolean(currentSbpElection)
+
   const fetchPending = useCallback(async () => {
     if (!open) return
     if (propDocument) {
@@ -790,8 +803,13 @@ export default function TaxDocumentReviewModal({
                       onChange={(e) => setNotes(e.target.value)}
                       readOnly={effectiveReviewed}
                     />
-                    {!effectiveReviewed && (
-                      <div className="flex justify-end">
+                    {(!effectiveReviewed || hasUnsavedSbpElectionChange) && (
+                      <div className="flex items-center justify-end gap-2">
+                        {effectiveReviewed && hasUnsavedSbpElectionChange && (
+                          <span className="text-[10px] text-amber-600 dark:text-amber-500 italic">
+                            SBP election has unsaved changes
+                          </span>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
@@ -800,7 +818,7 @@ export default function TaxDocumentReviewModal({
                           onClick={() => handleUpdate(activeDoc, effectiveReviewed)}
                         >
                           <Save className="h-3.5 w-3.5" />
-                          Save Changes
+                          {effectiveReviewed ? 'Save Election' : 'Save Changes'}
                         </Button>
                       </div>
                     )}
