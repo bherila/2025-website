@@ -4,7 +4,7 @@ import currency from 'currency.js'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
-import { computeForm8582Lines } from '@/finance/8582/form8582'
+import { computeForm8582Lines, RENTAL_PHASEOUT_END, RENTAL_PHASEOUT_START, RENTAL_SPECIAL_ALLOWANCE } from '@/finance/8582/form8582'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import type { Form8582Lines } from '@/types/finance/tax-return'
@@ -146,7 +146,7 @@ export default function Form8582Preview({
             value={magi}
           />
           <FormLine
-            label={`Special allowance (${fmtAmt(25_000, 0)} max, phased out ${fmtAmt(100_000, 0)}–${fmtAmt(150_000, 0)} MAGI)`}
+            label={`Special allowance (${fmtAmt(RENTAL_SPECIAL_ALLOWANCE, 0)} max, phased out ${fmtAmt(RENTAL_PHASEOUT_START, 0)}–${fmtAmt(RENTAL_PHASEOUT_END, 0)} MAGI)`}
             value={rentalAllowance}
           />
         </FormBlock>
@@ -175,7 +175,7 @@ export default function Form8582Preview({
             label="PAL status"
             raw={netPassiveResult >= 0
               ? '✓ Net passive income — no limitation applies'
-              : `✓ All passive losses allowed (within $${(25_000).toLocaleString()} special allowance)`}
+              : `✓ All passive losses allowed (within $${RENTAL_SPECIAL_ALLOWANCE.toLocaleString()} special allowance)`}
           />
         )}
       </FormBlock>

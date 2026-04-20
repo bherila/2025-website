@@ -77,7 +77,7 @@ export function computeForm8582Lines({
 
   const totalLossAmount = Math.abs(netPassiveResult)
 
-  const rentalAllowanceBase = isMarried ? RENTAL_SPECIAL_ALLOWANCE : RENTAL_SPECIAL_ALLOWANCE
+  const rentalAllowanceBase = RENTAL_SPECIAL_ALLOWANCE
   const phaseOutReduction = Math.max(0, currency(magi).subtract(RENTAL_PHASEOUT_START).multiply(0.5).value)
   const rentalAllowance = Math.max(0, currency(rentalAllowanceBase).subtract(phaseOutReduction).value)
 
