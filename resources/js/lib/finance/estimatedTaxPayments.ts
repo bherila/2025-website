@@ -42,9 +42,6 @@ export interface EstimatedTaxPaymentsData {
  *   Q3 — September 15, P
  *   Q4 — January 15, P+1
  */
-function formatDueDate(month: string, day: number, year: number): string {
-  return `${month} ${day}, ${year}`
-}
 
 export function computeEstimatedTaxPayments(params: {
   /** The tax year being reviewed on the Tax Preview page (e.g. 2025). */
@@ -89,10 +86,10 @@ export function computeEstimatedTaxPayments(params: {
     netDue,
     quarterlyAmount,
     quarterlyPayments: [
-      { paymentNumber: 1, dueDate: formatDueDate('April', 15, planningYear), amount: quarterlyAmount },
-      { paymentNumber: 2, dueDate: formatDueDate('June', 15, planningYear), amount: quarterlyAmount },
-      { paymentNumber: 3, dueDate: formatDueDate('September', 15, planningYear), amount: quarterlyAmount },
-      { paymentNumber: 4, dueDate: formatDueDate('January', 15, planningYear + 1), amount: q4Amount },
+      { paymentNumber: 1, dueDate: `April 15, ${planningYear}`, amount: quarterlyAmount },
+      { paymentNumber: 2, dueDate: `June 15, ${planningYear}`, amount: quarterlyAmount },
+      { paymentNumber: 3, dueDate: `September 15, ${planningYear}`, amount: quarterlyAmount },
+      { paymentNumber: 4, dueDate: `January 15, ${planningYear + 1}`, amount: q4Amount },
     ],
   }
 }

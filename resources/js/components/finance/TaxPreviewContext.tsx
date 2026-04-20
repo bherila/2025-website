@@ -646,6 +646,16 @@ export function TaxPreviewProvider({
       totalAdditionalTaxes: currency(form8959.additionalTax).add(form8960.niitTax).value,
     }
 
+    const estimatedTaxPayments = !isMarried && priorYearTax > 0
+      ? computeEstimatedTaxPayments({
+          selectedYear: year,
+          priorYearTax,
+          priorYearAgi,
+          expectedWithholding: fedWH,
+          isMarriedFilingSeparately: false,
+        })
+      : undefined
+
     return {
       year,
       ...(overviewSections.length > 0 ? { overviewSections } : {}),
@@ -718,13 +728,7 @@ export function TaxPreviewProvider({
       ...(shortDividendSummary ? { shortDividends: shortDividendSummary } : {}),
       // Marriage settings only distinguish married vs single today, not MFJ vs MFS.
       // TODO: plumb a dedicated MFS setting through tax preview once that path exists.
-      estimatedTaxPayments: computeEstimatedTaxPayments({
-        selectedYear: year,
-        priorYearTax,
-        priorYearAgi,
-        expectedWithholding: fedWH,
-        isMarriedFilingSeparately: false,
-      }),
+      ...(estimatedTaxPayments ? { estimatedTaxPayments } : {}),
     }
   }, [
     year,

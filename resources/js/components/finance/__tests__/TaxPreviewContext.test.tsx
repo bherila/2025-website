@@ -165,4 +165,33 @@ describe('TaxPreviewContext', () => {
 
     expect(toast.success).not.toHaveBeenCalled()
   })
+
+  it('omits estimated tax payment results when marriage status is true because MFS is not yet supported', async () => {
+    ;(fetchWrapper.get as jest.Mock).mockImplementation((url: string) => {
+      if (url === '/api/finance/marriage-status') {
+        return Promise.resolve({ 2025: true })
+      }
+
+      if (url === '/api/finance/user-tax-states?year=2025') {
+        return Promise.resolve([])
+      }
+
+      if (url === '/api/finance/user-deductions?year=2025') {
+        return Promise.resolve([])
+      }
+
+      return Promise.resolve(makeResponse())
+    })
+
+    const { result } = renderHook(() => useTaxPreview(), { wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+    await waitFor(() => expect(result.current.isMarried).toBe(true))
+
+    await act(async () => {
+      result.current.setPriorYearTax(100_000)
+      result.current.setPriorYearAgi(200_000)
+    })
+
+    expect(result.current.taxReturn.estimatedTaxPayments).toBeUndefined()
+  })
 })

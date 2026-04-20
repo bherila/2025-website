@@ -815,16 +815,15 @@ function TaxPreviewPageContent() {
             </div>
           )}
 
-          {taxReturn.estimatedTaxPayments && (
-            <EstimatedTaxPaymentsSection
-              selectedYear={selectedYear}
-              priorYearAgi={priorYearAgi}
-              priorYearTax={priorYearTax}
-              onPriorYearAgiChange={setPriorYearAgi}
-              onPriorYearTaxChange={setPriorYearTax}
-              estimatedTaxPayments={taxReturn.estimatedTaxPayments}
-            />
-          )}
+          <EstimatedTaxPaymentsSection
+            planningYear={selectedYear + 1}
+            priorYearAgi={priorYearAgi}
+            priorYearTax={priorYearTax}
+            onPriorYearAgiChange={setPriorYearAgi}
+            onPriorYearTaxChange={setPriorYearTax}
+            estimatedTaxPayments={taxReturn.estimatedTaxPayments}
+            showMfsUnsupportedNotice={isMarried}
+          />
         </TabsContent>
 
         <TabsContent value={TAX_TABS.actionItems} className="mt-0">

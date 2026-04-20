@@ -1,4 +1,3 @@
-import type { EstimatedTaxPaymentsData } from '@/lib/finance/estimatedTaxPayments'
 import type { ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import type { ScheduleDData } from '@/lib/tax/scheduleD'
 
@@ -222,7 +221,7 @@ export interface TaxReturn1040 {
   form8995?: Form8995Lines
   capitalLossCarryover?: CapitalLossCarryoverLines
   form461?: Form461Lines
-  estimatedTaxPayments?: EstimatedTaxPaymentsData
+  estimatedTaxPayments?: import('@/lib/finance/estimatedTaxPayments').EstimatedTaxPaymentsData
   k1Docs?: K1ExportEntry[]
   k3Docs?: K3ExportEntry[]
   docs1099?: Doc1099ExportEntry[]
