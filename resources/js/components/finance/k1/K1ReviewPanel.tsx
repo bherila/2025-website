@@ -1315,7 +1315,7 @@ export default function K1ReviewPanel({ data, onChange, readOnly = false }: K1Re
       {/* K-3 sections */}
       {k3Sections.length > 0 && (
         <div className="space-y-4">
-          <K3ElectionSection data={data} onChange={onChange} readOnly={readOnly} />
+          <K3ElectionSection data={data} onChange={onChange} readOnly={false} />
           <K3GrossIncomeTable sections={k3Sections} />
           <K3DeductionsTable sections={k3Sections} electionActive={data.k3Elections?.sourcedByPartnerAsUSSource} />
           <K3AssetApportionmentTable sections={k3Sections} electionActive={data.k3Elections?.sourcedByPartnerAsUSSource} />

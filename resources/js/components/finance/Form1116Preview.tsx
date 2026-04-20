@@ -111,6 +111,17 @@ export function computeForm1116Lines({
   }
 
   for (const doc of reviewed1099Docs) {
+    if (doc.form_type !== 'broker_1099' || Array.isArray(doc.parsed_data) || !doc.is_reviewed) continue
+    const p = doc.parsed_data as Record<string, unknown>
+    const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? 'Consolidated 1099'
+    const foreignTax = p?.div_7_foreign_tax_paid as number | undefined
+    if (foreignTax != null && foreignTax > 0) {
+      incomeSources.push({ label: `${payer} — Consolidated 1099 DIV (estimated foreign source)`, amount: currency(foreignTax).divide(0.15).value })
+      taxSources.push({ label: `${payer} — Consolidated 1099 DIV Box 7`, amount: foreignTax })
+    }
+  }
+
+  for (const doc of reviewed1099Docs) {
     const p = doc.parsed_data as Record<string, unknown>
     const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? '1099'
     const intForeignTax = p?.box6_foreign_tax as number | undefined
