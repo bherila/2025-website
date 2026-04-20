@@ -1315,6 +1315,8 @@ export default function K1ReviewPanel({ data, onChange, readOnly = false }: K1Re
       {/* K-3 sections */}
       {k3Sections.length > 0 && (
         <div className="space-y-4">
+          {/* SBP election is a user tax-planning preference (not extracted data) and must remain
+              editable even after the K-1 is confirmed, so readOnly is always false here. */}
           <K3ElectionSection data={data} onChange={onChange} readOnly={false} />
           <K3GrossIncomeTable sections={k3Sections} />
           <K3DeductionsTable sections={k3Sections} electionActive={data.k3Elections?.sourcedByPartnerAsUSSource} />

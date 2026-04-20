@@ -116,6 +116,8 @@ export function computeForm1116Lines({
     const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? 'Consolidated 1099'
     const foreignTax = p?.div_7_foreign_tax_paid as number | undefined
     if (foreignTax != null && foreignTax > 0) {
+      // 0.15 is an assumed 15% withholding rate used to back-calculate estimated foreign source income
+      // from the reported foreign tax withheld (same approach as the 1099-DIV loop above).
       incomeSources.push({ label: `${payer} — Consolidated 1099 DIV (estimated foreign source)`, amount: currency(foreignTax).divide(0.15).value })
       taxSources.push({ label: `${payer} — Consolidated 1099 DIV Box 7`, amount: foreignTax })
     }
