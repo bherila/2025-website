@@ -93,6 +93,10 @@ PROMPT;
     {
         $toolName = GenAiJobDispatcherService::TAX_DOCUMENT_K1_TOOL_NAME;
 
+        $box20QbiGuidance = $taxYear >= 2023
+            ? "Code Z = Section 199A information (QBI income/loss from the activity). The value is the\n     QBI amount; record the full Section 199A Statement A (W-2 wages, UBIA, SSTB flag) in `notes`."
+            : "Code S = Section 199A information (QBI income/loss from the activity). The value is the\n     QBI amount; record the full Section 199A statement (W-2 wages, UBIA, SSTB flag) in `notes`.\n     Code V = Section 199A UBIA of qualified property (enter the dollar amount).";
+
         return <<<PROMPT
 <!-- tool:{$toolName} -->
 Extract ALL data from this Schedule K-1 PDF (tax year {$taxYear}) using the `{$toolName}` tool.
@@ -164,9 +168,7 @@ EXTRACTION RULES:
      Code A = country name, Code B = passive gross income, Code C = general gross income,
      Code I = foreign taxes paid, Code J = foreign taxes withheld at source.
    Box 20 (Other Information) — critical for QBI deduction:
-     Code Z = Section 199A information (QBI income/loss from the activity, TY 2023+). The value is the
-     QBI amount; record the full Section 199A Statement A (W-2 wages, UBIA, SSTB flag) in `notes`.
-     (Pre-2023 forms used Code S for this field; for TY 2023+ use Code Z.)
+     {$box20QbiGuidance}
    Box 13 (Other Deductions):
      Code G = investment interest expense (→ Form 4952 Line 1).
      Code L = portfolio deductions not subject to 2% floor (→ Schedule A or Form 4952).

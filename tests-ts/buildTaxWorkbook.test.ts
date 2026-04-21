@@ -29,9 +29,11 @@ describe('buildTaxWorkbook', () => {
       }],
     })
     const k1Sheet = workbook.sheets.find(s => s.name === 'K-1 Old LP')
+    expect(k1Sheet).toBeDefined()
     const sRow = k1Sheet!.rows.find(r => r.line === '20S')
+    expect(sRow).toBeDefined()
     // S no longer has a routing note; the note should be undefined or not reference Form 8995
-    expect(sRow?.note ?? '').not.toMatch(/Form 8995/)
+    expect(sRow!.note ?? '').not.toMatch(/Form 8995/)
   })
 
   it('Box 20 Code V has no UBIA routing note (pre-2023 code no longer routed)', () => {
@@ -44,8 +46,10 @@ describe('buildTaxWorkbook', () => {
       }],
     })
     const k1Sheet = workbook.sheets.find(s => s.name === 'K-1 Old LP')
+    expect(k1Sheet).toBeDefined()
     const vRow = k1Sheet!.rows.find(r => r.line === '20V')
-    expect(vRow?.note ?? '').not.toMatch(/UBIA/)
+    expect(vRow).toBeDefined()
+    expect(vRow!.note ?? '').not.toMatch(/UBIA/)
   })
 
   it('emits only Schedule B when only scheduleB is populated', () => {

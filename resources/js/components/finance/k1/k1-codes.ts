@@ -151,14 +151,14 @@ export const BOX20_CODES: Record<string, string> = {
   Q: 'Section 409A income',
   R: 'Section 448(d)(5) deferral',
   S: 'Section 199A information (QBI deduction)',
-  T: 'Section 704(c) information',
+  T: 'Section 704(c) information (pre-2023)',
   U: 'Net investment income (Form 8960)',
   V: 'Section 199A UBIA of qualified property',
   W: 'Section 965 information',
   X: 'Section 461(l) excess business loss information',
   Y: 'Other information (see attached statement)',
   Z: 'Section 199A information (QBI deduction — Statement A)',
-  AA: 'Section 704(c) information',
+  AA: 'Section 704(c) information (TY 2023+)',
 }
 
 /** All coded-box definitions in one lookup keyed by box number. */
