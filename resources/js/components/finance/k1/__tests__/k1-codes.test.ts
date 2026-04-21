@@ -3,6 +3,10 @@ import { BOX20_CODES } from '../k1-codes'
 describe('BOX20_CODES', () => {
   it('uses TY 2024 Schedule K-1 Box 20 labels for renumbered and extended codes', () => {
     expect(BOX20_CODES).toMatchObject({
+      I: 'Recapture of other credits (TY 2023+; Look-back interest—completed long-term contracts pre-2023)',
+      J: 'Look-back interest—completed long-term contracts (TY 2023+; Look-back interest—income forecast method pre-2023)',
+      K: 'Look-back interest—income forecast method (TY 2023+; Dispositions of property with section 179 deductions pre-2023)',
+      L: 'Dispositions of property with section 179 deductions (TY 2023+; Recapture of section 179 deduction pre-2023)',
       M: 'Recapture of section 179 deduction (TY 2023+; Section 453(l)(3) information pre-2023)',
       N: 'Business interest expense (information item) (TY 2023+; Section 453A(c) information pre-2023)',
       O: 'Section 453(l)(3) information (TY 2023+; Section 1260(b) information pre-2023)',
@@ -38,7 +42,7 @@ describe('BOX20_CODES', () => {
       AS: 'Qualifying advanced coal project property and qualifying gasification project property',
       AT: 'Qualifying advanced energy project property',
       AU: 'Advanced manufacturing investment property',
-      AV: 'Clean electricity investment property',
+      AV: 'Reserved for future use',
       AW: 'Reportable transactions',
       AX: 'Corporate alternative minimum tax (CAMT)',
       AY: 'Foreign partners, Form 8990, Schedule A',
