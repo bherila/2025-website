@@ -1184,13 +1184,30 @@ PROMPT;
         // Schedule K-3 — assemble structured sections from new flat arrays
         $k3Sections = (new K3SectionAssembler)->assemble($args);
 
+        // §199A Statement A — map snake_case tool keys → camelCase FK1StructuredData shape
+        $statementA = null;
+        $rawSa = $args['statement_a'] ?? null;
+        if (is_array($rawSa) && isset($rawSa['qualified_business_income'])) {
+            $statementA = [
+                'qualifiedBusinessIncome' => is_numeric($rawSa['qualified_business_income']) ? (float) $rawSa['qualified_business_income'] : 0.0,
+                'w2Wages' => is_numeric($rawSa['w2_wages'] ?? null) ? (float) $rawSa['w2_wages'] : 0.0,
+                'ubia' => is_numeric($rawSa['ubia'] ?? null) ? (float) $rawSa['ubia'] : 0.0,
+                'reitDividends' => is_numeric($rawSa['reit_dividends'] ?? null) ? (float) $rawSa['reit_dividends'] : 0.0,
+                'ptpIncome' => is_numeric($rawSa['ptp_income'] ?? null) ? (float) $rawSa['ptp_income'] : 0.0,
+                'isSstb' => (bool) ($rawSa['is_sstb'] ?? false),
+            ];
+            if (isset($rawSa['trade_name']) && $rawSa['trade_name'] !== '') {
+                $statementA['tradeName'] = (string) $rawSa['trade_name'];
+            }
+        }
+
         // Warnings
         $rawWarnings = $args['warnings'] ?? [];
         $warnings = is_array($rawWarnings)
             ? array_values(array_filter(array_map(fn ($w) => is_string($w) ? $w : null, $rawWarnings)))
             : [];
 
-        return [
+        $result = [
             'schemaVersion' => '2026.1',
             'formType' => isset($args['formType']) ? (string) $args['formType'] : 'K-1-1065',
             'formId' => isset($args['formId']) && $args['formId'] !== '' ? (string) $args['formId'] : null,
@@ -1213,6 +1230,12 @@ PROMPT;
             ],
             'createdAt' => now()->toIso8601String(),
         ];
+
+        if ($statementA !== null) {
+            $result['statementA'] = $statementA;
+        }
+
+        return $result;
     }
 
     /**
@@ -1511,6 +1534,22 @@ PROMPT;
                 'codes_18' => $codeItemsProp,  // Tax-exempt & nondeductible
                 'codes_19' => $codeItemsProp,  // Distributions
                 'codes_20' => $codeItemsProp,  // Other information
+
+                // ── §199A Statement A (attached to Box 20 Code Z, TY 2023+) ─────────
+                // Populate this object when the K-1 includes a Section 199A Statement A.
+                // The qualified_business_income field should match the Box 20 Code Z dollar amount.
+                'statement_a' => Schema::object(
+                    [
+                        'trade_name' => Schema::string('Name of the trade or business from Statement A header'),
+                        'qualified_business_income' => Schema::number('QBI income (loss) — matches Box 20 Code Z value'),
+                        'w2_wages' => Schema::number('W-2 wages paid by the entity (used for W-2 wage limitation on Form 8995-A)'),
+                        'ubia' => Schema::number('Unadjusted Basis Immediately After Acquisition of qualified property'),
+                        'reit_dividends' => Schema::number('§199A(e)(3) REIT dividends allocated to partner'),
+                        'ptp_income' => Schema::number('§199A(e)(5) qualified PTP income'),
+                        'is_sstb' => Schema::boolean('True if this is a Specified Service Trade or Business (SSTB)'),
+                    ],
+                    ['qualified_business_income'],
+                ),
 
                 // ── Schedule K-3 (backward-compat fallback) ───────────────────────
                 'k3_sections' => $k3SectionProp,

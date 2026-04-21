@@ -94,7 +94,7 @@ PROMPT;
         $toolName = GenAiJobDispatcherService::TAX_DOCUMENT_K1_TOOL_NAME;
 
         $box20QbiGuidance = $taxYear >= 2023
-            ? "Code Z = Section 199A information (QBI income/loss from the activity). The value is the\n     QBI amount; record the full Section 199A Statement A (W-2 wages, UBIA, SSTB flag) in `notes`."
+            ? "Code Z = Section 199A information (QBI income/loss from the activity). The value is the\n     QBI amount. ALSO populate the `statement_a` top-level object with the fields from the\n     Section 199A Statement A attachment: qualified_business_income (= Code Z value),\n     w2_wages, ubia, reit_dividends, ptp_income, is_sstb, and trade_name if shown.\n     Set numeric fields to 0 when not present on the statement; set is_sstb to false when not indicated."
             : "Code S = Section 199A information (QBI income/loss from the activity). The value is the\n     QBI amount; record the full Section 199A statement (W-2 wages, UBIA, SSTB flag) in `notes`.\n     Code V = Section 199A UBIA of qualified property (enter the dollar amount).";
 
         return <<<PROMPT

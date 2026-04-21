@@ -47,6 +47,29 @@ export interface K1ExtractionInfo {
 }
 
 /**
+ * Section 199A Statement A — attached to Box 20 Code Z (TY 2023+).
+ *
+ * Extracted from the supporting statement that partnerships attach to their K-1
+ * to report QBI deduction components for each trade or business.
+ */
+export interface StatementA {
+  /** Name of the trade or business (from Statement A header, if present). */
+  tradeName?: string
+  /** QBI income (loss) from this activity — mirrors the Box 20 Code Z dollar amount. */
+  qualifiedBusinessIncome: number
+  /** W-2 wages paid by the entity — used for the W-2 wage limitation on Form 8995-A. */
+  w2Wages: number
+  /** UBIA (Unadjusted Basis Immediately After Acquisition) of qualified property. */
+  ubia: number
+  /** REIT dividends allocated to partner (§199A(e)(3)). */
+  reitDividends: number
+  /** Qualified PTP income (§199A(e)(5)). */
+  ptpIncome: number
+  /** Whether this is a Specified Service Trade or Business — deduction phases out above threshold. */
+  isSstb: boolean
+}
+
+/**
  * Document-level elections that affect how K-3 data is interpreted.
  * Stored in parsed_data alongside the extracted data.
  */
@@ -61,9 +84,10 @@ export interface K3Elections {
 /**
  * Structured K-1 / K-3 data stored in parsed_data (schemaVersion "2026.1").
  *
- * - `fields`  — all flat boxes (A–O, 1–10, 12) keyed by box identifier
- * - `codes`   — coded boxes (11, 13–20) keyed by box number, each an array of K1CodeItem
- * - `k3`      — Schedule K-3 sections (foreign tax reporting)
+ * - `fields`     — all flat boxes (A–O, 1–10, 12) keyed by box identifier
+ * - `codes`      — coded boxes (11, 13–20) keyed by box number, each an array of K1CodeItem
+ * - `statementA` — §199A Statement A (extracted from Box 20 Code Z attachment, TY 2023+)
+ * - `k3`         — Schedule K-3 sections (foreign tax reporting)
  * - `k3Elections` — document-level elections affecting K-3 interpretation
  * - `extraction` — server-stamped AI provenance metadata
  */
@@ -75,6 +99,8 @@ export interface FK1StructuredData {
   pages?: number | null
   fields: Record<string, K1FieldValue>
   codes: Record<string, K1CodeItem[]>
+  /** §199A Statement A data extracted from the attachment to Box 20 Code Z (TY 2023+). */
+  statementA?: StatementA
   k3?: {
     sections: K3Section[]
   }
