@@ -34,12 +34,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { fetchWrapper } from '@/fetchWrapper'
 import { buildTaxWorkbook } from '@/lib/finance/buildTaxWorkbook'
-import { getK1sWithPassiveLosses, parseK1Field } from '@/lib/finance/k1Utils'
+import { parseK1Field } from '@/lib/finance/k1Utils'
 import { type FilingStatus, getStandardDeduction } from '@/lib/tax/standardDeductions'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 
-import { Callout } from './tax-preview-primitives'
 import { TAX_TABS } from './tax-tab-ids'
 import { TaxPreviewProvider, type TaxPreviewShellData, useTaxPreview } from './TaxPreviewContext'
 import { YearSelectorWithNav } from './YearSelectorWithNav'
@@ -467,7 +466,6 @@ function TaxPreviewPageContent() {
   const [reviewModalDoc, setReviewModalDoc] = useState<TaxDocument | undefined>(undefined)
   const [activeTab, setActiveTab] = useState<string>(TAX_TABS.overview)
   const [isExporting, setIsExporting] = useState(false)
-  const [showPassiveLossWarning, setShowPassiveLossWarning] = useState(true)
 
   const handleYearChange = useCallback((year: number | 'all') => {
     if (typeof year !== 'number') return
@@ -618,11 +616,6 @@ function TaxPreviewPageContent() {
   const filingStatus: FilingStatus = isMarried ? 'Married Filing Jointly' : 'Single'
 
   // ── Incomplete-computation signals (issue #274) ─────────────────────────────
-  const k1ParsedData = reviewedK1Docs
-    .map((d) => isFK1StructuredData(d.parsed_data) ? d.parsed_data : null)
-    .filter((d): d is FK1StructuredData => d !== null)
-  const k1sWithPassiveLosses = getK1sWithPassiveLosses(k1ParsedData)
-
   return (
     <div>
       <div className="flex items-center gap-4 px-4 pt-4 pb-2 flex-wrap">
@@ -839,27 +832,6 @@ function TaxPreviewPageContent() {
         </TabsContent>
 
         <TabsContent value={TAX_TABS.form8582} className="mt-0">
-          {showPassiveLossWarning && k1sWithPassiveLosses.length > 0 && (
-            <Callout kind="alert" title="⚠ K-1 Passive Losses — Not Wired into Form 8582">
-              <p>
-                The following K-1s report negative Box 1 ordinary business losses that may be passive,
-                but K-1 activity grouping into Form 8582 has not been implemented yet. These losses are not reflected
-                in the passive-activity loss computation below. Tracked in issue{' '}
-                <a href="https://github.com/bherila/2025-website/issues/273" className="underline" target="_blank" rel="noreferrer">#273</a>.
-              </p>
-              <ul className="mt-1 list-disc list-inside text-xs">
-                {k1sWithPassiveLosses.map((name, i) => <li key={i}>{name}</li>)}
-              </ul>
-              <div className="flex items-center gap-3">
-                <Button type="button" variant="link" className="h-auto p-0 text-xs" onClick={handleOpenK1Review}>
-                  Open K-1 review
-                </Button>
-                <Button type="button" variant="link" className="h-auto p-0 text-xs" onClick={() => setShowPassiveLossWarning(false)}>
-                  Dismiss for this session
-                </Button>
-              </div>
-            </Callout>
-          )}
           {taxReturn.form8582 ? (
             <Form8582Preview
               form8582={taxReturn.form8582}
@@ -871,7 +843,7 @@ function TaxPreviewPageContent() {
             />
           ) : (
             <div className="py-12 text-center text-muted-foreground text-sm">
-              No passive activity data found. Passive activities are reported in K-1 Box 2 (rental real estate) and Box 3 (other rental).
+              No passive activity data found. Passive activities are reported in passive K-1 Box 1, Box 2 (rental real estate), and Box 3 (other rental).
             </div>
           )}
         </TabsContent>

@@ -117,6 +117,15 @@ export function getK1sWithPassiveLosses(k1s: FK1StructuredData[]): string[] {
 /** Returns a checklist of review completeness items for the K-1 review panel. */
 export function getK1CompletenessChecklist(data: FK1StructuredData): CompletenessItem[] {
   const items: CompletenessItem[] = []
+  const box1 = parseK1Field(data, '1')
+  const classification = getK1ActivityClassification(data)
+
+  if (box1 !== 0 && classification === 'unknown') {
+    items.push({
+      item: 'Box 1 ordinary business income/loss is treated as passive by default — confirm partner classification for Form 8582',
+      status: 'needs_user_action',
+    })
+  }
 
   const hasBox20Z = (data.codes['20'] ?? []).some((i) => i.code.toUpperCase() === 'Z')
   if (hasBox20Z) {
