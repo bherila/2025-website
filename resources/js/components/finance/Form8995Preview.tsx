@@ -100,9 +100,6 @@ export default function Form8995Preview({ reviewedK1Docs, totalIncome, selectedY
             {entry.w2Wages !== 0 && (
               <FormLine label={`${entry.label} — W-2 wages (Form 8995-A, Line 4)`} value={entry.w2Wages} />
             )}
-            {entry.ubia !== 0 && (
-              <FormLine label={`${entry.label} — UBIA of qualified property`} value={entry.ubia} />
-            )}
             {(entry.reitDividends !== 0) && (
               <FormLine label={`${entry.label} — §199A REIT dividends`} value={entry.reitDividends} />
             )}

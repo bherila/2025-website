@@ -133,7 +133,7 @@ export interface OverviewRow {
 }
 
 export interface Form8995Lines {
-  entries: { label: string; qbiIncome: number; w2Wages: number; ubia: number; reitDividends: number; ptpIncome: number; isSstb: boolean; sectionNotes: string; qbiComponent: number }[]
+  entries: { label: string; qbiIncome: number; w2Wages: number; reitDividends: number; ptpIncome: number; isSstb: boolean; sectionNotes: string; qbiComponent: number }[]
   totalQBI: number
   totalQBIComponent: number
   totalIncome: number
