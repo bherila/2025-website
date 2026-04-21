@@ -91,7 +91,7 @@ describe('extractQBIFromK1', () => {
     expect(result).not.toBeNull()
     expect(result!.qbiIncome).toBe(75_000)
     expect(result!.w2Wages).toBe(120_000)
-    expect(result!.ubia).toBe(500_000)
+    expect('ubia' in result!).toBe(false)
     expect(result!.reitDividends).toBe(2_500)
     expect(result!.ptpIncome).toBe(1_000)
     expect(result!.isSstb).toBe(false)
@@ -118,7 +118,7 @@ describe('extractQBIFromK1', () => {
     const data = makeData(box20({ code: 'Z', value: '10000' }))
     const result = extractQBIFromK1(data, 'LP')!
     expect(result.w2Wages).toBe(0)
-    expect(result.ubia).toBe(0)
+    expect('ubia' in result).toBe(false)
     expect(result.reitDividends).toBe(0)
     expect(result.ptpIncome).toBe(0)
     expect(result.isSstb).toBe(false)

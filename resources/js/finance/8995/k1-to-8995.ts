@@ -104,8 +104,6 @@ export interface QBIEntry {
   qbiIncome: number
   /** W-2 wages paid by the entity — from Statement A. Used for W-2 wage limitation on Form 8995-A. */
   w2Wages: number
-  /** UBIA of qualified property — from Statement A. */
-  ubia: number
   /** REIT dividends — from Statement A (§199A(e)(3)). */
   reitDividends: number
   /** Qualified PTP income — from Statement A (§199A(e)(5)). */
@@ -129,7 +127,6 @@ export function extractQBIFromK1(data: FK1StructuredData, label: string): QBIEnt
     label,
     qbiIncome,
     w2Wages: sa?.w2Wages ?? 0,
-    ubia: sa?.ubia ?? 0,
     reitDividends: sa?.reitDividends ?? 0,
     ptpIncome: sa?.ptpIncome ?? 0,
     isSstb: sa?.isSstb ?? false,
