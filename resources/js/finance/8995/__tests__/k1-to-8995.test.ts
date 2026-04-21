@@ -35,20 +35,11 @@ describe('extractQBIFromK1', () => {
     expect(result).not.toBeNull()
     expect(result!.qbiIncome).toBe(50_000)
     expect(result!.qbiComponent).toBeCloseTo(10_000)
-    expect(result!.ubia).toBe(0)
   })
 
   it('does NOT extract QBI from legacy Code S (pre-2023, no backwards compat)', () => {
     const data = makeData(box20({ code: 'S', value: '99999' }))
     expect(extractQBIFromK1(data, 'Acme LP')).toBeNull()
-  })
-
-  it('returns ubia as 0 (Statement A parsing deferred)', () => {
-    const data = makeData(box20(
-      { code: 'Z', value: '30000' },
-    ))
-    const result = extractQBIFromK1(data, 'Acme LP')
-    expect(result!.ubia).toBe(0)
   })
 
   it('clamps negative QBI to 0 for the component (loss does not give deduction)', () => {

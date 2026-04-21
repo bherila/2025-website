@@ -7,8 +7,8 @@
  * IRS Box 20 code reference (Form 1065 K-1, TY 2023+):
  *   Z  – Section 199A information (QBI income/loss from the activity, with Statement A attached)
  *
- * Note: W-2 wages and UBIA are reported in Statement A attached to Code Z.
- * Full Statement A parsing (W-2 wages, UBIA, SSTB) is deferred to a follow-on issue.
+ * Statement A fields (W-2 wages, UBIA, SSTB flag) are extracted into FK1StructuredData.statementA
+ * by the AI extraction pipeline and used in Form 8995-A computation (Commit 3).
  */
 
 import currency from 'currency.js'
@@ -102,9 +102,7 @@ export interface QBIEntry {
   label: string
   /** Box 20 Code Z — QBI income (loss) from this activity (TY 2023+). */
   qbiIncome: number
-  /** UBIA of qualified property — reported in Statement A attached to Code Z. Currently 0; full Statement A parsing is deferred. */
-  ubia: number
-  /** Free-form notes from Box 20 Code Z (may include W-2 wages and SSTB flag from Statement A). */
+  /** Free-form notes from Box 20 Code Z. */
   sectionNotes: string
   /** 20% × max(qbiIncome, 0) — the raw QBI component before any caps. */
   qbiComponent: number
@@ -119,7 +117,6 @@ export function extractQBIFromK1(data: FK1StructuredData, label: string): QBIEnt
   return {
     label,
     qbiIncome,
-    ubia: 0, // UBIA is embedded in Statement A attached to Code Z; full parsing deferred to follow-on work.
     sectionNotes: getCodeNotes(data.codes, '20', 'Z'),
     qbiComponent: currency(Math.max(qbiIncome, 0)).multiply(0.2).value,
   }

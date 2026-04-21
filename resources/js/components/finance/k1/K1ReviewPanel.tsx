@@ -22,7 +22,7 @@ import {
 import { DetailsButton, fmtAmt, parseFieldVal } from '../tax-preview-primitives'
 import { BOX11_CODES, BOX13_CODES, BOX14_CODES, BOX17_CODES } from './k1-codes'
 import { K1_SPEC } from './k1-spec'
-import type { FK1StructuredData, K1CodeItem, K1FieldSpec, K3Section } from './k1-types'
+import type { FK1StructuredData, K1CodeItem, K1FieldSpec, K3Section, StatementA } from './k1-types'
 import K1CodesModal from './K1CodesModal'
 
 // ── Badge helpers ─────────────────────────────────────────────────────────────
@@ -717,6 +717,36 @@ function SupplementalBlock({
             </>
           )
         })()}
+      </div>
+    </div>
+  )
+}
+
+// ── §199A Statement A block ───────────────────────────────────────────────────
+
+function StatementABlock({ sa }: { sa: StatementA }) {
+  return (
+    <div className="border border-green-300 dark:border-green-700 rounded-lg overflow-hidden">
+      <SectionHeader title="§199A Statement A (Box 20 Code Z)" />
+      <div className="divide-y divide-dashed divide-border/50">
+        {sa.tradeName && (
+          <LineItem boxRef="20Z" label="Trade or business name" raw={sa.tradeName} />
+        )}
+        <LineItem boxRef="20Z" label="Qualified business income" value={sa.qualifiedBusinessIncome} />
+        <LineItem boxRef="20Z" label="W-2 wages (Form 8995-A, Line 4)" value={sa.w2Wages} />
+        <LineItem boxRef="20Z" label="UBIA of qualified property" value={sa.ubia} />
+        {sa.reitDividends !== 0 && (
+          <LineItem boxRef="20Z" label="§199A(e)(3) REIT dividends" value={sa.reitDividends} />
+        )}
+        {sa.ptpIncome !== 0 && (
+          <LineItem boxRef="20Z" label="§199A(e)(5) qualified PTP income" value={sa.ptpIncome} />
+        )}
+        <LineItem
+          boxRef="20Z"
+          label="Specified Service Trade or Business (SSTB)"
+          raw={sa.isSstb ? 'YES — deduction phases out above income threshold' : 'No'}
+        />
+        <SubLine text="→ Form 8995 / 8995-A — QBI deduction (Form 1040 Line 13)" />
       </div>
     </div>
   )
@@ -1492,6 +1522,9 @@ export default function K1ReviewPanel({ data, onChange, readOnly = false }: K1Re
 
       {/* Box 20 Supplemental */}
       <SupplementalBlock data={data} onOpenCodes={(box) => setCodesModal({ box })} />
+
+      {/* §199A Statement A — rendered when extracted by AI */}
+      {data.statementA && <StatementABlock sa={data.statementA} />}
 
       <AdditionalCodedBoxesBlock data={data} onOpenCodes={(box) => setCodesModal({ box })} />
 

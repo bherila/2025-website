@@ -9,7 +9,7 @@
  */
 
 // Re-export all shared data types from the types layer (single source of truth).
-export type { FK1StructuredData, K1CodeItem, K1ExtractionInfo, K1FieldValue, K3Section } from '@/types/finance/k1-data'
+export type { FK1StructuredData, K1CodeItem, K1ExtractionInfo, K1FieldValue, K3Section, StatementA } from '@/types/finance/k1-data'
 export { isFK1StructuredData } from '@/types/finance/k1-data'
 
 // ────────────────────────────────────────────────────────────────────────────

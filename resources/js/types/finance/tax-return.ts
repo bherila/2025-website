@@ -133,7 +133,7 @@ export interface OverviewRow {
 }
 
 export interface Form8995Lines {
-  entries: { label: string; qbiIncome: number; ubia: number; sectionNotes: string; qbiComponent: number }[]
+  entries: { label: string; qbiIncome: number; sectionNotes: string; qbiComponent: number }[]
   totalQBI: number
   totalQBIComponent: number
   totalIncome: number

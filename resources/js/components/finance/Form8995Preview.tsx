@@ -52,7 +52,7 @@ export default function Form8995Preview({ reviewedK1Docs, totalIncome, selectedY
       <div className="py-12 text-center text-muted-foreground text-sm">
         No Section 199A / QBI data found in reviewed K-1 documents.
         <br />
-        QBI is reported in K-1 Box 20 Code S. Review K-1 documents to see Form 8995 analysis.
+        QBI is reported in K-1 Box 20 Code Z (TY 2023+). Review K-1 documents to see Form 8995 analysis.
       </div>
     )
   }
@@ -75,7 +75,7 @@ export default function Form8995Preview({ reviewedK1Docs, totalIncome, selectedY
             {isMarried ? 'MFJ' : 'single'} threshold of{' '}
             <strong>{fmtAmt(threshold, 0)}</strong> for {selectedYear}. Use Form 8995-A.
             The deduction may be limited to the greater of 50% of W-2 wages or 25% of W-2 wages + 2.5% of UBIA.
-            W-2 wages are reported in the Section 199A statement attached to Box 20 Code S.
+            W-2 wages are reported in the Section 199A Statement A attached to Box 20 Code Z.
           </p>
         </Callout>
       ) : (
@@ -90,13 +90,10 @@ export default function Form8995Preview({ reviewedK1Docs, totalIncome, selectedY
       )}
 
       {/* Per-partnership breakdown */}
-      <FormBlock title="Per-Partnership QBI Breakdown (Box 20 Code S)">
+      <FormBlock title="Per-Partnership QBI Breakdown (Box 20 Code Z)">
         {entries.map((entry, i) => (
           <div key={i} className="space-y-0.5 pb-2 border-b last:border-0 last:pb-0">
             <FormLine label={`${entry.label} — QBI income`} value={entry.qbiIncome} />
-            {entry.ubia !== 0 && (
-              <FormLine label={`${entry.label} — UBIA of qualified property (Box 20 V)`} value={entry.ubia} />
-            )}
             <FormLine label={`${entry.label} — 20% QBI component`} value={entry.qbiComponent} />
             {entry.sectionNotes && (
               <FormLine label={`${entry.label} — Section 199A statement notes`} raw={entry.sectionNotes} />
@@ -168,7 +165,7 @@ export default function Form8995Preview({ reviewedK1Docs, totalIncome, selectedY
         {aboveThreshold && (
           <p>
             <strong>Above threshold:</strong> Use Form 8995-A (not the simplified Form 8995). You will
-            need W-2 wages and UBIA from each partnership's Section 199A statement (attached to Box 20 S).
+            need W-2 wages and UBIA from each partnership's Section 199A Statement A (attached to Box 20 Code Z).
           </p>
         )}
       </Callout>
