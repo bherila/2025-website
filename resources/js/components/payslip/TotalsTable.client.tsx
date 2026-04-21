@@ -288,7 +288,7 @@ export default function TotalsTable({
 
             {allTotals.some(({ totals }) => totals.additionalTax.value !== 0) && (
               <TableRow className="border-border hover:bg-muted/30">
-                <Td>Additional Federal Taxes</Td>
+                <Td>Additional Taxes (Schedule 2)</Td>
                 {allTotals.map(({ label, totals }) => (
                   <Td key={label} right>{fmtCurrency(totals.additionalTax)}</Td>
                 ))}
