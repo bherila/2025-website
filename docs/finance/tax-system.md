@@ -555,9 +555,9 @@ All three are computed in `TaxPreviewContext` using the `isMarried` flag (MFJ th
 | `k1-to-8995.ts` | `extractQBIFromK1`, `computeForm8995Lines`, `qbiThreshold` |
 | `__tests__/k1-to-8995.test.ts` | Unit tests |
 
-**K-1 Box 20 code mapping:**
-- Code S → QBI income/loss from the activity (value); W-2 wages + SSTB flag in `notes`
-- Code V → UBIA of qualified property
+**K-1 Box 20 code mapping (TY 2023+):**
+- Code Z → Section 199A information (QBI income/loss from the activity); W-2 wages, UBIA, and SSTB flag in Statement A attached to Code Z
+- Note: Pre-2023 forms used Code S (QBI) and Code V (UBIA); these codes are no longer read by `extractQBIFromK1` — see issue #269 for the no-backwards-compat decision.
 
 **Computation (`computeForm8995Lines`):**
 - Accepts K-1 data array, `totalIncome` (Form 1040 Line 9 estimate), `year`, and `isMarried`
@@ -573,9 +573,9 @@ All three are computed in `TaxPreviewContext` using the `isMarried` flag (MFJ th
 - AMT (no add-back required post-TCJA)
 - State conformity (CA, NY, NJ, MA, IL and others do not conform)
 
-**XLSX:** Form 8995 sheet added to `buildTaxWorkbook`. Form 1040 Line 13 is cross-referenced via Excel formula. Box 20 S/V routing notes added to `K1_CODE_ROUTING_NOTES`.
+**XLSX:** Form 8995 sheet added to `buildTaxWorkbook`. Form 1040 Line 13 is cross-referenced via Excel formula. Box 20 Z routing note added to `K1_CODE_ROUTING_NOTES` (TY 2023+).
 
-**Extraction prompt:** `TaxDocumentPromptTemplate.php` now explicitly instructs the AI to extract Box 20 Code S (QBI amount + full Section 199A statement notes) and Code V (UBIA).
+**Extraction prompt:** `TaxDocumentPromptTemplate.php` instructs the AI to extract Box 20 Code Z (QBI amount + full Section 199A Statement A notes, TY 2023+).
 
 ---
 

@@ -25,12 +25,12 @@ describe('qbiThreshold', () => {
 // ── extractQBIFromK1 ──────────────────────────────────────────────────────────
 
 describe('extractQBIFromK1', () => {
-  it('returns null when no Box 20 S or V', () => {
+  it('returns null when no Box 20 Z', () => {
     expect(extractQBIFromK1(makeData(), 'Acme LP')).toBeNull()
   })
 
-  it('extracts QBI income and 20% component', () => {
-    const data = makeData(box20({ code: 'S', value: '50000' }))
+  it('extracts QBI income and 20% component from Code Z (TY 2023+)', () => {
+    const data = makeData(box20({ code: 'Z', value: '50000' }))
     const result = extractQBIFromK1(data, 'Acme LP')
     expect(result).not.toBeNull()
     expect(result!.qbiIncome).toBe(50_000)
@@ -38,47 +38,49 @@ describe('extractQBIFromK1', () => {
     expect(result!.ubia).toBe(0)
   })
 
-  it('extracts UBIA from Code V', () => {
+  it('does NOT extract QBI from legacy Code S (pre-2023, no backwards compat)', () => {
+    const data = makeData(box20({ code: 'S', value: '99999' }))
+    expect(extractQBIFromK1(data, 'Acme LP')).toBeNull()
+  })
+
+  it('returns ubia as 0 (Statement A parsing deferred)', () => {
     const data = makeData(box20(
-      { code: 'S', value: '30000' },
-      { code: 'V', value: '200000' },
+      { code: 'Z', value: '30000' },
     ))
     const result = extractQBIFromK1(data, 'Acme LP')
-    expect(result!.ubia).toBe(200_000)
+    expect(result!.ubia).toBe(0)
   })
 
   it('clamps negative QBI to 0 for the component (loss does not give deduction)', () => {
-    const data = makeData(box20({ code: 'S', value: '-15000' }))
+    const data = makeData(box20({ code: 'Z', value: '-15000' }))
     const result = extractQBIFromK1(data, 'Acme LP')
     expect(result!.qbiIncome).toBe(-15_000)
     expect(result!.qbiComponent).toBe(0)
   })
 
-  it('captures notes from Code S', () => {
-    const data = makeData(box20({ code: 'S', value: '10000', notes: 'W-2 wages: $50,000; SSTB: No' }))
+  it('captures notes from Code Z', () => {
+    const data = makeData(box20({ code: 'Z', value: '10000', notes: 'W-2 wages: $50,000; SSTB: No' }))
     const result = extractQBIFromK1(data, 'Acme LP')
     expect(result!.sectionNotes).toBe('W-2 wages: $50,000; SSTB: No')
   })
 
   it('parses parenthesized negative values like (1,234)', () => {
-    const data = makeData(box20({ code: 'S', value: '(25,000)' }))
+    const data = makeData(box20({ code: 'Z', value: '(25,000)' }))
     const result = extractQBIFromK1(data, 'Acme LP')
     expect(result!.qbiIncome).toBe(-25_000)
     expect(result!.qbiComponent).toBe(0) // loss → no component
   })
 
-  it('sums multiple Code S entries for the same partnership', () => {
+  it('sums multiple Code Z entries for the same partnership', () => {
     const data = makeData({
       '20': [
-        { code: 'S', value: '30000', notes: 'Business A' },
-        { code: 'S', value: '20000', notes: 'Business B' },
-        { code: 'V', value: '500000', notes: '' },
+        { code: 'Z', value: '30000', notes: 'Business A' },
+        { code: 'Z', value: '20000', notes: 'Business B' },
       ],
     })
     const result = extractQBIFromK1(data, 'Multi LP')
     expect(result!.qbiIncome).toBe(50_000)
     expect(result!.sectionNotes).toBe('Business A\nBusiness B')
-    expect(result!.ubia).toBe(500_000)
   })
 })
 
@@ -97,7 +99,7 @@ describe('computeForm8995Lines', () => {
   })
 
   it('computes deduction below threshold — single filer', () => {
-    const data = makeData(box20({ code: 'S', value: '100000' }))
+    const data = makeData(box20({ code: 'Z', value: '100000' }))
     const result = computeForm8995Lines(
       [{ data, label: 'Acme LP' }],
       200_000, // total income (below $191,950 threshold after std deduction)
@@ -117,7 +119,7 @@ describe('computeForm8995Lines', () => {
   })
 
   it('caps deduction at 20% of taxable income when QBI component exceeds cap', () => {
-    const data = makeData(box20({ code: 'S', value: '500000' }))
+    const data = makeData(box20({ code: 'Z', value: '500000' }))
     const result = computeForm8995Lines(
       [{ data, label: 'Big LP' }],
       50_000,  // low total income
@@ -130,7 +132,7 @@ describe('computeForm8995Lines', () => {
   })
 
   it('flags above threshold for single filer', () => {
-    const data = makeData(box20({ code: 'S', value: '100000' }))
+    const data = makeData(box20({ code: 'Z', value: '100000' }))
     const result = computeForm8995Lines(
       [{ data, label: 'Acme LP' }],
       250_000, // total income → taxable ~235k > $191,950 threshold
@@ -140,7 +142,7 @@ describe('computeForm8995Lines', () => {
   })
 
   it('uses MFJ threshold when isMarried=true', () => {
-    const data = makeData(box20({ code: 'S', value: '100000' }))
+    const data = makeData(box20({ code: 'Z', value: '100000' }))
     const single = computeForm8995Lines([{ data, label: 'LP' }], 300_000, 2024, false)
     const married = computeForm8995Lines([{ data, label: 'LP' }], 300_000, 2024, true)
     // Single: $300k > $191,950 threshold → above
@@ -150,8 +152,8 @@ describe('computeForm8995Lines', () => {
   })
 
   it('aggregates multiple K-1s', () => {
-    const lp1 = makeData(box20({ code: 'S', value: '40000' }))
-    const lp2 = makeData(box20({ code: 'S', value: '60000' }))
+    const lp1 = makeData(box20({ code: 'Z', value: '40000' }))
+    const lp2 = makeData(box20({ code: 'Z', value: '60000' }))
     const result = computeForm8995Lines(
       [{ data: lp1, label: 'LP 1' }, { data: lp2, label: 'LP 2' }],
       200_000,
@@ -164,8 +166,8 @@ describe('computeForm8995Lines', () => {
 
   it('nets losses across partnerships before applying 20% (IRS Form 8995 Line 12)', () => {
     // LP1 has +$100k QBI, LP2 has -$50k loss → net $50k → component = $10k
-    const lp1 = makeData(box20({ code: 'S', value: '100000' }))
-    const lp2 = makeData(box20({ code: 'S', value: '-50000' }))
+    const lp1 = makeData(box20({ code: 'Z', value: '100000' }))
+    const lp2 = makeData(box20({ code: 'Z', value: '-50000' }))
     const result = computeForm8995Lines(
       [{ data: lp1, label: 'LP 1' }, { data: lp2, label: 'LP 2' }],
       200_000,
@@ -179,7 +181,7 @@ describe('computeForm8995Lines', () => {
   })
 
   it('returns 0 deduction when aggregate QBI is negative', () => {
-    const data = makeData(box20({ code: 'S', value: '-30000' }))
+    const data = makeData(box20({ code: 'Z', value: '-30000' }))
     const result = computeForm8995Lines([{ data, label: 'Loss LP' }], 200_000, 2024)
     expect(result.totalQBI).toBe(-30_000)
     expect(result.totalQBIComponent).toBe(0)
