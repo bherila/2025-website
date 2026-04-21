@@ -74,14 +74,14 @@ export function computeForm1116Lines({
 
     // Collect SBP election state for any K-1 with col-f (Sourced by Partner) amounts.
     const breakdown = extractK3IncomeBreakdown(data)
-      if (breakdown.sourcedByPartner !== 0) {
-        sbpElections.push({
-          docId: doc.id,
-          partnerName,
-          active: getSbpElection(data),
-          sourcedByPartner: breakdown.sourcedByPartner,
-        })
-      }
+    if (breakdown.sourcedByPartner !== 0) {
+      sbpElections.push({
+        docId: doc.id,
+        partnerName,
+        active: getSbpElection(data),
+        sourcedByPartner: breakdown.sourcedByPartner,
+      })
+    }
 
     if (summaries.length > 0) {
       let taxAdded = false

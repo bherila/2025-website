@@ -2,7 +2,6 @@ import currency from 'currency.js'
 
 import { ALL_K1_CODES, K1_SPEC_BY_BOX } from '@/components/finance/k1'
 import { renderK3SectionsRows } from '@/finance/1116/k3-row-renderer'
-import type { K3Section } from '@/types/finance/k1-data'
 import type { EstimatedTaxPaymentsData, TaxReturn1040 } from '@/types/finance/tax-return'
 import type { XlsxRow, XlsxSheet, XlsxWorkbook } from '@/types/finance/xlsx-export'
 
@@ -85,7 +84,7 @@ function parseDestinationRows(
 
   return destinations.map((destination, index) => ({
     description: source,
-    amount,
+    amount: index === 0 ? amount : undefined,
     line: index === 0 ? source : undefined,
     note: `Destination: ${destination} | Status: ${status}`,
   }))
@@ -149,7 +148,7 @@ function buildK1WorksheetSheet(entry: NonNullable<TaxReturn1040['k1Docs']>[numbe
     }))
   }
 
-  const k3Rows = entry.k3Sections ? renderK3SectionsRows(entry.k3Sections as K3Section[]) : []
+  const k3Rows = entry.k3Sections ? renderK3SectionsRows(entry.k3Sections) : []
   if (k3Rows.length > 0) {
     rows.push({ isHeader: true, description: '4. K-3 Summary' })
     rows.push(...k3Rows)
@@ -865,7 +864,7 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
 
   const k3Sheets = (taxReturn.k3Docs ?? []).map((entry) => buildSheet(
     `K-3 ${entry.entityName}`,
-    renderK3SectionsRows(entry.sections as K3Section[]),
+    renderK3SectionsRows(entry.sections),
   ))
 
   const docs1099Sheets = (taxReturn.docs1099 ?? []).map((entry) => buildSheet(

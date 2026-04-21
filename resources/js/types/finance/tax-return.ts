@@ -1,5 +1,6 @@
 import type { ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import type { ScheduleDData } from '@/lib/tax/scheduleD'
+import type { K3Section } from '@/types/finance/k1-data'
 
 export type { EstimatedTaxPaymentsData } from '@/lib/finance/estimatedTaxPayments'
 
@@ -106,12 +107,12 @@ export interface K1ExportEntry {
   ein?: string
   fields: Record<string, string | number>
   codes: Record<string, { code: string; value: string }[]>
-  k3Sections?: { sectionId: string; title: string; data: unknown }[]
+  k3Sections?: K3Section[]
 }
 
 export interface K3ExportEntry {
   entityName: string
-  sections: { sectionId: string; title: string; data: unknown }[]
+  sections: K3Section[]
 }
 
 export interface Doc1099ExportEntry {

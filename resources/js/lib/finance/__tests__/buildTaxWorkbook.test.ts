@@ -83,6 +83,24 @@ describe('buildTaxWorkbook — K-1/K-3 sheets', () => {
     expect(k1Sheet?.rows.some((row) => row.note?.includes('Status: Unrouted'))).toBe(true)
   })
 
+  it('multi-destination rows carry amount only on the first destination', () => {
+    // Box 20Z routes to both Form 8995 AND Form 1040 Line 13 (two >> markers)
+    const workbook = buildTaxWorkbook({
+      year: 2025,
+      k1Docs: [{
+        entityName: 'Test LP',
+        fields: {},
+        codes: { '20': [{ code: 'Z', value: '50000' }] },
+      }],
+    })
+    const k1Sheet = workbook.sheets.find((s) => s.name.startsWith('K-1'))
+    const destSection = k1Sheet?.rows.findIndex((r) => r.description === '5. Destination Summary — Where each line flows') ?? -1
+    const destRows = k1Sheet?.rows.slice(destSection + 1).filter((r) => r.description === 'Box 20Z') ?? []
+    expect(destRows.length).toBe(2)
+    expect(destRows[0]?.amount).toBe(50000)
+    expect(destRows[1]?.amount).toBeUndefined()
+  })
+
   it('renders structured K-3 sheet rows instead of JSON dumps', () => {
     const workbook = buildTaxWorkbook(makeTaxReturn())
     const k3Sheet = workbook.sheets.find((sheet) => sheet.name.startsWith('K-3'))
