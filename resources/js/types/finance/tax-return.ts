@@ -98,7 +98,7 @@ export interface Form1116Lines {
   turboTaxAlert: boolean
   totalK1Box5?: number
   /** K-1 funds that have "Sourced by Partner" (col f) amounts in K-3 Part II, and whether the election to treat them as U.S. source is active. */
-  sbpElections?: { partnerName: string; active: boolean; sourcedByPartner: number }[]
+  sbpElections?: { docId: number; partnerName: string; active: boolean; sourcedByPartner: number }[]
 }
 
 export interface K1ExportEntry {
@@ -106,6 +106,7 @@ export interface K1ExportEntry {
   ein?: string
   fields: Record<string, string | number>
   codes: Record<string, { code: string; value: string }[]>
+  k3Sections?: { sectionId: string; title: string; data: unknown }[]
 }
 
 export interface K3ExportEntry {

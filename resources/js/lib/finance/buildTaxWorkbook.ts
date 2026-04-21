@@ -1,6 +1,8 @@
 import currency from 'currency.js'
 
 import { ALL_K1_CODES, K1_SPEC_BY_BOX } from '@/components/finance/k1'
+import { renderK3SectionsRows } from '@/finance/1116/k3-row-renderer'
+import type { K3Section } from '@/types/finance/k1-data'
 import type { EstimatedTaxPaymentsData, TaxReturn1040 } from '@/types/finance/tax-return'
 import type { XlsxRow, XlsxSheet, XlsxWorkbook } from '@/types/finance/xlsx-export'
 
@@ -8,13 +10,13 @@ import type { XlsxRow, XlsxSheet, XlsxWorkbook } from '@/types/finance/xlsx-expo
  * Routing notes for key K-1 boxes, showing where values come from (K-3 source)
  * and where they flow on the return (destination forms/schedules).
  */
-const K1_ROUTING_NOTES: Record<string, string> = {
+export const K1_ROUTING_NOTES: Record<string, string> = {
   '5':  '<< K-3, II, line 6 | >> Sch B line 1 / Form 1040 line 2b',
   '21': '<< K-3, III, section 4 (see K-3 for country breakdown)',
 }
 
 /** Routing notes for specific box + code combinations. */
-const K1_CODE_ROUTING_NOTES: Record<string, Record<string, string>> = {
+export const K1_CODE_ROUTING_NOTES: Record<string, Record<string, string>> = {
   '11': {
     A: '>> Sch E Part II / Sch B (other portfolio income)',
     C: '>> Form 6781 line 1 / Sch D line 4 (ST 40%) + line 11 (LT 60%)',
@@ -33,11 +35,155 @@ const K1_CODE_ROUTING_NOTES: Record<string, Record<string, string>> = {
     AE: '§67(g) suspended (portfolio income deduction, 2% floor) — not deductible TY 2018–2025',
     ZZ: 'Other deductions — varies by footnote; check K-1 attached statement',
   },
+  '14': {
+    A: '>> Schedule SE (not yet computed — see Form 1040 Line 23)',
+    B: '>> Schedule SE (not yet computed — see Form 1040 Line 23)',
+    C: '>> Schedule SE (not yet computed — see Form 1040 Line 23)',
+  },
+  '17': {
+    A: '>> Form 6251 (AMT — not yet computed)',
+    B: '>> Form 6251 (AMT — not yet computed)',
+    C: '>> Form 6251 (AMT — not yet computed)',
+    D: '>> Form 6251 (AMT — not yet computed)',
+    E: '>> Form 6251 (AMT — not yet computed)',
+    F: '>> Form 6251 (AMT — not yet computed)',
+    G: '>> Form 6251 (AMT — not yet computed)',
+    H: '>> Form 6251 (AMT — not yet computed)',
+  },
   '20': {
     A: '>> Form 4952, II, line 4a',
     B: '>> Form 4952, II, line 5 (investment expenses)',
     Z: '>> Form 8995 / 8995-A — QBI deduction (20% of qualified income, Statement A) | >> Form 1040 Line 13',
   },
+}
+
+function parseDestinationRows(
+  source: string,
+  amount: number | undefined,
+  routingNote: string | undefined,
+): XlsxRow[] {
+  if (!routingNote) {
+    return [{ description: source, amount, note: 'Status: Unrouted', line: source }]
+  }
+
+  const destinations = Array.from(routingNote.matchAll(/>>\s*([^|]+)/g)).map((m) => m[1]?.trim()).filter(Boolean) as string[]
+  const lower = routingNote.toLowerCase()
+  const status = lower.includes('taxpayer election required') || lower.includes('check k-1 attached statement')
+    ? 'User action'
+    : lower.includes('suspended') || lower.includes('carryover tracking') || lower.includes('not deductible')
+      ? 'Suspended'
+      : 'Routed'
+
+  if (destinations.length === 0) {
+    return [{
+      description: source,
+      amount,
+      note: `Status: ${status} | ${routingNote}`,
+      line: source,
+    }]
+  }
+
+  return destinations.map((destination, index) => ({
+    description: source,
+    amount,
+    line: index === 0 ? source : undefined,
+    note: `Destination: ${destination} | Status: ${status}`,
+  }))
+}
+
+function buildK1WorksheetSheet(entry: NonNullable<TaxReturn1040['k1Docs']>[number]): IndexedSheet {
+  const rows: XlsxRow[] = []
+  const rawBoxRows = Object.entries(entry.fields)
+    .map(([key, value]) => {
+      const spec = K1_SPEC_BY_BOX[key]
+      const label = spec ? spec.label : `Box ${key}`
+      const numeric = typeof value === 'number' ? value : Number(value)
+      return {
+        box: key,
+        label,
+        value,
+        amount: Number.isFinite(numeric) ? numeric : undefined,
+      }
+    })
+
+  const partnerInfoRows = rawBoxRows.filter((row) =>
+    ['A', 'B', 'E', 'F', 'G', 'H1', 'H2'].includes(row.box) ||
+    row.box.startsWith('J_') ||
+    row.box.startsWith('K_') ||
+    row.box.startsWith('L_'),
+  )
+  if (partnerInfoRows.length > 0) {
+    rows.push({ isHeader: true, description: '1. Partner Info' })
+    rows.push(...partnerInfoRows.map((row) => ({
+      line: row.box,
+      description: row.label,
+      ...(row.amount !== undefined ? { amount: row.amount } : { note: String(row.value) }),
+    })))
+  }
+
+  const part3Rows = rawBoxRows.filter((row) => /^[0-9]/.test(row.box) && !row.box.includes('_'))
+  if (part3Rows.length > 0) {
+    rows.push({ isHeader: true, description: '2. Part III — Raw K-1 Values (boxes 1–21)' })
+    rows.push(...part3Rows.map((row) => ({
+      line: row.box,
+      description: row.label,
+      ...(row.amount !== undefined ? { amount: row.amount } : { note: String(row.value) }),
+    })))
+  }
+
+  const codedOrder = ['11', '13', '14', '17', '18', '19', '20']
+  const codedRows = codedOrder.flatMap((box) => (entry.codes[box] ?? []).map((item) => ({ box, item })))
+  if (codedRows.length > 0) {
+    rows.push({ isHeader: true, description: '3. Part III — Coded Items' })
+    rows.push(...codedRows.map(({ box, item }) => {
+      const code = item.code.toUpperCase()
+      const codeLabel = ALL_K1_CODES[box]?.[code] ?? `Code ${code}`
+      const numVal = Number(item.value)
+      const routing = K1_CODE_ROUTING_NOTES[box]?.[code]
+      return {
+        line: `${box}${code}`,
+        description: `Box ${box} ${code} — ${codeLabel}`,
+        ...(Number.isFinite(numVal) ? { amount: numVal } : {}),
+        ...(routing ? { note: routing } : (!Number.isFinite(numVal) && item.value ? { note: item.value } : {})),
+      }
+    }))
+  }
+
+  const k3Rows = entry.k3Sections ? renderK3SectionsRows(entry.k3Sections as K3Section[]) : []
+  if (k3Rows.length > 0) {
+    rows.push({ isHeader: true, description: '4. K-3 Summary' })
+    rows.push(...k3Rows)
+  }
+
+  const routedFieldRows = part3Rows.filter((row) => K1_ROUTING_NOTES[row.box])
+  if (codedRows.length > 0 || routedFieldRows.length > 0) {
+    rows.push({ isHeader: true, description: '5. Destination Summary — Where each line flows' })
+    rows.push(
+      ...codedRows.flatMap(({ box, item }) => {
+        const code = item.code.toUpperCase()
+        const amount = Number.isFinite(Number(item.value)) ? Number(item.value) : undefined
+        const routing = K1_CODE_ROUTING_NOTES[box]?.[code]
+        return parseDestinationRows(`Box ${box}${code}`, amount, routing)
+      }),
+      ...routedFieldRows.flatMap((row) => parseDestinationRows(
+        `Box ${row.box}`,
+        row.amount,
+        K1_ROUTING_NOTES[row.box],
+      )),
+    )
+  }
+
+  rows.push({ isHeader: true, description: '6. Cross-references' })
+  rows.push(
+    { description: 'Form 1116 sheet', note: 'See: Form 1116' },
+    { description: 'Form 4952 sheet', note: 'See: Form 4952' },
+    { description: 'Form 8995 sheet', note: 'See: Form 8995' },
+    { description: 'Schedule A sheet', note: 'See: Schedule A' },
+    { description: 'Schedule B sheet', note: 'See: Schedule B' },
+    { description: 'Schedule D sheet', note: 'See: Schedule D' },
+  )
+
+  return buildSheet(`K-1 ${entry.entityName}`, rows)
 }
 
 type IndexedSheet = XlsxSheet & { rowIndex: Map<string, number> }
@@ -715,46 +861,11 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
     : null
 
   // ── K-1 / K-3 / 1099 supplemental sheets ────────────────────────────────────
-  const k1Sheets = (taxReturn.k1Docs ?? []).map((entry) => {
-    const rows: XlsxRow[] = [
-      { isHeader: true, description: 'Fields (Boxes A–O, 1–21)' },
-      ...Object.entries(entry.fields).map(([key, value]) => {
-        const spec = K1_SPEC_BY_BOX[key]
-        const label = spec ? spec.label : `Box ${key}`
-        const routing = K1_ROUTING_NOTES[key]
-        return {
-          line: key,
-          description: label,
-          amount: typeof value === 'number' ? value : undefined,
-          note: typeof value === 'string' ? value : routing,
-        }
-      }),
-      { isHeader: true, description: 'Coded Boxes (11, 13–20)' },
-      ...Object.entries(entry.codes).flatMap(([box, items]) =>
-        items.map((item) => {
-          const codeLabel = ALL_K1_CODES[box]?.[item.code.toUpperCase()]
-          const description = codeLabel ? `Box ${box} ${item.code} — ${codeLabel}` : `Box ${box} Code ${item.code}`
-          const routing = K1_CODE_ROUTING_NOTES[box]?.[item.code.toUpperCase()]
-          const numVal = Number(item.value)
-          const isNumeric = item.value !== '' && !isNaN(numVal)
-          return {
-            line: `${box}${item.code}`,
-            description,
-            amount: isNumeric ? numVal : undefined,
-            note: routing ?? (isNumeric ? undefined : item.value || undefined),
-          }
-        }),
-      ),
-    ]
-    return buildSheet(`K-1 ${entry.entityName}`, rows)
-  })
+  const k1Sheets = (taxReturn.k1Docs ?? []).map((entry) => buildK1WorksheetSheet(entry))
 
   const k3Sheets = (taxReturn.k3Docs ?? []).map((entry) => buildSheet(
     `K-3 ${entry.entityName}`,
-    entry.sections.map((section) => ({
-      description: `${section.sectionId} — ${section.title}`,
-      note: JSON.stringify(section.data),
-    })),
+    renderK3SectionsRows(entry.sections as K3Section[]),
   ))
 
   const docs1099Sheets = (taxReturn.docs1099 ?? []).map((entry) => buildSheet(

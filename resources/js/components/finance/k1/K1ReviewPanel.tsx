@@ -10,10 +10,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { renderK3SectionRows } from '@/finance/1116/k3-row-renderer'
 import { getSbpElection } from '@/lib/finance/k1Utils'
 
 import { DetailsButton, fmtAmt, parseFieldVal } from '../tax-preview-primitives'
-import { BOX11_CODES, BOX13_CODES } from './k1-codes'
+import { BOX11_CODES, BOX13_CODES, BOX14_CODES, BOX17_CODES } from './k1-codes'
 import { K1_SPEC } from './k1-spec'
 import type { FK1StructuredData, K1CodeItem, K1FieldSpec, K3Section } from './k1-types'
 import K1CodesModal from './K1CodesModal'
@@ -486,6 +487,50 @@ function DeductionItemsBlock({
         )}
         <TotalLine label="Total deductions" value={totalBoxDeductions} />
         <TotalLine label="Net K-1 income/(loss)" value={netK1} double />
+      </div>
+    </div>
+  )
+}
+
+function AdditionalCodedBoxesBlock({
+  data,
+  onOpenCodes,
+}: {
+  data: FK1StructuredData
+  onOpenCodes: (box: string) => void
+}) {
+  const box14Items = data.codes['14'] ?? []
+  const box17Items = data.codes['17'] ?? []
+  if (box14Items.length === 0 && box17Items.length === 0) {
+    return null
+  }
+
+  const renderBox = (box: '14' | '17', items: K1CodeItem[]) => {
+    if (items.length === 0) return null
+    const total = items.reduce((acc, item) => acc.add(parseFieldVal(item.value) ?? 0), currency(0)).value
+    const firstCode = items[0]?.code?.toUpperCase() ?? ''
+    const uniqueCodes = [...new Set(items.map((i) => i.code.toUpperCase()))]
+    const labels = box === '14' ? BOX14_CODES : BOX17_CODES
+    const label = uniqueCodes.length === 1
+      ? (labels[firstCode] ?? `Code ${firstCode}`)
+      : `${box === '14' ? 'Self-employment' : 'AMT'} items (${uniqueCodes.length} codes)`
+
+    return (
+      <LineItem
+        boxRef={uniqueCodes.length === 1 ? `Box ${box}${firstCode}` : `Box ${box}`}
+        label={label}
+        value={total}
+        onDetails={() => onOpenCodes(box)}
+      />
+    )
+  }
+
+  return (
+    <div className="border border-border rounded-lg overflow-hidden">
+      <SectionHeader title="Additional Coded Items" />
+      <div className="divide-y divide-dashed divide-border/50">
+        {renderBox('14', box14Items)}
+        {renderBox('17', box17Items)}
       </div>
     </div>
   )
@@ -1210,11 +1255,22 @@ function K3ElectionSection({
 function K3SectionFallback({ section }: { section: K3Section }) {
   const HANDLED = ['header', 'part2_section1', 'part2_section2', 'part3_section2', 'part3_section4', 'part4']
   if (HANDLED.includes(section.sectionId)) return null
+  const renderedRows = renderK3SectionRows(section).filter((row) => !row.isHeader)
 
   return (
     <div className="border border-border rounded-lg px-3 py-2">
       <div className="text-xs font-semibold">{section.title}</div>
       {section.notes && <p className="text-xs text-muted-foreground mt-1 italic">{section.notes}</p>}
+      {renderedRows.length > 0 && (
+        <div className="mt-2 space-y-1">
+          {renderedRows.slice(0, 6).map((row, idx) => (
+            <div key={idx} className="text-[11px] text-muted-foreground">
+              {row.description}
+              {row.amount != null ? `: ${fmtAmt(row.amount)}` : ''}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -1310,6 +1366,8 @@ export default function K1ReviewPanel({ data, onChange, readOnly = false }: K1Re
 
       {/* Box 20 Supplemental */}
       <SupplementalBlock data={data} onOpenCodes={(box) => setCodesModal({ box })} />
+
+      <AdditionalCodedBoxesBlock data={data} onOpenCodes={(box) => setCodesModal({ box })} />
 
       {/* Capital Account & Liabilities */}
       <CapitalAccountBlock data={data} />

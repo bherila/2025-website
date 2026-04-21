@@ -1,6 +1,7 @@
 'use client'
 
 import currency from 'currency.js'
+import { useMemo, useState } from 'react'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
@@ -9,6 +10,7 @@ import {
   extractK3IncomeBreakdown,
   extractK3Line4bApportionment,
 } from '@/finance/1116/k3-to-1116'
+import { getRelevantUnreviewedK1Docs } from '@/finance/1116/unreviewed-k1'
 import { getSbpElection } from '@/lib/finance/k1Utils'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
@@ -40,12 +42,15 @@ function pk1(data: FK1StructuredData, box: string): number {
 
 interface Form1116PreviewProps {
   reviewedK1Docs: TaxDocument[]
+  allK1Docs?: TaxDocument[]
   reviewed1099Docs: TaxDocument[]
   income1099: {
     interestIncome: currency
     dividendIncome: currency
     qualifiedDividends: currency
   }
+  onReviewNow?: (docId: number) => void
+  onBulkSetSbpElection?: (active: boolean, docIds: number[]) => Promise<string[]>
 }
 
 export function computeForm1116Lines({
@@ -60,7 +65,7 @@ export function computeForm1116Lines({
   const generalIncomeSources: { label: string; amount: number }[] = []
   const taxSources: { label: string; amount: number }[] = []
   const line4bApportionment: { label: string; interestExpense: number; ratio: number; line4b: number }[] = []
-  const sbpElections: { partnerName: string; active: boolean; sourcedByPartner: number }[] = []
+  const sbpElections: { docId: number; partnerName: string; active: boolean; sourcedByPartner: number }[] = []
   for (const { doc, data } of k1Parsed) {
     const partnerName =
       data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
@@ -69,13 +74,14 @@ export function computeForm1116Lines({
 
     // Collect SBP election state for any K-1 with col-f (Sourced by Partner) amounts.
     const breakdown = extractK3IncomeBreakdown(data)
-    if (breakdown.sourcedByPartner !== 0) {
-      sbpElections.push({
-        partnerName,
-        active: getSbpElection(data),
-        sourcedByPartner: breakdown.sourcedByPartner,
-      })
-    }
+      if (breakdown.sourcedByPartner !== 0) {
+        sbpElections.push({
+          docId: doc.id,
+          partnerName,
+          active: getSbpElection(data),
+          sourcedByPartner: breakdown.sourcedByPartner,
+        })
+      }
 
     if (summaries.length > 0) {
       let taxAdded = false
@@ -187,8 +193,13 @@ export function computeForm1116Lines({
 
 export default function Form1116Preview({
   reviewedK1Docs,
+  allK1Docs = [],
   reviewed1099Docs,
+  onReviewNow,
+  onBulkSetSbpElection,
 }: Form1116PreviewProps) {
+  const [bulkUpdating, setBulkUpdating] = useState(false)
+  const [bulkFailures, setBulkFailures] = useState<string[]>([])
   const computed = computeForm1116Lines({ reviewedK1Docs, reviewed1099Docs })
   const {
     incomeSources,
@@ -204,6 +215,22 @@ export default function Form1116Preview({
     totalK1Box5 = 0,
     sbpElections = [],
   } = computed
+  const relevantUnreviewed = useMemo(() => getRelevantUnreviewedK1Docs(allK1Docs), [allK1Docs])
+
+  const runBulkToggle = async (nextValue: boolean) => {
+    if (!onBulkSetSbpElection || bulkUpdating) {
+      return
+    }
+
+    const docIds = sbpElections.map((entry) => entry.docId)
+    setBulkUpdating(true)
+    try {
+      const failures = await onBulkSetSbpElection(nextValue, docIds)
+      setBulkFailures(failures)
+    } finally {
+      setBulkUpdating(false)
+    }
+  }
 
   const simplifiedElectionThreshold = 300
   const aboveSimplifiedThreshold = totalForeignTaxes > simplifiedElectionThreshold
@@ -240,6 +267,27 @@ export default function Form1116Preview({
             Total FTC ({fmtAmt(totalForeignTaxes, 2)}) ≤ $300. You may enter directly on Schedule 3 Line 1 without
             completing Form 1116. Confirm no foreign income in multiple baskets.
           </p>
+        </Callout>
+      )}
+
+      {relevantUnreviewed.length > 0 && (
+        <Callout kind="warn" title="⚠ Unreviewed K-1 documents are currently excluded from Form 1116 totals">
+          <div className="space-y-2">
+            {relevantUnreviewed.map((doc) => (
+              <div key={doc.id} className="flex items-center justify-between gap-2">
+                <span>{doc.partnerName}</span>
+                {onReviewNow && (
+                  <button
+                    type="button"
+                    className="text-amber-700 dark:text-amber-300 underline underline-offset-2 hover:opacity-80"
+                    onClick={() => onReviewNow(doc.id)}
+                  >
+                    Review now
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
         </Callout>
       )}
 
@@ -366,6 +414,32 @@ export default function Form1116Preview({
 
       {sbpElections.length > 0 && (
         <FormBlock title="Sourced-by-Partner (Col f) Election — Form 1116 Impact">
+          {sbpElections.length > 1 && onBulkSetSbpElection && (
+            <div className="flex gap-2 pb-2">
+              <button
+                type="button"
+                disabled={bulkUpdating}
+                className="text-xs px-2 py-1 rounded border border-border hover:bg-muted disabled:opacity-50"
+                onClick={() => void runBulkToggle(true)}
+              >
+                {bulkUpdating ? 'Updating…' : 'Elect all'}
+              </button>
+              <button
+                type="button"
+                disabled={bulkUpdating}
+                className="text-xs px-2 py-1 rounded border border-border hover:bg-muted disabled:opacity-50"
+                onClick={() => void runBulkToggle(false)}
+              >
+                {bulkUpdating ? 'Updating…' : 'Unelect all'}
+              </button>
+            </div>
+          )}
+          {bulkFailures.length > 0 && (
+            <FormLine
+              label="Bulk update failures"
+              raw={`Could not update: ${bulkFailures.join(', ')}`}
+            />
+          )}
           <FormLine
             label="What is this?"
             raw="K-3 Part II column (f) amounts are classified 'Sourced by Partner'. By default they are treated as foreign-source income, increasing your FTC base."
