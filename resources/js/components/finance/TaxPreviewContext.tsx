@@ -643,9 +643,9 @@ export function TaxPreviewProvider({
 
     const medicareWageSources = reviewedW2Docs.map((doc) => {
       const p = doc.parsed_data as W2ParsedData | null
-      const wages = p?.box5_medicare_wages ?? p?.box1_wages ?? 0
+      const medicareWagesForSource = p?.box5_medicare_wages ?? p?.box1_wages ?? 0
       const label = p?.employer_name ?? doc.employment_entity?.display_name ?? doc.original_filename ?? 'W-2'
-      return { label, wages }
+      return { label, wages: medicareWagesForSource }
     }).filter(s => s.wages > 0)
 
     const form8959 = computeForm8959Lines(medicareWages, isMarried, medicareWageSources)

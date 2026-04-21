@@ -753,6 +753,12 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
   const scheduleSEAdditionalMedicare = scheduleSESheet?.rowIndex.get('Form 8959 — Additional Medicare tax on self-employment earnings')
   const form8959Line7 = form8959Sheet?.rowIndex.get('Line 7 — Additional Medicare Tax (0.9%) → Schedule 2 Line 11')
   const form8960Line17 = form8960Sheet?.rowIndex.get('NIIT (3.8% × lesser of Line 12 or 15) → Schedule 2 Line 12')
+  const schedule2FormulaRefs = [
+    scheduleSELine12 ? formulaRef('Schedule SE', scheduleSELine12).slice(1) : null,
+    scheduleSEAdditionalMedicare ? formulaRef('Schedule SE', scheduleSEAdditionalMedicare).slice(1) : null,
+    form8959Line7 ? formulaRef('Form 8959', form8959Line7).slice(1) : null,
+    form8960Line17 ? formulaRef('Form 8960', form8960Line17).slice(1) : null,
+  ].filter(Boolean)
 
   const line1a = taxReturn.form1040?.find((line) => line.line === '1a')?.value ?? undefined
   const line2b = scheduleBLine4 ? taxReturn.scheduleB?.interestTotal : undefined
@@ -841,9 +847,8 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
           line: '17',
           description: 'Other taxes (Schedule 2)',
           amount: taxReturn.schedule2?.totalAdditionalTaxes,
-          formula: [scheduleSELine12 ? formulaRef('Schedule SE', scheduleSELine12).slice(1) : null, scheduleSEAdditionalMedicare ? formulaRef('Schedule SE', scheduleSEAdditionalMedicare).slice(1) : null, form8959Line7 ? formulaRef('Form 8959', form8959Line7).slice(1) : null, form8960Line17 ? formulaRef('Form 8960', form8960Line17).slice(1) : null]
-            .filter(Boolean).length > 0
-            ? `=${[scheduleSELine12 ? formulaRef('Schedule SE', scheduleSELine12).slice(1) : null, scheduleSEAdditionalMedicare ? formulaRef('Schedule SE', scheduleSEAdditionalMedicare).slice(1) : null, form8959Line7 ? formulaRef('Form 8959', form8959Line7).slice(1) : null, form8960Line17 ? formulaRef('Form 8960', form8960Line17).slice(1) : null].filter(Boolean).join('+')}`
+          formula: schedule2FormulaRefs.length > 0
+            ? `=${schedule2FormulaRefs.join('+')}`
             : undefined,
           note: '→ Schedule SE + Form 8959 + Form 8960',
         },

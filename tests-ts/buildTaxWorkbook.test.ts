@@ -195,31 +195,32 @@ describe('buildTaxWorkbook', () => {
   })
 
   it('adds a Schedule SE worksheet when self-employment tax data is present', () => {
+    const scheduleSEFixture = {
+      entries: [{ label: 'Acme LP — Box 14A', amount: 100_000, sourceType: 'k1_box14_a' as const }],
+      netEarningsFromSE: 100_000,
+      seTaxableEarnings: 92_350,
+      socialSecurityWageBase: 168_600,
+      socialSecurityWages: 0,
+      remainingSocialSecurityWageBase: 168_600,
+      socialSecurityTaxableEarnings: 92_350,
+      socialSecurityTax: 11_451.4,
+      medicareWages: 0,
+      medicareTaxableEarnings: 92_350,
+      medicareTax: 2_677.15,
+      additionalMedicareThreshold: 200_000,
+      additionalMedicareTaxableEarnings: 0,
+      additionalMedicareTax: 0,
+      seTax: 14_128.55,
+      deductibleSeTax: 7_064.28,
+    }
     const workbook = buildTaxWorkbook({
       year: 2025,
-      scheduleSE: {
-        entries: [{ label: 'Acme LP — Box 14A', amount: 100_000, sourceType: 'k1_box14_a' }],
-        netEarningsFromSE: 100_000,
-        seTaxableEarnings: 92_350,
-        socialSecurityWageBase: 168_600,
-        socialSecurityWages: 0,
-        remainingSocialSecurityWageBase: 168_600,
-        socialSecurityTaxableEarnings: 92_350,
-        socialSecurityTax: 11_451.4,
-        medicareWages: 0,
-        medicareTaxableEarnings: 92_350,
-        medicareTax: 2_677.15,
-        additionalMedicareThreshold: 200_000,
-        additionalMedicareTaxableEarnings: 0,
-        additionalMedicareTax: 0,
-        seTax: 14_128.55,
-        deductibleSeTax: 7_064.28,
-      },
+      scheduleSE: scheduleSEFixture,
     })
 
     const scheduleSE = workbook.sheets.find(s => s.name === 'Schedule SE')
     expect(scheduleSE).toBeDefined()
-    expect(scheduleSE?.rows.some(r => r.description === 'Line 12 — Self-employment tax → Schedule 2 Line 4' && r.amount === 14_128.55)).toBe(true)
+    expect(scheduleSE?.rows.some(r => r.description === 'Line 12 — Self-employment tax → Schedule 2 Line 4' && r.amount === scheduleSEFixture.seTax)).toBe(true)
     expect(scheduleSE?.rows.some(r => r.description === 'Line 13 — Deductible half of self-employment tax → Schedule 1 Line 15')).toBe(true)
   })
 

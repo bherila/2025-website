@@ -580,6 +580,7 @@ function TaxPreviewPageContent() {
     dataThroughQ3.length > dataThroughQ2.length ? ['Q3', dataThroughQ3] : undefined,
     data.length > dataThroughQ3.length ? ['Q4 (Full Year)', data] : undefined,
   ].filter(Boolean) as [string, fin_payslip[]][]
+  const finalSeriesLabel = dataSeries[dataSeries.length - 1]?.[0] ?? 'Q4 (Full Year)'
 
   const scheduleCIncomeBySeries = {
     Q1: scheduleCNetIncome.byQuarter.q1,
@@ -938,11 +939,13 @@ function TaxPreviewPageContent() {
                     standardDeduction: getStandardDeduction(selectedYear, filingStatus),
                   }}
                   extraIncome={scheduleCIncomeBySeries}
+                  // Schedule 2 taxes are annual computations. Until quarter-specific
+                  // SE / NIIT allocation exists, keep them on the full-year column only.
                   extraTax={{
                     Q1: 0,
                     Q2: 0,
                     Q3: 0,
-                    'Q4 (Full Year)': taxReturn.schedule2?.totalAdditionalTaxes ?? 0,
+                    [finalSeriesLabel]: taxReturn.schedule2?.totalAdditionalTaxes ?? 0,
                   }}
                 />
               </div>

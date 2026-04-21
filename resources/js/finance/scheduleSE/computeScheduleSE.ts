@@ -50,6 +50,9 @@ export const ADDITIONAL_MEDICARE_THRESHOLD = {
 } as const
 
 function socialSecurityWageBase(year: number): number {
+  // Fall back to the latest configured SSA wage base when the selected year has
+  // not been added yet. This keeps the UI functional while making the assumption
+  // explicit in code review until the table is updated for the new year.
   return SOCIAL_SECURITY_WAGE_BASE[year] ?? SOCIAL_SECURITY_WAGE_BASE[2025] ?? 176_100
 }
 
