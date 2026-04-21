@@ -86,7 +86,7 @@ export interface CompletenessItem {
 
 // ── Multi-K-1 incomplete-computation signals ──────────────────────────────────
 
-/** Returns entity names of reviewed K-1s that have Box 17 AMT codes (Form 6251 not yet computed). */
+/** Returns entity names of reviewed K-1s that have Box 17 AMT items. */
 export function getK1sWithAMTItems(k1s: FK1StructuredData[]): string[] {
   return k1s
     .filter((d) => (d.codes['17'] ?? []).length > 0)
@@ -130,7 +130,7 @@ export function getK1CompletenessChecklist(data: FK1StructuredData): Completenes
   }
 
   if ((data.codes['17'] ?? []).length > 0) {
-    items.push({ item: 'Box 17 — AMT items present; Form 6251 computation not yet implemented', status: 'needs_user_action' })
+    items.push({ item: 'Box 17 — AMT items present; review Form 6251 and any attached AMT statement items', status: 'needs_user_action' })
   }
 
   if ((data.codes['14'] ?? []).length > 0) {

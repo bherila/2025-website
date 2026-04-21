@@ -11,6 +11,7 @@ export const TAX_TABS = {
   scheduleSE: 'schedule-se',
   capitalGains: 'capital-gains',
   form1116: 'form-1116',
+  form6251: 'form-6251',
   form8582: 'form-8582',
   form8995: 'form-8995',
   scheduleC: 'schedule-c',

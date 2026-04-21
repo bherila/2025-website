@@ -71,6 +71,7 @@ export default function AdditionalTaxesPreview({ schedule2, scheduleSE, form8959
   const [passiveModal, setPassiveModal] = useState(false)
 
   const hasContent =
+    (schedule2?.totalAdditionalTaxes ?? 0) > 0 ||
     (schedule2?.selfEmploymentTax ?? 0) > 0 ||
     (form8959?.additionalTax ?? 0) > 0 ||
     (form8960?.magi ?? 0) > 0 ||
@@ -113,7 +114,7 @@ export default function AdditionalTaxesPreview({ schedule2, scheduleSE, form8959
           )}
           <FormTotalLine label="Total additional taxes → Form 1040 Line 17" value={schedule2.totalAdditionalTaxes} double />
           {schedule2.altMinimumTax === 0 && (
-            <FormLine label="Note" raw="AMT (Line 2) not computed — see Form 6251 if your income exceeds the AMT exemption." />
+            <FormLine label="Note" raw="AMT computed at $0 — tentative minimum tax does not exceed regular tax after credits." />
           )}
         </FormBlock>
       )}

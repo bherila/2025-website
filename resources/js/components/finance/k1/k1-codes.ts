@@ -112,11 +112,11 @@ export const BOX17_CODES: Record<string, string> = {
   A: 'Post-1986 depreciation adjustment',
   B: 'Adjusted gain or loss',
   C: 'Depletion (other than oil & gas)',
-  D: 'Oil, gas, & geothermal depletion',
-  E: 'Alternative minimum tax adjustment',
-  F: 'Tax-exempt interest income',
-  G: 'Other AMT items',
-  H: 'Passive activity loss adjustment',
+  D: 'Oil, gas, & geothermal properties — gross income',
+  E: 'Oil, gas, & geothermal properties — deductions',
+  F: 'Other AMT items',
+  G: 'Legacy other AMT items',
+  H: 'Legacy passive activity loss adjustment',
 }
 
 export const BOX18_CODES: Record<string, string> = {

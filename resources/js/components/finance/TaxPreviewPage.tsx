@@ -10,6 +10,7 @@ import EstimatedTaxPaymentsSection from '@/components/finance/EstimatedTaxPaymen
 import Form1040Preview from '@/components/finance/Form1040Preview'
 import Form1116Preview from '@/components/finance/Form1116Preview'
 import Form4952Preview from '@/components/finance/Form4952Preview'
+import Form6251Preview from '@/components/finance/Form6251Preview'
 import Form8582Preview from '@/components/finance/Form8582Preview'
 import Form8995Preview from '@/components/finance/Form8995Preview'
 import { isFK1StructuredData } from '@/components/finance/k1'
@@ -33,7 +34,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { fetchWrapper } from '@/fetchWrapper'
 import { buildTaxWorkbook } from '@/lib/finance/buildTaxWorkbook'
-import { getK1sWithAMTItems, getK1sWithPassiveLosses, parseK1Field } from '@/lib/finance/k1Utils'
+import { getK1sWithPassiveLosses, parseK1Field } from '@/lib/finance/k1Utils'
 import { type FilingStatus, getStandardDeduction } from '@/lib/tax/standardDeductions'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
@@ -466,7 +467,6 @@ function TaxPreviewPageContent() {
   const [reviewModalDoc, setReviewModalDoc] = useState<TaxDocument | undefined>(undefined)
   const [activeTab, setActiveTab] = useState<string>(TAX_TABS.overview)
   const [isExporting, setIsExporting] = useState(false)
-  const [showAmtWarning, setShowAmtWarning] = useState(true)
   const [showPassiveLossWarning, setShowPassiveLossWarning] = useState(true)
 
   const handleYearChange = useCallback((year: number | 'all') => {
@@ -621,7 +621,6 @@ function TaxPreviewPageContent() {
   const k1ParsedData = reviewedK1Docs
     .map((d) => isFK1StructuredData(d.parsed_data) ? d.parsed_data : null)
     .filter((d): d is FK1StructuredData => d !== null)
-  const k1sWithAMT = getK1sWithAMTItems(k1ParsedData)
   const k1sWithPassiveLosses = getK1sWithPassiveLosses(k1ParsedData)
 
   return (
@@ -689,6 +688,7 @@ function TaxPreviewPageContent() {
           <TabsTrigger value={TAX_TABS.scheduleSE}>Schedule SE</TabsTrigger>
           <TabsTrigger value={TAX_TABS.capitalGains}>Capital Gains</TabsTrigger>
           <TabsTrigger value={TAX_TABS.form1116}>Form 1116</TabsTrigger>
+          <TabsTrigger value={TAX_TABS.form6251}>Form 6251</TabsTrigger>
           <TabsTrigger value={TAX_TABS.form8582}>Form 8582</TabsTrigger>
           <TabsTrigger value={TAX_TABS.form8995}>Form 8995</TabsTrigger>
           <TabsTrigger value={TAX_TABS.scheduleC}>Schedule C</TabsTrigger>
@@ -745,27 +745,6 @@ function TaxPreviewPageContent() {
         </TabsContent>
 
         <TabsContent value={TAX_TABS.schedules} className="space-y-6 mt-0">
-          {showAmtWarning && k1sWithAMT.length > 0 && (
-            <Callout kind="alert" title="⚠ Form 6251 (AMT) — Not Yet Computed">
-              <p>
-                The following K-1s report Box 17 AMT adjustment items, but Form 6251 has not been
-                implemented yet. Your AMT liability estimate may be understated.
-                Tracked in issue{' '}
-                <a href="https://github.com/bherila/2025-website/issues/273" className="underline" target="_blank" rel="noreferrer">#273</a>.
-              </p>
-              <ul className="mt-1 list-disc list-inside text-xs">
-                {k1sWithAMT.map((name, i) => <li key={i}>{name}</li>)}
-              </ul>
-              <div className="flex items-center gap-3">
-                <Button type="button" variant="link" className="h-auto p-0 text-xs" onClick={handleOpenK1Review}>
-                  Open K-1 review
-                </Button>
-                <Button type="button" variant="link" className="h-auto p-0 text-xs" onClick={() => setShowAmtWarning(false)}>
-                  Dismiss for this session
-                </Button>
-              </div>
-            </Callout>
-          )}
           <ScheduleBPreview
             interestIncome={income1099.interestIncome}
             dividendIncome={income1099.dividendIncome}
@@ -843,6 +822,10 @@ function TaxPreviewPageContent() {
             onReviewNow={handleReviewK1Now}
             onBulkSetSbpElection={handleBulkSetSbpElection}
           />
+        </TabsContent>
+
+        <TabsContent value={TAX_TABS.form6251} className="mt-0">
+          <Form6251Preview form6251={taxReturn.form6251} selectedYear={selectedYear} />
         </TabsContent>
 
         <TabsContent value={TAX_TABS.form8995} className="mt-0">
