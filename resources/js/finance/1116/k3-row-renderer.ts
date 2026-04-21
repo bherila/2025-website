@@ -1,6 +1,10 @@
 import type { K3Section } from '@/types/finance/k1-data'
 import type { XlsxRow } from '@/types/finance/xlsx-export'
 
+/** K-3 sectionIds that have dedicated specialized renderers in K1ReviewPanel and are not rendered by the generic fallback. */
+export const K3_HANDLED_SECTION_IDS = ['header', 'part2_section1', 'part2_section2', 'part3_section2', 'part3_section4', 'part4'] as const
+export type K3HandledSectionId = typeof K3_HANDLED_SECTION_IDS[number]
+
 function toNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value

@@ -1,6 +1,13 @@
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 
-import { k1NetIncome, parseK1Codes, parseK1Field } from '../k1Utils'
+import {
+  getK1ActivityClassification,
+  getK1CompletenessChecklist,
+  getUnroutedCodes,
+  k1NetIncome,
+  parseK1Codes,
+  parseK1Field,
+} from '../k1Utils'
 
 function makeData(overrides: Partial<FK1StructuredData> = {}): FK1StructuredData {
   return {
@@ -180,5 +187,108 @@ describe('k1NetIncome', () => {
     })
     expect(k1NetIncome(dataPositive)).toBe(5000)
     expect(k1NetIncome(dataNegative)).toBe(5000)
+  })
+})
+
+// ── getUnroutedCodes ──────────────────────────────────────────────────────────
+
+describe('getUnroutedCodes', () => {
+  it('returns empty when all codes have routing entries', () => {
+    const data = makeData({ codes: { '20': [{ code: 'Z', value: '5000' }] } })
+    expect(getUnroutedCodes(data)).toEqual([])
+  })
+
+  it('does not flag suspension codes — they are intentionally in the table', () => {
+    const data = makeData({ codes: { '13': [{ code: 'K', value: '100' }] } })
+    expect(getUnroutedCodes(data)).toEqual([])
+  })
+
+  it('flags coded boxes with no routing entry', () => {
+    // Box 18 and 19 have no entries in K1_CODE_ROUTING_NOTES
+    const data = makeData({ codes: { '18': [{ code: 'A', value: '200' }] } })
+    const result = getUnroutedCodes(data)
+    expect(result).toHaveLength(1)
+    expect(result[0]?.box).toBe('18')
+    expect(result[0]?.code).toBe('A')
+    expect(result[0]?.value).toBe('200')
+  })
+
+  it('mixes routed and unrouted across boxes', () => {
+    const data = makeData({
+      codes: {
+        '14': [{ code: 'A', value: '300' }], // routed → Schedule SE
+        '19': [{ code: 'A', value: '100' }], // not in routing table
+        '20': [{ code: 'Z', value: '500' }], // routed → Form 8995
+      },
+    })
+    const keys = getUnroutedCodes(data).map((r) => `${r.box}${r.code}`)
+    expect(keys).toContain('19A')
+    expect(keys).not.toContain('14A')
+    expect(keys).not.toContain('20Z')
+  })
+
+  it('is case-insensitive', () => {
+    const data = makeData({ codes: { '20': [{ code: 'z', value: '1000' }] } })
+    expect(getUnroutedCodes(data)).toEqual([])
+  })
+})
+
+// ── getK1ActivityClassification ───────────────────────────────────────────────
+
+describe('getK1ActivityClassification', () => {
+  it('returns nonpassive for trader in securities', () => {
+    const data = makeData({ fields: { partnershipPosition_traderInSecurities: { value: 'true' } } })
+    expect(getK1ActivityClassification(data)).toBe('nonpassive')
+  })
+
+  it('returns nonpassive for general partner type', () => {
+    const data = makeData({ fields: { G: { value: 'General Partner' } } })
+    expect(getK1ActivityClassification(data)).toBe('nonpassive')
+  })
+
+  it('returns passive for limited partner type', () => {
+    const data = makeData({ fields: { G: { value: 'Limited Partner' } } })
+    expect(getK1ActivityClassification(data)).toBe('passive')
+  })
+
+  it('returns unknown when no classification signals present', () => {
+    expect(getK1ActivityClassification(makeData())).toBe('unknown')
+  })
+})
+
+// ── getK1CompletenessChecklist ────────────────────────────────────────────────
+
+describe('getK1CompletenessChecklist', () => {
+  it('returns empty for K-1 with no notable codes', () => {
+    const data = makeData({ codes: { '13': [{ code: 'G', value: '100' }] } })
+    expect(getK1CompletenessChecklist(data)).toEqual([])
+  })
+
+  it('flags Box 20Z as missing when statementA is absent', () => {
+    const data = makeData({ codes: { '20': [{ code: 'Z', value: '5000' }] } })
+    const items = getK1CompletenessChecklist(data)
+    expect(items.find((i) => i.item.includes('20Z'))?.status).toBe('missing')
+  })
+
+  it('flags Box 17 AMT items', () => {
+    const data = makeData({ codes: { '17': [{ code: 'E', value: '20' }] } })
+    expect(getK1CompletenessChecklist(data).some((i) => i.item.includes('Box 17') && i.status === 'needs_user_action')).toBe(true)
+  })
+
+  it('flags Box 14 self-employment items', () => {
+    const data = makeData({ codes: { '14': [{ code: 'A', value: '10000' }] } })
+    expect(getK1CompletenessChecklist(data).some((i) => i.item.includes('Box 14') && i.status === 'needs_user_action')).toBe(true)
+  })
+
+  it('flags K-3 sections when present', () => {
+    const data = makeData({
+      k3: { sections: [{ sectionId: 'part2_section1', title: 'Part II', data: { rows: [] } }] },
+    })
+    expect(getK1CompletenessChecklist(data).some((i) => i.item.includes('K-3') && i.status === 'needs_user_action')).toBe(true)
+  })
+
+  it('flags 13ZZ "other" code', () => {
+    const data = makeData({ codes: { '13': [{ code: 'ZZ', value: '50' }] } })
+    expect(getK1CompletenessChecklist(data).some((i) => i.item.includes('"Other"') && i.status === 'needs_user_action')).toBe(true)
   })
 })

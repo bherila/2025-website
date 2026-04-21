@@ -1,6 +1,9 @@
 import currency from 'currency.js'
 
-import { type FK1StructuredData,isFK1StructuredData } from '@/types/finance/k1-data'
+import { ALL_K1_CODES } from '@/components/finance/k1/k1-codes'
+import { K1_CODE_ROUTING_NOTES } from '@/lib/finance/k1RoutingNotes'
+import type { FK1StructuredData } from '@/types/finance/k1-data'
+import { isFK1StructuredData } from '@/types/finance/k1-data'
 
 /**
  * Returns the K-3 "Sourced by Partner" election state for a K-1 document.
@@ -40,4 +43,78 @@ export function k1NetIncome(data: FK1StructuredData): number {
     .add(box13 !== 0 ? -Math.abs(box13) : 0)
     .add(box21 !== 0 ? -Math.abs(box21) : 0)
   return incomeTotal.add(deductionTotal).value
+}
+
+// ── Review panel helpers ──────────────────────────────────────────────────────
+
+const CODED_BOXES = ['11', '13', '14', '17', '18', '19', '20']
+
+export interface UnroutedCode {
+  box: string
+  code: string
+  label: string
+  value: string
+}
+
+/** Returns every coded K-1 item that has no entry in K1_CODE_ROUTING_NOTES — i.e., not yet routed to any form. */
+export function getUnroutedCodes(data: FK1StructuredData): UnroutedCode[] {
+  const results: UnroutedCode[] = []
+  for (const box of CODED_BOXES) {
+    for (const item of data.codes[box] ?? []) {
+      const code = item.code.toUpperCase()
+      if (K1_CODE_ROUTING_NOTES[box]?.[code] === undefined) {
+        results.push({ box, code, label: ALL_K1_CODES[box]?.[code] ?? `Code ${code}`, value: item.value })
+      }
+    }
+  }
+  return results
+}
+
+/** Returns the activity classification for Form 8582 / §469 passive-loss purposes. */
+export function getK1ActivityClassification(data: FK1StructuredData): 'passive' | 'nonpassive' | 'unknown' {
+  if (data.fields['partnershipPosition_traderInSecurities']?.value === 'true') return 'nonpassive'
+  const partnerType = (data.fields['G']?.value ?? data.fields['G_partnerType']?.value ?? '').toLowerCase()
+  if (partnerType.includes('general') || partnerType.includes(' gp')) return 'nonpassive'
+  if (partnerType.includes('limited') || partnerType.includes(' lp')) return 'passive'
+  return 'unknown'
+}
+
+export interface CompletenessItem {
+  item: string
+  status: 'ok' | 'missing' | 'needs_user_action'
+}
+
+/** Returns a checklist of review completeness items for the K-1 review panel. */
+export function getK1CompletenessChecklist(data: FK1StructuredData): CompletenessItem[] {
+  const items: CompletenessItem[] = []
+
+  const hasBox20Z = (data.codes['20'] ?? []).some((i) => i.code.toUpperCase() === 'Z')
+  if (hasBox20Z) {
+    items.push({
+      item: 'Box 20Z — §199A/QBI: Statement A fields not yet extracted (W-2 wages, UBIA, SSTB flag)',
+      status: (data as unknown as Record<string, unknown>)['statementA'] != null ? 'ok' : 'missing',
+    })
+  }
+
+  if ((data.codes['17'] ?? []).length > 0) {
+    items.push({ item: 'Box 17 — AMT items present; Form 6251 computation not yet implemented', status: 'needs_user_action' })
+  }
+
+  if ((data.codes['14'] ?? []).length > 0) {
+    items.push({ item: 'Box 14 — Self-employment income present; Schedule SE not yet computed', status: 'needs_user_action' })
+  }
+
+  if ((data.k3?.sections ?? []).length > 0) {
+    items.push({ item: 'K-3 attached — verify foreign tax totals on Form 1116 tab', status: 'needs_user_action' })
+  }
+
+  const otherCodes: [string, string][] = [['11', 'F'], ['13', 'ZZ'], ['20', 'Y']]
+  const hasOther = otherCodes.some(([box, code]) =>
+    (data.codes[box] ?? []).some((i) => i.code.toUpperCase() === code),
+  )
+  if (hasOther) {
+    items.push({ item: '"Other" codes present — check attached statement for categorization', status: 'needs_user_action' })
+  }
+
+  return items
 }
