@@ -32,11 +32,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { fetchWrapper } from '@/fetchWrapper'
 import { buildTaxWorkbook } from '@/lib/finance/buildTaxWorkbook'
-import { parseK1Field } from '@/lib/finance/k1Utils'
+import { getK1sWithAMTItems, getK1sWithPassiveLosses, getK1sWithSEItems, parseK1Field } from '@/lib/finance/k1Utils'
 import { type FilingStatus, getStandardDeduction } from '@/lib/tax/standardDeductions'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 
+import { Callout } from './tax-preview-primitives'
 import { TAX_TABS } from './tax-tab-ids'
 import { TaxPreviewProvider, type TaxPreviewShellData, useTaxPreview } from './TaxPreviewContext'
 import { YearSelectorWithNav } from './YearSelectorWithNav'
@@ -464,6 +465,9 @@ function TaxPreviewPageContent() {
   const [reviewModalDoc, setReviewModalDoc] = useState<TaxDocument | undefined>(undefined)
   const [activeTab, setActiveTab] = useState<string>(TAX_TABS.overview)
   const [isExporting, setIsExporting] = useState(false)
+  const [showAmtWarning, setShowAmtWarning] = useState(true)
+  const [showSeWarning, setShowSeWarning] = useState(true)
+  const [showPassiveLossWarning, setShowPassiveLossWarning] = useState(true)
 
   const handleYearChange = useCallback((year: number | 'all') => {
     if (typeof year !== 'number') return
@@ -512,6 +516,11 @@ function TaxPreviewPageContent() {
     setReviewModalDoc(targetDoc)
     setReviewModalOpen(true)
   }, [accountDocuments])
+
+  const handleOpenK1Review = useCallback(() => {
+    setReviewModalDoc(undefined)
+    setReviewModalOpen(true)
+  }, [])
 
   const handleBulkSetSbpElection = useCallback(async (active: boolean, docIds: number[]) => {
     const failures: string[] = []
@@ -606,6 +615,14 @@ function TaxPreviewPageContent() {
   // to the marriage-status settings once MFS becomes a supported path (MFS has a
   // $5k SALT cap and roughly half-MFJ bracket thresholds).
   const filingStatus: FilingStatus = isMarried ? 'Married Filing Jointly' : 'Single'
+
+  // ── Incomplete-computation signals (issue #274) ─────────────────────────────
+  const k1ParsedData = reviewedK1Docs
+    .map((d) => isFK1StructuredData(d.parsed_data) ? d.parsed_data : null)
+    .filter((d): d is FK1StructuredData => d !== null)
+  const k1sWithAMT = getK1sWithAMTItems(k1ParsedData)
+  const k1sWithSE = getK1sWithSEItems(k1ParsedData)
+  const k1sWithPassiveLosses = getK1sWithPassiveLosses(k1ParsedData)
 
   return (
     <div>
@@ -727,6 +744,48 @@ function TaxPreviewPageContent() {
         </TabsContent>
 
         <TabsContent value={TAX_TABS.schedules} className="space-y-6 mt-0">
+          {showAmtWarning && k1sWithAMT.length > 0 && (
+            <Callout kind="alert" title="⚠ Form 6251 (AMT) — Not Yet Computed">
+              <p>
+                The following K-1s report Box 17 AMT adjustment items, but Form 6251 has not been
+                implemented yet. Your AMT liability estimate may be understated.
+                Tracked in issue{' '}
+                <a href="https://github.com/bherila/2025-website/issues/273" className="underline" target="_blank" rel="noreferrer">#273</a>.
+              </p>
+              <ul className="mt-1 list-disc list-inside text-xs">
+                {k1sWithAMT.map((name, i) => <li key={i}>{name}</li>)}
+              </ul>
+              <div className="flex items-center gap-3">
+                <Button type="button" variant="link" className="h-auto p-0 text-xs" onClick={handleOpenK1Review}>
+                  Open K-1 review
+                </Button>
+                <Button type="button" variant="link" className="h-auto p-0 text-xs" onClick={() => setShowAmtWarning(false)}>
+                  Dismiss for this session
+                </Button>
+              </div>
+            </Callout>
+          )}
+          {showSeWarning && k1sWithSE.length > 0 && (
+            <Callout kind="alert" title="⚠ Schedule SE (Self-Employment Tax) — Not Yet Computed">
+              <p>
+                The following K-1s report Box 14 self-employment income, but Schedule SE has not been
+                implemented yet. Self-employment tax is not included in the estimate below.
+                Tracked in issue{' '}
+                <a href="https://github.com/bherila/2025-website/issues/273" className="underline" target="_blank" rel="noreferrer">#273</a>.
+              </p>
+              <ul className="mt-1 list-disc list-inside text-xs">
+                {k1sWithSE.map((name, i) => <li key={i}>{name}</li>)}
+              </ul>
+              <div className="flex items-center gap-3">
+                <Button type="button" variant="link" className="h-auto p-0 text-xs" onClick={handleOpenK1Review}>
+                  Open K-1 review
+                </Button>
+                <Button type="button" variant="link" className="h-auto p-0 text-xs" onClick={() => setShowSeWarning(false)}>
+                  Dismiss for this session
+                </Button>
+              </div>
+            </Callout>
+          )}
           <ScheduleBPreview
             interestIncome={income1099.interestIncome}
             dividendIncome={income1099.dividendIncome}
@@ -806,6 +865,27 @@ function TaxPreviewPageContent() {
         </TabsContent>
 
         <TabsContent value={TAX_TABS.form8582} className="mt-0">
+          {showPassiveLossWarning && k1sWithPassiveLosses.length > 0 && (
+            <Callout kind="alert" title="⚠ K-1 Passive Losses — Not Wired into Form 8582">
+              <p>
+                The following K-1s report negative Box 1 ordinary business losses that may be passive,
+                but K-1 activity grouping into Form 8582 has not been implemented yet. These losses are not reflected
+                in the passive-activity loss computation below. Tracked in issue{' '}
+                <a href="https://github.com/bherila/2025-website/issues/273" className="underline" target="_blank" rel="noreferrer">#273</a>.
+              </p>
+              <ul className="mt-1 list-disc list-inside text-xs">
+                {k1sWithPassiveLosses.map((name, i) => <li key={i}>{name}</li>)}
+              </ul>
+              <div className="flex items-center gap-3">
+                <Button type="button" variant="link" className="h-auto p-0 text-xs" onClick={handleOpenK1Review}>
+                  Open K-1 review
+                </Button>
+                <Button type="button" variant="link" className="h-auto p-0 text-xs" onClick={() => setShowPassiveLossWarning(false)}>
+                  Dismiss for this session
+                </Button>
+              </div>
+            </Callout>
+          )}
           {taxReturn.form8582 ? (
             <Form8582Preview
               form8582={taxReturn.form8582}

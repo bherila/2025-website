@@ -84,6 +84,36 @@ export interface CompletenessItem {
   status: 'ok' | 'missing' | 'needs_user_action'
 }
 
+// ── Multi-K-1 incomplete-computation signals ──────────────────────────────────
+
+/** Returns entity names of reviewed K-1s that have Box 17 AMT codes (Form 6251 not yet computed). */
+export function getK1sWithAMTItems(k1s: FK1StructuredData[]): string[] {
+  return k1s
+    .filter((d) => (d.codes['17'] ?? []).length > 0)
+    .map((d) => d.fields['B']?.value?.split('\n')[0] ?? 'Unknown entity')
+}
+
+/** Returns entity names of reviewed K-1s that have Box 14 self-employment codes (Schedule SE not yet computed). */
+export function getK1sWithSEItems(k1s: FK1StructuredData[]): string[] {
+  return k1s
+    .filter((d) => (d.codes['14'] ?? []).some((item) => {
+      const code = item.code.toUpperCase()
+      return code === 'A' || code === 'C'
+    }))
+    .map((d) => d.fields['B']?.value?.split('\n')[0] ?? 'Unknown entity')
+}
+
+/** Returns entity names of reviewed K-1s that have negative Box 1 losses that may need passive-loss review. */
+export function getK1sWithPassiveLosses(k1s: FK1StructuredData[]): string[] {
+  return k1s
+    .filter((d) => {
+      const box1 = parseK1Field(d, '1')
+      if (box1 >= 0) return false
+      return getK1ActivityClassification(d) !== 'nonpassive'
+    })
+    .map((d) => d.fields['B']?.value?.split('\n')[0] ?? 'Unknown entity')
+}
+
 /** Returns a checklist of review completeness items for the K-1 review panel. */
 export function getK1CompletenessChecklist(data: FK1StructuredData): CompletenessItem[] {
   const items: CompletenessItem[] = []

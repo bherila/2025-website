@@ -3,6 +3,9 @@ import type { FK1StructuredData } from '@/types/finance/k1-data'
 import {
   getK1ActivityClassification,
   getK1CompletenessChecklist,
+  getK1sWithAMTItems,
+  getK1sWithPassiveLosses,
+  getK1sWithSEItems,
   getUnroutedCodes,
   k1NetIncome,
   parseK1Codes,
@@ -303,5 +306,89 @@ describe('getK1CompletenessChecklist', () => {
   it('flags 13ZZ "other" code', () => {
     const data = makeData({ codes: { '13': [{ code: 'ZZ', value: '50' }] } })
     expect(getK1CompletenessChecklist(data).some((i) => i.item.includes('"Other"') && i.status === 'needs_user_action')).toBe(true)
+  })
+})
+
+// ── Multi-K-1 incomplete-computation signals ──────────────────────────────────
+
+describe('getK1sWithAMTItems', () => {
+  it('returns empty when no K-1s have Box 17', () => {
+    expect(getK1sWithAMTItems([makeData()])).toEqual([])
+  })
+
+  it('returns entity name for K-1 with Box 17 codes', () => {
+    const data = makeData({
+      fields: { B: { value: 'AQR Fund\n123 Main St' } },
+      codes: { '17': [{ code: 'A', value: '5000' }] },
+    })
+    expect(getK1sWithAMTItems([data])).toEqual(['AQR Fund'])
+  })
+
+  it('falls back to "Unknown entity" when field B absent', () => {
+    const data = makeData({ codes: { '17': [{ code: 'A', value: '1000' }] } })
+    expect(getK1sWithAMTItems([data])).toEqual(['Unknown entity'])
+  })
+})
+
+describe('getK1sWithSEItems', () => {
+  it('returns empty when no K-1s have Box 14', () => {
+    expect(getK1sWithSEItems([makeData()])).toEqual([])
+  })
+
+  it('returns entity name for K-1 with Box 14 code A', () => {
+    const data = makeData({
+      fields: { B: { value: 'Self-Employed LLC' } },
+      codes: { '14': [{ code: 'A', value: '80000' }] },
+    })
+    expect(getK1sWithSEItems([data])).toEqual(['Self-Employed LLC'])
+  })
+
+  it('returns entity name for K-1 with Box 14 code C', () => {
+    const data = makeData({
+      fields: { B: { value: 'SE Farm LLC' } },
+      codes: { '14': [{ code: 'c', value: '12000' }] },
+    })
+    expect(getK1sWithSEItems([data])).toEqual(['SE Farm LLC'])
+  })
+
+  it('does not flag K-1 with Box 14 codes other than A/C', () => {
+    const data = makeData({
+      fields: { B: { value: 'Non-SE Partnership' } },
+      codes: { '14': [{ code: 'B', value: '1000' }] },
+    })
+    expect(getK1sWithSEItems([data])).toEqual([])
+  })
+})
+
+describe('getK1sWithPassiveLosses', () => {
+  it('returns empty when no losses', () => {
+    const data = makeData({ fields: { '1': { value: '50000' } } })
+    expect(getK1sWithPassiveLosses([data])).toEqual([])
+  })
+
+  it('detects negative Box 1 loss', () => {
+    const data = makeData({
+      fields: { B: { value: 'Real Estate LP' }, '1': { value: '-20000' } },
+    })
+    expect(getK1sWithPassiveLosses([data])).toEqual(['Real Estate LP'])
+  })
+
+  it('does not flag Box 2 rental loss by itself', () => {
+    const data = makeData({
+      fields: { B: { value: 'Rental LP' }, '2': { value: '-5000' } },
+    })
+    expect(getK1sWithPassiveLosses([data])).toEqual([])
+  })
+
+  it('does not flag negative Box 1 for nonpassive activities', () => {
+    const data = makeData({
+      fields: { B: { value: 'Trader GP LLC' }, '1': { value: '-5000' }, G: { value: 'General Partner' } },
+    })
+    expect(getK1sWithPassiveLosses([data])).toEqual([])
+  })
+
+  it('does not flag entities with only positive income', () => {
+    const income = makeData({ fields: { '1': { value: '10000' }, '2': { value: '2000' } } })
+    expect(getK1sWithPassiveLosses([income])).toEqual([])
   })
 })
