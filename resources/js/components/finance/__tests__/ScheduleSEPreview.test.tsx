@@ -21,7 +21,7 @@ function makeK1Doc(code: string, value: string): TaxDocument {
         '14': [{ code, value }],
       },
     },
-  } as TaxDocument
+  } as unknown as TaxDocument
 }
 
 describe('ScheduleSEPreview', () => {

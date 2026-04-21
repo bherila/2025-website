@@ -10,9 +10,9 @@ describe('computeScheduleSELines', () => {
     expect(result.netEarningsFromSE).toBe(100_000)
     expect(result.seTaxableEarnings).toBeCloseTo(92_350, 2)
     expect(result.socialSecurityTax).toBeCloseTo(11_451.4, 2)
-    expect(result.medicareTax).toBeCloseTo(2_677.15, 2)
-    expect(result.seTax).toBeCloseTo(14_128.55, 2)
-    expect(result.deductibleSeTax).toBeCloseTo(7_064.28, 2)
+    expect(result.medicareTax).toBeCloseTo(2_678.15, 2)
+    expect(result.seTax).toBeCloseTo(14_129.55, 2)
+    expect(result.deductibleSeTax).toBeCloseTo(7_064.78, 2)
   })
 
   it('sums multiple K-1 sources together', () => {
@@ -26,7 +26,7 @@ describe('computeScheduleSELines', () => {
 
     expect(result.netEarningsFromSE).toBe(100_000)
     expect(result.entries).toHaveLength(2)
-    expect(result.seTax).toBeCloseTo(14_128.55, 2)
+    expect(result.seTax).toBeCloseTo(14_129.55, 2)
   })
 
   it('caps the Social Security portion at the wage base', () => {

@@ -58,7 +58,12 @@ function sumW2Field(reviewedW2Docs: TaxDocument[], field: keyof W2ParsedData, fa
     const parsed = doc.parsed_data as W2ParsedData | null
     const primary = parsed?.[field]
     const fallback = fallbackField ? parsed?.[fallbackField] : null
-    return currency(acc).add(primary ?? fallback ?? 0).value
+    const numericValue = typeof primary === 'number'
+      ? primary
+      : typeof fallback === 'number'
+        ? fallback
+        : 0
+    return currency(acc).add(numericValue).value
   }, 0)
 }
 
