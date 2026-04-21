@@ -86,6 +86,25 @@ export interface Form4952Lines {
   disallowedCarryforward: number
 }
 
+export interface ScheduleSELines {
+  entries: { label: string; amount: number; sourceType: 'k1_box14_a' | 'k1_box14_c' | 'schedule_c' }[]
+  netEarningsFromSE: number
+  seTaxableEarnings: number
+  socialSecurityWageBase: number
+  socialSecurityWages: number
+  remainingSocialSecurityWageBase: number
+  socialSecurityTaxableEarnings: number
+  socialSecurityTax: number
+  medicareWages: number
+  medicareTaxableEarnings: number
+  medicareTax: number
+  additionalMedicareThreshold: number
+  additionalMedicareTaxableEarnings: number
+  additionalMedicareTax: number
+  seTax: number
+  deductibleSeTax: number
+}
+
 export interface Form1116Lines {
   incomeSources: { label: string; amount: number }[]
   taxSources: { label: string; amount: number }[]
@@ -191,6 +210,8 @@ export interface CapitalLossCarryoverLines {
 export interface Schedule2Lines {
   /** Line 2 — Alternative Minimum Tax (Form 6251). 0 if not applicable. */
   altMinimumTax: number
+  /** Line 4 — Self-employment tax (Schedule SE). */
+  selfEmploymentTax: number
   /** Line 11 — Additional Medicare Tax (Form 8959). */
   additionalMedicareTax: number
   /** Line 12 — Net Investment Income Tax (Form 8960). */
@@ -280,6 +301,7 @@ export interface TaxReturn1040 {
   scheduleC?: ScheduleCNetIncome
   scheduleD?: ScheduleDData
   scheduleE?: ScheduleELines
+  scheduleSE?: ScheduleSELines
   form4952?: Form4952Lines
   form1116?: Form1116Lines
   form8959?: Form8959Lines

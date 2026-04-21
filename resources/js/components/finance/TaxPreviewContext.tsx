@@ -9,6 +9,7 @@ import { computeForm1040Lines } from '@/components/finance/Form1040Preview'
 import { computeForm1116Lines } from '@/components/finance/Form1116Preview'
 import { computeForm4952Lines } from '@/components/finance/Form4952Preview'
 import { computeForm8995 } from '@/components/finance/Form8995Preview'
+import { computeScheduleSE } from '@/components/finance/ScheduleSEPreview'
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { computeScheduleALines } from '@/components/finance/ScheduleAPreview'
 import { computeScheduleB } from '@/components/finance/ScheduleBPreview'
@@ -22,6 +23,7 @@ import { computeForm8582, type PalCarryforwardEntry } from '@/finance/8582/form8
 import { computeForm8959Lines } from '@/finance/8959/form8959'
 import { computeForm8960Lines } from '@/finance/8960/form8960'
 import { computeCapitalLossCarryover } from '@/finance/capitalLoss/capitalLossCarryover'
+import { computeMedicareWages } from '@/finance/scheduleSE/computeScheduleSE'
 import { computeEstimatedTaxPayments } from '@/lib/finance/estimatedTaxPayments'
 import { k1NetIncome } from '@/lib/finance/k1Utils'
 import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
@@ -534,7 +536,7 @@ export function TaxPreviewProvider({
     const yearStr = String(year)
     const yearPayslips = payslips.filter((r) => r.pay_date && r.pay_date > `${yearStr}-01-01` && r.pay_date < `${String(year + 1)}-01-01`)
     const fedWH = yearPayslips.reduce((acc, r) => acc.add(r.ps_fed_tax ?? 0).add(r.ps_fed_tax_addl ?? 0).subtract(r.ps_fed_tax_refunded ?? 0), currency(0)).value
-    const addlMedicare = currency(Math.max(0, w2GrossIncome.value - 200000)).multiply(0.009).value
+    const medicareWages = computeMedicareWages(reviewedW2Docs, payslips)
 
     const docRows: OverviewRow[] = []
     // W-2 documents
@@ -593,7 +595,8 @@ export function TaxPreviewProvider({
     if (k1InvInterest !== 0) taxPositionRows.push({ item: 'Investment interest deduction (Form 4952)', amount: k1InvInterest, note: 'From K-1 Box 13G/H — flows to Schedule E' })
     if (totalForeignTax !== 0) taxPositionRows.push({ item: 'Foreign tax credit (Form 1116)', amount: totalForeignTax, note: 'Dollar-for-dollar vs. income tax' })
     if (fedWH > 0) taxPositionRows.push({ item: 'Federal withholding (W-2 Box 2)', amount: fedWH, note: 'Already paid — compare to final liability' })
-    if (w2GrossIncome.value > 200000) taxPositionRows.push({ item: 'Additional Medicare Tax (Form 8959)', amount: -addlMedicare, note: '0.9% on wages over $200K threshold' })
+    const medicareThreshold = isMarried ? 250000 : 200000
+    if (medicareWages > medicareThreshold) taxPositionRows.push({ item: 'Additional Medicare Tax (Form 8959)', amount: -currency(Math.max(0, medicareWages - medicareThreshold)).multiply(0.009).value, note: '0.9% on Medicare wages over the filing-status threshold' })
 
     const overviewSections = [
       ...(docRows.length > 0 ? [{ heading: 'Tax Documents', rows: docRows }] : []),
@@ -638,14 +641,22 @@ export function TaxPreviewProvider({
       isMarried,
     }
 
-    const w2Sources = reviewedW2Docs.map((doc) => {
+    const medicareWageSources = reviewedW2Docs.map((doc) => {
       const p = doc.parsed_data as W2ParsedData | null
-      const wages = p?.box1_wages ?? 0
+      const wages = p?.box5_medicare_wages ?? p?.box1_wages ?? 0
       const label = p?.employer_name ?? doc.employment_entity?.display_name ?? doc.original_filename ?? 'W-2'
       return { label, wages }
     }).filter(s => s.wages > 0)
 
-    const form8959 = computeForm8959Lines(w2GrossIncome.value, isMarried, w2Sources)
+    const form8959 = computeForm8959Lines(medicareWages, isMarried, medicareWageSources)
+    const scheduleSE = computeScheduleSE({
+      reviewedK1Docs,
+      scheduleCNetIncome: scheduleCNetIncome.total,
+      selectedYear: year,
+      isMarried,
+      reviewedW2Docs,
+      payslips,
+    })
 
     // Form 8960 MAGI = AGI + §911 foreign earned income exclusion addback.
     const form8960EstimatedMagi = w2GrossIncome
@@ -653,7 +664,8 @@ export function TaxPreviewProvider({
       .add(income1099.dividendIncome)
       .add(scheduleCNetIncome.total)
       .add(scheduleE.grandTotal)
-      .add(Math.max(scheduleD.schD.schD_line16, -3000)).value
+      .add(Math.max(scheduleD.schD.schD_line16, -3000))
+      .subtract(scheduleSE.deductibleSeTax).value
 
     const form8960 = computeForm8960Lines({
       taxableInterest: income1099.interestIncome.value,
@@ -671,9 +683,13 @@ export function TaxPreviewProvider({
     })
     const schedule2 = {
       altMinimumTax: 0,
-      additionalMedicareTax: form8959.additionalTax,
+      selfEmploymentTax: scheduleSE.seTax,
+      additionalMedicareTax: currency(form8959.additionalTax).add(scheduleSE.additionalMedicareTax).value,
       niit: form8960.niitTax,
-      totalAdditionalTaxes: currency(form8959.additionalTax).add(form8960.niitTax).value,
+      totalAdditionalTaxes: currency(scheduleSE.seTax)
+        .add(form8959.additionalTax)
+        .add(scheduleSE.additionalMedicareTax)
+        .add(form8960.niitTax).value,
     }
 
     // Form 8582 MAGI = AGI computed without the passive activity loss deduction,
@@ -686,7 +702,8 @@ export function TaxPreviewProvider({
       .add(income1099.dividendIncome)
       .add(scheduleCNetIncome.total)
       .add(scheduleE.grandTotal)
-      .add(Math.max(scheduleD.schD.schD_line16, -3000)).value
+      .add(Math.max(scheduleD.schD.schD_line16, -3000))
+      .subtract(scheduleSE.deductibleSeTax).value
 
     // Direct rental properties from Schedule E Part I would be passed here once the
     // codebase has a rental property tracker (user-entered per-property data).
@@ -731,6 +748,7 @@ export function TaxPreviewProvider({
         totalPassive: scheduleE.totalPassive,
         totalNonpassive: scheduleE.totalNonpassive,
       },
+      scheduleSE,
       form4952,
       form1116: computeForm1116Lines({ reviewedK1Docs, reviewed1099Docs }),
       schedule2,

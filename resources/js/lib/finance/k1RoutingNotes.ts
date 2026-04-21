@@ -36,9 +36,9 @@ export const K1_CODE_ROUTING_NOTES: Record<string, Record<string, string>> = {
     ZZ: 'Other deductions — varies by footnote; check K-1 attached statement',
   },
   '14': {
-    A: '>> Schedule SE (not yet computed — see Form 1040 Line 23)',
-    B: '>> Schedule SE (not yet computed — see Form 1040 Line 23)',
-    C: '>> Schedule SE (not yet computed — see Form 1040 Line 23)',
+    A: '>> Schedule SE (self-employment tax) | >> Schedule 1 line 15 (deductible half) | >> Form 1040 line 23',
+    B: '>> Schedule SE (self-employment tax) | >> Schedule 1 line 15 (deductible half) | >> Form 1040 line 23',
+    C: '>> Schedule SE (self-employment tax) | >> Schedule 1 line 15 (deductible half) | >> Form 1040 line 23',
   },
   '17': {
     A: '>> Form 6251 (AMT — not yet computed)',

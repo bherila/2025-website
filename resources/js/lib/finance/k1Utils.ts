@@ -93,7 +93,7 @@ export function getK1sWithAMTItems(k1s: FK1StructuredData[]): string[] {
     .map((d) => d.fields['B']?.value?.split('\n')[0] ?? 'Unknown entity')
 }
 
-/** Returns entity names of reviewed K-1s that have Box 14 self-employment codes (Schedule SE not yet computed). */
+/** Returns entity names of reviewed K-1s that have Box 14 self-employment codes. */
 export function getK1sWithSEItems(k1s: FK1StructuredData[]): string[] {
   return k1s
     .filter((d) => (d.codes['14'] ?? []).some((item) => {
@@ -134,7 +134,7 @@ export function getK1CompletenessChecklist(data: FK1StructuredData): Completenes
   }
 
   if ((data.codes['14'] ?? []).length > 0) {
-    items.push({ item: 'Box 14 — Self-employment income present; Schedule SE not yet computed', status: 'needs_user_action' })
+    items.push({ item: 'Box 14 — Self-employment income present; review the Schedule SE tab', status: 'needs_user_action' })
   }
 
   if ((data.k3?.sections ?? []).length > 0) {

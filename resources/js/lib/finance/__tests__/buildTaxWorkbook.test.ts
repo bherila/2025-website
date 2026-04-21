@@ -81,6 +81,7 @@ describe('buildTaxWorkbook — K-1/K-3 sheets', () => {
     expect(k1Sheet?.rows.some((row) => row.note?.includes('Status: Suspended'))).toBe(true)
     expect(k1Sheet?.rows.some((row) => row.note?.includes('Status: User action'))).toBe(true)
     expect(k1Sheet?.rows.some((row) => row.note?.includes('Status: Unrouted'))).toBe(true)
+    expect(k1Sheet?.rows.some((row) => row.description === 'Schedule SE sheet')).toBe(true)
   })
 
   it('multi-destination rows carry amount only on the first destination', () => {

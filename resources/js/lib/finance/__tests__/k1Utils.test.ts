@@ -293,7 +293,9 @@ describe('getK1CompletenessChecklist', () => {
 
   it('flags Box 14 self-employment items', () => {
     const data = makeData({ codes: { '14': [{ code: 'A', value: '10000' }] } })
-    expect(getK1CompletenessChecklist(data).some((i) => i.item.includes('Box 14') && i.status === 'needs_user_action')).toBe(true)
+    const item = getK1CompletenessChecklist(data).find((i) => i.item.includes('Box 14'))
+    expect(item?.status).toBe('needs_user_action')
+    expect(item?.item).toContain('Schedule SE tab')
   })
 
   it('flags K-3 sections when present', () => {

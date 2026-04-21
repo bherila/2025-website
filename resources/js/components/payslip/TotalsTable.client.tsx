@@ -162,6 +162,7 @@ export default function TotalsTable({
   series,
   taxConfig,
   extraIncome = 0,
+  extraTax = 0,
 }: {
   series: [string, fin_payslip[]][]
   taxConfig: {
@@ -171,17 +172,20 @@ export default function TotalsTable({
     standardDeduction: number
   }
   extraIncome?: number | Record<string, number>
+  extraTax?: number | Record<string, number>
 }) {
   const calculateTotals = (label: string, data: fin_payslip[]) => {
     const extra = typeof extraIncome === 'number' ? extraIncome : (extraIncome[label] ?? 0)
+    const additionalTax = typeof extraTax === 'number' ? extraTax : (extraTax[label] ?? 0)
     const income = totalIncome(data).add(extra)
     const fedWH = totalFedWH(data)
     const stateWH = taxConfig.state ? totalStateWH(data) : currency(0)
     const withheld = taxConfig.state ? stateWH : fedWH
     const estTaxIncome = income.subtract(taxConfig.standardDeduction)
     const { taxes, totalTax } = calculateTax(taxConfig.year, taxConfig.state, estTaxIncome, taxConfig.filingStatus)
-    const taxDue = totalTax.subtract(withheld)
-    return { income, fedWH, stateWH, withheld, estTaxIncome, taxes, totalTax, taxDue }
+    const totalTaxWithAdjustments = totalTax.add(additionalTax)
+    const taxDue = totalTaxWithAdjustments.subtract(withheld)
+    return { income, fedWH, stateWH, withheld, estTaxIncome, taxes, additionalTax: currency(additionalTax), totalTax: totalTaxWithAdjustments, taxDue }
   }
 
   const allTotals = series.map(([label, data]) => ({ label, totals: calculateTotals(label, data) }))
@@ -281,6 +285,15 @@ export default function TotalsTable({
                 <Td key={label} right>{fmtCurrency(totals.estTaxIncome)}</Td>
               ))}
             </TableRow>
+
+            {allTotals.some(({ totals }) => totals.additionalTax.value !== 0) && (
+              <TableRow className="border-border hover:bg-muted/30">
+                <Td>Additional Federal Taxes</Td>
+                {allTotals.map(({ label, totals }) => (
+                  <Td key={label} right>{fmtCurrency(totals.additionalTax)}</Td>
+                ))}
+              </TableRow>
+            )}
 
             {/* Total Tax — subtotal row */}
             <TableRow className="border-t-2 border-border bg-primary/5 hover:bg-primary/10">

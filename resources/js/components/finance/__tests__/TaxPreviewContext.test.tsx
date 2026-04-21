@@ -224,4 +224,35 @@ describe('TaxPreviewContext', () => {
     expect(result.current.income1099.dividendIncome.value).toBe(500)
     expect(result.current.income1099.qualifiedDividends.value).toBe(400)
   })
+
+  it('wires Schedule SE into the computed tax return when reviewed K-1 SE income exists', async () => {
+    const k1Doc = {
+      id: 77,
+      form_type: 'k1',
+      genai_status: 'parsed',
+      is_reviewed: true,
+      tax_year: 2025,
+      parsed_data: {
+        schemaVersion: '2026.1',
+        formType: 'K-1-1065',
+        fields: {
+          B: { value: 'SE Partnership' },
+        },
+        codes: {
+          '14': [{ code: 'A', value: '10000' }],
+        },
+      },
+    }
+
+    ;(fetchWrapper.get as jest.Mock)
+      .mockResolvedValueOnce(makeResponse([k1Doc]))
+      .mockResolvedValue([])
+
+    const { result } = renderHook(() => useTaxPreview(), { wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    expect(result.current.taxReturn.scheduleSE?.netEarningsFromSE).toBe(10_000)
+    expect(result.current.taxReturn.schedule2?.selfEmploymentTax).toBeCloseTo(1_412.96, 2)
+    expect(result.current.taxReturn.schedule2?.totalAdditionalTaxes).toBeCloseTo(1_412.96, 2)
+  })
 })
