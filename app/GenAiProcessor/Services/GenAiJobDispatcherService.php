@@ -1194,7 +1194,7 @@ PROMPT;
                 'ubia' => is_numeric($rawSa['ubia'] ?? null) ? (float) $rawSa['ubia'] : 0.0,
                 'reitDividends' => is_numeric($rawSa['reit_dividends'] ?? null) ? (float) $rawSa['reit_dividends'] : 0.0,
                 'ptpIncome' => is_numeric($rawSa['ptp_income'] ?? null) ? (float) $rawSa['ptp_income'] : 0.0,
-                'isSstb' => (bool) ($rawSa['is_sstb'] ?? false),
+                'isSstb' => $this->parseBoolArg($rawSa['is_sstb'] ?? false),
             ];
             if (isset($rawSa['trade_name']) && $rawSa['trade_name'] !== '') {
                 $statementA['tradeName'] = (string) $rawSa['trade_name'];
@@ -1267,6 +1267,31 @@ PROMPT;
         }
 
         return $result;
+    }
+
+    /**
+     * Normalize a mixed bool/int/string value to a PHP bool.
+     * Handles strings like "false"/"0"/"no" that PHP's (bool) cast would incorrectly treat as true.
+     */
+    private function parseBoolArg(mixed $raw): bool
+    {
+        if (is_bool($raw)) {
+            return $raw;
+        }
+        if (is_int($raw) || is_float($raw)) {
+            return $raw !== 0;
+        }
+        if (is_string($raw)) {
+            $normalized = strtolower(trim($raw));
+            if (in_array($normalized, ['false', '0', 'no', 'n', ''], true)) {
+                return false;
+            }
+            if (in_array($normalized, ['true', '1', 'yes', 'y'], true)) {
+                return true;
+            }
+        }
+
+        return (bool) $raw;
     }
 
     private function buildW2ToolDefinition(): ToolDefinition

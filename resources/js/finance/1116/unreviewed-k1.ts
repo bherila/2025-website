@@ -1,5 +1,5 @@
-import { isFK1StructuredData } from '@/components/finance/k1'
 import { extractK3IncomeBreakdown } from '@/finance/1116/k3-to-1116'
+import { isFK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 
 function toNum(value: unknown): number {

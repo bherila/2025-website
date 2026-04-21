@@ -579,7 +579,7 @@ function UnroutedCodesCallout({ data }: { data: FK1StructuredData }) {
 function DestinationBadge({ routingNote }: { routingNote: string }) {
   const lower = routingNote.toLowerCase()
   const isSuspended = lower.includes('suspended') || lower.includes('not deductible') || lower.includes('carryover tracking')
-  const isUserAction = lower.includes('taxpayer election required') || lower.includes('check k-1 attached statement')
+  const isUserAction = lower.includes('taxpayer election required') || lower.includes('check k-1 attached statement') || lower.includes('not yet computed') || lower.includes('not yet implemented')
   const destinations = Array.from(routingNote.matchAll(/>>\s*([^|]+)/g))
     .map((m) => m[1]?.trim())
     .filter(Boolean) as string[]

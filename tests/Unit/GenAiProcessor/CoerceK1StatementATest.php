@@ -3,14 +3,14 @@
 namespace Tests\Unit\GenAiProcessor;
 
 use App\GenAiProcessor\Services\GenAiJobDispatcherService;
-use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
+use Tests\TestCase;
 
 /**
  * Tests the §199A Statement A extraction logic inside GenAiJobDispatcherService::coerceK1Args().
  *
- * coerceK1Args() is private; we invoke it via reflection so we can test the mapping
- * in isolation without standing up a full Laravel application context.
+ * coerceK1Args() is private; we invoke it via reflection. Extends Tests\TestCase so that
+ * Laravel facades (now(), Log::, etc.) are available during the call.
  */
 class CoerceK1StatementATest extends TestCase
 {
@@ -18,6 +18,7 @@ class CoerceK1StatementATest extends TestCase
     {
         $service = new GenAiJobDispatcherService;
         $method = new ReflectionMethod(GenAiJobDispatcherService::class, 'coerceK1Args');
+        $method->setAccessible(true);
 
         return $method->invoke($service, $args);
     }
@@ -102,12 +103,37 @@ class CoerceK1StatementATest extends TestCase
         $this->assertArrayNotHasKey('tradeName', $result['statementA']);
     }
 
-    public function test_statement_a_coerces_is_sstb_truthy_values(): void
+    public function test_statement_a_coerces_is_sstb_truthy_integer(): void
     {
         $result = $this->coerce([
             'statement_a' => [
                 'qualified_business_income' => 1000,
                 'is_sstb' => 1,
+            ],
+        ]);
+
+        $this->assertTrue($result['statementA']['isSstb']);
+    }
+
+    public function test_statement_a_string_false_does_not_set_is_sstb_true(): void
+    {
+        // PHP (bool)"false" = true — the normalized parser must handle this correctly
+        $result = $this->coerce([
+            'statement_a' => [
+                'qualified_business_income' => 1000,
+                'is_sstb' => 'false',
+            ],
+        ]);
+
+        $this->assertFalse($result['statementA']['isSstb']);
+    }
+
+    public function test_statement_a_string_true_sets_is_sstb(): void
+    {
+        $result = $this->coerce([
+            'statement_a' => [
+                'qualified_business_income' => 1000,
+                'is_sstb' => 'true',
             ],
         ]);
 

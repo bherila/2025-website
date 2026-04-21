@@ -267,7 +267,20 @@ describe('getK1CompletenessChecklist', () => {
   it('flags Box 20Z as missing when statementA is absent', () => {
     const data = makeData({ codes: { '20': [{ code: 'Z', value: '5000' }] } })
     const items = getK1CompletenessChecklist(data)
-    expect(items.find((i) => i.item.includes('20Z'))?.status).toBe('missing')
+    const item = items.find((i) => i.item.includes('20Z'))
+    expect(item?.status).toBe('missing')
+    expect(item?.item).toContain('not yet extracted')
+  })
+
+  it('marks Box 20Z as ok when statementA is present', () => {
+    const data = makeData({
+      codes: { '20': [{ code: 'Z', value: '5000' }] },
+      statementA: { qualifiedBusinessIncome: 5000, w2Wages: 0, ubia: 0, reitDividends: 0, ptpIncome: 0, isSstb: false },
+    })
+    const item = getK1CompletenessChecklist(data).find((i) => i.item.includes('20Z'))
+    expect(item?.status).toBe('ok')
+    expect(item?.item).toContain('extracted')
+    expect(item?.item).not.toContain('not yet')
   })
 
   it('flags Box 17 AMT items', () => {

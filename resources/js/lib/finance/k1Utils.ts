@@ -47,7 +47,7 @@ export function k1NetIncome(data: FK1StructuredData): number {
 
 // ── Review panel helpers ──────────────────────────────────────────────────────
 
-const CODED_BOXES = ['11', '13', '14', '17', '18', '19', '20']
+const CODED_BOXES = ['11', '13', '14', '15', '16', '17', '18', '19', '20']
 
 export interface UnroutedCode {
   box: string
@@ -90,9 +90,12 @@ export function getK1CompletenessChecklist(data: FK1StructuredData): Completenes
 
   const hasBox20Z = (data.codes['20'] ?? []).some((i) => i.code.toUpperCase() === 'Z')
   if (hasBox20Z) {
+    const hasStatementA = data.statementA != null
     items.push({
-      item: 'Box 20Z — §199A/QBI: Statement A fields not yet extracted (W-2 wages, UBIA, SSTB flag)',
-      status: (data as unknown as Record<string, unknown>)['statementA'] != null ? 'ok' : 'missing',
+      item: hasStatementA
+        ? 'Box 20Z — §199A/QBI: Statement A extracted (W-2 wages, UBIA, SSTB flag)'
+        : 'Box 20Z — §199A/QBI: Statement A not yet extracted (W-2 wages, UBIA, SSTB flag)',
+      status: hasStatementA ? 'ok' : 'missing',
     })
   }
 

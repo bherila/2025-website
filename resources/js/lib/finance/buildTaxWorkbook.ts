@@ -19,7 +19,7 @@ function parseDestinationRows(
 
   const destinations = Array.from(routingNote.matchAll(/>>\s*([^|]+)/g)).map((m) => m[1]?.trim()).filter(Boolean) as string[]
   const lower = routingNote.toLowerCase()
-  const status = lower.includes('taxpayer election required') || lower.includes('check k-1 attached statement')
+  const status = lower.includes('taxpayer election required') || lower.includes('check k-1 attached statement') || lower.includes('not yet computed') || lower.includes('not yet implemented')
     ? 'User action'
     : lower.includes('suspended') || lower.includes('carryover tracking') || lower.includes('not deductible')
       ? 'Suspended'
@@ -82,7 +82,7 @@ function buildK1WorksheetSheet(entry: NonNullable<TaxReturn1040['k1Docs']>[numbe
     })))
   }
 
-  const codedOrder = ['11', '13', '14', '17', '18', '19', '20']
+  const codedOrder = ['11', '13', '14', '15', '16', '17', '18', '19', '20']
   const codedRows = codedOrder.flatMap((box) => (entry.codes[box] ?? []).map((item) => ({ box, item })))
   if (codedRows.length > 0) {
     rows.push({ isHeader: true, description: '3. Part III — Coded Items' })
