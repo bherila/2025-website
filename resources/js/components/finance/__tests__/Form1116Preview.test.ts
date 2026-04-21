@@ -96,6 +96,7 @@ describe('computeForm1116Lines — sbpElections', () => {
     })
     const result = computeForm1116Lines({ reviewedK1Docs: [makeK1Doc(data)], reviewed1099Docs: [] })
     expect(result.sbpElections).toHaveLength(1)
+    expect(result.sbpElections![0]!.docId).toBe(1)
     expect(result.sbpElections![0]!.active).toBe(false)
     expect(result.sbpElections![0]!.sourcedByPartner).toBe(250)
   })

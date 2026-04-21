@@ -35,20 +35,11 @@ describe('extractQBIFromK1', () => {
     expect(result).not.toBeNull()
     expect(result!.qbiIncome).toBe(50_000)
     expect(result!.qbiComponent).toBeCloseTo(10_000)
-    expect(result!.ubia).toBe(0)
   })
 
   it('does NOT extract QBI from legacy Code S (pre-2023, no backwards compat)', () => {
     const data = makeData(box20({ code: 'S', value: '99999' }))
     expect(extractQBIFromK1(data, 'Acme LP')).toBeNull()
-  })
-
-  it('returns ubia as 0 (Statement A parsing deferred)', () => {
-    const data = makeData(box20(
-      { code: 'Z', value: '30000' },
-    ))
-    const result = extractQBIFromK1(data, 'Acme LP')
-    expect(result!.ubia).toBe(0)
   })
 
   it('clamps negative QBI to 0 for the component (loss does not give deduction)', () => {
@@ -81,6 +72,71 @@ describe('extractQBIFromK1', () => {
     const result = extractQBIFromK1(data, 'Multi LP')
     expect(result!.qbiIncome).toBe(50_000)
     expect(result!.sectionNotes).toBe('Business A\nBusiness B')
+  })
+
+  it('populates Statement A fields when statementA is present', () => {
+    const data: FK1StructuredData = {
+      ...makeData(box20({ code: 'Z', value: '0' })),
+      statementA: {
+        qualifiedBusinessIncome: 75_000,
+        w2Wages: 120_000,
+        ubia: 500_000,
+        reitDividends: 2_500,
+        ptpIncome: 1_000,
+        isSstb: false,
+        tradeName: 'Acme Fund LLC',
+      },
+    }
+    const result = extractQBIFromK1(data, 'Acme LP')
+    expect(result).not.toBeNull()
+    expect(result!.qbiIncome).toBe(75_000)
+    expect(result!.w2Wages).toBe(120_000)
+    expect(result!.ubia).toBe(500_000)
+    expect(result!.reitDividends).toBe(2_500)
+    expect(result!.ptpIncome).toBe(1_000)
+    expect(result!.isSstb).toBe(false)
+    expect(result!.qbiComponent).toBeCloseTo(15_000)
+  })
+
+  it('uses statementA.qualifiedBusinessIncome over Box 20 Z sum when statementA present', () => {
+    // Box 20 Z value = 50,000 but statementA says 75,000 — statementA wins
+    const data: FK1StructuredData = {
+      ...makeData(box20({ code: 'Z', value: '50000' })),
+      statementA: {
+        qualifiedBusinessIncome: 75_000,
+        w2Wages: 0,
+        ubia: 0,
+        reitDividends: 0,
+        ptpIncome: 0,
+        isSstb: false,
+      },
+    }
+    expect(extractQBIFromK1(data, 'LP')!.qbiIncome).toBe(75_000)
+  })
+
+  it('defaults Statement A fields to 0 when statementA absent', () => {
+    const data = makeData(box20({ code: 'Z', value: '10000' }))
+    const result = extractQBIFromK1(data, 'LP')!
+    expect(result.w2Wages).toBe(0)
+    expect(result.ubia).toBe(0)
+    expect(result.reitDividends).toBe(0)
+    expect(result.ptpIncome).toBe(0)
+    expect(result.isSstb).toBe(false)
+  })
+
+  it('flags SSTB entity', () => {
+    const data: FK1StructuredData = {
+      ...makeData(box20({ code: 'Z', value: '50000' })),
+      statementA: {
+        qualifiedBusinessIncome: 50_000,
+        w2Wages: 0,
+        ubia: 0,
+        reitDividends: 0,
+        ptpIncome: 0,
+        isSstb: true,
+      },
+    }
+    expect(extractQBIFromK1(data, 'Law Firm LP')!.isSstb).toBe(true)
   })
 })
 

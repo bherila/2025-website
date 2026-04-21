@@ -461,6 +461,7 @@ function TaxPreviewPageContent() {
   } = useTaxPreview()
 
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
+  const [reviewModalDoc, setReviewModalDoc] = useState<TaxDocument | undefined>(undefined)
   const [activeTab, setActiveTab] = useState<string>(TAX_TABS.overview)
   const [isExporting, setIsExporting] = useState(false)
 
@@ -502,6 +503,43 @@ function TaxPreviewPageContent() {
       setIsExporting(false)
     }
   }, [taxReturn])
+
+  const handleReviewK1Now = useCallback((docId: number) => {
+    const targetDoc = accountDocuments.find((doc) => doc.id === docId)
+    if (!targetDoc) {
+      return
+    }
+    setReviewModalDoc(targetDoc)
+    setReviewModalOpen(true)
+  }, [accountDocuments])
+
+  const handleBulkSetSbpElection = useCallback(async (active: boolean, docIds: number[]) => {
+    const failures: string[] = []
+
+    for (const docId of docIds) {
+      const targetDoc = accountDocuments.find((doc) => doc.id === docId)
+      if (!targetDoc || !isFK1StructuredData(targetDoc.parsed_data)) {
+        continue
+      }
+
+      try {
+        await fetchWrapper.put(`/api/finance/tax-documents/${docId}`, {
+          parsed_data: {
+            ...targetDoc.parsed_data,
+            k3Elections: {
+              ...targetDoc.parsed_data.k3Elections,
+              sourcedByPartnerAsUSSource: active,
+            },
+          },
+        })
+      } catch {
+        failures.push(targetDoc.parsed_data.fields['B']?.value?.split('\n')[0] ?? targetDoc.employment_entity?.display_name ?? `K-1 #${docId}`)
+      }
+    }
+
+    await refreshAll()
+    return failures
+  }, [accountDocuments, refreshAll])
 
   const year = selectedYear
   const { data, dataThroughQ1, dataThroughQ2, dataThroughQ3 } = (() => {
@@ -578,7 +616,10 @@ function TaxPreviewPageContent() {
             variant="outline"
             size="sm"
             className="gap-2"
-            onClick={() => setReviewModalOpen(true)}
+            onClick={() => {
+              setReviewModalDoc(undefined)
+              setReviewModalOpen(true)
+            }}
           >
             <ClipboardList className="h-4 w-4" />
             Review Documents
@@ -610,8 +651,13 @@ function TaxPreviewPageContent() {
       <TaxDocumentReviewModal
         open={reviewModalOpen}
         taxYear={selectedYear}
-        onClose={() => setReviewModalOpen(false)}
+        {...(reviewModalDoc ? { document: reviewModalDoc } : {})}
+        onClose={() => {
+          setReviewModalDoc(undefined)
+          setReviewModalOpen(false)
+        }}
         onDocumentReviewed={() => {
+          setReviewModalDoc(undefined)
           setReviewModalOpen(false)
           void refreshAll()
         }}
@@ -741,8 +787,11 @@ function TaxPreviewPageContent() {
         <TabsContent value={TAX_TABS.form1116} className="mt-0">
           <Form1116Preview
             reviewedK1Docs={reviewedK1Docs}
+            allK1Docs={accountDocuments.filter((doc) => doc.form_type === 'k1')}
             reviewed1099Docs={reviewed1099Docs}
             income1099={income1099}
+            onReviewNow={handleReviewK1Now}
+            onBulkSetSbpElection={handleBulkSetSbpElection}
           />
         </TabsContent>
 

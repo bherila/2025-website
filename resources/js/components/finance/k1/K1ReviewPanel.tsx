@@ -2,7 +2,7 @@
 
 import currency from 'currency.js'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { useState } from 'react'
+import { type ReactNode, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -10,12 +10,19 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { getSbpElection } from '@/lib/finance/k1Utils'
+import { K3_HANDLED_SECTION_IDS, renderK3SectionRows } from '@/finance/1116/k3-row-renderer'
+import { K1_CODE_ROUTING_NOTES } from '@/lib/finance/k1RoutingNotes'
+import {
+  getK1ActivityClassification,
+  getK1CompletenessChecklist,
+  getSbpElection,
+  getUnroutedCodes,
+} from '@/lib/finance/k1Utils'
 
 import { DetailsButton, fmtAmt, parseFieldVal } from '../tax-preview-primitives'
-import { BOX11_CODES, BOX13_CODES } from './k1-codes'
+import { BOX11_CODES, BOX13_CODES, BOX14_CODES, BOX17_CODES } from './k1-codes'
 import { K1_SPEC } from './k1-spec'
-import type { FK1StructuredData, K1CodeItem, K1FieldSpec, K3Section } from './k1-types'
+import type { FK1StructuredData, K1CodeItem, K1FieldSpec, K3Section, StatementA } from './k1-types'
 import K1CodesModal from './K1CodesModal'
 
 // ── Badge helpers ─────────────────────────────────────────────────────────────
@@ -280,7 +287,7 @@ function LineItem({
   )
 }
 
-function SubLine({ text }: { text: string }) {
+function SubLine({ text }: { text: string | ReactNode }) {
   return (
     <div className="px-3 py-0.5 pl-[5.5rem]">
       <span className="text-[10px] text-muted-foreground leading-tight italic">{text}</span>
@@ -349,6 +356,8 @@ function IncomeItemsBlock({
 
   if (incomeFieldLines.length === 0 && box11Items.length === 0) return null
 
+  const hasBox123 = incomeFieldLines.some(({ box }) => ['1', '2', '3'].includes(box))
+
   return (
     <div className="border border-border rounded-lg overflow-hidden">
       <SectionHeader title="Income Items — Part III" />
@@ -397,6 +406,7 @@ function IncomeItemsBlock({
             />
           )
         })()}
+        {hasBox123 && <PassiveClassificationHint data={data} />}
         <TotalLine label="Subtotal gross income items" value={subtotal} />
       </div>
     </div>
@@ -491,6 +501,165 @@ function DeductionItemsBlock({
   )
 }
 
+function AdditionalCodedBoxesBlock({
+  data,
+  onOpenCodes,
+}: {
+  data: FK1StructuredData
+  onOpenCodes: (box: string) => void
+}) {
+  const box14Items = data.codes['14'] ?? []
+  const box17Items = data.codes['17'] ?? []
+  if (box14Items.length === 0 && box17Items.length === 0) {
+    return null
+  }
+
+  const renderBox = (box: '14' | '17', items: K1CodeItem[]) => {
+    if (items.length === 0) return null
+    const total = items.reduce((acc, item) => acc.add(parseFieldVal(item.value) ?? 0), currency(0)).value
+    const firstCode = items[0]?.code?.toUpperCase() ?? ''
+    const uniqueCodes = [...new Set(items.map((i) => i.code.toUpperCase()))]
+    const labels = box === '14' ? BOX14_CODES : BOX17_CODES
+    const label = uniqueCodes.length === 1
+      ? (labels[firstCode] ?? `Code ${firstCode}`)
+      : `${box === '14' ? 'Self-employment' : 'AMT'} items (${uniqueCodes.length} codes)`
+    const routingNote = uniqueCodes.length === 1 ? K1_CODE_ROUTING_NOTES[box]?.[firstCode] : undefined
+
+    return (
+      <>
+        <LineItem
+          boxRef={uniqueCodes.length === 1 ? `Box ${box}${firstCode}` : `Box ${box}`}
+          label={label}
+          value={total}
+          onDetails={() => onOpenCodes(box)}
+        />
+        {routingNote && (
+          <SubLine text={<DestinationBadge routingNote={routingNote} />} />
+        )}
+      </>
+    )
+  }
+
+  return (
+    <div className="border border-border rounded-lg overflow-hidden">
+      <SectionHeader title="Additional Coded Items" />
+      <div className="divide-y divide-dashed divide-border/50">
+        {renderBox('14', box14Items)}
+        {renderBox('17', box17Items)}
+      </div>
+    </div>
+  )
+}
+
+// ── 5.1 Unrouted codes callout ────────────────────────────────────────────────
+
+function UnroutedCodesCallout({ data }: { data: FK1StructuredData }) {
+  const unrouted = getUnroutedCodes(data)
+  if (unrouted.length === 0) return null
+  return (
+    <div className="border border-amber-300 dark:border-amber-700 rounded-lg p-3 bg-amber-50 dark:bg-amber-950/30">
+      <div className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-1.5">
+        {unrouted.length} coded item{unrouted.length > 1 ? 's' : ''} with no routing — verify manually
+      </div>
+      <div className="space-y-0.5">
+        {unrouted.map(({ box, code, label, value }) => (
+          <div key={`${box}-${code}`} className="text-[11px] text-amber-700 dark:text-amber-400">
+            <span className="font-mono font-semibold">Box {box}{code}</span>
+            {' — '}{label}
+            {value ? `: ${value}` : ''}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── 5.2 Destination badge ─────────────────────────────────────────────────────
+
+function DestinationBadge({ routingNote }: { routingNote: string }) {
+  const lower = routingNote.toLowerCase()
+  const isSuspended = lower.includes('suspended') || lower.includes('not deductible') || lower.includes('carryover tracking')
+  const isUserAction = lower.includes('taxpayer election required') || lower.includes('check k-1 attached statement') || lower.includes('not yet computed') || lower.includes('not yet implemented')
+  const destinations = Array.from(routingNote.matchAll(/>>\s*([^|]+)/g))
+    .map((m) => m[1]?.trim())
+    .filter(Boolean) as string[]
+
+  if (isSuspended) {
+    return (
+      <span className="inline-flex items-center px-1.5 py-0 text-[9px] font-bold rounded bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300">
+        SUSPENDED
+      </span>
+    )
+  }
+  if (isUserAction) {
+    return (
+      <span className="inline-flex items-center px-1.5 py-0 text-[9px] font-bold rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+        ELECTION REQUIRED
+      </span>
+    )
+  }
+  if (destinations.length === 0) return null
+  return (
+    <span className="inline-flex flex-wrap gap-1">
+      {destinations.map((dest, i) => (
+        <span key={i} className="inline-flex items-center px-1.5 py-0 text-[9px] font-bold rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
+          → {dest}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+// ── 5.3 Passive/nonpassive classification hint ────────────────────────────────
+
+function PassiveClassificationHint({ data }: { data: FK1StructuredData }) {
+  const classification = getK1ActivityClassification(data)
+  if (classification === 'unknown') return null
+  const isPassive = classification === 'passive'
+  return (
+    <SubLine text={
+      isPassive
+        ? 'Activity is PASSIVE — losses subject to §469 limitation; see Form 8582'
+        : 'Activity is NONPASSIVE (general partner or trader) — §469 loss limits do not apply'
+    } />
+  )
+}
+
+// ── 5.4 Completeness checklist ────────────────────────────────────────────────
+
+function CompletenessChecklist({ data }: { data: FK1StructuredData }) {
+  const items = getK1CompletenessChecklist(data)
+  if (items.length === 0) return null
+  const actionCount = items.filter((i) => i.status !== 'ok').length
+  return (
+    <details className="group border border-border rounded-lg">
+      <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer list-none text-xs font-semibold select-none">
+        <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90 shrink-0" />
+        Review completeness
+        <span className="text-muted-foreground font-normal ml-auto">
+          {actionCount} item{actionCount !== 1 ? 's' : ''} need attention
+        </span>
+      </summary>
+      <div className="px-3 pb-2 space-y-1 border-t border-border">
+        {items.map((item, idx) => (
+          <div key={idx} className="flex items-start gap-2 text-[11px] pt-1">
+            <span className={
+              item.status === 'ok'
+                ? 'text-green-600 dark:text-green-400 shrink-0'
+                : item.status === 'missing'
+                  ? 'text-red-600 dark:text-red-400 shrink-0'
+                  : 'text-amber-600 dark:text-amber-400 shrink-0'
+            }>
+              {item.status === 'ok' ? '✓' : item.status === 'missing' ? '✗' : '⚠'}
+            </span>
+            <span className={item.status === 'ok' ? 'text-muted-foreground' : ''}>{item.item}</span>
+          </div>
+        ))}
+      </div>
+    </details>
+  )
+}
+
 // ── Box 20 Supplemental block ─────────────────────────────────────────────────
 
 const BOX20_LABELS: Record<string, string> = {
@@ -548,6 +717,36 @@ function SupplementalBlock({
             </>
           )
         })()}
+      </div>
+    </div>
+  )
+}
+
+// ── §199A Statement A block ───────────────────────────────────────────────────
+
+function StatementABlock({ sa }: { sa: StatementA }) {
+  return (
+    <div className="border border-green-300 dark:border-green-700 rounded-lg overflow-hidden">
+      <SectionHeader title="§199A Statement A (Box 20 Code Z)" />
+      <div className="divide-y divide-dashed divide-border/50">
+        {sa.tradeName && (
+          <LineItem boxRef="20Z" label="Trade or business name" raw={sa.tradeName} />
+        )}
+        <LineItem boxRef="20Z" label="Qualified business income" value={sa.qualifiedBusinessIncome} />
+        <LineItem boxRef="20Z" label="W-2 wages (Form 8995-A, Line 4)" value={sa.w2Wages} />
+        <LineItem boxRef="20Z" label="UBIA of qualified property" value={sa.ubia} />
+        {sa.reitDividends !== 0 && (
+          <LineItem boxRef="20Z" label="§199A(e)(3) REIT dividends" value={sa.reitDividends} />
+        )}
+        {sa.ptpIncome !== 0 && (
+          <LineItem boxRef="20Z" label="§199A(e)(5) qualified PTP income" value={sa.ptpIncome} />
+        )}
+        <LineItem
+          boxRef="20Z"
+          label="Specified Service Trade or Business (SSTB)"
+          raw={sa.isSstb ? 'YES — deduction phases out above income threshold' : 'No'}
+        />
+        <SubLine text="→ Form 8995 / 8995-A — QBI deduction (Form 1040 Line 13)" />
       </div>
     </div>
   )
@@ -1208,13 +1407,23 @@ function K3ElectionSection({
 // ── K-3 generic section fallback ──────────────────────────────────────────────
 
 function K3SectionFallback({ section }: { section: K3Section }) {
-  const HANDLED = ['header', 'part2_section1', 'part2_section2', 'part3_section2', 'part3_section4', 'part4']
-  if (HANDLED.includes(section.sectionId)) return null
+  if ((K3_HANDLED_SECTION_IDS as readonly string[]).includes(section.sectionId)) return null
+  const renderedRows = renderK3SectionRows(section).filter((row) => !row.isHeader)
 
   return (
     <div className="border border-border rounded-lg px-3 py-2">
       <div className="text-xs font-semibold">{section.title}</div>
       {section.notes && <p className="text-xs text-muted-foreground mt-1 italic">{section.notes}</p>}
+      {renderedRows.length > 0 && (
+        <div className="mt-2 space-y-1">
+          {renderedRows.slice(0, 6).map((row, idx) => (
+            <div key={idx} className="text-[11px] text-muted-foreground">
+              {row.description}
+              {row.amount != null ? `: ${fmtAmt(row.amount)}` : ''}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -1296,6 +1505,9 @@ export default function K1ReviewPanel({ data, onChange, readOnly = false }: K1Re
         </div>
       )}
 
+      {/* Unrouted codes callout — shows before main content so it's not missed */}
+      <UnroutedCodesCallout data={data} />
+
       {/* Entity / Partner Info — collapsible */}
       <EntityInfoSection data={data} readOnly={readOnly} onUpdate={updateField} />
 
@@ -1310,6 +1522,11 @@ export default function K1ReviewPanel({ data, onChange, readOnly = false }: K1Re
 
       {/* Box 20 Supplemental */}
       <SupplementalBlock data={data} onOpenCodes={(box) => setCodesModal({ box })} />
+
+      {/* §199A Statement A — rendered when extracted by AI */}
+      {data.statementA && <StatementABlock sa={data.statementA} />}
+
+      <AdditionalCodedBoxesBlock data={data} onOpenCodes={(box) => setCodesModal({ box })} />
 
       {/* Capital Account & Liabilities */}
       <CapitalAccountBlock data={data} />
@@ -1330,6 +1547,9 @@ export default function K1ReviewPanel({ data, onChange, readOnly = false }: K1Re
           ))}
         </div>
       )}
+
+      {/* Review completeness checklist */}
+      <CompletenessChecklist data={data} />
 
       {/* Warnings */}
       {data.warnings && data.warnings.length > 0 && (

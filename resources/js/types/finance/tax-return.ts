@@ -1,5 +1,6 @@
 import type { ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import type { ScheduleDData } from '@/lib/tax/scheduleD'
+import type { K3Section } from '@/types/finance/k1-data'
 
 export type { EstimatedTaxPaymentsData } from '@/lib/finance/estimatedTaxPayments'
 
@@ -98,7 +99,7 @@ export interface Form1116Lines {
   turboTaxAlert: boolean
   totalK1Box5?: number
   /** K-1 funds that have "Sourced by Partner" (col f) amounts in K-3 Part II, and whether the election to treat them as U.S. source is active. */
-  sbpElections?: { partnerName: string; active: boolean; sourcedByPartner: number }[]
+  sbpElections?: { docId: number; partnerName: string; active: boolean; sourcedByPartner: number }[]
 }
 
 export interface K1ExportEntry {
@@ -106,11 +107,12 @@ export interface K1ExportEntry {
   ein?: string
   fields: Record<string, string | number>
   codes: Record<string, { code: string; value: string }[]>
+  k3Sections?: K3Section[]
 }
 
 export interface K3ExportEntry {
   entityName: string
-  sections: { sectionId: string; title: string; data: unknown }[]
+  sections: K3Section[]
 }
 
 export interface Doc1099ExportEntry {
@@ -131,7 +133,7 @@ export interface OverviewRow {
 }
 
 export interface Form8995Lines {
-  entries: { label: string; qbiIncome: number; ubia: number; sectionNotes: string; qbiComponent: number }[]
+  entries: { label: string; qbiIncome: number; w2Wages: number; ubia: number; reitDividends: number; ptpIncome: number; isSstb: boolean; sectionNotes: string; qbiComponent: number }[]
   totalQBI: number
   totalQBIComponent: number
   totalIncome: number
