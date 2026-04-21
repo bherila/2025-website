@@ -94,6 +94,21 @@ export default function Form8995Preview({ reviewedK1Docs, totalIncome, selectedY
         {entries.map((entry, i) => (
           <div key={i} className="space-y-0.5 pb-2 border-b last:border-0 last:pb-0">
             <FormLine label={`${entry.label} — QBI income`} value={entry.qbiIncome} />
+            {entry.isSstb && (
+              <FormLine label={`${entry.label} — SSTB`} raw="Specified Service Trade or Business — deduction phases out above threshold" />
+            )}
+            {entry.w2Wages !== 0 && (
+              <FormLine label={`${entry.label} — W-2 wages (Form 8995-A, Line 4)`} value={entry.w2Wages} />
+            )}
+            {entry.ubia !== 0 && (
+              <FormLine label={`${entry.label} — UBIA of qualified property`} value={entry.ubia} />
+            )}
+            {(entry.reitDividends !== 0) && (
+              <FormLine label={`${entry.label} — §199A REIT dividends`} value={entry.reitDividends} />
+            )}
+            {(entry.ptpIncome !== 0) && (
+              <FormLine label={`${entry.label} — Qualified PTP income`} value={entry.ptpIncome} />
+            )}
             <FormLine label={`${entry.label} — 20% QBI component`} value={entry.qbiComponent} />
             {entry.sectionNotes && (
               <FormLine label={`${entry.label} — Section 199A statement notes`} raw={entry.sectionNotes} />

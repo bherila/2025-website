@@ -102,6 +102,16 @@ export interface QBIEntry {
   label: string
   /** Box 20 Code Z — QBI income (loss) from this activity (TY 2023+). */
   qbiIncome: number
+  /** W-2 wages paid by the entity — from Statement A. Used for W-2 wage limitation on Form 8995-A. */
+  w2Wages: number
+  /** UBIA of qualified property — from Statement A. */
+  ubia: number
+  /** REIT dividends — from Statement A (§199A(e)(3)). */
+  reitDividends: number
+  /** Qualified PTP income — from Statement A (§199A(e)(5)). */
+  ptpIncome: number
+  /** Whether this is a Specified Service Trade or Business — deduction phases out above threshold. */
+  isSstb: boolean
   /** Free-form notes from Box 20 Code Z. */
   sectionNotes: string
   /** 20% × max(qbiIncome, 0) — the raw QBI component before any caps. */
@@ -111,12 +121,18 @@ export interface QBIEntry {
 export function extractQBIFromK1(data: FK1StructuredData, label: string): QBIEntry | null {
   // TY 2023+: Section 199A information is reported in Box 20 Code Z (with Statement A attached).
   // Pre-2023 codes S and V are no longer read — see issue #269 for the no-backwards-compat decision.
-  const qbiIncome = getCodeValue(data.codes, '20', 'Z')
+  const qbiIncome = data.statementA?.qualifiedBusinessIncome ?? getCodeValue(data.codes, '20', 'Z')
   if (qbiIncome === 0) return null
 
+  const sa = data.statementA
   return {
     label,
     qbiIncome,
+    w2Wages: sa?.w2Wages ?? 0,
+    ubia: sa?.ubia ?? 0,
+    reitDividends: sa?.reitDividends ?? 0,
+    ptpIncome: sa?.ptpIncome ?? 0,
+    isSstb: sa?.isSstb ?? false,
     sectionNotes: getCodeNotes(data.codes, '20', 'Z'),
     qbiComponent: currency(Math.max(qbiIncome, 0)).multiply(0.2).value,
   }
