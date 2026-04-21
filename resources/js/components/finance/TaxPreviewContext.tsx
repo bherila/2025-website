@@ -38,6 +38,8 @@ import type { OverviewRow, TaxReturn1040, UserDeductionEntry } from '@/types/fin
 
 import type { ScheduleCResponse, YearData } from './ScheduleCPreview'
 
+const FEDERAL_TAX_STATE = ''
+
 export interface TaxPreviewShellData {
   year: number
   availableYears: number[]
@@ -705,10 +707,14 @@ export function TaxPreviewProvider({
     )
     const regularTaxEstimate = calculateTax(
       String(year),
-      '',
+      FEDERAL_TAX_STATE,
       currency(taxableIncomeEstimate),
       isMarried ? 'Married Filing Jointly' : 'Single',
     ).totalTax.value
+    // Until AMT-specific Form 1116 limitation logic is implemented, mirror the
+    // regular FTC amount on the AMT side so AMT still reflects foreign-tax-credit
+    // interaction instead of assuming line 8 is always zero.
+    const estimatedAmtForeignTaxCredit = form1116.totalForeignTaxes
     const form6251 = computeForm6251Lines({
       taxableIncome: taxableIncomeEstimate,
       year,
@@ -730,7 +736,7 @@ export function TaxPreviewProvider({
       scheduleA,
       regularTax: regularTaxEstimate,
       regularForeignTaxCredit: form1116.totalForeignTaxes,
-      amtForeignTaxCredit: form1116.totalForeignTaxes,
+      amtForeignTaxCredit: estimatedAmtForeignTaxCredit,
     })
     const schedule2 = {
       altMinimumTax: form6251.amt,

@@ -18,6 +18,8 @@ export const AMT_RATE_SPLIT_THRESHOLD: Record<number, { single: number; mfj: num
   2025: { single: 239_100, mfj: 239_100 },
 }
 
+const DEFAULT_AMT_YEAR = 2025
+
 function normalizeNumericString(value: string): string {
   const trimmed = value.trim()
   if (!trimmed) {
@@ -53,7 +55,7 @@ function getAmtTableValue(
   year: number,
   isMarried: boolean,
 ): number {
-  const row = table[year] ?? table[2025] ?? { single: 88_100, mfj: 137_000 }
+  const row = table[year] ?? table[DEFAULT_AMT_YEAR] ?? { single: 0, mfj: 0 }
   return isMarried ? row.mfj : row.single
 }
 
@@ -154,7 +156,7 @@ export function computeForm6251Lines({
       }
 
       if (code === 'E') {
-        const deductionAmount = -Math.abs(rawAmount)
+        const deductionAmount = rawAmount > 0 ? -rawAmount : rawAmount
         line2tIntangibleDrillingCosts = currency(line2tIntangibleDrillingCosts).add(deductionAmount).value
         sourceEntries.push({
           label,
