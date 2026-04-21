@@ -335,12 +335,28 @@ describe('getK1sWithSEItems', () => {
     expect(getK1sWithSEItems([makeData()])).toEqual([])
   })
 
-  it('returns entity name for K-1 with Box 14 codes', () => {
+  it('returns entity name for K-1 with Box 14 code A', () => {
     const data = makeData({
       fields: { B: { value: 'Self-Employed LLC' } },
       codes: { '14': [{ code: 'A', value: '80000' }] },
     })
     expect(getK1sWithSEItems([data])).toEqual(['Self-Employed LLC'])
+  })
+
+  it('returns entity name for K-1 with Box 14 code C', () => {
+    const data = makeData({
+      fields: { B: { value: 'SE Farm LLC' } },
+      codes: { '14': [{ code: 'c', value: '12000' }] },
+    })
+    expect(getK1sWithSEItems([data])).toEqual(['SE Farm LLC'])
+  })
+
+  it('does not flag K-1 with Box 14 codes other than A/C', () => {
+    const data = makeData({
+      fields: { B: { value: 'Non-SE Partnership' } },
+      codes: { '14': [{ code: 'B', value: '1000' }] },
+    })
+    expect(getK1sWithSEItems([data])).toEqual([])
   })
 })
 
@@ -357,11 +373,18 @@ describe('getK1sWithPassiveLosses', () => {
     expect(getK1sWithPassiveLosses([data])).toEqual(['Real Estate LP'])
   })
 
-  it('detects negative Box 2 rental loss', () => {
+  it('does not flag Box 2 rental loss by itself', () => {
     const data = makeData({
       fields: { B: { value: 'Rental LP' }, '2': { value: '-5000' } },
     })
-    expect(getK1sWithPassiveLosses([data])).toEqual(['Rental LP'])
+    expect(getK1sWithPassiveLosses([data])).toEqual([])
+  })
+
+  it('does not flag negative Box 1 for nonpassive activities', () => {
+    const data = makeData({
+      fields: { B: { value: 'Trader GP LLC' }, '1': { value: '-5000' }, G: { value: 'General Partner' } },
+    })
+    expect(getK1sWithPassiveLosses([data])).toEqual([])
   })
 
   it('does not flag entities with only positive income', () => {

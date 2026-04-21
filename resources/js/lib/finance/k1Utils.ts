@@ -96,18 +96,20 @@ export function getK1sWithAMTItems(k1s: FK1StructuredData[]): string[] {
 /** Returns entity names of reviewed K-1s that have Box 14 self-employment codes (Schedule SE not yet computed). */
 export function getK1sWithSEItems(k1s: FK1StructuredData[]): string[] {
   return k1s
-    .filter((d) => (d.codes['14'] ?? []).length > 0)
+    .filter((d) => (d.codes['14'] ?? []).some((item) => {
+      const code = item.code.toUpperCase()
+      return code === 'A' || code === 'C'
+    }))
     .map((d) => d.fields['B']?.value?.split('\n')[0] ?? 'Unknown entity')
 }
 
-/** Returns entity names of reviewed K-1s that have Box 1/2/3 losses not wired into Form 8582. */
+/** Returns entity names of reviewed K-1s that have negative Box 1 losses that may need passive-loss review. */
 export function getK1sWithPassiveLosses(k1s: FK1StructuredData[]): string[] {
   return k1s
     .filter((d) => {
       const box1 = parseK1Field(d, '1')
-      const box2 = parseK1Field(d, '2')
-      const box3 = parseK1Field(d, '3')
-      return box1 < 0 || box2 < 0 || box3 < 0
+      if (box1 >= 0) return false
+      return getK1ActivityClassification(d) !== 'nonpassive'
     })
     .map((d) => d.fields['B']?.value?.split('\n')[0] ?? 'Unknown entity')
 }
