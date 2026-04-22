@@ -38,7 +38,7 @@ class PalCarryforwardControllerTest extends TestCase
             'ordinary_carryover' => -6280.00,
             'short_term_carryover' => 0,
             'long_term_carryover' => 0,
-        ])->assertCreated()
+        ])->assertOk()
             ->assertJsonFragment([
                 'activity_name' => 'AQR Diversified Arbitrage Fund',
                 'ordinary_carryover' => -6280.0,
@@ -58,7 +58,7 @@ class PalCarryforwardControllerTest extends TestCase
             'tax_year' => 2025,
             'activity_name' => 'Fund A',
             'ordinary_carryover' => -1000,
-        ])->assertCreated();
+        ])->assertOk();
 
         $this->postJson(self::ENDPOINT, [
             'tax_year' => 2025,
@@ -159,7 +159,7 @@ class PalCarryforwardControllerTest extends TestCase
             'ordinary_carryover' => -1234.56,
         ]);
 
-        $response->assertCreated();
+        $response->assertOk();
         $this->assertIsFloat($response->json('ordinary_carryover'));
         $this->assertEqualsWithDelta(-1234.56, $response->json('ordinary_carryover'), 0.001);
     }

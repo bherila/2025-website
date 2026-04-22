@@ -253,8 +253,12 @@ function PalCarryforwardInput({ year, form8582, carryforwards, onChange }: PalCa
   const [committing, setCommitting] = useState(false)
 
   async function reloadCarryforwards(targetYear: number): Promise<PalCarryforwardEntry[]> {
-    const updated = (await fetchWrapper.get(`${TAX_LOSS_CARRYFORWARD_ENDPOINT}?year=${targetYear}`)) as PalCarryforwardEntry[]
-    return Array.isArray(updated) ? updated : []
+    const updated = (await fetchWrapper.get(`${TAX_LOSS_CARRYFORWARD_ENDPOINT}?year=${targetYear}`)) as unknown
+    if (!Array.isArray(updated)) {
+      throw new Error(`Expected carryforwards array for ${targetYear}`)
+    }
+
+    return updated as PalCarryforwardEntry[]
   }
 
   function resetForm(): void {
