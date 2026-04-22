@@ -139,4 +139,108 @@ class CoerceK1StatementATest extends TestCase
 
         $this->assertTrue($result['statementA']['isSstb']);
     }
+
+    // ── passive_activities (Box 23 supplemental statement) ───────────────────
+
+    public function test_passive_activities_absent_when_not_in_args(): void
+    {
+        $result = $this->coerce([]);
+        $this->assertArrayNotHasKey('passiveActivities', $result);
+    }
+
+    public function test_passive_activities_absent_when_empty_array(): void
+    {
+        $result = $this->coerce(['passive_activities' => []]);
+        $this->assertArrayNotHasKey('passiveActivities', $result);
+    }
+
+    public function test_passive_activities_maps_income_and_loss(): void
+    {
+        $result = $this->coerce([
+            'passive_activities' => [
+                ['name' => 'Section 1256 activity', 'current_income' => 32545.0, 'current_loss' => 0.0],
+                ['name' => 'Other passive activity', 'current_income' => 0.0, 'current_loss' => -38825.0],
+            ],
+        ]);
+
+        $pa = $result['passiveActivities'] ?? null;
+        $this->assertNotNull($pa);
+        $this->assertCount(2, $pa);
+
+        $this->assertSame('Section 1256 activity', $pa[0]['name']);
+        $this->assertSame(32545.0, $pa[0]['currentIncome']);
+        $this->assertSame(0.0, $pa[0]['currentLoss']);
+
+        $this->assertSame('Other passive activity', $pa[1]['name']);
+        $this->assertSame(0.0, $pa[1]['currentIncome']);
+        $this->assertSame(-38825.0, $pa[1]['currentLoss']);
+    }
+
+    public function test_passive_activities_clamps_income_to_non_negative(): void
+    {
+        // current_income must never be negative; clamp to 0.
+        $result = $this->coerce([
+            'passive_activities' => [
+                ['name' => 'Loss-only activity', 'current_income' => -5000.0, 'current_loss' => -5000.0],
+            ],
+        ]);
+
+        $pa = $result['passiveActivities'][0];
+        $this->assertSame(0.0, $pa['currentIncome']);
+        $this->assertSame(-5000.0, $pa['currentLoss']);
+    }
+
+    public function test_passive_activities_clamps_loss_to_non_positive(): void
+    {
+        // current_loss must never be positive; clamp to 0.
+        $result = $this->coerce([
+            'passive_activities' => [
+                ['name' => 'Income-only activity', 'current_income' => 10000.0, 'current_loss' => 10000.0],
+            ],
+        ]);
+
+        $pa = $result['passiveActivities'][0];
+        $this->assertSame(10000.0, $pa['currentIncome']);
+        $this->assertSame(0.0, $pa['currentLoss']);
+    }
+
+    public function test_passive_activities_drops_entries_without_name(): void
+    {
+        $result = $this->coerce([
+            'passive_activities' => [
+                ['current_income' => 1000.0, 'current_loss' => 0.0], // missing 'name'
+                ['name' => 'Valid activity', 'current_income' => 500.0, 'current_loss' => 0.0],
+            ],
+        ]);
+
+        $pa = $result['passiveActivities'] ?? null;
+        $this->assertNotNull($pa);
+        $this->assertCount(1, $pa);
+        $this->assertSame('Valid activity', $pa[0]['name']);
+    }
+
+    public function test_passive_activities_drops_non_array_items(): void
+    {
+        $result = $this->coerce([
+            'passive_activities' => [
+                'not-an-array',
+                ['name' => 'Real activity', 'current_income' => 100.0, 'current_loss' => 0.0],
+            ],
+        ]);
+
+        $this->assertCount(1, $result['passiveActivities']);
+    }
+
+    public function test_passive_activities_defaults_missing_numeric_fields_to_zero(): void
+    {
+        $result = $this->coerce([
+            'passive_activities' => [
+                ['name' => 'Activity with no amounts'],
+            ],
+        ]);
+
+        $pa = $result['passiveActivities'][0];
+        $this->assertSame(0.0, $pa['currentIncome']);
+        $this->assertSame(0.0, $pa['currentLoss']);
+    }
 }
