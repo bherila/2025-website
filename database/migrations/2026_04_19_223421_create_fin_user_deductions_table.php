@@ -8,7 +8,11 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::createIfNotExists('fin_user_deductions', function (Blueprint $table) {
+        if (Schema::hasTable('fin_user_deductions')) {
+            return;
+        }
+
+        Schema::create('fin_user_deductions', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
             $table->unsignedSmallInteger('tax_year');
