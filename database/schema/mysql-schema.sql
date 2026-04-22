@@ -310,6 +310,7 @@ CREATE TABLE `client_time_entries` (
   `user_id` bigint(20) unsigned DEFAULT NULL,
   `creator_user_id` bigint(20) unsigned DEFAULT NULL,
   `is_billable` tinyint(1) NOT NULL DEFAULT 1,
+  `is_deferred_billing` tinyint(1) NOT NULL DEFAULT 0,
   `job_type` varchar(255) NOT NULL DEFAULT 'Software Development',
   `client_invoice_line_id` bigint(20) unsigned DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
@@ -323,6 +324,7 @@ CREATE TABLE `client_time_entries` (
   KEY `client_time_entries_user_id_index` (`user_id`),
   KEY `client_time_entries_date_worked_index` (`date_worked`),
   KEY `client_time_entries_client_invoice_line_id_index` (`client_invoice_line_id`),
+  KEY `client_time_entries_is_deferred_billing_index` (`is_deferred_billing`),
   CONSTRAINT `client_time_entries_client_company_id_foreign` FOREIGN KEY (`client_company_id`) REFERENCES `client_companies` (`id`) ON DELETE CASCADE,
   CONSTRAINT `client_time_entries_client_invoice_line_id_foreign` FOREIGN KEY (`client_invoice_line_id`) REFERENCES `client_invoice_lines` (`client_invoice_line_id`),
   CONSTRAINT `client_time_entries_creator_user_id_foreign` FOREIGN KEY (`creator_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
@@ -433,7 +435,6 @@ CREATE TABLE `files_for_fin_accounts` (
   `download_history` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT 'Array of {user_id, downloaded_at}' CHECK (json_valid(`download_history`)),
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
-  `deleted_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `files_for_fin_accounts_uploaded_by_user_id_foreign` (`uploaded_by_user_id`),
   KEY `files_for_fin_accounts_acct_id_index` (`acct_id`),
@@ -497,7 +498,6 @@ CREATE TABLE `fin_account_line_item_links` (
   `parent_t_id` bigint(20) unsigned NOT NULL COMMENT 'The parent transaction ID (typically the source/withdrawal)',
   `child_t_id` bigint(20) unsigned NOT NULL COMMENT 'The child transaction ID (typically the destination/deposit)',
   `when_added` timestamp NOT NULL DEFAULT current_timestamp(),
-  `when_deleted` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `fin_account_line_item_links_parent_t_id_child_t_id_unique` (`parent_t_id`,`child_t_id`),
   KEY `fin_account_line_item_links_parent_t_id_index` (`parent_t_id`),
@@ -514,7 +514,6 @@ CREATE TABLE `fin_account_line_item_tag_map` (
   `t_id` bigint(20) unsigned NOT NULL,
   `tag_id` bigint(20) unsigned NOT NULL,
   `when_added` timestamp NOT NULL DEFAULT current_timestamp(),
-  `when_deleted` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `fin_account_line_item_tag_map_t_id_tag_id_unique` (`t_id`,`tag_id`),
   KEY `fin_account_line_item_tag_map_tag_id_index` (`tag_id`),
@@ -560,7 +559,6 @@ CREATE TABLE `fin_account_line_items` (
   `listing_exch` varchar(50) DEFAULT NULL,
   `multiplier` int(11) DEFAULT NULL,
   `when_added` timestamp NULL DEFAULT NULL,
-  `when_deleted` timestamp NULL DEFAULT NULL,
   `t_harvested_amount` decimal(13,4) DEFAULT NULL,
   `t_is_not_duplicate` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'When true, this transaction has been verified as not a duplicate',
   `t_date_posted` varchar(10) DEFAULT NULL,
@@ -591,6 +589,7 @@ CREATE TABLE `fin_account_lots` (
   `statement_id` bigint(20) unsigned DEFAULT NULL COMMENT 'Statement this lot was imported from',
   `open_t_id` bigint(20) unsigned DEFAULT NULL COMMENT 'Transaction that opened this lot (buy)',
   `close_t_id` bigint(20) unsigned DEFAULT NULL COMMENT 'Transaction that closed this lot (sell)',
+  `tax_document_id` bigint(20) unsigned DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`lot_id`),
@@ -600,10 +599,12 @@ CREATE TABLE `fin_account_lots` (
   KEY `fin_account_lots_sale_date_index` (`sale_date`),
   KEY `fin_account_lots_open_t_id_index` (`open_t_id`),
   KEY `fin_account_lots_close_t_id_index` (`close_t_id`),
+  KEY `fin_account_lots_tax_document_id_index` (`tax_document_id`),
   CONSTRAINT `fin_account_lots_acct_id_foreign` FOREIGN KEY (`acct_id`) REFERENCES `fin_accounts` (`acct_id`) ON DELETE CASCADE,
   CONSTRAINT `fin_account_lots_close_t_id_foreign` FOREIGN KEY (`close_t_id`) REFERENCES `fin_account_line_items` (`t_id`) ON DELETE SET NULL,
   CONSTRAINT `fin_account_lots_open_t_id_foreign` FOREIGN KEY (`open_t_id`) REFERENCES `fin_account_line_items` (`t_id`) ON DELETE SET NULL,
-  CONSTRAINT `fin_account_lots_statement_id_foreign` FOREIGN KEY (`statement_id`) REFERENCES `fin_statements` (`statement_id`) ON DELETE SET NULL
+  CONSTRAINT `fin_account_lots_statement_id_foreign` FOREIGN KEY (`statement_id`) REFERENCES `fin_statements` (`statement_id`) ON DELETE SET NULL,
+  CONSTRAINT `fin_account_lots_tax_document_id_foreign` FOREIGN KEY (`tax_document_id`) REFERENCES `fin_tax_documents` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_account_tag`;
@@ -617,7 +618,6 @@ CREATE TABLE `fin_account_tag` (
   `tax_characteristic` enum('business_income','business_returns','sce_advertising','sce_car_truck','sce_commissions_fees','sce_contract_labor','sce_depletion','sce_depreciation','sce_employee_benefits','sce_insurance','sce_interest_mortgage','sce_interest_other','sce_legal_professional','sce_office_expenses','sce_pension','sce_rent_vehicles','sce_rent_property','sce_repairs_maintenance','sce_supplies','sce_taxes_licenses','sce_travel','sce_meals','sce_utilities','sce_wages','sce_other','scho_rent','scho_mortgage_interest','scho_real_estate_taxes','scho_insurance','scho_utilities','scho_repairs_maintenance','scho_security','scho_depreciation','scho_cleaning','scho_hoa','scho_casualty_losses','interest','ordinary_dividend','qualified_dividend','other_ordinary_income','w2_wages','w2_other_comp','us_government_interest') DEFAULT NULL,
   `employment_entity_id` bigint(20) unsigned DEFAULT NULL,
   `when_added` timestamp NOT NULL DEFAULT current_timestamp(),
-  `when_deleted` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`tag_id`),
   UNIQUE KEY `fin_account_tag_tag_userid_tag_label_unique` (`tag_userid`,`tag_label`),
   KEY `fin_account_tag_employment_entity_id_foreign` (`employment_entity_id`),
@@ -632,7 +632,6 @@ CREATE TABLE `fin_accounts` (
   `acct_owner` varchar(50) NOT NULL,
   `acct_name` varchar(50) NOT NULL,
   `acct_number` varchar(255) DEFAULT NULL,
-  `when_deleted` timestamp NULL DEFAULT NULL,
   `acct_last_balance` varchar(20) NOT NULL DEFAULT '0',
   `acct_last_balance_date` timestamp NULL DEFAULT NULL,
   `acct_sort_order` int(11) NOT NULL DEFAULT 0,
@@ -682,6 +681,26 @@ CREATE TABLE `fin_equity_awards` (
   `vest_price` decimal(10,2) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `fin_equity_awards_grant_date_award_id_vest_date_symbol_unique` (`grant_date`,`award_id`,`vest_date`,`symbol`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_pal_carryforwards`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_pal_carryforwards` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(20) unsigned NOT NULL,
+  `tax_year` smallint(5) unsigned NOT NULL,
+  `activity_name` varchar(255) NOT NULL,
+  `activity_ein` varchar(20) DEFAULT NULL,
+  `ordinary_carryover` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `short_term_carryover` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `long_term_carryover` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `fin_pal_carryforwards_user_id_tax_year_activity_name_unique` (`user_id`,`tax_year`,`activity_name`),
+  KEY `fin_pal_carryforwards_user_id_tax_year_index` (`user_id`,`tax_year`),
+  CONSTRAINT `fin_pal_carryforwards_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_payslip`;
@@ -734,7 +753,6 @@ CREATE TABLE `fin_payslip` (
   `other` mediumtext DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
-  `deleted_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`payslip_id`),
   UNIQUE KEY `fin_payslip_uid_period_start_period_end_pay_date_unique` (`uid`,`period_start`,`period_end`,`pay_date`),
   KEY `fin_payslip_employment_entity_id_foreign` (`employment_entity_id`),
@@ -853,7 +871,6 @@ CREATE TABLE `fin_rules` (
   `stop_processing_if_match` tinyint(1) NOT NULL DEFAULT 0,
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
-  `deleted_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `fin_rules_user_id_index` (`user_id`),
   CONSTRAINT `fin_rules_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`)
@@ -1007,6 +1024,29 @@ CREATE TABLE `fin_statements` (
   CONSTRAINT `fin_statements_genai_job_id_foreign` FOREIGN KEY (`genai_job_id`) REFERENCES `genai_import_jobs` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_tax_document_accounts`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_tax_document_accounts` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `tax_document_id` bigint(20) unsigned NOT NULL,
+  `account_id` bigint(20) unsigned DEFAULT NULL,
+  `form_type` varchar(50) NOT NULL,
+  `tax_year` int(11) NOT NULL,
+  `ai_identifier` varchar(100) DEFAULT NULL,
+  `ai_account_name` varchar(255) DEFAULT NULL,
+  `is_reviewed` tinyint(1) NOT NULL DEFAULT 0,
+  `notes` text DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `fin_tax_document_accounts_tax_document_id_index` (`tax_document_id`),
+  KEY `fin_tax_document_accounts_account_id_index` (`account_id`),
+  KEY `fin_tax_document_accounts_account_id_tax_year_index` (`account_id`,`tax_year`),
+  CONSTRAINT `fin_tax_document_accounts_account_id_foreign` FOREIGN KEY (`account_id`) REFERENCES `fin_accounts` (`acct_id`) ON DELETE SET NULL,
+  CONSTRAINT `fin_tax_document_accounts_tax_document_id_foreign` FOREIGN KEY (`tax_document_id`) REFERENCES `fin_tax_documents` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_tax_documents`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -1032,7 +1072,6 @@ CREATE TABLE `fin_tax_documents` (
   `download_history` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`download_history`)),
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
-  `deleted_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `fin_tax_documents_user_id_index` (`user_id`),
   KEY `fin_tax_documents_tax_year_index` (`tax_year`),
@@ -1059,6 +1098,39 @@ CREATE TABLE `fin_transaction_non_duplicate_pairs` (
   KEY `fin_transaction_non_duplicate_pairs_t_id_2_foreign` (`t_id_2`),
   CONSTRAINT `fin_transaction_non_duplicate_pairs_t_id_1_foreign` FOREIGN KEY (`t_id_1`) REFERENCES `fin_account_line_items` (`t_id`) ON DELETE CASCADE,
   CONSTRAINT `fin_transaction_non_duplicate_pairs_t_id_2_foreign` FOREIGN KEY (`t_id_2`) REFERENCES `fin_account_line_items` (`t_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_user_deductions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_user_deductions` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(20) unsigned NOT NULL,
+  `tax_year` smallint(5) unsigned NOT NULL,
+  `category` varchar(40) NOT NULL,
+  `description` varchar(255) DEFAULT NULL,
+  `amount` decimal(12,2) NOT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `fin_user_deductions_user_id_tax_year_index` (`user_id`,`tax_year`),
+  CONSTRAINT `fin_user_deductions_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_user_tax_states`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_user_tax_states` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(20) unsigned NOT NULL,
+  `tax_year` smallint(5) unsigned NOT NULL,
+  `state_code` varchar(2) NOT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `fin_user_tax_states_user_id_tax_year_state_code_unique` (`user_id`,`tax_year`,`state_code`),
+  KEY `fin_user_tax_states_user_id_tax_year_index` (`user_id`,`tax_year`),
+  CONSTRAINT `fin_user_tax_states_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `genai_daily_quota`;
@@ -1653,3 +1725,13 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (92,'2026_04_08_100
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (93,'2026_04_10_100046_add_1099_nec_and_1099_r_to_fin_tax_documents_form_type',56);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (94,'2026_04_10_200000_add_broker_form_types_to_fin_tax_documents',57);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (95,'2026_04_10_200001_make_tax_document_file_fields_nullable',57);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (96,'2026_04_11_000001_convert_finance_domain_to_hard_delete',58);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (97,'2026_04_11_062652_create_fin_tax_document_accounts_table',59);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (98,'2026_04_11_192648_add_tax_document_id_to_fin_account_lots',59);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (99,'2026_04_11_210000_add_ai_fields_to_fin_tax_document_accounts',60);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (100,'2026_04_11_231927_normalize_legacy_k1_schema_version',61);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (101,'2026_04_19_063834_add_is_deferred_billing_to_client_time_entries',62);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (102,'2026_04_19_223420_create_fin_user_deductions_table',63);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (103,'2026_04_19_223420_create_fin_user_tax_states_table',63);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (104,'2026_04_19_223421_create_fin_user_deductions_table',64);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (105,'2026_04_20_033435_create_fin_pal_carryforwards_table',64);
