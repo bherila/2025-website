@@ -298,6 +298,19 @@ describe('getK1CompletenessChecklist', () => {
     expect(item?.item).toContain('Schedule SE tab')
   })
 
+  it('flags unknown Box 1 classification for Form 8582 review', () => {
+    const data = makeData({
+      fields: {
+        '1': { value: '-3200' },
+        B: { value: 'Unclassified Partnership' },
+      },
+    })
+
+    expect(getK1CompletenessChecklist(data).some((i) =>
+      i.item.includes('treated as passive by default') && i.status === 'needs_user_action',
+    )).toBe(true)
+  })
+
   it('flags K-3 sections when present', () => {
     const data = makeData({
       k3: { sections: [{ sectionId: 'part2_section1', title: 'Part II', data: { rows: [] } }] },

@@ -25,7 +25,7 @@
 import currency from 'currency.js'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
-import { parseK1Field } from '@/lib/finance/k1Utils'
+import { getK1ActivityClassification, parseK1Field } from '@/lib/finance/k1Utils'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import type { Form8582ActivityLine, Form8582Lines } from '@/types/finance/tax-return'
@@ -86,9 +86,12 @@ export interface ActivityInput {
 /**
  * Extracts Form 8582 activities from reviewed K-1 docs, direct rentals, and PAL carryforwards.
  *
+ * Box 1 = ordinary business income/loss — included only when the K-1 activity is
+ * passive or unknown (conservatively defaulted to passive).
  * Box 2 = net rental real estate income/loss — eligible for $25k special allowance.
  * Box 3 = other net rental income/loss — NOT eligible for $25k allowance.
  *
+ * Each K-1 with a non-zero passive Box 1 produces one activity with isRentalRealEstate = false.
  * Each K-1 with a non-zero Box 2 produces one activity with isRentalRealEstate = true.
  * Each K-1 with a non-zero Box 3 produces a separate activity with isRentalRealEstate = false.
  * Each direct rental property (Schedule E Part I) produces one activity with isRentalRealEstate = true.
@@ -116,8 +119,24 @@ export function extractForm8582Activities(
     const g2Val = (data.fields['G2']?.value ?? '').toLowerCase()
     const isLimitedPartner = g2Val === 'true' || g2Val === 'x' || g2Val === 'yes'
 
+    const classification = getK1ActivityClassification(data)
+    const box1 = parseK1Field(data, '1')
     const box2 = parseK1Field(data, '2')
     const box3 = parseK1Field(data, '3')
+
+    if (box1 !== 0 && classification !== 'nonpassive') {
+      const name = `${baseName} (ordinary business)`
+      const carryforward = findCarryforward(palCarryforwards, name, ein)
+      activities.push({
+        activityName: name,
+        ein,
+        isRentalRealEstate: false,
+        activeParticipation: !isLimitedPartner,
+        currentIncome: Math.max(0, box1),
+        currentLoss: Math.min(0, box1),
+        priorYearUnallowed: carryforward,
+      })
+    }
 
     if (box2 !== 0) {
       const carryforward = findCarryforward(palCarryforwards, baseName, ein)

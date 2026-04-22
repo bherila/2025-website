@@ -1,6 +1,172 @@
-import { computeForm8582Lines, RENTAL_PHASEOUT_END, RENTAL_PHASEOUT_START, RENTAL_SPECIAL_ALLOWANCE, RENTAL_SPECIAL_ALLOWANCE_MFS } from '../form8582'
+import { computeScheduleELines } from '@/components/finance/ScheduleEPreview'
+import type { FK1StructuredData } from '@/types/finance/k1-data'
+import type { TaxDocument } from '@/types/finance/tax-document'
+
+import { computeForm8582, computeForm8582Lines, extractForm8582Activities, RENTAL_PHASEOUT_END, RENTAL_PHASEOUT_START, RENTAL_SPECIAL_ALLOWANCE, RENTAL_SPECIAL_ALLOWANCE_MFS } from '../form8582'
+
+function makeK1Data(overrides: Partial<FK1StructuredData> = {}): FK1StructuredData {
+  return {
+    schemaVersion: '2026.1',
+    formType: 'K-1-1065',
+    fields: {},
+    codes: {},
+    ...overrides,
+  }
+}
+
+function makeK1Doc(data: FK1StructuredData, partnerName = 'Test Partnership', id = 1): TaxDocument {
+  return {
+    id,
+    user_id: 1,
+    tax_year: 2024,
+    form_type: 'k1',
+    employment_entity_id: null,
+    account_id: null,
+    original_filename: null,
+    stored_filename: null,
+    s3_path: null,
+    mime_type: 'application/pdf',
+    file_size_bytes: 0,
+    file_hash: `hash-${id}`,
+    is_reviewed: true,
+    notes: null,
+    human_file_size: '0 B',
+    download_count: 0,
+    genai_job_id: null,
+    genai_status: null,
+    parsed_data: data,
+    uploader: null,
+    employment_entity: { id: id, display_name: partnerName },
+    account: null,
+    account_links: [],
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z',
+  }
+}
 
 const noActivities = { activities: [], magi: 100_000, isMarried: false }
+
+describe('extractForm8582Activities', () => {
+  it('includes passive LP Box 1 loss and suspends it when no passive income offsets it', () => {
+    const reviewedK1Docs = [
+      makeK1Doc(makeK1Data({
+        fields: {
+          A: { value: '12-3456789' },
+          B: { value: 'Passive LP Fund' },
+          G: { value: 'Limited Partner' },
+          G2: { value: 'true' },
+          '1': { value: '-12000' },
+        },
+      }), 'Passive LP Fund'),
+    ]
+
+    const activities = extractForm8582Activities(reviewedK1Docs)
+
+    expect(activities).toEqual([
+      expect.objectContaining({
+        activityName: 'Passive LP Fund (ordinary business)',
+        ein: '12-3456789',
+        isRentalRealEstate: false,
+        activeParticipation: false,
+        currentIncome: 0,
+        currentLoss: -12000,
+      }),
+    ])
+
+    const result = computeForm8582({ reviewedK1Docs, magi: 200_000, isMarried: false })
+    expect(result.totalPassiveLoss).toBe(-12_000)
+    expect(result.totalAllowedLoss).toBe(0)
+    expect(result.totalSuspendedLoss).toBe(12_000)
+    expect(result.activities[0]!.activityName).toBe('Passive LP Fund (ordinary business)')
+    expect(result.activities[0]!.suspendedLossCarryforward).toBe(12_000)
+  })
+
+  it('skips nonpassive GP Box 1 loss from Form 8582 while keeping it in Schedule E nonpassive totals', () => {
+    const reviewedK1Docs = [
+      makeK1Doc(makeK1Data({
+        fields: {
+          B: { value: 'General Partner LLC' },
+          G: { value: 'General Partner' },
+          '1': { value: '-5000' },
+        },
+      }), 'General Partner LLC'),
+    ]
+
+    expect(extractForm8582Activities(reviewedK1Docs)).toEqual([])
+
+    const form8582 = computeForm8582({ reviewedK1Docs, magi: 150_000, isMarried: false })
+    expect(form8582.activities).toEqual([])
+    expect(form8582.totalPassiveLoss).toBe(0)
+
+    const scheduleE = computeScheduleELines(reviewedK1Docs)
+    expect(scheduleE.totalBox1).toBe(-5_000)
+    expect(scheduleE.totalNonpassive).toBe(-5_000)
+  })
+
+  it('treats unknown-classification Box 1 as passive by default', () => {
+    const reviewedK1Docs = [
+      makeK1Doc(makeK1Data({
+        fields: {
+          B: { value: 'Unknown Activity Fund' },
+          '1': { value: '-7000' },
+        },
+      }), 'Unknown Activity Fund'),
+    ]
+
+    const result = computeForm8582({ reviewedK1Docs, magi: 180_000, isMarried: false })
+
+    expect(result.activities).toHaveLength(1)
+    expect(result.activities[0]!.activityName).toBe('Unknown Activity Fund (ordinary business)')
+    expect(result.totalPassiveLoss).toBe(-7_000)
+    expect(result.totalSuspendedLoss).toBe(7_000)
+  })
+
+  it('nets passive Box 1 income and loss across multiple K-1 activities before suspending any excess', () => {
+    const reviewedK1Docs = [
+      makeK1Doc(makeK1Data({
+        fields: {
+          B: { value: 'Passive Gain Fund' },
+          G: { value: 'Limited Partner' },
+          '1': { value: '9000' },
+        },
+      }), 'Passive Gain Fund', 1),
+      makeK1Doc(makeK1Data({
+        fields: {
+          B: { value: 'Passive Loss Fund' },
+          G: { value: 'Limited Partner' },
+          '1': { value: '-6000' },
+        },
+      }), 'Passive Loss Fund', 2),
+    ]
+
+    const result = computeForm8582({ reviewedK1Docs, magi: 200_000, isMarried: false })
+
+    expect(result.totalPassiveIncome).toBe(9_000)
+    expect(result.totalPassiveLoss).toBe(-6_000)
+    expect(result.netPassiveResult).toBe(3_000)
+    expect(result.totalAllowedLoss).toBe(6_000)
+    expect(result.totalSuspendedLoss).toBe(0)
+    expect(result.activities.find((activity) => activity.activityName === 'Passive Loss Fund (ordinary business)')!.allowedLossThisYear).toBe(6_000)
+  })
+
+  it('treats trader-in-securities Box 1 activity as nonpassive and excludes it from Form 8582', () => {
+    const reviewedK1Docs = [
+      makeK1Doc(makeK1Data({
+        fields: {
+          B: { value: 'Trader Fund LP' },
+          partnershipPosition_traderInSecurities: { value: 'true' },
+          '1': { value: '-4500' },
+        },
+      }), 'Trader Fund LP'),
+    ]
+
+    const result = computeForm8582({ reviewedK1Docs, magi: 180_000, isMarried: false })
+
+    expect(result.activities).toEqual([])
+    expect(result.totalPassiveLoss).toBe(0)
+    expect(computeScheduleELines(reviewedK1Docs).totalNonpassive).toBe(-4_500)
+  })
+})
 
 describe('computeForm8582Lines', () => {
   it('returns zeros when no activities exist', () => {

@@ -48,7 +48,7 @@ export default function Form8582Preview({
       <div className="py-12 text-center text-muted-foreground text-sm">
         No passive activity data found in reviewed K-1 documents.
         <br />
-        Passive activities are reported in K-1 Box 2 (rental real estate) and Box 3 (other rental).
+        Passive activities are reported in passive K-1 Box 1, Box 2 (rental real estate), and Box 3 (other rental).
       </div>
     )
   }
