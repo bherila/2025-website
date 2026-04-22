@@ -1235,6 +1235,27 @@ PROMPT;
             $result['statementA'] = $statementA;
         }
 
+        // Passive activities (Box 23 = true supplemental statement)
+        $rawPas = $args['passive_activities'] ?? [];
+        if (is_array($rawPas) && count($rawPas) > 0) {
+            $passiveActivities = [];
+            foreach ($rawPas as $pa) {
+                if (! is_array($pa) || ! isset($pa['name'])) {
+                    continue;
+                }
+                $income = is_numeric($pa['current_income'] ?? null) ? (float) $pa['current_income'] : 0.0;
+                $loss = is_numeric($pa['current_loss'] ?? null) ? (float) $pa['current_loss'] : 0.0;
+                $passiveActivities[] = [
+                    'name' => (string) $pa['name'],
+                    'currentIncome' => max(0.0, $income),
+                    'currentLoss' => min(0.0, $loss),
+                ];
+            }
+            if (count($passiveActivities) > 0) {
+                $result['passiveActivities'] = $passiveActivities;
+            }
+        }
+
         return $result;
     }
 
@@ -1699,6 +1720,23 @@ PROMPT;
                 // partnership is a "Trader in Securities" (neither portfolio nor passive).
                 // Trader funds are nonpassive by definition regardless of partner type.
                 'field_partnershipPosition_traderInSecurities' => Schema::boolean('True when the K-1 or attached statements indicate the partnership is a Trader in Securities (neither portfolio nor passive). Trader funds are nonpassive regardless of whether the taxpayer is a limited partner.'),
+
+                // ── Passive activities (Box 23 = true) ───────────────────────────
+                // When Box 23 (more than one activity is passive) is checked, the
+                // partnership attaches a supplemental statement listing each passive
+                // activity with its current-year net income or loss.  Extract each
+                // activity here so Form 8582 can be computed correctly.  Each entry
+                // maps to one row in Form 8582 Part V.
+                'passive_activities' => Schema::arrayOf(
+                    Schema::object(
+                        'One passive activity from the partnership supplemental statement.',
+                        [
+                            'name' => Schema::string('Activity description from the supplemental statement (e.g. "Section 1256 contracts activity", "Trading activity — passive").'),
+                            'current_income' => Schema::number('Net current-year income from this activity (positive number, or 0 if the activity has a net loss).'),
+                            'current_loss' => Schema::number('Net current-year loss from this activity (negative number, or 0 if the activity has net income).'),
+                        ],
+                    )
+                ),
 
                 // ── Supplemental text & metadata ─────────────────────────────────
                 'raw_text' => Schema::string(),

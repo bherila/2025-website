@@ -70,6 +70,20 @@ export interface StatementA {
 }
 
 /**
+ * One §469 passive activity reported by the partnership via supplemental statement
+ * (present when Box 23 = true — more than one activity is passive).
+ * Each entry maps to one row in Form 8582 Part V.
+ */
+export interface K1PassiveActivity {
+  /** Activity description from the partnership's supplemental statement. */
+  name: string
+  /** Net current-year income from this activity (>= 0). Reported in Part V column (a). */
+  currentIncome: number
+  /** Net current-year loss from this activity (<= 0). Reported in Part V column (b). */
+  currentLoss: number
+}
+
+/**
  * Document-level elections that affect how K-3 data is interpreted.
  * Stored in parsed_data alongside the extracted data.
  */
@@ -101,6 +115,12 @@ export interface FK1StructuredData {
   codes: Record<string, K1CodeItem[]>
   /** §199A Statement A data extracted from the attachment to Box 20 Code Z (TY 2023+). */
   statementA?: StatementA
+  /**
+   * Passive activities from the partnership's supplemental statement
+   * (populated when Box 23 = true — more than one activity is passive).
+   * Each entry is one §469 activity for Form 8582 Part V (All Other Passive Activities).
+   */
+  passiveActivities?: K1PassiveActivity[]
   k3?: {
     sections: K3Section[]
   }
