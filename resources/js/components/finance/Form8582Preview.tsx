@@ -9,10 +9,9 @@ import {
   RENTAL_PHASEOUT_END,
   RENTAL_PHASEOUT_START,
   RENTAL_SPECIAL_ALLOWANCE,
+  TAX_LOSS_CARRYFORWARD_ENDPOINT,
 } from '@/finance/8582/form8582'
 import type { Form8582Lines } from '@/types/finance/tax-return'
-
-const TAX_LOSS_CARRYFORWARD_ENDPOINT = '/api/finance/tax-loss-carryforwards'
 
 interface Form8582PreviewProps {
   form8582: Form8582Lines
@@ -251,6 +250,7 @@ function PalCarryforwardInput({ year, form8582, carryforwards, onChange }: PalCa
   const [editingId, setEditingId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [committing, setCommitting] = useState(false)
+  const [commitMessage, setCommitMessage] = useState<{ kind: 'error' | 'success'; text: string } | null>(null)
 
   async function reloadCarryforwards(targetYear: number): Promise<PalCarryforwardEntry[]> {
     const updated = (await fetchWrapper.get(`${TAX_LOSS_CARRYFORWARD_ENDPOINT}?year=${targetYear}`)) as unknown
@@ -315,8 +315,9 @@ function PalCarryforwardInput({ year, form8582, carryforwards, onChange }: PalCa
 
   async function handleCommitForward(): Promise<void> {
     setCommitting(true)
+    setCommitMessage(null)
+    const nextYear = year + 1
     try {
-      const nextYear = year + 1
       const existingNextYear = await reloadCarryforwards(nextYear)
       const existingByName = new Map(existingNextYear.map((entry) => [entry.activity_name, entry]))
 
@@ -347,8 +348,11 @@ function PalCarryforwardInput({ year, form8582, carryforwards, onChange }: PalCa
       if (failedActivities.length > 0) {
         throw new Error(`Failed to persist carryforwards for: ${failedActivities.join(', ')}`)
       }
+      setCommitMessage({ kind: 'success', text: `Saved suspended losses to ${nextYear}.` })
     } catch (err) {
       console.error('Failed to commit suspended PAL carryforwards forward', err)
+      const detail = err instanceof Error ? err.message : 'Unknown error'
+      setCommitMessage({ kind: 'error', text: `Could not save to ${nextYear}: ${detail}` })
     } finally {
       setCommitting(false)
     }
@@ -458,18 +462,28 @@ function PalCarryforwardInput({ year, form8582, carryforwards, onChange }: PalCa
         )}
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-dashed border-border/70 p-3">
-        <div className="text-xs text-muted-foreground">
-          Persist this year&apos;s suspended losses as opening carryforwards for {year + 1}.
+      <div className="mt-4 rounded-md border border-dashed border-border/70 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="text-xs text-muted-foreground">
+            Persist this year&apos;s suspended losses as opening carryforwards for {year + 1}.
+          </div>
+          <button
+            type="button"
+            className="px-3 py-1 text-sm bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50"
+            onClick={handleCommitForward}
+            disabled={committing || form8582.activities.length === 0}
+          >
+            {committing ? `Saving ${year + 1}…` : `Save suspended losses to ${year + 1}`}
+          </button>
         </div>
-        <button
-          type="button"
-          className="px-3 py-1 text-sm bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50"
-          onClick={handleCommitForward}
-          disabled={committing || form8582.activities.length === 0}
-        >
-          {committing ? `Saving ${year + 1}…` : `Save suspended losses to ${year + 1}`}
-        </button>
+        {commitMessage && (
+          <div
+            role={commitMessage.kind === 'error' ? 'alert' : 'status'}
+            className={`mt-2 text-xs ${commitMessage.kind === 'error' ? 'text-red-600' : 'text-emerald-700'}`}
+          >
+            {commitMessage.text}
+          </div>
+        )}
       </div>
     </FormBlock>
   )

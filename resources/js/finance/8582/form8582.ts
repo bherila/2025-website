@@ -45,6 +45,8 @@ export const RENTAL_PHASEOUT_END_MFS = 75_000
 
 // ── K-1 → activities extraction ─────────────────────────────────────────────
 
+export const TAX_LOSS_CARRYFORWARD_ENDPOINT = '/api/finance/tax-loss-carryforwards'
+
 export interface PalCarryforwardEntry {
   id?: number
   activity_name: string

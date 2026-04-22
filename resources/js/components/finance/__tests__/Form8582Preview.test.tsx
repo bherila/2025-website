@@ -187,7 +187,7 @@ describe('Form8582Preview', () => {
     expect(fetchWrapper.delete).toHaveBeenCalledWith('/api/finance/tax-loss-carryforwards/11', {})
   })
 
-  it('logs an error if a commit-forward delete fails', async () => {
+  it('surfaces a visible error if a commit-forward delete fails', async () => {
     ;(fetchWrapper.get as jest.Mock).mockResolvedValue([
       {
         id: 11,
@@ -248,6 +248,46 @@ describe('Form8582Preview', () => {
       )
     })
 
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(/Could not save to 2026/i)
+    expect(alert).toHaveTextContent(/Passive LP Fund|Zero Carryforward Activity/)
+
     consoleErrorSpy.mockRestore()
+  })
+
+  it('surfaces a visible success message after a successful commit-forward', async () => {
+    ;(fetchWrapper.get as jest.Mock).mockResolvedValue([])
+    ;(fetchWrapper.post as jest.Mock).mockResolvedValue({})
+
+    render(
+      <Form8582Preview
+        form8582={makeForm8582({
+          activities: [
+            {
+              activityName: 'Passive LP Fund (ordinary business)',
+              ein: '12-3456789',
+              isRentalRealEstate: false,
+              activeParticipation: false,
+              currentIncome: 0,
+              currentLoss: -12000,
+              priorYearUnallowed: 0,
+              overallGainOrLoss: -12000,
+              allowedLossThisYear: 0,
+              suspendedLossCarryforward: 12000,
+            },
+          ],
+        })}
+        year={2025}
+        palCarryforwards={[]}
+        onCarryforwardsChange={() => {}}
+        realEstateProfessional={false}
+        onRealEstateProfessionalChange={() => {}}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save suspended losses to 2026' }))
+
+    const status = await screen.findByRole('status')
+    expect(status).toHaveTextContent(/Saved suspended losses to 2026/i)
   })
 })

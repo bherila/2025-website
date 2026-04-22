@@ -20,7 +20,7 @@ import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
 import { computeForm6251Lines } from '@/finance/6251/form6251'
-import { computeForm8582, type PalCarryforwardEntry } from '@/finance/8582/form8582'
+import { computeForm8582, type PalCarryforwardEntry, TAX_LOSS_CARRYFORWARD_ENDPOINT } from '@/finance/8582/form8582'
 import { computeForm8959Lines } from '@/finance/8959/form8959'
 import { computeForm8960Lines } from '@/finance/8960/form8960'
 import { computeCapitalLossCarryover } from '@/finance/capitalLoss/capitalLossCarryover'
@@ -39,7 +39,6 @@ import type { OverviewRow, TaxReturn1040, UserDeductionEntry } from '@/types/fin
 import type { ScheduleCResponse, YearData } from './ScheduleCPreview'
 
 const FEDERAL_TAX_STATE = ''
-const TAX_LOSS_CARRYFORWARD_ENDPOINT = '/api/finance/tax-loss-carryforwards'
 
 export interface TaxPreviewShellData {
   year: number
