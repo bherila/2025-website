@@ -36,7 +36,7 @@ class PalCarryforwardController extends Controller
         ];
 
         $values = [
-            'activity_ein' => $request->validated('activity_ein'),
+            'activity_ein' => $request->validated('activity_ein') ?? null,
             'ordinary_carryover' => (float) $request->validated('ordinary_carryover'),
             'short_term_carryover' => (float) ($request->validated('short_term_carryover') ?? 0),
             'long_term_carryover' => (float) ($request->validated('long_term_carryover') ?? 0),
