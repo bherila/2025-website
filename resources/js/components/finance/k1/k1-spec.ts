@@ -162,6 +162,14 @@ export const K1_SPEC: K1FieldSpec[] = [
     side: 'left',
     uiOrder: 18,
   },
+  {
+    box: 'partnershipPosition_traderInSecurities',
+    label: 'Partnership is a Trader in Securities (neither portfolio nor passive)',
+    concise: 'Trader in securities',
+    fieldType: 'check',
+    side: 'left',
+    uiOrder: 19,
+  },
 
   // ── Right panel: income, deductions, credits ─────────────────────────────
   {

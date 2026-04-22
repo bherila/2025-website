@@ -1098,7 +1098,7 @@ PROMPT;
     {
         // Scalar field boxes (left panel A–O, right panel 1–10, 12, 21)
         $strBoxes = ['A', 'B', 'C', 'E', 'F', 'G', 'H1', 'I1', 'I2', 'I3', 'M', 'N', 'O'];
-        $boolBoxes = ['D', 'H2'];
+        $boolBoxes = ['D', 'H2', 'partnershipPosition_traderInSecurities'];
         $numBoxes = ['1', '2', '3', '4', '4a', '4b', '4c', '5', '6a', '6b', '6c', '7',
             '8', '9a', '9b', '9c', '10', '12', '21'];
         $codedBoxes = ['11', '13', '14', '15', '16', '17', '18', '19', '20'];
@@ -1693,6 +1693,12 @@ PROMPT;
 
                 // ── K-3 general notes ─────────────────────────────────────────────
                 'k3_notes' => Schema::arrayOf(Schema::string()),
+
+                // ── Partnership classification overrides ──────────────────────────
+                // Set to true when the K-1 or attached statements indicate the
+                // partnership is a "Trader in Securities" (neither portfolio nor passive).
+                // Trader funds are nonpassive by definition regardless of partner type.
+                'field_partnershipPosition_traderInSecurities' => Schema::boolean('True when the K-1 or attached statements indicate the partnership is a Trader in Securities (neither portfolio nor passive). Trader funds are nonpassive regardless of whether the taxpayer is a limited partner.'),
 
                 // ── Supplemental text & metadata ─────────────────────────────────
                 'raw_text' => Schema::string(),

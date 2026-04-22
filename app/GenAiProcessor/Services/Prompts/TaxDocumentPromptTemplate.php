@@ -185,7 +185,15 @@ EXTRACTION RULES:
    - All dates: YYYY-MM-DD.
    - Partner number / form ID: capture from header if present.
 
-CRITICAL COMPLETENESS CHECK (10): Before returning, verify that if a Schedule K-3 is attached,
+10. TRADER IN SECURITIES CLASSIFICATION:
+   Set `field_partnershipPosition_traderInSecurities` to TRUE if the K-1 face page, attached
+   supplemental statements, or cover letter includes any phrase indicating the partnership
+   is classified as a trader in securities — e.g., "Trader in Securities (neither portfolio
+   nor passive)", "trading fund", "trader fund", or similar. This overrides the limited
+   partner designation for §469 passive-loss purposes; trader funds are nonpassive regardless
+   of partner type.
+
+CRITICAL COMPLETENESS CHECK (11): Before returning, verify that if a Schedule K-3 is attached,
 at minimum `k3_part2_rows`, `k3_part3_asset_rows`, and `k3_part3_foreign_taxes` are
 non-empty. If any of these are empty despite the K-3 having that section, add a warning.
 PROMPT;
