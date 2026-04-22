@@ -12,6 +12,8 @@ import {
 } from '@/finance/8582/form8582'
 import type { Form8582Lines } from '@/types/finance/tax-return'
 
+const TAX_LOSS_CARRYFORWARD_ENDPOINT = '/api/finance/tax-loss-carryforwards'
+
 interface Form8582PreviewProps {
   form8582: Form8582Lines
   year: number
@@ -42,16 +44,6 @@ export default function Form8582Preview({
     isLossLimited,
     magi,
   } = form8582
-
-  if (activities.length === 0) {
-    return (
-      <div className="py-12 text-center text-muted-foreground text-sm">
-        No passive activity data found in reviewed K-1 documents.
-        <br />
-        Passive activities are reported in passive K-1 Box 1, Box 2 (rental real estate), and Box 3 (other rental).
-      </div>
-    )
-  }
 
   return (
     <div className="space-y-5">
@@ -89,34 +81,44 @@ export default function Form8582Preview({
             </p>
           </Callout>
         )}
-        {activities.map((a, i) => (
-          <div key={i}>
-            {a.currentIncome !== 0 && (
-              <FormLine
-                label={`${a.activityName}${a.ein ? ` (EIN ${a.ein})` : ''}${a.isRentalRealEstate ? ' [Rental RE]' : ''}${!a.activeParticipation ? ' [No Active Participation]' : ''} — income`}
-                value={a.currentIncome}
-              />
-            )}
-            {a.currentLoss !== 0 && (
-              <FormLine
-                label={`${a.activityName}${a.ein ? ` (EIN ${a.ein})` : ''}${a.isRentalRealEstate ? ' [Rental RE]' : ''}${!a.activeParticipation ? ' [No Active Participation]' : ''} — loss`}
-                value={a.currentLoss}
-              />
-            )}
-            {a.priorYearUnallowed !== 0 && (
-              <FormLine
-                label={`${a.activityName} — prior-year unallowed loss`}
-                value={a.priorYearUnallowed}
-              />
-            )}
+        {activities.length === 0 ? (
+          <div className="px-3 py-6 text-center text-muted-foreground text-sm">
+            No passive activity data found in reviewed K-1 documents.
+            <br />
+            Passive activities are reported in passive K-1 Box 1, Box 2 (rental real estate), and Box 3 (other rental).
           </div>
-        ))}
-        <FormTotalLine label="Line 1a — Total passive income" value={totalPassiveIncome} />
-        <FormTotalLine label="Line 1b — Total passive loss" value={totalPassiveLoss} />
-        {totalPriorYearUnallowed !== 0 && (
-          <FormLine label="Line 1c — Prior-year unallowed losses" value={totalPriorYearUnallowed} />
+        ) : (
+          <>
+            {activities.map((a, i) => (
+              <div key={i}>
+                {a.currentIncome !== 0 && (
+                  <FormLine
+                    label={`${a.activityName}${a.ein ? ` (EIN ${a.ein})` : ''}${a.isRentalRealEstate ? ' [Rental RE]' : ''}${!a.activeParticipation ? ' [No Active Participation]' : ''} — income`}
+                    value={a.currentIncome}
+                  />
+                )}
+                {a.currentLoss !== 0 && (
+                  <FormLine
+                    label={`${a.activityName}${a.ein ? ` (EIN ${a.ein})` : ''}${a.isRentalRealEstate ? ' [Rental RE]' : ''}${!a.activeParticipation ? ' [No Active Participation]' : ''} — loss`}
+                    value={a.currentLoss}
+                  />
+                )}
+                {a.priorYearUnallowed !== 0 && (
+                  <FormLine
+                    label={`${a.activityName} — prior-year unallowed loss`}
+                    value={a.priorYearUnallowed}
+                  />
+                )}
+              </div>
+            ))}
+            <FormTotalLine label="Line 1a — Total passive income" value={totalPassiveIncome} />
+            <FormTotalLine label="Line 1b — Total passive loss" value={totalPassiveLoss} />
+            {totalPriorYearUnallowed !== 0 && (
+              <FormLine label="Line 1c — Prior-year unallowed losses" value={totalPriorYearUnallowed} />
+            )}
+            <FormTotalLine label="Line 1d — Combine lines 1a through 1c" value={netPassiveResult} double />
+          </>
         )}
-        <FormTotalLine label="Line 1d — Combine lines 1a through 1c" value={netPassiveResult} double />
       </FormBlock>
 
       {/* Part II — Special Allowance */}
@@ -202,19 +204,22 @@ export default function Form8582Preview({
       )}
 
       {/* Per-Activity overallGainOrLoss display (B.10) */}
-      <FormBlock title="Per-Activity Net Gain/Loss">
-        {activities.map((a, i) => (
-          <FormLine
-            key={i}
-            label={`${a.activityName}${a.isRentalRealEstate ? ' [Rental RE]' : ''}`}
-            value={a.overallGainOrLoss}
-          />
-        ))}
-      </FormBlock>
+      {activities.length > 0 && (
+        <FormBlock title="Per-Activity Net Gain/Loss">
+          {activities.map((a, i) => (
+            <FormLine
+              key={i}
+              label={`${a.activityName}${a.isRentalRealEstate ? ' [Rental RE]' : ''}`}
+              value={a.overallGainOrLoss}
+            />
+          ))}
+        </FormBlock>
+      )}
 
       {/* Prior-Year Suspended Losses Input (A.2 — editable section) */}
       <PalCarryforwardInput
         year={year}
+        form8582={form8582}
         carryforwards={palCarryforwards}
         onChange={onCarryforwardsChange}
       />
@@ -226,6 +231,7 @@ export default function Form8582Preview({
 
 interface PalCarryforwardInputProps {
   year: number
+  form8582: Form8582Lines
   carryforwards: PalCarryforwardEntry[]
   onChange: (entries: PalCarryforwardEntry[]) => void
 }
@@ -236,29 +242,47 @@ interface PalFormState {
   ordinary_carryover: string
 }
 
-function PalCarryforwardInput({ year, carryforwards, onChange }: PalCarryforwardInputProps) {
+function PalCarryforwardInput({ year, form8582, carryforwards, onChange }: PalCarryforwardInputProps) {
   const [form, setForm] = useState<PalFormState>({
     activity_name: '',
     activity_ein: '',
     ordinary_carryover: '',
   })
+  const [editingId, setEditingId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
+  const [committing, setCommitting] = useState(false)
+
+  async function reloadCarryforwards(targetYear: number): Promise<PalCarryforwardEntry[]> {
+    const updated = (await fetchWrapper.get(`${TAX_LOSS_CARRYFORWARD_ENDPOINT}?year=${targetYear}`)) as PalCarryforwardEntry[]
+    return Array.isArray(updated) ? updated : []
+  }
+
+  function resetForm(): void {
+    setForm({ activity_name: '', activity_ein: '', ordinary_carryover: '' })
+    setEditingId(null)
+  }
 
   async function handleAdd(): Promise<void> {
     if (!form.activity_name || !form.ordinary_carryover) return
     setSaving(true)
     try {
-      await fetchWrapper.post('/api/finance/pal-carryforwards', {
-        tax_year: year,
+      const payload = {
         activity_name: form.activity_name,
         activity_ein: form.activity_ein || null,
         ordinary_carryover: parseFloat(form.ordinary_carryover),
         short_term_carryover: 0,
         long_term_carryover: 0,
-      })
-      const updated = (await fetchWrapper.get(`/api/finance/pal-carryforwards?year=${year}`)) as PalCarryforwardEntry[]
-      onChange(Array.isArray(updated) ? updated : [])
-      setForm({ activity_name: '', activity_ein: '', ordinary_carryover: '' })
+      }
+      if (editingId === null) {
+        await fetchWrapper.post(TAX_LOSS_CARRYFORWARD_ENDPOINT, {
+          tax_year: year,
+          ...payload,
+        })
+      } else {
+        await fetchWrapper.put(`${TAX_LOSS_CARRYFORWARD_ENDPOINT}/${editingId}`, payload)
+      }
+      onChange(await reloadCarryforwards(year))
+      resetForm()
     } catch (err) {
       console.error('Failed to save PAL carryforward', err)
     } finally {
@@ -266,22 +290,65 @@ function PalCarryforwardInput({ year, carryforwards, onChange }: PalCarryforward
     }
   }
 
+  function handleEdit(entry: PalCarryforwardEntry): void {
+    setEditingId(entry.id ?? null)
+    setForm({
+      activity_name: entry.activity_name,
+      activity_ein: entry.activity_ein ?? '',
+      ordinary_carryover: String(entry.ordinary_carryover),
+    })
+  }
+
   async function handleDelete(entry: PalCarryforwardEntry): Promise<void> {
     if (entry.id === undefined) return
     try {
-      await fetchWrapper.delete(`/api/finance/pal-carryforwards/${entry.id}`, {})
-      const updated = (await fetchWrapper.get(`/api/finance/pal-carryforwards?year=${year}`)) as PalCarryforwardEntry[]
-      onChange(Array.isArray(updated) ? updated : [])
+      await fetchWrapper.delete(`${TAX_LOSS_CARRYFORWARD_ENDPOINT}/${entry.id}`, {})
+      onChange(await reloadCarryforwards(year))
     } catch (err) {
       console.error('Failed to delete PAL carryforward', err)
+    }
+  }
+
+  async function handleCommitForward(): Promise<void> {
+    setCommitting(true)
+    try {
+      const nextYear = year + 1
+      const existingNextYear = await reloadCarryforwards(nextYear)
+      const existingByName = new Map(existingNextYear.map((entry) => [entry.activity_name, entry]))
+
+      await Promise.all(
+        form8582.activities.map(async (activity) => {
+          const existing = existingByName.get(activity.activityName)
+          if (activity.suspendedLossCarryforward > 0) {
+            await fetchWrapper.post(TAX_LOSS_CARRYFORWARD_ENDPOINT, {
+              tax_year: nextYear,
+              activity_name: activity.activityName,
+              activity_ein: activity.ein ?? null,
+              ordinary_carryover: -activity.suspendedLossCarryforward,
+              short_term_carryover: 0,
+              long_term_carryover: 0,
+            })
+            return
+          }
+
+          if (existing?.id !== undefined) {
+            await fetchWrapper.delete(`${TAX_LOSS_CARRYFORWARD_ENDPOINT}/${existing.id}`, {})
+          }
+        }),
+      )
+    } catch (err) {
+      console.error('Failed to commit suspended PAL carryforwards forward', err)
+    } finally {
+      setCommitting(false)
     }
   }
 
   return (
     <FormBlock title="Prior-Year Suspended Losses (PAL Carryforwards)">
       <p className="text-xs text-muted-foreground mb-3">
-        Enter prior-year Form 8582 suspended losses per activity. These carry forward to offset
-        future passive income or are fully deductible when the activity is disposed of.
+        Saved opening carryforwards for {year} flow into the prior-year unallowed loss lines above.
+        Use “Save suspended losses to {year + 1}” after reviewing this year’s Form 8582 to persist
+        next year’s opening balances.
       </p>
 
       {carryforwards.length > 0 && (
@@ -292,7 +359,7 @@ function PalCarryforwardInput({ year, carryforwards, onChange }: PalCarryforward
                 <th className="py-1 pr-3">Activity</th>
                 <th className="py-1 px-3">EIN</th>
                 <th className="py-1 px-3 text-right">Ordinary Carryover</th>
-                <th className="py-1 px-3 text-right w-16"></th>
+                <th className="py-1 px-3 text-right w-28"></th>
               </tr>
             </thead>
             <tbody>
@@ -301,14 +368,23 @@ function PalCarryforwardInput({ year, carryforwards, onChange }: PalCarryforward
                   <td className="py-1 pr-3">{cf.activity_name}</td>
                   <td className="py-1 px-3 text-muted-foreground">{cf.activity_ein ?? '—'}</td>
                   <td className="py-1 px-3 text-right tabular-nums">{fmtAmt(cf.ordinary_carryover)}</td>
-                  <td className="py-1 px-3 text-right">
-                    <button
-                      type="button"
-                      className="text-xs text-red-500 hover:text-red-700"
-                      onClick={() => handleDelete(cf)}
-                    >
-                      ✕
-                    </button>
+                  <td className="py-1 px-3">
+                    <div className="flex items-center justify-end gap-3">
+                      <button
+                        type="button"
+                        className="text-xs text-blue-600 hover:text-blue-800"
+                        onClick={() => handleEdit(cf)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="text-xs text-red-500 hover:text-red-700"
+                        onClick={() => handleDelete(cf)}
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -322,6 +398,7 @@ function PalCarryforwardInput({ year, carryforwards, onChange }: PalCarryforward
           <label className="text-xs text-muted-foreground">Activity Name</label>
           <input
             type="text"
+            aria-label="Activity Name"
             className="w-full border rounded px-2 py-1 text-sm"
             value={form.activity_name}
             onChange={(e) => setForm(s => ({ ...s, activity_name: e.target.value }))}
@@ -332,6 +409,7 @@ function PalCarryforwardInput({ year, carryforwards, onChange }: PalCarryforward
           <label className="text-xs text-muted-foreground">EIN (optional)</label>
           <input
             type="text"
+            aria-label="EIN"
             className="w-full border rounded px-2 py-1 text-sm"
             value={form.activity_ein}
             onChange={(e) => setForm(s => ({ ...s, activity_ein: e.target.value }))}
@@ -342,6 +420,7 @@ function PalCarryforwardInput({ year, carryforwards, onChange }: PalCarryforward
           <label className="text-xs text-muted-foreground">Ordinary Carryover</label>
           <input
             type="number"
+            aria-label="Ordinary Carryover"
             className="w-full border rounded px-2 py-1 text-sm"
             value={form.ordinary_carryover}
             onChange={(e) => setForm(s => ({ ...s, ordinary_carryover: e.target.value }))}
@@ -355,7 +434,30 @@ function PalCarryforwardInput({ year, carryforwards, onChange }: PalCarryforward
           onClick={handleAdd}
           disabled={saving || !form.activity_name || !form.ordinary_carryover}
         >
-          {saving ? 'Saving…' : 'Add'}
+          {saving ? 'Saving…' : editingId === null ? 'Add' : 'Save'}
+        </button>
+        {editingId !== null && (
+          <button
+            type="button"
+            className="px-3 py-1 text-sm border rounded hover:bg-muted"
+            onClick={resetForm}
+          >
+            Cancel
+          </button>
+        )}
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-dashed border-border/70 p-3">
+        <div className="text-xs text-muted-foreground">
+          Persist this year&apos;s suspended losses as opening carryforwards for {year + 1}.
+        </div>
+        <button
+          type="button"
+          className="px-3 py-1 text-sm bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50"
+          onClick={handleCommitForward}
+          disabled={committing || form8582.activities.length === 0}
+        >
+          {committing ? `Saving ${year + 1}…` : `Save suspended losses to ${year + 1}`}
         </button>
       </div>
     </FormBlock>

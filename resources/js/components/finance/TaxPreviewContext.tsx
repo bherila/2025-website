@@ -39,6 +39,7 @@ import type { OverviewRow, TaxReturn1040, UserDeductionEntry } from '@/types/fin
 import type { ScheduleCResponse, YearData } from './ScheduleCPreview'
 
 const FEDERAL_TAX_STATE = ''
+const TAX_LOSS_CARRYFORWARD_ENDPOINT = '/api/finance/tax-loss-carryforwards'
 
 export interface TaxPreviewShellData {
   year: number
@@ -335,7 +336,7 @@ export function TaxPreviewProvider({
   useEffect(() => {
     void (async () => {
       try {
-        const cfs = (await fetchWrapper.get(`/api/finance/pal-carryforwards?year=${year}`)) as PalCarryforwardEntry[]
+        const cfs = (await fetchWrapper.get(`${TAX_LOSS_CARRYFORWARD_ENDPOINT}?year=${year}`)) as PalCarryforwardEntry[]
         setPalCarryforwards(Array.isArray(cfs) ? cfs : [])
       } catch (err) {
         console.error('Failed to load PAL carryforwards for year', year, err)

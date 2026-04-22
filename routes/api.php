@@ -102,6 +102,10 @@ Route::middleware(['web', 'auth'])->get('/finance/pal-carryforwards', [PalCarryf
 Route::middleware(['web', 'auth'])->post('/finance/pal-carryforwards', [PalCarryforwardController::class, 'store']);
 Route::middleware(['web', 'auth'])->put('/finance/pal-carryforwards/{id}', [PalCarryforwardController::class, 'update']);
 Route::middleware(['web', 'auth'])->delete('/finance/pal-carryforwards/{id}', [PalCarryforwardController::class, 'destroy']);
+Route::middleware(['web', 'auth'])->get('/finance/tax-loss-carryforwards', [PalCarryforwardController::class, 'index']);
+Route::middleware(['web', 'auth'])->post('/finance/tax-loss-carryforwards', [PalCarryforwardController::class, 'store']);
+Route::middleware(['web', 'auth'])->put('/finance/tax-loss-carryforwards/{id}', [PalCarryforwardController::class, 'update']);
+Route::middleware(['web', 'auth'])->delete('/finance/tax-loss-carryforwards/{id}', [PalCarryforwardController::class, 'destroy']);
 
 Route::middleware(['web', 'auth'])->post('/finance/transactions/batch-delete', [FinanceTransactionsApiController::class, 'batchDelete']);
 Route::middleware(['web', 'auth'])->post('/finance/transactions/batch-update', [FinanceTransactionsApiController::class, 'batchUpdate']);
