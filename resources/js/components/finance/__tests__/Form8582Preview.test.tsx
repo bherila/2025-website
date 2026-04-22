@@ -186,4 +186,68 @@ describe('Form8582Preview', () => {
     })
     expect(fetchWrapper.delete).toHaveBeenCalledWith('/api/finance/tax-loss-carryforwards/11', {})
   })
+
+  it('logs an error if a commit-forward delete fails', async () => {
+    ;(fetchWrapper.get as jest.Mock).mockResolvedValue([
+      {
+        id: 11,
+        activity_name: 'Zero Carryforward Activity',
+        activity_ein: null,
+        ordinary_carryover: -900,
+        short_term_carryover: 0,
+        long_term_carryover: 0,
+      },
+    ])
+    ;(fetchWrapper.post as jest.Mock).mockResolvedValue({})
+    ;(fetchWrapper.delete as jest.Mock).mockRejectedValue(new Error('delete failed'))
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    render(
+      <Form8582Preview
+        form8582={makeForm8582({
+          activities: [
+            {
+              activityName: 'Passive LP Fund (ordinary business)',
+              ein: '12-3456789',
+              isRentalRealEstate: false,
+              activeParticipation: false,
+              currentIncome: 0,
+              currentLoss: -12000,
+              priorYearUnallowed: 0,
+              overallGainOrLoss: -12000,
+              allowedLossThisYear: 0,
+              suspendedLossCarryforward: 12000,
+            },
+            {
+              activityName: 'Zero Carryforward Activity',
+              isRentalRealEstate: false,
+              activeParticipation: true,
+              currentIncome: 5000,
+              currentLoss: -5000,
+              priorYearUnallowed: 0,
+              overallGainOrLoss: 0,
+              allowedLossThisYear: 5000,
+              suspendedLossCarryforward: 0,
+            },
+          ],
+        })}
+        year={2025}
+        palCarryforwards={[]}
+        onCarryforwardsChange={() => {}}
+        realEstateProfessional={false}
+        onRealEstateProfessionalChange={() => {}}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save suspended losses to 2026' }))
+
+    await waitFor(() => {
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'Failed to commit suspended PAL carryforwards forward',
+        expect.any(Error),
+      )
+    })
+
+    consoleErrorSpy.mockRestore()
+  })
 })

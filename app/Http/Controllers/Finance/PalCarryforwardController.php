@@ -42,9 +42,10 @@ class PalCarryforwardController extends Controller
             'long_term_carryover' => (float) ($request->validated('long_term_carryover') ?? 0),
         ];
 
+        $existing = PalCarryforward::query()->where($attributes)->first();
         $carryforward = PalCarryforward::query()->updateOrCreate($attributes, $values);
 
-        return response()->json($this->toResponseArray($carryforward), $carryforward->wasRecentlyCreated ? 201 : 200);
+        return response()->json($this->toResponseArray($carryforward), $existing === null ? 201 : 200);
     }
 
     /** PUT /api/finance/{pal-carryforwards|tax-loss-carryforwards}/{id} — update a carryforward entry. */

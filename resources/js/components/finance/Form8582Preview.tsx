@@ -316,7 +316,7 @@ function PalCarryforwardInput({ year, form8582, carryforwards, onChange }: PalCa
       const existingNextYear = await reloadCarryforwards(nextYear)
       const existingByName = new Map(existingNextYear.map((entry) => [entry.activity_name, entry]))
 
-      await Promise.all(
+      const results = await Promise.allSettled(
         form8582.activities.map(async (activity) => {
           const existing = existingByName.get(activity.activityName)
           if (activity.suspendedLossCarryforward > 0) {
@@ -336,6 +336,13 @@ function PalCarryforwardInput({ year, form8582, carryforwards, onChange }: PalCa
           }
         }),
       )
+
+      const failedActivities = results.flatMap((result, index) =>
+        result.status === 'rejected' ? [form8582.activities[index]?.activityName ?? `activity-${index}`] : [],
+      )
+      if (failedActivities.length > 0) {
+        throw new Error(`Failed to persist carryforwards for: ${failedActivities.join(', ')}`)
+      }
     } catch (err) {
       console.error('Failed to commit suspended PAL carryforwards forward', err)
     } finally {
