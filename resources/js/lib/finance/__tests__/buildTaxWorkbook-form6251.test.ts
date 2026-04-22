@@ -47,6 +47,7 @@ function makeTaxReturn(form6251: Form6251Lines): TaxReturn1040 {
     form1040: [{ line: '1a', label: 'Wages, salaries, tips (W-2, box 1)', value: 300_000 }],
     schedule2: {
       altMinimumTax: form6251.amt,
+      selfEmploymentTax: 0,
       additionalMedicareTax: 0,
       niit: 0,
       totalAdditionalTaxes: form6251.amt,
