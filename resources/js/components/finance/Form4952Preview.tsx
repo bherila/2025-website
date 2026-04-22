@@ -384,7 +384,7 @@ export default function Form4952Preview({
               />
             </>
           )}
-          <FormTotalLine label="Line 4e — NII (no QD election)" value={niiBefore} />
+          <FormTotalLine label="Line 6 — Net investment income (no QD election)" value={niiBefore} />
         </FormBlock>
       </div>
 
@@ -538,7 +538,7 @@ export default function Form4952Preview({
               />
             )}
             <FormLine boxRef="L.4e" label="Net investment income" value={finalNii} />
-            <FormTotalLine label="Line 6 — Deductible investment interest expense" value={finalDeductible} double />
+            <FormTotalLine label="Line 8 — Investment interest expense deduction" value={finalDeductible} double />
             <FormLine
               boxRef="L.7"
               label="Disallowed — carryforward to next year"

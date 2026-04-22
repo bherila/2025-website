@@ -546,6 +546,94 @@ All three are computed in `TaxPreviewContext` using the `isMarried` flag (MFJ th
 
 ---
 
+### Form 4952 (Investment Interest Expense) Support
+
+**Computation:** `computeForm4952Lines` in `resources/js/components/finance/Form4952Preview.tsx` builds two independent source lists, then runs a QD-election optimiser.
+
+**Part I — Investment interest expense (Line 1, flowing to Line 3):**
+- K-1 Box 13 codes **H** (investment interest), **G**, **AC**, **AD** — collected into `invIntSources` as negative values.
+- 1099-INT **Box 5** — investment expense reported by the payer also feeds Part I Line 1 under current convention.
+- Short dividends held >45 days (from `analyzeShortDividends`) — deductible investment interest expense per Pub. 550.
+
+**Part II — Net investment income (Lines 4a–6):**
+- Gross investment income (Line 4h): when K-1 **Box 20 Code A** is present it is authoritative; otherwise reconstruct from K-1 Box 5 interest + non-qualified dividends + Section 1256 (Box 11 C) + direct 1099 interest and non-qualified dividends.
+- K-1 **Box 20 Code B** (investment expenses) — collected into `invExpSources` and summed as `totalInvExp`. This is Form 4952 **Line 5** and reduces NII. It is **not** Part I interest expense.
+- `niiBefore = max(0, niiGross − totalInvExp)` — Form 4952 Line 6 (NII, floored at zero).
+
+**Part III — Deduction and carryforward:**
+- Scenario A (no QD election): deductible = `min(Line 3, Line 6)`.
+- Scenarios B / C evaluate the 4g qualified-dividend election when Line 3 > Line 6, picking the best net benefit at 37% vs. the 13.2% QD rate delta.
+- `deductibleInvestmentInterestExpense` is Line 8; `disallowedCarryforward` is Line 7 (rolls forward to next year's Line 2).
+
+**Known gaps:**
+- Line 2 (prior-year disallowed investment interest carryover) is not persisted across years yet. Each year's Line 3 uses only current-year Line 1 sources.
+- Section 1256 net gain (Box 11 Code C) is added to reconstructed NII even without a formal Line 4g election. Aggressive treatment — a user wanting full §163(d) conformance should override by reporting Box 20 Code A instead.
+- Post-TCJA §212 misc-itemized suspension applies 2018–2025 — Box 20B investment expenses still reduce NII on Form 4952 Line 5 but are not deductible on Schedule A line 16.
+
+**XLSX:** Form 4952 sheet renders Part I sources, Line 3 total, Part II 20B sources, Line 5 total, Line 6 NII, Line 7 carryforward, Line 8 deduction. Schedule A Line 9 cross-references the Line 8 row via an Excel formula (rowIndex lookup keyed on the Line 8 description).
+
+---
+
+### Form 8582 (Passive Activity Loss Limitations) Support
+
+**Directory: `resources/js/finance/8582/`**
+
+| File | Purpose |
+|------|---------|
+| `form8582.ts` | `extractForm8582Activities`, `computeForm8582Lines`, `computeForm8582`, `PalCarryforwardEntry`, `TAX_LOSS_CARRYFORWARD_ENDPOINT` |
+| `__tests__/form8582.test.ts` | Unit tests |
+
+**Activity extraction (`extractForm8582Activities`):**
+- K-1 Box 1 → one activity per K-1 when classification is passive (or unknown). Trader-in-securities K-1s (`field_partnershipPosition_traderInSecurities = true`) are reclassified nonpassive and excluded.
+- K-1 Box 2 → rental real estate activity (eligible for $25k special allowance when active participation + non-LP).
+- K-1 Box 3 → other rental activity (not RE; no $25k allowance).
+- K-1 `passiveActivities[]` (from Box 23 supplemental statement) → one activity per entry, named `"${baseName} — ${pa.name}"`, always `isRentalRealEstate: false, activeParticipation: false`. Schema limitation: the supplemental schema does not distinguish per-sub-activity RE or active-participation status.
+- Direct rental properties from Schedule E Part I → rental RE activities with active participation.
+
+**Computation (`computeForm8582Lines`):**
+- `grossLoss = |totalPassiveLoss| + |totalPriorYearUnallowed|` — basis for allowed vs. suspended.
+- Rental $25k special allowance applies only to RE activities with active participation (LPs never qualify), phased out 50% per $1 of MAGI over $100k, fully phased out at $150k (MFJ / Single / HoH). MFS handling is stubbed — currently treated as MFJ.
+- Real estate professional election (`§469(c)(7)`) excludes rental RE activities with material participation from Form 8582 entirely.
+- `totalAllowedLoss = totalPassiveIncome + effectiveAllowance`; `totalSuspendedLoss = max(0, grossLoss − totalAllowedLoss)`.
+- Worksheet 5 allocates the allowed loss proportionally by `|currentLoss + priorYearUnallowed|` across loss activities.
+
+**PAL carryforward persistence (`fin_pal_carryforwards`):**
+
+| Column | Purpose |
+|---|---|
+| `tax_year` | Opening-balance year (i.e. the year whose Form 8582 Part I Line 1c reads this row) |
+| `activity_name` | Must match `Form8582ActivityLine.activityName` for `findCarryforward` to wire it into the correct row |
+| `activity_ein` | Fallback match key when `activity_name` drifts between years |
+| `ordinary_carryover` | Stored as **negative** magnitude (loss). `findCarryforward` returns this value directly into `priorYearUnallowed` |
+| `short_term_carryover`, `long_term_carryover` | Reserved for future ST/LT capital-loss carryforward separation |
+
+Unique index: `(user_id, tax_year, activity_name)`.
+
+**API** (aliases share the same controller — `PalCarryforwardController`):
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/finance/pal-carryforwards?year=YYYY` ≡ `/api/finance/tax-loss-carryforwards?year=YYYY` | List entries for the year |
+| `POST` | `/api/finance/pal-carryforwards` ≡ `/api/finance/tax-loss-carryforwards` | Upsert by `(user_id, tax_year, activity_name)` — returns 200 (not 201) since creates and updates share the path |
+| `PUT` | `.../{id}` | Update a specific row (tax_year is immutable and silently ignored if sent) |
+| `DELETE` | `.../{id}` | Remove a row |
+
+The `tax-loss-carryforwards` alias is the one the UI code calls; `pal-carryforwards` is kept for backward compatibility and is not referenced in the codebase outside `routes/api.php`.
+
+**Forward-save flow ("Save suspended losses to Y+1"):**
+
+Triggered from `Form8582Preview` after the user reviews year *Y*. For each activity in `form8582.activities`:
+- If `suspendedLossCarryforward > 0`: POST/upsert a carryforward row for *Y+1* with `ordinary_carryover = -suspendedLossCarryforward`.
+- Else if *Y+1* already has a row keyed on this activity name: DELETE it (keeps next-year opening balances in sync with this year's recomputation; will clobber manually entered *Y+1* rows that share an activity_name).
+
+On reload, `TaxPreviewProvider` fetches `/api/finance/tax-loss-carryforwards?year=YYYY`, and `computeForm8582` calls `findCarryforward(name, ein)` — first exact name match, then EIN fallback — to seed `priorYearUnallowed` on each activity.
+
+**UI feedback:** the commit-forward button surfaces either a `role="status"` success message or a `role="alert"` error naming the failed activities. The Form 8582 carryforward editor stays visible even when `activities.length === 0` so that opening balances can be entered before K-1s are reviewed.
+
+**XLSX:** Form 8582 sheet renders Part I per-activity lines, Part II special allowance, Part III allowed/suspended totals, Worksheet 5 per-activity allocation, and per-activity net gain/loss. K-1 sheet gains a "Box 11 S — Per-Activity Passive Items" section when `passiveActivities` is present (codebase-internal label — no formal IRS Box 11 Code S exists; represents Box 23 supplemental statement entries).
+
+---
+
 ### Form 8995 (QBI Deduction) Support
 
 **Directory: `resources/js/finance/8995/`**

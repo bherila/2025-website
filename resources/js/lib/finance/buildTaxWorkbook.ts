@@ -446,14 +446,23 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
                 } as XlsxRow,
               ]
             : []),
-          { line: '4e', description: 'Line 4e — NII (no QD election)', amount: taxReturn.form4952.niiBefore },
           {
             line: '6',
-            description: 'Line 6 — Deductible investment interest expense',
+            description: 'Line 6 — Net investment income (Line 4h − Line 5, no QD election)',
+            amount: taxReturn.form4952.niiBefore,
+            note: 'Floored at zero; basis for Line 8 deductible interest',
+          },
+          {
+            line: '8',
+            description: 'Line 8 — Investment interest expense deduction (smaller of Line 3 or Line 6)',
             amount: taxReturn.form4952.deductibleInvestmentInterestExpense,
             isTotal: true,
           },
-          { line: '7', description: 'Line 7 — Disallowed carryforward', amount: taxReturn.form4952.disallowedCarryforward },
+          {
+            line: '7',
+            description: 'Line 7 — Disallowed investment interest expense carried to next year',
+            amount: taxReturn.form4952.disallowedCarryforward,
+          },
         ]
         return buildSheet('Form 4952', rows)
       })()
@@ -478,8 +487,8 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
           line: '9',
           description: 'Line 9 — Investment interest expense (from Form 4952)',
           amount: taxReturn.scheduleA.totalInvIntExpense,
-          formula: form4952Sheet?.rowIndex.get('Line 6 — Deductible investment interest expense')
-            ? formulaRef('Form 4952', form4952Sheet.rowIndex.get('Line 6 — Deductible investment interest expense')!)
+          formula: form4952Sheet?.rowIndex.get('Line 8 — Investment interest expense deduction (smaller of Line 3 or Line 6)')
+            ? formulaRef('Form 4952', form4952Sheet.rowIndex.get('Line 8 — Investment interest expense deduction (smaller of Line 3 or Line 6)')!)
             : undefined,
         },
         {
