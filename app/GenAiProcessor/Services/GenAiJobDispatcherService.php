@@ -1729,12 +1729,13 @@ PROMPT;
                 // maps to one row in Form 8582 Part V.
                 'passive_activities' => Schema::arrayOf(
                     Schema::object(
-                        'One passive activity from the partnership supplemental statement.',
                         [
                             'name' => Schema::string('Activity description from the supplemental statement (e.g. "Section 1256 contracts activity", "Trading activity — passive").'),
                             'current_income' => Schema::number('Net current-year income from this activity (positive number, or 0 if the activity has a net loss).'),
                             'current_loss' => Schema::number('Net current-year loss from this activity (negative number, or 0 if the activity has net income).'),
                         ],
+                        [],
+                        'One passive activity from the partnership supplemental statement.',
                     )
                 ),
 
