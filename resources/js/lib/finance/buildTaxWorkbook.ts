@@ -132,6 +132,7 @@ function buildK1WorksheetSheet(entry: NonNullable<TaxReturn1040['k1Docs']>[numbe
     { description: 'Schedule A sheet', note: 'See: Schedule A' },
     { description: 'Schedule B sheet', note: 'See: Schedule B' },
     { description: 'Schedule D sheet', note: 'See: Schedule D' },
+    { description: 'Schedule SE sheet', note: 'See: Schedule SE' },
   )
 
   return buildSheet(`K-1 ${entry.entityName}`, rows)
@@ -346,6 +347,52 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
           isTotal: true,
         },
       ])
+    : null
+
+  // ── Schedule SE ──────────────────────────────────────────────────────────────
+  const scheduleSESheet = taxReturn.scheduleSE && taxReturn.scheduleSE.entries.length > 0
+    ? (() => {
+        const s = taxReturn.scheduleSE
+        const sourceStart = 3
+        const sourceEnd = sourceStart + s.entries.length - 1
+        return buildSheet('Schedule SE', [
+          { isHeader: true, description: 'Part I — Self-Employment Earnings' },
+          ...s.entries.map((entry) => ({ description: entry.label, amount: entry.amount })),
+          {
+            line: '2',
+            description: 'Line 2 — Net earnings from self-employment',
+            amount: s.netEarningsFromSE,
+            formula: s.entries.length > 0 ? sumFormula(sourceStart, sourceEnd) : undefined,
+            isTotal: true,
+          },
+          { line: '4a', description: 'Line 4a — 92.35% of net earnings', amount: s.seTaxableEarnings },
+          {
+            line: '7',
+            description: 'Line 7 — Social Security wage base',
+            amount: s.socialSecurityWageBase,
+            note: s.socialSecurityWages > 0
+              ? `Reduced by ${currency(s.socialSecurityWages).format()} already subject to Social Security tax`
+              : undefined,
+          },
+          { line: '8a', description: 'Line 8a — Earnings subject to Social Security tax', amount: s.socialSecurityTaxableEarnings },
+          { line: '10', description: 'Line 10 — Social Security tax (12.4%)', amount: s.socialSecurityTax },
+          { line: '11', description: 'Line 11 — Medicare tax (2.9%)', amount: s.medicareTax },
+          { line: '12', description: 'Line 12 — Self-employment tax → Schedule 2 Line 4', amount: s.seTax, isTotal: true },
+          {
+            description: 'Form 8959 — Additional Medicare tax on self-employment earnings',
+            amount: s.additionalMedicareTax,
+            note: s.additionalMedicareTaxableEarnings > 0
+              ? `${currency(s.additionalMedicareTaxableEarnings).format()} above the ${currency(s.additionalMedicareThreshold).format()} threshold after wages`
+              : 'No Additional Medicare tax from self-employment earnings',
+          },
+          {
+            line: '13',
+            description: 'Line 13 — Deductible half of self-employment tax → Schedule 1 Line 15',
+            amount: s.deductibleSeTax,
+            isTotal: true,
+          },
+        ])
+      })()
     : null
 
   // ── Form 4952 ────────────────────────────────────────────────────────────────
@@ -702,8 +749,16 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
   const scheduleECombined = scheduleESheet?.rowIndex.get('Schedule E combined total')
   const form1116Line2 = form1116Sheet?.rowIndex.get('Total foreign taxes paid')
   const form8995Line13 = form8995Sheet?.rowIndex.get('QBI Deduction — lesser of 20% QBI or taxable income cap')
+  const scheduleSELine12 = scheduleSESheet?.rowIndex.get('Line 12 — Self-employment tax → Schedule 2 Line 4')
+  const scheduleSEAdditionalMedicare = scheduleSESheet?.rowIndex.get('Form 8959 — Additional Medicare tax on self-employment earnings')
   const form8959Line7 = form8959Sheet?.rowIndex.get('Line 7 — Additional Medicare Tax (0.9%) → Schedule 2 Line 11')
   const form8960Line17 = form8960Sheet?.rowIndex.get('NIIT (3.8% × lesser of Line 12 or 15) → Schedule 2 Line 12')
+  const schedule2FormulaRefs = [
+    scheduleSELine12 ? formulaRef('Schedule SE', scheduleSELine12).slice(1) : null,
+    scheduleSEAdditionalMedicare ? formulaRef('Schedule SE', scheduleSEAdditionalMedicare).slice(1) : null,
+    form8959Line7 ? formulaRef('Form 8959', form8959Line7).slice(1) : null,
+    form8960Line17 ? formulaRef('Form 8960', form8960Line17).slice(1) : null,
+  ].filter(Boolean)
 
   const line1a = taxReturn.form1040?.find((line) => line.line === '1a')?.value ?? undefined
   const line2b = scheduleBLine4 ? taxReturn.scheduleB?.interestTotal : undefined
@@ -792,14 +847,10 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
           line: '17',
           description: 'Other taxes (Schedule 2)',
           amount: taxReturn.schedule2?.totalAdditionalTaxes,
-          formula: (form8959Line7 && form8960Line17)
-            ? `=${formulaRef('Form 8959', form8959Line7).slice(1)}+${formulaRef('Form 8960', form8960Line17).slice(1)}`
-            : form8959Line7
-              ? formulaRef('Form 8959', form8959Line7)
-              : form8960Line17
-                ? formulaRef('Form 8960', form8960Line17)
-                : undefined,
-          note: '→ Form 8959 (Medicare) + Form 8960 (NIIT)',
+          formula: schedule2FormulaRefs.length > 0
+            ? `=${schedule2FormulaRefs.join('+')}`
+            : undefined,
+          note: '→ Schedule SE + Form 8959 + Form 8960',
         },
         {
           line: '20',
@@ -840,6 +891,7 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
     scheduleCSheet,
     scheduleDSheet,
     scheduleESheet,
+    scheduleSESheet,
     form1116Sheet,
     form8959Sheet,
     form8960Sheet,

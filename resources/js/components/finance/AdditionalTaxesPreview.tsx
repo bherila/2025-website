@@ -6,7 +6,7 @@ import { useState } from 'react'
 import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import type { CapitalLossCarryoverLines, Form461Lines, Form8959Lines, Form8960Lines, Schedule2Lines } from '@/types/finance/tax-return'
+import type { CapitalLossCarryoverLines, Form461Lines, Form8959Lines, Form8960Lines, Schedule2Lines, ScheduleSELines } from '@/types/finance/tax-return'
 
 /** Reusable data-source drilldown modal. */
 function SourceModal({
@@ -57,19 +57,21 @@ function SourceModal({
 
 interface AdditionalTaxesPreviewProps {
   schedule2?: Schedule2Lines | undefined
+  scheduleSE?: ScheduleSELines | undefined
   form8959?: Form8959Lines | undefined
   form8960?: Form8960Lines | undefined
   capitalLossCarryover?: CapitalLossCarryoverLines | undefined
   form461?: Form461Lines | undefined
 }
 
-export default function AdditionalTaxesPreview({ schedule2, form8959, form8960, capitalLossCarryover, form461 }: AdditionalTaxesPreviewProps) {
+export default function AdditionalTaxesPreview({ schedule2, scheduleSE, form8959, form8960, capitalLossCarryover, form461 }: AdditionalTaxesPreviewProps) {
   const [wagesModal, setWagesModal] = useState(false)
   const [interestModal, setInterestModal] = useState(false)
   const [dividendModal, setDividendModal] = useState(false)
   const [passiveModal, setPassiveModal] = useState(false)
 
   const hasContent =
+    (schedule2?.selfEmploymentTax ?? 0) > 0 ||
     (form8959?.additionalTax ?? 0) > 0 ||
     (form8960?.magi ?? 0) > 0 ||
     (capitalLossCarryover?.combined ?? 0) < 0 ||
@@ -92,8 +94,19 @@ export default function AdditionalTaxesPreview({ schedule2, form8959, form8960, 
           {schedule2.altMinimumTax > 0 && (
             <FormLine label="Line 2 — Alternative Minimum Tax (Form 6251)" value={schedule2.altMinimumTax} />
           )}
+          {schedule2.selfEmploymentTax > 0 && (
+            <FormLine label="Line 4 — Self-employment tax (Schedule SE)" value={schedule2.selfEmploymentTax} />
+          )}
           {schedule2.additionalMedicareTax > 0 && (
-            <FormLine label="Line 11 — Additional Medicare Tax (Form 8959)" value={schedule2.additionalMedicareTax} />
+            <>
+              <FormLine label="Line 11 — Additional Medicare Tax (Form 8959)" value={schedule2.additionalMedicareTax} />
+              {scheduleSE?.additionalMedicareTax ? (
+                <FormLine
+                  label="Line 11 note"
+                  raw={`Includes ${currency(scheduleSE.additionalMedicareTax).format()} from self-employment earnings`}
+                />
+              ) : null}
+            </>
           )}
           {schedule2.niit > 0 && (
             <FormLine label="Line 12 — Net Investment Income Tax (Form 8960)" value={schedule2.niit} />
@@ -109,7 +122,7 @@ export default function AdditionalTaxesPreview({ schedule2, form8959, form8960, 
       {form8959 && form8959.additionalTax > 0 && (
         <FormBlock title="Form 8959 — Additional Medicare Tax (0.9%)">
           <FormLine
-            label="W-2 wages (Box 1)"
+            label="Medicare wages"
             value={form8959.wages}
             {...(form8959.sources.length > 1 ? { onClick: () => setWagesModal(true) } : {})}
           />
@@ -226,9 +239,9 @@ export default function AdditionalTaxesPreview({ schedule2, form8959, form8960, 
     {/* Data source modals */}
     {form8959 && (
       <SourceModal
-        title="W-2 Wage Sources — Form 8959 Line 1"
+        title="Medicare Wage Sources — Form 8959 Line 1"
         rows={form8959.sources.map(s => ({ label: s.label, amount: s.wages }))}
-        totalLabel="Total W-2 wages (Box 1)"
+        totalLabel="Total Medicare wages"
         total={form8959.wages}
         open={wagesModal}
         onClose={() => setWagesModal(false)}

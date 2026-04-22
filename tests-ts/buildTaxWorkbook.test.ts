@@ -133,6 +133,24 @@ describe('buildTaxWorkbook', () => {
         limitedPersonalCapGains: 0,
       },
       scheduleE: { grandTotal: 100, totalPassive: 60, totalNonpassive: 40 },
+      scheduleSE: {
+        entries: [{ label: 'Blue Harbor — Box 14A', amount: 10_000, sourceType: 'k1_box14_a' }],
+        netEarningsFromSE: 10_000,
+        seTaxableEarnings: 9_235,
+        socialSecurityWageBase: 176_100,
+        socialSecurityWages: 0,
+        remainingSocialSecurityWageBase: 176_100,
+        socialSecurityTaxableEarnings: 9_235,
+        socialSecurityTax: 1_145.14,
+        medicareWages: 0,
+        medicareTaxableEarnings: 9_235,
+        medicareTax: 267.82,
+        additionalMedicareThreshold: 200_000,
+        additionalMedicareTaxableEarnings: 0,
+        additionalMedicareTax: 0,
+        seTax: 1_412.96,
+        deductibleSeTax: 706.48,
+      },
       form1116: {
         incomeSources: [],
         taxSources: [],
@@ -167,12 +185,43 @@ describe('buildTaxWorkbook', () => {
       'Schedule C',
       'Schedule D',
       'Schedule E',
+      'Schedule SE',
       'Form 1116',
       'Form 4952',
       'K-1 Blue Harbor',
       'K-3 Blue Harbor',
       '1099-DIV Fidelity SMA',
     ])
+  })
+
+  it('adds a Schedule SE worksheet when self-employment tax data is present', () => {
+    const scheduleSEFixture = {
+      entries: [{ label: 'Acme LP — Box 14A', amount: 100_000, sourceType: 'k1_box14_a' as const }],
+      netEarningsFromSE: 100_000,
+      seTaxableEarnings: 92_350,
+      socialSecurityWageBase: 168_600,
+      socialSecurityWages: 0,
+      remainingSocialSecurityWageBase: 168_600,
+      socialSecurityTaxableEarnings: 92_350,
+      socialSecurityTax: 11_451.4,
+      medicareWages: 0,
+      medicareTaxableEarnings: 92_350,
+      medicareTax: 2_677.15,
+      additionalMedicareThreshold: 200_000,
+      additionalMedicareTaxableEarnings: 0,
+      additionalMedicareTax: 0,
+      seTax: 14_128.55,
+      deductibleSeTax: 7_064.28,
+    }
+    const workbook = buildTaxWorkbook({
+      year: 2025,
+      scheduleSE: scheduleSEFixture,
+    })
+
+    const scheduleSE = workbook.sheets.find(s => s.name === 'Schedule SE')
+    expect(scheduleSE).toBeDefined()
+    expect(scheduleSE?.rows.some(r => r.description === 'Line 12 — Self-employment tax → Schedule 2 Line 4' && r.amount === scheduleSEFixture.seTax)).toBe(true)
+    expect(scheduleSE?.rows.some(r => r.description === 'Line 13 — Deductible half of self-employment tax → Schedule 1 Line 15')).toBe(true)
   })
 
   it('omits undefined schedule fields', () => {

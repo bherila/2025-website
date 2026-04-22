@@ -19,6 +19,7 @@ import ScheduleBPreview from '@/components/finance/ScheduleBPreview'
 import ScheduleCTab from '@/components/finance/ScheduleCTab'
 import ScheduleDPreview from '@/components/finance/ScheduleDPreview'
 import ScheduleEPreview from '@/components/finance/ScheduleEPreview'
+import ScheduleSEPreview from '@/components/finance/ScheduleSEPreview'
 import StateSelectorSection from '@/components/finance/StateSelectorSection'
 import TaxDocumentReviewModal from '@/components/finance/TaxDocumentReviewModal'
 import TaxDocuments1099Section from '@/components/finance/TaxDocuments1099Section'
@@ -32,7 +33,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { fetchWrapper } from '@/fetchWrapper'
 import { buildTaxWorkbook } from '@/lib/finance/buildTaxWorkbook'
-import { getK1sWithAMTItems, getK1sWithPassiveLosses, getK1sWithSEItems, parseK1Field } from '@/lib/finance/k1Utils'
+import { getK1sWithAMTItems, getK1sWithPassiveLosses, parseK1Field } from '@/lib/finance/k1Utils'
 import { type FilingStatus, getStandardDeduction } from '@/lib/tax/standardDeductions'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
@@ -466,7 +467,6 @@ function TaxPreviewPageContent() {
   const [activeTab, setActiveTab] = useState<string>(TAX_TABS.overview)
   const [isExporting, setIsExporting] = useState(false)
   const [showAmtWarning, setShowAmtWarning] = useState(true)
-  const [showSeWarning, setShowSeWarning] = useState(true)
   const [showPassiveLossWarning, setShowPassiveLossWarning] = useState(true)
 
   const handleYearChange = useCallback((year: number | 'all') => {
@@ -580,6 +580,7 @@ function TaxPreviewPageContent() {
     dataThroughQ3.length > dataThroughQ2.length ? ['Q3', dataThroughQ3] : undefined,
     data.length > dataThroughQ3.length ? ['Q4 (Full Year)', data] : undefined,
   ].filter(Boolean) as [string, fin_payslip[]][]
+  const finalSeriesLabel = dataSeries[dataSeries.length - 1]?.[0] ?? 'Q4 (Full Year)'
 
   const scheduleCIncomeBySeries = {
     Q1: scheduleCNetIncome.byQuarter.q1,
@@ -621,7 +622,6 @@ function TaxPreviewPageContent() {
     .map((d) => isFK1StructuredData(d.parsed_data) ? d.parsed_data : null)
     .filter((d): d is FK1StructuredData => d !== null)
   const k1sWithAMT = getK1sWithAMTItems(k1ParsedData)
-  const k1sWithSE = getK1sWithSEItems(k1ParsedData)
   const k1sWithPassiveLosses = getK1sWithPassiveLosses(k1ParsedData)
 
   return (
@@ -686,6 +686,7 @@ function TaxPreviewPageContent() {
           <TabsTrigger value={TAX_TABS.schedules}>Schedules</TabsTrigger>
           <TabsTrigger value={TAX_TABS.scheduleA}>Schedule A</TabsTrigger>
           <TabsTrigger value={TAX_TABS.scheduleE}>Schedule E</TabsTrigger>
+          <TabsTrigger value={TAX_TABS.scheduleSE}>Schedule SE</TabsTrigger>
           <TabsTrigger value={TAX_TABS.capitalGains}>Capital Gains</TabsTrigger>
           <TabsTrigger value={TAX_TABS.form1116}>Form 1116</TabsTrigger>
           <TabsTrigger value={TAX_TABS.form8582}>Form 8582</TabsTrigger>
@@ -765,27 +766,6 @@ function TaxPreviewPageContent() {
               </div>
             </Callout>
           )}
-          {showSeWarning && k1sWithSE.length > 0 && (
-            <Callout kind="alert" title="⚠ Schedule SE (Self-Employment Tax) — Not Yet Computed">
-              <p>
-                The following K-1s report Box 14 self-employment income, but Schedule SE has not been
-                implemented yet. Self-employment tax is not included in the estimate below.
-                Tracked in issue{' '}
-                <a href="https://github.com/bherila/2025-website/issues/273" className="underline" target="_blank" rel="noreferrer">#273</a>.
-              </p>
-              <ul className="mt-1 list-disc list-inside text-xs">
-                {k1sWithSE.map((name, i) => <li key={i}>{name}</li>)}
-              </ul>
-              <div className="flex items-center gap-3">
-                <Button type="button" variant="link" className="h-auto p-0 text-xs" onClick={handleOpenK1Review}>
-                  Open K-1 review
-                </Button>
-                <Button type="button" variant="link" className="h-auto p-0 text-xs" onClick={() => setShowSeWarning(false)}>
-                  Dismiss for this session
-                </Button>
-              </div>
-            </Callout>
-          )}
           <ScheduleBPreview
             interestIncome={income1099.interestIncome}
             dividendIncome={income1099.dividendIncome}
@@ -832,6 +812,17 @@ function TaxPreviewPageContent() {
           <ScheduleEPreview
             reviewedK1Docs={reviewedK1Docs}
             selectedYear={selectedYear}
+          />
+        </TabsContent>
+
+        <TabsContent value={TAX_TABS.scheduleSE} className="mt-0">
+          <ScheduleSEPreview
+            reviewedK1Docs={reviewedK1Docs}
+            scheduleCNetIncome={scheduleCNetIncome.total}
+            selectedYear={selectedYear}
+            isMarried={isMarried}
+            reviewedW2Docs={reviewedW2Docs}
+            payslips={payslips}
           />
         </TabsContent>
 
@@ -912,6 +903,7 @@ function TaxPreviewPageContent() {
         <TabsContent value={TAX_TABS.estimate} className="space-y-6 mt-0">
           <AdditionalTaxesPreview
             schedule2={taxReturn.schedule2}
+            scheduleSE={taxReturn.scheduleSE}
             form8959={taxReturn.form8959}
             form8960={taxReturn.form8960}
             capitalLossCarryover={taxReturn.capitalLossCarryover}
@@ -947,6 +939,14 @@ function TaxPreviewPageContent() {
                     standardDeduction: getStandardDeduction(selectedYear, filingStatus),
                   }}
                   extraIncome={scheduleCIncomeBySeries}
+                  // Schedule 2 taxes are annual computations. Until quarter-specific
+                  // SE / NIIT allocation exists, keep them on the full-year column only.
+                  extraTax={{
+                    Q1: 0,
+                    Q2: 0,
+                    Q3: 0,
+                    [finalSeriesLabel]: taxReturn.schedule2?.totalAdditionalTaxes ?? 0,
+                  }}
                 />
               </div>
               {activeTaxStates.map(stateCode => (
