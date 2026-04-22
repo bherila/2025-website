@@ -80,6 +80,9 @@ export interface ScheduleELines {
 export interface Form4952Lines {
   invIntSources: { label: string; amount: number }[]
   totalInvIntExpense: number
+  /** Box 20B investment expenses (Form 4952 Part II Line 5) — reduce NII. Separate from Part I interest. */
+  invExpSources: { label: string; amount: number }[]
+  totalInvExp: number
   niiBefore: number
   totalQualDiv: number
   deductibleInvestmentInterestExpense: number
@@ -169,6 +172,8 @@ export interface K1ExportEntry {
   fields: Record<string, string | number>
   codes: Record<string, { code: string; value: string }[]>
   k3Sections?: K3Section[]
+  /** Box 11 S — per-activity passive income/loss from supplemental statement (Form 8582). */
+  passiveActivities?: import('@/types/finance/k1-data').K1PassiveActivity[]
 }
 
 export interface K3ExportEntry {

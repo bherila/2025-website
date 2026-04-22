@@ -100,6 +100,23 @@ function buildK1WorksheetSheet(entry: NonNullable<TaxReturn1040['k1Docs']>[numbe
     }))
   }
 
+  if (entry.passiveActivities && entry.passiveActivities.length > 0) {
+    rows.push({ isHeader: true, description: '3a. Box 11 S — Per-Activity Passive Items (Form 8582)' })
+    rows.push(...entry.passiveActivities.map((pa) => ({
+      description: pa.name,
+      amount: currency(pa.currentIncome).add(pa.currentLoss).value,
+      note: `Income: ${currency(pa.currentIncome).format()} | Loss: ${currency(pa.currentLoss).format()} → Form 8582`,
+    })))
+    rows.push({
+      description: 'Total passive activities net',
+      amount: entry.passiveActivities.reduce(
+        (acc, pa) => acc.add(pa.currentIncome).add(pa.currentLoss),
+        currency(0),
+      ).value,
+      isTotal: true,
+    })
+  }
+
   const k3Rows = entry.k3Sections ? renderK3SectionsRows(entry.k3Sections) : []
   if (k3Rows.length > 0) {
     rows.push({ isHeader: true, description: '4. K-3 Summary' })
@@ -404,8 +421,12 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
         }))
         const srcStart = 3
         const srcEnd = srcStart + srcLines.length - 1
+        const expLines = (taxReturn.form4952.invExpSources ?? []).map((s) => ({
+          description: s.label,
+          amount: s.amount,
+        }))
         const rows: XlsxRow[] = [
-          { isHeader: true, description: 'Investment Interest Expense Sources' },
+          { isHeader: true, description: 'Part I — Investment Interest Expense Sources' },
           ...srcLines,
           {
             line: '3',
@@ -413,6 +434,18 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
             amount: taxReturn.form4952.totalInvIntExpense * -1,
             formula: srcLines.length > 0 ? `=-SUM(C${srcStart}:C${srcEnd})` : undefined,
           },
+          { isHeader: true, description: 'Part II — Net Investment Income' },
+          ...(expLines.length > 0
+            ? [
+                ...expLines,
+                {
+                  line: '5',
+                  description: 'Line 5 — Investment expenses (Box 20B)',
+                  amount: (taxReturn.form4952.totalInvExp ?? 0) * -1,
+                  note: 'Reduces NII — Box 20B investment expenses from K-1',
+                } as XlsxRow,
+              ]
+            : []),
           { line: '4e', description: 'Line 4e — NII (no QD election)', amount: taxReturn.form4952.niiBefore },
           {
             line: '6',

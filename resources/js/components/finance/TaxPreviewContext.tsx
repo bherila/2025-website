@@ -172,6 +172,7 @@ function toTaxReturnYearK1Entries(reviewedK1Docs: TaxDocument[]) {
         fields,
         codes,
         ...(doc.parsed_data.k3?.sections ? { k3Sections: doc.parsed_data.k3.sections } : {}),
+        ...(doc.parsed_data.passiveActivities?.length ? { passiveActivities: doc.parsed_data.passiveActivities } : {}),
       }
     })
     .filter((entry): entry is NonNullable<typeof entry> => entry !== null)

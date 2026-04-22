@@ -17,6 +17,7 @@ export const BOX11_CODES: Record<string, string> = {
   G: 'Section 951A income',
   H: 'Section 965(a) inclusion',
   I: 'Subpart F income other than sections 951A and 965',
+  S: 'Passive income (loss) — multi-activity supplemental statement',
   ZZ: 'Other income (loss)',
 }
 
