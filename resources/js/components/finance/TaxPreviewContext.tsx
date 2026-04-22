@@ -19,6 +19,7 @@ import { computeScheduleSE } from '@/components/finance/ScheduleSEPreview'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
+import { computeForm6251Lines } from '@/finance/6251/form6251'
 import { computeForm8582, type PalCarryforwardEntry } from '@/finance/8582/form8582'
 import { computeForm8959Lines } from '@/finance/8959/form8959'
 import { computeForm8960Lines } from '@/finance/8960/form8960'
@@ -28,6 +29,7 @@ import { computeEstimatedTaxPayments } from '@/lib/finance/estimatedTaxPayments'
 import { k1NetIncome } from '@/lib/finance/k1Utils'
 import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import { form461 } from '@/lib/tax/form461'
+import { calculateTax } from '@/lib/tax/taxBracket'
 import { buildCacheKey, getCachedTransactions, setCachedTransactions } from '@/services/transactionCache'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { EmploymentEntity, F1099DivParsedData, F1099IntParsedData, TaxDocument, W2ParsedData } from '@/types/finance/tax-document'
@@ -35,6 +37,8 @@ import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 import type { OverviewRow, TaxReturn1040, UserDeductionEntry } from '@/types/finance/tax-return'
 
 import type { ScheduleCResponse, YearData } from './ScheduleCPreview'
+
+const FEDERAL_TAX_STATE = ''
 
 export interface TaxPreviewShellData {
   year: number
@@ -624,6 +628,7 @@ export function TaxPreviewProvider({
       income1099,
       shortDividendDeduction: shortDividendSummary?.totalItemizedDeduction ?? 0,
     })
+    const form1116 = computeForm1116Lines({ reviewedK1Docs, reviewed1099Docs })
 
     const eblData = form461({
       taxYear: year,
@@ -681,12 +686,65 @@ export function TaxPreviewProvider({
         .filter(r => r.netPassive !== 0)
         .map(r => ({ label: r.partnerName, amount: r.netPassive })),
     })
+    const totalIncomeEstimate = w2GrossIncome
+      .add(income1099.interestIncome)
+      .add(income1099.dividendIncome)
+      .add(scheduleCNetIncome.total)
+      .add(scheduleE.grandTotal)
+      .add(Math.max(scheduleD.schD.schD_line16, -3000)).value
+    const form8995 = computeForm8995({
+      reviewedK1Docs,
+      totalIncome: totalIncomeEstimate,
+      selectedYear: year,
+      isMarried,
+    })
+    const deductionUsed = scheduleA.shouldItemize ? scheduleA.totalItemizedDeductions : scheduleA.standardDeduction
+    const taxableIncomeEstimate = Math.max(
+      0,
+      currency(totalIncomeEstimate)
+        .subtract(deductionUsed)
+        .subtract(form8995.estimatedDeduction).value,
+    )
+    const regularTaxEstimate = calculateTax(
+      String(year),
+      FEDERAL_TAX_STATE,
+      currency(taxableIncomeEstimate),
+      isMarried ? 'Married Filing Jointly' : 'Single',
+    ).totalTax.value
+    // Until AMT-specific Form 1116 limitation logic is implemented, mirror the
+    // regular FTC amount on the AMT side so AMT still reflects foreign-tax-credit
+    // interaction instead of assuming line 8 is always zero.
+    const estimatedAmtForeignTaxCredit = form1116.totalForeignTaxes
+    const form6251 = computeForm6251Lines({
+      taxableIncome: taxableIncomeEstimate,
+      year,
+      isMarried,
+      k1Data: reviewedK1Docs
+        .map((doc) => {
+          const data = isFK1StructuredData(doc.parsed_data) ? doc.parsed_data : null
+          if (!data) {
+            return null
+          }
+
+          const label = data.fields['B']?.value?.split('\n')[0]
+            ?? doc.employment_entity?.display_name
+            ?? doc.original_filename
+            ?? 'Partnership'
+          return { data, label }
+        })
+        .filter((entry): entry is { data: FK1StructuredData; label: string } => entry !== null),
+      scheduleA,
+      regularTax: regularTaxEstimate,
+      regularForeignTaxCredit: form1116.totalForeignTaxes,
+      amtForeignTaxCredit: estimatedAmtForeignTaxCredit,
+    })
     const schedule2 = {
-      altMinimumTax: 0,
+      altMinimumTax: form6251.amt,
       selfEmploymentTax: scheduleSE.seTax,
       additionalMedicareTax: currency(form8959.additionalTax).add(scheduleSE.additionalMedicareTax).value,
       niit: form8960.niitTax,
-      totalAdditionalTaxes: currency(scheduleSE.seTax)
+      totalAdditionalTaxes: currency(form6251.amt)
+        .add(scheduleSE.seTax)
         .add(form8959.additionalTax)
         .add(scheduleSE.additionalMedicareTax)
         .add(form8960.niitTax).value,
@@ -750,7 +808,8 @@ export function TaxPreviewProvider({
       },
       scheduleSE,
       form4952,
-      form1116: computeForm1116Lines({ reviewedK1Docs, reviewed1099Docs }),
+      form1116,
+      form6251,
       schedule2,
       form8959,
       form8960,
@@ -760,17 +819,7 @@ export function TaxPreviewProvider({
         scheduleD.schD.schD_line7,
         scheduleD.schD.schD_line15,
       ),
-      form8995: computeForm8995({
-        reviewedK1Docs,
-        totalIncome: w2GrossIncome
-          .add(income1099.interestIncome)
-          .add(income1099.dividendIncome)
-          .add(scheduleCNetIncome.total)
-          .add(scheduleE.grandTotal)
-          .add(Math.max(scheduleD.schD.schD_line16, -3000)).value,
-        selectedYear: year,
-        isMarried,
-      }),
+      form8995,
       k1Docs: toTaxReturnYearK1Entries(reviewedK1Docs),
       k3Docs: reviewedK1Docs
         .map((doc) => {

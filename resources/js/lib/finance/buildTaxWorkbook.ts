@@ -551,6 +551,56 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
       })()
     : null
 
+  // ── Form 6251 ────────────────────────────────────────────────────────────────
+  const form6251Sheet = taxReturn.form6251
+    ? (() => {
+        const f = taxReturn.form6251
+        const sourceStart = 3
+        const sourceEnd = sourceStart + f.sourceEntries.length - 1
+        const rows: XlsxRow[] = [
+          { isHeader: true, description: 'K-1 Box 17 / AMT Source Items' },
+          ...f.sourceEntries.map((entry) => ({
+            description: `${entry.label} — Box 17${entry.code} → Line ${entry.line}`,
+            amount: entry.amount,
+            note: entry.description,
+          })),
+          {
+            description: 'Total K-1 AMT source items',
+            amount: f.sourceEntries.reduce((total, entry) => currency(total).add(entry.amount).value, 0),
+            formula: f.sourceEntries.length > 0 ? sumFormula(sourceStart, sourceEnd) : undefined,
+            isTotal: true,
+          },
+          { isHeader: true, description: 'Part I — Alternative Minimum Taxable Income' },
+          { line: '1', description: 'Line 1 — Taxable income', amount: f.line1TaxableIncome },
+          { line: '2a', description: 'Line 2a — Taxes / standard deduction addback', amount: f.line2aTaxesOrStandardDeduction },
+          ...(f.line2cInvestmentInterest !== 0 ? [{ line: '2c', description: 'Line 2c — Investment interest adjustment', amount: f.line2cInvestmentInterest }] : []),
+          ...(f.line2dDepletion !== 0 ? [{ line: '2d', description: 'Line 2d — Depletion adjustment', amount: f.line2dDepletion }] : []),
+          ...(f.line2kDispositionOfProperty !== 0 ? [{ line: '2k', description: 'Line 2k — Disposition of property', amount: f.line2kDispositionOfProperty }] : []),
+          ...(f.line2lPost1986Depreciation !== 0 ? [{ line: '2l', description: 'Line 2l — Post-1986 depreciation', amount: f.line2lPost1986Depreciation }] : []),
+          ...(f.line2mPassiveActivities !== 0 ? [{ line: '2m', description: 'Line 2m — Passive activities', amount: f.line2mPassiveActivities }] : []),
+          ...(f.line2nLossLimitations !== 0 ? [{ line: '2n', description: 'Line 2n — Loss limitations', amount: f.line2nLossLimitations }] : []),
+          ...(f.line2tIntangibleDrillingCosts !== 0 ? [{ line: '2t', description: 'Line 2t — Intangible drilling costs', amount: f.line2tIntangibleDrillingCosts }] : []),
+          ...(f.line3OtherAdjustments !== 0 ? [{ line: '3', description: 'Line 3 — Other adjustments', amount: f.line3OtherAdjustments }] : []),
+          { line: '4', description: 'Line 4 — Alternative minimum taxable income (AMTI)', amount: f.amti, isTotal: true },
+          { isHeader: true, description: 'Part II — Alternative Minimum Tax' },
+          { line: '5', description: 'Line 5 — AMT exemption', amount: f.exemption, note: `Base ${currency(f.exemptionBase).format()} less phaseout ${currency(f.exemptionReduction).format()}` },
+          { line: '6', description: 'Line 6 — AMT tax base after exemption', amount: f.amtTaxBase },
+          { line: '7', description: 'Line 7 — AMT before foreign tax credit', amount: f.amtBeforeForeignCredit },
+          ...(f.line8AmtForeignTaxCredit > 0 ? [{ line: '8', description: 'Line 8 — AMT foreign tax credit', amount: f.line8AmtForeignTaxCredit }] : []),
+          { line: '9', description: 'Line 9 — Tentative minimum tax', amount: f.tentativeMinTax, isTotal: true },
+          { line: '10', description: 'Line 10 — Regular tax after credits', amount: f.regularTaxAfterCredits },
+          { line: '11', description: 'Line 11 — Alternative minimum tax', amount: f.amt, isTotal: true, note: '→ Schedule 2 Line 2' },
+        ]
+
+        if (f.requiresStatementReview) {
+          rows.push({ isHeader: true, description: 'Manual review notes' })
+          rows.push(...f.manualReviewReasons.map((reason) => ({ description: reason })))
+        }
+
+        return buildSheet('Form 6251', rows)
+      })()
+    : null
+
   // ── Form 8995 ────────────────────────────────────────────────────────────────
   const form8995Sheet = taxReturn.form8995
     ? (() => {
@@ -748,12 +798,14 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
   const scheduleCNetIncome = scheduleCSheet?.rowIndex.get('Net income / (loss)')
   const scheduleECombined = scheduleESheet?.rowIndex.get('Schedule E combined total')
   const form1116Line2 = form1116Sheet?.rowIndex.get('Total foreign taxes paid')
+  const form6251Line11 = form6251Sheet?.rowIndex.get('Line 11 — Alternative minimum tax')
   const form8995Line13 = form8995Sheet?.rowIndex.get('QBI Deduction — lesser of 20% QBI or taxable income cap')
   const scheduleSELine12 = scheduleSESheet?.rowIndex.get('Line 12 — Self-employment tax → Schedule 2 Line 4')
   const scheduleSEAdditionalMedicare = scheduleSESheet?.rowIndex.get('Form 8959 — Additional Medicare tax on self-employment earnings')
   const form8959Line7 = form8959Sheet?.rowIndex.get('Line 7 — Additional Medicare Tax (0.9%) → Schedule 2 Line 11')
   const form8960Line17 = form8960Sheet?.rowIndex.get('NIIT (3.8% × lesser of Line 12 or 15) → Schedule 2 Line 12')
   const schedule2FormulaRefs = [
+    form6251Line11 ? formulaRef('Form 6251', form6251Line11).slice(1) : null,
     scheduleSELine12 ? formulaRef('Schedule SE', scheduleSELine12).slice(1) : null,
     scheduleSEAdditionalMedicare ? formulaRef('Schedule SE', scheduleSEAdditionalMedicare).slice(1) : null,
     form8959Line7 ? formulaRef('Form 8959', form8959Line7).slice(1) : null,
@@ -850,7 +902,7 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
           formula: schedule2FormulaRefs.length > 0
             ? `=${schedule2FormulaRefs.join('+')}`
             : undefined,
-          note: '→ Schedule SE + Form 8959 + Form 8960',
+          note: '→ Form 6251 + Schedule SE + Form 8959 + Form 8960',
         },
         {
           line: '20',
@@ -893,6 +945,7 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
     scheduleESheet,
     scheduleSESheet,
     form1116Sheet,
+    form6251Sheet,
     form8959Sheet,
     form8960Sheet,
     form8995Sheet,

@@ -121,6 +121,48 @@ export interface Form1116Lines {
   sbpElections?: { docId: number; partnerName: string; active: boolean; sourcedByPartner: number }[]
 }
 
+export interface Form6251SourceEntry {
+  label: string
+  code: string
+  line: string
+  amount: number
+  description: string
+  requiresStatementReview?: boolean
+}
+
+export interface Form6251Lines {
+  line1TaxableIncome: number
+  line2aTaxesOrStandardDeduction: number
+  line2aSource: 'salt_deduction' | 'standard_deduction' | 'none'
+  line2cInvestmentInterest: number
+  line2dDepletion: number
+  line2kDispositionOfProperty: number
+  line2lPost1986Depreciation: number
+  line2mPassiveActivities: number
+  line2nLossLimitations: number
+  line2tIntangibleDrillingCosts: number
+  line3OtherAdjustments: number
+  adjustmentTotal: number
+  amti: number
+  exemption: number
+  exemptionBase: number
+  exemptionReduction: number
+  exemptionPhaseoutThreshold: number
+  amtTaxBase: number
+  amtRateSplitThreshold: number
+  amtBeforeForeignCredit: number
+  line8AmtForeignTaxCredit: number
+  tentativeMinTax: number
+  regularTax: number
+  regularForeignTaxCredit: number
+  regularTaxAfterCredits: number
+  amt: number
+  filingStatus: 'single' | 'mfj'
+  sourceEntries: Form6251SourceEntry[]
+  requiresStatementReview: boolean
+  manualReviewReasons: string[]
+}
+
 export interface K1ExportEntry {
   entityName: string
   ein?: string
@@ -304,6 +346,7 @@ export interface TaxReturn1040 {
   scheduleSE?: ScheduleSELines
   form4952?: Form4952Lines
   form1116?: Form1116Lines
+  form6251?: Form6251Lines
   form8959?: Form8959Lines
   form8960?: Form8960Lines
   form8995?: Form8995Lines
