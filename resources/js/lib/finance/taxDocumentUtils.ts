@@ -5,7 +5,10 @@
  * and the per-account entries stored in the parent document's parsed_data array.
  */
 
-import type { MultiAccountParsedEntry, TaxDocument, TaxDocumentAccountLink } from '@/types/finance/tax-document'
+import { extractForeignTaxFromK1 } from '@/finance/1116'
+import { k1NetIncome } from '@/lib/finance/k1Utils'
+import type { FK1StructuredData, MultiAccountParsedEntry, TaxDocument, TaxDocumentAccountLink } from '@/types/finance/tax-document'
+import { isFK1StructuredData } from '@/types/finance/tax-document'
 
 /**
  * Find the account link that corresponds to a parsed_data entry.
@@ -117,4 +120,102 @@ export function* iterateReviewedBrokerEntries(
  */
 export function hasReviewedContent(doc: TaxDocument): boolean {
   return doc.is_reviewed || (doc.account_links ?? []).some(l => l.is_reviewed)
+}
+
+/** Extract the payer/fund name for display alongside the review button. */
+export function getPayerName(doc: TaxDocument): string | null {
+  if (!doc.parsed_data) {
+    return null
+  }
+  if (doc.form_type === 'k1' && isFK1StructuredData(doc.parsed_data)) {
+    return (doc.parsed_data as FK1StructuredData).fields['B']?.value?.split('\n')[0] ?? null
+  }
+  return ((doc.parsed_data as Record<string, unknown>).payer_name as string | undefined) ?? null
+}
+
+export interface DocAmounts {
+  interest: number | null
+  dividend: number | null
+  other: number | null
+  foreignTax: number | null
+}
+
+/**
+ * Extract structured key amounts (interest / dividend / other / foreign tax) from a
+ * reviewed tax document for display in dedicated table columns. Returns nulls for
+ * missing values so callers can distinguish "no data" from a legitimate zero.
+ *
+ * For consolidated broker_1099 docs with multiple per-form links, amounts are
+ * attributed to the link whose form_type matches — this avoids double-counting
+ * when a single broker PDF exposes both 1099-INT and 1099-DIV child forms for the
+ * same account.
+ */
+export function getDocAmounts(doc: TaxDocument, link?: TaxDocumentAccountLink): DocAmounts {
+  const result: DocAmounts = { interest: null, dividend: null, other: null, foreignTax: null }
+  const effectiveFormType = link ? link.form_type : doc.form_type
+  const effectiveReviewed = link ? link.is_reviewed : doc.is_reviewed
+  if (!doc.parsed_data || !effectiveReviewed) {
+    return result
+  }
+  const p = doc.parsed_data as Record<string, unknown>
+
+  if (doc.form_type === 'broker_1099') {
+    if (effectiveFormType === '1099_int' || effectiveFormType === '1099_int_c') {
+      const interest = p.int_1_interest_income as number | undefined
+      if (interest != null && interest !== 0) {
+        result.interest = interest
+      }
+      const ft = p.int_6_foreign_tax_paid as number | undefined
+      if (ft != null && ft !== 0) {
+        result.foreignTax = ft
+      }
+    } else if (effectiveFormType === '1099_div' || effectiveFormType === '1099_div_c') {
+      const ordDiv = p.div_1a_total_ordinary as number | undefined
+      if (ordDiv != null && ordDiv !== 0) {
+        result.dividend = ordDiv
+      }
+      const ft = p.div_7_foreign_tax_paid as number | undefined
+      if (ft != null && ft !== 0) {
+        result.foreignTax = ft
+      }
+    }
+    return result
+  }
+
+  if (effectiveFormType === '1099_int' || effectiveFormType === '1099_int_c') {
+    const amt = p.box1_interest as number | undefined
+    if (amt != null && amt !== 0) {
+      result.interest = amt
+    }
+    const ft = p.box6_foreign_tax as number | undefined
+    if (ft != null && ft !== 0) {
+      result.foreignTax = ft
+    }
+  } else if (effectiveFormType === '1099_div' || effectiveFormType === '1099_div_c') {
+    const amt = (p.box1a_ordinary ?? p.box1_ordinary) as number | undefined
+    if (amt != null && amt !== 0) {
+      result.dividend = amt
+    }
+    const ft = p.box7_foreign_tax as number | undefined
+    if (ft != null && ft !== 0) {
+      result.foreignTax = ft
+    }
+  } else if (effectiveFormType === '1099_misc') {
+    const amt = (p.box3_other_income ?? p.box3_other ?? p.box7_nonemployee ?? p.total_amount) as number | undefined
+    if (amt != null && amt !== 0) {
+      result.other = amt
+    }
+  } else if (effectiveFormType === 'k1' && isFK1StructuredData(doc.parsed_data)) {
+    const k1Data = doc.parsed_data as FK1StructuredData
+    const net = k1NetIncome(k1Data)
+    if (net !== 0) {
+      result.other = net
+    }
+    const ft = extractForeignTaxFromK1(k1Data)
+    if (ft && ft.totalForeignTaxPaid !== 0) {
+      result.foreignTax = ft.totalForeignTaxPaid
+    }
+  }
+
+  return result
 }

@@ -2,7 +2,7 @@
 
 import currency from 'currency.js'
 import { Calculator, CheckCircle, ChevronDown, Clock, Eye, Loader2, Plus, Upload } from 'lucide-react'
-import { type JSX, useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import MultiAccountImportModal from '@/components/finance/MultiAccountImportModal'
@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
 import type { ForeignTaxSummary } from '@/finance/1116'
 import {
@@ -34,8 +34,7 @@ import {
   WorksheetModal,
 } from '@/finance/1116'
 import { useReviewModal } from '@/hooks/useReviewModal'
-import { k1NetIncome } from '@/lib/finance/k1Utils'
-import { hasReviewedContent, iterateReviewedBrokerEntries } from '@/lib/finance/taxDocumentUtils'
+import { getDocAmounts, getPayerName, hasReviewedContent, iterateReviewedBrokerEntries } from '@/lib/finance/taxDocumentUtils'
 import type { F1099DivParsedData, F1099IntParsedData, FK1StructuredData, TaxDocument, TaxDocumentAccountLink } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS, isFK1StructuredData } from '@/types/finance/tax-document'
 
@@ -289,68 +288,6 @@ export default function TaxDocuments1099Section({
     }
   }
 
-  /** Format the primary taxable amount from a document for display in the review button. */
-  const formatDocumentAmount = (doc: TaxDocument): string | null => {
-    if (!doc.parsed_data) return null
-    const p = doc.parsed_data as Record<string, unknown>
-    if (doc.form_type === '1099_int' || doc.form_type === '1099_int_c') {
-      const amt = p.box1_interest as number | undefined
-      return amt != null ? currency(amt).format() : null
-    }
-    if (doc.form_type === '1099_div' || doc.form_type === '1099_div_c') {
-      const amt = (p.box1a_ordinary ?? p.box1_ordinary) as number | undefined
-      return amt != null ? currency(amt).format() : null
-    }
-    if (doc.form_type === '1099_misc') {
-      const amt = (p.box3_other_income ?? p.box3_other ?? p.box7_nonemployee ?? p.total_amount) as number | undefined
-      return amt != null ? currency(amt).format() : null
-    }
-    return null
-  }
-
-  /** Extract payer/fund name and key amounts for display alongside the review button. */
-  const getDocumentInfo = (doc: TaxDocument, link?: TaxDocumentAccountLink): { payerName: string | null; amountStr: string | null } => {
-    const effectiveFormType = link ? link.form_type : doc.form_type
-    const effectiveReviewed = link ? link.is_reviewed : doc.is_reviewed
-
-    let payerName: string | null = null
-    if (doc.parsed_data) {
-      if (doc.form_type === 'k1' && isFK1StructuredData(doc.parsed_data)) {
-        payerName = (doc.parsed_data as FK1StructuredData).fields['B']?.value?.split('\n')[0] ?? null
-      } else {
-        payerName = ((doc.parsed_data as Record<string, unknown>).payer_name as string | undefined) ?? null
-      }
-    }
-
-    let amountStr: string | null = null
-    if (effectiveReviewed && doc.parsed_data) {
-      const p = doc.parsed_data as Record<string, unknown>
-      if (doc.form_type === 'broker_1099') {
-        // Consolidated broker PDF: amounts are in aggregate parent fields regardless of link form type.
-        const interest = p.int_1_interest_income as number | undefined
-        const ordDiv = p.div_1a_total_ordinary as number | undefined
-        const parts: string[] = []
-        if (interest && interest !== 0) parts.push(`Int ${currency(interest).format()}`)
-        if (ordDiv && ordDiv !== 0) parts.push(`Div ${currency(ordDiv).format()}`)
-        if (parts.length > 0) amountStr = parts.join(' · ')
-      } else if (effectiveFormType === '1099_int' || effectiveFormType === '1099_int_c') {
-        const amt = p.box1_interest as number | undefined
-        if (amt != null) amountStr = `Int ${currency(amt).format()}`
-      } else if (effectiveFormType === '1099_div' || effectiveFormType === '1099_div_c') {
-        const amt = (p.box1a_ordinary ?? p.box1_ordinary) as number | undefined
-        if (amt != null) amountStr = `Div ${currency(amt).format()}`
-      } else if (effectiveFormType === '1099_misc') {
-        const amt = (p.box3_other_income ?? p.box3_other ?? p.box7_nonemployee ?? p.total_amount) as number | undefined
-        if (amt != null) amountStr = currency(amt).format()
-      } else if (effectiveFormType === 'k1' && isFK1StructuredData(doc.parsed_data)) {
-        const net = k1NetIncome(doc.parsed_data as FK1StructuredData)
-        if (net !== 0) amountStr = `Net ${currency(net).format()}`
-      }
-    }
-
-    return { payerName, amountStr }
-  }
-
   /**
    * Render a review/status button for a tax document.
    *
@@ -365,7 +302,6 @@ export default function TaxDocuments1099Section({
     // Use per-link form_type and is_reviewed when a link is provided.
     const effectiveFormType = link ? link.form_type : doc.form_type
     const effectiveReviewed = link ? link.is_reviewed : doc.is_reviewed
-    const displayValue = link ? null : formatDocumentAmount(doc) // amounts only for standalone docs
     const formLabel = FORM_TYPE_LABELS[effectiveFormType] ?? effectiveFormType
     const key = link ? `link-${link.id}` : `doc-${doc.id}`
 
@@ -414,12 +350,7 @@ export default function TaxDocuments1099Section({
         onClick={() => openReviewModal(doc, link)}
         title={effectiveReviewed ? `${formLabel} — Reviewed` : `${formLabel} — Needs Review`}
       >
-        {effectiveFormType !== 'k1' && displayValue != null ? (
-          <>
-            {effectiveReviewed && <CheckCircle className="h-3 w-3 shrink-0" />}
-            <span className="font-mono tabular-nums">{formLabel}: {displayValue}</span>
-          </>
-        ) : effectiveReviewed ? (
+        {effectiveReviewed ? (
           <>
             <CheckCircle className="h-3 w-3" />
             {formLabel}
@@ -434,110 +365,91 @@ export default function TaxDocuments1099Section({
     )
   }
 
-  /** Render the full document section for an account row (existing docs + add dropdown). */
-  const renderAccountDocuments = (account: FinAccount) => {
-    // One entry per (document, account_link) pair for this account. Handles consolidated
-    // broker_1099 docs that expose multiple per-form links for the same account.
-    const docEntries: JSX.Element[] = []
-    const uploadedFormTypes = new Set<string>()
+  type DocRow = {
+    key: string
+    doc: TaxDocument
+    link?: TaxDocumentAccountLink | undefined
+    payerName: string | null
+    amounts: ReturnType<typeof getDocAmounts>
+  }
 
+  type AccountGroup = {
+    account: FinAccount
+    rows: DocRow[]
+    uploadedFormTypes: Set<string>
+    isSecondary: boolean
+  }
+
+  /** Collect per-document rows and which form types have been uploaded for an account. */
+  const buildDocRowsForAccount = (account: FinAccount): Omit<AccountGroup, 'account' | 'isSecondary'> => {
+    const rows: DocRow[] = []
+    const uploadedFormTypes = new Set<string>()
     for (const doc of documents) {
       const links = doc.account_links ?? []
       if (links.length > 0) {
         for (const link of links) {
-          if (link.account_id !== account.acct_id) continue
-          const { payerName, amountStr } = getDocumentInfo(doc, link)
-          docEntries.push(
-            <div key={`link-${link.id}`} className="flex items-center gap-2 flex-wrap min-w-0">
-              {renderTaxDocumentButton(doc, link)}
-              {payerName && <span className="text-xs text-muted-foreground truncate max-w-40">{payerName}</span>}
-              {amountStr && <span className="text-xs font-mono text-muted-foreground whitespace-nowrap">{amountStr}</span>}
-            </div>,
-          )
-          // Normalize corrected forms back to their base type for the "already uploaded" check.
+          if (link.account_id !== account.acct_id) {
+            continue
+          }
+          rows.push({
+            key: `link-${link.id}`,
+            doc,
+            link,
+            payerName: getPayerName(doc),
+            amounts: getDocAmounts(doc, link),
+          })
           const baseType = link.form_type === '1099_int_c' ? '1099_int'
             : link.form_type === '1099_div_c' ? '1099_div'
             : link.form_type
           uploadedFormTypes.add(baseType)
         }
       } else if (doc.account_id === account.acct_id) {
-        // Legacy path: document predates the join table and has no account_links.
-        const { payerName, amountStr } = getDocumentInfo(doc)
-        docEntries.push(
-          <div key={`doc-${doc.id}`} className="flex items-center gap-2 flex-wrap min-w-0">
-            {renderTaxDocumentButton(doc)}
-            {payerName && <span className="text-xs text-muted-foreground truncate max-w-40">{payerName}</span>}
-            {amountStr && <span className="text-xs font-mono text-muted-foreground whitespace-nowrap">{amountStr}</span>}
-          </div>,
-        )
+        rows.push({
+          key: `doc-${doc.id}`,
+          doc,
+          payerName: getPayerName(doc),
+          amounts: getDocAmounts(doc),
+        })
         const baseType = doc.form_type === '1099_int_c' ? '1099_int'
           : doc.form_type === '1099_div_c' ? '1099_div'
           : doc.form_type
         uploadedFormTypes.add(baseType)
       }
     }
-
-    return (
-      <div className="space-y-1.5">
-        {docEntries}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 px-2">
-              <Plus className="h-3 w-3" />
-              Add
-              <ChevronDown className="h-3 w-3" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            {DISPLAY_FORM_TYPES.map(ft => (
-              <DropdownMenuItem
-                key={ft}
-                onClick={() => setUploadModal({ open: true, formType: ft, accountId: account.acct_id })}
-              >
-                <Upload className="h-3 w-3 mr-2" />
-                {FORM_TYPE_LABELS[ft]}
-                {uploadedFormTypes.has(ft) && <span className="ml-2 text-xs text-muted-foreground">(add another)</span>}
-              </DropdownMenuItem>
-            ))}
-            <DropdownMenuItem
-              onClick={() => setConsolidatedUploadAccountId(account.acct_id)}
-            >
-              <Upload className="h-3 w-3 mr-2" />
-              Consolidated 1099 (Broker)
-              {uploadedFormTypes.has('broker_1099') && <span className="ml-2 text-xs text-muted-foreground">(add another)</span>}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    )
+    return { rows, uploadedFormTypes }
   }
 
-  const renderAccountRows = (accountList: FinAccount[], isSecondary: boolean) =>
-    accountList.map(account => {
-      const accountForeignTax = foreignTaxSummaries
-        .filter(s => s.accountId === account.acct_id)
-        .reduce((sum, s) => currency(sum).add(s.totalForeignTaxPaid).value, 0)
-      return (
-        <TableRow
-          key={account.acct_id}
-          className={isSecondary ? 'opacity-50' : ''}
+  /** Render the Add dropdown for an account (shown inline next to the account name). */
+  const renderAddDropdown = (account: FinAccount, uploadedFormTypes: Set<string>) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 px-2">
+          <Plus className="h-3 w-3" />
+          Add
+          <ChevronDown className="h-3 w-3" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {DISPLAY_FORM_TYPES.map(ft => (
+          <DropdownMenuItem
+            key={ft}
+            onClick={() => setUploadModal({ open: true, formType: ft, accountId: account.acct_id })}
+          >
+            <Upload className="h-3 w-3 mr-2" />
+            {FORM_TYPE_LABELS[ft]}
+            {uploadedFormTypes.has(ft) && <span className="ml-2 text-xs text-muted-foreground">(add another)</span>}
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuItem
+          onClick={() => setConsolidatedUploadAccountId(account.acct_id)}
         >
-          <TableCell className={`font-medium text-sm align-middle ${isSecondary ? 'text-muted-foreground' : ''}`}>
-            {account.acct_name}
-          </TableCell>
-          <TableCell>
-            {renderAccountDocuments(account)}
-          </TableCell>
-          <TableCell className="align-middle">
-            {accountForeignTax > 0 && (
-              <span className="text-xs text-amber-700 font-medium">
-                {currency(accountForeignTax).format()}
-              </span>
-            )}
-          </TableCell>
-        </TableRow>
-      )
-    })
+          <Upload className="h-3 w-3 mr-2" />
+          Consolidated 1099 (Broker)
+          {uploadedFormTypes.has('broker_1099') && <span className="ml-2 text-xs text-muted-foreground">(add another)</span>}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 
   return (
     <div>
@@ -579,76 +491,166 @@ export default function TaxDocuments1099Section({
         <p className="text-sm text-muted-foreground">
           No accounts found. Add an account to upload account documents.
         </p>
-      ) : (
-        <div className="border rounded-md overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Account</TableHead>
-                <TableHead>Documents</TableHead>
-                <TableHead>Foreign Tax</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {renderAccountRows(activeAccounts, false)}
-              {inactiveAccounts.length > 0 && activeAccounts.length > 0 && (
+      ) : (() => {
+        const activeGroups: AccountGroup[] = activeAccounts.map(a => ({ account: a, ...buildDocRowsForAccount(a), isSecondary: false }))
+        const inactiveGroups: AccountGroup[] = inactiveAccounts.map(a => ({ account: a, ...buildDocRowsForAccount(a), isSecondary: true }))
+        const allGroups = [...activeGroups, ...inactiveGroups]
+
+        const totals = { interest: currency(0), dividend: currency(0), other: currency(0), foreignTax: currency(0) }
+        let hasInt = false
+        let hasDiv = false
+        let hasOther = false
+        let hasFT = false
+        for (const g of allGroups) {
+          for (const r of g.rows) {
+            if (r.amounts.interest !== null) {
+              hasInt = true
+              totals.interest = totals.interest.add(r.amounts.interest)
+            }
+            if (r.amounts.dividend !== null) {
+              hasDiv = true
+              totals.dividend = totals.dividend.add(r.amounts.dividend)
+            }
+            if (r.amounts.other !== null) {
+              hasOther = true
+              totals.other = totals.other.add(r.amounts.other)
+            }
+            if (r.amounts.foreignTax !== null) {
+              hasFT = true
+              totals.foreignTax = totals.foreignTax.add(r.amounts.foreignTax)
+            }
+          }
+        }
+
+        const totalCols = 3 + (hasInt ? 1 : 0) + (hasDiv ? 1 : 0) + (hasOther ? 1 : 0) + (hasFT ? 1 : 0)
+
+        const fmtAmount = (n: number | null) => n === null ? '' : currency(n).format()
+
+        const renderAmountCells = (a: DocRow['amounts']) => (
+          <>
+            {hasInt && <TableCell className="text-right font-mono text-xs tabular-nums">{fmtAmount(a.interest)}</TableCell>}
+            {hasDiv && <TableCell className="text-right font-mono text-xs tabular-nums">{fmtAmount(a.dividend)}</TableCell>}
+            {hasOther && <TableCell className="text-right font-mono text-xs tabular-nums">{fmtAmount(a.other)}</TableCell>}
+            {hasFT && <TableCell className="text-right font-mono text-xs tabular-nums">{fmtAmount(a.foreignTax)}</TableCell>}
+          </>
+        )
+
+        const renderGroup = (g: AccountGroup) => {
+          const accountCell = (
+            <TableCell
+              rowSpan={Math.max(1, g.rows.length)}
+              className={`font-medium text-sm align-top ${g.isSecondary ? 'text-muted-foreground' : ''}`}
+            >
+              <div className="flex items-center gap-2 flex-wrap">
+                <span>{g.account.acct_name}</span>
+                {renderAddDropdown(g.account, g.uploadedFormTypes)}
+              </div>
+            </TableCell>
+          )
+          if (g.rows.length === 0) {
+            return [
+              <TableRow key={`empty-${g.account.acct_id}`} className={g.isSecondary ? 'opacity-50' : ''}>
+                {accountCell}
+                <TableCell colSpan={totalCols - 1} />
+              </TableRow>,
+            ]
+          }
+          return g.rows.map((r, idx) => (
+            <TableRow key={`${g.account.acct_id}-${r.key}`} className={g.isSecondary ? 'opacity-50' : ''}>
+              {idx === 0 ? accountCell : null}
+              <TableCell className="align-middle">{renderTaxDocumentButton(r.doc, r.link)}</TableCell>
+              <TableCell className="text-xs text-muted-foreground align-middle">{r.payerName}</TableCell>
+              {renderAmountCells(r.amounts)}
+            </TableRow>
+          ))
+        }
+
+        return (
+          <div className="border rounded-md overflow-hidden">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell
-                    colSpan={3}
-                    className="py-1 bg-muted/20 text-[10px] text-muted-foreground font-medium uppercase tracking-wider"
-                  >
-                    No transactions in {selectedYear}
-                  </TableCell>
+                  <TableHead>Account</TableHead>
+                  <TableHead>Document</TableHead>
+                  <TableHead>Name</TableHead>
+                  {hasInt && <TableHead className="text-right">Interest</TableHead>}
+                  {hasDiv && <TableHead className="text-right">Dividends</TableHead>}
+                  {hasOther && <TableHead className="text-right">Other</TableHead>}
+                  {hasFT && <TableHead className="text-right">Foreign Tax</TableHead>}
                 </TableRow>
-              )}
-              {renderAccountRows(inactiveAccounts, true)}
-              {(pendingBrokerDocs.length > 0 || unresolvedBrokerDocs.length > 0) && (
-                <TableRow>
-                  <TableCell
-                    colSpan={3}
-                    className="py-1 bg-orange-50 dark:bg-orange-950/20 text-[10px] text-orange-700 dark:text-orange-400 font-medium uppercase tracking-wider"
-                  >
-                    Pending imports — awaiting account assignment
-                  </TableCell>
-                </TableRow>
-              )}
-              {pendingBrokerDocs.map(doc => (
-                <TableRow key={`pending-${doc.id}`}>
-                  <TableCell className="text-sm text-muted-foreground italic">
-                    {doc.original_filename ?? 'Consolidated 1099'}
-                  </TableCell>
-                  <TableCell>
-                    <Button size="sm" variant="outline" disabled className="gap-1 h-7 text-xs border-orange-300 text-orange-600 px-2">
-                      <Clock className="h-3 w-3 animate-pulse" />
-                      Processing…
-                    </Button>
-                  </TableCell>
-                  <TableCell />
-                </TableRow>
-              ))}
-              {unresolvedBrokerDocs.map(doc => (
-                <TableRow key={`unresolved-${doc.id}`}>
-                  <TableCell className="text-sm text-muted-foreground italic">
-                    {doc.original_filename ?? 'Consolidated 1099'}
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="gap-1 h-7 text-xs border-amber-300 text-amber-700 px-2"
-                      onClick={() => setAssignDocId(doc.id)}
+              </TableHeader>
+              <TableBody>
+                {activeGroups.flatMap(renderGroup)}
+                {inactiveGroups.length > 0 && activeGroups.length > 0 && (
+                  <TableRow>
+                    <TableCell
+                      colSpan={totalCols}
+                      className="py-1 bg-muted/20 text-[10px] text-muted-foreground font-medium uppercase tracking-wider"
                     >
-                      <Eye className="h-3 w-3" />
-                      Assign accounts
-                    </Button>
-                  </TableCell>
-                  <TableCell />
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+                      No transactions in {selectedYear}
+                    </TableCell>
+                  </TableRow>
+                )}
+                {inactiveGroups.flatMap(renderGroup)}
+                {(pendingBrokerDocs.length > 0 || unresolvedBrokerDocs.length > 0) && (
+                  <TableRow>
+                    <TableCell
+                      colSpan={totalCols}
+                      className="py-1 bg-orange-50 dark:bg-orange-950/20 text-[10px] text-orange-700 dark:text-orange-400 font-medium uppercase tracking-wider"
+                    >
+                      Pending imports — awaiting account assignment
+                    </TableCell>
+                  </TableRow>
+                )}
+                {pendingBrokerDocs.map(doc => (
+                  <TableRow key={`pending-${doc.id}`}>
+                    <TableCell className="text-sm text-muted-foreground italic">
+                      {doc.original_filename ?? 'Consolidated 1099'}
+                    </TableCell>
+                    <TableCell>
+                      <Button size="sm" variant="outline" disabled className="gap-1 h-7 text-xs border-orange-300 text-orange-600 px-2">
+                        <Clock className="h-3 w-3 animate-pulse" />
+                        Processing…
+                      </Button>
+                    </TableCell>
+                    <TableCell colSpan={totalCols - 2} />
+                  </TableRow>
+                ))}
+                {unresolvedBrokerDocs.map(doc => (
+                  <TableRow key={`unresolved-${doc.id}`}>
+                    <TableCell className="text-sm text-muted-foreground italic">
+                      {doc.original_filename ?? 'Consolidated 1099'}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1 h-7 text-xs border-amber-300 text-amber-700 px-2"
+                        onClick={() => setAssignDocId(doc.id)}
+                      >
+                        <Eye className="h-3 w-3" />
+                        Assign accounts
+                      </Button>
+                    </TableCell>
+                    <TableCell colSpan={totalCols - 2} />
+                  </TableRow>
+                ))}
+              </TableBody>
+              {(hasInt || hasDiv || hasOther || hasFT) && (
+                <TableFooter>
+                  <TableRow>
+                    <TableCell colSpan={3} className="font-semibold text-sm">Total</TableCell>
+                    {hasInt && <TableCell className="text-right font-mono text-xs tabular-nums font-semibold">{currency(totals.interest.value).format()}</TableCell>}
+                    {hasDiv && <TableCell className="text-right font-mono text-xs tabular-nums font-semibold">{currency(totals.dividend.value).format()}</TableCell>}
+                    {hasOther && <TableCell className="text-right font-mono text-xs tabular-nums font-semibold">{currency(totals.other.value).format()}</TableCell>}
+                    {hasFT && <TableCell className="text-right font-mono text-xs tabular-nums font-semibold">{currency(totals.foreignTax.value).format()}</TableCell>}
+                  </TableRow>
+                </TableFooter>
+              )}
+            </Table>
+          </div>
+        )
+      })()}
 
       {/* Upload modal */}
       {uploadModal && (
