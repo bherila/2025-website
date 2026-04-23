@@ -1,3 +1,4 @@
+import type { ForeignTaxSummary } from '@/finance/1116'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 
