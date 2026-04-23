@@ -57,11 +57,17 @@ interface Form1116PreviewProps {
   onBulkSetSbpElection?: (active: boolean, docIds: number[]) => Promise<string[]>
 }
 
+interface ComputeForm1116LinesArgs {
+  reviewedK1Docs: TaxDocument[]
+  reviewed1099Docs: TaxDocument[]
+  foreignTaxSummaries?: ForeignTaxSummary[] | undefined
+}
+
 export function computeForm1116Lines({
   reviewedK1Docs,
   reviewed1099Docs,
   foreignTaxSummaries,
-}: Pick<Form1116PreviewProps, 'reviewedK1Docs' | 'reviewed1099Docs' | 'foreignTaxSummaries'>): Form1116Lines {
+}: ComputeForm1116LinesArgs): Form1116Lines {
   const k1Parsed = reviewedK1Docs
     .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
     .filter((x): x is { doc: TaxDocument; data: FK1StructuredData } => x.data !== null)
@@ -196,11 +202,7 @@ export default function Form1116Preview({
   const [bulkUpdating, setBulkUpdating] = useState(false)
   const [bulkFailures, setBulkFailures] = useState<string[]>([])
   const [worksheetOpen, setWorksheetOpen] = useState(false)
-  const computed = computeForm1116Lines({
-    reviewedK1Docs,
-    reviewed1099Docs,
-    ...(foreignTaxSummaries ? { foreignTaxSummaries } : {}),
-  })
+  const computed = computeForm1116Lines({ reviewedK1Docs, reviewed1099Docs, foreignTaxSummaries })
   const worksheetSummaries = foreignTaxSummaries ?? collectForeignTaxSummaries([...reviewedK1Docs, ...reviewed1099Docs])
   const {
     incomeSources,
