@@ -5,6 +5,7 @@
  */
 export const TAX_TABS = {
   overview: 'overview',
+  w2: 'w2',
   schedules: 'schedules',
   scheduleA: 'schedule-a',
   scheduleE: 'schedule-e',

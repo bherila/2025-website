@@ -2,7 +2,7 @@
 
 import currency from 'currency.js'
 import { ClipboardList } from 'lucide-react'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import ActionItemsTab from '@/components/finance/ActionItemsTab'
 import AdditionalTaxesPreview from '@/components/finance/AdditionalTaxesPreview'
@@ -464,8 +464,25 @@ function TaxPreviewPageContent() {
 
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
   const [reviewModalDoc, setReviewModalDoc] = useState<TaxDocument | undefined>(undefined)
-  const [activeTab, setActiveTab] = useState<string>(TAX_TABS.overview)
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    const hash = typeof window !== 'undefined' ? window.location.hash.slice(1) : ''
+    return (Object.values(TAX_TABS) as string[]).includes(hash) ? hash : TAX_TABS.overview
+  })
   const [isExporting, setIsExporting] = useState(false)
+
+  const handleTabChange = useCallback((tab: string) => {
+    setActiveTab(tab)
+    window.history.pushState(null, '', `#${tab}`)
+  }, [])
+
+  useEffect(() => {
+    const onPopState = () => {
+      const hash = window.location.hash.slice(1)
+      setActiveTab((Object.values(TAX_TABS) as string[]).includes(hash) ? hash : TAX_TABS.overview)
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
 
   const handleYearChange = useCallback((year: number | 'all') => {
     if (typeof year !== 'number') return
@@ -672,9 +689,10 @@ function TaxPreviewPageContent() {
         }}
       />
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="px-4 pb-8">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="px-4 pb-8">
         <TabsList className="mb-4 flex-wrap">
           <TabsTrigger value={TAX_TABS.overview}>Overview</TabsTrigger>
+          <TabsTrigger value={TAX_TABS.w2}>W-2</TabsTrigger>
           <TabsTrigger value={TAX_TABS.schedules}>Schedules</TabsTrigger>
           <TabsTrigger value={TAX_TABS.scheduleA}>Schedule A</TabsTrigger>
           <TabsTrigger value={TAX_TABS.scheduleE}>Schedule E</TabsTrigger>
@@ -700,6 +718,18 @@ function TaxPreviewPageContent() {
             reviewedK1Docs={reviewedK1Docs}
           />
 
+          <TaxDocuments1099Section
+            selectedYear={selectedYear}
+            documents={accountDocuments}
+            accounts={accounts}
+            activeAccountIds={activeAccountIds}
+            isLoading={isLoading}
+            onDocumentsReload={refreshAll}
+            onNavigate={handleTabChange}
+          />
+        </TabsContent>
+
+        <TabsContent value={TAX_TABS.w2} className="space-y-6 mt-0">
           {showTaxTables ? (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <div className="lg:col-span-1">
@@ -726,15 +756,6 @@ function TaxPreviewPageContent() {
               onDocumentsReload={refreshAll}
             />
           )}
-
-          <TaxDocuments1099Section
-            selectedYear={selectedYear}
-            documents={accountDocuments}
-            accounts={accounts}
-            activeAccountIds={activeAccountIds}
-            isLoading={isLoading}
-            onDocumentsReload={refreshAll}
-          />
         </TabsContent>
 
         <TabsContent value={TAX_TABS.schedules} className="space-y-6 mt-0">
@@ -873,7 +894,7 @@ function TaxPreviewPageContent() {
             w2Documents={reviewedW2Docs}
             interestDocuments={reviewed1099Docs.filter((doc) => doc.form_type === '1099_int' || doc.form_type === '1099_int_c')}
             dividendDocuments={reviewed1099Docs.filter((doc) => doc.form_type === '1099_div' || doc.form_type === '1099_div_c')}
-            onNavigate={setActiveTab}
+            onNavigate={handleTabChange}
           />
 
           {showTaxTables && (
