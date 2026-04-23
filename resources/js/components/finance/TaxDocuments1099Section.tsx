@@ -91,6 +91,8 @@ function MoneyHeader({
               variant="ghost"
               className="h-5 w-5 p-0"
               onClick={() => onNavigate(tab)}
+              aria-label={tooltip}
+              title={tooltip}
             >
               <FileText className="h-3 w-3" />
             </Button>
@@ -472,13 +474,16 @@ export default function TaxDocuments1099Section({
             key: `link-${link.id}`,
             doc,
             link,
-            payerName: getPayerName(doc),
+            payerName: getPayerName(doc, link),
             amounts: getDocAmounts(doc, link),
           })
           const baseType = link.form_type === '1099_int_c' ? '1099_int'
             : link.form_type === '1099_div_c' ? '1099_div'
             : link.form_type
           uploadedFormTypes.add(baseType)
+          if (doc.form_type === 'broker_1099') {
+            uploadedFormTypes.add('broker_1099')
+          }
         }
       } else if (doc.account_id === account.acct_id) {
         rows.push({

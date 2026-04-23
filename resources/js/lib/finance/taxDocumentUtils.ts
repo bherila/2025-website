@@ -5,7 +5,7 @@
  * and the per-account entries stored in the parent document's parsed_data array.
  */
 
-import { extractForeignTaxFromK1 } from '@/finance/1116'
+import { extractForeignTaxFromK1 } from '@/finance/1116/k3-to-1116'
 import { k1NetIncome } from '@/lib/finance/k1Utils'
 import type { FK1StructuredData, MultiAccountParsedEntry, TaxDocument, TaxDocumentAccountLink } from '@/types/finance/tax-document'
 import { isFK1StructuredData } from '@/types/finance/tax-document'
@@ -123,12 +123,19 @@ export function hasReviewedContent(doc: TaxDocument): boolean {
 }
 
 /** Extract the payer/fund name for display alongside the review button. */
-export function getPayerName(doc: TaxDocument): string | null {
+export function getPayerName(doc: TaxDocument, link?: TaxDocumentAccountLink): string | null {
   if (!doc.parsed_data) {
     return null
   }
   if (doc.form_type === 'k1' && isFK1StructuredData(doc.parsed_data)) {
     return (doc.parsed_data as FK1StructuredData).fields['B']?.value?.split('\n')[0] ?? null
+  }
+  if (Array.isArray(doc.parsed_data)) {
+    if (!link) {
+      return null
+    }
+    const entryData = extractLinkParsedData(doc, link)
+    return (entryData?.payer_name as string | undefined) ?? null
   }
   return ((doc.parsed_data as Record<string, unknown>).payer_name as string | undefined) ?? null
 }
@@ -157,30 +164,39 @@ export function getDocAmounts(doc: TaxDocument, link?: TaxDocumentAccountLink): 
   if (!doc.parsed_data || !effectiveReviewed) {
     return result
   }
-  const p = doc.parsed_data as Record<string, unknown>
 
   if (doc.form_type === 'broker_1099') {
+    // Multi-account broker imports store parsed_data as an array of per-account entries;
+    // read the matching entry's inner parsed_data instead of the outer array.
+    const p: Record<string, unknown> | null = Array.isArray(doc.parsed_data)
+      ? link ? extractLinkParsedData(doc, link) : null
+      : (doc.parsed_data as Record<string, unknown>)
+    if (!p) {
+      return result
+    }
     if (effectiveFormType === '1099_int' || effectiveFormType === '1099_int_c') {
-      const interest = p.int_1_interest_income as number | undefined
+      const interest = (p.int_1_interest_income ?? p.box1_interest) as number | undefined
       if (interest != null && interest !== 0) {
         result.interest = interest
       }
-      const ft = p.int_6_foreign_tax_paid as number | undefined
+      const ft = (p.int_6_foreign_tax_paid ?? p.box6_foreign_tax) as number | undefined
       if (ft != null && ft !== 0) {
         result.foreignTax = ft
       }
     } else if (effectiveFormType === '1099_div' || effectiveFormType === '1099_div_c') {
-      const ordDiv = p.div_1a_total_ordinary as number | undefined
+      const ordDiv = (p.div_1a_total_ordinary ?? p.box1a_ordinary ?? p.box1_ordinary) as number | undefined
       if (ordDiv != null && ordDiv !== 0) {
         result.dividend = ordDiv
       }
-      const ft = p.div_7_foreign_tax_paid as number | undefined
+      const ft = (p.div_7_foreign_tax_paid ?? p.box7_foreign_tax) as number | undefined
       if (ft != null && ft !== 0) {
         result.foreignTax = ft
       }
     }
     return result
   }
+
+  const p = doc.parsed_data as Record<string, unknown>
 
   if (effectiveFormType === '1099_int' || effectiveFormType === '1099_int_c') {
     const amt = p.box1_interest as number | undefined

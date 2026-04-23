@@ -51,6 +51,40 @@ describe('getPayerName', () => {
     })
     expect(getPayerName(doc)).toBe('Acme Partners LP')
   })
+
+  it('returns null for a multi-account array broker_1099 when no link is provided', () => {
+    const doc = makeDoc({
+      form_type: 'broker_1099',
+      parsed_data: [
+        {
+          account_identifier: 'A1',
+          account_name: 'Acct 1',
+          form_type: '1099_div',
+          tax_year: 2025,
+          parsed_data: { payer_name: 'Fidelity' },
+        },
+      ] as never,
+    })
+    expect(getPayerName(doc)).toBeNull()
+  })
+
+  it('extracts payer_name from the matching entry in a multi-account array broker_1099', () => {
+    const link = makeLink({ form_type: '1099_div', ai_identifier: 'A1' })
+    const doc = makeDoc({
+      form_type: 'broker_1099',
+      account_links: [link],
+      parsed_data: [
+        {
+          account_identifier: 'A1',
+          account_name: 'Acct 1',
+          form_type: '1099_div',
+          tax_year: 2025,
+          parsed_data: { payer_name: 'Fidelity' },
+        },
+      ] as never,
+    })
+    expect(getPayerName(doc, link)).toBe('Fidelity')
+  })
 })
 
 describe('getDocAmounts', () => {
@@ -124,5 +158,65 @@ describe('getDocAmounts', () => {
     })
     const link = makeLink({ form_type: '1099_int', is_reviewed: false })
     expect(getDocAmounts(doc, link)).toEqual({ interest: null, dividend: null, other: null, foreignTax: null })
+  })
+
+  it('extracts amounts from the matching entry in a multi-account array broker_1099 (1099-INT link)', () => {
+    const link = makeLink({ form_type: '1099_int', ai_identifier: 'A1' })
+    const doc = makeDoc({
+      form_type: 'broker_1099',
+      account_links: [link],
+      parsed_data: [
+        {
+          account_identifier: 'A1',
+          account_name: 'Acct 1',
+          form_type: '1099_int',
+          tax_year: 2025,
+          parsed_data: { box1_interest: 150, box6_foreign_tax: 3 },
+        },
+      ] as never,
+    })
+    expect(getDocAmounts(doc, link)).toEqual({ interest: 150, dividend: null, other: null, foreignTax: 3 })
+  })
+
+  it('extracts amounts from the matching entry in a multi-account array broker_1099 (1099-DIV link)', () => {
+    const divLink = makeLink({ id: 201, form_type: '1099_div', ai_identifier: 'A1' })
+    const intLink = makeLink({ id: 200, form_type: '1099_int', ai_identifier: 'A1' })
+    const doc = makeDoc({
+      form_type: 'broker_1099',
+      account_links: [intLink, divLink],
+      parsed_data: [
+        {
+          account_identifier: 'A1',
+          account_name: 'Acct 1',
+          form_type: '1099_int',
+          tax_year: 2025,
+          parsed_data: { box1_interest: 150 },
+        },
+        {
+          account_identifier: 'A1',
+          account_name: 'Acct 1',
+          form_type: '1099_div',
+          tax_year: 2025,
+          parsed_data: { box1a_ordinary: 900, box7_foreign_tax: 20 },
+        },
+      ] as never,
+    })
+    expect(getDocAmounts(doc, divLink)).toEqual({ interest: null, dividend: 900, other: null, foreignTax: 20 })
+  })
+
+  it('returns nulls for multi-account array broker_1099 when no link is provided', () => {
+    const doc = makeDoc({
+      form_type: 'broker_1099',
+      parsed_data: [
+        {
+          account_identifier: 'A1',
+          account_name: 'Acct 1',
+          form_type: '1099_int',
+          tax_year: 2025,
+          parsed_data: { box1_interest: 150 },
+        },
+      ] as never,
+    })
+    expect(getDocAmounts(doc)).toEqual({ interest: null, dividend: null, other: null, foreignTax: null })
   })
 })
