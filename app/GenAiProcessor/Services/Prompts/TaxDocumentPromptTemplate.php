@@ -185,7 +185,29 @@ EXTRACTION RULES:
    - All dates: YYYY-MM-DD.
    - Partner number / form ID: capture from header if present.
 
-CRITICAL COMPLETENESS CHECK (10): Before returning, verify that if a Schedule K-3 is attached,
+10. TRADER IN SECURITIES CLASSIFICATION:
+   Set `field_partnershipPosition_traderInSecurities` to TRUE if the K-1 face page, attached
+   supplemental statements, or cover letter includes any phrase indicating the partnership
+   is classified as a trader in securities — e.g., "Trader in Securities (neither portfolio
+   nor passive)", "trading fund", "trader fund", or similar. This overrides the limited
+   partner designation for §469 passive-loss purposes; trader funds are nonpassive regardless
+   of partner type.
+
+11. PASSIVE ACTIVITIES (Box 23 = true):
+   When Box 23 (more than one activity for passive-loss purposes) is checked, the partnership
+   must attach a supplemental statement listing each passive activity separately.  Extract
+   each activity into `passive_activities` as follows:
+   - `name`: the activity description from the statement (e.g. "Section 1256 contracts
+     activity", "Other passive activity — trading", etc.).
+   - `current_income`: the net current-year income for that activity (positive number, or 0).
+   - `current_loss`: the net current-year loss for that activity (negative number, or 0).
+   If an activity has both gross income and gross loss within it, report only the NET amount
+   in the appropriate field and 0 in the other.  These values feed Form 8582 Part V directly.
+   Common sources: Box 11 coded entries (e.g. Code C = Section 1256, Code S = other passive
+   sub-activities); the fund's "Passive Activity" supplemental worksheet; or at-risk schedule.
+   Omit `passive_activities` entirely (or leave it empty) when Box 23 is not checked.
+
+CRITICAL COMPLETENESS CHECK (12): Before returning, verify that if a Schedule K-3 is attached,
 at minimum `k3_part2_rows`, `k3_part3_asset_rows`, and `k3_part3_foreign_taxes` are
 non-empty. If any of these are empty despite the K-3 having that section, add a warning.
 PROMPT;

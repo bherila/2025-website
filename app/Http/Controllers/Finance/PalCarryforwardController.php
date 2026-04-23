@@ -11,7 +11,7 @@ use Illuminate\Http\Request;
 
 class PalCarryforwardController extends Controller
 {
-    /** GET /api/finance/pal-carryforwards?year=YYYY — list carryforwards for the year. */
+    /** GET /api/finance/{pal-carryforwards|tax-loss-carryforwards}?year=YYYY — list carryforwards for the year. */
     public function index(Request $request): JsonResponse
     {
         $year = (int) $request->query('year', date('Y'));
@@ -26,18 +26,28 @@ class PalCarryforwardController extends Controller
         return response()->json($carryforwards->map(fn (PalCarryforward $cf): array => $this->toResponseArray($cf)));
     }
 
-    /** POST /api/finance/pal-carryforwards — add a carryforward entry. */
+    /** POST /api/finance/{pal-carryforwards|tax-loss-carryforwards} — create or update a carryforward entry. */
     public function store(StorePalCarryforwardRequest $request): JsonResponse
     {
-        $carryforward = PalCarryforward::create([
+        $attributes = [
             'user_id' => auth()->id(),
-            ...$request->validated(),
-        ]);
+            'tax_year' => $request->integer('tax_year'),
+            'activity_name' => (string) $request->string('activity_name'),
+        ];
 
-        return response()->json($this->toResponseArray($carryforward), 201);
+        $values = [
+            'activity_ein' => $request->validated('activity_ein') ?? null,
+            'ordinary_carryover' => (float) $request->validated('ordinary_carryover'),
+            'short_term_carryover' => (float) ($request->validated('short_term_carryover') ?? 0),
+            'long_term_carryover' => (float) ($request->validated('long_term_carryover') ?? 0),
+        ];
+
+        $carryforward = PalCarryforward::query()->updateOrCreate($attributes, $values);
+
+        return response()->json($this->toResponseArray($carryforward));
     }
 
-    /** PUT /api/finance/pal-carryforwards/{id} — update a carryforward entry. */
+    /** PUT /api/finance/{pal-carryforwards|tax-loss-carryforwards}/{id} — update a carryforward entry. */
     public function update(UpdatePalCarryforwardRequest $request, int $id): JsonResponse
     {
         $carryforward = PalCarryforward::query()
@@ -49,7 +59,7 @@ class PalCarryforwardController extends Controller
         return response()->json($this->toResponseArray($carryforward));
     }
 
-    /** DELETE /api/finance/pal-carryforwards/{id} — remove a carryforward entry. */
+    /** DELETE /api/finance/{pal-carryforwards|tax-loss-carryforwards}/{id} — remove a carryforward entry. */
     public function destroy(int $id): JsonResponse
     {
         PalCarryforward::query()

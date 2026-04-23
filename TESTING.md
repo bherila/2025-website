@@ -1,31 +1,49 @@
 # Testing Guide
 
-**IMPORTANT**: All validations below MUST pass before committing code.
+**IMPORTANT**: All validations below MUST pass before committing code. None of these
+are optional — PHPStan in particular is easy to forget because other checks may still
+pass while static-analysis errors stay uncaught.
 
-## Frontend
+## Pre-Commit Checklist
 
-Run these first — all are mandatory:
+Run every command below. Every one must return a clean result before any commit or push:
+
+| # | Layer | Command | Must produce |
+|---|---|---|---|
+| 1 | TS   | `pnpm run type-check` | No errors |
+| 2 | JS   | `pnpm run lint` | No errors |
+| 3 | JS   | `pnpm run test` | All tests pass |
+| 4 | PHP  | `./vendor/bin/pint --test --format agent` | `{"result":"pass"}` |
+| 5 | PHP  | `vendor/bin/phpstan analyse --no-progress` | `[OK] No errors` |
+| 6 | PHP  | `composer test` (or `php artisan test --compact`) | All tests pass |
+
+Steps 1–3 are fast; run them first. Step 5 (PHPStan) is the step most likely to fail
+silently if skipped — always run it even when your change looks "PHP-trivial".
+
+## Frontend (steps 1–3)
 
 1. **TypeScript**: `pnpm run type-check` — must pass with no errors
 2. **ESLint**: `pnpm run lint` — must pass with no errors
 3. **Jest**: `pnpm run test` — all tests must pass
 
-## Backend
+## Backend (steps 4–6)
 
 Before running backend tests, build the Vite manifest: `pnpm run build` (required for blade view tests).
 
 All PHP tests run against an **in-memory SQLite database** for speed and safety — no risk to local or production MySQL.
 
-1. **Laravel Pint** (PHP linter): `./vendor/bin/pint --test` to check, `./vendor/bin/pint` to fix
-   - This is mandatory for every change, including minor fixes and refactors.
-2. **PHPStan** (static analysis): `vendor/bin/phpstan analyse --no-progress` — must report no errors
-   - Runs at level 5 with the Larastan Laravel extension
-   - Pre-existing errors are captured in `phpstan-baseline.neon`; new code must not introduce new errors
-   - To regenerate the baseline after fixing old errors: `vendor/bin/phpstan analyse --generate-baseline=phpstan-baseline.neon`
-3. **PHP Type Annotations**: All PHP methods and functions MUST have explicit return type annotations.
-4. **PHPUnit**: `composer test` — all tests must pass
-   - SQLite in-memory is auto-configured via `phpunit.xml` + `tests/bootstrap.php`
-   - Do NOT use `$this->withoutVite()`; the real manifest should exist during testing
+4. **Laravel Pint** (PHP linter): `./vendor/bin/pint --test --format agent` to check, `./vendor/bin/pint --format agent` to fix.
+   - Mandatory for every PHP change, including minor fixes and refactors.
+5. **PHPStan** (static analysis): `vendor/bin/phpstan analyse --no-progress` — must report `[OK] No errors`.
+   - Runs at level 5 with the Larastan Laravel extension.
+   - Pre-existing errors are captured in `phpstan-baseline.neon`; new code must not introduce new errors.
+   - Common failure pattern to check before committing: calling a `Schema::*` / builder / fluent helper with its arguments in the wrong order — PHPStan flags the type mismatch where Pint and PHPUnit stay silent.
+   - Never suppress with `@phpstan-ignore`, baseline entries, inline `@var` tags, `assert()`, or defensive casts. Fix the underlying type.
+   - To regenerate the baseline after fixing old errors: `vendor/bin/phpstan analyse --generate-baseline=phpstan-baseline.neon`.
+6. **PHP Type Annotations**: All PHP methods and functions MUST have explicit return type annotations.
+7. **PHPUnit**: `composer test` — all tests must pass.
+   - SQLite in-memory is auto-configured via `phpunit.xml` + `tests/bootstrap.php`.
+   - Do NOT use `$this->withoutVite()`; the real manifest should exist during testing.
 
 
 ### Database Safety

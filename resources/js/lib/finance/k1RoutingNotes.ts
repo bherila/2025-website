@@ -7,6 +7,8 @@
 /** Routing notes for plain-number K-1 boxes (source ← and destination →). */
 export const K1_ROUTING_NOTES: Record<string, string> = {
   '5':  '<< K-3, II, line 6 | >> Sch B line 1 / Form 1040 line 2b',
+  '6a': '>> Sch B Part II line 5 / Form 1040 line 3b (ordinary dividends)',
+  '6b': '>> Form 1040 line 3a (qualified dividends — subset of Box 6a, do NOT add separately)',
   '21': '<< K-3, III, section 4 (see K-3 for country breakdown)',
 }
 
@@ -15,6 +17,8 @@ export const K1_CODE_ROUTING_NOTES: Record<string, Record<string, string>> = {
   '11': {
     A: '>> Sch E Part II / Sch B (other portfolio income)',
     C: '>> Form 6781 line 1 / Sch D line 4 (ST 40%) + line 11 (LT 60%)',
+    S: '>> Form 8582 (per-activity passive income/loss from supplemental statement — passiveActivities field)',
+    ZZ: 'Other ordinary income/loss — varies by footnote; check K-1 attached statement. Sec. 988 FX, swap, PFIC MTM items report to Schedule E Part II (nonpassive ordinary).',
   },
   '13': {
     A: '>> Sch A line 12 (charitable contributions — 50% AGI limit)',
@@ -54,5 +58,7 @@ export const K1_CODE_ROUTING_NOTES: Record<string, Record<string, string>> = {
     A: '>> Form 4952, II, line 4a',
     B: '>> Form 4952, II, line 5 (investment expenses)',
     Z: '>> Form 8995 / 8995-A — QBI deduction (20% of qualified income, Statement A) | >> Form 1040 Line 13',
+    AA: 'Section 704(c) information — informational only; adjusts basis allocation between partners. No current-year deduction.',
+    AJ: '>> Form 461 — excess business loss limitation (Schedule 1 line 8p as NOL carryforward if triggered)',
   },
 }

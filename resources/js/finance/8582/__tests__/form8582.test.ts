@@ -149,6 +149,99 @@ describe('extractForm8582Activities', () => {
     expect(result.activities.find((activity) => activity.activityName === 'Passive Loss Fund (ordinary business)')!.allowedLossThisYear).toBe(6_000)
   })
 
+  it('includes passiveActivities entries as Form 8582 Part V activities', () => {
+    // Fund with Box 23=true (multiple passive activities) and no Box 1 income.
+    // Passive income comes from Box 11 coded items (already processed into passiveActivities).
+    const reviewedK1Docs = [
+      makeK1Doc(makeK1Data({
+        fields: {
+          A: { value: '85-0000000' },
+          B: { value: 'Multi-Activity Fund' },
+          G: { value: 'LIMITED_PARTNER' },
+          partnershipPosition_traderInSecurities: { value: 'true' },
+        },
+        passiveActivities: [
+          { name: 'Passive income activity', currentIncome: 32_545, currentLoss: 0 },
+          { name: 'Passive loss activity', currentIncome: 0, currentLoss: -38_825 },
+        ],
+      }), 'Multi-Activity Fund'),
+    ]
+
+    const activities = extractForm8582Activities(reviewedK1Docs)
+
+    expect(activities).toHaveLength(2)
+    expect(activities[0]).toMatchObject({
+      activityName: 'Multi-Activity Fund — Passive income activity',
+      currentIncome: 32_545,
+      currentLoss: 0,
+      isRentalRealEstate: false,
+      activeParticipation: false,
+    })
+    expect(activities[1]).toMatchObject({
+      activityName: 'Multi-Activity Fund — Passive loss activity',
+      currentIncome: 0,
+      currentLoss: -38_825,
+      isRentalRealEstate: false,
+      activeParticipation: false,
+    })
+  })
+
+  it('computes correct Form 8582 totals for Box 11 passive activities (verified against real K-1)', () => {
+    // Verified numbers: fund with trader status but passive activities via Box 11.
+    // Box 11C = 32,545 passive income; Box 11S net = -38,825 passive loss.
+    // Expected: line 2a=32,545 / line 2b=-38,825 / line 2d=-6,280 / line 11=32,545.
+    const reviewedK1Docs = [
+      makeK1Doc(makeK1Data({
+        fields: {
+          B: { value: 'Trader Fund With Passive Activities' },
+          G: { value: 'LIMITED_PARTNER' },
+          partnershipPosition_traderInSecurities: { value: 'true' },
+        },
+        passiveActivities: [
+          { name: '1256 passive activity', currentIncome: 32_545, currentLoss: 0 },
+          { name: 'Other passive activity', currentIncome: 0, currentLoss: -38_825 },
+        ],
+      }), 'Trader Fund With Passive Activities'),
+    ]
+
+    const result = computeForm8582({ reviewedK1Docs, magi: 500_000, isMarried: false })
+
+    expect(result.totalPassiveIncome).toBe(32_545)      // Form 8582 line 2a
+    expect(result.totalPassiveLoss).toBe(-38_825)        // Form 8582 line 2b
+    expect(result.netPassiveResult).toBe(-6_280)         // Form 8582 line 2d / line 3
+    expect(result.rentalAllowance).toBe(0)               // MAGI too high / no rental
+    expect(result.totalAllowedLoss).toBe(32_545)         // Form 8582 line 11
+    expect(result.totalSuspendedLoss).toBe(6_280)
+    expect(result.isLossLimited).toBe(true)
+  })
+
+  it('Box 1 trader exclusion and Box 11 passive activities coexist on the same K-1', () => {
+    // A trader fund K-1 can have Box 1 = active (excluded from 8582)
+    // while also reporting passive activities via passiveActivities.
+    const reviewedK1Docs = [
+      makeK1Doc(makeK1Data({
+        fields: {
+          B: { value: 'Trader Fund' },
+          G: { value: 'LIMITED_PARTNER' },
+          partnershipPosition_traderInSecurities: { value: 'true' },
+          '1': { value: '-50000' }, // active — must NOT appear in Form 8582
+        },
+        passiveActivities: [
+          { name: 'Passive sub-activity', currentIncome: 32_545, currentLoss: 0 },
+          { name: 'Other passive sub-activity', currentIncome: 0, currentLoss: -38_825 },
+        ],
+      }), 'Trader Fund'),
+    ]
+
+    const result = computeForm8582({ reviewedK1Docs, magi: 500_000, isMarried: false })
+
+    // Box 1 = nonpassive (trader) → excluded; only passiveActivities contribute
+    expect(result.activities).toHaveLength(2)
+    expect(result.totalPassiveIncome).toBe(32_545)
+    expect(result.totalPassiveLoss).toBe(-38_825)
+    expect(result.totalAllowedLoss).toBe(32_545)
+  })
+
   it('treats trader-in-securities Box 1 activity as nonpassive and excludes it from Form 8582', () => {
     const reviewedK1Docs = [
       makeK1Doc(makeK1Data({
@@ -206,7 +299,8 @@ describe('computeForm8582Lines', () => {
     // Non-rental activities get NO rental allowance
     expect(r.rentalAllowance).toBe(0)
     expect(r.totalAllowedLoss).toBe(10_000)
-    expect(r.totalSuspendedLoss).toBe(30_000)
+    // Suspended = gross loss − allowed = 50k − 10k = 40k (full LP B loss minus income offset)
+    expect(r.totalSuspendedLoss).toBe(40_000)
   })
 
   it('applies $25k rental real estate special allowance when MAGI <= $100k', () => {
@@ -345,7 +439,8 @@ describe('computeForm8582Lines', () => {
     // So rental allowance can't add anything beyond the income offset
     expect(r.rentalAllowance).toBe(0)
     expect(r.totalAllowedLoss).toBe(20_000) // just the passive income
-    expect(r.totalSuspendedLoss).toBe(5_000)
+    // Suspended = gross loss − allowed = 45k − 20k = 25k (carries forward to next year)
+    expect(r.totalSuspendedLoss).toBe(25_000)
   })
 
   it('correctly computes per-activity overallGainOrLoss', () => {

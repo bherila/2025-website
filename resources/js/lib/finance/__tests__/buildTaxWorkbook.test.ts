@@ -102,6 +102,32 @@ describe('buildTaxWorkbook — K-1/K-3 sheets', () => {
     expect(destRows[1]?.amount).toBeUndefined()
   })
 
+  it('renders passiveActivities as Box 11 S section in K-1 sheet', () => {
+    const workbook = buildTaxWorkbook({
+      year: 2025,
+      k1Docs: [{
+        entityName: 'Multi-Activity Fund',
+        ein: '85-0000000',
+        fields: {},
+        codes: {},
+        passiveActivities: [
+          { name: 'Section 1256 activity', currentIncome: 32_545, currentLoss: 0 },
+          { name: 'Other passive activity', currentIncome: 0, currentLoss: -38_825 },
+        ],
+      }],
+    })
+    const k1Sheet = workbook.sheets.find((s) => s.name.startsWith('K-1'))
+    expect(k1Sheet).toBeDefined()
+    const descriptions = (k1Sheet?.rows ?? []).map((r) => r.description)
+    expect(descriptions.some((d) => d.includes('Box 11 S'))).toBe(true)
+    expect(descriptions.some((d) => d.includes('Section 1256 activity'))).toBe(true)
+    expect(descriptions.some((d) => d.includes('Other passive activity'))).toBe(true)
+    const incomeRow = k1Sheet?.rows.find((r) => r.description.includes('Section 1256 activity'))
+    expect(incomeRow?.amount).toBe(32_545)
+    const lossRow = k1Sheet?.rows.find((r) => r.description.includes('Other passive activity'))
+    expect(lossRow?.amount).toBe(-38_825)
+  })
+
   it('renders structured K-3 sheet rows instead of JSON dumps', () => {
     const workbook = buildTaxWorkbook(makeTaxReturn())
     const k3Sheet = workbook.sheets.find((sheet) => sheet.name.startsWith('K-3'))

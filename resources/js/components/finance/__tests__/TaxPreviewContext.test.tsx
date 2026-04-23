@@ -255,4 +255,58 @@ describe('TaxPreviewContext', () => {
     expect(result.current.taxReturn.schedule2?.selfEmploymentTax).toBeCloseTo(1_412.96, 2)
     expect(result.current.taxReturn.schedule2?.totalAdditionalTaxes).toBeCloseTo(1_412.96, 2)
   })
+
+  it('feeds saved carryforwards into Form 8582 as prior-year unallowed loss balances', async () => {
+    const k1Doc = {
+      id: 88,
+      form_type: 'k1',
+      genai_status: 'parsed',
+      is_reviewed: true,
+      tax_year: 2025,
+      parsed_data: {
+        schemaVersion: '2026.1',
+        formType: 'K-1-1065',
+        fields: {
+          A: { value: '12-3456789' },
+          B: { value: 'Passive LP Fund' },
+          G2: { value: 'true' },
+          '1': { value: '-12000' },
+        },
+        codes: {},
+      },
+      employment_entity: { id: 88, display_name: 'Passive LP Fund' },
+    }
+
+    ;(fetchWrapper.get as jest.Mock).mockImplementation((url: string) => {
+      if (url === '/api/finance/tax-loss-carryforwards?year=2025') {
+        return Promise.resolve([
+          {
+            id: 3,
+            activity_name: 'Passive LP Fund (ordinary business)',
+            activity_ein: '12-3456789',
+            ordinary_carryover: -4000,
+            short_term_carryover: 0,
+            long_term_carryover: 0,
+          },
+        ])
+      }
+
+      if (url === '/api/finance/user-tax-states?year=2025' || url === '/api/finance/user-deductions?year=2025') {
+        return Promise.resolve([])
+      }
+
+      if (url === '/api/finance/marriage-status') {
+        return Promise.resolve({})
+      }
+
+      return Promise.resolve(makeResponse([k1Doc]))
+    })
+
+    const { result } = renderHook(() => useTaxPreview(), { wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+    await waitFor(() => expect(result.current.palCarryforwards).toHaveLength(1))
+
+    expect(result.current.taxReturn.form8582?.activities[0]?.priorYearUnallowed).toBe(-4000)
+    expect(result.current.taxReturn.form8582?.totalPriorYearUnallowed).toBe(-4000)
+  })
 })

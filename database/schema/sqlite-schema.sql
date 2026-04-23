@@ -223,6 +223,7 @@ CREATE TABLE `client_time_entries`(
   `created_at` TEXT,
   `updated_at` TEXT,
   `deleted_at` TEXT,
+  "is_deferred_billing" tinyint(1) not null default '0',
   FOREIGN KEY(`project_id`) REFERENCES `client_projects`(`id`) ON DELETE CASCADE,
   FOREIGN KEY(`client_company_id`) REFERENCES `client_companies`(`id`) ON DELETE CASCADE,
   FOREIGN KEY(`task_id`) REFERENCES `client_tasks`(`id`) ON DELETE SET NULL,
@@ -1313,6 +1314,60 @@ CREATE INDEX "fin_account_lots_tax_document_id_index" on "fin_account_lots"(
 CREATE INDEX "files_for_fin_accounts_file_hash_index" on "files_for_fin_accounts"(
   "file_hash"
 );
+CREATE INDEX "client_time_entries_is_deferred_billing_index" on "client_time_entries"(
+  "is_deferred_billing"
+);
+CREATE TABLE IF NOT EXISTS "fin_user_tax_states"(
+  "id" integer primary key autoincrement not null,
+  "user_id" integer not null,
+  "tax_year" integer not null,
+  "state_code" varchar not null,
+  "created_at" datetime,
+  "updated_at" datetime,
+  foreign key("user_id") references "users"("id") on delete cascade
+);
+CREATE UNIQUE INDEX "fin_user_tax_states_user_id_tax_year_state_code_unique" on "fin_user_tax_states"(
+  "user_id",
+  "tax_year",
+  "state_code"
+);
+CREATE TABLE IF NOT EXISTS "fin_user_deductions"(
+  "id" integer primary key autoincrement not null,
+  "user_id" integer not null,
+  "tax_year" integer not null,
+  "category" varchar not null,
+  "description" varchar,
+  "amount" numeric not null,
+  "created_at" datetime,
+  "updated_at" datetime,
+  foreign key("user_id") references "users"("id") on delete cascade
+);
+CREATE INDEX "fin_user_deductions_user_id_tax_year_index" on "fin_user_deductions"(
+  "user_id",
+  "tax_year"
+);
+CREATE TABLE IF NOT EXISTS "fin_pal_carryforwards"(
+  "id" integer primary key autoincrement not null,
+  "user_id" integer not null,
+  "tax_year" integer not null,
+  "activity_name" varchar not null,
+  "activity_ein" varchar,
+  "ordinary_carryover" numeric not null default '0',
+  "short_term_carryover" numeric not null default '0',
+  "long_term_carryover" numeric not null default '0',
+  "created_at" datetime,
+  "updated_at" datetime,
+  foreign key("user_id") references "users"("id") on delete cascade
+);
+CREATE INDEX "fin_pal_carryforwards_user_id_tax_year_index" on "fin_pal_carryforwards"(
+  "user_id",
+  "tax_year"
+);
+CREATE UNIQUE INDEX "fin_pal_carryforwards_user_id_tax_year_activity_name_unique" on "fin_pal_carryforwards"(
+  "user_id",
+  "tax_year",
+  "activity_name"
+);
 
 INSERT INTO migrations VALUES(1,'0001_01_01_000000_create_schema_baseline',1);
 INSERT INTO migrations VALUES(2,'2026_03_05_000000_create_fin_account_lots_table',2);
@@ -1369,3 +1424,7 @@ INSERT INTO migrations VALUES(53,'2026_04_11_192648_add_tax_document_id_to_fin_a
 INSERT INTO migrations VALUES(54,'2026_03_05_001906_add_hash_and_statement_id_to_finance_tables',2);
 INSERT INTO migrations VALUES(55,'2026_04_11_210000_add_ai_fields_to_fin_tax_document_accounts',5);
 INSERT INTO migrations VALUES(56,'2026_04_11_231927_normalize_legacy_k1_schema_version',5);
+INSERT INTO migrations VALUES(57,'2026_04_19_063834_add_is_deferred_billing_to_client_time_entries',6);
+INSERT INTO migrations VALUES(58,'2026_04_19_223420_create_fin_user_tax_states_table',6);
+INSERT INTO migrations VALUES(59,'2026_04_19_223421_create_fin_user_deductions_table',6);
+INSERT INTO migrations VALUES(60,'2026_04_20_033435_create_fin_pal_carryforwards_table',6);

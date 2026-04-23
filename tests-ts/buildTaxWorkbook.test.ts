@@ -166,6 +166,8 @@ describe('buildTaxWorkbook', () => {
       form4952: {
         invIntSources: [],
         totalInvIntExpense: 10,
+        invExpSources: [],
+        totalInvExp: 0,
         niiBefore: 200,
         totalQualDiv: 0,
         deductibleInvestmentInterestExpense: 10,

@@ -20,7 +20,7 @@ import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
 import { computeForm6251Lines } from '@/finance/6251/form6251'
-import { computeForm8582, type PalCarryforwardEntry } from '@/finance/8582/form8582'
+import { computeForm8582, type PalCarryforwardEntry, TAX_LOSS_CARRYFORWARD_ENDPOINT } from '@/finance/8582/form8582'
 import { computeForm8959Lines } from '@/finance/8959/form8959'
 import { computeForm8960Lines } from '@/finance/8960/form8960'
 import { computeCapitalLossCarryover } from '@/finance/capitalLoss/capitalLossCarryover'
@@ -171,6 +171,7 @@ function toTaxReturnYearK1Entries(reviewedK1Docs: TaxDocument[]) {
         fields,
         codes,
         ...(doc.parsed_data.k3?.sections ? { k3Sections: doc.parsed_data.k3.sections } : {}),
+        ...(doc.parsed_data.passiveActivities?.length ? { passiveActivities: doc.parsed_data.passiveActivities } : {}),
       }
     })
     .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
@@ -335,7 +336,7 @@ export function TaxPreviewProvider({
   useEffect(() => {
     void (async () => {
       try {
-        const cfs = (await fetchWrapper.get(`/api/finance/pal-carryforwards?year=${year}`)) as PalCarryforwardEntry[]
+        const cfs = (await fetchWrapper.get(`${TAX_LOSS_CARRYFORWARD_ENDPOINT}?year=${year}`)) as PalCarryforwardEntry[]
         setPalCarryforwards(Array.isArray(cfs) ? cfs : [])
       } catch (err) {
         console.error('Failed to load PAL carryforwards for year', year, err)

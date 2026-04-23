@@ -56,6 +56,7 @@ export function computeForm4952Lines({
   shortDividendDeduction = 0,
 }: Form4952PreviewProps): Form4952Lines {
   const invIntSources: { label: string; amount: number }[] = []
+  const invExpSources: { label: string; amount: number }[] = []
   const k1Parsed = reviewedK1Docs
     .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
     .filter((x): x is { doc: TaxDocument; data: FK1StructuredData } => x.data !== null)
@@ -67,7 +68,7 @@ export function computeForm4952Lines({
     })
   }
 
-  // K-1 Box 13H (investment interest expense) and 13G
+  // K-1 Box 13H/G/AC/AD → Form 4952 Part I Line 1 (investment interest expense)
   for (const { doc, data } of k1Parsed) {
     const partnerName =
       data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
@@ -81,21 +82,7 @@ export function computeForm4952Lines({
     }
   }
 
-  // K-1 Box 20B (investment expenses → Form 4952 Line 5)
-  for (const { doc, data } of k1Parsed) {
-    const partnerName =
-      data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
-    for (const item of data.codes['20'] ?? []) {
-      if (item.code === 'B') {
-        const n = parseFloat(item.value)
-        if (!isNaN(n) && n !== 0) {
-          invIntSources.push({ label: `${partnerName} — Box 20B (investment expenses)`, amount: -Math.abs(n) })
-        }
-      }
-    }
-  }
-
-  // 1099-INT Box 5 (investment expenses)
+  // 1099-INT Box 5 (investment expenses → Part I)
   for (const doc of reviewed1099Docs) {
     const p = doc.parsed_data as Record<string, unknown>
     const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? ''
@@ -105,8 +92,24 @@ export function computeForm4952Lines({
     }
   }
 
+  // K-1 Box 20B → Form 4952 Part II Line 5 (investment expenses that reduce NII)
+  // These are NOT investment interest expense (Part I) — they reduce net investment income.
+  for (const { doc, data } of k1Parsed) {
+    const partnerName =
+      data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
+    for (const item of data.codes['20'] ?? []) {
+      if (item.code === 'B') {
+        const n = parseFloat(item.value)
+        if (!isNaN(n) && n !== 0) {
+          invExpSources.push({ label: `${partnerName} — Box 20B (investment expenses)`, amount: -Math.abs(n) })
+        }
+      }
+    }
+  }
+
   const totalInvInt = invIntSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value
   const totalInvIntExpense = Math.abs(totalInvInt)
+  const totalInvExp = Math.abs(invExpSources.reduce((acc, s) => acc.add(s.amount), currency(0)).value)
   const k1Interest = k1Parsed.reduce((acc, { data }) => acc.add(parseK1Field(data, '5')), currency(0)).value
   const k1OrdDiv = k1Parsed.reduce((acc, { data }) => acc.add(parseK1Field(data, '6a')), currency(0)).value
   const k1QualDiv = k1Parsed.reduce((acc, { data }) => acc.add(parseK1Field(data, '6b')), currency(0)).value
@@ -118,10 +121,15 @@ export function computeForm4952Lines({
   const direct1099QualDiv = income1099.qualifiedDividends.value
   const direct1099NonQualDiv = currency(direct1099OrdDiv).subtract(direct1099QualDiv).value
 
-  const niiBefore =
+  // NII (before QD election) — Box 20A is the authoritative gross investment income figure.
+  // When 20A is present, Box 20B expenses reduce NII (Part II Line 5 offset against Line 4a).
+  // When 20A is absent, reconstruct NII from component boxes, then reduce by 20B expenses.
+  const niiGross =
     k1Box20A > 0
       ? currency(k1Box20A).add(direct1099Interest).add(direct1099NonQualDiv).value
       : currency(k1Interest).add(k1NonQualDiv).add(k1Sec1256).add(direct1099Interest).add(direct1099NonQualDiv).value
+  // Box 20B expenses (Form 4952 Part II Line 5) reduce NII — they are not Part I interest expense.
+  const niiBefore = Math.max(0, currency(niiGross).subtract(totalInvExp).value)
 
   const totalQualDiv = currency(k1QualDiv).add(direct1099QualDiv).value
   const scenA_deductible = Math.min(totalInvIntExpense, niiBefore)
@@ -150,6 +158,8 @@ export function computeForm4952Lines({
   return {
     invIntSources,
     totalInvIntExpense,
+    invExpSources,
+    totalInvExp,
     niiBefore,
     totalQualDiv,
     deductibleInvestmentInterestExpense: finalDeductible,
@@ -327,6 +337,27 @@ export default function Form4952Preview({
             <FormLine key={i} boxRef="L.4a" label={line.label} value={line.amount} />
           ))}
           {niiLines.length === 0 && <FormLine label="No NII sources found in reviewed documents" raw="—" />}
+          {computedLines.invExpSources.length > 0 && (
+            <>
+              {computedLines.invExpSources.map((line, i) => (
+                <FormLine
+                  key={`invexp-${i}`}
+                  boxRef="L.5"
+                  label={line.label}
+                  value={line.amount}
+                />
+              ))}
+              <FormLine
+                boxRef="L.5"
+                label={
+                  <span className="italic text-muted-foreground text-[10px]">
+                    Box 20B expenses reduce NII (Form 4952 Part II Line 5)
+                  </span>
+                }
+                raw=""
+              />
+            </>
+          )}
           {suspendedLines.length > 0 && (
             <>
               {suspendedLines.map((line, i) => (
@@ -353,7 +384,7 @@ export default function Form4952Preview({
               />
             </>
           )}
-          <FormTotalLine label="Line 4e — NII (no QD election)" value={niiBefore} />
+          <FormTotalLine label="Line 6 — Net investment income (no QD election)" value={niiBefore} />
         </FormBlock>
       </div>
 
@@ -507,7 +538,7 @@ export default function Form4952Preview({
               />
             )}
             <FormLine boxRef="L.4e" label="Net investment income" value={finalNii} />
-            <FormTotalLine label="Line 6 — Deductible investment interest expense" value={finalDeductible} double />
+            <FormTotalLine label="Line 8 — Investment interest expense deduction" value={finalDeductible} double />
             <FormLine
               boxRef="L.7"
               label="Disallowed — carryforward to next year"

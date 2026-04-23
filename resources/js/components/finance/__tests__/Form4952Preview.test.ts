@@ -229,7 +229,9 @@ describe('computeForm4952Lines — sign normalization (defense-in-depth)', () =>
 })
 
 describe('computeForm4952Lines — Box 20B (Issue 7)', () => {
-  it('includes Box 20B (investment expenses) in invIntSources as negative', () => {
+  it('places Box 20B (investment expenses) in invExpSources, not invIntSources', () => {
+    // Box 20B is Form 4952 Part II Line 5 (investment expenses that reduce NII),
+    // NOT Part I investment interest expense. It must NOT appear in invIntSources.
     const data = makeK1Data({
       fields: { '5': { value: '10000' } },
       codes: {
@@ -243,8 +245,53 @@ describe('computeForm4952Lines — Box 20B (Issue 7)', () => {
       reviewed1099Docs: [],
       income1099: defaultIncome1099,
     })
-    const bSource = result.invIntSources.find((s) => s.label.includes('Box 20B'))
+    // Should NOT be in Part I interest sources
+    expect(result.invIntSources.find((s) => s.label.includes('Box 20B'))).toBeUndefined()
+    // Should be in Part II expense sources
+    const bSource = result.invExpSources.find((s) => s.label.includes('Box 20B'))
     expect(bSource).toBeDefined()
     expect(bSource!.amount).toBe(-2500)
+    expect(result.totalInvExp).toBe(2500)
+  })
+
+  it('reduces NII by Box 20B expenses when Box 20A is present', () => {
+    // When Box 20A (gross investment income) = 33300 and Box 20B (expenses) = 86555,
+    // niiBefore should be max(0, 33300 - 86555) = 0 (capped at 0).
+    const data = makeK1Data({
+      fields: {},
+      codes: {
+        '20': [
+          { code: 'A', value: '33300' },
+          { code: 'B', value: '86555' },
+        ],
+      },
+    })
+    const result = computeForm4952Lines({
+      reviewedK1Docs: [makeK1Doc(data)],
+      reviewed1099Docs: [],
+      income1099: defaultIncome1099,
+    })
+    expect(result.totalInvExp).toBe(86555)
+    // NII = max(0, 33300 - 86555) = 0
+    expect(result.niiBefore).toBe(0)
+  })
+
+  it('reduces NII by Box 20B when Box 20B is smaller than gross investment income', () => {
+    // Box 20A = 100000, Box 20B = 20000 → NII = 80000
+    const data = makeK1Data({
+      fields: {},
+      codes: {
+        '20': [
+          { code: 'A', value: '100000' },
+          { code: 'B', value: '20000' },
+        ],
+      },
+    })
+    const result = computeForm4952Lines({
+      reviewedK1Docs: [makeK1Doc(data)],
+      reviewed1099Docs: [],
+      income1099: defaultIncome1099,
+    })
+    expect(result.niiBefore).toBe(80000)
   })
 })

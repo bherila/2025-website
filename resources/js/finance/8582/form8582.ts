@@ -45,6 +45,8 @@ export const RENTAL_PHASEOUT_END_MFS = 75_000
 
 // ── K-1 → activities extraction ─────────────────────────────────────────────
 
+export const TAX_LOSS_CARRYFORWARD_ENDPOINT = '/api/finance/tax-loss-carryforwards'
+
 export interface PalCarryforwardEntry {
   id?: number
   activity_name: string
@@ -164,6 +166,20 @@ export function extractForm8582Activities(
         priorYearUnallowed: carryforward,
       })
     }
+
+    for (const pa of data.passiveActivities ?? []) {
+      const name = `${baseName} — ${pa.name}`
+      const carryforward = findCarryforward(palCarryforwards, name, ein)
+      activities.push({
+        activityName: name,
+        ein,
+        isRentalRealEstate: false,
+        activeParticipation: false,
+        currentIncome: Math.max(0, pa.currentIncome),
+        currentLoss: Math.min(0, pa.currentLoss),
+        priorYearUnallowed: carryforward,
+      })
+    }
   }
 
   // Direct rental properties from Schedule E Part I
@@ -188,10 +204,13 @@ function findCarryforward(
   activityName: string,
   ein?: string | undefined,
 ): number {
-  const match = carryforwards.find(
-    (cf) => cf.activity_name === activityName || (ein && cf.activity_ein === ein),
-  )
-  return match ? match.ordinary_carryover : 0
+  const nameMatch = carryforwards.find((cf) => cf.activity_name === activityName)
+  if (nameMatch) return nameMatch.ordinary_carryover
+  if (ein) {
+    const einMatches = carryforwards.filter((cf) => cf.activity_ein === ein)
+    if (einMatches.length === 1) return einMatches[0]!.ordinary_carryover
+  }
+  return 0
 }
 
 /**
@@ -282,7 +301,9 @@ export function computeForm8582Lines({
     }
   }
 
-  const totalLossAmount = Math.abs(netPassiveResult)
+  // Gross loss = all current-year losses + all prior-year unallowed. This is the basis
+  // for computing how much is allowed vs. suspended (carryforward = grossLoss − allowed).
+  const grossLoss = currency(Math.abs(totalPassiveLoss)).add(Math.abs(totalPriorYearUnallowed)).value
 
   // Rental allowance only applies to activities where isRentalRealEstate === true
   // AND the taxpayer actively participates (§469(i)(6) — LPs never qualify).
@@ -305,10 +326,10 @@ export function computeForm8582Lines({
   const rentalAllowance = Math.max(0, currency(rentalAllowanceBase).subtract(phaseOutReduction).value)
 
   // Cap allowance at the net rental loss (only rental RE activities benefit)
-  const effectiveAllowance = Math.min(rentalAllowance, netRentalLoss, totalLossAmount)
+  const effectiveAllowance = Math.min(rentalAllowance, netRentalLoss, grossLoss)
 
   const totalAllowedLoss = currency(totalPassiveIncome).add(effectiveAllowance).value
-  const totalSuspendedLoss = Math.max(0, currency(totalLossAmount).subtract(totalAllowedLoss).value)
+  const totalSuspendedLoss = Math.max(0, currency(grossLoss).subtract(totalAllowedLoss).value)
 
   allocateAllowedLosses(activityLines, totalAllowedLoss)
 
