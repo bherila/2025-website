@@ -1,10 +1,15 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import currency from 'currency.js'
 
+import { fetchWrapper } from '@/fetchWrapper'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 
 import Form1116Preview from '../Form1116Preview'
+
+jest.mock('@/fetchWrapper', () => ({
+  fetchWrapper: { get: jest.fn() },
+}))
 
 function makeK1Data(overrides: Partial<FK1StructuredData> = {}): FK1StructuredData {
   return {
@@ -51,6 +56,10 @@ function toolSection(sectionId: string, rows: Record<string, unknown>[]) {
 }
 
 describe('Form1116Preview UI helpers', () => {
+  beforeEach(() => {
+    ;(fetchWrapper.get as jest.Mock).mockResolvedValue({ lots: [] })
+  })
+
   it('shows unreviewed relevant banner with review link', () => {
     const reviewed = makeK1Doc(makeK1Data({
       k3: {
@@ -120,5 +129,23 @@ describe('Form1116Preview UI helpers', () => {
     await waitFor(() => {
       expect(onBulkSetSbpElection).toHaveBeenCalledWith(true, [1, 2])
     })
+  })
+
+  it('shows the worksheet trigger inside the Form 1116 tab header', () => {
+    const reviewed = makeK1Doc(makeK1Data({
+      fields: { '21': { value: '100' } },
+    }))
+
+    render(
+      <Form1116Preview
+        reviewedK1Docs={[reviewed]}
+        allK1Docs={[reviewed]}
+        reviewed1099Docs={[]}
+        income1099={{ interestIncome: currency(0), dividendIncome: currency(0), qualifiedDividends: currency(0) }}
+        selectedYear={2024}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: /1116 worksheet/i })).toBeInTheDocument()
   })
 })

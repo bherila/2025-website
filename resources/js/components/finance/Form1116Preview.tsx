@@ -1,12 +1,14 @@
 'use client'
 
 import currency from 'currency.js'
+import { Calculator } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
+import { Button } from '@/components/ui/button'
+import { collectForeignTaxSummaries, type ForeignTaxSummary, WorksheetModal } from '@/finance/1116'
 import {
-  extractForeignTaxSummaries,
   extractK3IncomeBreakdown,
   extractK3Line4bApportionment,
 } from '@/finance/1116/k3-to-1116'
@@ -44,6 +46,8 @@ interface Form1116PreviewProps {
   reviewedK1Docs: TaxDocument[]
   allK1Docs?: TaxDocument[]
   reviewed1099Docs: TaxDocument[]
+  foreignTaxSummaries?: ForeignTaxSummary[]
+  selectedYear?: number
   income1099: {
     interestIncome: currency
     dividendIncome: currency
@@ -56,10 +60,14 @@ interface Form1116PreviewProps {
 export function computeForm1116Lines({
   reviewedK1Docs,
   reviewed1099Docs,
-}: Pick<Form1116PreviewProps, 'reviewedK1Docs' | 'reviewed1099Docs'>): Form1116Lines {
+  foreignTaxSummaries,
+}: Pick<Form1116PreviewProps, 'reviewedK1Docs' | 'reviewed1099Docs' | 'foreignTaxSummaries'>): Form1116Lines {
   const k1Parsed = reviewedK1Docs
     .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
     .filter((x): x is { doc: TaxDocument; data: FK1StructuredData } => x.data !== null)
+
+  const summaries = foreignTaxSummaries ?? collectForeignTaxSummaries([...reviewedK1Docs, ...reviewed1099Docs])
+  const sourceLabel = (summary: ForeignTaxSummary, fallback: string) => summary.sourceLabel ?? fallback
 
   const incomeSources: { label: string; amount: number }[] = []
   const generalIncomeSources: { label: string; amount: number }[] = []
@@ -69,8 +77,6 @@ export function computeForm1116Lines({
   for (const { doc, data } of k1Parsed) {
     const partnerName =
       data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
-
-    const summaries = extractForeignTaxSummaries(data, doc.account_id)
 
     // Collect SBP election state for any K-1 with col-f (Sourced by Partner) amounts.
     const breakdown = extractK3IncomeBreakdown(data)
@@ -83,28 +89,6 @@ export function computeForm1116Lines({
       })
     }
 
-    if (summaries.length > 0) {
-      let taxAdded = false
-      for (const summary of summaries) {
-        const income = summary.grossForeignIncome ?? 0
-        if (summary.category === 'passive' && income !== 0) {
-          incomeSources.push({ label: `${partnerName} — K-3 passive income`, amount: income })
-        } else if (summary.category === 'general' && income !== 0) {
-          generalIncomeSources.push({ label: `${partnerName} — K-3 general income`, amount: income })
-        }
-        if (summary.totalForeignTaxPaid > 0 && !taxAdded) {
-          taxSources.push({ label: `${partnerName} — K-1 Box 21`, amount: summary.totalForeignTaxPaid })
-          taxAdded = true
-        }
-      }
-    } else {
-      const box21 = pk1(data, '21')
-      if (box21 > 0) {
-        incomeSources.push({ label: `${partnerName} — Box 21 (income estimated)`, amount: currency(box21).divide(ASSUMED_FOREIGN_WITHHOLDING_RATE).value })
-        taxSources.push({ label: `${partnerName} — K-1 Box 21`, amount: box21 })
-      }
-    }
-
     const appt = extractK3Line4bApportionment(data)
     if (appt) {
       line4bApportionment.push({
@@ -114,47 +98,56 @@ export function computeForm1116Lines({
         line4b: appt.line4b,
       })
     }
-
   }
 
-  for (const doc of reviewed1099Docs) {
-    if (doc.form_type !== '1099_div' && doc.form_type !== '1099_div_c') continue
-    const p = doc.parsed_data as Record<string, unknown>
-    const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? '1099-DIV'
-    const foreignTax = p?.box7_foreign_tax as number | undefined
-    if (foreignTax != null && foreignTax > 0) {
-      incomeSources.push({ label: `${payer} — 1099-DIV (estimated foreign source)`, amount: currency(foreignTax).divide(ASSUMED_FOREIGN_WITHHOLDING_RATE).value })
-      taxSources.push({ label: `${payer} — 1099-DIV Box 7`, amount: foreignTax })
+  for (const summary of summaries) {
+    if (summary.sourceType === 'k1') {
+      const partnerName = sourceLabel(summary, 'Partnership')
+      const income = summary.grossForeignIncome ?? 0
+
+      if (summary.category === 'passive') {
+        if (income !== 0) {
+          incomeSources.push({ label: `${partnerName} — K-3 passive income`, amount: income })
+        } else if (summary.totalForeignTaxPaid > 0) {
+          incomeSources.push({
+            label: `${partnerName} — Box 21 (income estimated)`,
+            amount: currency(summary.totalForeignTaxPaid).divide(ASSUMED_FOREIGN_WITHHOLDING_RATE).value,
+          })
+        }
+      } else if (summary.category === 'general' && income !== 0) {
+        generalIncomeSources.push({ label: `${partnerName} — K-3 general income`, amount: income })
+      }
+
+      if (summary.totalForeignTaxPaid > 0) {
+        taxSources.push({ label: `${partnerName} — K-1 Box 21`, amount: summary.totalForeignTaxPaid })
+      }
+
+      continue
     }
-  }
 
-  for (const doc of reviewed1099Docs) {
-    if (doc.form_type !== 'broker_1099' || Array.isArray(doc.parsed_data) || !doc.is_reviewed) continue
-    const p = doc.parsed_data as Record<string, unknown>
-    const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? 'Consolidated 1099'
-    const foreignTax = p?.div_7_foreign_tax_paid as number | undefined
-    if (foreignTax != null && foreignTax > 0) {
-      incomeSources.push({ label: `${payer} — Consolidated 1099 DIV (estimated foreign source)`, amount: currency(foreignTax).divide(ASSUMED_FOREIGN_WITHHOLDING_RATE).value })
-      taxSources.push({ label: `${payer} — Consolidated 1099 DIV Box 7`, amount: foreignTax })
+    if (summary.sourceType === '1099_div') {
+      const payer = sourceLabel(summary, summary.sourceDocumentFormType === 'broker_1099' ? 'Consolidated 1099' : '1099-DIV')
+      const incomeLabel = summary.sourceDocumentFormType === 'broker_1099'
+        ? `${payer} — Consolidated 1099 DIV (estimated foreign source)`
+        : `${payer} — 1099-DIV (estimated foreign source)`
+      const taxLabel = summary.sourceDocumentFormType === 'broker_1099'
+        ? `${payer} — Consolidated 1099 DIV Box 7`
+        : `${payer} — 1099-DIV Box 7`
+
+      incomeSources.push({
+        label: incomeLabel,
+        amount: currency(summary.totalForeignTaxPaid).divide(ASSUMED_FOREIGN_WITHHOLDING_RATE).value,
+      })
+      taxSources.push({ label: taxLabel, amount: summary.totalForeignTaxPaid })
+      continue
     }
-  }
 
-  for (const doc of reviewed1099Docs) {
-    const p = doc.parsed_data as Record<string, unknown>
-    const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? '1099'
-    const intForeignTax = p?.box6_foreign_tax as number | undefined
-    if (intForeignTax != null && intForeignTax > 0) {
-      taxSources.push({ label: `${payer} — 1099-INT Box 6`, amount: intForeignTax })
-    }
-  }
-
-  for (const doc of reviewed1099Docs) {
-    if (doc.form_type !== 'broker_1099' || Array.isArray(doc.parsed_data) || !doc.is_reviewed) continue
-    const p = doc.parsed_data as Record<string, unknown>
-    const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? 'Consolidated 1099'
-    const intForeignTax = p?.int_6_foreign_tax_paid as number | undefined
-    if (intForeignTax != null && intForeignTax > 0) {
-      taxSources.push({ label: `${payer} — Consolidated 1099 INT Box 6`, amount: intForeignTax })
+    if (summary.sourceType === '1099_int' && summary.totalForeignTaxPaid > 0) {
+      const payer = sourceLabel(summary, summary.sourceDocumentFormType === 'broker_1099' ? 'Consolidated 1099' : '1099-INT')
+      const taxLabel = summary.sourceDocumentFormType === 'broker_1099'
+        ? `${payer} — Consolidated 1099 INT Box 6`
+        : `${payer} — 1099-INT Box 6`
+      taxSources.push({ label: taxLabel, amount: summary.totalForeignTaxPaid })
     }
   }
 
@@ -195,12 +188,20 @@ export default function Form1116Preview({
   reviewedK1Docs,
   allK1Docs = [],
   reviewed1099Docs,
+  foreignTaxSummaries,
+  selectedYear,
   onReviewNow,
   onBulkSetSbpElection,
 }: Form1116PreviewProps) {
   const [bulkUpdating, setBulkUpdating] = useState(false)
   const [bulkFailures, setBulkFailures] = useState<string[]>([])
-  const computed = computeForm1116Lines({ reviewedK1Docs, reviewed1099Docs })
+  const [worksheetOpen, setWorksheetOpen] = useState(false)
+  const computed = computeForm1116Lines({
+    reviewedK1Docs,
+    reviewed1099Docs,
+    ...(foreignTaxSummaries ? { foreignTaxSummaries } : {}),
+  })
+  const worksheetSummaries = foreignTaxSummaries ?? collectForeignTaxSummaries([...reviewedK1Docs, ...reviewed1099Docs])
   const {
     incomeSources,
     taxSources,
@@ -247,11 +248,24 @@ export default function Form1116Preview({
 
   return (
     <div className="space-y-5">
-      <div>
-        <h2 className="text-base font-semibold mb-0.5">Form 1116 — Foreign Tax Credit</h2>
-        <p className="text-xs text-muted-foreground">
-          Passive category foreign tax credit — dollar-for-dollar offset against U.S. tax.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold mb-0.5">Form 1116 — Foreign Tax Credit</h2>
+          <p className="text-xs text-muted-foreground">
+            Passive category foreign tax credit — dollar-for-dollar offset against U.S. tax.
+          </p>
+        </div>
+        {worksheetSummaries.length > 0 && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs gap-1"
+            onClick={() => setWorksheetOpen(true)}
+          >
+            <Calculator className="h-3 w-3" />
+            1116 Worksheet
+          </Button>
+        )}
       </div>
 
       {aboveSimplifiedThreshold ? (
@@ -497,6 +511,13 @@ export default function Form1116Preview({
           </p>
         )}
       </Callout>
+
+      <WorksheetModal
+        open={worksheetOpen}
+        onClose={() => setWorksheetOpen(false)}
+        foreignTaxSummaries={worksheetSummaries}
+        {...(selectedYear !== undefined ? { taxYear: selectedYear } : {})}
+      />
     </div>
   )
 }

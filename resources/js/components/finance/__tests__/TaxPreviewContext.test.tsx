@@ -225,6 +225,44 @@ describe('TaxPreviewContext', () => {
     expect(result.current.income1099.qualifiedDividends.value).toBe(400)
   })
 
+  it('shares memoized foreign-tax summaries from account documents', async () => {
+    const brokerDoc = {
+      id: 51,
+      form_type: 'broker_1099',
+      genai_status: 'parsed',
+      is_reviewed: true,
+      tax_year: 2025,
+      account_id: 33,
+      parsed_data: {
+        payer_name: 'Shared Broker',
+        div_7_foreign_tax_paid: 25,
+        int_6_foreign_tax_paid: 10,
+      },
+    }
+
+    ;(fetchWrapper.get as jest.Mock)
+      .mockResolvedValueOnce(makeResponse([brokerDoc]))
+      .mockResolvedValue([])
+
+    const { result } = renderHook(() => useTaxPreview(), { wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    expect(result.current.foreignTaxSummaries).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        totalForeignTaxPaid: 25,
+        sourceType: '1099_div',
+        sourceDocumentId: 51,
+        sourceLabel: 'Shared Broker',
+      }),
+      expect.objectContaining({
+        totalForeignTaxPaid: 10,
+        sourceType: '1099_int',
+        sourceDocumentId: 51,
+        sourceLabel: 'Shared Broker',
+      }),
+    ]))
+  })
+
   it('wires Schedule SE into the computed tax return when reviewed K-1 SE income exists', async () => {
     const k1Doc = {
       id: 77,

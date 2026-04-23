@@ -103,6 +103,16 @@ describe('getDocAmounts', () => {
     expect(getDocAmounts(doc)).toEqual({ interest: null, dividend: 800, other: null, foreignTax: 12 })
   })
 
+  it('uses shared foreign-tax summaries when provided', () => {
+    const doc = makeDoc({ form_type: '1099_div', parsed_data: { box1a_ordinary: 800, box7_foreign_tax: 12 } as never })
+    expect(getDocAmounts(doc, undefined, [{
+      totalForeignTaxPaid: 15,
+      sourceType: '1099_div',
+      sourceDocumentId: 1,
+      sourceDocumentFormType: '1099_div',
+    }])).toEqual({ interest: null, dividend: 800, other: null, foreignTax: 15 })
+  })
+
   it('extracts 1099-MISC income into the "other" column', () => {
     const doc = makeDoc({ form_type: '1099_misc', parsed_data: { box3_other_income: 400 } as never })
     expect(getDocAmounts(doc)).toEqual({ interest: null, dividend: null, other: 400, foreignTax: null })

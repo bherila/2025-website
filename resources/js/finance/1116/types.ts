@@ -87,4 +87,10 @@ export interface ForeignTaxSummary {
   sourceType: 'k1' | '1099_div' | '1099_int'
   /** Account ID the document belongs to. */
   accountId?: number | null
+  /** Source tax document ID. */
+  sourceDocumentId?: number | null
+  /** Parent tax document form type (for example broker_1099 vs 1099_div). */
+  sourceDocumentFormType?: string | undefined
+  /** Human-friendly partner / payer label for UI display. */
+  sourceLabel?: string | undefined
 }

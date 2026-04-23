@@ -1,8 +1,8 @@
 'use client'
 
 import currency from 'currency.js'
-import { Calculator, CheckCircle, ChevronDown, Clock, Eye, FileText, Loader2, Plus, Sigma, Upload } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { CheckCircle, ChevronDown, Clock, Eye, FileText, Loader2, Plus, Sigma, Upload } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import MultiAccountImportModal from '@/components/finance/MultiAccountImportModal'
@@ -28,17 +28,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { fetchWrapper } from '@/fetchWrapper'
 import type { ForeignTaxSummary } from '@/finance/1116'
-import {
-  extractForeignTaxFrom1099Div,
-  extractForeignTaxFrom1099Int,
-  extractForeignTaxFromK1,
-  WorksheetModal,
-} from '@/finance/1116'
 import { useReviewModal } from '@/hooks/useReviewModal'
 import type { DocAmounts } from '@/lib/finance/taxDocumentUtils'
-import { getDocAmounts, getPayerName, hasReviewedContent, iterateReviewedBrokerEntries } from '@/lib/finance/taxDocumentUtils'
-import type { F1099DivParsedData, F1099IntParsedData, FK1StructuredData, TaxDocument, TaxDocumentAccountLink } from '@/types/finance/tax-document'
-import { FORM_TYPE_LABELS, isFK1StructuredData } from '@/types/finance/tax-document'
+import { getDocAmounts, getPayerName, hasReviewedContent } from '@/lib/finance/taxDocumentUtils'
+import type { F1099DivParsedData, F1099IntParsedData, TaxDocument, TaxDocumentAccountLink } from '@/types/finance/tax-document'
+import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
 import { TAX_TABS } from './tax-tab-ids'
 
@@ -130,6 +124,7 @@ interface TaxDocuments1099SectionProps {
   onDocumentsChange?: (docs: TaxDocument[]) => void
   /** Navigate to another Tax Preview tab (used by column-header drill-down buttons). */
   onNavigate?: (tab: string) => void
+  foreignTaxSummaries?: ForeignTaxSummary[] | undefined
 }
 
 interface ManualEntryState {
@@ -167,6 +162,7 @@ export default function TaxDocuments1099Section({
   onDocumentsReload,
   onDocumentsChange,
   onNavigate,
+  foreignTaxSummaries = [],
 }: TaxDocuments1099SectionProps) {
   const [documents, setDocuments] = useState<TaxDocument[]>(controlledDocuments ?? [])
   const [accounts, setAccounts] = useState<FinAccount[]>(controlledAccounts ?? [])
@@ -182,58 +178,10 @@ export default function TaxDocuments1099Section({
   const [manualEntry, setManualEntry] = useState<ManualEntryState | null>(null)
   const [manualSaving, setManualSaving] = useState(false)
   const { reviewDoc: reviewModalDoc, reviewLink: reviewModalLink, openReview: openReviewModal, closeReview: closeReviewModal } = useReviewModal()
-  const [worksheetOpen, setWorksheetOpen] = useState(false)
 
   useEffect(() => {
     onDocumentsChange?.(documents.filter(hasReviewedContent))
   }, [documents, onDocumentsChange])
-
-  /** Collect foreign tax summaries from all reviewed documents. */
-  const foreignTaxSummaries = useMemo<ForeignTaxSummary[]>(() => {
-    const summaries: ForeignTaxSummary[] = []
-    for (const doc of documents) {
-      if (!doc.parsed_data) continue
-
-      if (doc.form_type === 'broker_1099') {
-        if (Array.isArray(doc.parsed_data)) {
-          // Multi-account array format: iterate per-entry and respect per-link review state.
-          for (const [entry, link] of iterateReviewedBrokerEntries(doc)) {
-            const pd = entry.parsed_data as Record<string, unknown>
-            if (entry.form_type === '1099_div' || entry.form_type === '1099_div_c') {
-              const s = extractForeignTaxFrom1099Div(pd, link.account_id)
-              if (s) summaries.push(s)
-            } else if (entry.form_type === '1099_int' || entry.form_type === '1099_int_c') {
-              const s = extractForeignTaxFrom1099Int(pd, link.account_id)
-              if (s) summaries.push(s)
-            }
-          }
-        } else if (doc.is_reviewed) {
-          // Flat-dict format (single-account consolidated 1099): read div_7 directly.
-          const pd = doc.parsed_data as Record<string, unknown>
-          const accountId = doc.account_links?.find(l => l.account_id != null)?.account_id ?? doc.account_id
-          const divFt = { box7_foreign_tax: pd.div_7_foreign_tax_paid }
-          const s = extractForeignTaxFrom1099Div(divFt, accountId)
-          if (s) summaries.push(s)
-        }
-      } else {
-        // Single-form document.
-        if (!doc.is_reviewed) continue
-        const pd = doc.parsed_data as Record<string, unknown>
-        const accountId = doc.account_links?.find(l => l.account_id != null)?.account_id ?? doc.account_id
-        if (doc.form_type === 'k1' && isFK1StructuredData(pd)) {
-          const s = extractForeignTaxFromK1(pd as FK1StructuredData, accountId)
-          if (s) summaries.push(s)
-        } else if (doc.form_type === '1099_div' || doc.form_type === '1099_div_c') {
-          const s = extractForeignTaxFrom1099Div(pd, accountId)
-          if (s) summaries.push(s)
-        } else if (doc.form_type === '1099_int' || doc.form_type === '1099_int_c') {
-          const s = extractForeignTaxFrom1099Int(pd, accountId)
-          if (s) summaries.push(s)
-        }
-      }
-    }
-    return summaries
-  }, [documents])
 
   const fetchDocuments = useCallback(async () => {
     try {
@@ -475,7 +423,7 @@ export default function TaxDocuments1099Section({
             doc,
             link,
             payerName: getPayerName(doc, link),
-            amounts: getDocAmounts(doc, link),
+            amounts: getDocAmounts(doc, link, foreignTaxSummaries),
           })
           const baseType = link.form_type === '1099_int_c' ? '1099_int'
             : link.form_type === '1099_div_c' ? '1099_div'
@@ -490,7 +438,7 @@ export default function TaxDocuments1099Section({
           key: `doc-${doc.id}`,
           doc,
           payerName: getPayerName(doc),
-          amounts: getDocAmounts(doc),
+          amounts: getDocAmounts(doc, undefined, foreignTaxSummaries),
         })
         const baseType = doc.form_type === '1099_int_c' ? '1099_int'
           : doc.form_type === '1099_div_c' ? '1099_div'
@@ -538,17 +486,6 @@ export default function TaxDocuments1099Section({
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-base font-semibold">Account Documents</h3>
         <div className="flex items-center gap-2">
-          {foreignTaxSummaries.length > 0 && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs gap-1"
-              onClick={() => setWorksheetOpen(true)}
-            >
-              <Calculator className="h-3 w-3" />
-              1116 Worksheet
-            </Button>
-          )}
           <Button
             size="sm"
             variant="outline"
@@ -909,13 +846,6 @@ export default function TaxDocuments1099Section({
         />
       )}
 
-      {/* Form 1116 Worksheet modal */}
-      <WorksheetModal
-        open={worksheetOpen}
-        onClose={() => setWorksheetOpen(false)}
-        foreignTaxSummaries={foreignTaxSummaries}
-        taxYear={selectedYear}
-      />
     </div>
   )
 }
