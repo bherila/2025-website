@@ -106,6 +106,8 @@ export function computeForm1116Lines({
     }
   }
 
+  const k1TaxAddedDocIds = new Set<number | null | undefined>()
+
   for (const summary of summaries) {
     if (summary.sourceType === 'k1') {
       const partnerName = sourceLabel(summary, 'Partnership')
@@ -124,8 +126,9 @@ export function computeForm1116Lines({
         generalIncomeSources.push({ label: `${partnerName} — K-3 general income`, amount: income })
       }
 
-      if (summary.totalForeignTaxPaid > 0) {
+      if (summary.totalForeignTaxPaid > 0 && !k1TaxAddedDocIds.has(summary.sourceDocumentId)) {
         taxSources.push({ label: `${partnerName} — K-1 Box 21`, amount: summary.totalForeignTaxPaid })
+        k1TaxAddedDocIds.add(summary.sourceDocumentId)
       }
 
       continue

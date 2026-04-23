@@ -220,3 +220,41 @@ describe('computeForm1116Lines — flat-dict broker_1099 INT foreign tax (Issue 
     expect(result.totalForeignTaxes).toBe(200)
   })
 })
+
+// ── K-1 tax deduplication ─────────────────────────────────────────────────────
+
+describe('computeForm1116Lines — K-1 Box 21 tax deduplication', () => {
+  it('counts Box 21 tax once when a K-1 has both passive and general summaries', () => {
+    const summaries: ForeignTaxSummary[] = [
+      {
+        sourceType: 'k1',
+        sourceDocumentId: 99,
+        sourceLabel: 'Alpha Fund',
+        category: 'passive',
+        totalForeignTaxPaid: 500,
+        grossForeignIncome: 3000,
+      },
+      {
+        sourceType: 'k1',
+        sourceDocumentId: 99,
+        sourceLabel: 'Alpha Fund',
+        category: 'general',
+        totalForeignTaxPaid: 500,
+        grossForeignIncome: 1000,
+      },
+    ]
+    const result = computeForm1116Lines({ reviewedK1Docs: [], reviewed1099Docs: [], foreignTaxSummaries: summaries })
+    expect(result.totalForeignTaxes).toBe(500)
+    expect(result.taxSources.filter((s) => s.label.includes('Alpha Fund'))).toHaveLength(1)
+  })
+
+  it('counts tax separately for two different K-1 documents', () => {
+    const summaries: ForeignTaxSummary[] = [
+      { sourceType: 'k1', sourceDocumentId: 10, sourceLabel: 'Fund A', category: 'passive', totalForeignTaxPaid: 200, grossForeignIncome: 1000 },
+      { sourceType: 'k1', sourceDocumentId: 20, sourceLabel: 'Fund B', category: 'passive', totalForeignTaxPaid: 300, grossForeignIncome: 2000 },
+    ]
+    const result = computeForm1116Lines({ reviewedK1Docs: [], reviewed1099Docs: [], foreignTaxSummaries: summaries })
+    expect(result.totalForeignTaxes).toBe(500)
+    expect(result.taxSources).toHaveLength(2)
+  })
+})
