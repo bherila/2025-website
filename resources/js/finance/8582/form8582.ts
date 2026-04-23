@@ -204,10 +204,13 @@ function findCarryforward(
   activityName: string,
   ein?: string | undefined,
 ): number {
-  const match = carryforwards.find(
-    (cf) => cf.activity_name === activityName || (ein && cf.activity_ein === ein),
-  )
-  return match ? match.ordinary_carryover : 0
+  const nameMatch = carryforwards.find((cf) => cf.activity_name === activityName)
+  if (nameMatch) return nameMatch.ordinary_carryover
+  if (ein) {
+    const einMatches = carryforwards.filter((cf) => cf.activity_ein === ein)
+    if (einMatches.length === 1) return einMatches[0]!.ordinary_carryover
+  }
+  return 0
 }
 
 /**
