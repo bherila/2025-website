@@ -9,6 +9,7 @@ Admin-only feature for managing client companies, their users, agreements, time 
 - **[Billing](billing.md)** — retainer / rollover logic, invoice lifecycle, payments, milestones, catch-up rule.
 - **[Deferred billing](deferred-billing.md)** — (new) per-entry flag that lets admins complete work now and bill for it only when retainer capacity exists.
 - **[Overpayment credits](overpayment-credits.md)** — (new) any overpaid amount carries forward as a credit on the next invoice(s) and never expires.
+- **[Data exports](../exports.md)** — inventory of every download/clipboard surface across the app, including client portal file downloads and invoice print views.
 
 ## Code locations
 
