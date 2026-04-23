@@ -4,13 +4,13 @@
 
 export { F1116_SPEC } from './F1116_SPEC'
 export { default as F1116ReviewPanel } from './F1116ReviewPanel'
+export { collectForeignTaxSummaries } from './foreignTaxSummaries'
 export {
   calculateApportionedInterest,
   extractForeignTaxFrom1099Div,
   extractForeignTaxFrom1099Int,
   extractForeignTaxFromK1,
 } from './k3-to-1116'
-export { collectForeignTaxSummaries } from './foreignTaxSummaries'
 export type {
   F1116Category,
   F1116Data,

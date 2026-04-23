@@ -1,7 +1,7 @@
+import { iterateReviewedBrokerEntries } from '@/lib/finance/taxDocumentUtils'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import { isFK1StructuredData } from '@/types/finance/tax-document'
-import { iterateReviewedBrokerEntries } from '@/lib/finance/taxDocumentUtils'
 
 import {
   extractForeignTaxFrom1099Div,
