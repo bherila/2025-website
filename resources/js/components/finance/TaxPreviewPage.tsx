@@ -725,6 +725,7 @@ function TaxPreviewPageContent() {
             activeAccountIds={activeAccountIds}
             isLoading={isLoading}
             onDocumentsReload={refreshAll}
+            onNavigate={handleTabChange}
           />
         </TabsContent>
 

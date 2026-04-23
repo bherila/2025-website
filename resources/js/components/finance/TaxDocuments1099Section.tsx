@@ -1,7 +1,7 @@
 'use client'
 
 import currency from 'currency.js'
-import { Calculator, CheckCircle, ChevronDown, Clock, Eye, Loader2, Plus, Upload } from 'lucide-react'
+import { Calculator, CheckCircle, ChevronDown, Clock, Eye, FileText, Loader2, Plus, Upload } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -25,6 +25,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { fetchWrapper } from '@/fetchWrapper'
 import type { ForeignTaxSummary } from '@/finance/1116'
 import {
@@ -38,9 +39,45 @@ import { getDocAmounts, getPayerName, hasReviewedContent, iterateReviewedBrokerE
 import type { F1099DivParsedData, F1099IntParsedData, FK1StructuredData, TaxDocument, TaxDocumentAccountLink } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS, isFK1StructuredData } from '@/types/finance/tax-document'
 
+import { TAX_TABS } from './tax-tab-ids'
+
 export interface FinAccount {
   acct_id: number
   acct_name: string
+}
+
+/** Column header that optionally renders a small drill-down button linking to a detail tab. */
+function MoneyHeader({
+  label,
+  tab,
+  tooltip,
+  onNavigate,
+}: {
+  label: string
+  tab: string
+  tooltip: string
+  onNavigate?: ((tab: string) => void) | undefined
+}) {
+  return (
+    <div className="flex items-center justify-end gap-1">
+      <span>{label}</span>
+      {onNavigate && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-5 w-5 p-0"
+              onClick={() => onNavigate(tab)}
+            >
+              <FileText className="h-3 w-3" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{tooltip}</TooltipContent>
+        </Tooltip>
+      )}
+    </div>
+  )
 }
 
 interface TaxDocuments1099SectionProps {
@@ -52,6 +89,8 @@ interface TaxDocuments1099SectionProps {
   onDocumentsReload?: (() => void | Promise<void>) | undefined
   /** Called whenever reviewed documents change (for Form 1040 data source drill-down). */
   onDocumentsChange?: (docs: TaxDocument[]) => void
+  /** Navigate to another Tax Preview tab (used by column-header drill-down buttons). */
+  onNavigate?: (tab: string) => void
 }
 
 interface ManualEntryState {
@@ -88,6 +127,7 @@ export default function TaxDocuments1099Section({
   isLoading: controlledLoading,
   onDocumentsReload,
   onDocumentsChange,
+  onNavigate,
 }: TaxDocuments1099SectionProps) {
   const [documents, setDocuments] = useState<TaxDocument[]>(controlledDocuments ?? [])
   const [accounts, setAccounts] = useState<FinAccount[]>(controlledAccounts ?? [])
@@ -573,10 +613,22 @@ export default function TaxDocuments1099Section({
                   <TableHead>Account</TableHead>
                   <TableHead>Document</TableHead>
                   <TableHead>Name</TableHead>
-                  {hasInt && <TableHead className="text-right">Interest</TableHead>}
-                  {hasDiv && <TableHead className="text-right">Dividends</TableHead>}
+                  {hasInt && (
+                    <TableHead className="text-right">
+                      <MoneyHeader label="Interest" tab={TAX_TABS.schedules} tooltip="Go to Schedule B details" onNavigate={onNavigate} />
+                    </TableHead>
+                  )}
+                  {hasDiv && (
+                    <TableHead className="text-right">
+                      <MoneyHeader label="Dividends" tab={TAX_TABS.schedules} tooltip="Go to Schedule B details" onNavigate={onNavigate} />
+                    </TableHead>
+                  )}
                   {hasOther && <TableHead className="text-right">Other</TableHead>}
-                  {hasFT && <TableHead className="text-right">Foreign Tax</TableHead>}
+                  {hasFT && (
+                    <TableHead className="text-right">
+                      <MoneyHeader label="Foreign Tax" tab={TAX_TABS.form1116} tooltip="Go to form 1116 details" onNavigate={onNavigate} />
+                    </TableHead>
+                  )}
                 </TableRow>
               </TableHeader>
               <TableBody>
