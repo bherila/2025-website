@@ -10,18 +10,18 @@ import {
 } from './k3-to-1116'
 import type { ForeignTaxSummary } from './types'
 
-function getSourceLabel(doc: TaxDocument, parsedData?: Record<string, unknown> | FK1StructuredData | null): string {
-  if (doc.form_type === 'k1' && parsedData && isFK1StructuredData(parsedData)) {
-    return parsedData.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
+function getSourceLabel(doc: TaxDocument, parsedDataOrK1?: Record<string, unknown> | FK1StructuredData | null): string {
+  if (doc.form_type === 'k1' && parsedDataOrK1 && isFK1StructuredData(parsedDataOrK1)) {
+    return parsedDataOrK1.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
   }
 
-  return ((parsedData as Record<string, unknown> | null | undefined)?.payer_name as string | undefined)
+  return ((parsedDataOrK1 as Record<string, unknown> | null | undefined)?.payer_name as string | undefined)
     ?? doc.employment_entity?.display_name
     ?? doc.original_filename
     ?? 'Tax document'
 }
 
-function withMetadata(
+function attachSourceDocumentMetadata(
   summary: ForeignTaxSummary,
   doc: TaxDocument,
   sourceLabel: string,
@@ -51,12 +51,12 @@ export function collectForeignTaxSummaries(documents: TaxDocument[]): ForeignTax
           if (entry.form_type === '1099_div' || entry.form_type === '1099_div_c') {
             const summary = extractForeignTaxFrom1099Div(parsedData, link.account_id)
             if (summary) {
-              summaries.push(withMetadata(summary, doc, sourceLabel))
+              summaries.push(attachSourceDocumentMetadata(summary, doc, sourceLabel))
             }
           } else if (entry.form_type === '1099_int' || entry.form_type === '1099_int_c') {
             const summary = extractForeignTaxFrom1099Int(parsedData, link.account_id)
             if (summary) {
-              summaries.push(withMetadata(summary, doc, sourceLabel))
+              summaries.push(attachSourceDocumentMetadata(summary, doc, sourceLabel))
             }
           }
         }
@@ -67,12 +67,12 @@ export function collectForeignTaxSummaries(documents: TaxDocument[]): ForeignTax
 
         const dividendSummary = extractForeignTaxFrom1099Div({ box7_foreign_tax: parsedData.div_7_foreign_tax_paid }, accountId)
         if (dividendSummary) {
-          summaries.push(withMetadata(dividendSummary, doc, sourceLabel))
+          summaries.push(attachSourceDocumentMetadata(dividendSummary, doc, sourceLabel))
         }
 
         const interestSummary = extractForeignTaxFrom1099Int({ box6_foreign_tax: parsedData.int_6_foreign_tax_paid }, accountId)
         if (interestSummary) {
-          summaries.push(withMetadata(interestSummary, doc, sourceLabel))
+          summaries.push(attachSourceDocumentMetadata(interestSummary, doc, sourceLabel))
         }
       }
 
@@ -89,17 +89,17 @@ export function collectForeignTaxSummaries(documents: TaxDocument[]): ForeignTax
 
     if (doc.form_type === 'k1' && isFK1StructuredData(doc.parsed_data)) {
       for (const summary of extractForeignTaxSummaries(doc.parsed_data, accountId)) {
-        summaries.push(withMetadata(summary, doc, sourceLabel))
+        summaries.push(attachSourceDocumentMetadata(summary, doc, sourceLabel))
       }
     } else if (doc.form_type === '1099_div' || doc.form_type === '1099_div_c') {
       const summary = extractForeignTaxFrom1099Div(parsedData, accountId)
       if (summary) {
-        summaries.push(withMetadata(summary, doc, sourceLabel))
+        summaries.push(attachSourceDocumentMetadata(summary, doc, sourceLabel))
       }
     } else if (doc.form_type === '1099_int' || doc.form_type === '1099_int_c') {
       const summary = extractForeignTaxFrom1099Int(parsedData, accountId)
       if (summary) {
-        summaries.push(withMetadata(summary, doc, sourceLabel))
+        summaries.push(attachSourceDocumentMetadata(summary, doc, sourceLabel))
       }
     }
   }

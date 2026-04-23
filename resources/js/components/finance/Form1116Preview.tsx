@@ -202,8 +202,11 @@ export default function Form1116Preview({
   const [bulkUpdating, setBulkUpdating] = useState(false)
   const [bulkFailures, setBulkFailures] = useState<string[]>([])
   const [worksheetOpen, setWorksheetOpen] = useState(false)
+  const worksheetSummaries = useMemo(
+    () => foreignTaxSummaries ?? collectForeignTaxSummaries([...reviewedK1Docs, ...reviewed1099Docs]),
+    [foreignTaxSummaries, reviewedK1Docs, reviewed1099Docs],
+  )
   const computed = computeForm1116Lines({ reviewedK1Docs, reviewed1099Docs, foreignTaxSummaries })
-  const worksheetSummaries = foreignTaxSummaries ?? collectForeignTaxSummaries([...reviewedK1Docs, ...reviewed1099Docs])
   const {
     incomeSources,
     taxSources,
