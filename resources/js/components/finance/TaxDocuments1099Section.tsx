@@ -1,7 +1,7 @@
 'use client'
 
 import currency from 'currency.js'
-import { Calculator, CheckCircle, ChevronDown, Clock, Eye, FileText, Loader2, Plus, Upload } from 'lucide-react'
+import { Calculator, CheckCircle, ChevronDown, Clock, Eye, FileText, Loader2, Plus, Sigma, Upload } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { fetchWrapper } from '@/fetchWrapper'
 import type { ForeignTaxSummary } from '@/finance/1116'
@@ -35,6 +35,7 @@ import {
   WorksheetModal,
 } from '@/finance/1116'
 import { useReviewModal } from '@/hooks/useReviewModal'
+import type { DocAmounts } from '@/lib/finance/taxDocumentUtils'
 import { getDocAmounts, getPayerName, hasReviewedContent, iterateReviewedBrokerEntries } from '@/lib/finance/taxDocumentUtils'
 import type { F1099DivParsedData, F1099IntParsedData, FK1StructuredData, TaxDocument, TaxDocumentAccountLink } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS, isFK1StructuredData } from '@/types/finance/tax-document'
@@ -46,6 +47,27 @@ export interface FinAccount {
   acct_name: string
 }
 
+type MoneyKey = keyof DocAmounts
+
+interface MoneyColumnDef {
+  key: MoneyKey
+  label: string
+  tab?: string | undefined
+  tooltip?: string | undefined
+}
+
+/**
+ * Canonical column config for the Account Documents money columns.
+ * Drives the table header, totals row, and per-row amount cells so a
+ * future column (e.g. Cap Gain, Sch-C — see issue #292) is a 1-line add.
+ */
+const MONEY_COLUMNS: MoneyColumnDef[] = [
+  { key: 'interest', label: 'Interest', tab: TAX_TABS.schedules, tooltip: 'Go to Schedule B details' },
+  { key: 'dividend', label: 'Dividends', tab: TAX_TABS.schedules, tooltip: 'Go to Schedule B details' },
+  { key: 'other', label: 'Other' },
+  { key: 'foreignTax', label: 'Foreign Tax', tab: TAX_TABS.form1116, tooltip: 'Go to form 1116 details' },
+]
+
 /** Column header that optionally renders a small drill-down button linking to a detail tab. */
 function MoneyHeader({
   label,
@@ -54,14 +76,14 @@ function MoneyHeader({
   onNavigate,
 }: {
   label: string
-  tab: string
-  tooltip: string
+  tab?: string | undefined
+  tooltip?: string | undefined
   onNavigate?: ((tab: string) => void) | undefined
 }) {
   return (
     <div className="flex items-center justify-end gap-1">
       <span>{label}</span>
-      {onNavigate && (
+      {tab && tooltip && onNavigate && (
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -77,6 +99,21 @@ function MoneyHeader({
         </Tooltip>
       )}
     </div>
+  )
+}
+
+/** Money amount cell — shared by data rows and the totals row. */
+function MoneyCell({ value, isTotal }: { value: number | null; isTotal?: boolean }) {
+  const formatted = value === null ? '' : currency(value).format()
+  return (
+    <TableCell className={`text-right font-mono text-xs tabular-nums ${isTotal ? 'font-semibold' : ''}`}>
+      {isTotal && formatted ? (
+        <span className="inline-flex items-center justify-end gap-1">
+          <Sigma className="h-3 w-3 text-muted-foreground" />
+          {formatted}
+        </span>
+      ) : formatted}
+    </TableCell>
   )
 }
 
@@ -536,42 +573,36 @@ export default function TaxDocuments1099Section({
         const inactiveGroups: AccountGroup[] = inactiveAccounts.map(a => ({ account: a, ...buildDocRowsForAccount(a), isSecondary: true }))
         const allGroups = [...activeGroups, ...inactiveGroups]
 
-        const totals = { interest: currency(0), dividend: currency(0), other: currency(0), foreignTax: currency(0) }
-        let hasInt = false
-        let hasDiv = false
-        let hasOther = false
-        let hasFT = false
+        const totalsByKey: Record<MoneyKey, currency> = {
+          interest: currency(0),
+          dividend: currency(0),
+          other: currency(0),
+          foreignTax: currency(0),
+        }
+        const hasDataByKey: Record<MoneyKey, boolean> = {
+          interest: false,
+          dividend: false,
+          other: false,
+          foreignTax: false,
+        }
         for (const g of allGroups) {
           for (const r of g.rows) {
-            if (r.amounts.interest !== null) {
-              hasInt = true
-              totals.interest = totals.interest.add(r.amounts.interest)
-            }
-            if (r.amounts.dividend !== null) {
-              hasDiv = true
-              totals.dividend = totals.dividend.add(r.amounts.dividend)
-            }
-            if (r.amounts.other !== null) {
-              hasOther = true
-              totals.other = totals.other.add(r.amounts.other)
-            }
-            if (r.amounts.foreignTax !== null) {
-              hasFT = true
-              totals.foreignTax = totals.foreignTax.add(r.amounts.foreignTax)
+            for (const col of MONEY_COLUMNS) {
+              const v = r.amounts[col.key]
+              if (v !== null) {
+                hasDataByKey[col.key] = true
+                totalsByKey[col.key] = totalsByKey[col.key].add(v)
+              }
             }
           }
         }
 
-        const totalCols = 3 + (hasInt ? 1 : 0) + (hasDiv ? 1 : 0) + (hasOther ? 1 : 0) + (hasFT ? 1 : 0)
+        const visibleColumns = MONEY_COLUMNS.filter(c => hasDataByKey[c.key])
+        const totalCols = 3 + visibleColumns.length
 
-        const fmtAmount = (n: number | null) => n === null ? '' : currency(n).format()
-
-        const renderAmountCells = (a: DocRow['amounts']) => (
+        const renderAmountCells = (a: DocAmounts) => (
           <>
-            {hasInt && <TableCell className="text-right font-mono text-xs tabular-nums">{fmtAmount(a.interest)}</TableCell>}
-            {hasDiv && <TableCell className="text-right font-mono text-xs tabular-nums">{fmtAmount(a.dividend)}</TableCell>}
-            {hasOther && <TableCell className="text-right font-mono text-xs tabular-nums">{fmtAmount(a.other)}</TableCell>}
-            {hasFT && <TableCell className="text-right font-mono text-xs tabular-nums">{fmtAmount(a.foreignTax)}</TableCell>}
+            {visibleColumns.map(col => <MoneyCell key={col.key} value={a[col.key]} />)}
           </>
         )
 
@@ -581,7 +612,7 @@ export default function TaxDocuments1099Section({
               rowSpan={Math.max(1, g.rows.length)}
               className={`font-medium text-sm align-top ${g.isSecondary ? 'text-muted-foreground' : ''}`}
             >
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center justify-between gap-2">
                 <span>{g.account.acct_name}</span>
                 {renderAddDropdown(g.account, g.uploadedFormTypes)}
               </div>
@@ -613,25 +644,22 @@ export default function TaxDocuments1099Section({
                   <TableHead>Account</TableHead>
                   <TableHead>Document</TableHead>
                   <TableHead>Name</TableHead>
-                  {hasInt && (
-                    <TableHead className="text-right">
-                      <MoneyHeader label="Interest" tab={TAX_TABS.schedules} tooltip="Go to Schedule B details" onNavigate={onNavigate} />
+                  {visibleColumns.map(col => (
+                    <TableHead key={col.key} className="text-right">
+                      <MoneyHeader label={col.label} tab={col.tab} tooltip={col.tooltip} onNavigate={onNavigate} />
                     </TableHead>
-                  )}
-                  {hasDiv && (
-                    <TableHead className="text-right">
-                      <MoneyHeader label="Dividends" tab={TAX_TABS.schedules} tooltip="Go to Schedule B details" onNavigate={onNavigate} />
-                    </TableHead>
-                  )}
-                  {hasOther && <TableHead className="text-right">Other</TableHead>}
-                  {hasFT && (
-                    <TableHead className="text-right">
-                      <MoneyHeader label="Foreign Tax" tab={TAX_TABS.form1116} tooltip="Go to form 1116 details" onNavigate={onNavigate} />
-                    </TableHead>
-                  )}
+                  ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {visibleColumns.length > 0 && (
+                  <TableRow className="bg-muted/40 hover:bg-muted/50 border-b-2">
+                    <TableCell colSpan={3} className="font-semibold text-sm">Total</TableCell>
+                    {visibleColumns.map(col => (
+                      <MoneyCell key={col.key} value={totalsByKey[col.key].value} isTotal />
+                    ))}
+                  </TableRow>
+                )}
                 {activeGroups.flatMap(renderGroup)}
                 {inactiveGroups.length > 0 && activeGroups.length > 0 && (
                   <TableRow>
@@ -688,17 +716,6 @@ export default function TaxDocuments1099Section({
                   </TableRow>
                 ))}
               </TableBody>
-              {(hasInt || hasDiv || hasOther || hasFT) && (
-                <TableFooter>
-                  <TableRow>
-                    <TableCell colSpan={3} className="font-semibold text-sm">Total</TableCell>
-                    {hasInt && <TableCell className="text-right font-mono text-xs tabular-nums font-semibold">{currency(totals.interest.value).format()}</TableCell>}
-                    {hasDiv && <TableCell className="text-right font-mono text-xs tabular-nums font-semibold">{currency(totals.dividend.value).format()}</TableCell>}
-                    {hasOther && <TableCell className="text-right font-mono text-xs tabular-nums font-semibold">{currency(totals.other.value).format()}</TableCell>}
-                    {hasFT && <TableCell className="text-right font-mono text-xs tabular-nums font-semibold">{currency(totals.foreignTax.value).format()}</TableCell>}
-                  </TableRow>
-                </TableFooter>
-              )}
             </Table>
           </div>
         )
