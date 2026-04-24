@@ -15,6 +15,7 @@ import Form8582Preview from '@/components/finance/Form8582Preview'
 import Form8995Preview from '@/components/finance/Form8995Preview'
 import { isFK1StructuredData } from '@/components/finance/k1'
 import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
+import Schedule1Preview from '@/components/finance/Schedule1Preview'
 import ScheduleAPreview from '@/components/finance/ScheduleAPreview'
 import ScheduleBPreview from '@/components/finance/ScheduleBPreview'
 import ScheduleCTab from '@/components/finance/ScheduleCTab'
@@ -697,6 +698,7 @@ function TaxPreviewPageContent() {
           <TabsTrigger value={TAX_TABS.w2}>W-2</TabsTrigger>
           <TabsTrigger value={TAX_TABS.schedules}>Schedules</TabsTrigger>
           <TabsTrigger value={TAX_TABS.scheduleA}>Schedule A</TabsTrigger>
+          <TabsTrigger value={TAX_TABS.schedule1}>Schedule 1</TabsTrigger>
           <TabsTrigger value={TAX_TABS.scheduleE}>Schedule E</TabsTrigger>
           <TabsTrigger value={TAX_TABS.scheduleSE}>Schedule SE</TabsTrigger>
           <TabsTrigger value={TAX_TABS.capitalGains}>Capital Gains</TabsTrigger>
@@ -804,6 +806,15 @@ function TaxPreviewPageContent() {
           </div>
         </TabsContent>
 
+        <TabsContent value={TAX_TABS.schedule1} className="mt-0">
+          <Schedule1Preview
+            selectedYear={selectedYear}
+            scheduleCNetIncome={scheduleCNetIncome.total}
+            scheduleEGrandTotal={taxReturn.scheduleE?.grandTotal ?? 0}
+            schedule1OtherIncome={schedule1OtherIncome}
+          />
+        </TabsContent>
+
         <TabsContent value={TAX_TABS.scheduleE} className="mt-0">
           <ScheduleEPreview
             reviewedK1Docs={reviewedK1Docs}
@@ -897,13 +908,13 @@ function TaxPreviewPageContent() {
             interestIncome={currency(taxReturn.scheduleB?.interestTotal ?? income1099.interestIncome.value)}
             dividendIncome={currency(taxReturn.scheduleB?.dividendTotal ?? income1099.dividendIncome.value)}
             scheduleCIncome={scheduleCNetIncome.total}
-            scheduleEIncome={taxReturn.scheduleE?.grandTotal ?? 0}
             schedule1OtherIncome={schedule1OtherIncome}
             deductibleSeTaxAdjustment={taxReturn.scheduleSE?.deductibleSeTax ?? 0}
             capitalGainOrLoss={(taxReturn.scheduleD?.schD_line21 ?? 0) !== 0 ? (taxReturn.scheduleD?.schD_line21 ?? null) : (taxReturn.scheduleD?.schD_line16 ?? null)}
             schedule2TotalAdditionalTaxes={taxReturn.schedule2?.totalAdditionalTaxes ?? null}
             foreignTaxCredit={taxReturn.form1116?.totalForeignTaxes ?? null}
             {...(taxReturn.scheduleB ? { scheduleB: taxReturn.scheduleB } : {})}
+            scheduleEGrandTotal={taxReturn.scheduleE?.grandTotal ?? 0}
             selectedYear={selectedYear}
             w2Documents={reviewedW2Docs}
             interestDocuments={reviewed1099Docs.filter((doc) => doc.form_type === '1099_int' || doc.form_type === '1099_int_c')}

@@ -41,7 +41,6 @@ const defaultProps = {
 }
 
 let Form1040Preview: React.ComponentType<typeof defaultProps & {
-  scheduleEIncome?: number
   schedule1OtherIncome?: number
   deductibleSeTaxAdjustment?: number
   capitalGainOrLoss?: number | null
@@ -56,6 +55,7 @@ let Form1040Preview: React.ComponentType<typeof defaultProps & {
     qualifiedDividendLines: Array<{ label: string; amount: number }>
   }
   retirementDocuments?: object[]
+  scheduleEGrandTotal?: number
   onNavigate?: (tab: string) => void
 }>
 
@@ -112,21 +112,37 @@ describe('Form1040Preview navigation', () => {
     expect(onNavigate).toHaveBeenCalledWith('form-1116')
   })
 
-  it('calls onNavigate with "schedule-c" when Line 8 row is clicked', () => {
+  it('renders one unified Line 8 row and routes clicks to the Schedule 1 tab', () => {
     const onNavigate = jest.fn()
-    render(<Form1040Preview {...defaultProps} scheduleCIncome={5000} onNavigate={onNavigate} />)
+    render(
+      <Form1040Preview
+        {...defaultProps}
+        scheduleCIncome={5000}
+        schedule1OtherIncome={750}
+        scheduleEGrandTotal={1200}
+        onNavigate={onNavigate}
+      />,
+    )
 
-    const row = screen.getByText('Additional income (Schedule 1)').closest('tr')!
+    const row = screen.getByText('Additional income from Schedule 1, line 10').closest('tr')!
     fireEvent.click(row)
 
-    expect(onNavigate).toHaveBeenCalledWith('schedule-c')
+    expect(onNavigate).toHaveBeenCalledWith('schedule-1')
   })
 
-  it('renders Schedule 1 other income on Line 8 and includes it in total income', () => {
-    render(<Form1040Preview {...defaultProps} schedule1OtherIncome={750} />)
+  it('aggregates Schedule C, Schedule E, and Schedule 1 line 8 into a single Line 8 value', () => {
+    render(
+      <Form1040Preview
+        {...defaultProps}
+        scheduleCIncome={5000}
+        schedule1OtherIncome={750}
+        scheduleEGrandTotal={1200}
+      />,
+    )
 
-    expect(screen.getByText('Additional income (Schedule 1)')).toBeInTheDocument()
-    expect(screen.getAllByText('$102,450.00')).toHaveLength(2)
+    expect(screen.getByText('Additional income from Schedule 1, line 10')).toBeInTheDocument()
+    expect(screen.getByText('$6,950.00')).toBeInTheDocument()
+    expect(screen.getAllByText('$108,650.00')).toHaveLength(2)
   })
 
   it('renders 1099-R lines and computes AGI from schedule totals and adjustments', () => {
@@ -142,7 +158,7 @@ describe('Form1040Preview navigation', () => {
           qualifiedDividendLines: [],
         }}
         scheduleCIncome={5000}
-        scheduleEIncome={1000}
+        scheduleEGrandTotal={1000}
         deductibleSeTaxAdjustment={706.48}
         capitalGainOrLoss={250}
         retirementDocuments={[
