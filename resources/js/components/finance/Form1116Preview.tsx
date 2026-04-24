@@ -2,7 +2,7 @@
 
 import currency from 'currency.js'
 import { Calculator } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
 import { Button } from '@/components/ui/button'
@@ -52,7 +52,7 @@ export default function Form1116Preview({
     totalK1Box5 = 0,
     sbpElections = [],
   } = form1116
-  const relevantUnreviewed = getRelevantUnreviewedK1Docs(allK1Docs)
+  const relevantUnreviewed = useMemo(() => getRelevantUnreviewedK1Docs(allK1Docs), [allK1Docs])
 
   const runBulkToggle = async (nextValue: boolean) => {
     if (!onBulkSetSbpElection || bulkUpdating) {
