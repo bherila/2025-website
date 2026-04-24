@@ -120,6 +120,14 @@ function getRetirementPayerLabel(doc: TaxDocument, parsed: Form1099RParsedData):
   return parsed.payer_name ?? doc.account?.acct_name ?? doc.original_filename ?? `1099-R #${doc.id}`
 }
 
+function mapScheduleBSources(lines: Array<{ label: string; amount: number }>): NonNullable<Form1040LineItem['sources']> {
+  return lines.map((line) => ({
+    label: line.label,
+    amount: line.amount,
+    note: 'Schedule B source',
+  }))
+}
+
 export function compute1099RDistributionSummary(retirementDocuments: TaxDocument[]): RetirementDistributionSummary {
   const summary: RetirementDistributionSummary = {
     ira: createRetirementDistributionBucket(),
@@ -222,11 +230,7 @@ export function computeForm1040Lines({
 
   const reviewedIntDocs = interestDocuments.filter(d => d.is_reviewed && d.parsed_data)
   const interestSources = scheduleB?.interestLines.length
-    ? scheduleB.interestLines.map((line) => ({
-        label: line.label,
-        amount: line.amount,
-        note: line.label.includes('K-1') ? 'Schedule B source' : '1099-INT Box 1',
-      }))
+    ? mapScheduleBSources(scheduleB.interestLines)
     : reviewedIntDocs.length > 0
       ? reviewedIntDocs.map(d => ({
           label: (d.parsed_data as F1099IntParsedData)?.payer_name ?? d.account?.acct_name ?? d.original_filename ?? '',
@@ -237,11 +241,7 @@ export function computeForm1040Lines({
 
   const reviewedDivDocs = dividendDocuments.filter(d => d.is_reviewed && d.parsed_data)
   const dividendSources = scheduleB?.dividendLines.length
-    ? scheduleB.dividendLines.map((line) => ({
-        label: line.label,
-        amount: line.amount,
-        note: line.label.includes('K-1') ? 'Schedule B source' : '1099-DIV Box 1a',
-      }))
+    ? mapScheduleBSources(scheduleB.dividendLines)
     : reviewedDivDocs.length > 0
       ? reviewedDivDocs.map(d => ({
           label: (d.parsed_data as F1099DivParsedData)?.payer_name ?? d.account?.acct_name ?? d.original_filename ?? '',

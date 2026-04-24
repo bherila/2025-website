@@ -5,7 +5,7 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
-import { compute1099RDistributionSummary,computeForm1040Lines } from '@/components/finance/Form1040Preview'
+import { compute1099RDistributionSummary, computeForm1040Lines } from '@/components/finance/Form1040Preview'
 import { computeForm4952Lines } from '@/components/finance/Form4952Preview'
 import { computeForm8995 } from '@/components/finance/Form8995Preview'
 import { isFK1StructuredData } from '@/components/finance/k1'
