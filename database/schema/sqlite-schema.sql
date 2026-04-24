@@ -1226,6 +1226,7 @@ CREATE TABLE IF NOT EXISTS "fin_tax_documents"(
   `download_history` TEXT NULL,
   `created_at` TEXT,
   `updated_at` TEXT,
+  "misc_routing" varchar,
   FOREIGN KEY(`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
 );
 CREATE INDEX `fin_tax_documents_user_id_index` ON `fin_tax_documents`(
@@ -1428,3 +1429,4 @@ INSERT INTO migrations VALUES(57,'2026_04_19_063834_add_is_deferred_billing_to_c
 INSERT INTO migrations VALUES(58,'2026_04_19_223420_create_fin_user_tax_states_table',6);
 INSERT INTO migrations VALUES(59,'2026_04_19_223421_create_fin_user_deductions_table',6);
 INSERT INTO migrations VALUES(60,'2026_04_20_033435_create_fin_pal_carryforwards_table',6);
+INSERT INTO migrations VALUES(61,'2026_04_24_070803_add_misc_routing_to_fin_tax_documents',7);

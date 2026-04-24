@@ -172,6 +172,7 @@ export interface F1099NecParsedData {
   recipient_tin_last4?: string | null
   account_number?: string | null
   box1_nonemployeeComp?: number | null
+  box1_nonemployee_compensation?: number | null
   box2_directSalesIndicator?: boolean | null
   box4_fed_tax?: number | null
   box5_state_tax?: number | null
@@ -359,6 +360,7 @@ export interface TaxDocument {
   download_count: number
   genai_job_id: number | null
   genai_status: 'pending' | 'processing' | 'parsed' | 'failed' | null
+  misc_routing: MiscRouting | null
   parsed_data: TaxDocumentParsedData | null
   uploader: { id: number; name: string } | null
   employment_entity: { id: number; display_name: string } | null
@@ -369,6 +371,8 @@ export interface TaxDocument {
   created_at: string
   updated_at: string
 }
+
+export type MiscRouting = 'sch_c' | 'sch_e' | 'sch_1_line_8'
 
 export interface EmploymentEntity {
   id: number

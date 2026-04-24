@@ -58,7 +58,9 @@ interface MoneyColumnDef {
 const MONEY_COLUMNS: MoneyColumnDef[] = [
   { key: 'interest', label: 'Interest', tab: TAX_TABS.schedules, tooltip: 'Go to Schedule B details' },
   { key: 'dividend', label: 'Dividends', tab: TAX_TABS.schedules, tooltip: 'Go to Schedule B details' },
+  { key: 'capGain', label: 'Cap Gain', tab: TAX_TABS.capitalGains, tooltip: 'Go to capital gains details' },
   { key: 'other', label: 'Other' },
+  { key: 'schC', label: 'Sch C', tab: TAX_TABS.scheduleC, tooltip: 'Go to Schedule C details' },
   { key: 'foreignTax', label: 'Foreign Tax', tab: TAX_TABS.form1116, tooltip: 'Go to form 1116 details' },
 ]
 
@@ -147,7 +149,7 @@ interface UploadModalState {
   accountId: number
 }
 
-const DISPLAY_FORM_TYPES = ['1099_int', '1099_div', '1099_misc', 'k1'] as const
+const DISPLAY_FORM_TYPES = ['1099_int', '1099_div', '1099_misc', '1099_nec', 'k1'] as const
 // Form types shown as individual upload options in the per-account Add dropdown.
 // 'broker_1099' is intentionally omitted here — it is handled by the "Consolidated 1099" entry
 // which routes through the MultiAccountImportModal with a preselected account.
@@ -185,8 +187,8 @@ export default function TaxDocuments1099Section({
 
   const fetchDocuments = useCallback(async () => {
     try {
-      const params = new URLSearchParams({
-        form_type: '1099_int,1099_int_c,1099_div,1099_div_c,1099_misc,1099_b,broker_1099,k1',
+        const params = new URLSearchParams({
+        form_type: '1099_int,1099_int_c,1099_div,1099_div_c,1099_misc,1099_nec,1099_b,broker_1099,k1',
         year: String(selectedYear),
       })
       const data = await fetchWrapper.get(`/api/finance/tax-documents?${params.toString()}`)
@@ -515,18 +517,12 @@ export default function TaxDocuments1099Section({
         const inactiveGroups: AccountGroup[] = inactiveAccounts.map(a => ({ account: a, ...buildDocRowsForAccount(a), isSecondary: true }))
         const allGroups = [...activeGroups, ...inactiveGroups]
 
-        const totalsByKey: Record<MoneyKey, currency> = {
-          interest: currency(0),
-          dividend: currency(0),
-          other: currency(0),
-          foreignTax: currency(0),
-        }
-        const hasDataByKey: Record<MoneyKey, boolean> = {
-          interest: false,
-          dividend: false,
-          other: false,
-          foreignTax: false,
-        }
+        const totalsByKey = Object.fromEntries(
+          MONEY_COLUMNS.map((column) => [column.key, currency(0)]),
+        ) as Record<MoneyKey, currency>
+        const hasDataByKey = Object.fromEntries(
+          MONEY_COLUMNS.map((column) => [column.key, false]),
+        ) as Record<MoneyKey, boolean>
         for (const g of allGroups) {
           for (const r of g.rows) {
             for (const col of MONEY_COLUMNS) {

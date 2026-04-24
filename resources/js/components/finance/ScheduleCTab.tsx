@@ -6,6 +6,9 @@ import { useMemo, useState } from 'react'
 import { Callout, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { getDocAmounts, getPayerName } from '@/lib/finance/taxDocumentUtils'
+import type { TaxDocument } from '@/types/finance/tax-document'
+import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
 import type { CategoryTotal, EntityData, YearData } from './ScheduleCPreview'
 import { computeHomeOfficeCalcs } from './ScheduleCPreview'
@@ -13,6 +16,7 @@ import { computeHomeOfficeCalcs } from './ScheduleCPreview'
 interface ScheduleCTabProps {
   selectedYear: number
   scheduleCData: YearData[]
+  reviewed1099Docs?: TaxDocument[]
 }
 
 function sumCategories(cats: Record<string, CategoryTotal>): number {
@@ -172,7 +176,7 @@ function Form8829Preview({ entity, carryForward, netIncome }: Form8829Props) {
   )
 }
 
-export default function ScheduleCTab({ selectedYear, scheduleCData }: ScheduleCTabProps) {
+export default function ScheduleCTab({ selectedYear, scheduleCData, reviewed1099Docs = [] }: ScheduleCTabProps) {
   // Filter to selected year
   const yearData = useMemo(() => {
     return scheduleCData.filter((yd) => Number(yd.year) === selectedYear)
@@ -181,7 +185,54 @@ export default function ScheduleCTab({ selectedYear, scheduleCData }: ScheduleCT
   // Compute home-office carry-forward per entity across all years (reuses shared pure function)
   const homeOfficeCalcs = useMemo(() => computeHomeOfficeCalcs(scheduleCData), [scheduleCData])
 
-  if (yearData.length === 0) {
+  const scheduleCDocumentRows = useMemo(() => {
+    const rows: Array<{ key: string; label: string; amount: number }> = []
+
+    for (const doc of reviewed1099Docs) {
+      const links = doc.account_links ?? []
+
+      if (links.length > 0) {
+        for (const link of links) {
+          const schCAmount = getDocAmounts(doc, link).schC
+          if (schCAmount === null) {
+            continue
+          }
+
+          const formLabel = FORM_TYPE_LABELS[link.form_type] ?? link.form_type
+          const payerLabel = getPayerName(doc, link) ?? link.account?.acct_name ?? doc.original_filename ?? formLabel
+          rows.push({
+            key: `link-${link.id}`,
+            label: `${payerLabel} — ${formLabel}`,
+            amount: schCAmount,
+          })
+        }
+
+        continue
+      }
+
+      const schCAmount = getDocAmounts(doc).schC
+      if (schCAmount === null) {
+        continue
+      }
+
+      const formLabel = FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type
+      const payerLabel = getPayerName(doc) ?? doc.account?.acct_name ?? doc.original_filename ?? formLabel
+      rows.push({
+        key: `doc-${doc.id}`,
+        label: `${payerLabel} — ${formLabel}`,
+        amount: schCAmount,
+      })
+    }
+
+    return rows
+  }, [reviewed1099Docs])
+
+  const scheduleCDocumentTotal = useMemo(
+    () => scheduleCDocumentRows.reduce((sum, row) => sum.add(row.amount), currency(0)).value,
+    [scheduleCDocumentRows],
+  )
+
+  if (yearData.length === 0 && scheduleCDocumentRows.length === 0) {
     return (
       <div className="text-center py-12 text-muted-foreground border rounded-md">
         <p className="mb-2 font-medium">No Schedule C data found for {selectedYear}.</p>
@@ -195,6 +246,14 @@ export default function ScheduleCTab({ selectedYear, scheduleCData }: ScheduleCT
 
   return (
     <div className="space-y-8">
+      {scheduleCDocumentRows.length > 0 && (
+        <FormBlock title="Schedule C — Tax Document Income">
+          {scheduleCDocumentRows.map((row) => (
+            <FormLine key={row.key} label={row.label} value={row.amount} />
+          ))}
+          <FormTotalLine label="Total 1099 income routed to Schedule C" value={scheduleCDocumentTotal} />
+        </FormBlock>
+      )}
       {yearData.map((yd) => (
         <div key={yd.year}>
           {yd.entities

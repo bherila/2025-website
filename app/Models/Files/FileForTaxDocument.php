@@ -60,6 +60,7 @@ class FileForTaxDocument extends Model
         'uploaded_by_user_id',
         'notes',
         'is_reviewed',
+        'misc_routing',
         'genai_job_id',
         'genai_status',
         'parsed_data',

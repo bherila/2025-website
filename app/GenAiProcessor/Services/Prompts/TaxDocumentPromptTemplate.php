@@ -21,6 +21,7 @@ class TaxDocumentPromptTemplate extends PromptTemplate
             in_array($formType, ['1099_int', '1099_int_c']) => $this->build1099IntPrompt($formType, $taxYear),
             in_array($formType, ['1099_div', '1099_div_c']) => $this->build1099DivPrompt($formType, $taxYear),
             $formType === '1099_misc' => $this->build1099MiscPrompt($taxYear),
+            $formType === '1099_nec' => $this->build1099NecPrompt($taxYear),
             $formType === 'k1' => $this->buildK1Prompt($taxYear),
             default => throw new \InvalidArgumentException("Unknown tax form type: {$formType}"),
         };
@@ -74,6 +75,18 @@ PROMPT;
 <!-- tool:{$toolName} -->
 Analyze the provided 1099-MISC PDF for tax year {$taxYear}.
 Use the `{$toolName}` tool to return ALL extracted box values from the Miscellaneous Income form.
+All monetary values must be numbers (not strings). If a field is not present on the form, set it to null.
+PROMPT;
+    }
+
+    private function build1099NecPrompt(int $taxYear): string
+    {
+        $toolName = GenAiJobDispatcherService::TAX_DOCUMENT_1099NEC_TOOL_NAME;
+
+        return <<<PROMPT
+<!-- tool:{$toolName} -->
+Analyze the provided 1099-NEC PDF for tax year {$taxYear}.
+Use the `{$toolName}` tool to return ALL extracted box values from the Nonemployee Compensation form.
 All monetary values must be numbers (not strings). If a field is not present on the form, set it to null.
 PROMPT;
     }

@@ -8,7 +8,7 @@
 import type { ForeignTaxSummary } from '@/finance/1116'
 import { extractForeignTaxFromK1 } from '@/finance/1116/k3-to-1116'
 import { k1NetIncome } from '@/lib/finance/k1Utils'
-import type { FK1StructuredData, MultiAccountParsedEntry, TaxDocument, TaxDocumentAccountLink } from '@/types/finance/tax-document'
+import type { FK1StructuredData, MiscRouting, MultiAccountParsedEntry, TaxDocument, TaxDocumentAccountLink } from '@/types/finance/tax-document'
 import { isFK1StructuredData } from '@/types/finance/tax-document'
 
 /**
@@ -144,8 +144,100 @@ export function getPayerName(doc: TaxDocument, link?: TaxDocumentAccountLink): s
 export interface DocAmounts {
   interest: number | null
   dividend: number | null
+  capGain: number | null
+  schC: number | null
   other: number | null
   foreignTax: number | null
+}
+
+const MISC_PRIMARY_BOX_KEYS = [
+  'box1_rents',
+  'box2_royalties',
+  'box3_other_income',
+  'box3_other',
+  'box7_nonemployee',
+  'total_amount',
+] as const
+
+function getNumericValue(
+  data: Record<string, unknown>,
+  ...keys: readonly string[]
+): number | null {
+  for (const key of keys) {
+    const value = data[key]
+    if (typeof value === 'number' && !Number.isNaN(value)) {
+      return value
+    }
+    if (typeof value === 'string') {
+      const parsed = Number.parseFloat(value)
+      if (!Number.isNaN(parsed)) {
+        return parsed
+      }
+    }
+  }
+
+  return null
+}
+
+function sumNumericValues(
+  data: Record<string, unknown>,
+  keys: readonly string[],
+): number | null {
+  let total = 0
+  let hasValue = false
+
+  for (const key of keys) {
+    const value = getNumericValue(data, key)
+    if (value === null) {
+      continue
+    }
+    total += value
+    hasValue = true
+  }
+
+  return hasValue && total !== 0 ? total : null
+}
+
+function inferMiscRouting(parsedData: Record<string, unknown>): MiscRouting | null {
+  if (getNumericValue(parsedData, 'box7_nonemployee') !== null) {
+    return 'sch_c'
+  }
+
+  if (getNumericValue(parsedData, 'box1_rents', 'box2_royalties') !== null) {
+    return 'sch_e'
+  }
+
+  if (getNumericValue(parsedData, 'box3_other_income', 'box3_other', 'total_amount') !== null) {
+    return 'sch_1_line_8'
+  }
+
+  return null
+}
+
+function applyMiscRouting(
+  parsedData: Record<string, unknown>,
+  routing: MiscRouting | null,
+  result: DocAmounts,
+): void {
+  if (routing === 'sch_c') {
+    result.schC = sumNumericValues(parsedData, MISC_PRIMARY_BOX_KEYS)
+    return
+  }
+
+  if (routing === 'sch_e' || routing === 'sch_1_line_8') {
+    result.other = sumNumericValues(parsedData, MISC_PRIMARY_BOX_KEYS)
+    return
+  }
+
+  result.schC = sumNumericValues(parsedData, ['box7_nonemployee'])
+  result.other = sumNumericValues(parsedData, ['box1_rents', 'box2_royalties', 'box3_other_income', 'box3_other'])
+
+  if (result.other === null) {
+    const inferredRouting = inferMiscRouting(parsedData)
+    if (inferredRouting === 'sch_e' || inferredRouting === 'sch_1_line_8') {
+      result.other = sumNumericValues(parsedData, MISC_PRIMARY_BOX_KEYS)
+    }
+  }
 }
 
 function getSharedForeignTaxAmount(
@@ -208,7 +300,7 @@ export function getDocAmounts(
   link?: TaxDocumentAccountLink,
   foreignTaxSummaries?: ForeignTaxSummary[],
 ): DocAmounts {
-  const result: DocAmounts = { interest: null, dividend: null, other: null, foreignTax: null }
+  const result: DocAmounts = { interest: null, dividend: null, capGain: null, schC: null, other: null, foreignTax: null }
   const effectiveFormType = link ? link.form_type : doc.form_type
   const effectiveReviewed = link ? link.is_reviewed : doc.is_reviewed
   if (!doc.parsed_data || !effectiveReviewed) {
@@ -225,22 +317,33 @@ export function getDocAmounts(
       return result
     }
     if (effectiveFormType === '1099_int' || effectiveFormType === '1099_int_c') {
-      const interest = (p.int_1_interest_income ?? p.box1_interest) as number | undefined
+      const interest = getNumericValue(p, 'int_1_interest_income', 'box1_interest')
       if (interest != null && interest !== 0) {
         result.interest = interest
       }
-      const ft = (p.int_6_foreign_tax_paid ?? p.box6_foreign_tax) as number | undefined
+      const ft = getNumericValue(p, 'int_6_foreign_tax_paid', 'box6_foreign_tax')
       if (ft != null && ft !== 0) {
         result.foreignTax = ft
       }
     } else if (effectiveFormType === '1099_div' || effectiveFormType === '1099_div_c') {
-      const ordDiv = (p.div_1a_total_ordinary ?? p.box1a_ordinary ?? p.box1_ordinary) as number | undefined
+      const ordDiv = getNumericValue(p, 'div_1a_total_ordinary', 'box1a_ordinary', 'box1_ordinary')
       if (ordDiv != null && ordDiv !== 0) {
         result.dividend = ordDiv
       }
-      const ft = (p.div_7_foreign_tax_paid ?? p.box7_foreign_tax) as number | undefined
+      const capGain = getNumericValue(p, 'div_2a_cap_gain', 'box2a_cap_gain')
+      if (capGain != null && capGain !== 0) {
+        result.capGain = capGain
+      }
+      const ft = getNumericValue(p, 'div_7_foreign_tax_paid', 'box7_foreign_tax')
       if (ft != null && ft !== 0) {
         result.foreignTax = ft
+      }
+    } else if (effectiveFormType === '1099_misc') {
+      applyMiscRouting(p, doc.misc_routing, result)
+    } else if (effectiveFormType === '1099_nec') {
+      const nonemployeeComp = getNumericValue(p, 'box1_nonemployeeComp', 'box1_nonemployee_compensation')
+      if (nonemployeeComp != null && nonemployeeComp !== 0) {
+        result.schC = nonemployeeComp
       }
     }
 
@@ -255,27 +358,33 @@ export function getDocAmounts(
   const p = doc.parsed_data as Record<string, unknown>
 
   if (effectiveFormType === '1099_int' || effectiveFormType === '1099_int_c') {
-    const amt = p.box1_interest as number | undefined
+    const amt = getNumericValue(p, 'box1_interest')
     if (amt != null && amt !== 0) {
       result.interest = amt
     }
-    const ft = p.box6_foreign_tax as number | undefined
+    const ft = getNumericValue(p, 'box6_foreign_tax')
     if (ft != null && ft !== 0) {
       result.foreignTax = ft
     }
   } else if (effectiveFormType === '1099_div' || effectiveFormType === '1099_div_c') {
-    const amt = (p.box1a_ordinary ?? p.box1_ordinary) as number | undefined
+    const amt = getNumericValue(p, 'box1a_ordinary', 'box1_ordinary')
     if (amt != null && amt !== 0) {
       result.dividend = amt
     }
-    const ft = p.box7_foreign_tax as number | undefined
+    const capGain = getNumericValue(p, 'box2a_cap_gain')
+    if (capGain != null && capGain !== 0) {
+      result.capGain = capGain
+    }
+    const ft = getNumericValue(p, 'box7_foreign_tax')
     if (ft != null && ft !== 0) {
       result.foreignTax = ft
     }
   } else if (effectiveFormType === '1099_misc') {
-    const amt = (p.box3_other_income ?? p.box3_other ?? p.box7_nonemployee ?? p.total_amount) as number | undefined
-    if (amt != null && amt !== 0) {
-      result.other = amt
+    applyMiscRouting(p, doc.misc_routing, result)
+  } else if (effectiveFormType === '1099_nec') {
+    const nonemployeeComp = getNumericValue(p, 'box1_nonemployeeComp', 'box1_nonemployee_compensation')
+    if (nonemployeeComp != null && nonemployeeComp !== 0) {
+      result.schC = nonemployeeComp
     }
   } else if (effectiveFormType === 'k1' && isFK1StructuredData(doc.parsed_data)) {
     const k1Data = doc.parsed_data as FK1StructuredData

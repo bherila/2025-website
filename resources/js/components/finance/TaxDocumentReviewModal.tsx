@@ -27,13 +27,15 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { fetchWrapper } from '@/fetchWrapper'
 import { F1116ReviewPanel, isF1116Data } from '@/finance/1116'
 import { getSbpElection } from '@/lib/finance/k1Utils'
 import { extractLinkParsedData, patchLinkParsedDataInArray } from '@/lib/finance/taxDocumentUtils'
-import type { TaxDocument, TaxDocumentAccountLink, TaxDocumentParsedData, W2ParsedData } from '@/types/finance/tax-document'
+import type { MiscRouting, TaxDocument, TaxDocumentAccountLink, TaxDocumentParsedData, W2ParsedData } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
 interface TaxDocumentReviewModalProps {
@@ -49,6 +51,8 @@ interface TaxDocumentReviewModalProps {
   /** Called when any document is reviewed so parent can refresh. */
   onDocumentReviewed?: () => void
 }
+
+type MiscRoutingSelectValue = MiscRouting | 'auto'
 
 /**
  * Renders a comparison table for W-2 documents.
@@ -411,6 +415,7 @@ export default function TaxDocumentReviewModal({
   // Local editor state for the active document
   const [notes, setNotes] = useState('')
   const [editData, setEditData] = useState<TaxDocumentParsedData | Record<string, unknown>>({})
+  const [miscRouting, setMiscRouting] = useState<MiscRoutingSelectValue>('auto')
 
   const activeDoc = documents[currentIndex]
 
@@ -439,9 +444,11 @@ export default function TaxDocumentReviewModal({
         const linkData = extractLinkParsedData(propDocument, propAccountLink)
         setEditData(linkData ?? {})
         setNotes(propAccountLink.notes ?? '')
+        setMiscRouting('auto')
       } else {
         setNotes(propDocument.notes ?? '')
         setEditData(propDocument.parsed_data ?? {})
+        setMiscRouting(propDocument.misc_routing ?? 'auto')
       }
       return
     }
@@ -458,6 +465,7 @@ export default function TaxDocumentReviewModal({
         if (d) {
           setNotes(d.notes ?? '')
           setEditData(d.parsed_data ?? {})
+          setMiscRouting(d.misc_routing ?? 'auto')
         }
       }
     } catch {
@@ -480,6 +488,7 @@ export default function TaxDocumentReviewModal({
         setCurrentIndex(nextIdx)
         setNotes(doc.notes ?? '')
         setEditData(doc.parsed_data ?? {})
+        setMiscRouting(doc.misc_routing ?? 'auto')
       }
     }
   }
@@ -492,6 +501,7 @@ export default function TaxDocumentReviewModal({
         setCurrentIndex(prevIdx)
         setNotes(doc.notes ?? '')
         setEditData(doc.parsed_data ?? {})
+        setMiscRouting(doc.misc_routing ?? 'auto')
       }
     }
   }
@@ -581,6 +591,7 @@ export default function TaxDocumentReviewModal({
           setCurrentIndex(newIdx)
           setNotes(nextDoc.notes ?? '')
           setEditData(nextDoc.parsed_data ?? {})
+          setMiscRouting(nextDoc.misc_routing ?? 'auto')
         }
       }
     } catch {
@@ -630,6 +641,9 @@ export default function TaxDocumentReviewModal({
         // Standard document-level review.
         const isReviewToggling = isReviewed !== doc.is_reviewed
         const payload: Record<string, unknown> = { notes, parsed_data: editData }
+        if (effectiveFormType === '1099_misc') {
+          payload.misc_routing = miscRouting === 'auto' ? null : miscRouting
+        }
 
         if (isReviewToggling) {
           payload.is_reviewed = isReviewed
@@ -647,6 +661,7 @@ export default function TaxDocumentReviewModal({
         setDocuments(prev => prev.map(d => d.id === doc.id ? {
           ...d,
           notes,
+          misc_routing: effectiveFormType === '1099_misc' ? (miscRouting === 'auto' ? null : miscRouting) : d.misc_routing,
           parsed_data: JSON.parse(JSON.stringify(editData)),
           is_reviewed: isReviewed
         } : d))
@@ -793,6 +808,28 @@ export default function TaxDocumentReviewModal({
                   {/* Review Notes - full width below extracted data */}
                   <div className="space-y-2">
                     <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1">Review Notes</div>
+                    {effectiveFormType === '1099_misc' && !isLinkReview && (
+                      <div className="space-y-2 px-1">
+                        <Label htmlFor="misc-routing" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                          1099-MISC Routing
+                        </Label>
+                        <Select
+                          value={miscRouting}
+                          onValueChange={(value) => setMiscRouting(value as MiscRoutingSelectValue)}
+                          disabled={effectiveReviewed}
+                        >
+                          <SelectTrigger id="misc-routing" className="w-full">
+                            <SelectValue placeholder="Select routing" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="auto">Auto (infer from boxes)</SelectItem>
+                            <SelectItem value="sch_c">Schedule C</SelectItem>
+                            <SelectItem value="sch_e">Schedule E</SelectItem>
+                            <SelectItem value="sch_1_line_8">Schedule 1 Line 8</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                     <Textarea
                       className="resize-none text-sm leading-relaxed min-h-[80px]"
                       placeholder="Add notes about this document or discrepancies found..."
