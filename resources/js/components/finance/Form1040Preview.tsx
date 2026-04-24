@@ -91,24 +91,31 @@ function createRetirementDistributionBucket(): RetirementDistributionBucket {
   }
 }
 
+/**
+ * Prefer the explicit IRS checkbox indicator when the free-form distribution_type
+ * text is ambiguous. distribution_type is treated as a best-effort hint only.
+ */
 function isIraDistribution(parsed: Form1099RParsedData): boolean {
   const distributionType = typeof parsed.distribution_type === 'string'
     ? parsed.distribution_type.toLowerCase()
     : null
 
   if (distributionType) {
-    if (
+    const looksLikeIra = (
       distributionType.includes('ira')
       || distributionType.includes('sep')
       || distributionType.includes('simple')
-    ) {
+    )
+    const looksLikePension = (
+      distributionType.includes('pension')
+      || distributionType.includes('annuity')
+    )
+
+    if (looksLikeIra && !looksLikePension) {
       return true
     }
 
-    if (
-      distributionType.includes('pension')
-      || distributionType.includes('annuity')
-    ) {
+    if (looksLikePension && !looksLikeIra) {
       return false
     }
   }
@@ -128,6 +135,14 @@ function mapScheduleBSources(lines: Array<{ label: string; amount: number }>): N
   }))
 }
 
+/**
+ * Aggregate reviewed 1099-R documents for Form 1040 lines 4 and 5.
+ *
+ * When Box 2a is blank, the preview falls back to Box 1 as a best-effort taxable
+ * amount estimate so retirement income is not dropped entirely from AGI. This is
+ * intentionally conservative preview behavior only; a blank Box 2a can require a
+ * manual taxability determination on the filed return.
+ */
 export function compute1099RDistributionSummary(retirementDocuments: TaxDocument[]): RetirementDistributionSummary {
   const summary: RetirementDistributionSummary = {
     ira: createRetirementDistributionBucket(),

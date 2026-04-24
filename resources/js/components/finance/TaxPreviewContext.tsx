@@ -645,14 +645,17 @@ export function TaxPreviewProvider({
     if (k1InvInterest !== 0) taxPositionRows.push({ item: 'Investment interest deduction (Form 4952)', amount: k1InvInterest, note: 'From K-1 Box 13G/H — flows to Schedule E' })
     if (totalForeignTax !== 0) taxPositionRows.push({ item: 'Foreign tax credit (Form 1116)', amount: totalForeignTax, note: 'Dollar-for-dollar vs. income tax' })
     if (totalFederalWithholding > 0) {
+      const federalWithholdingLabel = retirementDistributionSummary.federalWithholding > 0
+        ? 'Federal withholding (payroll + 1099-R)'
+        : 'Federal withholding (payroll)'
+      const federalWithholdingNote = retirementDistributionSummary.federalWithholding > 0
+        ? 'Includes payslip withholding plus 1099-R Box 4 withholding already paid'
+        : 'Already paid — compare to final liability'
+
       taxPositionRows.push({
-        item: retirementDistributionSummary.federalWithholding > 0
-          ? 'Federal withholding (payroll + 1099-R)'
-          : 'Federal withholding (payroll)',
+        item: federalWithholdingLabel,
         amount: totalFederalWithholding,
-        note: retirementDistributionSummary.federalWithholding > 0
-          ? 'Includes payslip withholding plus 1099-R Box 4 withholding already paid'
-          : 'Already paid — compare to final liability',
+        note: federalWithholdingNote,
       })
     }
     const medicareThreshold = isMarried ? 250000 : 200000
