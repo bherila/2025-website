@@ -438,6 +438,7 @@ function TaxPreviewPageContent() {
     reviewedW2Docs,
     reviewed1099Docs,
     reviewedK1Docs,
+    foreignTaxSummaries,
     scheduleCData,
     scheduleCNetIncome,
     employmentEntities,
@@ -726,6 +727,7 @@ function TaxPreviewPageContent() {
             isLoading={isLoading}
             onDocumentsReload={refreshAll}
             onNavigate={handleTabChange}
+            foreignTaxSummaries={foreignTaxSummaries}
           />
         </TabsContent>
 
@@ -832,6 +834,8 @@ function TaxPreviewPageContent() {
             reviewedK1Docs={reviewedK1Docs}
             allK1Docs={accountDocuments.filter((doc) => doc.form_type === 'k1')}
             reviewed1099Docs={reviewed1099Docs}
+            foreignTaxSummaries={foreignTaxSummaries}
+            selectedYear={selectedYear}
             income1099={income1099}
             onReviewNow={handleReviewK1Now}
             onBulkSetSbpElection={handleBulkSetSbpElection}

@@ -19,6 +19,7 @@ import { computeScheduleSE } from '@/components/finance/ScheduleSEPreview'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
+import { collectForeignTaxSummaries, type ForeignTaxSummary } from '@/finance/1116'
 import { computeForm6251Lines } from '@/finance/6251/form6251'
 import { computeForm8582, type PalCarryforwardEntry, TAX_LOSS_CARRYFORWARD_ENDPOINT } from '@/finance/8582/form8582'
 import { computeForm8959Lines } from '@/finance/8959/form8959'
@@ -78,6 +79,7 @@ interface TaxPreviewContextValue {
   reviewedW2Docs: TaxDocument[]
   reviewed1099Docs: TaxDocument[]
   reviewedK1Docs: TaxDocument[]
+  foreignTaxSummaries: ForeignTaxSummary[]
   scheduleCData: ScheduleCResponse | null
   scheduleCNetIncome: { total: number; byQuarter: { q1: number; q2: number; q3: number; q4: number } }
   employmentEntities: EmploymentEntity[]
@@ -448,6 +450,11 @@ export function TaxPreviewProvider({
     [accountDocuments],
   )
 
+  const foreignTaxSummaries = useMemo(
+    () => collectForeignTaxSummaries(accountDocuments),
+    [accountDocuments],
+  )
+
   const income1099 = useMemo(() => {
     let interestIncome = currency(0)
     let dividendIncome = currency(0)
@@ -629,7 +636,7 @@ export function TaxPreviewProvider({
       income1099,
       shortDividendDeduction: shortDividendSummary?.totalItemizedDeduction ?? 0,
     })
-    const form1116 = computeForm1116Lines({ reviewedK1Docs, reviewed1099Docs })
+    const form1116 = computeForm1116Lines({ reviewedK1Docs, reviewed1099Docs, foreignTaxSummaries })
 
     const eblData = form461({
       taxYear: year,
@@ -858,6 +865,7 @@ export function TaxPreviewProvider({
     reviewed1099Docs,
     reviewedK1Docs,
     reviewedW2Docs,
+    foreignTaxSummaries,
     income1099,
     scheduleCNetIncome,
     w2GrossIncome,
@@ -883,6 +891,7 @@ export function TaxPreviewProvider({
     reviewedW2Docs,
     reviewed1099Docs,
     reviewedK1Docs,
+    foreignTaxSummaries,
     scheduleCData,
     scheduleCNetIncome,
     employmentEntities,
@@ -925,6 +934,7 @@ export function TaxPreviewProvider({
     reviewedW2Docs,
     reviewed1099Docs,
     reviewedK1Docs,
+    foreignTaxSummaries,
     scheduleCData,
     scheduleCNetIncome,
     employmentEntities,

@@ -4,6 +4,7 @@
 
 export { F1116_SPEC } from './F1116_SPEC'
 export { default as F1116ReviewPanel } from './F1116ReviewPanel'
+export { collectForeignTaxSummaries } from './foreignTaxSummaries'
 export {
   calculateApportionedInterest,
   extractForeignTaxFrom1099Div,

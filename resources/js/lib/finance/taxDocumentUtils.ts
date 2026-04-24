@@ -5,6 +5,7 @@
  * and the per-account entries stored in the parent document's parsed_data array.
  */
 
+import type { ForeignTaxSummary } from '@/finance/1116'
 import { extractForeignTaxFromK1 } from '@/finance/1116/k3-to-1116'
 import { k1NetIncome } from '@/lib/finance/k1Utils'
 import type { FK1StructuredData, MultiAccountParsedEntry, TaxDocument, TaxDocumentAccountLink } from '@/types/finance/tax-document'
@@ -147,6 +148,51 @@ export interface DocAmounts {
   foreignTax: number | null
 }
 
+function getSharedForeignTaxAmount(
+  doc: TaxDocument,
+  link: TaxDocumentAccountLink | undefined,
+  foreignTaxSummaries: ForeignTaxSummary[] | undefined,
+): number | null {
+  if (!foreignTaxSummaries || foreignTaxSummaries.length === 0) {
+    return null
+  }
+
+  const expectedSourceType = (() => {
+    const formType = link?.form_type ?? doc.form_type
+    if (formType === '1099_div' || formType === '1099_div_c') {
+      return '1099_div'
+    }
+    if (formType === '1099_int' || formType === '1099_int_c') {
+      return '1099_int'
+    }
+    if (formType === 'k1') {
+      return 'k1'
+    }
+
+    return null
+  })()
+
+  if (!expectedSourceType) {
+    return null
+  }
+
+  const total = foreignTaxSummaries
+    .filter((summary) => {
+      if (summary.sourceDocumentId !== doc.id || summary.sourceType !== expectedSourceType) {
+        return false
+      }
+
+      if (link?.account_id != null && summary.accountId != null && summary.accountId !== link.account_id) {
+        return false
+      }
+
+      return true
+    })
+    .reduce((sum, summary) => sum + summary.totalForeignTaxPaid, 0)
+
+  return total === 0 ? null : total
+}
+
 /**
  * Extract structured key amounts (interest / dividend / other / foreign tax) from a
  * reviewed tax document for display in dedicated table columns. Returns nulls for
@@ -157,7 +203,11 @@ export interface DocAmounts {
  * when a single broker PDF exposes both 1099-INT and 1099-DIV child forms for the
  * same account.
  */
-export function getDocAmounts(doc: TaxDocument, link?: TaxDocumentAccountLink): DocAmounts {
+export function getDocAmounts(
+  doc: TaxDocument,
+  link?: TaxDocumentAccountLink,
+  foreignTaxSummaries?: ForeignTaxSummary[],
+): DocAmounts {
   const result: DocAmounts = { interest: null, dividend: null, other: null, foreignTax: null }
   const effectiveFormType = link ? link.form_type : doc.form_type
   const effectiveReviewed = link ? link.is_reviewed : doc.is_reviewed
@@ -193,6 +243,12 @@ export function getDocAmounts(doc: TaxDocument, link?: TaxDocumentAccountLink): 
         result.foreignTax = ft
       }
     }
+
+    const sharedForeignTax = getSharedForeignTaxAmount(doc, link, foreignTaxSummaries)
+    if (sharedForeignTax !== null) {
+      result.foreignTax = sharedForeignTax
+    }
+
     return result
   }
 
@@ -231,6 +287,11 @@ export function getDocAmounts(doc: TaxDocument, link?: TaxDocumentAccountLink): 
     if (ft && ft.totalForeignTaxPaid !== 0) {
       result.foreignTax = ft.totalForeignTaxPaid
     }
+  }
+
+  const sharedForeignTax = getSharedForeignTaxAmount(doc, link, foreignTaxSummaries)
+  if (sharedForeignTax !== null) {
+    result.foreignTax = sharedForeignTax
   }
 
   return result
