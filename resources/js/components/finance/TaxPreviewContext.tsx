@@ -28,7 +28,7 @@ import { computeMedicareWages } from '@/finance/scheduleSE/computeScheduleSE'
 import { computeEstimatedTaxPayments } from '@/lib/finance/estimatedTaxPayments'
 import { k1NetIncome } from '@/lib/finance/k1Utils'
 import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
-import { getDocAmounts, hasNonZeroNumericValue } from '@/lib/finance/taxDocumentUtils'
+import { extractLinkParsedData, getDocAmounts, hasNonZeroNumericValue } from '@/lib/finance/taxDocumentUtils'
 import { form461 } from '@/lib/tax/form461'
 import { calculateTax } from '@/lib/tax/taxBracket'
 import { buildCacheKey, getCachedTransactions, setCachedTransactions } from '@/services/transactionCache'
@@ -482,6 +482,30 @@ export function TaxPreviewProvider({
   }, [reviewed1099Docs])
 
   const schedule1OtherIncome = useMemo(() => reviewed1099Docs.reduce((acc, doc) => {
+    const links = doc.account_links ?? []
+
+    if (links.length > 0) {
+      return links.reduce((linkAcc, link) => {
+        if (link.form_type !== '1099_misc') {
+          return linkAcc
+        }
+
+        const entryData = extractLinkParsedData(doc, link)
+        if (entryData == null) {
+          return linkAcc
+        }
+
+        const shouldInclude = doc.misc_routing === 'sch_1_line_8'
+          || (doc.misc_routing == null && !hasNonZeroNumericValue(entryData, 'box1_rents', 'box2_royalties'))
+
+        if (!shouldInclude) {
+          return linkAcc
+        }
+
+        return linkAcc.add(getDocAmounts(doc, link).other ?? 0)
+      }, acc)
+    }
+
     const parsedData = !doc.parsed_data || Array.isArray(doc.parsed_data)
       ? null
       : doc.parsed_data as Record<string, unknown>
@@ -826,6 +850,7 @@ export function TaxPreviewProvider({
         dividendIncome: income1099.dividendIncome,
         scheduleCIncome: scheduleCNetIncome.total,
         schedule1OtherIncome,
+        scheduleEGrandTotal: scheduleE.grandTotal,
         w2Documents: reviewedW2Docs,
         interestDocuments: reviewedIntDocs,
         dividendDocuments: reviewedDivDocs,

@@ -8,6 +8,7 @@ export const TAX_TABS = {
   w2: 'w2',
   schedules: 'schedules',
   scheduleA: 'schedule-a',
+  schedule1: 'schedule-1',
   scheduleE: 'schedule-e',
   scheduleSE: 'schedule-se',
   capitalGains: 'capital-gains',
