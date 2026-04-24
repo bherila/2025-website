@@ -120,6 +120,8 @@ function isIraDistribution(parsed: Form1099RParsedData): boolean {
     }
   }
 
+  // When the free-form text is missing or ambiguous, defer to the explicit
+  // IRS checkbox that distinguishes IRA / SEP / SIMPLE from pension income.
   return parsed.box7_ira_sep_simple === true
 }
 

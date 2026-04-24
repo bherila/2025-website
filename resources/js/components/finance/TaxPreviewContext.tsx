@@ -688,6 +688,8 @@ export function TaxPreviewProvider({
       shortDividendDeduction: shortDividendSummary?.totalItemizedDeduction ?? 0,
     })
     const form1116 = computeForm1116Lines({ reviewedK1Docs, reviewed1099Docs, foreignTaxSummaries })
+    // Schedule D line 21 carries the Form 1040 loss limitation when applicable;
+    // otherwise line 16 is the amount that flows to Form 1040 line 7.
     const capitalGainOrLossToReturn = scheduleD.schD.schD_line21 !== 0
       ? scheduleD.schD.schD_line21
       : scheduleD.schD.schD_line16
