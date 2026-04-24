@@ -4,7 +4,7 @@ import currency from 'currency.js'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
-import { getDocAmounts, getPayerName } from '@/lib/finance/taxDocumentUtils'
+import { getDocAmounts, getPayerName, hasNonZeroNumericValue } from '@/lib/finance/taxDocumentUtils'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
@@ -54,33 +54,13 @@ export interface ScheduleELines {
   grandTotal: number
 }
 
-function hasRentalRoyaltyFields(doc: TaxDocument, link?: { id: number } | undefined): boolean {
+function hasRentalRoyaltyFields(doc: TaxDocument): boolean {
   if (!doc.parsed_data || Array.isArray(doc.parsed_data)) {
     return false
   }
 
   const parsedData = doc.parsed_data as Record<string, unknown>
-  const box1Rents = parsedData.box1_rents
-  const box2Royalties = parsedData.box2_royalties
-
-  const hasNumericValue = (value: unknown): boolean => {
-    if (typeof value === 'number') {
-      return !Number.isNaN(value) && value !== 0
-    }
-
-    if (typeof value === 'string') {
-      const parsed = Number.parseFloat(value)
-      return !Number.isNaN(parsed) && parsed !== 0
-    }
-
-    return false
-  }
-
-  if (link) {
-    return hasNumericValue(box1Rents) || hasNumericValue(box2Royalties)
-  }
-
-  return hasNumericValue(box1Rents) || hasNumericValue(box2Royalties)
+  return hasNonZeroNumericValue(parsedData, 'box1_rents', 'box2_royalties')
 }
 
 export function computeScheduleELines(reviewedK1Docs: TaxDocument[], reviewed1099Docs: TaxDocument[] = []): ScheduleELines {
@@ -99,7 +79,7 @@ export function computeScheduleELines(reviewedK1Docs: TaxDocument[], reviewed109
 
         const amount = getDocAmounts(doc, link).other
         const shouldInclude = amount !== null
-          && (doc.misc_routing === 'sch_e' || (doc.misc_routing == null && hasRentalRoyaltyFields(doc, link)))
+          && (doc.misc_routing === 'sch_e' || (doc.misc_routing == null && hasRentalRoyaltyFields(doc)))
 
         if (!shouldInclude) {
           return []

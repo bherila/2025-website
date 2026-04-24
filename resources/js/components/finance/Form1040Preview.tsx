@@ -251,7 +251,7 @@ export default function Form1040Preview({
           <TableBody>
             {lines.map(item => (
               <TableRow
-                key={`${item.line}-${item.label}`}
+                key={`${item.line}-${item.refSchedule ?? item.label}`}
                 className={cn(
                   item.bold && 'font-semibold bg-muted/30',
                   item.navTab && onNavigate && 'cursor-pointer hover:bg-muted/20 transition-colors',

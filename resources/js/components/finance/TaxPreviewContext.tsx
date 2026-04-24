@@ -28,7 +28,7 @@ import { computeMedicareWages } from '@/finance/scheduleSE/computeScheduleSE'
 import { computeEstimatedTaxPayments } from '@/lib/finance/estimatedTaxPayments'
 import { k1NetIncome } from '@/lib/finance/k1Utils'
 import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
-import { getDocAmounts } from '@/lib/finance/taxDocumentUtils'
+import { getDocAmounts, hasNonZeroNumericValue } from '@/lib/finance/taxDocumentUtils'
 import { form461 } from '@/lib/tax/form461'
 import { calculateTax } from '@/lib/tax/taxBracket'
 import { buildCacheKey, getCachedTransactions, setCachedTransactions } from '@/services/transactionCache'
@@ -40,21 +40,6 @@ import type { OverviewRow, TaxReturn1040, UserDeductionEntry } from '@/types/fin
 import type { ScheduleCResponse, YearData } from './ScheduleCPreview'
 
 const FEDERAL_TAX_STATE = ''
-
-function hasNonZeroNumericField(parsedData: Record<string, unknown>, ...keys: string[]): boolean {
-  return keys.some((key) => {
-    const value = parsedData[key]
-    if (typeof value === 'number') {
-      return !Number.isNaN(value) && value !== 0
-    }
-    if (typeof value === 'string') {
-      const parsed = Number.parseFloat(value)
-      return !Number.isNaN(parsed) && parsed !== 0
-    }
-
-    return false
-  })
-}
 
 export interface TaxPreviewShellData {
   year: number
@@ -504,7 +489,7 @@ export function TaxPreviewProvider({
     }
 
     const shouldInclude = doc.misc_routing === 'sch_1_line_8'
-      || (doc.misc_routing == null && !hasNonZeroNumericField(parsedData, 'box1_rents', 'box2_royalties'))
+      || (doc.misc_routing == null && !hasNonZeroNumericValue(parsedData, 'box1_rents', 'box2_royalties'))
 
     if (!shouldInclude) {
       return acc
