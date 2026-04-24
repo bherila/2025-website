@@ -179,6 +179,16 @@ function getNumericValue(
   return null
 }
 
+export function hasNonZeroNumericValue(
+  data: Record<string, unknown>,
+  ...keys: readonly string[]
+): boolean {
+  return keys.some((key) => {
+    const value = getNumericValue(data, key)
+    return value !== null && value !== 0
+  })
+}
+
 function sumNumericValues(
   data: Record<string, unknown>,
   keys: readonly string[],

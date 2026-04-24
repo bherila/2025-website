@@ -40,7 +40,10 @@ const defaultProps = {
   selectedYear: 2025,
 }
 
-let Form1040Preview: React.ComponentType<typeof defaultProps & { onNavigate?: (tab: string) => void }>
+let Form1040Preview: React.ComponentType<typeof defaultProps & {
+  schedule1OtherIncome?: number
+  onNavigate?: (tab: string) => void
+}>
 
 beforeAll(async () => {
   const mod = await import('../Form1040Preview')
@@ -103,6 +106,13 @@ describe('Form1040Preview navigation', () => {
     fireEvent.click(row)
 
     expect(onNavigate).toHaveBeenCalledWith('schedule-c')
+  })
+
+  it('renders Schedule 1 other income on Line 8 and includes it in total income', () => {
+    render(<Form1040Preview {...defaultProps} schedule1OtherIncome={750} />)
+
+    expect(screen.getByText('Other income (Schedule 1)')).toBeInTheDocument()
+    expect(screen.getByText('$102,450.00')).toBeInTheDocument()
   })
 
   it('does NOT call onNavigate when onNavigate prop is absent', () => {

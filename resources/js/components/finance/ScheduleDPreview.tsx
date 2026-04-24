@@ -4,6 +4,7 @@ import currency from 'currency.js'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { Callout, fmtAmt, FormBlock, FormLine, FormSubLine, FormTotalLine, parseFieldVal } from '@/components/finance/tax-preview-primitives'
+import { getDocAmounts } from '@/lib/finance/taxDocumentUtils'
 import { scheduleD } from '@/lib/tax/scheduleD'
 import type { FK1StructuredData, K1CodeItem } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
@@ -86,6 +87,25 @@ export function computeScheduleD(reviewedK1Docs: TaxDocument[], reviewed1099Docs
   const totalBrokerST = brokerSources.reduce((acc, s) => acc.add(s.stGain), currency(0)).value
   const totalBrokerLT = brokerSources.reduce((acc, s) => acc.add(s.ltGain), currency(0)).value
 
+  const totalCapitalGainDistributions = reviewed1099Docs.reduce((acc, doc) => {
+    const links = doc.account_links ?? []
+    if (links.length > 0) {
+      return links.reduce((linkAcc, link) => {
+        if (link.form_type !== '1099_div' && link.form_type !== '1099_div_c') {
+          return linkAcc
+        }
+
+        return linkAcc.add(getDocAmounts(doc, link).capGain ?? 0)
+      }, acc)
+    }
+
+    if (doc.form_type !== '1099_div' && doc.form_type !== '1099_div_c') {
+      return acc
+    }
+
+    return acc.add(getDocAmounts(doc).capGain ?? 0)
+  }, currency(0)).value
+
   const k1ST = k1Parsed.reduce((acc, { data }) => acc.add(pk1(data, '8')), currency(0)).value
   const k1LT = k1Parsed.reduce((acc, { data }) => acc
     .add(pk1(data, '9a'))
@@ -100,6 +120,7 @@ export function computeScheduleD(reviewedK1Docs: TaxDocument[], reviewed1099Docs
     line12: k1LT,
     line3_gain_loss: total6781ST,
     line10_gain_loss: total6781LT,
+    line13_capital_gain_distributions: totalCapitalGainDistributions,
   })
 
   const combined = schD.schD_line16

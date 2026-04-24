@@ -445,6 +445,7 @@ function TaxPreviewPageContent() {
     accounts,
     activeAccountIds,
     income1099,
+    schedule1OtherIncome,
     isMarried,
     activeTaxStates,
     setActiveTaxStates,
@@ -806,6 +807,7 @@ function TaxPreviewPageContent() {
         <TabsContent value={TAX_TABS.scheduleE} className="mt-0">
           <ScheduleEPreview
             reviewedK1Docs={reviewedK1Docs}
+            reviewed1099Docs={reviewed1099Docs}
             selectedYear={selectedYear}
           />
         </TabsContent>
@@ -895,6 +897,7 @@ function TaxPreviewPageContent() {
             interestIncome={income1099.interestIncome}
             dividendIncome={income1099.dividendIncome}
             scheduleCIncome={scheduleCNetIncome.total}
+            schedule1OtherIncome={schedule1OtherIncome}
             selectedYear={selectedYear}
             w2Documents={reviewedW2Docs}
             interestDocuments={reviewed1099Docs.filter((doc) => doc.form_type === '1099_int' || doc.form_type === '1099_int_c')}

@@ -254,6 +254,11 @@ export default function ScheduleCTab({ selectedYear, scheduleCData, reviewed1099
           <FormTotalLine label="Total 1099 income routed to Schedule C" value={scheduleCDocumentTotal} />
         </FormBlock>
       )}
+      {scheduleCDocumentTotal > 0 && yearData.length > 0 && (
+        <Callout kind="info" title="Reconcile 1099 gross receipts">
+          1099 gross receipts ({currency(scheduleCDocumentTotal).format()}) should reconcile with transaction-based gross receipts below.
+        </Callout>
+      )}
       {yearData.map((yd) => (
         <div key={yd.year}>
           {yd.entities
