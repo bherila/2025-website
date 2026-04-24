@@ -5,7 +5,7 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
-import { computeForm1040Lines } from '@/components/finance/Form1040Preview'
+import { compute1099RDistributionSummary,computeForm1040Lines } from '@/components/finance/Form1040Preview'
 import { computeForm4952Lines } from '@/components/finance/Form4952Preview'
 import { computeForm8995 } from '@/components/finance/Form8995Preview'
 import { isFK1StructuredData } from '@/components/finance/k1'
@@ -500,6 +500,11 @@ export function TaxPreviewProvider({
     return acc.add(getDocAmounts(doc).other ?? 0)
   }, currency(0)).value, [reviewed1099Docs])
 
+  const reviewed1099RDocs = useMemo(
+    () => reviewed1099Docs.filter((doc) => doc.form_type === '1099_r'),
+    [reviewed1099Docs],
+  )
+
   const scheduleCNetIncome = useMemo(() => {
     if (!scheduleCData?.years) return buildEmptyScheduleCNetIncome()
 
@@ -524,6 +529,7 @@ export function TaxPreviewProvider({
   const taxReturn = useMemo<TaxReturn1040>(() => {
     const reviewedIntDocs = reviewed1099Docs.filter((doc) => doc.form_type === '1099_int' || doc.form_type === '1099_int_c')
     const reviewedDivDocs = reviewed1099Docs.filter((doc) => doc.form_type === '1099_div' || doc.form_type === '1099_div_c')
+    const retirementDistributionSummary = compute1099RDistributionSummary(reviewed1099RDocs)
 
     // ── Overview sheet data ───────────────────────────────────────────────────
     function parseK1FieldLocal(data: FK1StructuredData, box: string): number {
@@ -568,7 +574,8 @@ export function TaxPreviewProvider({
 
     const yearStr = String(year)
     const yearPayslips = payslips.filter((r) => r.pay_date && r.pay_date > `${yearStr}-01-01` && r.pay_date < `${String(year + 1)}-01-01`)
-    const fedWH = yearPayslips.reduce((acc, r) => acc.add(r.ps_fed_tax ?? 0).add(r.ps_fed_tax_addl ?? 0).subtract(r.ps_fed_tax_refunded ?? 0), currency(0)).value
+    const payrollFederalWithholding = yearPayslips.reduce((acc, r) => acc.add(r.ps_fed_tax ?? 0).add(r.ps_fed_tax_addl ?? 0).subtract(r.ps_fed_tax_refunded ?? 0), currency(0)).value
+    const totalFederalWithholding = currency(payrollFederalWithholding).add(retirementDistributionSummary.federalWithholding).value
     const medicareWages = computeMedicareWages(reviewedW2Docs, payslips)
 
     const docRows: OverviewRow[] = []
@@ -604,16 +611,26 @@ export function TaxPreviewProvider({
       const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? doc.account?.acct_name ?? '—'
       const interest = isBroker ? (p?.int_1_interest_income as number | undefined) : (p?.box1_interest as number | undefined)
       const ordDiv = isBroker ? (p?.div_1a_total_ordinary as number | undefined) : (p?.box1a_ordinary as number | undefined)
+      const grossDistribution = doc.form_type === '1099_r' ? (p?.box1_gross_distribution as number | undefined) : undefined
+      const taxableDistribution = doc.form_type === '1099_r'
+        ? ((p?.box2a_taxable_amount as number | undefined) ?? (p?.box1_gross_distribution as number | undefined))
+        : undefined
       const foreignTax = isBroker ? (p?.div_7_foreign_tax_paid as number | undefined) : ((p?.box7_foreign_tax ?? p?.box6_foreign_tax) as number | undefined)
       const capGainLoss = isBroker ? (p?.b_total_gain_loss as number | undefined) : undefined
+      const fedTaxWithheld = doc.form_type === '1099_r' ? (p?.box4_fed_tax as number | undefined) : undefined
       const label = FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type
       const noteParts = [
         interest != null && interest !== 0 ? `Interest: ${currency(interest).format()}` : null,
         ordDiv != null && ordDiv !== 0 ? `Ord div: ${currency(ordDiv).format()}` : null,
+        grossDistribution != null && grossDistribution !== 0 ? `Gross dist: ${currency(grossDistribution).format()}` : null,
+        taxableDistribution != null && taxableDistribution !== 0 ? `Taxable dist: ${currency(taxableDistribution).format()}` : null,
         capGainLoss != null && capGainLoss !== 0 ? `Cap G/L: ${currency(capGainLoss).format()}` : null,
         foreignTax != null && foreignTax !== 0 ? `Foreign tax: ${currency(foreignTax, { precision: 2 }).format()}` : null,
+        fedTaxWithheld != null && fedTaxWithheld !== 0 ? `Fed WH: ${currency(fedTaxWithheld).format()}` : null,
       ].filter(Boolean)
-      const primaryAmount = (interest ?? 0) + (ordDiv ?? 0)
+      const primaryAmount = currency(interest ?? 0)
+        .add(ordDiv ?? 0)
+        .add(grossDistribution ?? 0).value
       docRows.push({
         item: `${payer} — ${label}`,
         amount: primaryAmount !== 0 ? primaryAmount : undefined,
@@ -627,7 +644,17 @@ export function TaxPreviewProvider({
     if (k1StCapital !== 0 || k1LtCapital !== 0) taxPositionRows.push({ item: 'Net capital gain (loss) — K-1s', amount: totalCapitalGains, note: `S/T ${k1StCapital.toLocaleString()} · L/T ${k1LtCapital.toLocaleString()}` })
     if (k1InvInterest !== 0) taxPositionRows.push({ item: 'Investment interest deduction (Form 4952)', amount: k1InvInterest, note: 'From K-1 Box 13G/H — flows to Schedule E' })
     if (totalForeignTax !== 0) taxPositionRows.push({ item: 'Foreign tax credit (Form 1116)', amount: totalForeignTax, note: 'Dollar-for-dollar vs. income tax' })
-    if (fedWH > 0) taxPositionRows.push({ item: 'Federal withholding (W-2 Box 2)', amount: fedWH, note: 'Already paid — compare to final liability' })
+    if (totalFederalWithholding > 0) {
+      taxPositionRows.push({
+        item: retirementDistributionSummary.federalWithholding > 0
+          ? 'Federal withholding (payroll + 1099-R)'
+          : 'Federal withholding (payroll)',
+        amount: totalFederalWithholding,
+        note: retirementDistributionSummary.federalWithholding > 0
+          ? 'Includes payslip withholding plus 1099-R Box 4 withholding already paid'
+          : 'Already paid — compare to final liability',
+      })
+    }
     const medicareThreshold = isMarried ? 250000 : 200000
     if (medicareWages > medicareThreshold) taxPositionRows.push({ item: 'Additional Medicare Tax (Form 8959)', amount: -currency(Math.max(0, medicareWages - medicareThreshold)).multiply(0.009).value, note: '0.9% on Medicare wages over the filing-status threshold' })
 
@@ -658,6 +685,12 @@ export function TaxPreviewProvider({
       shortDividendDeduction: shortDividendSummary?.totalItemizedDeduction ?? 0,
     })
     const form1116 = computeForm1116Lines({ reviewedK1Docs, reviewed1099Docs, foreignTaxSummaries })
+    const capitalGainOrLossToReturn = scheduleD.schD.schD_line21 !== 0
+      ? scheduleD.schD.schD_line21
+      : scheduleD.schD.schD_line16
+    const schedule1AdditionalIncome = currency(scheduleCNetIncome.total)
+      .add(scheduleE.grandTotal)
+      .add(schedule1OtherIncome).value
 
     const eblData = form461({
       taxYear: year,
@@ -692,20 +725,23 @@ export function TaxPreviewProvider({
       payslips,
     })
 
-    // Form 8960 MAGI = AGI + §911 foreign earned income exclusion addback.
-    const form8960EstimatedMagi = w2GrossIncome
-      .add(income1099.interestIncome)
-      .add(income1099.dividendIncome)
-      .add(scheduleCNetIncome.total)
-      .add(schedule1OtherIncome)
-      .add(scheduleE.grandTotal)
-      .add(Math.max(scheduleD.schD.schD_line16, -3000))
+    const totalIncomeEstimate = w2GrossIncome
+      .add(scheduleB.interestTotal)
+      .add(scheduleB.dividendTotal)
+      .add(retirementDistributionSummary.ira.taxable)
+      .add(retirementDistributionSummary.pension.taxable)
+      .add(schedule1AdditionalIncome)
+      .add(capitalGainOrLossToReturn).value
+    const adjustedGrossIncomeEstimate = currency(totalIncomeEstimate)
       .subtract(scheduleSE.deductibleSeTax).value
 
+    // Form 8960 MAGI = AGI + §911 foreign earned income exclusion addback.
+    const form8960EstimatedMagi = adjustedGrossIncomeEstimate
+
     const form8960 = computeForm8960Lines({
-      taxableInterest: income1099.interestIncome.value,
-      ordinaryDividends: income1099.dividendIncome.value,
-      netCapGainsRaw: scheduleD.schD.schD_line16,
+      taxableInterest: scheduleB.interestTotal,
+      ordinaryDividends: scheduleB.dividendTotal,
+      netCapGainsRaw: capitalGainOrLossToReturn,
       passiveIncome: scheduleE.totalPassive,
       investmentInterestExpense: form4952.deductibleInvestmentInterestExpense,
       magi: form8960EstimatedMagi,
@@ -716,13 +752,6 @@ export function TaxPreviewProvider({
         .filter(r => r.netPassive !== 0)
         .map(r => ({ label: r.partnerName, amount: r.netPassive })),
     })
-    const totalIncomeEstimate = w2GrossIncome
-      .add(income1099.interestIncome)
-      .add(income1099.dividendIncome)
-      .add(scheduleCNetIncome.total)
-      .add(schedule1OtherIncome)
-      .add(scheduleE.grandTotal)
-      .add(Math.max(scheduleD.schD.schD_line16, -3000)).value
     const form8995 = computeForm8995({
       reviewedK1Docs,
       totalIncome: totalIncomeEstimate,
@@ -732,7 +761,7 @@ export function TaxPreviewProvider({
     const deductionUsed = scheduleA.shouldItemize ? scheduleA.totalItemizedDeductions : scheduleA.standardDeduction
     const taxableIncomeEstimate = Math.max(
       0,
-      currency(totalIncomeEstimate)
+      currency(adjustedGrossIncomeEstimate)
         .subtract(deductionUsed)
         .subtract(form8995.estimatedDeduction).value,
     )
@@ -786,14 +815,7 @@ export function TaxPreviewProvider({
     // See Form 8582 Worksheet 1, lines 1–7.
     // For now we approximate with the same base AGI; this is a reasonable approximation
     // since most addbacks are small relative to the phase-out range ($100k–$150k).
-    const form8582EstimatedMagi = w2GrossIncome
-      .add(income1099.interestIncome)
-      .add(income1099.dividendIncome)
-      .add(scheduleCNetIncome.total)
-      .add(schedule1OtherIncome)
-      .add(scheduleE.grandTotal)
-      .add(Math.max(scheduleD.schD.schD_line16, -3000))
-      .subtract(scheduleSE.deductibleSeTax).value
+    const form8582EstimatedMagi = adjustedGrossIncomeEstimate
 
     // Direct rental properties from Schedule E Part I would be passed here once the
     // codebase has a rental property tracker (user-entered per-property data).
@@ -812,7 +834,7 @@ export function TaxPreviewProvider({
           selectedYear: year,
           priorYearTax,
           priorYearAgi,
-          expectedWithholding: fedWH,
+          expectedWithholding: payrollFederalWithholding,
           isMarriedFilingSeparately: false,
         })
       : undefined
@@ -822,13 +844,20 @@ export function TaxPreviewProvider({
       ...(overviewSections.length > 0 ? { overviewSections } : {}),
       form1040: computeForm1040Lines({
         w2Income: w2GrossIncome,
-        interestIncome: income1099.interestIncome,
-        dividendIncome: income1099.dividendIncome,
+        interestIncome: currency(scheduleB.interestTotal),
+        dividendIncome: currency(scheduleB.dividendTotal),
         scheduleCIncome: scheduleCNetIncome.total,
+        scheduleEIncome: scheduleE.grandTotal,
         schedule1OtherIncome,
+        deductibleSeTaxAdjustment: scheduleSE.deductibleSeTax,
+        capitalGainOrLoss: capitalGainOrLossToReturn,
+        schedule2TotalAdditionalTaxes: schedule2.totalAdditionalTaxes,
+        foreignTaxCredit: form1116.totalForeignTaxes,
+        scheduleB,
         w2Documents: reviewedW2Docs,
         interestDocuments: reviewedIntDocs,
         dividendDocuments: reviewedDivDocs,
+        retirementDocuments: reviewed1099RDocs,
       }),
       scheduleA,
       scheduleB,
@@ -898,6 +927,7 @@ export function TaxPreviewProvider({
     shortDividendSummary,
     isMarried,
     schedule1OtherIncome,
+    reviewed1099RDocs,
     userDeductions,
     palCarryforwards,
     realEstateProfessional,

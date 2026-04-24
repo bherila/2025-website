@@ -186,6 +186,7 @@ export interface Form1099RParsedData {
   payer_tin?: string | null
   recipient_name?: string | null
   recipient_tin_last4?: string | null
+  distribution_type?: string | null
   account_number?: string | null
   box1_gross_distribution?: number | null
   box2a_taxable_amount?: number | null
