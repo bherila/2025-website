@@ -339,7 +339,7 @@ export function getDocAmounts(
         result.foreignTax = ft
       }
     } else if (effectiveFormType === '1099_misc') {
-      applyMiscRouting(p, doc.misc_routing, result)
+      applyMiscRouting(p, doc.misc_routing ?? null, result)
     } else if (effectiveFormType === '1099_nec') {
       const nonemployeeComp = getNumericValue(p, 'box1_nonemployeeComp', 'box1_nonemployee_compensation')
       if (nonemployeeComp != null && nonemployeeComp !== 0) {
@@ -380,7 +380,7 @@ export function getDocAmounts(
       result.foreignTax = ft
     }
   } else if (effectiveFormType === '1099_misc') {
-    applyMiscRouting(p, doc.misc_routing, result)
+    applyMiscRouting(p, doc.misc_routing ?? null, result)
   } else if (effectiveFormType === '1099_nec') {
     const nonemployeeComp = getNumericValue(p, 'box1_nonemployeeComp', 'box1_nonemployee_compensation')
     if (nonemployeeComp != null && nonemployeeComp !== 0) {

@@ -661,7 +661,7 @@ export default function TaxDocumentReviewModal({
         setDocuments(prev => prev.map(d => d.id === doc.id ? {
           ...d,
           notes,
-          misc_routing: effectiveFormType === '1099_misc' ? (miscRouting === 'auto' ? null : miscRouting) : d.misc_routing,
+          misc_routing: effectiveFormType === '1099_misc' ? (miscRouting === 'auto' ? null : miscRouting) : (d.misc_routing ?? null),
           parsed_data: JSON.parse(JSON.stringify(editData)),
           is_reviewed: isReviewed
         } : d))

@@ -15,6 +15,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property string|null $misc_routing
+ */
 class FileForTaxDocument extends Model
 {
     use HasFileStorage, SerializesDatesAsLocal;

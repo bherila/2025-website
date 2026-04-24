@@ -360,7 +360,7 @@ export interface TaxDocument {
   download_count: number
   genai_job_id: number | null
   genai_status: 'pending' | 'processing' | 'parsed' | 'failed' | null
-  misc_routing: MiscRouting | null
+  misc_routing?: MiscRouting | null
   parsed_data: TaxDocumentParsedData | null
   uploader: { id: number; name: string } | null
   employment_entity: { id: number; display_name: string } | null
