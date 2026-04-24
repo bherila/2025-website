@@ -263,6 +263,59 @@ describe('TaxPreviewContext', () => {
     ]))
   })
 
+  it('aggregates Schedule 1 other income from reviewed 1099-MISC documents', async () => {
+    const miscDoc = {
+      id: 52,
+      form_type: '1099_misc',
+      genai_status: 'parsed',
+      is_reviewed: true,
+      tax_year: 2025,
+      misc_routing: 'sch_1_line_8',
+      parsed_data: {
+        payer_name: 'Other Income Payer',
+        box3_other_income: 900,
+      },
+      original_filename: 'misc.pdf',
+      account_links: [],
+    }
+
+    ;(fetchWrapper.get as jest.Mock).mockImplementation((url: string) => {
+      if (url === '/api/finance/marriage-status') {
+        return Promise.resolve({})
+      }
+
+      if (url === '/api/finance/user-tax-states?year=2025') {
+        return Promise.resolve([])
+      }
+
+      if (url === '/api/finance/user-deductions?year=2025') {
+        return Promise.resolve([])
+      }
+
+      if (url === '/api/finance/tax-loss-carryforwards?year=2025') {
+        return Promise.resolve([])
+      }
+
+      return Promise.resolve(makeResponse([miscDoc]))
+    })
+
+    const { result } = renderHook(() => useTaxPreview(), { wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    expect(result.current.taxReturn.form1040).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        line: '8',
+        label: 'Other income (Schedule 1)',
+        value: 900,
+      }),
+      expect.objectContaining({
+        line: '9',
+        value: 900,
+      }),
+    ]))
+    expect(result.current.taxReturn.scheduleE?.grandTotal).toBe(0)
+  })
+
   it('wires Schedule SE into the computed tax return when reviewed K-1 SE income exists', async () => {
     const k1Doc = {
       id: 77,

@@ -4,8 +4,10 @@ import currency from 'currency.js'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
+import { getDocAmounts, getPayerName } from '@/lib/finance/taxDocumentUtils'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
+import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
 // ── K-1 field helpers ─────────────────────────────────────────────────────────
 
@@ -31,7 +33,16 @@ interface PartnerRow {
   netNonpassive: number
 }
 
+interface MiscIncomeRow {
+  key: string
+  payerName: string
+  formLabel: string
+  amount: number
+}
+
 export interface ScheduleELines {
+  miscIncomeRows: MiscIncomeRow[]
+  miscIncomeTotal: number
   partnerRows: PartnerRow[]
   totalBox1: number
   totalBox2: number
@@ -43,10 +54,87 @@ export interface ScheduleELines {
   grandTotal: number
 }
 
-export function computeScheduleELines(reviewedK1Docs: TaxDocument[]): ScheduleELines {
+function hasRentalRoyaltyFields(doc: TaxDocument, link?: { id: number } | undefined): boolean {
+  if (!doc.parsed_data || Array.isArray(doc.parsed_data)) {
+    return false
+  }
+
+  const parsedData = doc.parsed_data as Record<string, unknown>
+  const box1Rents = parsedData.box1_rents
+  const box2Royalties = parsedData.box2_royalties
+
+  const hasNumericValue = (value: unknown): boolean => {
+    if (typeof value === 'number') {
+      return !Number.isNaN(value) && value !== 0
+    }
+
+    if (typeof value === 'string') {
+      const parsed = Number.parseFloat(value)
+      return !Number.isNaN(parsed) && parsed !== 0
+    }
+
+    return false
+  }
+
+  if (link) {
+    return hasNumericValue(box1Rents) || hasNumericValue(box2Royalties)
+  }
+
+  return hasNumericValue(box1Rents) || hasNumericValue(box2Royalties)
+}
+
+export function computeScheduleELines(reviewedK1Docs: TaxDocument[], reviewed1099Docs: TaxDocument[] = []): ScheduleELines {
   const k1Parsed = reviewedK1Docs
     .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
     .filter((x): x is { doc: TaxDocument; data: FK1StructuredData } => x.data !== null)
+
+  const miscIncomeRows = reviewed1099Docs.flatMap((doc) => {
+    const links = doc.account_links ?? []
+
+    if (links.length > 0) {
+      return links.flatMap((link) => {
+        if (link.form_type !== '1099_misc') {
+          return []
+        }
+
+        const amount = getDocAmounts(doc, link).other
+        const shouldInclude = amount !== null
+          && (doc.misc_routing === 'sch_e' || (doc.misc_routing == null && hasRentalRoyaltyFields(doc, link)))
+
+        if (!shouldInclude) {
+          return []
+        }
+
+        const payerName = getPayerName(doc, link) ?? link.account?.acct_name ?? doc.original_filename ?? '1099-MISC'
+        return [{
+          key: `link-${link.id}`,
+          payerName,
+          formLabel: FORM_TYPE_LABELS[link.form_type] ?? link.form_type,
+          amount,
+        }]
+      })
+    }
+
+    if (doc.form_type !== '1099_misc') {
+      return []
+    }
+
+    const amount = getDocAmounts(doc).other
+    const shouldInclude = amount !== null
+      && (doc.misc_routing === 'sch_e' || (doc.misc_routing == null && hasRentalRoyaltyFields(doc)))
+
+    if (!shouldInclude) {
+      return []
+    }
+
+    const payerName = getPayerName(doc) ?? doc.account?.acct_name ?? doc.original_filename ?? '1099-MISC'
+    return [{
+      key: `doc-${doc.id}`,
+      payerName,
+      formLabel: FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type,
+      amount,
+    }]
+  })
 
   const partnerRows: PartnerRow[] = k1Parsed.map(({ doc, data }) => {
     const partnerName =
@@ -81,11 +169,14 @@ export function computeScheduleELines(reviewedK1Docs: TaxDocument[]): ScheduleEL
   const totalBox3 = partnerRows.reduce((acc, r) => acc.add(r.box3OtherNetRental), currency(0)).value
   const totalBox4 = partnerRows.reduce((acc, r) => acc.add(r.box4GuaranteedPayments), currency(0)).value
   const totalBox5 = partnerRows.reduce((acc, r) => acc.add(r.box5Interest), currency(0)).value
+  const miscIncomeTotal = miscIncomeRows.reduce((acc, row) => acc.add(row.amount), currency(0)).value
   const totalPassive = partnerRows.reduce((acc, r) => acc.add(r.netPassive), currency(0)).value
   const totalNonpassive = partnerRows.reduce((acc, r) => acc.add(r.netNonpassive), currency(0)).value
-  const grandTotal = currency(totalPassive).add(totalNonpassive).value
+  const grandTotal = currency(miscIncomeTotal).add(totalPassive).add(totalNonpassive).value
 
   return {
+    miscIncomeRows,
+    miscIncomeTotal,
     partnerRows,
     totalBox1,
     totalBox2,
@@ -100,13 +191,16 @@ export function computeScheduleELines(reviewedK1Docs: TaxDocument[]): ScheduleEL
 
 interface ScheduleEPreviewProps {
   reviewedK1Docs: TaxDocument[]
+  reviewed1099Docs?: TaxDocument[]
   selectedYear: number
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function ScheduleEPreview({ reviewedK1Docs, selectedYear }: ScheduleEPreviewProps) {
+export default function ScheduleEPreview({ reviewedK1Docs, reviewed1099Docs = [], selectedYear }: ScheduleEPreviewProps) {
   const {
+    miscIncomeRows,
+    miscIncomeTotal,
     partnerRows,
     totalBox1,
     totalBox2,
@@ -116,16 +210,16 @@ export default function ScheduleEPreview({ reviewedK1Docs, selectedYear }: Sched
     totalPassive,
     totalNonpassive,
     grandTotal,
-  } = computeScheduleELines(reviewedK1Docs)
+  } = computeScheduleELines(reviewedK1Docs, reviewed1099Docs)
 
-  if (partnerRows.length === 0) {
+  if (partnerRows.length === 0 && miscIncomeRows.length === 0) {
     return (
       <div className="space-y-4">
         <div>
           <h3 className="text-base font-semibold mb-0.5">Schedule E — {selectedYear}</h3>
           <p className="text-xs text-muted-foreground">Supplemental Income and Loss</p>
         </div>
-        <p className="text-sm text-muted-foreground">No K-1 documents reviewed for this year.</p>
+        <p className="text-sm text-muted-foreground">No Schedule E tax documents reviewed for this year.</p>
       </div>
     )
   }
@@ -138,6 +232,15 @@ export default function ScheduleEPreview({ reviewedK1Docs, selectedYear }: Sched
           Supplemental Income and Loss — Partnerships &amp; S Corporations (Part II)
         </p>
       </div>
+
+      {miscIncomeRows.length > 0 && (
+        <FormBlock title="Part I — 1099-MISC Rental & Royalty Income">
+          {miscIncomeRows.map((row) => (
+            <FormLine key={row.key} label={`${row.payerName} — ${row.formLabel}`} value={row.amount} />
+          ))}
+          <FormTotalLine label="1099-MISC rental & royalty income subtotal" value={miscIncomeTotal} />
+        </FormBlock>
+      )}
 
       {/* Part I — Rental Real Estate (if any Box 2 activity) */}
       {totalBox2 !== 0 && (
@@ -216,6 +319,7 @@ export default function ScheduleEPreview({ reviewedK1Docs, selectedYear }: Sched
       </div>
 
       <FormBlock title="Schedule E — Combined Net Income / (Loss)">
+        {miscIncomeTotal !== 0 && <FormLine label="1099-MISC rental & royalty income" value={miscIncomeTotal} />}
         <FormLine label="Passive (rental / other rental)" value={totalPassive} />
         <FormLine label="Nonpassive (ordinary + guaranteed payments)" value={totalNonpassive} />
         <FormTotalLine label="Schedule E combined total" value={grandTotal} double />

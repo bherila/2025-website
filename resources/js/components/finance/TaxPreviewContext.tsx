@@ -28,6 +28,7 @@ import { computeMedicareWages } from '@/finance/scheduleSE/computeScheduleSE'
 import { computeEstimatedTaxPayments } from '@/lib/finance/estimatedTaxPayments'
 import { k1NetIncome } from '@/lib/finance/k1Utils'
 import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
+import { getDocAmounts } from '@/lib/finance/taxDocumentUtils'
 import { form461 } from '@/lib/tax/form461'
 import { calculateTax } from '@/lib/tax/taxBracket'
 import { buildCacheKey, getCachedTransactions, setCachedTransactions } from '@/services/transactionCache'
@@ -39,6 +40,21 @@ import type { OverviewRow, TaxReturn1040, UserDeductionEntry } from '@/types/fin
 import type { ScheduleCResponse, YearData } from './ScheduleCPreview'
 
 const FEDERAL_TAX_STATE = ''
+
+function hasNonZeroNumericField(parsedData: Record<string, unknown>, ...keys: string[]): boolean {
+  return keys.some((key) => {
+    const value = parsedData[key]
+    if (typeof value === 'number') {
+      return !Number.isNaN(value) && value !== 0
+    }
+    if (typeof value === 'string') {
+      const parsed = Number.parseFloat(value)
+      return !Number.isNaN(parsed) && parsed !== 0
+    }
+
+    return false
+  })
+}
 
 export interface TaxPreviewShellData {
   year: number
@@ -478,6 +494,25 @@ export function TaxPreviewProvider({
     return { interestIncome, dividendIncome, qualifiedDividends }
   }, [reviewed1099Docs])
 
+  const schedule1OtherIncome = useMemo(() => reviewed1099Docs.reduce((acc, doc) => {
+    const parsedData = !doc.parsed_data || Array.isArray(doc.parsed_data)
+      ? null
+      : doc.parsed_data as Record<string, unknown>
+
+    if (doc.form_type !== '1099_misc' || parsedData == null) {
+      return acc
+    }
+
+    const shouldInclude = doc.misc_routing === 'sch_1_line_8'
+      || (doc.misc_routing == null && !hasNonZeroNumericField(parsedData, 'box1_rents', 'box2_royalties'))
+
+    if (!shouldInclude) {
+      return acc
+    }
+
+    return acc.add(getDocAmounts(doc).other ?? 0)
+  }, currency(0)).value, [reviewed1099Docs])
+
   const scheduleCNetIncome = useMemo(() => {
     if (!scheduleCData?.years) return buildEmptyScheduleCNetIncome()
 
@@ -615,7 +650,7 @@ export function TaxPreviewProvider({
     ]
     const scheduleB = computeScheduleB(reviewedK1Docs, reviewed1099Docs, income1099)
     const scheduleD = computeScheduleD(reviewedK1Docs, reviewed1099Docs)
-    const scheduleE = computeScheduleELines(reviewedK1Docs)
+    const scheduleE = computeScheduleELines(reviewedK1Docs, reviewed1099Docs)
     const saltPaid = reviewedW2Docs.reduce((acc, doc) => {
       const p = doc.parsed_data as { box17_state_tax?: number | null } | null
       return currency(acc).add(p?.box17_state_tax ?? 0).value
@@ -675,6 +710,7 @@ export function TaxPreviewProvider({
       .add(income1099.interestIncome)
       .add(income1099.dividendIncome)
       .add(scheduleCNetIncome.total)
+      .add(schedule1OtherIncome)
       .add(scheduleE.grandTotal)
       .add(Math.max(scheduleD.schD.schD_line16, -3000))
       .subtract(scheduleSE.deductibleSeTax).value
@@ -697,6 +733,7 @@ export function TaxPreviewProvider({
       .add(income1099.interestIncome)
       .add(income1099.dividendIncome)
       .add(scheduleCNetIncome.total)
+      .add(schedule1OtherIncome)
       .add(scheduleE.grandTotal)
       .add(Math.max(scheduleD.schD.schD_line16, -3000)).value
     const form8995 = computeForm8995({
@@ -766,6 +803,7 @@ export function TaxPreviewProvider({
       .add(income1099.interestIncome)
       .add(income1099.dividendIncome)
       .add(scheduleCNetIncome.total)
+      .add(schedule1OtherIncome)
       .add(scheduleE.grandTotal)
       .add(Math.max(scheduleD.schD.schD_line16, -3000))
       .subtract(scheduleSE.deductibleSeTax).value
@@ -800,6 +838,7 @@ export function TaxPreviewProvider({
         interestIncome: income1099.interestIncome,
         dividendIncome: income1099.dividendIncome,
         scheduleCIncome: scheduleCNetIncome.total,
+        schedule1OtherIncome,
         w2Documents: reviewedW2Docs,
         interestDocuments: reviewedIntDocs,
         dividendDocuments: reviewedDivDocs,
@@ -871,6 +910,7 @@ export function TaxPreviewProvider({
     payslips,
     shortDividendSummary,
     isMarried,
+    schedule1OtherIncome,
     userDeductions,
     palCarryforwards,
     realEstateProfessional,

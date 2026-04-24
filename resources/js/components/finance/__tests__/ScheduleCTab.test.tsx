@@ -8,7 +8,22 @@ describe('ScheduleCTab', () => {
     render(
       <ScheduleCTab
         selectedYear={2024}
-        scheduleCData={[]}
+        scheduleCData={[{
+          year: 2024,
+          entities: [{
+            entity_id: 1,
+            entity_name: 'Consulting LLC',
+            schedule_c_income: {
+              gross_receipts: {
+                label: 'Gross receipts',
+                total: 2300,
+                transactions: [],
+              },
+            },
+            schedule_c_expense: {},
+            schedule_c_home_office: {},
+          }],
+        }]}
         reviewed1099Docs={[
           {
             id: 1,
@@ -73,6 +88,8 @@ describe('ScheduleCTab', () => {
     expect(screen.getByText('Schedule C — Tax Document Income')).toBeInTheDocument()
     expect(screen.getByText('Client LLC — 1099-NEC')).toBeInTheDocument()
     expect(screen.getByText('Rental Client — 1099-MISC')).toBeInTheDocument()
-    expect(screen.getByText('$2,300')).toBeInTheDocument()
+    expect(screen.getByText('Total 1099 income routed to Schedule C')).toBeInTheDocument()
+    expect(screen.getAllByText('$2,300')).not.toHaveLength(0)
+    expect(screen.getByText('1099 gross receipts ($2,300.00) should reconcile with transaction-based gross receipts below.')).toBeInTheDocument()
   })
 })
