@@ -32,6 +32,8 @@ interface Form1040PreviewProps {
   dividendIncome: currency
   scheduleCIncome: number
   schedule1OtherIncome?: number
+  /** Schedule E combined net income (K-1 partnerships + 1099-MISC rental/royalties) — feeds Schedule 1 line 5. */
+  scheduleEGrandTotal?: number
   selectedYear: number
   /** Confirmed/reviewed W-2 documents — when provided, line 1a uses their parsed data instead of payslip estimate. */
   w2Documents?: TaxDocument[]
@@ -66,6 +68,7 @@ export function computeForm1040Lines({
   dividendIncome,
   scheduleCIncome,
   schedule1OtherIncome = 0,
+  scheduleEGrandTotal = 0,
   w2Documents = [],
   interestDocuments = [],
   dividendDocuments = [],
@@ -75,6 +78,7 @@ export function computeForm1040Lines({
   dividendIncome: currency
   scheduleCIncome: number
   schedule1OtherIncome?: number
+  scheduleEGrandTotal?: number
   w2Documents?: TaxDocument[]
   interestDocuments?: TaxDocument[]
   dividendDocuments?: TaxDocument[]
@@ -115,11 +119,26 @@ export function computeForm1040Lines({
       }))
     : [{ label: 'From confirmed 1099-DIV documents', amount: dividendIncome.value }]
 
+  const schedule1Total = currency(scheduleCIncome)
+    .add(scheduleEGrandTotal)
+    .add(schedule1OtherIncome).value
+
+  const schedule1Sources: { label: string; amount: number; note?: string }[] = [
+    ...(scheduleCIncome !== 0
+      ? [{ label: 'Schedule C — Business income', amount: currency(scheduleCIncome).value, note: 'Schedule 1 line 3' }]
+      : []),
+    ...(scheduleEGrandTotal !== 0
+      ? [{ label: 'Schedule E — Rental / royalty / partnership', amount: currency(scheduleEGrandTotal).value, note: 'Schedule 1 line 5' }]
+      : []),
+    ...(schedule1OtherIncome !== 0
+      ? [{ label: '1099-MISC other income', amount: currency(schedule1OtherIncome).value, note: 'Schedule 1 line 8z' }]
+      : []),
+  ]
+
   const totalIncome = effectiveW2Income
     .add(interestIncome)
     .add(dividendIncome)
-    .add(scheduleCIncome)
-    .add(schedule1OtherIncome)
+    .add(schedule1Total)
 
   return [
     {
@@ -151,23 +170,14 @@ export function computeForm1040Lines({
       refSchedule: 'Schedule D',
       navTab: TAX_TABS.capitalGains,
     },
-    ...(schedule1OtherIncome !== 0
+    ...(schedule1Total !== 0
       ? [{
           line: '8',
-          label: 'Other income (Schedule 1)',
-          value: currency(schedule1OtherIncome).value,
+          label: 'Additional income from Schedule 1, line 10',
+          value: currency(schedule1Total).value,
           refSchedule: 'Schedule 1',
-          sources: [{ label: 'Schedule 1, line 8 other income', amount: currency(schedule1OtherIncome).value }],
-        }]
-      : []),
-    ...(scheduleCIncome !== 0
-      ? [{
-          line: '8',
-          label: 'Business income or loss (Schedule C)',
-          value: currency(scheduleCIncome).value,
-          refSchedule: 'Schedule C',
-          sources: [{ label: 'Schedule C net income', amount: currency(scheduleCIncome).value }],
-          navTab: TAX_TABS.scheduleC,
+          sources: schedule1Sources,
+          navTab: TAX_TABS.schedule1,
         }]
       : []),
     {
@@ -179,8 +189,7 @@ export function computeForm1040Lines({
         { label: 'W-2 wages (Line 1a)', amount: effectiveW2Income.value },
         { label: 'Interest income (Line 2b)', amount: interestIncome.value },
         { label: 'Ordinary dividends (Line 3b)', amount: dividendIncome.value },
-        ...(schedule1OtherIncome !== 0 ? [{ label: 'Other income (Line 8)', amount: currency(schedule1OtherIncome).value }] : []),
-        ...(scheduleCIncome !== 0 ? [{ label: 'Schedule C income (Line 8)', amount: currency(scheduleCIncome).value }] : []),
+        ...(schedule1Total !== 0 ? [{ label: 'Additional income (Line 8)', amount: currency(schedule1Total).value }] : []),
       ],
     },
     {
@@ -199,6 +208,7 @@ export default function Form1040Preview({
   dividendIncome,
   scheduleCIncome,
   schedule1OtherIncome = 0,
+  scheduleEGrandTotal = 0,
   selectedYear,
   w2Documents,
   interestDocuments,
@@ -212,6 +222,7 @@ export default function Form1040Preview({
     dividendIncome,
     scheduleCIncome,
     schedule1OtherIncome,
+    scheduleEGrandTotal,
     ...(w2Documents ? { w2Documents } : {}),
     ...(interestDocuments ? { interestDocuments } : {}),
     ...(dividendDocuments ? { dividendDocuments } : {}),
@@ -251,7 +262,7 @@ export default function Form1040Preview({
           <TableBody>
             {lines.map(item => (
               <TableRow
-                key={`${item.line}-${item.refSchedule ?? item.label}`}
+                key={item.line}
                 className={cn(
                   item.bold && 'font-semibold bg-muted/30',
                   item.navTab && onNavigate && 'cursor-pointer hover:bg-muted/20 transition-colors',

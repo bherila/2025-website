@@ -42,6 +42,7 @@ const defaultProps = {
 
 let Form1040Preview: React.ComponentType<typeof defaultProps & {
   schedule1OtherIncome?: number
+  scheduleEGrandTotal?: number
   onNavigate?: (tab: string) => void
 }>
 
@@ -98,21 +99,38 @@ describe('Form1040Preview navigation', () => {
     expect(onNavigate).toHaveBeenCalledWith('form-1116')
   })
 
-  it('calls onNavigate with "schedule-c" when Line 8 row is clicked', () => {
+  it('renders one unified Line 8 row and routes clicks to the Schedule 1 tab', () => {
     const onNavigate = jest.fn()
-    render(<Form1040Preview {...defaultProps} scheduleCIncome={5000} onNavigate={onNavigate} />)
+    render(
+      <Form1040Preview
+        {...defaultProps}
+        scheduleCIncome={5000}
+        schedule1OtherIncome={750}
+        scheduleEGrandTotal={1200}
+        onNavigate={onNavigate}
+      />,
+    )
 
-    const row = screen.getByText('Business income or loss (Schedule C)').closest('tr')!
+    const row = screen.getByText('Additional income from Schedule 1, line 10').closest('tr')!
     fireEvent.click(row)
 
-    expect(onNavigate).toHaveBeenCalledWith('schedule-c')
+    expect(onNavigate).toHaveBeenCalledWith('schedule-1')
   })
 
-  it('renders Schedule 1 other income on Line 8 and includes it in total income', () => {
-    render(<Form1040Preview {...defaultProps} schedule1OtherIncome={750} />)
+  it('aggregates Schedule C, Schedule E, and Schedule 1 line 8 into a single Line 8 value', () => {
+    render(
+      <Form1040Preview
+        {...defaultProps}
+        scheduleCIncome={5000}
+        schedule1OtherIncome={750}
+        scheduleEGrandTotal={1200}
+      />,
+    )
 
-    expect(screen.getByText('Other income (Schedule 1)')).toBeInTheDocument()
-    expect(screen.getByText('$102,450.00')).toBeInTheDocument()
+    // Line 8 value should be 5000 + 1200 + 750 = 6950
+    expect(screen.getByText('$6,950.00')).toBeInTheDocument()
+    // Line 9 total income = 100000 + 500 + 1200 + 6950 = 108650
+    expect(screen.getByText('$108,650.00')).toBeInTheDocument()
   })
 
   it('does NOT call onNavigate when onNavigate prop is absent', () => {
