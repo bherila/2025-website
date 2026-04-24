@@ -149,10 +149,11 @@ class TaxDocumentControllerTest extends TestCase
             'file_size_bytes' => 102400,
             'file_hash' => str_repeat('n', 64),
             'account_id' => $account->acct_id,
+            'misc_routing' => 'sch_c',
         ]);
 
         $response->assertStatus(201);
-        $response->assertJsonFragment(['form_type' => '1099_misc', 'tax_year' => 2024]);
+        $response->assertJsonFragment(['form_type' => '1099_misc', 'tax_year' => 2024, 'misc_routing' => 'sch_c']);
     }
 
     public function test_can_store_k1_document(): void
@@ -262,6 +263,36 @@ class TaxDocumentControllerTest extends TestCase
 
         $response->assertOk();
         $this->assertDatabaseHas('fin_tax_documents', ['id' => $doc->id, 'is_reviewed' => 1]);
+    }
+
+    public function test_can_update_misc_routing(): void
+    {
+        $user = $this->createUser();
+        $doc = $this->createTaxDocument($user->id, ['form_type' => '1099_misc']);
+
+        $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}", [
+            'misc_routing' => 'sch_e',
+        ]);
+
+        $response->assertOk()->assertJsonFragment(['misc_routing' => 'sch_e']);
+        $this->assertDatabaseHas('fin_tax_documents', ['id' => $doc->id, 'misc_routing' => 'sch_e']);
+    }
+
+    public function test_mark_reviewed_persists_misc_routing(): void
+    {
+        $user = $this->createUser();
+        $doc = $this->createTaxDocument($user->id, ['form_type' => '1099_misc', 'is_reviewed' => false]);
+
+        $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}/mark-reviewed", [
+            'misc_routing' => 'sch_1_line_8',
+        ]);
+
+        $response->assertOk()->assertJsonFragment(['misc_routing' => 'sch_1_line_8']);
+        $this->assertDatabaseHas('fin_tax_documents', [
+            'id' => $doc->id,
+            'is_reviewed' => 1,
+            'misc_routing' => 'sch_1_line_8',
+        ]);
     }
 
     public function test_cross_user_isolation(): void

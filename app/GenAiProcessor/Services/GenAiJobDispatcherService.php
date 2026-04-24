@@ -30,6 +30,8 @@ class GenAiJobDispatcherService
 
     public const TAX_DOCUMENT_1099MISC_TOOL_NAME = 'extract1099MiscData';
 
+    public const TAX_DOCUMENT_1099NEC_TOOL_NAME = 'extract1099NecData';
+
     /**
      * Tool name for extracting Schedule K-1 data (Form 1065 Partnership or Form 1120-S S-Corporation).
      *
@@ -152,6 +154,7 @@ PROMPT;
             '1099_int' => '1099-INT',
             '1099_div' => '1099-DIV',
             '1099_misc' => '1099-MISC',
+            '1099_nec' => '1099-NEC',
             'k1' => 'K-1 / K-3',
         ];
 
@@ -887,6 +890,9 @@ PROMPT;
         if (str_contains($prompt, self::TAX_DOCUMENT_1099MISC_TOOL_NAME)) {
             return $this->build1099MiscToolDefinition();
         }
+        if (str_contains($prompt, self::TAX_DOCUMENT_1099NEC_TOOL_NAME)) {
+            return $this->build1099NecToolDefinition();
+        }
         if (str_contains($prompt, self::TAX_DOCUMENT_K1_TOOL_NAME)) {
             return $this->buildK1ToolDefinition();
         }
@@ -908,6 +914,7 @@ PROMPT;
             self::TAX_DOCUMENT_1099INT_TOOL_NAME,
             self::TAX_DOCUMENT_1099DIV_TOOL_NAME,
             self::TAX_DOCUMENT_1099MISC_TOOL_NAME,
+            self::TAX_DOCUMENT_1099NEC_TOOL_NAME,
             self::TAX_DOCUMENT_K1_TOOL_NAME,
         ];
 
@@ -982,6 +989,9 @@ PROMPT;
                 'box14_excess_golden_parachute', 'box15_nonqualified_deferred',
                 'box16_state_tax',
             ],
+            self::TAX_DOCUMENT_1099NEC_TOOL_NAME => [
+                'box1_nonemployeeComp', 'box4_fed_tax', 'box5_state_tax', 'box7_state_income',
+            ],
             default => [],
         };
 
@@ -1001,6 +1011,10 @@ PROMPT;
             self::TAX_DOCUMENT_1099MISC_TOOL_NAME => [
                 'payer_name', 'payer_tin', 'recipient_name', 'recipient_tin_last4',
                 'box13_fatca_filing', 'box15_state', 'account_number',
+            ],
+            self::TAX_DOCUMENT_1099NEC_TOOL_NAME => [
+                'payer_name', 'payer_tin', 'recipient_name', 'recipient_tin_last4',
+                'box6_state', 'account_number',
             ],
             default => [],
         };
@@ -1072,6 +1086,13 @@ PROMPT;
             $coerced['box7_direct_sales_indicator'] = isset($args['box7_direct_sales_indicator'])
                 ? (bool) $args['box7_direct_sales_indicator']
                 : null;
+        }
+
+        if ($toolName === self::TAX_DOCUMENT_1099NEC_TOOL_NAME) {
+            $coerced['box2_directSalesIndicator'] = isset($args['box2_directSalesIndicator'])
+                ? (bool) $args['box2_directSalesIndicator']
+                : null;
+            $coerced['box1_nonemployee_compensation'] = $coerced['box1_nonemployeeComp'];
         }
 
         // Handle K-1: transform flat tool output into FK1StructuredData shape
@@ -1451,6 +1472,27 @@ PROMPT;
                 'box15_nonqualified_deferred' => Schema::number(),
                 'box15_state' => Schema::string(),
                 'box16_state_tax' => Schema::number(),
+            ]),
+        );
+    }
+
+    private function build1099NecToolDefinition(): ToolDefinition
+    {
+        return new ToolDefinition(
+            self::TAX_DOCUMENT_1099NEC_TOOL_NAME,
+            'Extract all box values from a 1099-NEC nonemployee compensation form.',
+            Schema::object([
+                'payer_name' => Schema::string(),
+                'payer_tin' => Schema::string(),
+                'recipient_name' => Schema::string(),
+                'recipient_tin_last4' => Schema::string(),
+                'account_number' => Schema::string(),
+                'box1_nonemployeeComp' => Schema::number(),
+                'box2_directSalesIndicator' => Schema::boolean(),
+                'box4_fed_tax' => Schema::number(),
+                'box5_state_tax' => Schema::number(),
+                'box6_state' => Schema::string(),
+                'box7_state_income' => Schema::number(),
             ]),
         );
     }

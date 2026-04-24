@@ -877,6 +877,7 @@ function TaxPreviewPageContent() {
           <ScheduleCTab
             selectedYear={selectedYear}
             scheduleCData={scheduleCData?.years ?? []}
+            reviewed1099Docs={reviewed1099Docs}
           />
         </TabsContent>
 

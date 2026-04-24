@@ -15,6 +15,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property string|null $misc_routing
+ */
 class FileForTaxDocument extends Model
 {
     use HasFileStorage, SerializesDatesAsLocal;
@@ -60,6 +63,7 @@ class FileForTaxDocument extends Model
         'uploaded_by_user_id',
         'notes',
         'is_reviewed',
+        'misc_routing',
         'genai_job_id',
         'genai_status',
         'parsed_data',

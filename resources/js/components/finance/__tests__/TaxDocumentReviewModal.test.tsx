@@ -72,6 +72,37 @@ jest.mock('@/components/ui/dropdown-menu', () => ({
   DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }))
 
+jest.mock('@/components/ui/label', () => ({
+  Label: ({ children, ...props }: React.ComponentProps<'label'>) => <label {...props}>{children}</label>,
+}))
+
+jest.mock('@/components/ui/select', () => ({
+  Select: ({
+    children,
+    value,
+    onValueChange,
+    disabled,
+  }: {
+    children: React.ReactNode
+    value?: string
+    onValueChange?: (value: string) => void
+    disabled?: boolean
+  }) => (
+    <select
+      data-testid="mock-select"
+      value={value}
+      onChange={(event) => onValueChange?.(event.target.value)}
+      disabled={disabled}
+    >
+      {children}
+    </select>
+  ),
+  SelectTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  SelectValue: ({ placeholder }: { placeholder?: string }) => <option value="">{placeholder ?? ''}</option>,
+  SelectContent: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  SelectItem: ({ children, value }: { children: React.ReactNode; value: string }) => <option value={value}>{children}</option>,
+}))
+
 import { fetchWrapper } from '@/fetchWrapper'
 
 import TaxDocumentReviewModal from '../TaxDocumentReviewModal'
@@ -103,6 +134,38 @@ const REVIEWED_K1 = {
     fields: {},
     codes: {},
     k3Elections: { sourcedByPartnerAsUSSource: true },
+  },
+  uploader: null,
+  employment_entity: null,
+  account: null,
+  account_links: [],
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
+} as const
+
+const UNREVIEWED_MISC = {
+  id: 2,
+  user_id: 1,
+  tax_year: 2024,
+  form_type: '1099_misc',
+  employment_entity_id: null,
+  account_id: 10,
+  original_filename: '1099-misc.pdf',
+  stored_filename: null,
+  s3_path: null,
+  mime_type: 'application/pdf',
+  file_size_bytes: 1000,
+  file_hash: 'misc',
+  is_reviewed: false,
+  misc_routing: null,
+  notes: null,
+  human_file_size: '1 KB',
+  download_count: 0,
+  genai_job_id: null,
+  genai_status: 'parsed',
+  parsed_data: {
+    payer_name: 'Client LLC',
+    box3_other_income: 1200,
   },
   uploader: null,
   employment_entity: null,
@@ -160,5 +223,24 @@ describe('TaxDocumentReviewModal — SBP election save-while-reviewed', () => {
       (payload.parsed_data as Record<string, unknown> & { k3Elections: { sourcedByPartnerAsUSSource: boolean } })
         ?.k3Elections?.sourcedByPartnerAsUSSource,
     ).toBe(false)
+  })
+})
+
+describe('TaxDocumentReviewModal — 1099-MISC routing', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it('includes misc_routing in the save payload for 1099-MISC documents', async () => {
+    ;(fetchWrapper.put as jest.Mock).mockResolvedValue({})
+
+    render(<TaxDocumentReviewModal {...(baseProps({ document: UNREVIEWED_MISC }) as any)} />)
+
+    fireEvent.change(screen.getByTestId('mock-select'), { target: { value: 'sch_c' } })
+    fireEvent.click(screen.getByText('Save Changes'))
+
+    await waitFor(() => expect(fetchWrapper.put).toHaveBeenCalledTimes(1))
+
+    const [url, payload] = (fetchWrapper.put as jest.Mock).mock.calls[0] as [string, Record<string, unknown>]
+    expect(url).toBe('/api/finance/tax-documents/2')
+    expect(payload.misc_routing).toBe('sch_c')
   })
 })

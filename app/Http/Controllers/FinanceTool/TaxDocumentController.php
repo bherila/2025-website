@@ -115,6 +115,7 @@ class TaxDocumentController extends Controller
             'account_id' => 'nullable|integer',
             'notes' => 'nullable|string',
             'parsed_data' => 'nullable|array',
+            'misc_routing' => 'nullable|string|in:sch_c,sch_e,sch_1_line_8',
         ]);
 
         $userId = Auth::id();
@@ -154,6 +155,7 @@ class TaxDocumentController extends Controller
             'uploaded_by_user_id' => $userId,
             'notes' => $request->notes,
             'parsed_data' => $hasParsedData ? $request->parsed_data : null,
+            'misc_routing' => $request->input('misc_routing'),
             'genai_status' => $hasParsedData ? 'parsed' : 'pending',
         ];
 
@@ -504,6 +506,7 @@ class TaxDocumentController extends Controller
             'notes' => 'nullable|string',
             'is_reviewed' => 'nullable|boolean',
             'parsed_data' => 'nullable|array',
+            'misc_routing' => 'nullable|string|in:sch_c,sch_e,sch_1_line_8',
         ]);
 
         $doc = FileForTaxDocument::where('id', $id)
@@ -520,6 +523,10 @@ class TaxDocumentController extends Controller
 
         if ($request->has('parsed_data')) {
             $doc->parsed_data = $request->parsed_data;
+        }
+
+        if ($request->has('misc_routing')) {
+            $doc->misc_routing = $request->input('misc_routing');
         }
 
         $doc->save();
@@ -573,6 +580,12 @@ class TaxDocumentController extends Controller
      */
     public function markReviewed(int $id, Request $request): JsonResponse
     {
+        $request->validate([
+            'notes' => 'nullable|string',
+            'parsed_data' => 'nullable|array',
+            'misc_routing' => 'nullable|string|in:sch_c,sch_e,sch_1_line_8',
+        ]);
+
         $doc = FileForTaxDocument::where('id', $id)
             ->where('user_id', Auth::id())
             ->firstOrFail();
@@ -585,6 +598,10 @@ class TaxDocumentController extends Controller
 
         if ($request->has('parsed_data')) {
             $doc->parsed_data = $request->parsed_data;
+        }
+
+        if ($request->has('misc_routing')) {
+            $doc->misc_routing = $request->input('misc_routing');
         }
 
         $doc->save();

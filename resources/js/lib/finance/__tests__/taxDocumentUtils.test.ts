@@ -9,6 +9,7 @@ function makeDoc(overrides: Partial<TaxDocument> = {}): TaxDocument {
     form_type: '1099_int',
     genai_status: 'parsed',
     is_reviewed: true,
+    misc_routing: null,
     parsed_data: null,
     original_filename: null,
     account_id: null,
@@ -90,17 +91,17 @@ describe('getPayerName', () => {
 describe('getDocAmounts', () => {
   it('returns all nulls when document is not reviewed', () => {
     const doc = makeDoc({ is_reviewed: false, parsed_data: { box1_interest: 100 } as never })
-    expect(getDocAmounts(doc)).toEqual({ interest: null, dividend: null, other: null, foreignTax: null })
+    expect(getDocAmounts(doc)).toEqual({ interest: null, dividend: null, capGain: null, schC: null, other: null, foreignTax: null })
   })
 
   it('extracts box1_interest and box6_foreign_tax from a 1099-INT', () => {
     const doc = makeDoc({ form_type: '1099_int', parsed_data: { box1_interest: 250, box6_foreign_tax: 5 } as never })
-    expect(getDocAmounts(doc)).toEqual({ interest: 250, dividend: null, other: null, foreignTax: 5 })
+    expect(getDocAmounts(doc)).toEqual({ interest: 250, dividend: null, capGain: null, schC: null, other: null, foreignTax: 5 })
   })
 
   it('extracts box1a_ordinary and box7_foreign_tax from a 1099-DIV', () => {
     const doc = makeDoc({ form_type: '1099_div', parsed_data: { box1a_ordinary: 800, box7_foreign_tax: 12 } as never })
-    expect(getDocAmounts(doc)).toEqual({ interest: null, dividend: 800, other: null, foreignTax: 12 })
+    expect(getDocAmounts(doc)).toEqual({ interest: null, dividend: 800, capGain: null, schC: null, other: null, foreignTax: 12 })
   })
 
   it('uses shared foreign-tax summaries when provided', () => {
@@ -110,12 +111,12 @@ describe('getDocAmounts', () => {
       sourceType: '1099_div',
       sourceDocumentId: 1,
       sourceDocumentFormType: '1099_div',
-    }])).toEqual({ interest: null, dividend: 800, other: null, foreignTax: 15 })
+    }])).toEqual({ interest: null, dividend: 800, capGain: null, schC: null, other: null, foreignTax: 15 })
   })
 
   it('extracts 1099-MISC income into the "other" column', () => {
     const doc = makeDoc({ form_type: '1099_misc', parsed_data: { box3_other_income: 400 } as never })
-    expect(getDocAmounts(doc)).toEqual({ interest: null, dividend: null, other: 400, foreignTax: null })
+    expect(getDocAmounts(doc)).toEqual({ interest: null, dividend: null, capGain: null, schC: null, other: 400, foreignTax: null })
   })
 
   it('ignores zero values (treated as "no data")', () => {
@@ -134,7 +135,7 @@ describe('getDocAmounts', () => {
       } as never,
     })
     const link = makeLink({ form_type: '1099_int' })
-    expect(getDocAmounts(doc, link)).toEqual({ interest: 150, dividend: null, other: null, foreignTax: 3 })
+    expect(getDocAmounts(doc, link)).toEqual({ interest: 150, dividend: null, capGain: null, schC: null, other: null, foreignTax: 3 })
   })
 
   it('attributes broker_1099 amounts to the matching link form_type (1099-DIV link)', () => {
@@ -148,7 +149,7 @@ describe('getDocAmounts', () => {
       } as never,
     })
     const link = makeLink({ form_type: '1099_div' })
-    expect(getDocAmounts(doc, link)).toEqual({ interest: null, dividend: 900, other: null, foreignTax: 20 })
+    expect(getDocAmounts(doc, link)).toEqual({ interest: null, dividend: 900, capGain: null, schC: null, other: null, foreignTax: 20 })
   })
 
   it('returns no amounts for broker_1099 1099-B links (reported on Schedule D, not here)', () => {
@@ -157,7 +158,7 @@ describe('getDocAmounts', () => {
       parsed_data: { int_1_interest_income: 150, div_1a_total_ordinary: 900 } as never,
     })
     const link = makeLink({ form_type: '1099_b' })
-    expect(getDocAmounts(doc, link)).toEqual({ interest: null, dividend: null, other: null, foreignTax: null })
+    expect(getDocAmounts(doc, link)).toEqual({ interest: null, dividend: null, capGain: null, schC: null, other: null, foreignTax: null })
   })
 
   it('respects per-link is_reviewed (returns nulls when the link is unreviewed)', () => {
@@ -167,7 +168,7 @@ describe('getDocAmounts', () => {
       parsed_data: { int_1_interest_income: 150 } as never,
     })
     const link = makeLink({ form_type: '1099_int', is_reviewed: false })
-    expect(getDocAmounts(doc, link)).toEqual({ interest: null, dividend: null, other: null, foreignTax: null })
+    expect(getDocAmounts(doc, link)).toEqual({ interest: null, dividend: null, capGain: null, schC: null, other: null, foreignTax: null })
   })
 
   it('extracts amounts from the matching entry in a multi-account array broker_1099 (1099-INT link)', () => {
@@ -185,7 +186,7 @@ describe('getDocAmounts', () => {
         },
       ] as never,
     })
-    expect(getDocAmounts(doc, link)).toEqual({ interest: 150, dividend: null, other: null, foreignTax: 3 })
+    expect(getDocAmounts(doc, link)).toEqual({ interest: 150, dividend: null, capGain: null, schC: null, other: null, foreignTax: 3 })
   })
 
   it('extracts amounts from the matching entry in a multi-account array broker_1099 (1099-DIV link)', () => {
@@ -211,7 +212,7 @@ describe('getDocAmounts', () => {
         },
       ] as never,
     })
-    expect(getDocAmounts(doc, divLink)).toEqual({ interest: null, dividend: 900, other: null, foreignTax: 20 })
+    expect(getDocAmounts(doc, divLink)).toEqual({ interest: null, dividend: 900, capGain: null, schC: null, other: null, foreignTax: 20 })
   })
 
   it('returns nulls for multi-account array broker_1099 when no link is provided', () => {
@@ -227,6 +228,48 @@ describe('getDocAmounts', () => {
         },
       ] as never,
     })
-    expect(getDocAmounts(doc)).toEqual({ interest: null, dividend: null, other: null, foreignTax: null })
+    expect(getDocAmounts(doc)).toEqual({ interest: null, dividend: null, capGain: null, schC: null, other: null, foreignTax: null })
+  })
+
+  it('extracts 1099-DIV capital gain distributions into the cap gain column', () => {
+    const doc = makeDoc({ form_type: '1099_div', parsed_data: { box2a_cap_gain: 125 } as never })
+    expect(getDocAmounts(doc)).toEqual({ interest: null, dividend: null, capGain: 125, schC: null, other: null, foreignTax: null })
+  })
+
+  it('extracts broker 1099 capital gain distributions into the cap gain column', () => {
+    const doc = makeDoc({
+      form_type: 'broker_1099',
+      parsed_data: { div_2a_cap_gain: 99 } as never,
+    })
+    const link = makeLink({ form_type: '1099_div' })
+    expect(getDocAmounts(doc, link)).toEqual({ interest: null, dividend: null, capGain: 99, schC: null, other: null, foreignTax: null })
+  })
+
+  it('extracts 1099-NEC amounts into the Schedule C column', () => {
+    const doc = makeDoc({ form_type: '1099_nec', parsed_data: { box1_nonemployeeComp: 2400 } as never })
+    expect(getDocAmounts(doc)).toEqual({ interest: null, dividend: null, capGain: null, schC: 2400, other: null, foreignTax: null })
+  })
+
+  it('routes default 1099-MISC box 7 income to Schedule C', () => {
+    const doc = makeDoc({ form_type: '1099_misc', parsed_data: { box7_nonemployee: 875 } as never })
+    expect(getDocAmounts(doc)).toEqual({ interest: null, dividend: null, capGain: null, schC: 875, other: null, foreignTax: null })
+  })
+
+  it('routes 1099-MISC amounts to Schedule C when explicitly selected', () => {
+    const doc = makeDoc({
+      form_type: '1099_misc',
+      misc_routing: 'sch_c',
+      parsed_data: { box1_rents: 100, box3_other_income: 50, box7_nonemployee: 25 } as never,
+    })
+    expect(getDocAmounts(doc)).toEqual({ interest: null, dividend: null, capGain: null, schC: 175, other: null, foreignTax: null })
+  })
+
+  it('routes 1099-MISC amounts to other income when explicitly sent to Schedule E', () => {
+    const doc = makeDoc({
+      form_type: '1099_misc',
+      misc_routing: 'sch_e',
+      parsed_data: { box1_rents: 100, box2_royalties: 50 } as never,
+    })
+    expect(getDocAmounts(doc)).toEqual({ interest: null, dividend: null, capGain: null, schC: null, other: 150, foreignTax: null })
   })
 })

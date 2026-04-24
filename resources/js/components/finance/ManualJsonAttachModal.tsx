@@ -63,6 +63,14 @@ function validateParsedData(data: unknown, formType: string): string[] {
         errors.push('Missing required field: payer_name')
       }
       break
+    case '1099_nec':
+      if (obj['payer_name'] === undefined) {
+        errors.push('Missing required field: payer_name')
+      }
+      if (obj['box1_nonemployeeComp'] === undefined && obj['box1_nonemployee_compensation'] === undefined) {
+        errors.push('Missing required field: box1_nonemployeeComp')
+      }
+      break
     case 'k1': {
       // "2026.1" = AI-generated via coerceK1Args; "1.0" = migrated legacy record.
       // Both use the same fields/codes structure and are treated as canonical.
@@ -98,6 +106,8 @@ function getJsonPlaceholder(formType: string): string {
       return '{\n  "payer_name": "Fidelity",\n  "box1a_ordinary": 2500.00,\n  "box1b_qualified": 2000.00\n}'
     case '1099_misc':
       return '{\n  "payer_name": "Payer LLC",\n  "box3_other_income": 5000.00,\n  "box4_fed_tax": null\n}'
+    case '1099_nec':
+      return '{\n  "payer_name": "Client LLC",\n  "box1_nonemployeeComp": 12000.00,\n  "box4_fed_tax": null\n}'
     case 'k1':
       return (
         '{\n  "schemaVersion": "2026.1",\n  "formType": "K-1-1065",\n' +
