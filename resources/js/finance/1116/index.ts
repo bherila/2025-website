@@ -2,6 +2,8 @@
  * Barrel exports for the Form 1116 module.
  */
 
+export type { ComputeForm1116LinesArgs } from './computeForm1116Lines'
+export { ASSUMED_FOREIGN_WITHHOLDING_RATE, computeForm1116Lines } from './computeForm1116Lines'
 export { F1116_SPEC } from './F1116_SPEC'
 export { default as F1116ReviewPanel } from './F1116ReviewPanel'
 export { collectForeignTaxSummaries } from './foreignTaxSummaries'
