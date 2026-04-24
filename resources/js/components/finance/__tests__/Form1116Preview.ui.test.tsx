@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import currency from 'currency.js'
 
 import { fetchWrapper } from '@/fetchWrapper'
+import { collectForeignTaxSummaries, computeForm1116Lines } from '@/finance/1116'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 
@@ -55,6 +55,23 @@ function toolSection(sectionId: string, rows: Record<string, unknown>[]) {
   return { sectionId, title: sectionId, data: { rows } }
 }
 
+function renderForm1116(
+  reviewedK1Docs: TaxDocument[],
+  reviewed1099Docs: TaxDocument[],
+  extras: Partial<React.ComponentProps<typeof Form1116Preview>> = {},
+) {
+  const foreignTaxSummaries = collectForeignTaxSummaries([...reviewedK1Docs, ...reviewed1099Docs])
+  const form1116 = computeForm1116Lines({ reviewedK1Docs, reviewed1099Docs, foreignTaxSummaries })
+  return render(
+    <Form1116Preview
+      form1116={form1116}
+      foreignTaxSummaries={foreignTaxSummaries}
+      allK1Docs={reviewedK1Docs}
+      {...extras}
+    />,
+  )
+}
+
 describe('Form1116Preview UI helpers', () => {
   beforeEach(() => {
     ;(fetchWrapper.get as jest.Mock).mockResolvedValue({ lots: [] })
@@ -85,15 +102,10 @@ describe('Form1116Preview UI helpers', () => {
     }
 
     const onReviewNow = jest.fn()
-    render(
-      <Form1116Preview
-        reviewedK1Docs={[reviewed]}
-        allK1Docs={[reviewed, unreviewed]}
-        reviewed1099Docs={[]}
-        income1099={{ interestIncome: currency(0), dividendIncome: currency(0), qualifiedDividends: currency(0) }}
-        onReviewNow={onReviewNow}
-      />,
-    )
+    renderForm1116([reviewed], [], {
+      allK1Docs: [reviewed, unreviewed],
+      onReviewNow,
+    })
 
     expect(screen.getByText(/excluded from Form 1116 totals/i)).toBeInTheDocument()
     fireEvent.click(screen.getByText('Review now'))
@@ -114,15 +126,9 @@ describe('Form1116Preview UI helpers', () => {
 
     const onBulkSetSbpElection = jest.fn().mockResolvedValue([])
 
-    render(
-      <Form1116Preview
-        reviewedK1Docs={[k1a, k1b]}
-        allK1Docs={[k1a, k1b]}
-        reviewed1099Docs={[]}
-        income1099={{ interestIncome: currency(0), dividendIncome: currency(0), qualifiedDividends: currency(0) }}
-        onBulkSetSbpElection={onBulkSetSbpElection}
-      />,
-    )
+    renderForm1116([k1a, k1b], [], {
+      onBulkSetSbpElection,
+    })
 
     fireEvent.click(screen.getByText('Elect all'))
 
@@ -136,15 +142,7 @@ describe('Form1116Preview UI helpers', () => {
       fields: { '21': { value: '100' } },
     }))
 
-    render(
-      <Form1116Preview
-        reviewedK1Docs={[reviewed]}
-        allK1Docs={[reviewed]}
-        reviewed1099Docs={[]}
-        income1099={{ interestIncome: currency(0), dividendIncome: currency(0), qualifiedDividends: currency(0) }}
-        selectedYear={2024}
-      />,
-    )
+    renderForm1116([reviewed], [], { selectedYear: 2024 })
 
     expect(screen.getByRole('button', { name: /1116 worksheet/i })).toBeInTheDocument()
   })

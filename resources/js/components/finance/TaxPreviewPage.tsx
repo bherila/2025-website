@@ -830,16 +830,16 @@ function TaxPreviewPageContent() {
         </TabsContent>
 
         <TabsContent value={TAX_TABS.form1116} className="mt-0">
-          <Form1116Preview
-            reviewedK1Docs={reviewedK1Docs}
-            allK1Docs={accountDocuments.filter((doc) => doc.form_type === 'k1')}
-            reviewed1099Docs={reviewed1099Docs}
-            foreignTaxSummaries={foreignTaxSummaries}
-            selectedYear={selectedYear}
-            income1099={income1099}
-            onReviewNow={handleReviewK1Now}
-            onBulkSetSbpElection={handleBulkSetSbpElection}
-          />
+          {taxReturn.form1116 && (
+            <Form1116Preview
+              form1116={taxReturn.form1116}
+              foreignTaxSummaries={foreignTaxSummaries}
+              allK1Docs={accountDocuments.filter((doc) => doc.form_type === 'k1')}
+              selectedYear={selectedYear}
+              onReviewNow={handleReviewK1Now}
+              onBulkSetSbpElection={handleBulkSetSbpElection}
+            />
+          )}
         </TabsContent>
 
         <TabsContent value={TAX_TABS.form6251} className="mt-0">
