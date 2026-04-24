@@ -445,6 +445,7 @@ function TaxPreviewPageContent() {
     accounts,
     activeAccountIds,
     income1099,
+    schedule1OtherIncome,
     isMarried,
     activeTaxStates,
     setActiveTaxStates,
@@ -470,10 +471,6 @@ function TaxPreviewPageContent() {
     return (Object.values(TAX_TABS) as string[]).includes(hash) ? hash : TAX_TABS.overview
   })
   const [isExporting, setIsExporting] = useState(false)
-
-  const schedule1OtherIncome = taxReturn.form1040?.find(
-    (line) => line.label === 'Other income (Schedule 1)',
-  )?.value ?? 0
 
   const handleTabChange = useCallback((tab: string) => {
     setActiveTab(tab)

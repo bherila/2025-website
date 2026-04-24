@@ -90,6 +90,8 @@ interface TaxPreviewContextValue {
     dividendIncome: currency
     qualifiedDividends: currency
   }
+  /** Aggregated 1099-MISC "Other income" routed to Schedule 1 line 8 (Form 1040 line 8 source). */
+  schedule1OtherIncome: number
   /** Whether the user is married for the selected tax year (from marriage status settings). */
   isMarried: boolean
   /** State codes the user filed in for the selected tax year (e.g. ['CA', 'NY']). */
@@ -922,6 +924,7 @@ export function TaxPreviewProvider({
     accounts,
     activeAccountIds,
     income1099,
+    schedule1OtherIncome,
     isMarried,
     activeTaxStates,
     setActiveTaxStates,
@@ -965,6 +968,7 @@ export function TaxPreviewProvider({
     accounts,
     activeAccountIds,
     income1099,
+    schedule1OtherIncome,
     isMarried,
     activeTaxStates,
     userDeductions,
