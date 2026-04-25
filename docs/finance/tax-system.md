@@ -130,21 +130,28 @@ The React mini-SPA is wrapped in `TaxPreviewProvider`, which loads `/api/finance
 
 ### Tab Structure
 
+Tab IDs are defined in `resources/js/components/finance/tax-tab-ids.ts`.
+
 ```
-Overview | Schedules | Schedule A | Schedule E | Capital Gains | Form 1116 | Form 8995 | Schedule C | Tax Estimate | Action Items
+Overview | W-2 | Schedules | Schedule A | Schedule 1 | Schedule E | Schedule SE | Capital Gains | Form 1116 | Form 6251 | Form 8582 | Form 8995 | Schedule C | Tax Estimate | Action Items
 ```
 
 | Tab | Component(s) | Description |
 |-----|---|---|
 | Overview | `TaxIncomeOverview` | Income card grid + unified Tax Documents & Estimated Positions table + W-2 Income Summary |
+| W-2 | `TaxDocumentsSection` | Per-entity W-2/W-2c document management with combined Review column |
 | Schedules | `ScheduleBPreview` + `Form4952Preview` | Schedule B (interest/dividends) + Form 4952 (investment interest) |
 | Schedule A | `ScheduleAPreview` + `UserDeductionsSection` | Itemized deductions — investment interest (K-1, 1099, short dividends) + user-entered SALT/mortgage/charitable via `fin_user_deductions` |
+| Schedule 1 | `Schedule1Preview` | Part I (additional income: Schedule C line 3, Schedule E line 5, 1099-MISC line 8z → line 10 total) + Part II (adjustments: deductible SE tax line 15, placeholders for HSA/health insurance/IRA/student loan → line 26 total). Feeds Form 1040 lines 8 and 10. |
 | Schedule E | `ScheduleEPreview` | Partnership/S-corp income from K-1 — Box 1 ordinary, Box 2/3 rental, Box 4 guaranteed payments |
+| Schedule SE | `ScheduleSEPreview` | Self-employment tax computation from K-1 Box 14A/14C + Schedule C |
 | Capital Gains | `ScheduleDPreview` | Form 6781 + Schedule D |
 | Form 1116 | `Form1116Preview` | Passive foreign tax credit |
+| Form 6251 | `Form6251Preview` | Alternative minimum tax computation |
+| Form 8582 | `Form8582Preview` | Passive activity loss limitations with per-activity breakdown and carryforward persistence |
 | Form 8995 | `Form8995Preview` | Sec. 199A QBI deduction — per-partnership breakdown, threshold check, estimated deduction |
 | Schedule C | `ScheduleCTab` | Self-employment income/expenses + Form 8829 home office |
-| Tax Estimate | `Form1040Preview` + `TotalsTable` | Form 1040 preview + federal/state tax tables |
+| Tax Estimate | `AdditionalTaxesPreview` + `Form1040Preview` + `TotalsTable` | Additional taxes (Schedule 2) + Form 1040 preview + federal/state tax tables |
 | Action Items | `ActionItemsTab` | Resolved/outstanding alerts |
 
 **Short dividend integration:** `TaxPreviewContext` fetches transactions for all active accounts on load, runs `analyzeShortDividends()`, and exposes `shortDividendSummary` on the context. `Form4952Preview` receives `shortDividendDeduction` (the >45-day bucket total) as investment interest expense. `ScheduleAPreview` renders both the K-1/1099 sources and the short dividend breakdown in one place. See [lot-analyzer.md](lot-analyzer.md#short-dividend-analysis) for details.
@@ -736,23 +743,11 @@ Per-account upload uses the `ghost` variant **Add** dropdown with per-form-type 
 
 ## Tax Preview Page Layout
 
-The Tax Preview page (`TaxPreviewPage.tsx`) uses a structured grid layout:
+The Tax Preview page (`TaxPreviewPage.tsx`) is a tabbed interface (see Tab Structure above). The **Overview** tab contains the W-2 Income Summary, income overview cards, and Account Documents section. The **Tax Estimate** tab contains `AdditionalTaxesPreview` (Schedule 2), `Form1040Preview`, federal/state tax tables, and estimated tax payments.
 
-### Row 1: W-2 Section
-- **Left (1/3)**: W-2 Income Summary — derived from payslip data; each line item is clickable to show a Data Source modal listing contributing payslips
-- **Right (2/3)**: W-2 Documents — per-entity document management with combined Review column
+`Form1040Preview` is purely presentational — it receives pre-computed `Form1040LineItem[]` from `taxReturn.form1040` (computed once in `TaxPreviewContext` and shared with the XLSX workbook export). Each 1040 line has an optional `navTab` that navigates to the relevant schedule tab on click, and an optional `sources` array for the drill-down data source modal.
 
-### Row 2: Form 1040 Preview
-- **Full width**: Shows key 1040 lines (Line 1a: W-2 wages, Line 2b: taxable interest, Line 3b: ordinary dividends, Line 8: Schedule C income, Line 9: total income)
-
-### Row 3: Schedule B & Account Documents Section
-- **Left (1/3)**: Schedule B Preview — Interest (Part I) and Dividends (Part II) totals from confirmed 1099 documents
-- **Right (2/3)**: Account Documents — 1099-INT/DIV/MISC/K-1 document management
-
-### Remaining Sections
-- Federal Taxes (quarterly estimates)
-- State Taxes (quarterly estimates for each state the user selected via `StateSelectorSection` — backed by `fin_user_tax_states`; supported states are `CA`, `NY`)
-- Schedule C Preview (per-entity income/expense detail)
+All schedule computations (Schedule 1, B, C, D, E, SE, Forms 1116/4952/6251/8582/8959/8960/8995) run once in `TaxPreviewContext` and their results are stored on `TaxReturn1040`. Preview components receive pre-computed data — they do not recompute.
 
 ### Frontend Components
 
