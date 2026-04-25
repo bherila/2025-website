@@ -41,14 +41,11 @@ import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 
 import { DockHomeView } from './tax-preview/DockHomeView'
-import type { FormRegistry } from './tax-preview/formRegistry'
 import { MillerShell } from './tax-preview/MillerShell'
-import { formRegistry as partialDockRegistry } from './tax-preview/registry'
+import { formRegistry as dockRegistry } from './tax-preview/registry'
 import { TAX_TABS } from './tax-tab-ids'
 import { TaxPreviewProvider, type TaxPreviewShellData, useTaxPreview } from './TaxPreviewContext'
 import { YearSelectorWithNav } from './YearSelectorWithNav'
-
-const dockRegistry = partialDockRegistry as FormRegistry
 
 // ── Preload interface ─────────────────────────────────────────────────────────
 

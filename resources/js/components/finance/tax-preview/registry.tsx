@@ -132,11 +132,133 @@ function HomePlaceholder(): React.ReactElement {
   )
 }
 
+function StubCard({ title, note }: { title: string; note: string }): React.ReactElement {
+  return (
+    <div className="space-y-3 rounded-md border border-dashed border-border bg-muted/30 p-4">
+      <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+      <p className="text-xs text-muted-foreground">{note}</p>
+    </div>
+  )
+}
+
+function Schedule3Stub(): React.ReactElement {
+  return (
+    <StubCard
+      title="Schedule 3 — Additional Credits & Payments"
+      note="Schedule 3 doesn't have a preview component yet. It will host nonrefundable credits (line 1: foreign tax credit from Form 1116, line 6: other credits) and refundable credits / payments."
+    />
+  )
+}
+
+function Form1116Stub(): React.ReactElement {
+  return (
+    <StubCard
+      title="Form 1116 — Foreign Tax Credit"
+      note="Pending migration. The current Form1116Preview takes review-modal callbacks that need to be re-wired through TaxPreviewContext before mounting it in a column."
+    />
+  )
+}
+
+function Form8582Stub(): React.ReactElement {
+  return (
+    <StubCard
+      title="Form 8582 — Passive Activity Loss Limitations"
+      note="Pending migration. Needs wiring for PAL carryforward edits and real-estate-professional toggle."
+    />
+  )
+}
+
+function ScheduleCStub(): React.ReactElement {
+  return (
+    <StubCard
+      title="Schedule C — Profit or Loss from Business"
+      note="Pending migration. ScheduleCTab manages its own form state for entity selection and expense entry — needs adapter that participates in dock navigation."
+    />
+  )
+}
+
+function Form4797Stub(): React.ReactElement {
+  return (
+    <StubCard
+      title="Form 4797 — Sales of Business Property"
+      note="Form 4797 doesn't exist in the codebase yet. Tracked in #319."
+    />
+  )
+}
+
+function ScheduleFStub(): React.ReactElement {
+  return (
+    <StubCard
+      title="Schedule F — Profit or Loss From Farming"
+      note="Schedule F doesn't exist in the codebase yet. Tracked in #320. Note: not currently wired to a FormId — placeholder reserved."
+    />
+  )
+}
+
+function Form8606Stub(): React.ReactElement {
+  return <StubCard title="Form 8606 — Nondeductible IRAs" note="Pending migration." />
+}
+
+function Form8949Stub(): React.ReactElement {
+  return (
+    <StubCard
+      title="Form 8949 — Sales & Dispositions of Capital Assets"
+      note="Pending migration. Currently rendered inside Schedule D."
+    />
+  )
+}
+
+function ActionItemsStub(): React.ReactElement {
+  return (
+    <StubCard
+      title="Action Items"
+      note="Will move from a tab into a side-sheet triggered from the persistent header."
+    />
+  )
+}
+
+function EstimateStub(): React.ReactElement {
+  return (
+    <StubCard
+      title="Tax Estimate"
+      note="Will move into the persistent header (3 tiers: slim / expanded cards / full modal with brackets + safe-harbor planning)."
+    />
+  )
+}
+
+function DocumentsStub(): React.ReactElement {
+  return (
+    <StubCard
+      title="Account Documents"
+      note="Will become the home dashboard's primary content (upload + review queue)."
+    />
+  )
+}
+
+function WorksheetSE401kStub(): React.ReactElement {
+  return (
+    <StubCard
+      title="SE 401(k) Contribution Worksheet"
+      note="Worksheet — will open as a modal Dialog, not a column. Pulls from Schedule SE net earnings + Schedule C compensation."
+    />
+  )
+}
+
+function WorksheetAmtStub(): React.ReactElement {
+  return <StubCard title="AMT Exemption Phaseout Worksheet" note="Worksheet — will open as a modal." />
+}
+
+function WorksheetTaxableSsStub(): React.ReactElement {
+  return <StubCard title="Taxable Social Security Worksheet" note="Worksheet — will open as a modal." />
+}
+
 /**
- * Registry populated with the first migrated forms. Additional entries
- * land in subsequent commits as each form's adapter is written.
+ * Registry of all forms. Read-only forms have full adapters wired to
+ * TaxPreviewState; mutation-bearing forms (1116, 8582, Sch C, Sch 3,
+ * etc.) and worksheets currently render placeholder StubCards pending
+ * full migration.
  */
-export const formRegistry: Partial<FormRegistry> = {
+export const formRegistry: FormRegistry = {
   home: {
     id: 'home',
     label: 'Home',
@@ -256,5 +378,134 @@ export const formRegistry: Partial<FormRegistry> = {
     category: 'Form',
     presentation: 'column',
     component: Form8995Adapter,
+  },
+  // Stub adapters — pending full migration. Render placeholder cards so
+  // drill-down navigation doesn't crash from missing registry entries.
+  'sch-3': {
+    id: 'sch-3',
+    label: 'Schedule 3 — Additional Credits & Payments',
+    shortLabel: 'Sch 3',
+    formNumber: '3',
+    keywords: ['schedule 3', 'credits', 'payments', 'nonrefundable', 'refundable'],
+    category: 'Schedule',
+    presentation: 'column',
+    component: Schedule3Stub,
+  },
+  'sch-c': {
+    id: 'sch-c',
+    label: 'Schedule C — Profit or Loss from Business',
+    shortLabel: 'Sch C',
+    formNumber: 'C',
+    keywords: ['schedule C', 'sole proprietor', 'business', 'self-employed', '1099-NEC'],
+    category: 'Schedule',
+    presentation: 'column',
+    component: ScheduleCStub,
+  },
+  'form-1116': {
+    id: 'form-1116',
+    label: 'Form 1116 — Foreign Tax Credit',
+    shortLabel: '1116',
+    formNumber: '1116',
+    keywords: ['1116', 'FTC', 'foreign tax credit', 'foreign income', 'passive', 'general'],
+    category: 'Form',
+    presentation: 'column',
+    component: Form1116Stub,
+  },
+  'form-8582': {
+    id: 'form-8582',
+    label: 'Form 8582 — Passive Activity Loss Limitations',
+    shortLabel: '8582',
+    formNumber: '8582',
+    keywords: ['8582', 'PAL', 'passive activity', 'loss limitation', 'real estate professional'],
+    category: 'Form',
+    presentation: 'column',
+    component: Form8582Stub,
+  },
+  'form-4797': {
+    id: 'form-4797',
+    label: 'Form 4797 — Sales of Business Property',
+    shortLabel: '4797',
+    formNumber: '4797',
+    keywords: ['4797', 'business property', 'section 1231', 'depreciation recapture'],
+    category: 'Form',
+    presentation: 'column',
+    component: Form4797Stub,
+  },
+  'form-8606': {
+    id: 'form-8606',
+    label: 'Form 8606 — Nondeductible IRAs',
+    shortLabel: '8606',
+    formNumber: '8606',
+    keywords: ['8606', 'nondeductible IRA', 'IRA basis', 'backdoor Roth'],
+    category: 'Form',
+    presentation: 'column',
+    component: Form8606Stub,
+  },
+  'form-8949': {
+    id: 'form-8949',
+    label: 'Form 8949 — Sales & Dispositions of Capital Assets',
+    shortLabel: '8949',
+    formNumber: '8949',
+    keywords: ['8949', 'capital assets', 'wash sale', 'cost basis'],
+    category: 'Form',
+    presentation: 'column',
+    component: Form8949Stub,
+  },
+  'action-items': {
+    id: 'action-items',
+    label: 'Action Items',
+    shortLabel: 'Action Items',
+    keywords: ['action items', 'todos', 'review queue', 'issues'],
+    category: 'App',
+    presentation: 'app',
+    component: ActionItemsStub,
+  },
+  estimate: {
+    id: 'estimate',
+    label: 'Tax Estimate',
+    shortLabel: 'Estimate',
+    keywords: ['estimate', 'refund', 'tax due', 'safe harbor', 'estimated payments', 'brackets'],
+    category: 'App',
+    presentation: 'app',
+    component: EstimateStub,
+  },
+  documents: {
+    id: 'documents',
+    label: 'Account Documents',
+    shortLabel: 'Documents',
+    keywords: ['documents', 'upload', '1099', 'W-2', 'K-1', 'account documents'],
+    category: 'App',
+    presentation: 'app',
+    component: DocumentsStub,
+  },
+  'wks-se-401k': {
+    id: 'wks-se-401k',
+    label: 'SE 401(k) Contribution Worksheet',
+    shortLabel: 'SE 401(k)',
+    keywords: ['401k', 'self-employed retirement', 'solo 401k', 'employer contribution'],
+    category: 'Worksheet',
+    presentation: 'modal',
+    component: WorksheetSE401kStub,
+    relatedForms: ['sch-c', 'sch-se', 'sch-1'],
+  },
+  'wks-amt-exemption': {
+    id: 'wks-amt-exemption',
+    label: 'AMT Exemption Phaseout Worksheet',
+    shortLabel: 'AMT Exemption',
+    keywords: ['AMT', 'AMT exemption', 'phaseout', 'alternative minimum tax exemption'],
+    category: 'Worksheet',
+    presentation: 'modal',
+    component: WorksheetAmtStub,
+    relatedForms: ['form-6251'],
+  },
+  'wks-taxable-ss': {
+    id: 'wks-taxable-ss',
+    label: 'Taxable Social Security Worksheet',
+    shortLabel: 'Taxable SS',
+    keywords: ['social security', 'taxable social security', 'SSA-1099'],
+    category: 'Worksheet',
+    presentation: 'modal',
+    component: WorksheetTaxableSsStub,
+    relatedForms: ['form-1040'],
   },
 }
