@@ -42,6 +42,19 @@ const defaultProps = {
 
 let Form1040Preview: React.ComponentType<typeof defaultProps & {
   schedule1OtherIncome?: number
+  deductibleSeTaxAdjustment?: number
+  capitalGainOrLoss?: number | null
+  schedule2TotalAdditionalTaxes?: number | null
+  foreignTaxCredit?: number | null
+  scheduleB?: {
+    interestTotal: number
+    dividendTotal: number
+    qualifiedDivTotal: number
+    interestLines: Array<{ label: string; amount: number }>
+    dividendLines: Array<{ label: string; amount: number }>
+    qualifiedDividendLines: Array<{ label: string; amount: number }>
+  }
+  retirementDocuments?: object[]
   scheduleEGrandTotal?: number
   onNavigate?: (tab: string) => void
 }>
@@ -127,10 +140,60 @@ describe('Form1040Preview navigation', () => {
       />,
     )
 
-    // Line 8 value should be 5000 + 1200 + 750 = 6950
+    expect(screen.getByText('Additional income from Schedule 1, line 10')).toBeInTheDocument()
     expect(screen.getByText('$6,950.00')).toBeInTheDocument()
-    // Line 9 total income = 100000 + 500 + 1200 + 6950 = 108650
-    expect(screen.getByText('$108,650.00')).toBeInTheDocument()
+    expect(screen.getAllByText('$108,650.00')).toHaveLength(2)
+  })
+
+  it('renders 1099-R lines and computes AGI from schedule totals and adjustments', () => {
+    render(
+      <Form1040Preview
+        {...defaultProps}
+        scheduleB={{
+          interestTotal: 700,
+          dividendTotal: 1500,
+          qualifiedDivTotal: 0,
+          interestLines: [{ label: 'Blue Harbor — K-1 Box 5', amount: 200 }, { label: 'Bank A — 1099-INT Box 1', amount: 500 }],
+          dividendLines: [{ label: 'Blue Harbor — K-1 Box 6a', amount: 300 }, { label: 'Fund A — 1099-DIV Box 1a', amount: 1200 }],
+          qualifiedDividendLines: [],
+        }}
+        scheduleCIncome={5000}
+        scheduleEGrandTotal={1000}
+        deductibleSeTaxAdjustment={706.48}
+        capitalGainOrLoss={250}
+        retirementDocuments={[
+          {
+            id: 1,
+            form_type: '1099_r',
+            is_reviewed: true,
+            parsed_data: {
+              payer_name: 'IRA Custodian',
+              box1_gross_distribution: 10000,
+              box2a_taxable_amount: 8000,
+              box4_fed_tax: 1200,
+              box7_ira_sep_simple: true,
+            },
+          },
+          {
+            id: 2,
+            form_type: '1099_r',
+            is_reviewed: true,
+            parsed_data: {
+              payer_name: 'Pension Plan',
+              box1_gross_distribution: 7000,
+              box2a_taxable_amount: 6500,
+              box4_fed_tax: 700,
+              box7_ira_sep_simple: false,
+            },
+          },
+        ]}
+      />,
+    )
+
+    expect(screen.getByText('IRA distributions')).toBeInTheDocument()
+    expect(screen.getByText('Pensions and annuities')).toBeInTheDocument()
+    expect(screen.getByText('$122,950.00')).toBeInTheDocument()
+    expect(screen.getByText('$122,243.52')).toBeInTheDocument()
   })
 
   it('does NOT call onNavigate when onNavigate prop is absent', () => {

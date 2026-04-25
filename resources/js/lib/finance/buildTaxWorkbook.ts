@@ -843,6 +843,7 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
   const form6251Line11 = form6251Sheet?.rowIndex.get('Line 11 — Alternative minimum tax')
   const form8995Line13 = form8995Sheet?.rowIndex.get('QBI Deduction — lesser of 20% QBI or taxable income cap')
   const scheduleSELine12 = scheduleSESheet?.rowIndex.get('Line 12 — Self-employment tax → Schedule 2 Line 4')
+  const scheduleSELine13 = scheduleSESheet?.rowIndex.get('Line 13 — Deductible half of self-employment tax → Schedule 1 Line 15')
   const scheduleSEAdditionalMedicare = scheduleSESheet?.rowIndex.get('Form 8959 — Additional Medicare tax on self-employment earnings')
   const form8959Line7 = form8959Sheet?.rowIndex.get('Line 7 — Additional Medicare Tax (0.9%) → Schedule 2 Line 11')
   const form8960Line17 = form8960Sheet?.rowIndex.get('NIIT (3.8% × lesser of Line 12 or 15) → Schedule 2 Line 12')
@@ -854,31 +855,43 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
     form8960Line17 ? formulaRef('Form 8960', form8960Line17).slice(1) : null,
   ].filter(Boolean)
 
-  const line1a = taxReturn.form1040?.find((line) => line.line === '1a')?.value ?? undefined
-  const line2b = scheduleBLine4 ? taxReturn.scheduleB?.interestTotal : undefined
-  const line3b = scheduleBLine6 ? taxReturn.scheduleB?.dividendTotal : undefined
-  const line7 = scheduleDLine21
-    ? taxReturn.scheduleD?.schD_line21
-    : scheduleDLine16
-      ? taxReturn.scheduleD?.schD_line16
-      : undefined
+  const form1040LineMap = new Map((taxReturn.form1040 ?? []).map((line) => [line.line, line.value] as const))
+
+  const line1a = form1040LineMap.get('1a') ?? undefined
+  const line2b = form1040LineMap.get('2b') ?? (scheduleBLine4 ? taxReturn.scheduleB?.interestTotal : undefined)
+  const line3b = form1040LineMap.get('3b') ?? (scheduleBLine6 ? taxReturn.scheduleB?.dividendTotal : undefined)
+  const line4a = form1040LineMap.get('4a') ?? undefined
+  const line4b = form1040LineMap.get('4b') ?? undefined
+  const line5a = form1040LineMap.get('5a') ?? undefined
+  const line5b = form1040LineMap.get('5b') ?? undefined
+  const line7 = form1040LineMap.get('7') ?? (
+    scheduleDLine21
+      ? taxReturn.scheduleD?.schD_line21
+      : scheduleDLine16
+        ? taxReturn.scheduleD?.schD_line16
+        : undefined
+  )
 
   // Use currency.js for safe monetary addition; keep undefined for truly unwired values
   const line8Value = currency(taxReturn.scheduleC?.total ?? 0).add(taxReturn.scheduleE?.grandTotal ?? 0).value
-  const line8 = (taxReturn.scheduleC || taxReturn.scheduleE) ? line8Value : undefined
+  const line8 = form1040LineMap.get('8') ?? ((taxReturn.scheduleC || taxReturn.scheduleE) ? line8Value : undefined)
 
   const line9Value = currency(line1a ?? 0)
     .add(line2b ?? 0)
     .add(line3b ?? 0)
+    .add(line4b ?? 0)
+    .add(line5b ?? 0)
     .add(line7 ?? 0)
     .add(line8 ?? 0).value
-  const line9 = line9Value !== 0 ? line9Value : undefined
-
-  const line9FormulaParts: string[] = ['C2']
-  if (scheduleBLine4) line9FormulaParts.push(`C3`)
-  if (scheduleBLine6) line9FormulaParts.push(`C4`)
-  if (scheduleDLine16 || scheduleDLine21) line9FormulaParts.push(`C5`)
-  if (scheduleCNetIncome || scheduleECombined) line9FormulaParts.push(`C6`)
+  const line9 = form1040LineMap.get('9') ?? (line9Value !== 0 ? line9Value : undefined)
+  const line10 = form1040LineMap.get('10') ?? taxReturn.scheduleSE?.deductibleSeTax ?? undefined
+  const line11 = form1040LineMap.get('11') ?? (
+    line9 !== undefined || line10 !== undefined
+      ? currency(line9 ?? 0).subtract(line10 ?? 0).value
+      : undefined
+  )
+  const line17 = form1040LineMap.get('17') ?? taxReturn.schedule2?.totalAdditionalTaxes ?? undefined
+  const line20 = form1040LineMap.get('20') ?? taxReturn.form1116?.totalForeignTaxes ?? undefined
 
   const form1040Sheet = taxReturn.form1040
     ? buildSheet('Form 1040', [
@@ -898,6 +911,26 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
           note: scheduleBLine6 ? '→ Schedule B' : undefined,
         },
         {
+          line: '4a',
+          description: 'IRA distributions',
+          amount: line4a,
+        },
+        {
+          line: '4b',
+          description: 'IRA taxable amount',
+          amount: line4b,
+        },
+        {
+          line: '5a',
+          description: 'Pensions and annuities',
+          amount: line5a,
+        },
+        {
+          line: '5b',
+          description: 'Pension / annuity taxable amount',
+          amount: line5b,
+        },
+        {
           line: '7',
           description: 'Capital gain or loss',
           amount: line7,
@@ -910,7 +943,7 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
         },
         {
           line: '8',
-          description: 'Business income or loss',
+          description: 'Additional income (Schedule 1)',
           amount: line8,
           formula: [
             scheduleCNetIncome ? formulaRef('Schedule C', scheduleCNetIncome).slice(1) : null,
@@ -927,7 +960,19 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
           line: '9',
           description: 'Total income',
           amount: line9,
-          formula: line9FormulaParts.length > 1 ? `=${line9FormulaParts.join('+')}` : undefined,
+          isTotal: true,
+        },
+        {
+          line: '10',
+          description: 'Adjustments to income (Schedule 1)',
+          amount: line10,
+          formula: scheduleSELine13 ? formulaRef('Schedule SE', scheduleSELine13) : undefined,
+          note: scheduleSELine13 ? '→ Schedule SE / Schedule 1' : undefined,
+        },
+        {
+          line: '11',
+          description: 'Adjusted gross income',
+          amount: line11,
           isTotal: true,
         },
         {
@@ -940,7 +985,7 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
         {
           line: '17',
           description: 'Other taxes (Schedule 2)',
-          amount: taxReturn.schedule2?.totalAdditionalTaxes,
+          amount: line17,
           formula: schedule2FormulaRefs.length > 0
             ? `=${schedule2FormulaRefs.join('+')}`
             : undefined,
@@ -949,7 +994,7 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
         {
           line: '20',
           description: 'Foreign tax credit (Form 1116)',
-          amount: taxReturn.form1116?.totalForeignTaxes,
+          amount: line20,
           formula: form1116Line2 ? formulaRef('Form 1116', form1116Line2) : undefined,
           note: form1116Line2 ? '→ Form 1116' : undefined,
         },

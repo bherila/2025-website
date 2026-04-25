@@ -4,6 +4,7 @@ import currency from 'currency.js'
 import { ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 
+import type { ScheduleBLines } from '@/components/finance/ScheduleBPreview'
 import { TAX_TABS } from '@/components/finance/tax-tab-ids'
 import { Button } from '@/components/ui/button'
 import {
@@ -15,7 +16,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import type { TaxDocument } from '@/types/finance/tax-document'
-import type { F1099DivParsedData, F1099IntParsedData, W2ParsedData } from '@/types/finance/tax-document'
+import type { F1099DivParsedData, F1099IntParsedData, Form1099RParsedData, W2ParsedData } from '@/types/finance/tax-document'
 import type { Form1040LineItem } from '@/types/finance/tax-return'
 
 export type { Form1040LineItem } from '@/types/finance/tax-return'
@@ -32,6 +33,11 @@ interface Form1040PreviewProps {
   dividendIncome: currency
   scheduleCIncome: number
   schedule1OtherIncome?: number
+  deductibleSeTaxAdjustment?: number
+  capitalGainOrLoss?: number | null
+  schedule2TotalAdditionalTaxes?: number | null
+  foreignTaxCredit?: number | null
+  scheduleB?: ScheduleBLines
   /** Schedule E combined net income (K-1 partnerships + 1099-MISC rental/royalties) — feeds Schedule 1 line 5. */
   scheduleEGrandTotal?: number
   selectedYear: number
@@ -41,6 +47,8 @@ interface Form1040PreviewProps {
   interestDocuments?: TaxDocument[]
   /** Confirmed/reviewed 1099-DIV documents for dividend income drill-down. */
   dividendDocuments?: TaxDocument[]
+  /** Confirmed/reviewed 1099-R documents for retirement distributions. */
+  retirementDocuments?: TaxDocument[]
   /** Called when the user clicks a 1040 line with a linked schedule tab. */
   onNavigate?: (tab: string) => void
 }
@@ -62,26 +70,160 @@ interface DataSourceModalState {
   sources: DataSource[]
 }
 
+interface RetirementDistributionBucket {
+  gross: number
+  taxable: number
+  grossSources: NonNullable<Form1040LineItem['sources']>
+  taxableSources: NonNullable<Form1040LineItem['sources']>
+}
+
+export interface RetirementDistributionSummary {
+  ira: RetirementDistributionBucket
+  pension: RetirementDistributionBucket
+  federalWithholding: number
+}
+
+function createRetirementDistributionBucket(): RetirementDistributionBucket {
+  return {
+    gross: 0,
+    taxable: 0,
+    grossSources: [],
+    taxableSources: [],
+  }
+}
+
+/**
+ * Prefer the explicit IRS checkbox indicator when the free-form distribution_type
+ * text is ambiguous. distribution_type is treated as a best-effort hint only.
+ */
+function isIraDistribution(parsed: Form1099RParsedData): boolean {
+  const distributionType = typeof parsed.distribution_type === 'string'
+    ? parsed.distribution_type.toLowerCase()
+    : null
+
+  if (distributionType) {
+    const looksLikeIra = (
+      distributionType.includes('ira')
+      || distributionType.includes('sep')
+      || distributionType.includes('simple')
+    )
+    const looksLikePension = (
+      distributionType.includes('pension')
+      || distributionType.includes('annuity')
+    )
+
+    if (looksLikeIra && !looksLikePension) {
+      return true
+    }
+
+    if (looksLikePension && !looksLikeIra) {
+      return false
+    }
+  }
+
+  // When the free-form text is missing or ambiguous, defer to the explicit
+  // IRS checkbox that distinguishes IRA / SEP / SIMPLE from pension income.
+  return parsed.box7_ira_sep_simple === true
+}
+
+function getRetirementPayerLabel(doc: TaxDocument, parsed: Form1099RParsedData): string {
+  return parsed.payer_name ?? doc.account?.acct_name ?? doc.original_filename ?? `1099-R #${doc.id}`
+}
+
+function mapScheduleBSources(lines: Array<{ label: string; amount: number }>): NonNullable<Form1040LineItem['sources']> {
+  return lines.map((line) => ({
+    label: line.label,
+    amount: line.amount,
+    note: 'Schedule B source',
+  }))
+}
+
+/**
+ * Aggregate reviewed 1099-R documents for Form 1040 lines 4 and 5.
+ *
+ * When Box 2a is blank, the preview falls back to Box 1 as a best-effort taxable
+ * amount estimate so retirement income is not dropped entirely from AGI. This is
+ * intentionally conservative preview behavior only; a blank Box 2a can require a
+ * manual taxability determination on the filed return.
+ */
+export function compute1099RDistributionSummary(retirementDocuments: TaxDocument[]): RetirementDistributionSummary {
+  const summary: RetirementDistributionSummary = {
+    ira: createRetirementDistributionBucket(),
+    pension: createRetirementDistributionBucket(),
+    federalWithholding: 0,
+  }
+
+  for (const doc of retirementDocuments) {
+    if (!doc.is_reviewed || !doc.parsed_data || Array.isArray(doc.parsed_data)) {
+      continue
+    }
+
+    const parsed = doc.parsed_data as Form1099RParsedData
+    const bucket = isIraDistribution(parsed) ? summary.ira : summary.pension
+    const payerLabel = getRetirementPayerLabel(doc, parsed)
+    const grossDistribution = parsed.box1_gross_distribution ?? 0
+    const taxableDistribution = parsed.box2a_taxable_amount ?? parsed.box1_gross_distribution ?? 0
+    const taxableSourceNote = parsed.box2a_taxable_amount == null
+      ? '1099-R Box 1 (fallback for blank Box 2a)'
+      : '1099-R Box 2a'
+
+    bucket.gross = currency(bucket.gross).add(grossDistribution).value
+    bucket.taxable = currency(bucket.taxable).add(taxableDistribution).value
+
+    if (grossDistribution !== 0) {
+      bucket.grossSources.push({
+        label: payerLabel,
+        amount: grossDistribution,
+        note: '1099-R Box 1',
+      })
+    }
+
+    if (taxableDistribution !== 0) {
+      bucket.taxableSources.push({
+        label: payerLabel,
+        amount: taxableDistribution,
+        note: taxableSourceNote,
+      })
+    }
+
+    summary.federalWithholding = currency(summary.federalWithholding).add(parsed.box4_fed_tax ?? 0).value
+  }
+
+  return summary
+}
+
 export function computeForm1040Lines({
   w2Income,
   interestIncome,
   dividendIncome,
   scheduleCIncome,
   schedule1OtherIncome = 0,
+  deductibleSeTaxAdjustment = 0,
+  capitalGainOrLoss = null,
+  schedule2TotalAdditionalTaxes = null,
+  foreignTaxCredit = null,
+  scheduleB,
   scheduleEGrandTotal = 0,
   w2Documents = [],
   interestDocuments = [],
   dividendDocuments = [],
+  retirementDocuments = [],
 }: {
   w2Income: currency
   interestIncome: currency
   dividendIncome: currency
   scheduleCIncome: number
   schedule1OtherIncome?: number
+  deductibleSeTaxAdjustment?: number
+  capitalGainOrLoss?: number | null
+  schedule2TotalAdditionalTaxes?: number | null
+  foreignTaxCredit?: number | null
+  scheduleB?: ScheduleBLines
   scheduleEGrandTotal?: number
   w2Documents?: TaxDocument[]
   interestDocuments?: TaxDocument[]
   dividendDocuments?: TaxDocument[]
+  retirementDocuments?: TaxDocument[]
 }): Form1040LineItem[] {
   const reviewedW2Docs = w2Documents.filter(d => d.is_reviewed && d.parsed_data)
   const w2IncomeFromDocs = reviewedW2Docs.length > 0
@@ -101,23 +243,39 @@ export function computeForm1040Lines({
       }))
     : [{ label: 'Payslip estimate (no W-2 uploaded)', amount: w2Income.value }]
 
+  const scheduleBInterestTotal = currency(scheduleB?.interestTotal ?? interestIncome.value)
+  const scheduleBDividendTotal = currency(scheduleB?.dividendTotal ?? dividendIncome.value)
+
   const reviewedIntDocs = interestDocuments.filter(d => d.is_reviewed && d.parsed_data)
-  const interestSources = reviewedIntDocs.length > 0
-    ? reviewedIntDocs.map(d => ({
-        label: (d.parsed_data as F1099IntParsedData)?.payer_name ?? d.account?.acct_name ?? d.original_filename ?? '',
-        amount: currency((d.parsed_data as F1099IntParsedData)?.box1_interest ?? 0).value,
-        note: '1099-INT Box 1',
-      }))
-    : [{ label: 'From confirmed 1099-INT documents', amount: interestIncome.value }]
+  const interestSources = scheduleB?.interestLines.length
+    ? mapScheduleBSources(scheduleB.interestLines)
+    : reviewedIntDocs.length > 0
+      ? reviewedIntDocs.map(d => ({
+          label: (d.parsed_data as F1099IntParsedData)?.payer_name ?? d.account?.acct_name ?? d.original_filename ?? '',
+          amount: currency((d.parsed_data as F1099IntParsedData)?.box1_interest ?? 0).value,
+          note: '1099-INT Box 1',
+        }))
+      : [{
+          label: scheduleB ? 'From confirmed Schedule B sources' : 'Interest income estimate (no Schedule B data)',
+          amount: scheduleBInterestTotal.value,
+        }]
 
   const reviewedDivDocs = dividendDocuments.filter(d => d.is_reviewed && d.parsed_data)
-  const dividendSources = reviewedDivDocs.length > 0
-    ? reviewedDivDocs.map(d => ({
-        label: (d.parsed_data as F1099DivParsedData)?.payer_name ?? d.account?.acct_name ?? d.original_filename ?? '',
-        amount: currency((d.parsed_data as F1099DivParsedData)?.box1a_ordinary ?? 0).value,
-        note: '1099-DIV Box 1a',
-      }))
-    : [{ label: 'From confirmed 1099-DIV documents', amount: dividendIncome.value }]
+  const dividendSources = scheduleB?.dividendLines.length
+    ? mapScheduleBSources(scheduleB.dividendLines)
+    : reviewedDivDocs.length > 0
+      ? reviewedDivDocs.map(d => ({
+          label: (d.parsed_data as F1099DivParsedData)?.payer_name ?? d.account?.acct_name ?? d.original_filename ?? '',
+          amount: currency((d.parsed_data as F1099DivParsedData)?.box1a_ordinary ?? 0).value,
+          note: '1099-DIV Box 1a',
+        }))
+      : [{
+          label: scheduleB ? 'From confirmed Schedule B sources' : 'Dividend income estimate (no Schedule B data)',
+          amount: scheduleBDividendTotal.value,
+        }]
+
+  const retirementSummary = compute1099RDistributionSummary(retirementDocuments)
+  const schedule1Adjustment = currency(deductibleSeTaxAdjustment)
 
   const schedule1Total = currency(scheduleCIncome)
     .add(scheduleEGrandTotal)
@@ -136,9 +294,13 @@ export function computeForm1040Lines({
   ]
 
   const totalIncome = effectiveW2Income
-    .add(interestIncome)
-    .add(dividendIncome)
+    .add(scheduleBInterestTotal)
+    .add(scheduleBDividendTotal)
+    .add(retirementSummary.ira.taxable)
+    .add(retirementSummary.pension.taxable)
+    .add(capitalGainOrLoss ?? 0)
     .add(schedule1Total)
+  const adjustedGrossIncome = totalIncome.subtract(schedule1Adjustment)
 
   return [
     {
@@ -150,7 +312,7 @@ export function computeForm1040Lines({
     {
       line: '2b',
       label: 'Taxable interest',
-      value: interestIncome.value,
+      value: scheduleBInterestTotal.value,
       refSchedule: 'Schedule B',
       sources: interestSources,
       navTab: TAX_TABS.schedules,
@@ -158,15 +320,47 @@ export function computeForm1040Lines({
     {
       line: '3b',
       label: 'Ordinary dividends',
-      value: dividendIncome.value,
+      value: scheduleBDividendTotal.value,
       refSchedule: 'Schedule B',
       sources: dividendSources,
       navTab: TAX_TABS.schedules,
     },
+    ...(retirementSummary.ira.gross !== 0 || retirementSummary.ira.taxable !== 0
+      ? [
+          {
+            line: '4a',
+            label: 'IRA distributions',
+            value: retirementSummary.ira.gross,
+            ...(retirementSummary.ira.grossSources.length > 0 ? { sources: retirementSummary.ira.grossSources } : {}),
+          },
+          {
+            line: '4b',
+            label: 'Taxable amount',
+            value: retirementSummary.ira.taxable,
+            ...(retirementSummary.ira.taxableSources.length > 0 ? { sources: retirementSummary.ira.taxableSources } : {}),
+          },
+        ]
+      : []),
+    ...(retirementSummary.pension.gross !== 0 || retirementSummary.pension.taxable !== 0
+      ? [
+          {
+            line: '5a',
+            label: 'Pensions and annuities',
+            value: retirementSummary.pension.gross,
+            ...(retirementSummary.pension.grossSources.length > 0 ? { sources: retirementSummary.pension.grossSources } : {}),
+          },
+          {
+            line: '5b',
+            label: 'Taxable amount',
+            value: retirementSummary.pension.taxable,
+            ...(retirementSummary.pension.taxableSources.length > 0 ? { sources: retirementSummary.pension.taxableSources } : {}),
+          },
+        ]
+      : []),
     {
       line: '7',
       label: 'Capital gain or loss',
-      value: null,
+      value: capitalGainOrLoss,
       refSchedule: 'Schedule D',
       navTab: TAX_TABS.capitalGains,
     },
@@ -187,15 +381,51 @@ export function computeForm1040Lines({
       bold: true,
       sources: [
         { label: 'W-2 wages (Line 1a)', amount: effectiveW2Income.value },
-        { label: 'Interest income (Line 2b)', amount: interestIncome.value },
-        { label: 'Ordinary dividends (Line 3b)', amount: dividendIncome.value },
+        { label: 'Taxable interest (Line 2b)', amount: scheduleBInterestTotal.value },
+        { label: 'Ordinary dividends (Line 3b)', amount: scheduleBDividendTotal.value },
+        ...(retirementSummary.ira.taxable !== 0 ? [{ label: 'IRA taxable distributions (Line 4b)', amount: retirementSummary.ira.taxable }] : []),
+        ...(retirementSummary.pension.taxable !== 0 ? [{ label: 'Pension / annuity taxable distributions (Line 5b)', amount: retirementSummary.pension.taxable }] : []),
+        ...(capitalGainOrLoss !== null ? [{ label: 'Capital gain or loss (Line 7)', amount: capitalGainOrLoss }] : []),
         ...(schedule1Total !== 0 ? [{ label: 'Additional income (Line 8)', amount: currency(schedule1Total).value }] : []),
       ],
     },
     {
+      line: '10',
+      label: 'Adjustments to income (Schedule 1)',
+      value: schedule1Adjustment.value,
+      refSchedule: 'Schedule 1',
+      ...(schedule1Adjustment.value !== 0
+        ? {
+            sources: [{
+              label: 'Deductible half of self-employment tax',
+              amount: schedule1Adjustment.value,
+              note: 'Schedule SE',
+            }],
+          }
+        : {}),
+    },
+    {
+      line: '11',
+      label: 'Adjusted gross income',
+      value: adjustedGrossIncome.value,
+      bold: true,
+      sources: [
+        { label: 'Total income (Line 9)', amount: totalIncome.value },
+        ...(schedule1Adjustment.value !== 0 ? [{ label: 'Adjustments to income (Line 10)', amount: -schedule1Adjustment.value }] : []),
+      ],
+    },
+    ...(schedule2TotalAdditionalTaxes !== null && schedule2TotalAdditionalTaxes !== 0
+      ? [{
+          line: '17',
+          label: 'Other taxes (Schedule 2)',
+          value: schedule2TotalAdditionalTaxes,
+          refSchedule: 'Schedule 2',
+        }]
+      : []),
+    {
       line: '20',
       label: 'Foreign tax credit',
-      value: null,
+      value: foreignTaxCredit,
       refSchedule: 'Schedule 3',
       navTab: TAX_TABS.form1116,
     },
@@ -208,11 +438,17 @@ export default function Form1040Preview({
   dividendIncome,
   scheduleCIncome,
   schedule1OtherIncome = 0,
+  deductibleSeTaxAdjustment = 0,
+  capitalGainOrLoss = null,
+  schedule2TotalAdditionalTaxes = null,
+  foreignTaxCredit = null,
+  scheduleB,
   scheduleEGrandTotal = 0,
   selectedYear,
   w2Documents,
   interestDocuments,
   dividendDocuments,
+  retirementDocuments,
   onNavigate,
 }: Form1040PreviewProps) {
   const [dataSourceModal, setDataSourceModal] = useState<DataSourceModalState | null>(null)
@@ -222,10 +458,16 @@ export default function Form1040Preview({
     dividendIncome,
     scheduleCIncome,
     schedule1OtherIncome,
+    deductibleSeTaxAdjustment,
+    capitalGainOrLoss,
+    schedule2TotalAdditionalTaxes,
+    foreignTaxCredit,
+    ...(scheduleB ? { scheduleB } : {}),
     scheduleEGrandTotal,
     ...(w2Documents ? { w2Documents } : {}),
     ...(interestDocuments ? { interestDocuments } : {}),
     ...(dividendDocuments ? { dividendDocuments } : {}),
+    ...(retirementDocuments ? { retirementDocuments } : {}),
   }).map((line) => {
     const mappedLine: LineItem = {
       line: line.line,

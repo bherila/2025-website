@@ -316,6 +316,108 @@ describe('TaxPreviewContext', () => {
     expect(result.current.taxReturn.scheduleE?.grandTotal).toBe(0)
   })
 
+  it('routes K-1 Schedule B and Schedule E amounts plus 1099-R distributions into Form 1040 and withholding summaries', async () => {
+    const k1Doc = {
+      id: 61,
+      form_type: 'k1',
+      genai_status: 'parsed',
+      is_reviewed: true,
+      tax_year: 2025,
+      parsed_data: {
+        schemaVersion: '2026.1',
+        formType: 'K-1-1065',
+        fields: {
+          A: { value: '12-3456789' },
+          B: { value: 'Blue Harbor Fund' },
+          '1': { value: '1000' },
+          '5': { value: '200' },
+          '6a': { value: '300' },
+        },
+        codes: {
+          '14': [{ code: 'A', value: '10000' }],
+        },
+      },
+      employment_entity: { id: 61, display_name: 'Blue Harbor Fund' },
+    }
+
+    const ira1099R = {
+      id: 62,
+      form_type: '1099_r',
+      genai_status: 'parsed',
+      is_reviewed: true,
+      tax_year: 2025,
+      parsed_data: {
+        payer_name: 'IRA Custodian',
+        box1_gross_distribution: 10000,
+        box2a_taxable_amount: 8000,
+        box4_fed_tax: 1200,
+        box7_ira_sep_simple: true,
+      },
+      original_filename: 'ira-1099r.pdf',
+      account_links: [],
+    }
+
+    const pension1099R = {
+      id: 63,
+      form_type: '1099_r',
+      genai_status: 'parsed',
+      is_reviewed: true,
+      tax_year: 2025,
+      parsed_data: {
+        payer_name: 'Pension Plan',
+        box1_gross_distribution: 7000,
+        box2a_taxable_amount: 6500,
+        box4_fed_tax: 700,
+        box7_ira_sep_simple: false,
+      },
+      original_filename: 'pension-1099r.pdf',
+      account_links: [],
+    }
+
+    ;(fetchWrapper.get as jest.Mock).mockImplementation((url: string) => {
+      if (
+        url === '/api/finance/marriage-status'
+        || url === '/api/finance/user-tax-states?year=2025'
+        || url === '/api/finance/user-deductions?year=2025'
+        || url === '/api/finance/tax-loss-carryforwards?year=2025'
+      ) {
+        return Promise.resolve([])
+      }
+
+      return Promise.resolve(makeResponse([k1Doc, ira1099R, pension1099R]))
+    })
+
+    const { result } = renderHook(() => useTaxPreview(), { wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    expect(result.current.taxReturn.form1040).toEqual(expect.arrayContaining([
+      expect.objectContaining({ line: '2b', value: 200 }),
+      expect.objectContaining({ line: '3b', value: 300 }),
+      expect.objectContaining({ line: '4a', value: 10_000 }),
+      expect.objectContaining({ line: '4b', value: 8_000 }),
+      expect.objectContaining({ line: '5a', value: 7_000 }),
+      expect.objectContaining({ line: '5b', value: 6_500 }),
+      expect.objectContaining({ line: '8', value: 1_000 }),
+      expect.objectContaining({ line: '9', value: 16_000 }),
+      expect.objectContaining({ line: '10', value: 706.48 }),
+      expect.objectContaining({ line: '11', value: 15_293.52 }),
+    ]))
+
+    expect(result.current.taxReturn.form8960?.taxableInterest).toBe(200)
+    expect(result.current.taxReturn.form8960?.ordinaryDividends).toBe(300)
+    expect(result.current.taxReturn.overviewSections).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        heading: 'Estimated Tax Positions',
+        rows: expect.arrayContaining([
+          expect.objectContaining({
+            item: 'Federal withholding (payroll + 1099-R)',
+            amount: 1_900,
+          }),
+        ]),
+      }),
+    ]))
+  })
+
   it('aggregates Schedule 1 other income from broker_1099 1099-MISC child links', async () => {
     const brokerDoc = {
       id: 53,
