@@ -4,12 +4,36 @@ import currency from 'currency.js'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { Callout, fmtAmt, parseFieldVal } from '@/components/finance/tax-preview-primitives'
+import { TAX_TABS, type TaxTabId } from '@/components/finance/tax-tab-ids'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function GoToSourceButton({
+  tab,
+  label,
+  onTabChange,
+}: {
+  tab: TaxTabId
+  label: string
+  onTabChange: ((tab: TaxTabId) => void) | undefined
+}) {
+  if (!onTabChange) return null
+  return (
+    <Button
+      size="sm"
+      variant="ghost"
+      className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+      onClick={() => onTabChange(tab)}
+    >
+      {label} →
+    </Button>
+  )
+}
 
 function pk1(data: FK1StructuredData, box: string): number {
   const v = data.fields[box]?.value
@@ -31,6 +55,7 @@ interface ActionItemsTabProps {
   }
   w2GrossIncome: currency
   selectedYear?: number
+  onTabChange?: (tab: TaxTabId) => void
 }
 
 export default function ActionItemsTab({
@@ -40,6 +65,7 @@ export default function ActionItemsTab({
   income1099,
   w2GrossIncome,
   selectedYear,
+  onTabChange,
 }: ActionItemsTabProps) {
   const taxYear = selectedYear ?? new Date().getFullYear()
   const priorYear = taxYear - 1
@@ -421,6 +447,7 @@ export default function ActionItemsTab({
                 <TableHead className="text-xs">Item</TableHead>
                 <TableHead className="text-xs text-right">Federal</TableHead>
                 <TableHead className="text-xs">Notes</TableHead>
+                <TableHead className="text-xs">Source</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -431,6 +458,9 @@ export default function ActionItemsTab({
                     {w2GrossIncome.format()}
                   </TableCell>
                   <TableCell className="py-2 text-xs text-muted-foreground">Box 1</TableCell>
+                  <TableCell className="py-2">
+                    <GoToSourceButton tab={TAX_TABS.w2} label="W-2" onTabChange={onTabChange} />
+                  </TableCell>
                 </TableRow>
               )}
               {(income1099.interestIncome.value + income1099.dividendIncome.value) > 0 && (
@@ -442,6 +472,9 @@ export default function ActionItemsTab({
                   <TableCell className="py-2 text-xs text-muted-foreground">
                     Before deductions; subject to 3.8% NIIT
                   </TableCell>
+                  <TableCell className="py-2">
+                    <GoToSourceButton tab={TAX_TABS.schedules} label="Schedule B" onTabChange={onTabChange} />
+                  </TableCell>
                 </TableRow>
               )}
               {aqrBox11ZZSum !== 0 && (
@@ -451,6 +484,9 @@ export default function ActionItemsTab({
                     {fmtAmt(aqrBox11ZZSum)}
                   </TableCell>
                   <TableCell className="py-2 text-xs text-muted-foreground">Schedule E Part II nonpassive</TableCell>
+                  <TableCell className="py-2">
+                    <GoToSourceButton tab={TAX_TABS.scheduleE} label="Schedule E" onTabChange={onTabChange} />
+                  </TableCell>
                 </TableRow>
               )}
               {k1NetTotal !== 0 && (
@@ -460,6 +496,9 @@ export default function ActionItemsTab({
                     {fmtAmt(k1NetTotal)}
                   </TableCell>
                   <TableCell className="py-2 text-xs text-muted-foreground">Schedule E — includes all K-1 items</TableCell>
+                  <TableCell className="py-2">
+                    <GoToSourceButton tab={TAX_TABS.scheduleE} label="Schedule E" onTabChange={onTabChange} />
+                  </TableCell>
                 </TableRow>
               )}
               {combined < 0 && (
@@ -470,6 +509,9 @@ export default function ActionItemsTab({
                   </TableCell>
                   <TableCell className="py-2 text-xs text-muted-foreground">
                     $3,000 annual cap; remainder carries forward
+                  </TableCell>
+                  <TableCell className="py-2">
+                    <GoToSourceButton tab={TAX_TABS.capitalGains} label="Capital Gains" onTabChange={onTabChange} />
                   </TableCell>
                 </TableRow>
               )}
@@ -482,6 +524,9 @@ export default function ActionItemsTab({
                   <TableCell className="py-2 text-xs text-muted-foreground">
                     {noQdElectionNeeded ? 'Fully deductible — no carryforward' : 'See Form 4952 for QD election analysis'}
                   </TableCell>
+                  <TableCell className="py-2">
+                    <GoToSourceButton tab={TAX_TABS.schedules} label="Schedules" onTabChange={onTabChange} />
+                  </TableCell>
                 </TableRow>
               )}
               {totalForeignTax > 0 && (
@@ -493,6 +538,9 @@ export default function ActionItemsTab({
                   <TableCell className="py-2 text-xs text-muted-foreground">
                     Passive category — Schedule 3 Line 1
                   </TableCell>
+                  <TableCell className="py-2">
+                    <GoToSourceButton tab={TAX_TABS.form1116} label="Form 1116" onTabChange={onTabChange} />
+                  </TableCell>
                 </TableRow>
               )}
               {totalW2FedWH > 0 && (
@@ -502,6 +550,9 @@ export default function ActionItemsTab({
                     {fmtAmt(totalW2FedWH)}
                   </TableCell>
                   <TableCell className="py-2 text-xs text-muted-foreground">Already paid</TableCell>
+                  <TableCell className="py-2">
+                    <GoToSourceButton tab={TAX_TABS.w2} label="W-2" onTabChange={onTabChange} />
+                  </TableCell>
                 </TableRow>
               )}
               {w2GrossIncome.value > 200000 && (
@@ -512,6 +563,9 @@ export default function ActionItemsTab({
                   </TableCell>
                   <TableCell className="py-2 text-xs text-muted-foreground">
                     0.9% on wages over $200K threshold
+                  </TableCell>
+                  <TableCell className="py-2">
+                    <GoToSourceButton tab={TAX_TABS.estimate} label="Tax Estimate" onTabChange={onTabChange} />
                   </TableCell>
                 </TableRow>
               )}

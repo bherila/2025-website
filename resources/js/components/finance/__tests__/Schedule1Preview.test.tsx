@@ -21,6 +21,9 @@ describe('computeSchedule1Totals', () => {
         line5_rentalPartnerships: 0,
         line6_farmIncome: null,
         line7_unemploymentCompensation: null,
+        line8b_gambling: null,
+        line8h_juryDuty: null,
+        line8i_prizes: null,
         line8z_otherIncome: 0,
         line9_totalOther: 0,
         line10_total: 0,
@@ -59,6 +62,40 @@ describe('computeSchedule1Totals', () => {
     })
 
     expect(totals.partI.line10_total).toBe(7500)
+  })
+
+  it('routes sub-line breakdown to correct line 8 fields', () => {
+    const totals = computeSchedule1Totals({
+      schedule1Line8Breakdown: { line8b: 200, line8h: 50, line8i: 100, line8z: 400 },
+    })
+
+    expect(totals.partI.line8b_gambling).toBe(200)
+    expect(totals.partI.line8h_juryDuty).toBe(50)
+    expect(totals.partI.line8i_prizes).toBe(100)
+    expect(totals.partI.line8z_otherIncome).toBe(400)
+    expect(totals.partI.line9_totalOther).toBe(750)
+    expect(totals.partI.line10_total).toBe(750)
+  })
+
+  it('breakdown overrides schedule1OtherIncome when both provided', () => {
+    const totals = computeSchedule1Totals({
+      schedule1OtherIncome: 999,
+      schedule1Line8Breakdown: { line8b: 0, line8h: 0, line8i: 0, line8z: 300 },
+    })
+
+    expect(totals.partI.line8z_otherIncome).toBe(300)
+    expect(totals.partI.line9_totalOther).toBe(300)
+  })
+
+  it('wires 1099-G unemployment to line 7 and refunds to line 1a', () => {
+    const totals = computeSchedule1Totals({
+      schedule1Line7Unemployment: 1500,
+      schedule1Line1aTaxableRefunds: 300,
+    })
+
+    expect(totals.partI.line7_unemploymentCompensation).toBe(1500)
+    expect(totals.partI.line1a_taxableRefunds).toBe(300)
+    expect(totals.partI.line10_total).toBe(1800)
   })
 })
 

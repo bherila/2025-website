@@ -971,6 +971,7 @@ function TaxPreviewPageContent() {
             income1099={income1099}
             w2GrossIncome={w2GrossIncome}
             selectedYear={selectedYear}
+            onTabChange={handleTabChange}
           />
         </TabsContent>
       </Tabs>

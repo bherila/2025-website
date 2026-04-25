@@ -161,18 +161,18 @@ export default function Form1116Preview({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <FormBlock title="Part I — Foreign Source Passive Income">
           {incomeSources.map((src, i) => (
-            <FormLine key={i} label={src.label} value={src.amount} />
+            <FormLine key={i} boxRef="1a" label={src.label} value={src.amount} />
           ))}
-          {incomeSources.length === 0 && <FormLine label="No foreign passive income identified" raw="—" />}
-          <FormTotalLine label="Total foreign passive income" value={totalPassiveIncome} />
+          {incomeSources.length === 0 && <FormLine boxRef="1a" label="No foreign passive income identified" raw="—" />}
+          <FormTotalLine label="Line 1c — Total foreign passive income" value={totalPassiveIncome} />
         </FormBlock>
 
-        <FormBlock title="Part II — Foreign Taxes Paid">
+        <FormBlock title="Part II — Foreign Taxes Paid or Accrued">
           {taxSources.map((src, i) => (
-            <FormLine key={i} label={src.label} value={src.amount} />
+            <FormLine key={i} boxRef="8" label={src.label} value={src.amount} />
           ))}
-          {taxSources.length === 0 && <FormLine label="No foreign taxes identified" raw="—" />}
-          <FormTotalLine label="Total foreign taxes paid" value={totalForeignTaxes} />
+          {taxSources.length === 0 && <FormLine boxRef="8" label="No foreign taxes identified" raw="—" />}
+          <FormTotalLine label="Line 9 — Total foreign taxes paid or accrued" value={totalForeignTaxes} />
         </FormBlock>
       </div>
 
@@ -180,10 +180,11 @@ export default function Form1116Preview({
       {generalIncomeSources.length > 0 && (
         <FormBlock title="General Category Form 1116 — Part I (Foreign Source General Income)">
           {generalIncomeSources.map((src, i) => (
-            <FormLine key={i} label={src.label} value={src.amount} />
+            <FormLine key={i} boxRef="1a" label={src.label} value={src.amount} />
           ))}
-          <FormTotalLine label="Total foreign general income" value={totalGeneralIncome} />
+          <FormTotalLine label="Line 1c — Total foreign general income" value={totalGeneralIncome} />
           <FormLine
+            boxRef="10"
             label="Foreign taxes attributable to general category"
             raw="See K-3 Part III Section 4 per-basket breakdown"
           />
@@ -200,10 +201,10 @@ export default function Form1116Preview({
                 label={`${row.label} — passive asset ratio`}
                 raw={`${(row.ratio * 100).toFixed(2)}%`}
               />
-              <FormLine label={`${row.label} — Line 4b (expense × ratio)`} value={row.line4b} />
+              <FormLine boxRef="4b" label={`${row.label} — Line 4b (expense × ratio)`} value={row.line4b} />
             </div>
           ))}
-          <FormTotalLine label="Total apportioned interest (Line 4b)" value={totalLine4b} />
+          <FormTotalLine label="Line 4b — Total apportioned interest" value={totalLine4b} />
           <FormLine
             label="Enter on Form 1116, Part I, Line 4b"
             raw="Reduce passive foreign income by this amount"
@@ -213,23 +214,23 @@ export default function Form1116Preview({
 
       {/* Part III — Limitation */}
       <FormBlock title="Part III — Limitation Calculation (Estimated)">
-        <FormLine label="Foreign passive income (Part I)" value={totalPassiveIncome} />
-        {totalLine4b > 0 && <FormLine label="Less: apportioned interest (Line 4b)" value={-totalLine4b} />}
-        <FormLine label="Total income (estimated — enter from prior return)" raw="~see note" />
-        <FormLine label="Limiting fraction" raw="foreign income ÷ total income" />
-        <FormLine label="U.S. tax before credits (estimated)" raw="~see note" />
-        <FormLine label="FTC limitation (fraction × U.S. tax)" raw="~see note" />
-        <FormLine label="Actual foreign taxes paid (Part II)" value={totalForeignTaxes} />
+        <FormLine boxRef="1c" label="Foreign passive income (Part I)" value={totalPassiveIncome} />
+        {totalLine4b > 0 && <FormLine boxRef="4b" label="Less: apportioned interest (Line 4b)" value={-totalLine4b} />}
+        <FormLine boxRef="6" label="Total income (estimated — enter from prior return)" raw="~see note" />
+        <FormLine boxRef="7" label="Limiting fraction (foreign income ÷ total income)" raw="~see note" />
+        <FormLine boxRef="8" label="U.S. tax before credits (estimated)" raw="~see note" />
+        <FormLine boxRef="9" label="FTC limitation (fraction × U.S. tax)" raw="~see note" />
+        <FormLine boxRef="11" label="Actual foreign taxes paid (Part II)" value={totalForeignTaxes} />
         <FormTotalLine
           label={
             totalPassiveIncome >= currency(totalForeignTaxes).divide(ASSUMED_FOREIGN_WITHHOLDING_RATE).value
-              ? 'Credit allowed — likely FULLY ALLOWED ✓'
-              : 'Credit allowed (subject to limitation)'
+              ? 'Line 12 — Credit allowed — likely FULLY ALLOWED ✓'
+              : 'Line 12 — Credit allowed (subject to limitation)'
           }
           value={totalForeignTaxes}
           double
         />
-        <FormLine label="Carryforward (if any)" raw="$0 (estimate)" />
+        <FormLine boxRef="14" label="Carryforward (if any)" raw="$0 (estimate)" />
       </FormBlock>
 
       {/* Credit vs. Deduction Comparison */}

@@ -116,6 +116,9 @@ export interface Schedule1PartILines {
   line5_rentalPartnerships: number
   line6_farmIncome: number | null
   line7_unemploymentCompensation: number | null
+  line8b_gambling: number | null
+  line8h_juryDuty: number | null
+  line8i_prizes: number | null
   line8z_otherIncome: number
   line9_totalOther: number
   line10_total: number

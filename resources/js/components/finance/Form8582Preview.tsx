@@ -55,30 +55,34 @@ export default function Form8582Preview({
 
       {/* Real Estate Professional Election (§469(c)(7)) */}
       <FormBlock title="Elections">
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={realEstateProfessional}
-            onChange={(e) => onRealEstateProfessionalChange(e.target.checked)}
-          />
-          Real estate professional (§469(c)(7)) — rental activities treated as non-passive
-        </label>
-        <p className="text-xs text-muted-foreground mt-1">
-          Requires: &gt;750 hours of material participation in real property trades/businesses AND more than half
-          of personal services in real property trades/businesses. When checked, rental RE activities with
-          active participation are excluded from passive activity limitations.
-        </p>
+        <div className="px-3 py-3 space-y-1.5">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={realEstateProfessional}
+              onChange={(e) => onRealEstateProfessionalChange(e.target.checked)}
+            />
+            Real estate professional (§469(c)(7)) — rental activities treated as non-passive
+          </label>
+          <p className="text-xs text-muted-foreground">
+            Requires: &gt;750 hours of material participation in real property trades/businesses AND more than half
+            of personal services in real property trades/businesses. When checked, rental RE activities with
+            active participation are excluded from passive activity limitations.
+          </p>
+        </div>
       </FormBlock>
 
       {/* Part I — Per-Activity Breakdown */}
       <FormBlock title="Part I — Passive Activities">
         {realEstateProfessional && (
-          <Callout kind="info" title="Real Estate Professional Election (§469(c)(7))">
-            <p>
-              Rental RE activities with active participation are treated as <strong>non-passive</strong> and
-              excluded from this form. They flow directly to Schedule E as non-passive income/loss.
-            </p>
-          </Callout>
+          <div className="px-3 py-2">
+            <Callout kind="info" title="Real Estate Professional Election (§469(c)(7))">
+              <p>
+                Rental RE activities with active participation are treated as <strong>non-passive</strong> and
+                excluded from this form. They flow directly to Schedule E as non-passive income/loss.
+              </p>
+            </Callout>
+          </div>
         )}
         {activities.length === 0 ? (
           <div className="px-3 py-6 text-center text-muted-foreground text-sm">
@@ -168,7 +172,7 @@ export default function Form8582Preview({
       {/* Per-Activity Carryforward Table (A.4) */}
       {activities.some(a => a.suspendedLossCarryforward > 0 || a.allowedLossThisYear > 0) && (
         <FormBlock title="Worksheet 5 — Per-Activity Allowed / Suspended Allocation">
-          <div className="overflow-x-auto">
+          <div className="px-3 py-2 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left text-xs text-muted-foreground">
@@ -360,55 +364,56 @@ function PalCarryforwardInput({ year, form8582, carryforwards, onChange }: PalCa
 
   return (
     <FormBlock title="Prior-Year Suspended Losses (PAL Carryforwards)">
-      <p className="text-xs text-muted-foreground mb-3">
-        Saved opening carryforwards for {year} flow into the prior-year unallowed loss lines above.
-        Use “Save suspended losses to {year + 1}” after reviewing this year’s Form 8582 to persist
-        next year’s opening balances.
-      </p>
+      <div className="px-3 py-3 space-y-3">
+        <p className="text-xs text-muted-foreground">
+          Saved opening carryforwards for {year} flow into the prior-year unallowed loss lines above.
+          Use "Save suspended losses to {year + 1}" after reviewing this year's Form 8582 to persist
+          next year's opening balances.
+        </p>
 
-      {carryforwards.length > 0 && (
-        <div className="overflow-x-auto mb-3">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-left text-xs text-muted-foreground">
-                <th className="py-1 pr-3">Activity</th>
-                <th className="py-1 px-3">EIN</th>
-                <th className="py-1 px-3 text-right">Ordinary Carryover</th>
-                <th className="py-1 px-3 text-right w-28"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {carryforwards.map((cf, i) => (
-                <tr key={i} className="border-b border-muted/30">
-                  <td className="py-1 pr-3">{cf.activity_name}</td>
-                  <td className="py-1 px-3 text-muted-foreground">{cf.activity_ein ?? '—'}</td>
-                  <td className="py-1 px-3 text-right tabular-nums">{fmtAmt(cf.ordinary_carryover)}</td>
-                  <td className="py-1 px-3">
-                    <div className="flex items-center justify-end gap-3">
-                      <button
-                        type="button"
-                        className="text-xs text-blue-600 hover:text-blue-800"
-                        onClick={() => handleEdit(cf)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="text-xs text-red-500 hover:text-red-700"
-                        onClick={() => handleDelete(cf)}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </td>
+        {carryforwards.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs text-muted-foreground">
+                  <th className="py-1 pr-3">Activity</th>
+                  <th className="py-1 px-3">EIN</th>
+                  <th className="py-1 px-3 text-right">Ordinary Carryover</th>
+                  <th className="py-1 px-3 text-right w-28"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              </thead>
+              <tbody>
+                {carryforwards.map((cf, i) => (
+                  <tr key={i} className="border-b border-muted/30">
+                    <td className="py-1 pr-3">{cf.activity_name}</td>
+                    <td className="py-1 px-3 text-muted-foreground">{cf.activity_ein ?? '—'}</td>
+                    <td className="py-1 px-3 text-right tabular-nums">{fmtAmt(cf.ordinary_carryover)}</td>
+                    <td className="py-1 px-3">
+                      <div className="flex items-center justify-end gap-3">
+                        <button
+                          type="button"
+                          className="text-xs text-blue-600 hover:text-blue-800"
+                          onClick={() => handleEdit(cf)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="text-xs text-red-500 hover:text-red-700"
+                          onClick={() => handleDelete(cf)}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-      <div className="flex flex-wrap gap-2 items-end">
+        <div className="flex flex-wrap gap-2 items-end">
         <div className="flex-1 min-w-[180px]">
           <label className="text-xs text-muted-foreground">Activity Name</label>
           <input
@@ -460,30 +465,31 @@ function PalCarryforwardInput({ year, form8582, carryforwards, onChange }: PalCa
             Cancel
           </button>
         )}
-      </div>
-
-      <div className="mt-4 rounded-md border border-dashed border-border/70 p-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="text-xs text-muted-foreground">
-            Persist this year&apos;s suspended losses as opening carryforwards for {year + 1}.
-          </div>
-          <button
-            type="button"
-            className="px-3 py-1 text-sm bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50"
-            onClick={handleCommitForward}
-            disabled={committing || form8582.activities.length === 0}
-          >
-            {committing ? `Saving ${year + 1}…` : `Save suspended losses to ${year + 1}`}
-          </button>
         </div>
-        {commitMessage && (
-          <div
-            role={commitMessage.kind === 'error' ? 'alert' : 'status'}
-            className={`mt-2 text-xs ${commitMessage.kind === 'error' ? 'text-red-600' : 'text-emerald-700'}`}
-          >
-            {commitMessage.text}
+
+        <div className="rounded-md border border-dashed border-border/70 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-xs text-muted-foreground">
+              Persist this year&apos;s suspended losses as opening carryforwards for {year + 1}.
+            </div>
+            <button
+              type="button"
+              className="px-3 py-1 text-sm bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50"
+              onClick={handleCommitForward}
+              disabled={committing || form8582.activities.length === 0}
+            >
+              {committing ? `Saving ${year + 1}…` : `Save suspended losses to ${year + 1}`}
+            </button>
           </div>
-        )}
+          {commitMessage && (
+            <div
+              role={commitMessage.kind === 'error' ? 'alert' : 'status'}
+              className={`mt-2 text-xs ${commitMessage.kind === 'error' ? 'text-red-600' : 'text-emerald-700'}`}
+            >
+              {commitMessage.text}
+            </div>
+          )}
+        </div>
       </div>
     </FormBlock>
   )
