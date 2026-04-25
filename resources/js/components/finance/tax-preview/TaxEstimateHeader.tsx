@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import type { Form1040LineItem } from '@/types/finance/tax-return'
 
 import EstimatedTaxPaymentsSection from '../EstimatedTaxPaymentsSection'
+import StateSelectorSection from '../StateSelectorSection'
 import { useTaxPreview } from '../TaxPreviewContext'
 
 type Tier = 'slim' | 'expanded'
@@ -280,6 +281,39 @@ function FullDetail({ summary }: { summary: KpiSummary }): React.ReactElement {
           />
         </Section>
       )}
+
+      <Section title="State Returns" sticky>
+        <div className="space-y-4">
+          <StateSelectorSection
+            year={state.year}
+            activeTaxStates={state.activeTaxStates}
+            onChange={state.setActiveTaxStates}
+          />
+          {hasPayslipData &&
+            state.activeTaxStates.map((stateCode) => (
+              <div key={stateCode} className="space-y-2">
+                <h4 className="font-mono text-xs font-semibold uppercase tracking-wider text-foreground">
+                  {stateCode} State Taxes
+                </h4>
+                <TotalsTable
+                  series={dataSeries}
+                  taxConfig={{
+                    year: String(state.year),
+                    state: stateCode,
+                    filingStatus,
+                    standardDeduction: getStandardDeduction(state.year, filingStatus, stateCode),
+                  }}
+                  extraIncome={scheduleCIncomeBySeries}
+                />
+              </div>
+            ))}
+          {state.activeTaxStates.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              Add a state return above to see per-state tax tables. Currently supported: CA, NY.
+            </p>
+          )}
+        </div>
+      </Section>
 
       <Section title="Estimated Payments — Safe Harbor" sticky>
         <EstimatedTaxPaymentsSection
