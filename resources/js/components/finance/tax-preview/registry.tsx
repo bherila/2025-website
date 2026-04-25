@@ -1,3 +1,7 @@
+
+import currency from 'currency.js'
+
+import ActionItemsTab from '@/components/finance/ActionItemsTab'
 import AdditionalTaxesPreview from '@/components/finance/AdditionalTaxesPreview'
 import Form1040Preview from '@/components/finance/Form1040Preview'
 import Form4952Preview from '@/components/finance/Form4952Preview'
@@ -229,11 +233,33 @@ function Form8949Stub(): React.ReactElement {
   )
 }
 
-function ActionItemsStub(): React.ReactElement {
+function ActionItemsAdapter({ state }: FormRenderProps): React.ReactElement {
+  const w2GrossIncome = state.payslips.reduce(
+    (acc, row) =>
+      acc
+        .add(row.ps_salary ?? 0)
+        .add(row.earnings_bonus ?? 0)
+        .add(row.earnings_rsu ?? 0)
+        .add(row.ps_vacation_payout ?? 0)
+        .add(row.imp_ltd ?? 0)
+        .add(row.imp_legal ?? 0)
+        .add(row.imp_fitness ?? 0)
+        .add(row.imp_other ?? 0)
+        .subtract(row.ps_401k_pretax ?? 0)
+        .subtract(row.ps_pretax_medical ?? 0)
+        .subtract(row.ps_pretax_dental ?? 0)
+        .subtract(row.ps_pretax_vision ?? 0)
+        .subtract(row.ps_pretax_fsa ?? 0),
+    currency(0),
+  )
   return (
-    <StubCard
-      title="Action Items"
-      note="Will move from a tab into a side-sheet triggered from the persistent header."
+    <ActionItemsTab
+      reviewedK1Docs={state.reviewedK1Docs}
+      reviewed1099Docs={state.reviewed1099Docs}
+      reviewedW2Docs={state.reviewedW2Docs}
+      income1099={state.income1099}
+      w2GrossIncome={w2GrossIncome}
+      selectedYear={state.year}
     />
   )
 }
@@ -484,7 +510,7 @@ export const formRegistry: FormRegistry = {
     keywords: ['action items', 'todos', 'review queue', 'issues'],
     category: 'App',
     presentation: 'app',
-    component: ActionItemsStub,
+    component: ActionItemsAdapter,
   },
   estimate: {
     id: 'estimate',

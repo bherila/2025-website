@@ -651,8 +651,10 @@ function TaxPreviewPageContent() {
           <Badge variant="outline" className="text-xs">
             Dock preview
           </Badge>
-          <div className="ml-auto text-xs text-muted-foreground">
-            Append <code className="rounded bg-muted px-1 py-0.5 font-mono">?dock=0</code> to disable
+          <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+            <span>
+              Append <code className="rounded bg-muted px-1 py-0.5 font-mono">?dock=0</code> to disable
+            </span>
           </div>
         </div>
         <TaxEstimateHeader defaultTier={hasColumns ? 'slim' : 'expanded'} />
