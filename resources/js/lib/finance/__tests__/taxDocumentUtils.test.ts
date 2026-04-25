@@ -272,4 +272,28 @@ describe('getDocAmounts', () => {
     })
     expect(getDocAmounts(doc)).toEqual({ interest: null, dividend: null, capGain: null, schC: null, other: 150, foreignTax: null })
   })
+
+  it('link-level misc_routing overrides document-level routing', () => {
+    const doc = makeDoc({
+      form_type: 'broker_1099',
+      misc_routing: 'sch_e',
+      parsed_data: [
+        { account_identifier: 'ACCT1', account_name: 'Test', form_type: '1099_misc', tax_year: 2025, parsed_data: { box3_other_income: 500 } },
+      ] as never,
+    })
+    const link = makeLink({ form_type: '1099_misc', ai_identifier: 'ACCT1', misc_routing: 'sch_c' })
+    expect(getDocAmounts(doc, link)).toEqual({ interest: null, dividend: null, capGain: null, schC: 500, other: null, foreignTax: null })
+  })
+
+  it('falls back to document-level misc_routing when link has no routing', () => {
+    const doc = makeDoc({
+      form_type: 'broker_1099',
+      misc_routing: 'sch_e',
+      parsed_data: [
+        { account_identifier: 'ACCT1', account_name: 'Test', form_type: '1099_misc', tax_year: 2025, parsed_data: { box3_other_income: 500 } },
+      ] as never,
+    })
+    const link = makeLink({ form_type: '1099_misc', ai_identifier: 'ACCT1' })
+    expect(getDocAmounts(doc, link)).toEqual({ interest: null, dividend: null, capGain: null, schC: null, other: 500, foreignTax: null })
+  })
 })

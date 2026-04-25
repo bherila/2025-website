@@ -78,8 +78,9 @@ export function computeScheduleELines(reviewedK1Docs: TaxDocument[], reviewed109
         }
 
         const amount = getDocAmounts(doc, link).other
+        const effectiveRouting = link.misc_routing ?? doc.misc_routing
         const shouldInclude = amount !== null
-          && (doc.misc_routing === 'sch_e' || (doc.misc_routing == null && hasRentalRoyaltyFields(doc)))
+          && (effectiveRouting === 'sch_e' || (effectiveRouting == null && hasRentalRoyaltyFields(doc)))
 
         if (!shouldInclude) {
           return []

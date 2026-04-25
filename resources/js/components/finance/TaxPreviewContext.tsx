@@ -496,8 +496,9 @@ export function TaxPreviewProvider({
           return linkAcc
         }
 
-        const shouldInclude = doc.misc_routing === 'sch_1_line_8'
-          || (doc.misc_routing == null && !hasNonZeroNumericValue(entryData, 'box1_rents', 'box2_royalties'))
+        const effectiveRouting = link.misc_routing ?? doc.misc_routing
+        const shouldInclude = effectiveRouting === 'sch_1_line_8'
+          || (effectiveRouting == null && !hasNonZeroNumericValue(entryData, 'box1_rents', 'box2_royalties'))
 
         if (!shouldInclude) {
           return linkAcc

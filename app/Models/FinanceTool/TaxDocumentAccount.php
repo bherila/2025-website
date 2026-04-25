@@ -12,6 +12,17 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * parent fin_tax_documents record. Single-account PDFs produce one row each.
  *
  * is_reviewed and notes are per-account (review is done per account/form, not per PDF).
+ *
+ * @property int $id
+ * @property int $tax_document_id
+ * @property int|null $account_id
+ * @property string $form_type
+ * @property int $tax_year
+ * @property string|null $ai_identifier
+ * @property string|null $ai_account_name
+ * @property bool $is_reviewed
+ * @property string|null $notes
+ * @property string|null $misc_routing
  */
 class TaxDocumentAccount extends Model
 {
@@ -26,6 +37,7 @@ class TaxDocumentAccount extends Model
         'ai_account_name',
         'is_reviewed',
         'notes',
+        'misc_routing',
     ];
 
     protected function casts(): array

@@ -1259,6 +1259,7 @@ CREATE TABLE IF NOT EXISTS "fin_tax_document_accounts"(
   "updated_at" datetime,
   "ai_identifier" varchar,
   "ai_account_name" varchar,
+  "misc_routing" varchar,
   foreign key("tax_document_id") references "fin_tax_documents"("id") on delete cascade,
   foreign key("account_id") references "fin_accounts"("acct_id") on delete set null
 );
@@ -1430,3 +1431,4 @@ INSERT INTO migrations VALUES(58,'2026_04_19_223420_create_fin_user_tax_states_t
 INSERT INTO migrations VALUES(59,'2026_04_19_223421_create_fin_user_deductions_table',6);
 INSERT INTO migrations VALUES(60,'2026_04_20_033435_create_fin_pal_carryforwards_table',6);
 INSERT INTO migrations VALUES(61,'2026_04_24_070803_add_misc_routing_to_fin_tax_documents',7);
+INSERT INTO migrations VALUES(62,'2026_04_25_062100_add_misc_routing_to_fin_tax_document_accounts',8);

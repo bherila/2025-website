@@ -444,7 +444,7 @@ export default function TaxDocumentReviewModal({
         const linkData = extractLinkParsedData(propDocument, propAccountLink)
         setEditData(linkData ?? {})
         setNotes(propAccountLink.notes ?? '')
-        setMiscRouting('auto')
+        setMiscRouting(propAccountLink.misc_routing ?? 'auto')
       } else {
         setNotes(propDocument.notes ?? '')
         setEditData(propDocument.parsed_data ?? {})
@@ -610,6 +610,9 @@ export default function TaxDocumentReviewModal({
         const isReviewToggling = isReviewed !== propAccountLink.is_reviewed
         if (isReviewToggling) {
           linkPayload.is_reviewed = isReviewed
+        }
+        if (propAccountLink.form_type === '1099_misc') {
+          linkPayload.misc_routing = miscRouting === 'auto' ? null : miscRouting
         }
         await fetchWrapper.patch(
           `/api/finance/tax-documents/${doc.id}/accounts/${propAccountLink.id}`,
@@ -808,7 +811,7 @@ export default function TaxDocumentReviewModal({
                   {/* Review Notes - full width below extracted data */}
                   <div className="space-y-2">
                     <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1">Review Notes</div>
-                    {effectiveFormType === '1099_misc' && !isLinkReview && (
+                    {effectiveFormType === '1099_misc' && (
                       <div className="space-y-2 px-1">
                         <Label htmlFor="misc-routing" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                           1099-MISC Routing
