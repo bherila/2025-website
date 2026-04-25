@@ -26,6 +26,7 @@ class TaxDocumentAccount extends Model
         'ai_account_name',
         'is_reviewed',
         'notes',
+        'misc_routing',
     ];
 
     protected function casts(): array

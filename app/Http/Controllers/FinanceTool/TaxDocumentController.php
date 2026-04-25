@@ -302,6 +302,7 @@ class TaxDocumentController extends Controller
             'account_id' => 'nullable|integer|min:1',
             'is_reviewed' => 'nullable|boolean',
             'notes' => 'nullable|string',
+            'misc_routing' => 'nullable|string|in:sch_c,sch_e,sch_1_line_8',
         ]);
 
         if ($request->has('account_id') && $request->account_id !== null) {
@@ -317,6 +318,10 @@ class TaxDocumentController extends Controller
 
         if ($request->has('notes')) {
             $link->notes = $request->notes;
+        }
+
+        if ($request->has('misc_routing')) {
+            $link->misc_routing = $request->input('misc_routing');
         }
 
         $link->save();

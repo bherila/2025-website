@@ -336,6 +336,7 @@ export interface TaxDocumentAccountLink {
   ai_account_name: string | null
   is_reviewed: boolean
   notes: string | null
+  misc_routing?: MiscRouting | null
   account: { acct_id: number; acct_name: string } | null
   created_at: string
   updated_at: string
