@@ -2,6 +2,7 @@ import AdditionalTaxesPreview from '@/components/finance/AdditionalTaxesPreview'
 import Form1040Preview from '@/components/finance/Form1040Preview'
 import Form4952Preview from '@/components/finance/Form4952Preview'
 import Form6251Preview from '@/components/finance/Form6251Preview'
+import Form8582Preview from '@/components/finance/Form8582Preview'
 import Form8995Preview from '@/components/finance/Form8995Preview'
 import Schedule1Preview from '@/components/finance/Schedule1Preview'
 import ScheduleAPreview from '@/components/finance/ScheduleAPreview'
@@ -121,6 +122,27 @@ function Form8995Adapter({ state }: FormRenderProps): React.ReactElement {
   )
 }
 
+function Form8582Adapter({ state }: FormRenderProps): React.ReactElement {
+  if (!state.taxReturn.form8582) {
+    return (
+      <StubCard
+        title="Form 8582 — Passive Activity Loss Limitations"
+        note="No passive activity data available. Add a Schedule E rental property or a K-1 with passive losses to populate this form."
+      />
+    )
+  }
+  return (
+    <Form8582Preview
+      form8582={state.taxReturn.form8582}
+      year={state.year}
+      palCarryforwards={state.palCarryforwards}
+      onCarryforwardsChange={state.setPalCarryforwards}
+      realEstateProfessional={state.realEstateProfessional}
+      onRealEstateProfessionalChange={state.setRealEstateProfessional}
+    />
+  )
+}
+
 function HomePlaceholder(): React.ReactElement {
   return (
     <div className="space-y-2">
@@ -163,15 +185,6 @@ function Form1116Stub({ instance }: FormRenderProps): React.ReactElement {
     <StubCard
       title={`Form 1116 — ${instance?.label ?? 'Foreign Tax Credit'}`}
       note={`Pending migration. The current Form1116Preview takes review-modal callbacks that need to be re-wired through TaxPreviewContext before mounting it in a column. Active instance: ${instance?.key ?? 'none'}.`}
-    />
-  )
-}
-
-function Form8582Stub(): React.ReactElement {
-  return (
-    <StubCard
-      title="Form 8582 — Passive Activity Loss Limitations"
-      note="Pending migration. Needs wiring for PAL carryforward edits and real-estate-professional toggle."
     />
   )
 }
@@ -432,7 +445,7 @@ export const formRegistry: FormRegistry = {
     keywords: ['8582', 'PAL', 'passive activity', 'loss limitation', 'real estate professional'],
     category: 'Form',
     presentation: 'column',
-    component: Form8582Stub,
+    component: Form8582Adapter,
   },
   'form-4797': {
     id: 'form-4797',
