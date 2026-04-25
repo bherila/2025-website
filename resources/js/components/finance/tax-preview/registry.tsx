@@ -10,6 +10,7 @@ import Form6251Preview from '@/components/finance/Form6251Preview'
 import Form8582Preview from '@/components/finance/Form8582Preview'
 import Form8995Preview from '@/components/finance/Form8995Preview'
 import Schedule1Preview from '@/components/finance/Schedule1Preview'
+import Schedule3Preview, { computeSchedule3 } from '@/components/finance/Schedule3Preview'
 import ScheduleAPreview from '@/components/finance/ScheduleAPreview'
 import ScheduleBPreview from '@/components/finance/ScheduleBPreview'
 import ScheduleCTab from '@/components/finance/ScheduleCTab'
@@ -171,13 +172,9 @@ function StubCard({ title, note }: { title: string; note: string }): React.React
   )
 }
 
-function Schedule3Stub(): React.ReactElement {
-  return (
-    <StubCard
-      title="Schedule 3 — Additional Credits & Payments"
-      note="Schedule 3 doesn't have a preview component yet. It will host nonrefundable credits (line 1: foreign tax credit from Form 1116, line 6: other credits) and refundable credits / payments."
-    />
-  )
+function Schedule3Adapter({ state }: FormRenderProps): React.ReactElement {
+  const schedule3 = computeSchedule3({ form1116: state.taxReturn.form1116 })
+  return <Schedule3Preview schedule3={schedule3} selectedYear={state.year} />
 }
 
 function Form1116Adapter({ state }: FormRenderProps): React.ReactElement {
@@ -455,7 +452,7 @@ export const formRegistry: FormRegistry = {
     keywords: ['schedule 3', 'credits', 'payments', 'nonrefundable', 'refundable'],
     category: 'Schedule',
     presentation: 'column',
-    component: Schedule3Stub,
+    component: Schedule3Adapter,
   },
   'sch-c': {
     id: 'sch-c',
