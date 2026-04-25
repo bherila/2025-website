@@ -43,6 +43,7 @@ import type { TaxDocument } from '@/types/finance/tax-document'
 import { DockHomeView } from './tax-preview/DockHomeView'
 import { MillerShell } from './tax-preview/MillerShell'
 import { formRegistry as dockRegistry } from './tax-preview/registry'
+import { TaxEstimateHeader } from './tax-preview/TaxEstimateHeader'
 import { TAX_TABS } from './tax-tab-ids'
 import { TaxPreviewProvider, type TaxPreviewShellData, useTaxPreview } from './TaxPreviewContext'
 import { YearSelectorWithNav } from './YearSelectorWithNav'
@@ -642,15 +643,19 @@ function TaxPreviewPageContent() {
 
   // ── Incomplete-computation signals (issue #274) ─────────────────────────────
   if (dockMode) {
+    const hasColumns = typeof window !== 'undefined' && window.location.hash.length > 1
     return (
       <div className="flex h-screen flex-col">
-        <div className="flex items-center gap-4 border-b border-border bg-card px-4 py-3">
-          <h1 className="text-lg font-semibold tracking-tight">Tax Preview</h1>
-          <Badge variant="outline" className="text-xs">Dock preview</Badge>
+        <div className="flex items-center gap-3 border-b border-border bg-card px-4 py-2">
+          <h1 className="text-base font-semibold tracking-tight">Tax Preview</h1>
+          <Badge variant="outline" className="text-xs">
+            Dock preview
+          </Badge>
           <div className="ml-auto text-xs text-muted-foreground">
             Append <code className="rounded bg-muted px-1 py-0.5 font-mono">?dock=0</code> to disable
           </div>
         </div>
+        <TaxEstimateHeader defaultTier={hasColumns ? 'slim' : 'expanded'} />
         <div className="flex-1 overflow-hidden">
           <MillerShell registry={dockRegistry} homeView={<DockHomeView />} />
         </div>
