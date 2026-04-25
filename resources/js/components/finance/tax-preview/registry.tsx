@@ -19,6 +19,11 @@ import ScheduleEPreview from '@/components/finance/ScheduleEPreview'
 import ScheduleSEPreview from '@/components/finance/ScheduleSEPreview'
 import TaxDocuments1099Section from '@/components/finance/TaxDocuments1099Section'
 import TaxDocumentsSection from '@/components/finance/TaxDocumentsSection'
+import {
+  buildScheduleCSheet,
+  buildScheduleDSheet,
+  buildScheduleESheet,
+} from '@/lib/finance/buildTaxWorkbook'
 
 import { useDockActions } from './DockActions'
 import type { FormRegistry, FormRenderProps } from './formRegistry'
@@ -394,6 +399,11 @@ export const formRegistry: FormRegistry = {
     category: 'Schedule',
     presentation: 'column',
     component: ScheduleDAdapter,
+    xlsx: {
+      sheetName: () => 'Schedule D',
+      order: 40,
+      build: buildScheduleDSheet,
+    },
   },
   'sch-e': {
     id: 'sch-e',
@@ -404,6 +414,11 @@ export const formRegistry: FormRegistry = {
     category: 'Schedule',
     presentation: 'column',
     component: ScheduleEAdapter,
+    xlsx: {
+      sheetName: () => 'Schedule E',
+      order: 50,
+      build: buildScheduleESheet,
+    },
   },
   'sch-se': {
     id: 'sch-se',
@@ -467,6 +482,11 @@ export const formRegistry: FormRegistry = {
     category: 'Schedule',
     presentation: 'column',
     component: ScheduleCAdapter,
+    xlsx: {
+      sheetName: () => 'Schedule C',
+      order: 30,
+      build: buildScheduleCSheet,
+    },
   },
   'form-1116': {
     id: 'form-1116',

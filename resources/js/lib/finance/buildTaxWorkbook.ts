@@ -213,6 +213,100 @@ function sumFormula(firstDetailExcelRow: number, lastDetailExcelRow: number): st
   return `=SUM(C${firstDetailExcelRow}:C${lastDetailExcelRow})`
 }
 
+/**
+ * Standalone sheet builders that registry entries can wire up via `xlsx.build`.
+ * These return plain XlsxSheet (without the rowIndex map) since they have no
+ * cross-sheet formula refs that need it. Sheets that need rowIndex (Schedule B,
+ * Schedule SE, etc.) stay inline in buildTaxWorkbook for now.
+ */
+
+export function buildScheduleCSheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.scheduleC) {
+    return null
+  }
+  return {
+    name: 'Schedule C',
+    rows: [
+      {
+        line: '31',
+        description: 'Net income / (loss)',
+        amount: taxReturn.scheduleC.total,
+        isTotal: true,
+      },
+    ],
+  }
+}
+
+export function buildScheduleESheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.scheduleE) {
+    return null
+  }
+  return {
+    name: 'Schedule E',
+    rows: [
+      { line: '1', description: 'Total passive income / (loss)', amount: taxReturn.scheduleE.totalPassive },
+      { line: '2', description: 'Total nonpassive income / (loss)', amount: taxReturn.scheduleE.totalNonpassive },
+      {
+        line: '3',
+        description: 'Schedule E combined total',
+        amount: taxReturn.scheduleE.grandTotal,
+        formula: '=C2+C3',
+        isTotal: true,
+      },
+    ],
+  }
+}
+
+/**
+ * Assemble the registry-contributed sheets from a form registry. Each entry
+ * with an `xlsx.build` field contributes one sheet (or none if `build` returns
+ * null or the sheet has no exportable content). Sheets are sorted by `order`.
+ *
+ * Used by `buildTaxWorkbook` for the migrated forms; non-migrated sheets stay
+ * inline in `buildTaxWorkbook` until their builders are extracted.
+ */
+export function assembleRegistrySheets(
+  taxReturn: TaxReturn1040,
+  registry: Record<string, { xlsx?: { sheetName: () => string; order?: number; build: (taxReturn: TaxReturn1040) => XlsxSheet | null } }>,
+): XlsxSheet[] {
+  const candidates: { order: number; sheet: XlsxSheet }[] = []
+  for (const entry of Object.values(registry)) {
+    if (!entry.xlsx) {
+      continue
+    }
+    const sheet = entry.xlsx.build(taxReturn)
+    if (!sheet || !hasExportableContent(sheet)) {
+      continue
+    }
+    candidates.push({ order: entry.xlsx.order ?? 999, sheet })
+  }
+  candidates.sort((a, b) => a.order - b.order)
+  return candidates.map((c) => c.sheet)
+}
+
+export function buildScheduleDSheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.scheduleD) {
+    return null
+  }
+  const rows: XlsxRow[] = [
+    {
+      line: '16',
+      description: 'Line 16 — Combined net capital gain (loss)',
+      amount: taxReturn.scheduleD.schD_line16,
+      isTotal: true,
+    },
+  ]
+  if (taxReturn.scheduleD.schD_line16 < 0) {
+    rows.push({
+      line: '21',
+      description: `Line 21 — Capital loss applied to ${taxReturn.year} return`,
+      amount: taxReturn.scheduleD.schD_line21,
+      isTotal: true,
+    })
+  }
+  return { name: 'Schedule D', rows }
+}
+
 function buildEstimatedTaxSheet(estimatedTaxPayments?: EstimatedTaxPaymentsData): IndexedSheet | null {
   if (!estimatedTaxPayments || estimatedTaxPayments.priorYearTax <= 0) {
     return null
@@ -329,42 +423,15 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
       })()
     : null
 
-  // ── Schedule C ──────────────────────────────────────────────────────────────
-  const scheduleCSheet = taxReturn.scheduleC
-    ? buildSheet('Schedule C', [
-        { line: '31', description: 'Net income / (loss)', amount: taxReturn.scheduleC.total, isTotal: true },
-      ])
-    : null
-
-  // ── Schedule D ──────────────────────────────────────────────────────────────
-  const scheduleDSheet = taxReturn.scheduleD
-    ? buildSheet('Schedule D', [
-        { line: '16', description: 'Line 16 — Combined net capital gain (loss)', amount: taxReturn.scheduleD.schD_line16, isTotal: true },
-        ...(taxReturn.scheduleD.schD_line16 < 0
-          ? [{
-              line: '21',
-              description: `Line 21 — Capital loss applied to ${taxReturn.year} return`,
-              amount: taxReturn.scheduleD.schD_line21,
-              isTotal: true,
-            }]
-          : []),
-      ])
-    : null
-
-  // ── Schedule E ──────────────────────────────────────────────────────────────
-  const scheduleESheet = taxReturn.scheduleE
-    ? buildSheet('Schedule E', [
-        { line: '1', description: 'Total passive income / (loss)', amount: taxReturn.scheduleE.totalPassive },
-        { line: '2', description: 'Total nonpassive income / (loss)', amount: taxReturn.scheduleE.totalNonpassive },
-        {
-          line: '3',
-          description: 'Schedule E combined total',
-          amount: taxReturn.scheduleE.grandTotal,
-          formula: '=C2+C3',
-          isTotal: true,
-        },
-      ])
-    : null
+  // ── Schedule C / D / E (registry-driven) ────────────────────────────────────
+  // Builders are exported standalone for the form registry to call; here we
+  // wrap with buildSheet() to get the rowIndex needed for cross-sheet refs.
+  const scheduleCRaw = buildScheduleCSheet(taxReturn)
+  const scheduleCSheet = scheduleCRaw ? buildSheet(scheduleCRaw.name, scheduleCRaw.rows) : null
+  const scheduleDRaw = buildScheduleDSheet(taxReturn)
+  const scheduleDSheet = scheduleDRaw ? buildSheet(scheduleDRaw.name, scheduleDRaw.rows) : null
+  const scheduleERaw = buildScheduleESheet(taxReturn)
+  const scheduleESheet = scheduleERaw ? buildSheet(scheduleERaw.name, scheduleERaw.rows) : null
 
   // ── Schedule SE ──────────────────────────────────────────────────────────────
   const scheduleSESheet = taxReturn.scheduleSE && taxReturn.scheduleSE.entries.length > 0
