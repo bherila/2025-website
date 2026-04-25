@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { cn } from '@/lib/utils'
 import type { Form1040LineItem } from '@/types/finance/tax-return'
 
+import EstimatedTaxPaymentsSection from '../EstimatedTaxPaymentsSection'
 import { useTaxPreview } from '../TaxPreviewContext'
 
 type Tier = 'slim' | 'expanded'
@@ -83,7 +84,7 @@ export function TaxEstimateHeader({ defaultTier = 'slim' }: TaxEstimateHeaderPro
       </div>
 
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-h-[85vh] max-w-4xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Tax Estimate — {state.year}</DialogTitle>
           </DialogHeader>
@@ -229,9 +230,10 @@ function KpiCard({
 }
 
 function FullDetail({ summary }: { summary: KpiSummary }): React.ReactElement {
+  const state = useTaxPreview()
   return (
-    <div className="space-y-4 font-mono text-sm">
-      <Section title="Federal" sticky>
+    <div className="space-y-6">
+      <Section title="Federal Summary" sticky>
         <DetailRow label="Estimated income" value={fmtUsd(summary.totalIncome)} tone="success" />
         <DetailRow label="Total tax" value={fmtUsd(summary.totalTax)} tone="destructive" bold />
         <DetailRow label="Effective tax rate" value={fmtPct(summary.effectiveRate)} />
@@ -243,9 +245,22 @@ function FullDetail({ summary }: { summary: KpiSummary }): React.ReactElement {
           bold
         />
       </Section>
+
+      <Section title="Estimated Payments — Safe Harbor" sticky>
+        <EstimatedTaxPaymentsSection
+          planningYear={state.year + 1}
+          priorYearAgi={state.priorYearAgi}
+          priorYearTax={state.priorYearTax}
+          onPriorYearAgiChange={state.setPriorYearAgi}
+          onPriorYearTaxChange={state.setPriorYearTax}
+          estimatedTaxPayments={state.taxReturn.estimatedTaxPayments}
+          showMfsUnsupportedNotice={state.isMarried}
+        />
+      </Section>
+
       <p className="text-xs text-muted-foreground">
-        Bracket breakdown and estimated-payment safe-harbor planning will land here once the existing
-        Tax Estimate tab content moves in.
+        Bracket breakdown by quarter will land here once the existing Tax Estimate tab&apos;s
+        TotalsTable computations move into TaxPreviewContext.
       </p>
     </div>
   )
