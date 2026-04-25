@@ -4,6 +4,7 @@ import currency from 'currency.js'
 import ActionItemsTab from '@/components/finance/ActionItemsTab'
 import AdditionalTaxesPreview from '@/components/finance/AdditionalTaxesPreview'
 import Form1040Preview from '@/components/finance/Form1040Preview'
+import Form1116Preview from '@/components/finance/Form1116Preview'
 import Form4952Preview from '@/components/finance/Form4952Preview'
 import Form6251Preview from '@/components/finance/Form6251Preview'
 import Form8582Preview from '@/components/finance/Form8582Preview'
@@ -176,19 +177,22 @@ function Schedule3Stub(): React.ReactElement {
   )
 }
 
-const FORM_1116_CATEGORIES: { key: string; label: string }[] = [
-  { key: 'passive', label: 'Passive' },
-  { key: 'general', label: 'General' },
-  { key: 'sec-901j', label: 'Sec. 901(j)' },
-  { key: 'treaty', label: 'Treaty Resourced' },
-  { key: 'lump-sum', label: 'Lump-sum Distrib.' },
-]
-
-function Form1116Stub({ instance }: FormRenderProps): React.ReactElement {
+function Form1116Adapter({ state }: FormRenderProps): React.ReactElement {
+  if (!state.taxReturn.form1116) {
+    return (
+      <StubCard
+        title="Form 1116 — Foreign Tax Credit"
+        note="No foreign tax data detected. Add a 1099-DIV with box 7 foreign tax paid or a K-1 with K-3 foreign income to populate this form."
+      />
+    )
+  }
+  const allK1Docs = state.accountDocuments.filter((doc) => doc.form_type === 'k1')
   return (
-    <StubCard
-      title={`Form 1116 — ${instance?.label ?? 'Foreign Tax Credit'}`}
-      note={`Pending migration. The current Form1116Preview takes review-modal callbacks that need to be re-wired through TaxPreviewContext before mounting it in a column. Active instance: ${instance?.key ?? 'none'}.`}
+    <Form1116Preview
+      form1116={state.taxReturn.form1116}
+      foreignTaxSummaries={state.foreignTaxSummaries}
+      allK1Docs={allK1Docs}
+      selectedYear={state.year}
     />
   )
 }
@@ -456,12 +460,11 @@ export const formRegistry: FormRegistry = {
     keywords: ['1116', 'FTC', 'foreign tax credit', 'foreign income', 'passive', 'general'],
     category: 'Form',
     presentation: 'column',
-    component: Form1116Stub,
-    instances: {
-      list: () => FORM_1116_CATEGORIES,
-      create: () => ({ key: 'passive', label: 'Passive' }),
-      allowCreate: false,
-    },
+    // TODO: per-category instance tabs require Form1116Preview to accept a
+    // `category` filter prop. Currently the component renders all categories
+    // (Passive, General, etc.) internally — instance switching is a separate
+    // refactor of the preview content, tracked alongside form-1116 polish.
+    component: Form1116Adapter,
   },
   'form-8582': {
     id: 'form-8582',
