@@ -1,5 +1,6 @@
 import { X } from 'lucide-react'
 
+import { useTaxPreview } from '../TaxPreviewContext'
 import { type FormRegistry, getEntry } from './formRegistry'
 import { useTaxRoute } from './useTaxRoute'
 
@@ -20,6 +21,7 @@ interface MillerShellProps {
  */
 export function MillerShell({ registry, homeView }: MillerShellProps): React.ReactElement {
   const { route, pushColumn, replaceFrom, truncateTo } = useTaxRoute()
+  const state = useTaxPreview()
 
   if (route.columns.length === 0) {
     return <div className="flex h-full w-full bg-background">{homeView}</div>
@@ -32,7 +34,7 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
         const Component = entry.component
         const instance =
           col.instance && entry.instances
-            ? entry.instances.list({} as never).find((i) => i.key === col.instance)
+            ? entry.instances.list(state).find((i) => i.key === col.instance)
             : undefined
 
         return (
@@ -58,7 +60,7 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
             </header>
             <div className="flex-1 overflow-y-auto bg-card p-4">
               <Component
-                state={{} as never}
+                state={state}
                 {...(instance ? { instance } : {})}
                 onDrill={(target) => {
                   if (depth + 1 < route.columns.length) {

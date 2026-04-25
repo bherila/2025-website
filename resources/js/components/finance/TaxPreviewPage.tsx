@@ -40,9 +40,15 @@ import { type FilingStatus, getStandardDeduction } from '@/lib/tax/standardDeduc
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 
+import { DockHomeView } from './tax-preview/DockHomeView'
+import type { FormRegistry } from './tax-preview/formRegistry'
+import { MillerShell } from './tax-preview/MillerShell'
+import { formRegistry as partialDockRegistry } from './tax-preview/registry'
 import { TAX_TABS } from './tax-tab-ids'
 import { TaxPreviewProvider, type TaxPreviewShellData, useTaxPreview } from './TaxPreviewContext'
 import { YearSelectorWithNav } from './YearSelectorWithNav'
+
+const dockRegistry = partialDockRegistry as FormRegistry
 
 // ── Preload interface ─────────────────────────────────────────────────────────
 
@@ -464,6 +470,9 @@ function TaxPreviewPageContent() {
     refreshAll,
   } = useTaxPreview()
 
+  const dockMode =
+    typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('dock') === '1'
+
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
   const [reviewModalDoc, setReviewModalDoc] = useState<TaxDocument | undefined>(undefined)
   const [activeTab, setActiveTab] = useState<string>(() => {
@@ -635,6 +644,23 @@ function TaxPreviewPageContent() {
   const filingStatus: FilingStatus = isMarried ? 'Married Filing Jointly' : 'Single'
 
   // ── Incomplete-computation signals (issue #274) ─────────────────────────────
+  if (dockMode) {
+    return (
+      <div className="flex h-screen flex-col">
+        <div className="flex items-center gap-4 border-b border-border bg-card px-4 py-3">
+          <h1 className="text-lg font-semibold tracking-tight">Tax Preview</h1>
+          <Badge variant="outline" className="text-xs">Dock preview</Badge>
+          <div className="ml-auto text-xs text-muted-foreground">
+            Append <code className="rounded bg-muted px-1 py-0.5 font-mono">?dock=0</code> to disable
+          </div>
+        </div>
+        <div className="flex-1 overflow-hidden">
+          <MillerShell registry={dockRegistry} homeView={<DockHomeView />} />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div>
       <div className="flex items-center gap-4 px-4 pt-4 pb-2 flex-wrap">
