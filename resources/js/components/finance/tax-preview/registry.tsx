@@ -12,6 +12,7 @@ import Form8995Preview from '@/components/finance/Form8995Preview'
 import Schedule1Preview from '@/components/finance/Schedule1Preview'
 import ScheduleAPreview from '@/components/finance/ScheduleAPreview'
 import ScheduleBPreview from '@/components/finance/ScheduleBPreview'
+import ScheduleCTab from '@/components/finance/ScheduleCTab'
 import ScheduleDPreview from '@/components/finance/ScheduleDPreview'
 import ScheduleEPreview from '@/components/finance/ScheduleEPreview'
 import ScheduleSEPreview from '@/components/finance/ScheduleSEPreview'
@@ -197,11 +198,12 @@ function Form1116Adapter({ state }: FormRenderProps): React.ReactElement {
   )
 }
 
-function ScheduleCStub(): React.ReactElement {
+function ScheduleCAdapter({ state }: FormRenderProps): React.ReactElement {
   return (
-    <StubCard
-      title="Schedule C — Profit or Loss from Business"
-      note="Pending migration. ScheduleCTab manages its own form state for entity selection and expense entry — needs adapter that participates in dock navigation."
+    <ScheduleCTab
+      selectedYear={state.year}
+      scheduleCData={state.scheduleCData?.years ?? []}
+      reviewed1099Docs={state.reviewed1099Docs}
     />
   )
 }
@@ -450,7 +452,7 @@ export const formRegistry: FormRegistry = {
     keywords: ['schedule C', 'sole proprietor', 'business', 'self-employed', '1099-NEC'],
     category: 'Schedule',
     presentation: 'column',
-    component: ScheduleCStub,
+    component: ScheduleCAdapter,
   },
   'form-1116': {
     id: 'form-1116',
