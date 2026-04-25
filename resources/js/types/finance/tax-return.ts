@@ -108,6 +108,33 @@ export interface ScheduleSELines {
   deductibleSeTax: number
 }
 
+export interface Schedule1PartILines {
+  line1a_taxableRefunds: number | null
+  line2a_alimonyReceived: number | null
+  line3_business: number
+  line4_otherGains: number | null
+  line5_rentalPartnerships: number
+  line6_farmIncome: number | null
+  line7_unemploymentCompensation: number | null
+  line8z_otherIncome: number
+  line9_totalOther: number
+  line10_total: number
+}
+
+export interface Schedule1PartIILines {
+  line13_hsaDeduction: number | null
+  line15_deductibleSeTax: number | null
+  line17_selfEmployedHealthInsurance: number | null
+  line20_iraDeduction: number | null
+  line21_studentLoanInterest: number | null
+  line26_totalAdjustments: number
+}
+
+export interface Schedule1Lines {
+  partI: Schedule1PartILines
+  partII: Schedule1PartIILines
+}
+
 export interface Form1116Lines {
   incomeSources: { label: string; amount: number }[]
   taxSources: { label: string; amount: number }[]
@@ -342,6 +369,7 @@ export interface TaxReturn1040 {
   year: number
   overviewSections?: OverviewSection[] | undefined
   form1040?: Form1040LineItem[]
+  schedule1?: Schedule1Lines
   schedule2?: Schedule2Lines
   scheduleA?: ScheduleALines
   scheduleB?: ScheduleBLines

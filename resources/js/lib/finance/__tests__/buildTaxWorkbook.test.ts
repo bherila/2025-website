@@ -144,6 +144,20 @@ describe('buildTaxWorkbook — Form 1040 sheet formulas', () => {
       year: 2025,
       scheduleC: { total: 5000, byQuarter: { q1: 0, q2: 0, q3: 0, q4: 0 } },
       scheduleE: { grandTotal: 1200, totalPassive: 0, totalNonpassive: 1200 },
+      schedule1: {
+        partI: {
+          line1a_taxableRefunds: null, line2a_alimonyReceived: null,
+          line3_business: 5000, line4_otherGains: null,
+          line5_rentalPartnerships: 1200, line6_farmIncome: null,
+          line7_unemploymentCompensation: null, line8z_otherIncome: 750,
+          line9_totalOther: 750, line10_total: 6950,
+        },
+        partII: {
+          line13_hsaDeduction: null, line15_deductibleSeTax: 706,
+          line17_selfEmployedHealthInsurance: null, line20_iraDeduction: null,
+          line21_studentLoanInterest: null, line26_totalAdjustments: 706,
+        },
+      },
       form1040: [
         { line: '1a', label: 'Wages', value: 100_000 },
         { line: '2b', label: 'Taxable interest', value: 0 },

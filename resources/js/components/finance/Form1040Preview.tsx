@@ -17,7 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { cn } from '@/lib/utils'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import type { F1099DivParsedData, F1099IntParsedData, Form1099RParsedData, W2ParsedData } from '@/types/finance/tax-document'
-import type { Form1040LineItem } from '@/types/finance/tax-return'
+import type { Form1040LineItem, Schedule1Lines } from '@/types/finance/tax-return'
 
 export type { Form1040LineItem } from '@/types/finance/tax-return'
 
@@ -182,14 +182,11 @@ export function computeForm1040Lines({
   w2Income,
   interestIncome,
   dividendIncome,
-  scheduleCIncome,
-  schedule1OtherIncome = 0,
-  deductibleSeTaxAdjustment = 0,
+  schedule1,
   capitalGainOrLoss = null,
   schedule2TotalAdditionalTaxes = null,
   foreignTaxCredit = null,
   scheduleB,
-  scheduleEGrandTotal = 0,
   w2Documents = [],
   interestDocuments = [],
   dividendDocuments = [],
@@ -198,14 +195,11 @@ export function computeForm1040Lines({
   w2Income: currency
   interestIncome: currency
   dividendIncome: currency
-  scheduleCIncome: number
-  schedule1OtherIncome?: number
-  deductibleSeTaxAdjustment?: number
+  schedule1: Schedule1Lines
   capitalGainOrLoss?: number | null
   schedule2TotalAdditionalTaxes?: number | null
   foreignTaxCredit?: number | null
   scheduleB?: ScheduleBLines
-  scheduleEGrandTotal?: number
   w2Documents?: TaxDocument[]
   interestDocuments?: TaxDocument[]
   dividendDocuments?: TaxDocument[]
@@ -261,21 +255,20 @@ export function computeForm1040Lines({
         }]
 
   const retirementSummary = compute1099RDistributionSummary(retirementDocuments)
-  const schedule1Adjustment = currency(deductibleSeTaxAdjustment)
 
-  const schedule1Total = currency(scheduleCIncome)
-    .add(scheduleEGrandTotal)
-    .add(schedule1OtherIncome).value
+  const { partI, partII } = schedule1
+  const schedule1Total = partI.line10_total
+  const schedule1Adjustment = partII.line26_totalAdjustments
 
   const schedule1Sources: { label: string; amount: number; note?: string }[] = [
-    ...(scheduleCIncome !== 0
-      ? [{ label: 'Schedule C — Business income', amount: currency(scheduleCIncome).value, note: 'Schedule 1 line 3' }]
+    ...(partI.line3_business !== 0
+      ? [{ label: 'Schedule C — Business income', amount: currency(partI.line3_business).value, note: 'Schedule 1 line 3' }]
       : []),
-    ...(scheduleEGrandTotal !== 0
-      ? [{ label: 'Schedule E — Rental / royalty / partnership', amount: currency(scheduleEGrandTotal).value, note: 'Schedule 1 line 5' }]
+    ...(partI.line5_rentalPartnerships !== 0
+      ? [{ label: 'Schedule E — Rental / royalty / partnership', amount: currency(partI.line5_rentalPartnerships).value, note: 'Schedule 1 line 5' }]
       : []),
-    ...(schedule1OtherIncome !== 0
-      ? [{ label: '1099-MISC other income', amount: currency(schedule1OtherIncome).value, note: 'Schedule 1 line 8z' }]
+    ...(partI.line8z_otherIncome !== 0
+      ? [{ label: '1099-MISC other income', amount: currency(partI.line8z_otherIncome).value, note: 'Schedule 1 line 8z' }]
       : []),
   ]
 
@@ -378,15 +371,16 @@ export function computeForm1040Lines({
     {
       line: '10',
       label: 'Adjustments to income (Schedule 1)',
-      value: schedule1Adjustment.value,
+      value: schedule1Adjustment,
       refSchedule: 'Schedule 1',
-      ...(schedule1Adjustment.value !== 0
+      navTab: TAX_TABS.schedule1,
+      ...(schedule1Adjustment !== 0
         ? {
-            sources: [{
-              label: 'Deductible half of self-employment tax',
-              amount: schedule1Adjustment.value,
-              note: 'Schedule SE',
-            }],
+            sources: [
+              ...(partII.line15_deductibleSeTax != null && partII.line15_deductibleSeTax !== 0
+                ? [{ label: 'Deductible half of self-employment tax', amount: partII.line15_deductibleSeTax, note: 'Schedule SE → Schedule 1 line 15' }]
+                : []),
+            ],
           }
         : {}),
     },
@@ -397,7 +391,7 @@ export function computeForm1040Lines({
       bold: true,
       sources: [
         { label: 'Total income (Line 9)', amount: totalIncome.value },
-        ...(schedule1Adjustment.value !== 0 ? [{ label: 'Adjustments to income (Line 10)', amount: -schedule1Adjustment.value }] : []),
+        ...(schedule1Adjustment !== 0 ? [{ label: 'Adjustments to income (Line 10)', amount: -schedule1Adjustment }] : []),
       ],
     },
     ...(schedule2TotalAdditionalTaxes !== null && schedule2TotalAdditionalTaxes !== 0
