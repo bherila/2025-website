@@ -2,6 +2,7 @@ import { X } from 'lucide-react'
 
 import { useTaxPreview } from '../TaxPreviewContext'
 import { type FormRegistry, getEntry } from './formRegistry'
+import { InstanceTabs } from './InstanceTabs'
 import { useTaxRoute } from './useTaxRoute'
 
 interface MillerShellProps {
@@ -32,10 +33,16 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
       {route.columns.map((col, depth) => {
         const entry = getEntry(registry, col.form)
         const Component = entry.component
-        const instance =
-          col.instance && entry.instances
-            ? entry.instances.list(state).find((i) => i.key === col.instance)
-            : undefined
+        const instances = entry.instances ? entry.instances.list(state) : []
+        const activeInstance = col.instance ? instances.find((i) => i.key === col.instance) : undefined
+
+        const onDrill = (target: { form: typeof col.form; instance?: string }): void => {
+          if (depth + 1 < route.columns.length) {
+            replaceFrom(depth + 1, target)
+          } else {
+            pushColumn(target)
+          }
+        }
 
         return (
           <section
@@ -58,18 +65,45 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
             </header>
-            <div className="flex-1 overflow-y-auto bg-card p-4">
-              <Component
-                state={state}
-                {...(instance ? { instance } : {})}
-                onDrill={(target) => {
-                  if (depth + 1 < route.columns.length) {
-                    replaceFrom(depth + 1, target)
-                  } else {
-                    pushColumn(target)
-                  }
-                }}
+            {entry.instances && (
+              <InstanceTabs
+                instances={instances}
+                activeKey={col.instance}
+                onSelect={(key: string) => replaceFrom(depth, { form: col.form, instance: key })}
+                {...(entry.instances.allowCreate
+                  ? {
+                      onCreate: () => {
+                        const created = entry.instances!.create(state)
+                        replaceFrom(depth, { form: col.form, instance: created.key })
+                      },
+                    }
+                  : {})}
               />
+            )}
+            <div className="flex-1 overflow-y-auto bg-card p-4">
+              {entry.instances && !activeInstance ? (
+                <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+                  <p className="text-sm text-muted-foreground">No {entry.shortLabel} instance selected.</p>
+                  {entry.instances.allowCreate && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const created = entry.instances!.create(state)
+                        replaceFrom(depth, { form: col.form, instance: created.key })
+                      }}
+                      className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      Create your first {entry.shortLabel}
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <Component
+                  state={state}
+                  {...(activeInstance ? { instance: activeInstance } : {})}
+                  onDrill={onDrill}
+                />
+              )}
             </div>
           </section>
         )

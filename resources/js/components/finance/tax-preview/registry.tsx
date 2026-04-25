@@ -150,11 +150,19 @@ function Schedule3Stub(): React.ReactElement {
   )
 }
 
-function Form1116Stub(): React.ReactElement {
+const FORM_1116_CATEGORIES: { key: string; label: string }[] = [
+  { key: 'passive', label: 'Passive' },
+  { key: 'general', label: 'General' },
+  { key: 'sec-901j', label: 'Sec. 901(j)' },
+  { key: 'treaty', label: 'Treaty Resourced' },
+  { key: 'lump-sum', label: 'Lump-sum Distrib.' },
+]
+
+function Form1116Stub({ instance }: FormRenderProps): React.ReactElement {
   return (
     <StubCard
-      title="Form 1116 — Foreign Tax Credit"
-      note="Pending migration. The current Form1116Preview takes review-modal callbacks that need to be re-wired through TaxPreviewContext before mounting it in a column."
+      title={`Form 1116 — ${instance?.label ?? 'Foreign Tax Credit'}`}
+      note={`Pending migration. The current Form1116Preview takes review-modal callbacks that need to be re-wired through TaxPreviewContext before mounting it in a column. Active instance: ${instance?.key ?? 'none'}.`}
     />
   )
 }
@@ -410,6 +418,11 @@ export const formRegistry: FormRegistry = {
     category: 'Form',
     presentation: 'column',
     component: Form1116Stub,
+    instances: {
+      list: () => FORM_1116_CATEGORIES,
+      create: () => ({ key: 'passive', label: 'Passive' }),
+      allowCreate: false,
+    },
   },
   'form-8582': {
     id: 'form-8582',
