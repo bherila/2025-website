@@ -1,4 +1,4 @@
-import { X } from 'lucide-react'
+import { ChevronLeft, X } from 'lucide-react'
 
 import { useTaxPreview } from '../TaxPreviewContext'
 import { type FormRegistry, getEntry } from './formRegistry'
@@ -52,7 +52,7 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
               key={`${depth}-${col.form}-${col.instance ?? ''}`}
               type="button"
               onClick={() => truncateTo(depth + 1)}
-              className="flex h-full w-12 shrink-0 flex-col items-center gap-2 border-r border-border bg-card py-3 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="hidden h-full w-12 shrink-0 flex-col items-center gap-2 border-r border-border bg-card py-3 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:flex"
               data-form-id={col.form}
               data-depth={depth}
               data-collapsed="true"
@@ -79,12 +79,22 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
         return (
           <section
             key={`${depth}-${col.form}-${col.instance ?? ''}`}
-            className="flex h-full min-w-[440px] flex-1 flex-col border-r border-border bg-card"
+            className="flex h-full w-full flex-1 flex-col border-r border-border bg-card md:min-w-[440px]"
             data-form-id={col.form}
             data-depth={depth}
           >
             <header className="flex items-center justify-between gap-2 border-b border-border bg-card px-4 py-3">
-              <div className="min-w-0">
+              {depth > 0 && (
+                <button
+                  type="button"
+                  onClick={() => truncateTo(depth)}
+                  className="-ml-1 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
+                  aria-label="Back to previous column"
+                >
+                  <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                </button>
+              )}
+              <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-semibold text-foreground">{entry.shortLabel}</div>
                 <div className="truncate text-xs text-muted-foreground">{entry.label}</div>
               </div>
