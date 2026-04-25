@@ -35,6 +35,8 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
         const Component = entry.component
         const instances = entry.instances ? entry.instances.list(state) : []
         const activeInstance = col.instance ? instances.find((i) => i.key === col.instance) : undefined
+        const isLast = depth === route.columns.length - 1
+        const isCollapsed = !isLast
 
         const onDrill = (target: { form: typeof col.form; instance?: string }): void => {
           if (depth + 1 < route.columns.length) {
@@ -44,10 +46,40 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
           }
         }
 
+        if (isCollapsed) {
+          return (
+            <button
+              key={`${depth}-${col.form}-${col.instance ?? ''}`}
+              type="button"
+              onClick={() => truncateTo(depth + 1)}
+              className="flex h-full w-12 shrink-0 flex-col items-center gap-2 border-r border-border bg-card py-3 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              data-form-id={col.form}
+              data-depth={depth}
+              data-collapsed="true"
+              aria-label={`Expand ${entry.shortLabel} column`}
+            >
+              <span
+                className="font-mono text-[10px] uppercase tracking-wider text-primary [writing-mode:vertical-rl] [text-orientation:mixed]"
+                style={{ transform: 'rotate(180deg)' }}
+              >
+                {entry.shortLabel}
+              </span>
+              {activeInstance && (
+                <span
+                  className="font-mono text-[10px] text-muted-foreground [writing-mode:vertical-rl] [text-orientation:mixed]"
+                  style={{ transform: 'rotate(180deg)' }}
+                >
+                  {activeInstance.label}
+                </span>
+              )}
+            </button>
+          )
+        }
+
         return (
           <section
             key={`${depth}-${col.form}-${col.instance ?? ''}`}
-            className="flex h-full w-[440px] shrink-0 flex-col border-r border-border bg-card"
+            className="flex h-full min-w-[440px] flex-1 flex-col border-r border-border bg-card"
             data-form-id={col.form}
             data-depth={depth}
           >
