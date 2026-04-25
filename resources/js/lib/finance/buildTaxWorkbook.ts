@@ -872,9 +872,7 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
         : undefined
   )
 
-  // Use currency.js for safe monetary addition; keep undefined for truly unwired values
-  const line8Value = currency(taxReturn.scheduleC?.total ?? 0).add(taxReturn.scheduleE?.grandTotal ?? 0).value
-  const line8 = form1040LineMap.get('8') ?? ((taxReturn.scheduleC || taxReturn.scheduleE) ? line8Value : undefined)
+  const line8 = form1040LineMap.get('8') ?? (taxReturn.schedule1 ? taxReturn.schedule1.partI.line10_total : undefined)
 
   const line9Value = currency(line1a ?? 0)
     .add(line2b ?? 0)
@@ -884,7 +882,7 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
     .add(line7 ?? 0)
     .add(line8 ?? 0).value
   const line9 = form1040LineMap.get('9') ?? (line9Value !== 0 ? line9Value : undefined)
-  const line10 = form1040LineMap.get('10') ?? taxReturn.scheduleSE?.deductibleSeTax ?? undefined
+  const line10 = form1040LineMap.get('10') ?? taxReturn.schedule1?.partII.line26_totalAdjustments ?? undefined
   const line11 = form1040LineMap.get('11') ?? (
     line9 !== undefined || line10 !== undefined
       ? currency(line9 ?? 0).subtract(line10 ?? 0).value

@@ -9,6 +9,7 @@ import { compute1099RDistributionSummary, computeForm1040Lines } from '@/compone
 import { computeForm4952Lines } from '@/components/finance/Form4952Preview'
 import { computeForm8995 } from '@/components/finance/Form8995Preview'
 import { isFK1StructuredData } from '@/components/finance/k1'
+import { computeSchedule1Totals } from '@/components/finance/Schedule1Preview'
 import { computeScheduleALines } from '@/components/finance/ScheduleAPreview'
 import { computeScheduleB } from '@/components/finance/ScheduleBPreview'
 import { computeScheduleCNetIncome } from '@/components/finance/ScheduleCPreview'
@@ -717,10 +718,6 @@ export function TaxPreviewProvider({
     const capitalGainOrLossToReturn = scheduleD.schD.schD_line21 !== 0
       ? scheduleD.schD.schD_line21
       : scheduleD.schD.schD_line16
-    const schedule1AdditionalIncome = currency(scheduleCNetIncome.total)
-      .add(scheduleE.grandTotal)
-      .add(schedule1OtherIncome).value
-
     const eblData = form461({
       taxYear: year,
       isSingle: !isMarried,
@@ -754,15 +751,22 @@ export function TaxPreviewProvider({
       payslips,
     })
 
+    const schedule1 = computeSchedule1Totals({
+      scheduleCNetIncome: scheduleCNetIncome.total,
+      scheduleEGrandTotal: scheduleE.grandTotal,
+      schedule1OtherIncome,
+      deductibleSeTaxAdjustment: scheduleSE.deductibleSeTax,
+    })
+
     const totalIncomeEstimate = w2GrossIncome
       .add(scheduleB.interestTotal)
       .add(scheduleB.dividendTotal)
       .add(retirementDistributionSummary.ira.taxable)
       .add(retirementDistributionSummary.pension.taxable)
-      .add(schedule1AdditionalIncome)
+      .add(schedule1.partI.line10_total)
       .add(capitalGainOrLossToReturn).value
     const adjustedGrossIncomeEstimate = currency(totalIncomeEstimate)
-      .subtract(scheduleSE.deductibleSeTax).value
+      .subtract(schedule1.partII.line26_totalAdjustments).value
 
     // Approximation: Form 8960 MAGI is currently estimated as AGI only in this
     // pipeline; no §911 foreign earned income exclusion addback is applied here.
@@ -876,19 +880,17 @@ export function TaxPreviewProvider({
         w2Income: w2GrossIncome,
         interestIncome: currency(scheduleB.interestTotal),
         dividendIncome: currency(scheduleB.dividendTotal),
-        scheduleCIncome: scheduleCNetIncome.total,
-        schedule1OtherIncome,
-        deductibleSeTaxAdjustment: scheduleSE.deductibleSeTax,
+        schedule1,
         capitalGainOrLoss: capitalGainOrLossToReturn,
         schedule2TotalAdditionalTaxes: schedule2.totalAdditionalTaxes,
         foreignTaxCredit: form1116.totalForeignTaxes,
         scheduleB,
-        scheduleEGrandTotal: scheduleE.grandTotal,
         w2Documents: reviewedW2Docs,
         interestDocuments: reviewedIntDocs,
         dividendDocuments: reviewedDivDocs,
         retirementDocuments: reviewed1099RDocs,
       }),
+      schedule1,
       scheduleA,
       scheduleB,
       scheduleC: scheduleCNetIncome,

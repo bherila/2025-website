@@ -35,6 +35,7 @@ jest.mock('@/components/ui/dialog', () => ({
 import type { Form1040LineItem } from '@/types/finance/tax-return'
 
 import type { computeForm1040Lines as ComputeForm1040LinesFn } from '../Form1040Preview'
+import { computeSchedule1Totals } from '../Schedule1Preview'
 
 let Form1040Preview: React.ComponentType<{
   lines: Form1040LineItem[]
@@ -53,11 +54,13 @@ beforeEach(() => {
   jest.clearAllMocks()
 })
 
+const defaultSchedule1 = computeSchedule1Totals({})
+
 const defaultInput = {
   w2Income: currency(100_000),
   interestIncome: currency(500),
   dividendIncome: currency(1_200),
-  scheduleCIncome: 0,
+  schedule1: defaultSchedule1,
 }
 
 function renderForm1040(
@@ -116,9 +119,11 @@ describe('Form1040Preview navigation', () => {
     const onNavigate = jest.fn()
     renderForm1040(
       {
-        scheduleCIncome: 5000,
-        schedule1OtherIncome: 750,
-        scheduleEGrandTotal: 1200,
+        schedule1: computeSchedule1Totals({
+          scheduleCNetIncome: 5000,
+          schedule1OtherIncome: 750,
+          scheduleEGrandTotal: 1200,
+        }),
       },
       { onNavigate },
     )
@@ -131,9 +136,11 @@ describe('Form1040Preview navigation', () => {
 
   it('aggregates Schedule C, Schedule E, and Schedule 1 line 8 into a single Line 8 value', () => {
     renderForm1040({
-      scheduleCIncome: 5000,
-      schedule1OtherIncome: 750,
-      scheduleEGrandTotal: 1200,
+      schedule1: computeSchedule1Totals({
+        scheduleCNetIncome: 5000,
+        schedule1OtherIncome: 750,
+        scheduleEGrandTotal: 1200,
+      }),
     })
 
     expect(screen.getByText('Additional income from Schedule 1, line 10')).toBeInTheDocument()
@@ -151,9 +158,11 @@ describe('Form1040Preview navigation', () => {
         dividendLines: [{ label: 'Blue Harbor — K-1 Box 6a', amount: 300 }, { label: 'Fund A — 1099-DIV Box 1a', amount: 1200 }],
         qualifiedDividendLines: [],
       },
-      scheduleCIncome: 5000,
-      scheduleEGrandTotal: 1000,
-      deductibleSeTaxAdjustment: 706.48,
+      schedule1: computeSchedule1Totals({
+        scheduleCNetIncome: 5000,
+        scheduleEGrandTotal: 1000,
+        deductibleSeTaxAdjustment: 706.48,
+      }),
       capitalGainOrLoss: 250,
       retirementDocuments: [
         {
