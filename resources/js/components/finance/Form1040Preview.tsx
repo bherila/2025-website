@@ -28,27 +28,13 @@ interface DataSource {
 }
 
 interface Form1040PreviewProps {
-  w2Income: currency
-  interestIncome: currency
-  dividendIncome: currency
-  scheduleCIncome: number
-  schedule1OtherIncome?: number
-  deductibleSeTaxAdjustment?: number
-  capitalGainOrLoss?: number | null
-  schedule2TotalAdditionalTaxes?: number | null
-  foreignTaxCredit?: number | null
-  scheduleB?: ScheduleBLines
-  /** Schedule E combined net income (K-1 partnerships + 1099-MISC rental/royalties) — feeds Schedule 1 line 5. */
-  scheduleEGrandTotal?: number
+  /**
+   * Pre-computed Form 1040 line items (typically `taxReturn.form1040`). The component
+   * is purely presentational — `computeForm1040Lines` is run once in TaxPreviewContext
+   * and the result is shared between the preview and the workbook export.
+   */
+  lines: Form1040LineItem[]
   selectedYear: number
-  /** Confirmed/reviewed W-2 documents — when provided, line 1a uses their parsed data instead of payslip estimate. */
-  w2Documents?: TaxDocument[]
-  /** Confirmed/reviewed 1099-INT documents for interest income drill-down. */
-  interestDocuments?: TaxDocument[]
-  /** Confirmed/reviewed 1099-DIV documents for dividend income drill-down. */
-  dividendDocuments?: TaxDocument[]
-  /** Confirmed/reviewed 1099-R documents for retirement distributions. */
-  retirementDocuments?: TaxDocument[]
   /** Called when the user clicks a 1040 line with a linked schedule tab. */
   onNavigate?: (tab: string) => void
 }
@@ -433,42 +419,12 @@ export function computeForm1040Lines({
 }
 
 export default function Form1040Preview({
-  w2Income,
-  interestIncome,
-  dividendIncome,
-  scheduleCIncome,
-  schedule1OtherIncome = 0,
-  deductibleSeTaxAdjustment = 0,
-  capitalGainOrLoss = null,
-  schedule2TotalAdditionalTaxes = null,
-  foreignTaxCredit = null,
-  scheduleB,
-  scheduleEGrandTotal = 0,
+  lines: rawLines,
   selectedYear,
-  w2Documents,
-  interestDocuments,
-  dividendDocuments,
-  retirementDocuments,
   onNavigate,
 }: Form1040PreviewProps) {
   const [dataSourceModal, setDataSourceModal] = useState<DataSourceModalState | null>(null)
-  const lines: LineItem[] = computeForm1040Lines({
-    w2Income,
-    interestIncome,
-    dividendIncome,
-    scheduleCIncome,
-    schedule1OtherIncome,
-    deductibleSeTaxAdjustment,
-    capitalGainOrLoss,
-    schedule2TotalAdditionalTaxes,
-    foreignTaxCredit,
-    ...(scheduleB ? { scheduleB } : {}),
-    scheduleEGrandTotal,
-    ...(w2Documents ? { w2Documents } : {}),
-    ...(interestDocuments ? { interestDocuments } : {}),
-    ...(dividendDocuments ? { dividendDocuments } : {}),
-    ...(retirementDocuments ? { retirementDocuments } : {}),
-  }).map((line) => {
+  const lines: LineItem[] = rawLines.map((line) => {
     const mappedLine: LineItem = {
       line: line.line,
       label: line.label,

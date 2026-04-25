@@ -904,22 +904,8 @@ function TaxPreviewPageContent() {
             form461={taxReturn.form461}
           />
           <Form1040Preview
-            w2Income={w2GrossIncome}
-            interestIncome={currency(taxReturn.scheduleB?.interestTotal ?? income1099.interestIncome.value)}
-            dividendIncome={currency(taxReturn.scheduleB?.dividendTotal ?? income1099.dividendIncome.value)}
-            scheduleCIncome={scheduleCNetIncome.total}
-            schedule1OtherIncome={schedule1OtherIncome}
-            deductibleSeTaxAdjustment={taxReturn.scheduleSE?.deductibleSeTax ?? 0}
-            capitalGainOrLoss={(taxReturn.scheduleD?.schD_line21 ?? 0) !== 0 ? (taxReturn.scheduleD?.schD_line21 ?? null) : (taxReturn.scheduleD?.schD_line16 ?? null)}
-            schedule2TotalAdditionalTaxes={taxReturn.schedule2?.totalAdditionalTaxes ?? null}
-            foreignTaxCredit={taxReturn.form1116?.totalForeignTaxes ?? null}
-            {...(taxReturn.scheduleB ? { scheduleB: taxReturn.scheduleB } : {})}
-            scheduleEGrandTotal={taxReturn.scheduleE?.grandTotal ?? 0}
+            lines={taxReturn.form1040 ?? []}
             selectedYear={selectedYear}
-            w2Documents={reviewedW2Docs}
-            interestDocuments={reviewed1099Docs.filter((doc) => doc.form_type === '1099_int' || doc.form_type === '1099_int_c')}
-            dividendDocuments={reviewed1099Docs.filter((doc) => doc.form_type === '1099_div' || doc.form_type === '1099_div_c')}
-            retirementDocuments={reviewed1099Docs.filter((doc) => doc.form_type === '1099_r')}
             onNavigate={handleTabChange}
           />
 
