@@ -17,7 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { cn } from '@/lib/utils'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import type { F1099DivParsedData, F1099IntParsedData, Form1099RParsedData, W2ParsedData } from '@/types/finance/tax-document'
-import type { Form1040LineItem } from '@/types/finance/tax-return'
+import type { Form1040LineItem, Schedule1Lines } from '@/types/finance/tax-return'
 
 export type { Form1040LineItem } from '@/types/finance/tax-return'
 
@@ -185,6 +185,7 @@ export function computeForm1040Lines({
   scheduleCIncome,
   schedule1OtherIncome = 0,
   deductibleSeTaxAdjustment = 0,
+  schedule1,
   capitalGainOrLoss = null,
   schedule2TotalAdditionalTaxes = null,
   foreignTaxCredit = null,
@@ -201,6 +202,7 @@ export function computeForm1040Lines({
   scheduleCIncome: number
   schedule1OtherIncome?: number
   deductibleSeTaxAdjustment?: number
+  schedule1?: Schedule1Lines
   capitalGainOrLoss?: number | null
   schedule2TotalAdditionalTaxes?: number | null
   foreignTaxCredit?: number | null
@@ -261,21 +263,45 @@ export function computeForm1040Lines({
         }]
 
   const retirementSummary = compute1099RDistributionSummary(retirementDocuments)
-  const schedule1Adjustment = currency(deductibleSeTaxAdjustment)
+  const schedule1PartI = schedule1?.partI
+  const schedule1PartII = schedule1?.partII
+  const schedule1AdjustmentSources: { label: string; amount: number; note?: string }[] = [
+    ...(schedule1PartII?.line13_hsaDeduction !== null && schedule1PartII?.line13_hsaDeduction !== undefined
+      ? [{ label: 'Health savings account deduction', amount: schedule1PartII.line13_hsaDeduction, note: 'Schedule 1 line 13' }]
+      : []),
+    ...(schedule1PartII?.line15_deductibleSeTax !== null && schedule1PartII?.line15_deductibleSeTax !== undefined
+      ? [{ label: 'Deductible half of self-employment tax', amount: schedule1PartII.line15_deductibleSeTax, note: 'Schedule 1 line 15' }]
+      : []),
+    ...(schedule1PartII?.line17_selfEmployedHealthInsurance !== null && schedule1PartII?.line17_selfEmployedHealthInsurance !== undefined
+      ? [{ label: 'Self-employed health insurance deduction', amount: schedule1PartII.line17_selfEmployedHealthInsurance, note: 'Schedule 1 line 17' }]
+      : []),
+    ...(schedule1PartII?.line20_iraDeduction !== null && schedule1PartII?.line20_iraDeduction !== undefined
+      ? [{ label: 'IRA deduction', amount: schedule1PartII.line20_iraDeduction, note: 'Schedule 1 line 20' }]
+      : []),
+    ...(schedule1PartII?.line21_studentLoanInterest !== null && schedule1PartII?.line21_studentLoanInterest !== undefined
+      ? [{ label: 'Student loan interest deduction', amount: schedule1PartII.line21_studentLoanInterest, note: 'Schedule 1 line 21' }]
+      : []),
+  ]
+  const schedule1Adjustment = currency(
+    schedule1PartII?.line26_totalAdjustments
+      ?? (schedule1AdjustmentSources.length > 0
+        ? schedule1AdjustmentSources.reduce((total, source) => currency(total).add(source.amount).value, 0)
+        : deductibleSeTaxAdjustment),
+  )
 
-  const schedule1Total = currency(scheduleCIncome)
+  const schedule1Total = schedule1PartI?.line10_total ?? currency(scheduleCIncome)
     .add(scheduleEGrandTotal)
     .add(schedule1OtherIncome).value
 
   const schedule1Sources: { label: string; amount: number; note?: string }[] = [
-    ...(scheduleCIncome !== 0
-      ? [{ label: 'Schedule C — Business income', amount: currency(scheduleCIncome).value, note: 'Schedule 1 line 3' }]
+    ...((schedule1PartI?.line3_business ?? scheduleCIncome) !== 0
+      ? [{ label: 'Schedule C — Business income', amount: currency(schedule1PartI?.line3_business ?? scheduleCIncome).value, note: 'Schedule 1 line 3' }]
       : []),
-    ...(scheduleEGrandTotal !== 0
-      ? [{ label: 'Schedule E — Rental / royalty / partnership', amount: currency(scheduleEGrandTotal).value, note: 'Schedule 1 line 5' }]
+    ...((schedule1PartI?.line5_rentalPartnerships ?? scheduleEGrandTotal) !== 0
+      ? [{ label: 'Schedule E — Rental / royalty / partnership', amount: currency(schedule1PartI?.line5_rentalPartnerships ?? scheduleEGrandTotal).value, note: 'Schedule 1 line 5' }]
       : []),
-    ...(schedule1OtherIncome !== 0
-      ? [{ label: '1099-MISC other income', amount: currency(schedule1OtherIncome).value, note: 'Schedule 1 line 8z' }]
+    ...((schedule1PartI?.line8z_otherIncome ?? schedule1OtherIncome) !== 0
+      ? [{ label: '1099-MISC other income', amount: currency(schedule1PartI?.line8z_otherIncome ?? schedule1OtherIncome).value, note: 'Schedule 1 line 8z' }]
       : []),
   ]
 
@@ -380,15 +406,7 @@ export function computeForm1040Lines({
       label: 'Adjustments to income (Schedule 1)',
       value: schedule1Adjustment.value,
       refSchedule: 'Schedule 1',
-      ...(schedule1Adjustment.value !== 0
-        ? {
-            sources: [{
-              label: 'Deductible half of self-employment tax',
-              amount: schedule1Adjustment.value,
-              note: 'Schedule SE',
-            }],
-          }
-        : {}),
+      ...(schedule1AdjustmentSources.length > 0 ? { sources: schedule1AdjustmentSources } : {}),
     },
     {
       line: '11',

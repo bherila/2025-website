@@ -313,6 +313,11 @@ describe('TaxPreviewContext', () => {
         value: 900,
       }),
     ]))
+    expect(result.current.taxReturn.schedule1?.partI).toEqual(expect.objectContaining({
+      line8z_otherIncome: 900,
+      line9_totalOther: 900,
+      line10_total: 900,
+    }))
     expect(result.current.taxReturn.scheduleE?.grandTotal).toBe(0)
   })
 
@@ -402,6 +407,10 @@ describe('TaxPreviewContext', () => {
       expect.objectContaining({ line: '10', value: 706.48 }),
       expect.objectContaining({ line: '11', value: 15_293.52 }),
     ]))
+    expect(result.current.taxReturn.schedule1?.partII).toEqual(expect.objectContaining({
+      line15_deductibleSeTax: 706.48,
+      line26_totalAdjustments: 706.48,
+    }))
 
     expect(result.current.taxReturn.form8960?.taxableInterest).toBe(200)
     expect(result.current.taxReturn.form8960?.ordinaryDividends).toBe(300)

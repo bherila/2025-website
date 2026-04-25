@@ -446,7 +446,6 @@ function TaxPreviewPageContent() {
     accounts,
     activeAccountIds,
     income1099,
-    schedule1OtherIncome,
     isMarried,
     activeTaxStates,
     setActiveTaxStates,
@@ -809,9 +808,7 @@ function TaxPreviewPageContent() {
         <TabsContent value={TAX_TABS.schedule1} className="mt-0">
           <Schedule1Preview
             selectedYear={selectedYear}
-            scheduleCNetIncome={scheduleCNetIncome.total}
-            scheduleEGrandTotal={taxReturn.scheduleE?.grandTotal ?? 0}
-            schedule1OtherIncome={schedule1OtherIncome}
+            schedule1={taxReturn.schedule1}
           />
         </TabsContent>
 

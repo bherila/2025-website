@@ -141,6 +141,37 @@ describe('Form1040Preview navigation', () => {
     expect(screen.getAllByText('$108,650.00')).toHaveLength(2)
   })
 
+  it('computes Line 10 from Schedule 1 Part II totals when a schedule1 payload is provided', () => {
+    renderForm1040({
+      schedule1: {
+        partI: {
+          line1a_taxableRefunds: null,
+          line2a_alimonyReceived: null,
+          line3_business: 5000,
+          line4_otherGains: null,
+          line5_rentalPartnerships: 1000,
+          line6_farmIncome: null,
+          line7_unemploymentCompensation: null,
+          line8z_otherIncome: 750,
+          line9_totalOther: 750,
+          line10_total: 6750,
+        },
+        partII: {
+          line13_hsaDeduction: 1200,
+          line15_deductibleSeTax: 706.48,
+          line17_selfEmployedHealthInsurance: 3000,
+          line20_iraDeduction: null,
+          line21_studentLoanInterest: 400,
+          line26_totalAdjustments: 5306.48,
+        },
+      },
+    })
+
+    expect(screen.getByText('Adjustments to income (Schedule 1)')).toBeInTheDocument()
+    expect(screen.getByText('$5,306.48')).toBeInTheDocument()
+    expect(screen.getByText('$103,143.52')).toBeInTheDocument()
+  })
+
   it('renders 1099-R lines and computes AGI from schedule totals and adjustments', () => {
     renderForm1040({
       scheduleB: {

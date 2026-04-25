@@ -3,54 +3,76 @@
 import currency from 'currency.js'
 
 import { FormBlock, FormLine, FormSubLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
+import type { Schedule1Lines } from '@/types/finance/tax-return'
 
 interface Schedule1PreviewProps {
   selectedYear: number
-  scheduleCNetIncome: number
-  scheduleEGrandTotal: number
-  schedule1OtherIncome: number
-}
-
-export interface Schedule1Totals {
-  line3_business: number
-  line5_rentalPartnerships: number
-  line8z_otherIncome: number
-  line9_totalOther: number
-  line10_total: number
+  schedule1?: Schedule1Lines | undefined
+  scheduleCNetIncome?: number
+  scheduleEGrandTotal?: number
+  schedule1OtherIncome?: number
+  deductibleSeTaxAdjustment?: number
 }
 
 export function computeSchedule1Totals({
-  scheduleCNetIncome,
-  scheduleEGrandTotal,
-  schedule1OtherIncome,
+  scheduleCNetIncome = 0,
+  scheduleEGrandTotal = 0,
+  schedule1OtherIncome = 0,
+  deductibleSeTaxAdjustment = 0,
 }: {
-  scheduleCNetIncome: number
-  scheduleEGrandTotal: number
-  schedule1OtherIncome: number
-}): Schedule1Totals {
+  scheduleCNetIncome?: number
+  scheduleEGrandTotal?: number
+  schedule1OtherIncome?: number
+  deductibleSeTaxAdjustment?: number
+}): Schedule1Lines {
   const line9_totalOther = currency(schedule1OtherIncome).value
   const line10_total = currency(scheduleCNetIncome)
     .add(scheduleEGrandTotal)
     .add(line9_totalOther).value
+  const line15_deductibleSeTax = deductibleSeTaxAdjustment === 0
+    ? null
+    : currency(deductibleSeTaxAdjustment).value
 
   return {
-    line3_business: scheduleCNetIncome,
-    line5_rentalPartnerships: scheduleEGrandTotal,
-    line8z_otherIncome: schedule1OtherIncome,
-    line9_totalOther,
-    line10_total,
+    partI: {
+      line1a_taxableRefunds: null,
+      line2a_alimonyReceived: null,
+      line3_business: scheduleCNetIncome,
+      line4_otherGains: null,
+      line5_rentalPartnerships: scheduleEGrandTotal,
+      line6_farmIncome: null,
+      line7_unemploymentCompensation: null,
+      line8z_otherIncome: schedule1OtherIncome,
+      line9_totalOther,
+      line10_total,
+    },
+    partII: {
+      line13_hsaDeduction: null,
+      line15_deductibleSeTax,
+      line17_selfEmployedHealthInsurance: null,
+      line20_iraDeduction: null,
+      line21_studentLoanInterest: null,
+      line26_totalAdjustments: currency(line15_deductibleSeTax ?? 0).value,
+    },
   }
 }
 
 export default function Schedule1Preview({
   selectedYear,
-  scheduleCNetIncome,
-  scheduleEGrandTotal,
-  schedule1OtherIncome,
+  schedule1,
+  scheduleCNetIncome = 0,
+  scheduleEGrandTotal = 0,
+  schedule1OtherIncome = 0,
+  deductibleSeTaxAdjustment = 0,
 }: Schedule1PreviewProps) {
-  const totals = computeSchedule1Totals({ scheduleCNetIncome, scheduleEGrandTotal, schedule1OtherIncome })
+  const totals = schedule1 ?? computeSchedule1Totals({
+    scheduleCNetIncome,
+    scheduleEGrandTotal,
+    schedule1OtherIncome,
+    deductibleSeTaxAdjustment,
+  })
 
-  const hasAnyIncome = totals.line10_total !== 0
+  const hasAnyIncome = totals.partI.line10_total !== 0
 
   return (
     <div className="space-y-4">
@@ -67,43 +89,70 @@ export default function Schedule1Preview({
 
       {hasAnyIncome && (
         <FormBlock title="Part I — Additional Income">
-          {totals.line3_business !== 0 && (
+          {totals.partI.line3_business !== 0 && (
             <>
-              <FormLine boxRef="3" label="Business income or (loss)" value={totals.line3_business} />
+              <FormLine boxRef="3" label="Business income or (loss)" value={totals.partI.line3_business} />
               <FormSubLine text="From Schedule C net income" />
             </>
           )}
-          {totals.line5_rentalPartnerships !== 0 && (
+          {totals.partI.line5_rentalPartnerships !== 0 && (
             <>
               <FormLine
                 boxRef="5"
                 label="Rental real estate, royalties, partnerships, S corporations, trusts"
-                value={totals.line5_rentalPartnerships}
+                value={totals.partI.line5_rentalPartnerships}
               />
               <FormSubLine text="From Schedule E combined total" />
             </>
           )}
-          {totals.line8z_otherIncome !== 0 && (
+          {totals.partI.line8z_otherIncome !== 0 && (
             <>
-              <FormLine boxRef="8z" label="Other income" value={totals.line8z_otherIncome} />
+              <FormLine boxRef="8z" label="Other income" value={totals.partI.line8z_otherIncome} />
               <FormSubLine text="From reviewed 1099-MISC documents routed to Schedule 1 line 8" />
-              <FormTotalLine label="Line 9 — Total other income (sum of lines 8a-8z)" value={totals.line9_totalOther} />
+              <FormTotalLine label="Line 9 — Total other income (sum of lines 8a-8z)" value={totals.partI.line9_totalOther} />
             </>
           )}
           <FormTotalLine
             label="Line 10 — Total additional income (to Form 1040 line 8)"
-            value={totals.line10_total}
+            value={totals.partI.line10_total}
             double
           />
         </FormBlock>
       )}
 
-      <FormBlock title="Part II — Adjustments to Income (not yet tracked)">
+      <FormBlock title="Part II — Adjustments to Income">
         <FormLine
-          label="Deductible SE tax, HSA deduction, self-employed health insurance, IRA, student loan interest, etc."
+          boxRef="13"
+          label="Health savings account (HSA) deduction"
           raw="—"
         />
-        <FormSubLine text="Schedule 1 Part II is the target of a future milestone; today these reduce AGI elsewhere in the tool." />
+        <FormLine
+          boxRef="15"
+          label="Deductible part of self-employment tax"
+          value={totals.partII.line15_deductibleSeTax}
+        />
+        <FormSubLine text="Computed from Schedule SE and included in Form 1040 line 10." />
+        <FormLine
+          boxRef="17"
+          label="Self-employed health insurance deduction"
+          raw="—"
+        />
+        <FormLine
+          boxRef="20"
+          label="IRA deduction"
+          raw="—"
+        />
+        <FormLine
+          boxRef="21"
+          label="Student loan interest deduction"
+          raw="—"
+        />
+        <FormSubLine text="Additional Part II manual-entry lines are not yet tracked in the tax preview UI." />
+        <FormTotalLine
+          label="Line 26 — Total adjustments to income (to Form 1040 line 10)"
+          value={totals.partII.line26_totalAdjustments}
+          double
+        />
       </FormBlock>
     </div>
   )
