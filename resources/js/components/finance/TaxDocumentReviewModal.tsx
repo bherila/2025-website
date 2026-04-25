@@ -828,7 +828,10 @@ export default function TaxDocumentReviewModal({
                             <SelectItem value="auto">Auto (infer from boxes)</SelectItem>
                             <SelectItem value="sch_c">Schedule C</SelectItem>
                             <SelectItem value="sch_e">Schedule E</SelectItem>
-                            <SelectItem value="sch_1_line_8">Schedule 1 Line 8</SelectItem>
+                            <SelectItem value="sch_1_8z">Schedule 1 Line 8z — Other income</SelectItem>
+                            <SelectItem value="sch_1_8b">Schedule 1 Line 8b — Gambling winnings</SelectItem>
+                            <SelectItem value="sch_1_8h">Schedule 1 Line 8h — Jury duty pay</SelectItem>
+                            <SelectItem value="sch_1_8i">Schedule 1 Line 8i — Prizes and awards</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>

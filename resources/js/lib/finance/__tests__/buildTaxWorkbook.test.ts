@@ -149,7 +149,9 @@ describe('buildTaxWorkbook — Form 1040 sheet formulas', () => {
           line1a_taxableRefunds: null, line2a_alimonyReceived: null,
           line3_business: 5000, line4_otherGains: null,
           line5_rentalPartnerships: 1200, line6_farmIncome: null,
-          line7_unemploymentCompensation: null, line8z_otherIncome: 750,
+          line7_unemploymentCompensation: null,
+          line8b_gambling: null, line8h_juryDuty: null, line8i_prizes: null,
+          line8z_otherIncome: 750,
           line9_totalOther: 750, line10_total: 6950,
         },
         partII: {

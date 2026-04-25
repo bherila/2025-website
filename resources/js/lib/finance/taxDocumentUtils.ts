@@ -9,7 +9,7 @@ import type { ForeignTaxSummary } from '@/finance/1116'
 import { extractForeignTaxFromK1 } from '@/finance/1116/k3-to-1116'
 import { k1NetIncome } from '@/lib/finance/k1Utils'
 import type { FK1StructuredData, MiscRouting, MultiAccountParsedEntry, TaxDocument, TaxDocumentAccountLink } from '@/types/finance/tax-document'
-import { isFK1StructuredData } from '@/types/finance/tax-document'
+import { isFK1StructuredData, isLine8MiscRouting } from '@/types/finance/tax-document'
 
 /**
  * Find the account link that corresponds to a parsed_data entry.
@@ -234,7 +234,7 @@ function applyMiscRouting(
     return
   }
 
-  if (routing === 'sch_e' || routing === 'sch_1_line_8') {
+  if (routing === 'sch_e' || isLine8MiscRouting(routing)) {
     result.other = sumNumericValues(parsedData, MISC_PRIMARY_BOX_KEYS)
     return
   }
@@ -244,7 +244,7 @@ function applyMiscRouting(
 
   if (result.other === null) {
     const inferredRouting = inferMiscRouting(parsedData)
-    if (inferredRouting === 'sch_e' || inferredRouting === 'sch_1_line_8') {
+    if (inferredRouting === 'sch_e' || isLine8MiscRouting(inferredRouting)) {
       result.other = sumNumericValues(parsedData, MISC_PRIMARY_BOX_KEYS)
     }
   }

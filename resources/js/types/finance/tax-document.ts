@@ -311,8 +311,26 @@ export interface Broker1099BParsedData {
   transactions: BrokerTransaction1099B[]
 }
 
+/** Parsed field values from 1099-G: government payments (unemployment, state refunds, etc.). */
+export interface F1099GParsedData {
+  payer_name?: string | null
+  payer_tin?: string | null
+  recipient_name?: string | null
+  recipient_tin_last4?: string | null
+  account_number?: string | null
+  box1_unemployment?: number | null
+  box2_state_local_refunds?: number | null
+  box4_fed_tax?: number | null
+  box5_rtaa_payments?: number | null
+  box6_taxable_grants?: number | null
+  box7_agriculture_payments?: number | null
+  box8_trade_business?: boolean | null
+  box10_state_tax?: number | null
+  box11_state?: string | null
+}
+
 /** Union of all possible parsed_data shapes. */
-export type TaxDocumentParsedData = W2ParsedData | F1099IntParsedData | F1099DivParsedData | F1099MiscParsedData | F1099NecParsedData | Form1099RParsedData | FK1ParsedData | _FK1StructuredData | Broker1099BParsedData
+export type TaxDocumentParsedData = W2ParsedData | F1099IntParsedData | F1099DivParsedData | F1099GParsedData | F1099MiscParsedData | F1099NecParsedData | Form1099RParsedData | FK1ParsedData | _FK1StructuredData | Broker1099BParsedData
 
 /** One entry in the parsed_data array for a broker_1099 / multi-account document. */
 export interface MultiAccountParsedEntry {
@@ -374,7 +392,24 @@ export interface TaxDocument {
   updated_at: string
 }
 
-export type MiscRouting = 'sch_c' | 'sch_e' | 'sch_1_line_8'
+/** sch_1_line_8 is retained as a backward-compat alias for sch_1_8z (catch-all other income). */
+export type MiscRouting =
+  | 'sch_c'
+  | 'sch_e'
+  | 'sch_1_line_8'
+  | 'sch_1_8b'
+  | 'sch_1_8h'
+  | 'sch_1_8i'
+  | 'sch_1_8z'
+
+/** Returns true for any routing value that targets Schedule 1 Part I line 8 family. */
+export function isLine8MiscRouting(routing: MiscRouting | null | undefined): boolean {
+  return routing === 'sch_1_line_8'
+    || routing === 'sch_1_8b'
+    || routing === 'sch_1_8h'
+    || routing === 'sch_1_8i'
+    || routing === 'sch_1_8z'
+}
 
 export interface EmploymentEntity {
   id: number
@@ -390,6 +425,7 @@ export const FORM_TYPE_LABELS: Record<string, string> = {
   '1099_int_c': '1099-INT-C',
   '1099_div': '1099-DIV',
   '1099_div_c': '1099-DIV-C',
+  '1099_g': '1099-G',
   '1099_misc': '1099-MISC',
   '1099_nec': '1099-NEC',
   '1099_r': 'Form 1099-R',

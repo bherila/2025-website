@@ -34,10 +34,11 @@ import { form461 } from '@/lib/tax/form461'
 import { calculateTax } from '@/lib/tax/taxBracket'
 import { buildCacheKey, getCachedTransactions, setCachedTransactions } from '@/services/transactionCache'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
-import type { EmploymentEntity, F1099DivParsedData, F1099IntParsedData, TaxDocument, W2ParsedData } from '@/types/finance/tax-document'
-import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
+import type { EmploymentEntity, F1099DivParsedData, F1099GParsedData, F1099IntParsedData, TaxDocument, W2ParsedData } from '@/types/finance/tax-document'
+import { FORM_TYPE_LABELS, isLine8MiscRouting } from '@/types/finance/tax-document'
 import type { OverviewRow, TaxReturn1040, UserDeductionEntry } from '@/types/finance/tax-return'
 
+import type { Schedule1Line8Breakdown } from './Schedule1Preview'
 import type { ScheduleCResponse, YearData } from './ScheduleCPreview'
 
 const FEDERAL_TAX_STATE = ''
@@ -91,8 +92,14 @@ interface TaxPreviewContextValue {
     dividendIncome: currency
     qualifiedDividends: currency
   }
-  /** Aggregated 1099-MISC "Other income" routed to Schedule 1 line 8 (Form 1040 line 8 source). */
+  /** Aggregated 1099-MISC "Other income" routed to Schedule 1 line 8 (total of all sub-lines). */
   schedule1OtherIncome: number
+  /** Per-sub-line breakdown of Schedule 1 line 8 income (8b gambling, 8h jury, 8i prizes, 8z other). */
+  schedule1Line8Breakdown: Schedule1Line8Breakdown
+  /** Unemployment compensation from 1099-G box 1 (Schedule 1 line 7). */
+  schedule1Line7Unemployment: number
+  /** Taxable state/local income tax refunds from 1099-G box 2 (Schedule 1 line 1a). */
+  schedule1Line1aTaxableRefunds: number
   /** Whether the user is married for the selected tax year (from marriage status settings). */
   isMarried: boolean
   /** State codes the user filed in for the selected tax year (e.g. ['CA', 'NY']). */
@@ -482,49 +489,93 @@ export function TaxPreviewProvider({
     return { interestIncome, dividendIncome, qualifiedDividends }
   }, [reviewed1099Docs])
 
-  const schedule1OtherIncome = useMemo(() => reviewed1099Docs.reduce((acc, doc) => {
-    const links = doc.account_links ?? []
+  const schedule1Line8Breakdown = useMemo<Schedule1Line8Breakdown>(() => {
+    const breakdown: Schedule1Line8Breakdown = { line8b: 0, line8h: 0, line8i: 0, line8z: 0 }
 
-    if (links.length > 0) {
-      return links.reduce((linkAcc, link) => {
-        if (link.form_type !== '1099_misc') {
-          return linkAcc
-        }
-
-        const entryData = extractLinkParsedData(doc, link)
-        if (entryData == null) {
-          return linkAcc
-        }
-
-        const effectiveRouting = link.misc_routing ?? doc.misc_routing
-        const shouldInclude = effectiveRouting === 'sch_1_line_8'
-          || (effectiveRouting == null && !hasNonZeroNumericValue(entryData, 'box1_rents', 'box2_royalties'))
-
-        if (!shouldInclude) {
-          return linkAcc
-        }
-
-        return linkAcc.add(getDocAmounts(doc, link).other ?? 0)
-      }, acc)
+    const addToBreakdown = (routing: string | null | undefined, amount: number) => {
+      if (routing === 'sch_1_8b') {
+        breakdown.line8b += amount
+      } else if (routing === 'sch_1_8h') {
+        breakdown.line8h += amount
+      } else if (routing === 'sch_1_8i') {
+        breakdown.line8i += amount
+      } else {
+        breakdown.line8z += amount
+      }
     }
 
-    const parsedData = !doc.parsed_data || Array.isArray(doc.parsed_data)
-      ? null
-      : doc.parsed_data as Record<string, unknown>
+    reviewed1099Docs.forEach((doc) => {
+      const links = doc.account_links ?? []
 
-    if (doc.form_type !== '1099_misc' || parsedData == null) {
-      return acc
-    }
+      if (links.length > 0) {
+        links.forEach((link) => {
+          if (link.form_type !== '1099_misc') {
+            return
+          }
+          const entryData = extractLinkParsedData(doc, link)
+          if (entryData == null) {
+            return
+          }
+          const effectiveRouting = link.misc_routing ?? doc.misc_routing
+          const shouldInclude = isLine8MiscRouting(effectiveRouting)
+            || (effectiveRouting == null && !hasNonZeroNumericValue(entryData, 'box1_rents', 'box2_royalties'))
+          if (!shouldInclude) {
+            return
+          }
+          addToBreakdown(effectiveRouting, getDocAmounts(doc, link).other ?? 0)
+        })
+        return
+      }
 
-    const shouldInclude = doc.misc_routing === 'sch_1_line_8'
-      || (doc.misc_routing == null && !hasNonZeroNumericValue(parsedData, 'box1_rents', 'box2_royalties'))
+      const parsedData = !doc.parsed_data || Array.isArray(doc.parsed_data)
+        ? null
+        : doc.parsed_data as Record<string, unknown>
 
-    if (!shouldInclude) {
-      return acc
-    }
+      if (doc.form_type !== '1099_misc' || parsedData == null) {
+        return
+      }
 
-    return acc.add(getDocAmounts(doc).other ?? 0)
-  }, currency(0)).value, [reviewed1099Docs])
+      const effectiveRouting = doc.misc_routing
+      const shouldInclude = isLine8MiscRouting(effectiveRouting)
+        || (effectiveRouting == null && !hasNonZeroNumericValue(parsedData, 'box1_rents', 'box2_royalties'))
+      if (!shouldInclude) {
+        return
+      }
+      addToBreakdown(effectiveRouting, getDocAmounts(doc).other ?? 0)
+    })
+
+    return breakdown
+  }, [reviewed1099Docs])
+
+  const schedule1OtherIncome = useMemo(
+    () => schedule1Line8Breakdown.line8b
+      + schedule1Line8Breakdown.line8h
+      + schedule1Line8Breakdown.line8i
+      + schedule1Line8Breakdown.line8z,
+    [schedule1Line8Breakdown],
+  )
+
+  const schedule1Line7Unemployment = useMemo(
+    () => reviewed1099Docs.reduce((acc, doc) => {
+      if (doc.form_type !== '1099_g') {
+        return acc
+      }
+      const p = doc.parsed_data as F1099GParsedData | null
+      return acc.add(p?.box1_unemployment ?? 0)
+    }, currency(0)).value,
+    [reviewed1099Docs],
+  )
+
+  const schedule1Line1aTaxableRefunds = useMemo(
+    () => reviewed1099Docs.reduce((acc, doc) => {
+      if (doc.form_type !== '1099_g') {
+        return acc
+      }
+      const p = doc.parsed_data as F1099GParsedData | null
+      return acc.add(p?.box2_state_local_refunds ?? 0)
+    }, currency(0)).value,
+    [reviewed1099Docs],
+  )
 
   const reviewed1099RDocs = useMemo(
     () => reviewed1099Docs.filter((doc) => doc.form_type === '1099_r'),
@@ -755,7 +806,9 @@ export function TaxPreviewProvider({
     const schedule1 = computeSchedule1Totals({
       scheduleCNetIncome: scheduleCNetIncome.total,
       scheduleEGrandTotal: scheduleE.grandTotal,
-      schedule1OtherIncome,
+      schedule1Line8Breakdown,
+      schedule1Line7Unemployment,
+      schedule1Line1aTaxableRefunds,
       deductibleSeTaxAdjustment: scheduleSE.deductibleSeTax,
     })
 
@@ -959,7 +1012,9 @@ export function TaxPreviewProvider({
     payslips,
     shortDividendSummary,
     isMarried,
-    schedule1OtherIncome,
+    schedule1Line8Breakdown,
+    schedule1Line7Unemployment,
+    schedule1Line1aTaxableRefunds,
     reviewed1099RDocs,
     userDeductions,
     palCarryforwards,
@@ -988,6 +1043,9 @@ export function TaxPreviewProvider({
     activeAccountIds,
     income1099,
     schedule1OtherIncome,
+    schedule1Line8Breakdown,
+    schedule1Line7Unemployment,
+    schedule1Line1aTaxableRefunds,
     isMarried,
     activeTaxStates,
     setActiveTaxStates,
@@ -1032,6 +1090,9 @@ export function TaxPreviewProvider({
     activeAccountIds,
     income1099,
     schedule1OtherIncome,
+    schedule1Line8Breakdown,
+    schedule1Line7Unemployment,
+    schedule1Line1aTaxableRefunds,
     isMarried,
     activeTaxStates,
     userDeductions,

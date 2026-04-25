@@ -296,4 +296,18 @@ describe('getDocAmounts', () => {
     const link = makeLink({ form_type: '1099_misc', ai_identifier: 'ACCT1' })
     expect(getDocAmounts(doc, link)).toEqual({ interest: null, dividend: null, capGain: null, schC: null, other: 500, foreignTax: null })
   })
+
+  it.each([
+    ['sch_1_8b', 300],
+    ['sch_1_8h', 300],
+    ['sch_1_8i', 300],
+    ['sch_1_8z', 300],
+  ] as const)('sub-line routing %s routes box3 to other', (routing, expected) => {
+    const doc = makeDoc({
+      form_type: '1099_misc',
+      misc_routing: routing,
+      parsed_data: { box3_other_income: expected } as never,
+    })
+    expect(getDocAmounts(doc).other).toBe(expected)
+  })
 })
