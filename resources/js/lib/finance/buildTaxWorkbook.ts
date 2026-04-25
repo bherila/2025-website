@@ -893,113 +893,124 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
   const line17 = form1040LineMap.get('17') ?? taxReturn.schedule2?.totalAdditionalTaxes ?? undefined
   const line20 = form1040LineMap.get('20') ?? taxReturn.form1116?.totalForeignTaxes ?? undefined
 
-  const form1040Sheet = taxReturn.form1040
-    ? buildSheet('Form 1040', [
-        { line: '1a', description: 'Wages, salaries, tips (W-2, box 1)', amount: line1a },
-        {
-          line: '2b',
-          description: 'Taxable interest',
-          amount: line2b,
-          formula: scheduleBLine4 ? formulaRef('Schedule B', scheduleBLine4) : undefined,
-          note: scheduleBLine4 ? '→ Schedule B' : undefined,
-        },
-        {
-          line: '3b',
-          description: 'Ordinary dividends',
-          amount: line3b,
-          formula: scheduleBLine6 ? formulaRef('Schedule B', scheduleBLine6) : undefined,
-          note: scheduleBLine6 ? '→ Schedule B' : undefined,
-        },
-        {
-          line: '4a',
-          description: 'IRA distributions',
-          amount: line4a,
-        },
-        {
-          line: '4b',
-          description: 'IRA taxable amount',
-          amount: line4b,
-        },
-        {
-          line: '5a',
-          description: 'Pensions and annuities',
-          amount: line5a,
-        },
-        {
-          line: '5b',
-          description: 'Pension / annuity taxable amount',
-          amount: line5b,
-        },
-        {
-          line: '7',
-          description: 'Capital gain or loss',
-          amount: line7,
-          formula: scheduleDLine21
-            ? formulaRef('Schedule D', scheduleDLine21)
-            : scheduleDLine16
-              ? formulaRef('Schedule D', scheduleDLine16)
-              : undefined,
-          note: scheduleDLine16 ? '→ Schedule D' : undefined,
-        },
-        {
-          line: '8',
-          description: 'Additional income (Schedule 1)',
-          amount: line8,
-          formula: [
-            scheduleCNetIncome ? formulaRef('Schedule C', scheduleCNetIncome).slice(1) : null,
-            scheduleECombined ? formulaRef('Schedule E', scheduleECombined).slice(1) : null,
-          ].filter(Boolean).length > 0
-            ? `=${[
-                scheduleCNetIncome ? formulaRef('Schedule C', scheduleCNetIncome).slice(1) : null,
-                scheduleECombined ? formulaRef('Schedule E', scheduleECombined).slice(1) : null,
-              ].filter(Boolean).join('+')}`
-            : undefined,
-          note: scheduleCNetIncome || scheduleECombined ? '→ Schedule C / E' : undefined,
-        },
-        {
-          line: '9',
-          description: 'Total income',
-          amount: line9,
-          isTotal: true,
-        },
-        {
-          line: '10',
-          description: 'Adjustments to income (Schedule 1)',
-          amount: line10,
-          formula: scheduleSELine13 ? formulaRef('Schedule SE', scheduleSELine13) : undefined,
-          note: scheduleSELine13 ? '→ Schedule SE / Schedule 1' : undefined,
-        },
-        {
-          line: '11',
-          description: 'Adjusted gross income',
-          amount: line11,
-          isTotal: true,
-        },
-        {
-          line: '13',
-          description: 'Qualified business income deduction (Form 8995)',
-          amount: taxReturn.form8995?.estimatedDeduction,
-          formula: form8995Line13 ? formulaRef('Form 8995', form8995Line13) : undefined,
-          note: form8995Line13 ? '→ Form 8995' : undefined,
-        },
-        {
-          line: '17',
-          description: 'Other taxes (Schedule 2)',
-          amount: line17,
-          formula: schedule2FormulaRefs.length > 0
-            ? `=${schedule2FormulaRefs.join('+')}`
-            : undefined,
-          note: '→ Form 6251 + Schedule SE + Form 8959 + Form 8960',
-        },
-        {
-          line: '20',
-          description: 'Foreign tax credit (Form 1116)',
-          amount: line20,
-          formula: form1116Line2 ? formulaRef('Form 1116', form1116Line2) : undefined,
-          note: form1116Line2 ? '→ Form 1116' : undefined,
-        },
-      ])
-    : null
+  // Schedule 1 "other income" residual (1099-MISC routed to line 8) — surfaced as a
+  // literal addend in the Excel formula since there's no Schedule 1 sheet to reference.
+  // Without this, the line 8 formula previously summed only Schedule C + Schedule E,
+  // silently under-reporting line 8 by the other-income amount in Excel exports.
+  const line8ScheduleCEContribution = currency(taxReturn.scheduleC?.total ?? 0)
+    .add(taxReturn.scheduleE?.grandTotal ?? 0).value
+  const line8OtherIncomeResidual = line8 !== undefined
+    ? currency(line8).subtract(line8ScheduleCEContribution).value
+    : 0
+  const line8FormulaTerms: string[] = [
+    ...(scheduleCNetIncome ? [formulaRef('Schedule C', scheduleCNetIncome).slice(1)] : []),
+    ...(scheduleECombined ? [formulaRef('Schedule E', scheduleECombined).slice(1)] : []),
+    ...(line8OtherIncomeResidual !== 0 ? [String(line8OtherIncomeResidual)] : []),
+  ]
+  const line8Formula = line8FormulaTerms.length > 0 ? `=${line8FormulaTerms.join('+')}` : undefined
+  const line8Note = line8OtherIncomeResidual !== 0
+    ? '→ Schedule C / E + Schedule 1 other income'
+    : (scheduleCNetIncome || scheduleECombined ? '→ Schedule C / E' : undefined)
+
+  const form1040Rows: XlsxRow[] | null = taxReturn.form1040 ? [
+    { line: '1a', description: 'Wages, salaries, tips (W-2, box 1)', amount: line1a },
+    {
+      line: '2b',
+      description: 'Taxable interest',
+      amount: line2b,
+      formula: scheduleBLine4 ? formulaRef('Schedule B', scheduleBLine4) : undefined,
+      note: scheduleBLine4 ? '→ Schedule B' : undefined,
+    },
+    {
+      line: '3b',
+      description: 'Ordinary dividends',
+      amount: line3b,
+      formula: scheduleBLine6 ? formulaRef('Schedule B', scheduleBLine6) : undefined,
+      note: scheduleBLine6 ? '→ Schedule B' : undefined,
+    },
+    { line: '4a', description: 'IRA distributions', amount: line4a },
+    { line: '4b', description: 'IRA taxable amount', amount: line4b },
+    { line: '5a', description: 'Pensions and annuities', amount: line5a },
+    { line: '5b', description: 'Pension / annuity taxable amount', amount: line5b },
+    {
+      line: '7',
+      description: 'Capital gain or loss',
+      amount: line7,
+      formula: scheduleDLine21
+        ? formulaRef('Schedule D', scheduleDLine21)
+        : scheduleDLine16
+          ? formulaRef('Schedule D', scheduleDLine16)
+          : undefined,
+      note: scheduleDLine16 ? '→ Schedule D' : undefined,
+    },
+    {
+      line: '8',
+      description: 'Additional income (Schedule 1)',
+      amount: line8,
+      formula: line8Formula,
+      note: line8Note,
+    },
+    { line: '9', description: 'Total income', amount: line9, isTotal: true },
+    {
+      line: '10',
+      description: 'Adjustments to income (Schedule 1)',
+      amount: line10,
+      formula: scheduleSELine13 ? formulaRef('Schedule SE', scheduleSELine13) : undefined,
+      note: scheduleSELine13 ? '→ Schedule SE / Schedule 1' : undefined,
+    },
+    { line: '11', description: 'Adjusted gross income', amount: line11, isTotal: true },
+    {
+      line: '13',
+      description: 'Qualified business income deduction (Form 8995)',
+      amount: taxReturn.form8995?.estimatedDeduction,
+      formula: form8995Line13 ? formulaRef('Form 8995', form8995Line13) : undefined,
+      note: form8995Line13 ? '→ Form 8995' : undefined,
+    },
+    {
+      line: '17',
+      description: 'Other taxes (Schedule 2)',
+      amount: line17,
+      formula: schedule2FormulaRefs.length > 0
+        ? `=${schedule2FormulaRefs.join('+')}`
+        : undefined,
+      note: '→ Form 6251 + Schedule SE + Form 8959 + Form 8960',
+    },
+    {
+      line: '20',
+      description: 'Foreign tax credit (Form 1116)',
+      amount: line20,
+      formula: form1116Line2 ? formulaRef('Form 1116', form1116Line2) : undefined,
+      note: form1116Line2 ? '→ Form 1116' : undefined,
+    },
+  ] : null
+
+  // Self-reference formulas: line 9 = SUM of constituent income lines, line 11 = line 9 − line 10.
+  // Row positions are derived from the actual array order so that adding/removing rows above
+  // doesn't silently break formulas (the previous hardcoded C2/C3/... approach broke when
+  // 4a/4b/5a/5b were inserted).
+  if (form1040Rows) {
+    const excelRowOf = (lineLabel: string): number | null => {
+      const idx = form1040Rows.findIndex(r => r.line === lineLabel)
+      return idx >= 0 ? idx + 2 : null
+    }
+
+    const line9SourceRows = ['1a', '2b', '3b', '4b', '5b', '7', '8']
+      .map(excelRowOf)
+      .filter((r): r is number => r !== null)
+    const line9Row = form1040Rows.find(r => r.line === '9')
+    if (line9Row && line9 !== undefined && line9SourceRows.length > 1) {
+      line9Row.formula = `=${line9SourceRows.map(r => `C${r}`).join('+')}`
+    }
+
+    const line9Pos = excelRowOf('9')
+    const line10Pos = excelRowOf('10')
+    const line11Row = form1040Rows.find(r => r.line === '11')
+    if (line11Row && line11 !== undefined && line9Pos !== null && line10Pos !== null) {
+      line11Row.formula = `=C${line9Pos}-C${line10Pos}`
+    }
+  }
+
+  const form1040Sheet = form1040Rows ? buildSheet('Form 1040', form1040Rows) : null
 
   // ── K-1 / K-3 / 1099 supplemental sheets ────────────────────────────────────
   const k1Sheets = (taxReturn.k1Docs ?? []).map((entry) => buildK1WorksheetSheet(entry))

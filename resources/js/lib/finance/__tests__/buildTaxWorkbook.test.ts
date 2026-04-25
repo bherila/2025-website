@@ -137,3 +137,85 @@ describe('buildTaxWorkbook — K-1/K-3 sheets', () => {
     expect(k3Sheet?.rows.some((row) => (row.note ?? '').includes('Country: DE'))).toBe(true)
   })
 })
+
+describe('buildTaxWorkbook — Form 1040 sheet formulas', () => {
+  function makeForm1040Return(overrides: Partial<TaxReturn1040> = {}): TaxReturn1040 {
+    return {
+      year: 2025,
+      scheduleC: { total: 5000, byQuarter: { q1: 0, q2: 0, q3: 0, q4: 0 } },
+      scheduleE: { grandTotal: 1200, totalPassive: 0, totalNonpassive: 1200 },
+      form1040: [
+        { line: '1a', label: 'Wages', value: 100_000 },
+        { line: '2b', label: 'Taxable interest', value: 0 },
+        { line: '3b', label: 'Ordinary dividends', value: 0 },
+        { line: '7', label: 'Capital gain or loss', value: 0 },
+        { line: '8', label: 'Schedule 1', value: 6_950 }, // 5000 C + 1200 E + 750 other
+        { line: '9', label: 'Total income', value: 106_950 },
+        { line: '10', label: 'Adjustments', value: 706 },
+        { line: '11', label: 'AGI', value: 106_244 },
+      ],
+      ...overrides,
+    }
+  }
+
+  function getForm1040Row(workbook: ReturnType<typeof buildTaxWorkbook>, line: string) {
+    const sheet = workbook.sheets.find((s) => s.name === 'Form 1040')
+    expect(sheet).toBeDefined()
+    return sheet!.rows.find((r) => r.line === line)
+  }
+
+  it('line 8 formula includes the Schedule 1 other-income residual when present (#306)', () => {
+    const workbook = buildTaxWorkbook(makeForm1040Return())
+    const line8 = getForm1040Row(workbook, '8')
+    expect(line8?.amount).toBe(6_950)
+    // 6950 amount minus (5000 C + 1200 E) = 750 residual added as a literal addend
+    expect(line8?.formula).toContain('+750')
+    expect(line8?.formula).toMatch(/Schedule C.*\+.*Schedule E.*\+750$/)
+    expect(line8?.note).toBe('→ Schedule C / E + Schedule 1 other income')
+  })
+
+  it('line 8 formula keeps the Schedule C / E only note when there is no other-income residual', () => {
+    const workbook = buildTaxWorkbook(makeForm1040Return({
+      // 5000 + 1200 = 6200 — line 8 amount matches schedule C+E, no residual
+      form1040: [
+        { line: '1a', label: 'Wages', value: 100_000 },
+        { line: '8', label: 'Schedule 1', value: 6_200 },
+        { line: '9', label: 'Total income', value: 106_200 },
+      ],
+    }))
+    const line8 = getForm1040Row(workbook, '8')
+    expect(line8?.amount).toBe(6_200)
+    expect(line8?.formula).not.toMatch(/\+\d/)
+    expect(line8?.note).toBe('→ Schedule C / E')
+  })
+
+  it('line 9 emits a SUM formula referencing the constituent income rows (#307)', () => {
+    const workbook = buildTaxWorkbook(makeForm1040Return())
+    const line9 = getForm1040Row(workbook, '9')
+    expect(line9?.amount).toBe(106_950)
+    // Self-references within Form 1040 are bare cell refs joined with '+'
+    expect(line9?.formula).toMatch(/^=C\d+(\+C\d+)+$/)
+    // Should reference at least 1a, 8 (and any other rows present)
+    const sheet = workbook.sheets.find((s) => s.name === 'Form 1040')!
+    const rowOf = (line: string) => sheet.rows.findIndex((r) => r.line === line) + 2
+    expect(line9?.formula).toContain(`C${rowOf('1a')}`)
+    expect(line9?.formula).toContain(`C${rowOf('8')}`)
+    // Must NOT include 4a/5a (gross retirement) — only 4b/5b (taxable) belong in line 9
+    expect(line9?.formula).not.toContain(`C${rowOf('4a')}`)
+    expect(line9?.formula).not.toContain(`C${rowOf('5a')}`)
+  })
+
+  it('line 11 emits a subtraction formula = line 9 − line 10 (#307)', () => {
+    const workbook = buildTaxWorkbook(makeForm1040Return())
+    const line11 = getForm1040Row(workbook, '11')
+    expect(line11?.amount).toBe(106_244)
+    const sheet = workbook.sheets.find((s) => s.name === 'Form 1040')!
+    const rowOf = (line: string) => sheet.rows.findIndex((r) => r.line === line) + 2
+    expect(line11?.formula).toBe(`=C${rowOf('9')}-C${rowOf('10')}`)
+  })
+
+  it('emits no Form 1040 sheet at all when taxReturn.form1040 is absent', () => {
+    const workbook = buildTaxWorkbook({ year: 2025 })
+    expect(workbook.sheets.find((s) => s.name === 'Form 1040')).toBeUndefined()
+  })
+})
