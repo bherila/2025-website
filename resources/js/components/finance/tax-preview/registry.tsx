@@ -20,6 +20,7 @@ import ScheduleSEPreview from '@/components/finance/ScheduleSEPreview'
 import TaxDocuments1099Section from '@/components/finance/TaxDocuments1099Section'
 import TaxDocumentsSection from '@/components/finance/TaxDocumentsSection'
 
+import { useDockActions } from './DockActions'
 import type { FormRegistry, FormRenderProps } from './formRegistry'
 
 function Form1040Adapter({ state }: FormRenderProps): React.ReactElement {
@@ -178,6 +179,7 @@ function Schedule3Adapter({ state }: FormRenderProps): React.ReactElement {
 }
 
 function Form1116Adapter({ state }: FormRenderProps): React.ReactElement {
+  const { reviewK1Doc, bulkSetSbpElection } = useDockActions()
   if (!state.taxReturn.form1116) {
     return (
       <StubCard
@@ -193,6 +195,8 @@ function Form1116Adapter({ state }: FormRenderProps): React.ReactElement {
       foreignTaxSummaries={state.foreignTaxSummaries}
       allK1Docs={allK1Docs}
       selectedYear={state.year}
+      onReviewNow={reviewK1Doc}
+      onBulkSetSbpElection={bulkSetSbpElection}
     />
   )
 }
