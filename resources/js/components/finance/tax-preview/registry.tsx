@@ -16,6 +16,8 @@ import ScheduleCTab from '@/components/finance/ScheduleCTab'
 import ScheduleDPreview from '@/components/finance/ScheduleDPreview'
 import ScheduleEPreview from '@/components/finance/ScheduleEPreview'
 import ScheduleSEPreview from '@/components/finance/ScheduleSEPreview'
+import TaxDocuments1099Section from '@/components/finance/TaxDocuments1099Section'
+import TaxDocumentsSection from '@/components/finance/TaxDocumentsSection'
 
 import type { FormRegistry, FormRenderProps } from './formRegistry'
 
@@ -279,12 +281,23 @@ function EstimateStub(): React.ReactElement {
   )
 }
 
-function DocumentsStub(): React.ReactElement {
+function DocumentsAdapter({ state }: FormRenderProps): React.ReactElement {
   return (
-    <StubCard
-      title="Account Documents"
-      note="Will become the home dashboard's primary content (upload + review queue)."
-    />
+    <div className="space-y-6">
+      <TaxDocumentsSection
+        selectedYear={state.year}
+        payslips={state.payslips}
+        documents={state.w2Documents}
+        employmentEntities={state.employmentEntities}
+      />
+      <TaxDocuments1099Section
+        selectedYear={state.year}
+        documents={state.accountDocuments}
+        accounts={state.accounts}
+        activeAccountIds={state.activeAccountIds}
+        foreignTaxSummaries={state.foreignTaxSummaries}
+      />
+    </div>
   )
 }
 
@@ -533,7 +546,7 @@ export const formRegistry: FormRegistry = {
     keywords: ['documents', 'upload', '1099', 'W-2', 'K-1', 'account documents'],
     category: 'App',
     presentation: 'app',
-    component: DocumentsStub,
+    component: DocumentsAdapter,
   },
   'wks-se-401k': {
     id: 'wks-se-401k',
