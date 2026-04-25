@@ -19,7 +19,7 @@ function Home() {
       <Line>{Im} currently:</Line>
       <ul className="list-disc list-inside pl-4">
         <li>
-          a Tech Lead at Meta, where I support the Getting Together teams. We build product 
+          a <s>Tech Lead</s> AI Pod Lead at Meta, where I support the Getting Together teams. We build product 
           and infrastructure (like Online Status) that help billions of people find and
           connect across platforms like Instagram, Facebook, and{' '}
           <CustomLink href="https://horizon.meta.com" rel="noopener">
