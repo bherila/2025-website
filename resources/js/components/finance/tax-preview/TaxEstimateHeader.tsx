@@ -2,8 +2,11 @@ import currency from 'currency.js'
 import { ChevronDown, ChevronUp, Maximize2 } from 'lucide-react'
 import { useState } from 'react'
 
+import type { fin_payslip } from '@/components/payslip/payslipDbCols'
+import TotalsTable from '@/components/payslip/TotalsTable.client'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { type FilingStatus, getStandardDeduction } from '@/lib/tax/standardDeductions'
 import { cn } from '@/lib/utils'
 import type { Form1040LineItem } from '@/types/finance/tax-return'
 
@@ -231,6 +234,17 @@ function KpiCard({
 
 function FullDetail({ summary }: { summary: KpiSummary }): React.ReactElement {
   const state = useTaxPreview()
+  const filingStatus: FilingStatus = state.isMarried ? 'Married Filing Jointly' : 'Single'
+  const dataSeries = buildPayslipSeries(state.payslips, state.year)
+  const finalSeriesLabel = dataSeries[dataSeries.length - 1]?.[0] ?? 'Q4 (Full Year)'
+  const scheduleCIncomeBySeries = {
+    Q1: state.scheduleCNetIncome.byQuarter.q1,
+    Q2: state.scheduleCNetIncome.byQuarter.q2,
+    Q3: state.scheduleCNetIncome.byQuarter.q3,
+    'Q4 (Full Year)': state.scheduleCNetIncome.byQuarter.q4,
+  }
+  const hasPayslipData = state.payslips.length > 0
+
   return (
     <div className="space-y-6">
       <Section title="Federal Summary" sticky>
@@ -246,6 +260,27 @@ function FullDetail({ summary }: { summary: KpiSummary }): React.ReactElement {
         />
       </Section>
 
+      {hasPayslipData && (
+        <Section title="Federal Brackets — by Quarter" sticky>
+          <TotalsTable
+            series={dataSeries}
+            taxConfig={{
+              year: String(state.year),
+              state: '',
+              filingStatus,
+              standardDeduction: getStandardDeduction(state.year, filingStatus),
+            }}
+            extraIncome={scheduleCIncomeBySeries}
+            extraTax={{
+              Q1: 0,
+              Q2: 0,
+              Q3: 0,
+              [finalSeriesLabel]: state.taxReturn.schedule2?.totalAdditionalTaxes ?? 0,
+            }}
+          />
+        </Section>
+      )}
+
       <Section title="Estimated Payments — Safe Harbor" sticky>
         <EstimatedTaxPaymentsSection
           planningYear={state.year + 1}
@@ -257,13 +292,34 @@ function FullDetail({ summary }: { summary: KpiSummary }): React.ReactElement {
           showMfsUnsupportedNotice={state.isMarried}
         />
       </Section>
-
-      <p className="text-xs text-muted-foreground">
-        Bracket breakdown by quarter will land here once the existing Tax Estimate tab&apos;s
-        TotalsTable computations move into TaxPreviewContext.
-      </p>
     </div>
   )
+}
+
+function buildPayslipSeries(payslips: fin_payslip[], year: number): [string, fin_payslip[]][] {
+  const start = `${year}-01-01`
+  const end = `${year + 1}-01-01`
+  const q1end = `${year}-04-01`
+  const q2end = `${year}-07-01`
+  const q3end = `${year}-10-01`
+  const all: fin_payslip[] = []
+  const q1: fin_payslip[] = []
+  const q2: fin_payslip[] = []
+  const q3: fin_payslip[] = []
+  for (const row of payslips) {
+    if (!row.pay_date || row.pay_date <= start || row.pay_date >= end) {
+      continue
+    }
+    all.push(row)
+    if (row.pay_date < q1end) q1.push(row)
+    if (row.pay_date < q2end) q2.push(row)
+    if (row.pay_date < q3end) q3.push(row)
+  }
+  const series: [string, fin_payslip[]][] = [['Q1', q1]]
+  if (q2.length > q1.length) series.push(['Q2', q2])
+  if (q3.length > q2.length) series.push(['Q3', q3])
+  if (all.length > q3.length) series.push(['Q4 (Full Year)', all])
+  return series
 }
 
 function Section({
