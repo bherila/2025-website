@@ -102,18 +102,20 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
       }
     }
 
-  if (route.columns.length === 0) {
-    return (
-      <div className="flex w-full bg-background">
-        {homeView}
-        <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} registry={registry} />
-      </div>
-    )
-  }
+  const hasFormColumns = route.columns.length > 0
 
   return (
     <div className="flex w-full overflow-x-auto bg-background">
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} registry={registry} />
+      <section
+        className={`flex flex-col overflow-y-auto bg-card ${
+          hasFormColumns
+            ? 'hidden w-[960px] shrink-0 border-r border-border md:flex'
+            : 'w-full'
+        }`}
+      >
+        {homeView}
+      </section>
       {route.columns.map((col, depth) => {
         const entry = getEntry(registry, col.form)
         const Component = entry.component
@@ -126,7 +128,7 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
         return (
           <section
             key={`${depth}-${col.form}-${col.instance ?? ''}`}
-            className={`flex w-full shrink-0 flex-col border-r border-border bg-card motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-right-4 motion-safe:duration-200 md:w-[480px] ${isLast ? '' : 'hidden md:flex'}`}
+            className={`flex w-full shrink-0 flex-col border-r border-border bg-card motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-right-4 motion-safe:duration-200 ${entry.wide ? 'md:w-[960px]' : 'md:w-[480px]'} ${isLast ? '' : 'hidden md:flex'}`}
             data-form-id={col.form}
             data-depth={depth}
             data-last={isLast ? 'true' : 'false'}

@@ -273,7 +273,7 @@ export default function ScheduleAPreview({
         <p className="text-xs text-muted-foreground">Itemized Deductions</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4">
         {/* Part I — Medical */}
         <FormBlock title="Part I — Medical and Dental Expenses">
           <FormLine label="Line 1 — Medical expenses" raw="—" />

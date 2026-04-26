@@ -55,6 +55,11 @@ export interface FormRenderProps {
   onDrill: (target: DrillTarget) => void
 }
 
+export interface KeyAmount {
+  label: string
+  value: number
+}
+
 export interface FormRegistryEntry {
   id: FormId
   label: string
@@ -70,6 +75,20 @@ export interface FormRegistryEntry {
   }
   component: ComponentType<FormRenderProps>
   relatedForms?: FormId[]
+  /** When true, the column renders at double width (960px) in the Miller shell. */
+  wide?: boolean
+  /**
+   * Returns key amounts to display on the form button in the home view.
+   * Return null when the form has no data yet.
+   */
+  keyAmounts?: (state: TaxPreviewState) => KeyAmount[] | null
+  /**
+   * Returns true when the form has data for the current return.
+   * Used to fade and sort N/A forms to the end of the home view grid.
+   * When absent and keyAmounts is defined, derives from keyAmounts !== null.
+   * When both are absent, always considered active.
+   */
+  hasData?: (state: TaxPreviewState) => boolean
   /**
    * XLSX export contribution. When present, `buildTaxWorkbook` invokes
    * `build` once per instance (or once total for singletons) and includes

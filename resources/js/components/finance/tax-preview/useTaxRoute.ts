@@ -42,6 +42,9 @@ function writeRoute(route: TaxRoute): void {
   }
   if (next === '') {
     history.replaceState(null, '', window.location.pathname + window.location.search)
+    // replaceState does not fire hashchange, but all useTaxRoute instances
+    // subscribe to it for sync. Dispatch manually so stale instances update.
+    window.dispatchEvent(new Event('hashchange'))
   } else {
     window.location.hash = next
   }

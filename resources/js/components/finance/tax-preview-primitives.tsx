@@ -79,6 +79,7 @@ export function FormLine({
   label,
   value,
   raw,
+  note,
   onClick,
   onDetails,
 }: {
@@ -86,11 +87,22 @@ export function FormLine({
   label: React.ReactNode
   value?: string | number | null
   raw?: string
+  note?: boolean
   onClick?: () => void
   onDetails?: () => void
 }) {
   const n = typeof value === 'number' ? value : parseFieldVal(value as string | null | undefined)
   const cls = n === null ? '' : n < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'
+
+  if (note) {
+    return (
+      <div className="px-3 py-1.5 space-y-0.5">
+        <span className="text-[10px] font-mono font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+        <p className="text-[12px] text-muted-foreground leading-snug">{raw}</p>
+      </div>
+    )
+  }
+
   return (
     <div
       className={`flex items-center gap-2 px-3 py-1.5 ${onClick ? 'cursor-pointer hover:bg-muted/20 transition-colors' : ''}`}

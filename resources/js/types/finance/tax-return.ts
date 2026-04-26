@@ -55,6 +55,7 @@ export interface ScheduleALines {
 export interface ScheduleBSourceLine {
   label: string
   amount: number
+  docId?: number
 }
 
 export interface ScheduleBLines {

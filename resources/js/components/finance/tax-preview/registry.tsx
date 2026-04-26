@@ -143,6 +143,7 @@ function ScheduleAAdapter({ state }: FormRenderProps): React.ReactElement {
 }
 
 function ScheduleBAdapter({ state }: FormRenderProps): React.ReactElement {
+  const { reviewK1Doc } = useDockActions()
   return (
     <ScheduleBPreview
       interestIncome={state.income1099.interestIncome}
@@ -151,6 +152,7 @@ function ScheduleBAdapter({ state }: FormRenderProps): React.ReactElement {
       selectedYear={state.year}
       reviewedK1Docs={state.reviewedK1Docs}
       reviewed1099Docs={state.reviewed1099Docs}
+      onOpenDoc={reviewK1Doc}
     />
   )
 }
@@ -175,7 +177,8 @@ function ScheduleEAdapter({ state }: FormRenderProps): React.ReactElement {
   )
 }
 
-function ScheduleSEAdapter({ state }: FormRenderProps): React.ReactElement {
+function ScheduleSEAdapter({ state, onDrill }: FormRenderProps): React.ReactElement {
+  const { reviewK1Doc } = useDockActions()
   return (
     <ScheduleSEPreview
       reviewedK1Docs={state.reviewedK1Docs}
@@ -184,6 +187,8 @@ function ScheduleSEAdapter({ state }: FormRenderProps): React.ReactElement {
       isMarried={state.isMarried}
       reviewedW2Docs={state.reviewedW2Docs}
       payslips={state.payslips}
+      onOpenDoc={reviewK1Doc}
+      onGoToScheduleC={() => onDrill({ form: 'sch-c' })}
     />
   )
 }
@@ -514,6 +519,8 @@ function DocumentsAdapter({ state }: FormRenderProps): React.ReactElement {
         payslips={state.payslips}
         documents={state.w2Documents}
         employmentEntities={state.employmentEntities}
+        isLoading={state.isLoading}
+        onDocumentsReload={state.refreshAll}
       />
       <TaxDocuments1099Section
         selectedYear={state.year}
@@ -521,6 +528,8 @@ function DocumentsAdapter({ state }: FormRenderProps): React.ReactElement {
         accounts={state.accounts}
         activeAccountIds={state.activeAccountIds}
         foreignTaxSummaries={state.foreignTaxSummaries}
+        isLoading={state.isLoading}
+        onDocumentsReload={state.refreshAll}
       />
     </div>
   )
@@ -567,6 +576,16 @@ export const formRegistry: FormRegistry = {
     category: 'Schedule',
     presentation: 'column',
     component: Schedule1Adapter,
+    keyAmounts: (state) => {
+      const s1 = state.taxReturn.schedule1
+      if (!s1) {
+        return null
+      }
+      return [
+        { label: 'Line 10', value: s1.partI.line10_total },
+        { label: 'Line 26', value: s1.partII.line26_totalAdjustments },
+      ]
+    },
   },
   'sch-2': {
     id: 'sch-2',
@@ -577,6 +596,13 @@ export const formRegistry: FormRegistry = {
     category: 'Schedule',
     presentation: 'column',
     component: Schedule2Adapter,
+    keyAmounts: (state) => {
+      const s2 = state.taxReturn.schedule2
+      if (!s2) {
+        return null
+      }
+      return [{ label: 'Total', value: s2.totalAdditionalTaxes }]
+    },
   },
   'sch-a': {
     id: 'sch-a',
@@ -587,6 +613,13 @@ export const formRegistry: FormRegistry = {
     category: 'Schedule',
     presentation: 'column',
     component: ScheduleAAdapter,
+    keyAmounts: (state) => {
+      const sA = state.taxReturn.scheduleA
+      if (!sA) {
+        return null
+      }
+      return [{ label: 'Itemized', value: sA.totalItemizedDeductions }]
+    },
   },
   'sch-b': {
     id: 'sch-b',
@@ -597,6 +630,16 @@ export const formRegistry: FormRegistry = {
     category: 'Schedule',
     presentation: 'column',
     component: ScheduleBAdapter,
+    keyAmounts: (state) => {
+      const sB = state.taxReturn.scheduleB
+      if (!sB) {
+        return null
+      }
+      return [
+        { label: 'Int', value: sB.interestTotal },
+        { label: 'Div', value: sB.dividendTotal },
+      ]
+    },
     xlsx: {
       sheetName: () => 'Schedule B',
       order: 25,
@@ -612,6 +655,13 @@ export const formRegistry: FormRegistry = {
     category: 'Schedule',
     presentation: 'column',
     component: ScheduleDAdapter,
+    keyAmounts: (state) => {
+      const sD = state.taxReturn.scheduleD
+      if (!sD) {
+        return null
+      }
+      return [{ label: 'Net G/L', value: sD.schD_line16 }]
+    },
     xlsx: {
       sheetName: () => 'Schedule D',
       order: 40,
@@ -627,6 +677,13 @@ export const formRegistry: FormRegistry = {
     category: 'Schedule',
     presentation: 'column',
     component: ScheduleEAdapter,
+    keyAmounts: (state) => {
+      const sE = state.taxReturn.scheduleE
+      if (!sE) {
+        return null
+      }
+      return [{ label: 'Total', value: sE.grandTotal }]
+    },
     xlsx: {
       sheetName: () => 'Schedule E',
       order: 50,
@@ -642,6 +699,7 @@ export const formRegistry: FormRegistry = {
     category: 'Schedule',
     presentation: 'column',
     component: ScheduleFAdapter,
+    hasData: (state) => state.taxReturn.scheduleF?.hasActivity ?? false,
   },
   'sch-se': {
     id: 'sch-se',
@@ -653,6 +711,13 @@ export const formRegistry: FormRegistry = {
     presentation: 'column',
     component: ScheduleSEAdapter,
     relatedForms: ['sch-c', 'sch-1', 'sch-2'],
+    keyAmounts: (state) => {
+      const sse = state.taxReturn.scheduleSE
+      if (!sse) {
+        return null
+      }
+      return [{ label: 'SE Tax', value: sse.seTax }]
+    },
     xlsx: {
       sheetName: () => 'Schedule SE',
       order: 60,
@@ -683,6 +748,13 @@ export const formRegistry: FormRegistry = {
     category: 'Form',
     presentation: 'column',
     component: Form6251Adapter,
+    keyAmounts: (state) => {
+      const f6251 = state.taxReturn.form6251
+      if (!f6251) {
+        return null
+      }
+      return [{ label: 'AMT', value: f6251.amt }]
+    },
     xlsx: {
       sheetName: () => 'Form 6251',
       order: 90,
@@ -698,6 +770,13 @@ export const formRegistry: FormRegistry = {
     category: 'Form',
     presentation: 'column',
     component: Form8995Adapter,
+    keyAmounts: (state) => {
+      const f8995 = state.taxReturn.form8995
+      if (!f8995) {
+        return null
+      }
+      return [{ label: 'QBI Ded.', value: f8995.estimatedDeduction }]
+    },
     xlsx: {
       sheetName: () => 'Form 8995',
       order: 110,
@@ -715,6 +794,10 @@ export const formRegistry: FormRegistry = {
     category: 'Schedule',
     presentation: 'column',
     component: Schedule3Adapter,
+    hasData: (state) => {
+      const f1116 = state.taxReturn.form1116
+      return f1116 != null && (f1116.totalForeignTaxes > 0 || f1116.totalPassiveIncome > 0)
+    },
   },
   'sch-c': {
     id: 'sch-c',
@@ -725,6 +808,7 @@ export const formRegistry: FormRegistry = {
     category: 'Schedule',
     presentation: 'column',
     component: ScheduleCAdapter,
+    hasData: (state) => state.scheduleCNetIncome.total !== 0,
     xlsx: {
       sheetName: () => 'Schedule C',
       order: 30,
@@ -740,6 +824,13 @@ export const formRegistry: FormRegistry = {
     category: 'Form',
     presentation: 'column',
     component: Form1116Adapter,
+    keyAmounts: (state) => {
+      const f1116 = state.taxReturn.form1116
+      if (!f1116) {
+        return null
+      }
+      return [{ label: 'FTC', value: f1116.totalForeignTaxes }]
+    },
     instances: {
       list: (state) => {
         const f1116 = state.taxReturn.form1116
@@ -775,6 +866,13 @@ export const formRegistry: FormRegistry = {
     category: 'Form',
     presentation: 'column',
     component: Form8582Adapter,
+    keyAmounts: (state) => {
+      const f8582 = state.taxReturn.form8582
+      if (!f8582) {
+        return null
+      }
+      return [{ label: 'Net', value: f8582.netPassiveResult }]
+    },
     xlsx: {
       sheetName: () => 'Form 8582',
       order: 100,
@@ -790,6 +888,7 @@ export const formRegistry: FormRegistry = {
     category: 'Form',
     presentation: 'column',
     component: Form4797Adapter,
+    hasData: (state) => state.taxReturn.form4797?.hasActivity ?? false,
   },
   'form-8606': {
     id: 'form-8606',
@@ -800,6 +899,7 @@ export const formRegistry: FormRegistry = {
     category: 'Form',
     presentation: 'column',
     component: Form8606Adapter,
+    hasData: (state) => state.taxReturn.form8606?.hasActivity ?? false,
   },
   'form-8949': {
     id: 'form-8949',
@@ -810,6 +910,7 @@ export const formRegistry: FormRegistry = {
     category: 'Form',
     presentation: 'column',
     component: Form8949Adapter,
+    hasData: (state) => state.reviewed1099Docs.length > 0 || state.reviewedK1Docs.length > 0,
   },
   'action-items': {
     id: 'action-items',
@@ -842,6 +943,7 @@ export const formRegistry: FormRegistry = {
     category: 'App',
     presentation: 'app',
     component: DocumentsAdapter,
+    wide: true,
   },
   'wks-se-401k': {
     id: 'wks-se-401k',
