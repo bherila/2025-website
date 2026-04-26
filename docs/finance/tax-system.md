@@ -793,3 +793,7 @@ TypeScript types are spread across several files in `resources/js/types/finance/
 - `TaxSummary`, `TaxHistoryReport`, `FederalCarryoverWorksheet`, `CapitalLossCarryoverSmartWorksheet`
 - `ScheduleBSmartWorksheet`, `ForeignTaxCreditComputationWorksheet`, `SALTDeductionSmartWorksheet`
 - `EstimatedTaxPaymentOptions`, `PersonOnReturnWorksheet`, `ScheduleCTwoYearComparison`
+
+---
+
+See [tax-preview-dock.md](tax-preview-dock.md) for the Miller-column dock UI architecture.

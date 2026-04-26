@@ -21,6 +21,7 @@ import ScheduleDPreview from '@/components/finance/ScheduleDPreview'
 import ScheduleEPreview from '@/components/finance/ScheduleEPreview'
 import ScheduleFPreview from '@/components/finance/ScheduleFPreview'
 import ScheduleSEPreview from '@/components/finance/ScheduleSEPreview'
+import { TAB_TO_FORM_ID, type TaxTabId } from '@/components/finance/tax-tab-ids'
 import TaxDocuments1099Section from '@/components/finance/TaxDocuments1099Section'
 import TaxDocumentsSection from '@/components/finance/TaxDocumentsSection'
 import WorksheetAmtExemption from '@/components/finance/worksheets/WorksheetAmtExemption'
@@ -42,13 +43,34 @@ import {
 } from '@/lib/finance/buildTaxWorkbook'
 
 import { useDockActions } from './DockActions'
-import type { FormRegistry, FormRenderProps } from './formRegistry'
+import type { DrillTarget, FormId, FormRegistry, FormRenderProps } from './formRegistry'
+import { summarizeTaxEstimate, TaxEstimateFullDetail } from './TaxEstimateHeader'
 
-function Form1040Adapter({ state }: FormRenderProps): React.ReactElement {
-  return <Form1040Preview lines={state.taxReturn.form1040 ?? []} selectedYear={state.year} />
+/**
+ * Adapts a legacy `onTabChange(TaxTabId)` callback to the Miller `onDrill`
+ * pipeline so previews wired for tab navigation automatically push columns
+ * when rendered in dock mode.
+ */
+function tabToDrill(onDrill: (t: DrillTarget) => void): (tab: TaxTabId) => void {
+  return (tab) => {
+    const formId = TAB_TO_FORM_ID[tab] as FormId | undefined
+    if (formId) {
+      onDrill({ form: formId })
+    }
+  }
 }
 
-function Schedule1Adapter({ state }: FormRenderProps): React.ReactElement {
+function Form1040Adapter({ state, onDrill }: FormRenderProps): React.ReactElement {
+  return (
+    <Form1040Preview
+      lines={state.taxReturn.form1040 ?? []}
+      selectedYear={state.year}
+      onNavigate={tabToDrill(onDrill)}
+    />
+  )
+}
+
+function Schedule1Adapter({ state, onDrill }: FormRenderProps): React.ReactElement {
   const alimonyInput = (
     <Schedule1AlimonyInput
       value={state.schedule1Line2aAlimony}
@@ -60,6 +82,7 @@ function Schedule1Adapter({ state }: FormRenderProps): React.ReactElement {
       selectedYear={state.year}
       schedule1={state.taxReturn.schedule1}
       line2aAlimonyInput={alimonyInput}
+      onTabChange={tabToDrill(onDrill)}
     />
   )
 }
@@ -92,7 +115,7 @@ function Schedule1AlimonyInput({
   )
 }
 
-function Schedule2Adapter({ state }: FormRenderProps): React.ReactElement {
+function Schedule2Adapter({ state, onDrill }: FormRenderProps): React.ReactElement {
   return (
     <AdditionalTaxesPreview
       schedule2={state.taxReturn.schedule2}
@@ -101,6 +124,7 @@ function Schedule2Adapter({ state }: FormRenderProps): React.ReactElement {
       form8960={state.taxReturn.form8960}
       capitalLossCarryover={state.taxReturn.capitalLossCarryover}
       form461={state.taxReturn.form461}
+      onTabChange={tabToDrill(onDrill)}
     />
   )
 }
@@ -445,7 +469,7 @@ function Form8949Adapter({ state }: FormRenderProps): React.ReactElement {
   return <Form8949Preview selectedYear={state.year} />
 }
 
-function ActionItemsAdapter({ state }: FormRenderProps): React.ReactElement {
+function ActionItemsAdapter({ state, onDrill }: FormRenderProps): React.ReactElement {
   const w2GrossIncome = state.payslips.reduce(
     (acc, row) =>
       acc
@@ -472,17 +496,14 @@ function ActionItemsAdapter({ state }: FormRenderProps): React.ReactElement {
       income1099={state.income1099}
       w2GrossIncome={w2GrossIncome}
       selectedYear={state.year}
+      onTabChange={tabToDrill(onDrill)}
     />
   )
 }
 
-function EstimateStub(): React.ReactElement {
-  return (
-    <StubCard
-      title="Tax Estimate"
-      note="Will move into the persistent header (3 tiers: slim / expanded cards / full modal with brackets + safe-harbor planning)."
-    />
-  )
+function EstimateAdapter({ state }: FormRenderProps): React.ReactElement {
+  const summary = summarizeTaxEstimate(state.taxReturn.form1040 ?? [])
+  return <TaxEstimateFullDetail summary={summary} />
 }
 
 function DocumentsAdapter({ state }: FormRenderProps): React.ReactElement {
@@ -806,7 +827,7 @@ export const formRegistry: FormRegistry = {
     keywords: ['estimate', 'refund', 'tax due', 'safe harbor', 'estimated payments', 'brackets'],
     category: 'App',
     presentation: 'app',
-    component: EstimateStub,
+    component: EstimateAdapter,
     xlsx: {
       sheetName: () => 'Est. Tax Payments',
       order: 200,
