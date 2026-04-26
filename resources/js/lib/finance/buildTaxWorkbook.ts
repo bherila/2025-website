@@ -568,6 +568,122 @@ export function buildForm8960Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
   return { name: 'Form 8960', rows }
 }
 
+export function buildForm4952Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.form4952) {
+    return null
+  }
+  const f = taxReturn.form4952
+  const srcLines = f.invIntSources.map((s) => ({ description: s.label, amount: s.amount }))
+  const srcStart = 3
+  const srcEnd = srcStart + srcLines.length - 1
+  const expLines = (f.invExpSources ?? []).map((s) => ({ description: s.label, amount: s.amount }))
+  const rows: XlsxRow[] = [
+    { isHeader: true, description: 'Part I — Investment Interest Expense Sources' },
+    ...srcLines,
+    {
+      line: '3',
+      description: 'Line 3 — Total investment interest',
+      amount: f.totalInvIntExpense * -1,
+      formula: srcLines.length > 0 ? `=-SUM(C${srcStart}:C${srcEnd})` : undefined,
+    },
+    { isHeader: true, description: 'Part II — Net Investment Income' },
+    ...(expLines.length > 0
+      ? [
+          ...expLines,
+          {
+            line: '5',
+            description: 'Line 5 — Investment expenses (Box 20B)',
+            amount: (f.totalInvExp ?? 0) * -1,
+            note: 'Reduces NII — Box 20B investment expenses from K-1',
+          } as XlsxRow,
+        ]
+      : []),
+    {
+      line: '6',
+      description: 'Line 6 — Net investment income (Line 4h − Line 5, no QD election)',
+      amount: f.niiBefore,
+      note: 'Floored at zero; basis for Line 8 deductible interest',
+    },
+    {
+      line: '7',
+      description: 'Line 7 — Disallowed investment interest expense carried to next year',
+      amount: f.disallowedCarryforward,
+    },
+    {
+      line: '8',
+      description: 'Line 8 — Investment interest expense deduction (smaller of Line 3 or Line 6)',
+      amount: f.deductibleInvestmentInterestExpense,
+      isTotal: true,
+    },
+  ]
+  return { name: 'Form 4952', rows }
+}
+
+export function buildScheduleSESheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.scheduleSE || taxReturn.scheduleSE.entries.length === 0) {
+    return null
+  }
+  const s = taxReturn.scheduleSE
+  const sourceStart = 3
+  const sourceEnd = sourceStart + s.entries.length - 1
+  return {
+    name: 'Schedule SE',
+    rows: [
+      { isHeader: true, description: 'Part I — Self-Employment Earnings' },
+      ...s.entries.map((entry) => ({ description: entry.label, amount: entry.amount })),
+      {
+        line: '2',
+        description: 'Line 2 — Net earnings from self-employment',
+        amount: s.netEarningsFromSE,
+        formula: s.entries.length > 0 ? sumFormula(sourceStart, sourceEnd) : undefined,
+        isTotal: true,
+      },
+      { line: '4a', description: 'Line 4a — 92.35% of net earnings', amount: s.seTaxableEarnings },
+      {
+        line: '7',
+        description: 'Line 7 — Social Security wage base',
+        amount: s.socialSecurityWageBase,
+        note:
+          s.socialSecurityWages > 0
+            ? `Reduced by ${currency(s.socialSecurityWages).format()} already subject to Social Security tax`
+            : undefined,
+      },
+      { line: '8a', description: 'Line 8a — Earnings subject to Social Security tax', amount: s.socialSecurityTaxableEarnings },
+      { line: '10', description: 'Line 10 — Social Security tax (12.4%)', amount: s.socialSecurityTax },
+      { line: '11', description: 'Line 11 — Medicare tax (2.9%)', amount: s.medicareTax },
+      { line: '12', description: 'Line 12 — Self-employment tax → Schedule 2 Line 4', amount: s.seTax, isTotal: true },
+      {
+        description: 'Form 8959 — Additional Medicare tax on self-employment earnings',
+        amount: s.additionalMedicareTax,
+        note:
+          s.additionalMedicareTaxableEarnings > 0
+            ? `${currency(s.additionalMedicareTaxableEarnings).format()} above the ${currency(s.additionalMedicareThreshold).format()} threshold after wages`
+            : 'No Additional Medicare tax from self-employment earnings',
+      },
+      {
+        line: '13',
+        description: 'Line 13 — Deductible half of self-employment tax → Schedule 1 Line 15',
+        amount: s.deductibleSeTax,
+        isTotal: true,
+      },
+    ],
+  }
+}
+
+export function buildShortDividendsSheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.shortDividends) {
+    return null
+  }
+  return {
+    name: 'Short Dividends',
+    rows: [
+      { line: '1', description: 'Total itemized deduction', amount: taxReturn.shortDividends.totalItemizedDeduction },
+      { line: '2', description: 'Total cost basis', amount: taxReturn.shortDividends.totalCostBasis },
+      { line: '3', description: 'Total unknown', amount: taxReturn.shortDividends.totalUnknown },
+    ],
+  }
+}
+
 export function buildScheduleDSheet(taxReturn: TaxReturn1040): XlsxSheet | null {
   if (!taxReturn.scheduleD) {
     return null
@@ -717,107 +833,11 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
   const scheduleERaw = buildScheduleESheet(taxReturn)
   const scheduleESheet = scheduleERaw ? buildSheet(scheduleERaw.name, scheduleERaw.rows) : null
 
-  // ── Schedule SE ──────────────────────────────────────────────────────────────
-  const scheduleSESheet = taxReturn.scheduleSE && taxReturn.scheduleSE.entries.length > 0
-    ? (() => {
-        const s = taxReturn.scheduleSE
-        const sourceStart = 3
-        const sourceEnd = sourceStart + s.entries.length - 1
-        return buildSheet('Schedule SE', [
-          { isHeader: true, description: 'Part I — Self-Employment Earnings' },
-          ...s.entries.map((entry) => ({ description: entry.label, amount: entry.amount })),
-          {
-            line: '2',
-            description: 'Line 2 — Net earnings from self-employment',
-            amount: s.netEarningsFromSE,
-            formula: s.entries.length > 0 ? sumFormula(sourceStart, sourceEnd) : undefined,
-            isTotal: true,
-          },
-          { line: '4a', description: 'Line 4a — 92.35% of net earnings', amount: s.seTaxableEarnings },
-          {
-            line: '7',
-            description: 'Line 7 — Social Security wage base',
-            amount: s.socialSecurityWageBase,
-            note: s.socialSecurityWages > 0
-              ? `Reduced by ${currency(s.socialSecurityWages).format()} already subject to Social Security tax`
-              : undefined,
-          },
-          { line: '8a', description: 'Line 8a — Earnings subject to Social Security tax', amount: s.socialSecurityTaxableEarnings },
-          { line: '10', description: 'Line 10 — Social Security tax (12.4%)', amount: s.socialSecurityTax },
-          { line: '11', description: 'Line 11 — Medicare tax (2.9%)', amount: s.medicareTax },
-          { line: '12', description: 'Line 12 — Self-employment tax → Schedule 2 Line 4', amount: s.seTax, isTotal: true },
-          {
-            description: 'Form 8959 — Additional Medicare tax on self-employment earnings',
-            amount: s.additionalMedicareTax,
-            note: s.additionalMedicareTaxableEarnings > 0
-              ? `${currency(s.additionalMedicareTaxableEarnings).format()} above the ${currency(s.additionalMedicareThreshold).format()} threshold after wages`
-              : 'No Additional Medicare tax from self-employment earnings',
-          },
-          {
-            line: '13',
-            description: 'Line 13 — Deductible half of self-employment tax → Schedule 1 Line 15',
-            amount: s.deductibleSeTax,
-            isTotal: true,
-          },
-        ])
-      })()
-    : null
-
-  // ── Form 4952 ────────────────────────────────────────────────────────────────
-  const form4952Sheet = taxReturn.form4952
-    ? (() => {
-        const srcLines = taxReturn.form4952.invIntSources.map((s) => ({
-          description: s.label,
-          amount: s.amount,
-        }))
-        const srcStart = 3
-        const srcEnd = srcStart + srcLines.length - 1
-        const expLines = (taxReturn.form4952.invExpSources ?? []).map((s) => ({
-          description: s.label,
-          amount: s.amount,
-        }))
-        const rows: XlsxRow[] = [
-          { isHeader: true, description: 'Part I — Investment Interest Expense Sources' },
-          ...srcLines,
-          {
-            line: '3',
-            description: 'Line 3 — Total investment interest',
-            amount: taxReturn.form4952.totalInvIntExpense * -1,
-            formula: srcLines.length > 0 ? `=-SUM(C${srcStart}:C${srcEnd})` : undefined,
-          },
-          { isHeader: true, description: 'Part II — Net Investment Income' },
-          ...(expLines.length > 0
-            ? [
-                ...expLines,
-                {
-                  line: '5',
-                  description: 'Line 5 — Investment expenses (Box 20B)',
-                  amount: (taxReturn.form4952.totalInvExp ?? 0) * -1,
-                  note: 'Reduces NII — Box 20B investment expenses from K-1',
-                } as XlsxRow,
-              ]
-            : []),
-          {
-            line: '6',
-            description: 'Line 6 — Net investment income (Line 4h − Line 5, no QD election)',
-            amount: taxReturn.form4952.niiBefore,
-            note: 'Floored at zero; basis for Line 8 deductible interest',
-          },
-          {
-            line: '7',
-            description: 'Line 7 — Disallowed investment interest expense carried to next year',
-            amount: taxReturn.form4952.disallowedCarryforward,
-          },
-          {
-            line: '8',
-            description: 'Line 8 — Investment interest expense deduction (smaller of Line 3 or Line 6)',
-            amount: taxReturn.form4952.deductibleInvestmentInterestExpense,
-            isTotal: true,
-          },
-        ]
-        return buildSheet('Form 4952', rows)
-      })()
-    : null
+  // ── Schedule SE / Form 4952 (registry-driven) ───────────────────────────────
+  const scheduleSERaw = buildScheduleSESheet(taxReturn)
+  const scheduleSESheet = scheduleSERaw ? buildSheet(scheduleSERaw.name, scheduleSERaw.rows) : null
+  const form4952Raw = buildForm4952Sheet(taxReturn)
+  const form4952Sheet = form4952Raw ? buildSheet(form4952Raw.name, form4952Raw.rows) : null
 
   // ── Schedule A ───────────────────────────────────────────────────────────────
   // Row order mirrors the IRS Schedule A: 7 → 8 → 9 → 10 → 11 → 16 → 17.
@@ -962,14 +982,9 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
   const form8582Raw = buildForm8582Sheet(taxReturn)
   const form8582Sheet = form8582Raw ? buildSheet(form8582Raw.name, form8582Raw.rows) : null
 
-  // ── Short Dividends ──────────────────────────────────────────────────────────
-  const shortDivSheet = taxReturn.shortDividends
-    ? buildSheet('Short Dividends', [
-        { line: '1', description: 'Total itemized deduction', amount: taxReturn.shortDividends.totalItemizedDeduction },
-        { line: '2', description: 'Total cost basis', amount: taxReturn.shortDividends.totalCostBasis },
-        { line: '3', description: 'Total unknown', amount: taxReturn.shortDividends.totalUnknown },
-      ])
-    : null
+  // ── Short Dividends (registry-driven) ────────────────────────────────────────
+  const shortDivRaw = buildShortDividendsSheet(taxReturn)
+  const shortDivSheet = shortDivRaw ? buildSheet(shortDivRaw.name, shortDivRaw.rows) : null
 
   // ── Form 1040 cross-sheet references ────────────────────────────────────────
   const scheduleBLine4 = scheduleBSheet?.rowIndex.get('Line 4 — Total interest')

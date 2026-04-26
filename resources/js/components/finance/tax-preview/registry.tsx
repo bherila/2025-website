@@ -20,12 +20,14 @@ import ScheduleSEPreview from '@/components/finance/ScheduleSEPreview'
 import TaxDocuments1099Section from '@/components/finance/TaxDocuments1099Section'
 import TaxDocumentsSection from '@/components/finance/TaxDocumentsSection'
 import {
+  buildForm4952Sheet,
   buildForm6251Sheet,
   buildForm8582Sheet,
   buildForm8995Sheet,
   buildScheduleCSheet,
   buildScheduleDSheet,
   buildScheduleESheet,
+  buildScheduleSESheet,
 } from '@/lib/finance/buildTaxWorkbook'
 
 import { useDockActions } from './DockActions'
@@ -435,6 +437,11 @@ export const formRegistry: FormRegistry = {
     presentation: 'column',
     component: ScheduleSEAdapter,
     relatedForms: ['sch-c', 'sch-1', 'sch-2'],
+    xlsx: {
+      sheetName: () => 'Schedule SE',
+      order: 60,
+      build: buildScheduleSESheet,
+    },
   },
   'form-4952': {
     id: 'form-4952',
@@ -445,6 +452,11 @@ export const formRegistry: FormRegistry = {
     category: 'Form',
     presentation: 'column',
     component: Form4952Adapter,
+    xlsx: {
+      sheetName: () => 'Form 4952',
+      order: 80,
+      build: buildForm4952Sheet,
+    },
   },
   'form-6251': {
     id: 'form-6251',
