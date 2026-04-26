@@ -2,6 +2,7 @@ import { ChevronLeft, X } from 'lucide-react'
 import { useEffect } from 'react'
 
 import { useTaxPreview } from '../TaxPreviewContext'
+import { CommandPalette, useCommandPaletteShortcut } from './CommandPalette'
 import { useDockActions } from './DockActions'
 import { type FormRegistry, getEntry } from './formRegistry'
 import { InstanceTabs } from './InstanceTabs'
@@ -42,8 +43,9 @@ interface MillerShellProps {
 export function MillerShell({ registry, homeView }: MillerShellProps): React.ReactElement {
   const { route, pushColumn, replaceFrom, truncateTo } = useTaxRoute()
   const state = useTaxPreview()
-  const { openWorksheet } = useDockActions()
+  const { openWorksheet, paletteOpen, setPaletteOpen } = useDockActions()
   const { addRecent } = useTaxPreviewPrefs(state.year)
+  useCommandPaletteShortcut(setPaletteOpen)
 
   const columnDepth = route.columns.length
   const rightmostForm = columnDepth > 0 ? route.columns[columnDepth - 1]!.form : null
@@ -101,11 +103,17 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
     }
 
   if (route.columns.length === 0) {
-    return <div className="flex h-full w-full bg-background">{homeView}</div>
+    return (
+      <div className="flex h-full w-full bg-background">
+        {homeView}
+        <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} registry={registry} />
+      </div>
+    )
   }
 
   return (
     <div className="flex h-full w-full overflow-x-auto bg-background">
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} registry={registry} />
       {route.columns.map((col, depth) => {
         const entry = getEntry(registry, col.form)
         const Component = entry.component
