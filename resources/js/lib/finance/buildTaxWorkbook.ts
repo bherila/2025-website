@@ -387,6 +387,187 @@ export function buildForm8582Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
   }
 }
 
+export function buildForm6251Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.form6251) {
+    return null
+  }
+  const f = taxReturn.form6251
+  const sourceStart = 3
+  const sourceEnd = sourceStart + f.sourceEntries.length - 1
+  const rows: XlsxRow[] = [
+    { isHeader: true, description: 'K-1 Box 17 / AMT Source Items' },
+    ...f.sourceEntries.map((entry) => ({
+      description: `${entry.label} — Box 17${entry.code} → Line ${entry.line}`,
+      amount: entry.amount,
+      note: entry.description,
+    })),
+    {
+      description: 'Total K-1 AMT source items',
+      amount: f.sourceEntries.reduce((total, entry) => currency(total).add(entry.amount).value, 0),
+      formula: f.sourceEntries.length > 0 ? sumFormula(sourceStart, sourceEnd) : undefined,
+      isTotal: true,
+    },
+    { isHeader: true, description: 'Part I — Alternative Minimum Taxable Income' },
+    { line: '1', description: 'Line 1 — Taxable income', amount: f.line1TaxableIncome },
+    { line: '2a', description: 'Line 2a — Taxes / standard deduction addback', amount: f.line2aTaxesOrStandardDeduction },
+    ...(f.line2cInvestmentInterest !== 0 ? [{ line: '2c', description: 'Line 2c — Investment interest adjustment', amount: f.line2cInvestmentInterest }] : []),
+    ...(f.line2dDepletion !== 0 ? [{ line: '2d', description: 'Line 2d — Depletion adjustment', amount: f.line2dDepletion }] : []),
+    ...(f.line2kDispositionOfProperty !== 0 ? [{ line: '2k', description: 'Line 2k — Disposition of property', amount: f.line2kDispositionOfProperty }] : []),
+    ...(f.line2lPost1986Depreciation !== 0 ? [{ line: '2l', description: 'Line 2l — Post-1986 depreciation', amount: f.line2lPost1986Depreciation }] : []),
+    ...(f.line2mPassiveActivities !== 0 ? [{ line: '2m', description: 'Line 2m — Passive activities', amount: f.line2mPassiveActivities }] : []),
+    ...(f.line2nLossLimitations !== 0 ? [{ line: '2n', description: 'Line 2n — Loss limitations', amount: f.line2nLossLimitations }] : []),
+    ...(f.line2tIntangibleDrillingCosts !== 0 ? [{ line: '2t', description: 'Line 2t — Intangible drilling costs', amount: f.line2tIntangibleDrillingCosts }] : []),
+    ...(f.line3OtherAdjustments !== 0 ? [{ line: '3', description: 'Line 3 — Other adjustments', amount: f.line3OtherAdjustments }] : []),
+    { line: '4', description: 'Line 4 — Alternative minimum taxable income (AMTI)', amount: f.amti, isTotal: true },
+    { isHeader: true, description: 'Part II — Alternative Minimum Tax' },
+    {
+      line: '5',
+      description: 'Line 5 — AMT exemption',
+      amount: f.exemption,
+      note: `Base ${currency(f.exemptionBase).format()} less phaseout ${currency(f.exemptionReduction).format()}`,
+    },
+    { line: '6', description: 'Line 6 — AMT tax base after exemption', amount: f.amtTaxBase },
+    { line: '7', description: 'Line 7 — AMT before foreign tax credit', amount: f.amtBeforeForeignCredit },
+    ...(f.line8AmtForeignTaxCredit > 0 ? [{ line: '8', description: 'Line 8 — AMT foreign tax credit', amount: f.line8AmtForeignTaxCredit }] : []),
+    { line: '9', description: 'Line 9 — Tentative minimum tax', amount: f.tentativeMinTax, isTotal: true },
+    { line: '10', description: 'Line 10 — Regular tax after credits', amount: f.regularTaxAfterCredits },
+    { line: '11', description: 'Line 11 — Alternative minimum tax', amount: f.amt, isTotal: true, note: '→ Schedule 2 Line 2' },
+  ]
+  if (f.requiresStatementReview) {
+    rows.push({ isHeader: true, description: 'Manual review notes' })
+    rows.push(...f.manualReviewReasons.map((reason) => ({ description: reason })))
+  }
+  return { name: 'Form 6251', rows }
+}
+
+export function buildForm8995Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.form8995) {
+    return null
+  }
+  const f = taxReturn.form8995
+  const entryStart = 3
+  const entryEnd = entryStart + f.entries.length - 1
+  const rows: XlsxRow[] = [
+    { isHeader: true, description: 'Per-Partnership QBI (Box 20 Code S)' },
+    ...f.entries.map((e) => ({ description: `${e.label} — QBI income`, amount: e.qbiIncome })),
+    {
+      line: '1',
+      description: 'Line 1 — Total qualified business income',
+      amount: f.totalQBI,
+      formula: f.entries.length > 0 ? sumFormula(entryStart, entryEnd) : undefined,
+      isTotal: true,
+    },
+    {
+      line: '15',
+      description: 'Line 15 — Estimated taxable income',
+      amount: f.estimatedTaxableIncome,
+      note: 'Total income minus estimated standard deduction',
+    },
+    {
+      line: '16',
+      description: 'Line 16 — Net capital gains (enter from Schedule D)',
+      note: 'Enter from return — reduces taxable income cap',
+    },
+    {
+      line: '17',
+      description: 'Line 17 — Taxable income cap (20% × Line 15)',
+      amount: f.taxableIncomeCap,
+      isTotal: true,
+    },
+    {
+      line: '13',
+      description: 'Line 13 — 20% × total QBI (after netting losses)',
+      amount: f.totalQBIComponent,
+    },
+    {
+      line: '13',
+      description: 'QBI Deduction — lesser of 20% QBI or taxable income cap',
+      amount: f.estimatedDeduction,
+      isTotal: true,
+      note: '→ Form 1040 Line 13',
+    },
+  ]
+  if (f.aboveThreshold) {
+    rows.push({
+      description: '⚠ Above threshold — use Form 8995-A; W-2 wage/UBIA limitation applies',
+      note: `Threshold: Single $${f.thresholdSingle.toLocaleString()} / MFJ $${f.thresholdMFJ.toLocaleString()}`,
+    })
+  }
+  return { name: 'Form 8995', rows }
+}
+
+export function buildForm8959Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.form8959 || taxReturn.form8959.additionalTax <= 0) {
+    return null
+  }
+  const f = taxReturn.form8959
+  const srcRows: XlsxRow[] =
+    f.sources.length > 0
+      ? [
+          { isHeader: true, description: 'W-2 Sources (Box 1 wages)' },
+          ...f.sources.map((s) => ({ description: s.label, amount: s.wages })),
+        ]
+      : []
+  return {
+    name: 'Form 8959',
+    rows: [
+      ...srcRows,
+      {
+        line: '1',
+        description: 'Line 1 — Medicare wages (W-2 Box 1 approx; exact = Box 5)',
+        amount: f.wages,
+        isTotal: srcRows.length > 0,
+        note: 'Box 5 (Medicare wages) may exceed Box 1 when 401k deferrals apply',
+      },
+      {
+        line: '5',
+        description: `Line 5 — Threshold (${f.threshold === 200_000 ? 'Single/HOH' : 'MFJ'})`,
+        amount: f.threshold,
+      },
+      { line: '6', description: 'Line 6 — Wages above threshold', amount: f.excessWages },
+      {
+        line: '7',
+        description: 'Line 7 — Additional Medicare Tax (0.9%) → Schedule 2 Line 11',
+        amount: f.additionalTax,
+        isTotal: true,
+      },
+    ],
+  }
+}
+
+export function buildForm8960Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.form8960) {
+    return null
+  }
+  const f = taxReturn.form8960
+  const rows: XlsxRow[] = [
+    { isHeader: true, description: 'Part I — Net Investment Income' },
+    ...f.interestSources.map((s) => ({ description: `  ${s.label}`, amount: s.amount })),
+    { line: '1', description: 'Taxable interest (Schedule B)', amount: f.taxableInterest, isTotal: f.interestSources.length > 0 },
+    ...f.dividendSources.map((s) => ({ description: `  ${s.label}`, amount: s.amount })),
+    { line: '2', description: 'Ordinary dividends (Schedule B)', amount: f.ordinaryDividends, isTotal: f.dividendSources.length > 0 },
+    { line: '5a', description: 'Net capital gains (Schedule D, capped at 0)', amount: f.netCapGains },
+    ...f.passiveSources.map((s) => ({ description: `  ${s.label}`, amount: s.amount })),
+    { line: '4a', description: 'Net passive income (K-1 Schedule E)', amount: f.passiveIncome, isTotal: f.passiveSources.length > 0 },
+    { line: '8', description: 'Line 8 — Gross NII', amount: f.grossNII, isTotal: true },
+    { isHeader: true, description: 'Part II — Deductions' },
+    { line: '9a', description: 'Investment interest expense (Form 4952)', amount: -f.investmentInterestExpense },
+    { line: '11', description: 'Line 11 — Total deductions', amount: -f.totalDeductions, isTotal: true },
+    { isHeader: true, description: 'Part III — NIIT Computation' },
+    { line: '12', description: 'Net Investment Income (Line 8 − 11)', amount: f.netInvestmentIncome, isTotal: true },
+    { line: '13', description: 'Modified AGI (estimated)', amount: f.magi },
+    { line: '14', description: `Threshold (${f.threshold === 200_000 ? 'Single/HOH' : 'MFJ'})`, amount: f.threshold },
+    { line: '15', description: 'MAGI excess over threshold', amount: f.magiExcess },
+    {
+      line: '17',
+      description: 'NIIT (3.8% × lesser of Line 12 or 15) → Schedule 2 Line 12',
+      amount: f.niitTax,
+      isTotal: true,
+    },
+  ]
+  return { name: 'Form 8960', rows }
+}
+
 export function buildScheduleDSheet(taxReturn: TaxReturn1040): XlsxSheet | null {
   if (!taxReturn.scheduleD) {
     return null
@@ -763,159 +944,15 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
       })()
     : null
 
-  // ── Form 6251 ────────────────────────────────────────────────────────────────
-  const form6251Sheet = taxReturn.form6251
-    ? (() => {
-        const f = taxReturn.form6251
-        const sourceStart = 3
-        const sourceEnd = sourceStart + f.sourceEntries.length - 1
-        const rows: XlsxRow[] = [
-          { isHeader: true, description: 'K-1 Box 17 / AMT Source Items' },
-          ...f.sourceEntries.map((entry) => ({
-            description: `${entry.label} — Box 17${entry.code} → Line ${entry.line}`,
-            amount: entry.amount,
-            note: entry.description,
-          })),
-          {
-            description: 'Total K-1 AMT source items',
-            amount: f.sourceEntries.reduce((total, entry) => currency(total).add(entry.amount).value, 0),
-            formula: f.sourceEntries.length > 0 ? sumFormula(sourceStart, sourceEnd) : undefined,
-            isTotal: true,
-          },
-          { isHeader: true, description: 'Part I — Alternative Minimum Taxable Income' },
-          { line: '1', description: 'Line 1 — Taxable income', amount: f.line1TaxableIncome },
-          { line: '2a', description: 'Line 2a — Taxes / standard deduction addback', amount: f.line2aTaxesOrStandardDeduction },
-          ...(f.line2cInvestmentInterest !== 0 ? [{ line: '2c', description: 'Line 2c — Investment interest adjustment', amount: f.line2cInvestmentInterest }] : []),
-          ...(f.line2dDepletion !== 0 ? [{ line: '2d', description: 'Line 2d — Depletion adjustment', amount: f.line2dDepletion }] : []),
-          ...(f.line2kDispositionOfProperty !== 0 ? [{ line: '2k', description: 'Line 2k — Disposition of property', amount: f.line2kDispositionOfProperty }] : []),
-          ...(f.line2lPost1986Depreciation !== 0 ? [{ line: '2l', description: 'Line 2l — Post-1986 depreciation', amount: f.line2lPost1986Depreciation }] : []),
-          ...(f.line2mPassiveActivities !== 0 ? [{ line: '2m', description: 'Line 2m — Passive activities', amount: f.line2mPassiveActivities }] : []),
-          ...(f.line2nLossLimitations !== 0 ? [{ line: '2n', description: 'Line 2n — Loss limitations', amount: f.line2nLossLimitations }] : []),
-          ...(f.line2tIntangibleDrillingCosts !== 0 ? [{ line: '2t', description: 'Line 2t — Intangible drilling costs', amount: f.line2tIntangibleDrillingCosts }] : []),
-          ...(f.line3OtherAdjustments !== 0 ? [{ line: '3', description: 'Line 3 — Other adjustments', amount: f.line3OtherAdjustments }] : []),
-          { line: '4', description: 'Line 4 — Alternative minimum taxable income (AMTI)', amount: f.amti, isTotal: true },
-          { isHeader: true, description: 'Part II — Alternative Minimum Tax' },
-          { line: '5', description: 'Line 5 — AMT exemption', amount: f.exemption, note: `Base ${currency(f.exemptionBase).format()} less phaseout ${currency(f.exemptionReduction).format()}` },
-          { line: '6', description: 'Line 6 — AMT tax base after exemption', amount: f.amtTaxBase },
-          { line: '7', description: 'Line 7 — AMT before foreign tax credit', amount: f.amtBeforeForeignCredit },
-          ...(f.line8AmtForeignTaxCredit > 0 ? [{ line: '8', description: 'Line 8 — AMT foreign tax credit', amount: f.line8AmtForeignTaxCredit }] : []),
-          { line: '9', description: 'Line 9 — Tentative minimum tax', amount: f.tentativeMinTax, isTotal: true },
-          { line: '10', description: 'Line 10 — Regular tax after credits', amount: f.regularTaxAfterCredits },
-          { line: '11', description: 'Line 11 — Alternative minimum tax', amount: f.amt, isTotal: true, note: '→ Schedule 2 Line 2' },
-        ]
-
-        if (f.requiresStatementReview) {
-          rows.push({ isHeader: true, description: 'Manual review notes' })
-          rows.push(...f.manualReviewReasons.map((reason) => ({ description: reason })))
-        }
-
-        return buildSheet('Form 6251', rows)
-      })()
-    : null
-
-  // ── Form 8995 ────────────────────────────────────────────────────────────────
-  const form8995Sheet = taxReturn.form8995
-    ? (() => {
-        const f = taxReturn.form8995
-        const entryStart = 3
-        const entryEnd = entryStart + f.entries.length - 1
-        const rows: XlsxRow[] = [
-          { isHeader: true, description: 'Per-Partnership QBI (Box 20 Code S)' },
-          ...f.entries.map((e) => ({ description: `${e.label} — QBI income`, amount: e.qbiIncome })),
-          {
-            line: '1',
-            description: 'Line 1 — Total qualified business income',
-            amount: f.totalQBI,
-            formula: f.entries.length > 0 ? sumFormula(entryStart, entryEnd) : undefined,
-            isTotal: true,
-          },
-          {
-            line: '15',
-            description: 'Line 15 — Estimated taxable income',
-            amount: f.estimatedTaxableIncome,
-            note: 'Total income minus estimated standard deduction',
-          },
-          {
-            line: '16',
-            description: 'Line 16 — Net capital gains (enter from Schedule D)',
-            note: 'Enter from return — reduces taxable income cap',
-          },
-          {
-            line: '17',
-            description: 'Line 17 — Taxable income cap (20% × Line 15)',
-            amount: f.taxableIncomeCap,
-            isTotal: true,
-          },
-          {
-            line: '13',
-            description: 'Line 13 — 20% × total QBI (after netting losses)',
-            amount: f.totalQBIComponent,
-          },
-          {
-            line: '13',
-            description: 'QBI Deduction — lesser of 20% QBI or taxable income cap',
-            amount: f.estimatedDeduction,
-            isTotal: true,
-            note: '→ Form 1040 Line 13',
-          },
-        ]
-        if (f.aboveThreshold) {
-          rows.push({
-            description: '⚠ Above threshold — use Form 8995-A; W-2 wage/UBIA limitation applies',
-            note: `Threshold: Single $${f.thresholdSingle.toLocaleString()} / MFJ $${f.thresholdMFJ.toLocaleString()}`,
-          })
-        }
-        return buildSheet('Form 8995', rows)
-      })()
-    : null
-
-  // ── Form 8959 ────────────────────────────────────────────────────────────────
-  const form8959Sheet = taxReturn.form8959 && taxReturn.form8959.additionalTax > 0
-    ? (() => {
-        const f = taxReturn.form8959
-        const srcRows: XlsxRow[] = f.sources.length > 0
-          ? [
-              { isHeader: true, description: 'W-2 Sources (Box 1 wages)' },
-              ...f.sources.map(s => ({ description: s.label, amount: s.wages })),
-            ]
-          : []
-        return buildSheet('Form 8959', [
-          ...srcRows,
-          { line: '1', description: 'Line 1 — Medicare wages (W-2 Box 1 approx; exact = Box 5)', amount: f.wages, isTotal: srcRows.length > 0, note: 'Box 5 (Medicare wages) may exceed Box 1 when 401k deferrals apply' },
-          { line: '5', description: `Line 5 — Threshold (${f.threshold === 200_000 ? 'Single/HOH' : 'MFJ'})`, amount: f.threshold },
-          { line: '6', description: 'Line 6 — Wages above threshold', amount: f.excessWages },
-          { line: '7', description: 'Line 7 — Additional Medicare Tax (0.9%) → Schedule 2 Line 11', amount: f.additionalTax, isTotal: true },
-        ])
-      })()
-    : null
-
-  // ── Form 8960 ────────────────────────────────────────────────────────────────
-  const form8960Sheet = taxReturn.form8960
-    ? (() => {
-        const f = taxReturn.form8960
-        const rows: XlsxRow[] = [
-          { isHeader: true, description: 'Part I — Net Investment Income' },
-          ...f.interestSources.map(s => ({ description: `  ${s.label}`, amount: s.amount })),
-          { line: '1', description: 'Taxable interest (Schedule B)', amount: f.taxableInterest, isTotal: f.interestSources.length > 0 },
-          ...f.dividendSources.map(s => ({ description: `  ${s.label}`, amount: s.amount })),
-          { line: '2', description: 'Ordinary dividends (Schedule B)', amount: f.ordinaryDividends, isTotal: f.dividendSources.length > 0 },
-          { line: '5a', description: 'Net capital gains (Schedule D, capped at 0)', amount: f.netCapGains },
-          ...f.passiveSources.map(s => ({ description: `  ${s.label}`, amount: s.amount })),
-          { line: '4a', description: 'Net passive income (K-1 Schedule E)', amount: f.passiveIncome, isTotal: f.passiveSources.length > 0 },
-          { line: '8', description: 'Line 8 — Gross NII', amount: f.grossNII, isTotal: true },
-          { isHeader: true, description: 'Part II — Deductions' },
-          { line: '9a', description: 'Investment interest expense (Form 4952)', amount: -f.investmentInterestExpense },
-          { line: '11', description: 'Line 11 — Total deductions', amount: -f.totalDeductions, isTotal: true },
-          { isHeader: true, description: 'Part III — NIIT Computation' },
-          { line: '12', description: 'Net Investment Income (Line 8 − 11)', amount: f.netInvestmentIncome, isTotal: true },
-          { line: '13', description: 'Modified AGI (estimated)', amount: f.magi },
-          { line: '14', description: `Threshold (${f.threshold === 200_000 ? 'Single/HOH' : 'MFJ'})`, amount: f.threshold },
-          { line: '15', description: 'MAGI excess over threshold', amount: f.magiExcess },
-          { line: '17', description: 'NIIT (3.8% × lesser of Line 12 or 15) → Schedule 2 Line 12', amount: f.niitTax, isTotal: true },
-        ]
-        return buildSheet('Form 8960', rows)
-      })()
-    : null
+  // ── Form 6251 / 8995 / 8959 / 8960 (registry-driven) ────────────────────────
+  const form6251Raw = buildForm6251Sheet(taxReturn)
+  const form6251Sheet = form6251Raw ? buildSheet(form6251Raw.name, form6251Raw.rows) : null
+  const form8995Raw = buildForm8995Sheet(taxReturn)
+  const form8995Sheet = form8995Raw ? buildSheet(form8995Raw.name, form8995Raw.rows) : null
+  const form8959Raw = buildForm8959Sheet(taxReturn)
+  const form8959Sheet = form8959Raw ? buildSheet(form8959Raw.name, form8959Raw.rows) : null
+  const form8960Raw = buildForm8960Sheet(taxReturn)
+  const form8960Sheet = form8960Raw ? buildSheet(form8960Raw.name, form8960Raw.rows) : null
 
   // ── Capital Loss Carryover / Form 461 / Form 8582 (registry-driven) ─────────
   const capitalLossRaw = buildCapitalLossCarryoverSheet(taxReturn)

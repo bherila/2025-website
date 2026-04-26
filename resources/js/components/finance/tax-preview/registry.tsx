@@ -20,7 +20,9 @@ import ScheduleSEPreview from '@/components/finance/ScheduleSEPreview'
 import TaxDocuments1099Section from '@/components/finance/TaxDocuments1099Section'
 import TaxDocumentsSection from '@/components/finance/TaxDocumentsSection'
 import {
+  buildForm6251Sheet,
   buildForm8582Sheet,
+  buildForm8995Sheet,
   buildScheduleCSheet,
   buildScheduleDSheet,
   buildScheduleESheet,
@@ -453,6 +455,11 @@ export const formRegistry: FormRegistry = {
     category: 'Form',
     presentation: 'column',
     component: Form6251Adapter,
+    xlsx: {
+      sheetName: () => 'Form 6251',
+      order: 90,
+      build: buildForm6251Sheet,
+    },
   },
   'form-8995': {
     id: 'form-8995',
@@ -463,6 +470,11 @@ export const formRegistry: FormRegistry = {
     category: 'Form',
     presentation: 'column',
     component: Form8995Adapter,
+    xlsx: {
+      sheetName: () => 'Form 8995',
+      order: 110,
+      build: buildForm8995Sheet,
+    },
   },
   // Stub adapters — pending full migration. Render placeholder cards so
   // drill-down navigation doesn't crash from missing registry entries.
