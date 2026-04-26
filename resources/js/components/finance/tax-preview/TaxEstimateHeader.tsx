@@ -30,6 +30,10 @@ function lineValue(lines: Form1040LineItem[], lineNumber: string): number {
   return lines.find((l) => l.line === lineNumber)?.value ?? 0
 }
 
+export function summarizeTaxEstimate(lines: Form1040LineItem[]): KpiSummary {
+  return summarize(lines)
+}
+
 function summarize(lines: Form1040LineItem[]): KpiSummary {
   const totalIncome = lineValue(lines, '9')
   const totalTax = lineValue(lines, '24')
@@ -231,6 +235,10 @@ function KpiCard({
       <div className="mt-0.5 text-xs text-muted-foreground">{sub}</div>
     </div>
   )
+}
+
+export function TaxEstimateFullDetail({ summary }: { summary: KpiSummary }): React.ReactElement {
+  return <FullDetail summary={summary} />
 }
 
 function FullDetail({ summary }: { summary: KpiSummary }): React.ReactElement {

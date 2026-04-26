@@ -5,7 +5,7 @@ import { ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 
 import type { ScheduleBLines } from '@/components/finance/ScheduleBPreview'
-import { TAX_TABS } from '@/components/finance/tax-tab-ids'
+import { TAX_TABS, type TaxTabId } from '@/components/finance/tax-tab-ids'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -36,7 +36,7 @@ interface Form1040PreviewProps {
   lines: Form1040LineItem[]
   selectedYear: number
   /** Called when the user clicks a 1040 line with a linked schedule tab. */
-  onNavigate?: (tab: string) => void
+  onNavigate?: (tab: TaxTabId) => void
 }
 
 interface LineItem {
@@ -47,13 +47,15 @@ interface LineItem {
   refSchedule?: string
   sources?: DataSource[]
   /** Tab to navigate to when the row is clicked (requires onNavigate prop). */
-  navTab?: string
+  navTab?: TaxTabId
 }
 
 interface DataSourceModalState {
   line: string
   label: string
   sources: DataSource[]
+  navTab?: TaxTabId
+  refSchedule?: string
 }
 
 interface RetirementDistributionBucket {
@@ -400,6 +402,7 @@ export function computeForm1040Lines({
           label: 'Other taxes (Schedule 2)',
           value: schedule2TotalAdditionalTaxes,
           refSchedule: 'Schedule 2',
+          navTab: TAX_TABS.schedule2,
         }]
       : []),
     {
@@ -407,7 +410,7 @@ export function computeForm1040Lines({
       label: 'Foreign tax credit',
       value: foreignTaxCredit,
       refSchedule: 'Schedule 3',
-      navTab: TAX_TABS.form1116,
+      navTab: TAX_TABS.schedule3,
     },
   ]
 }
@@ -425,7 +428,7 @@ export default function Form1040Preview({
       value: line.value === null ? null : currency(line.value),
       ...(line.bold ? { bold: line.bold } : {}),
       ...(line.refSchedule ? { refSchedule: line.refSchedule } : {}),
-      ...(line.navTab ? { navTab: line.navTab } : {}),
+      ...(line.navTab ? { navTab: line.navTab as TaxTabId } : {}),
     }
 
     if (line.sources) {
@@ -480,7 +483,16 @@ export default function Form1040Preview({
                         variant="ghost"
                         size="sm"
                         className="h-auto p-0 font-mono text-sm underline decoration-dotted hover:text-primary"
-                        onClick={(e) => { e.stopPropagation(); setDataSourceModal({ line: item.line, label: item.label, sources: item.sources! }) }}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setDataSourceModal({
+                            line: item.line,
+                            label: item.label,
+                            sources: item.sources!,
+                            ...(item.navTab ? { navTab: item.navTab } : {}),
+                            ...(item.refSchedule ? { refSchedule: item.refSchedule } : {}),
+                          })
+                        }}
                         title="View data sources"
                       >
                         {item.value.format()}
@@ -505,6 +517,20 @@ export default function Form1040Preview({
           {dataSourceModal && (
             <div className="space-y-3 py-1">
               <p className="text-sm text-muted-foreground">{dataSourceModal.label}</p>
+              {dataSourceModal.navTab && onNavigate && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => {
+                    onNavigate(dataSourceModal.navTab!)
+                    setDataSourceModal(null)
+                  }}
+                >
+                  <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                  Go to {dataSourceModal.refSchedule ?? 'source'}
+                </Button>
+              )}
               <div className="border rounded-md overflow-hidden">
                 <Table>
                   <TableHeader>

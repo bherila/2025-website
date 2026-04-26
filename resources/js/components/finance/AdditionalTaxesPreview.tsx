@@ -1,9 +1,12 @@
 'use client'
 
 import currency from 'currency.js'
+import { ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 
 import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
+import { TAX_TABS, type TaxTabId } from '@/components/finance/tax-tab-ids'
+import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type { CapitalLossCarryoverLines, Form461Lines, Form8959Lines, Form8960Lines, Schedule2Lines, ScheduleSELines } from '@/types/finance/tax-return'
@@ -16,6 +19,9 @@ function SourceModal({
   total,
   open,
   onClose,
+  goToTab,
+  goToLabel,
+  onTabChange,
 }: {
   title: string
   rows: { label: string; amount: number }[]
@@ -23,6 +29,9 @@ function SourceModal({
   total: number
   open: boolean
   onClose: () => void
+  goToTab?: TaxTabId
+  goToLabel?: string
+  onTabChange?: (tab: TaxTabId) => void
 }) {
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -30,6 +39,20 @@ function SourceModal({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
+        {goToTab && onTabChange && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-fit gap-1.5"
+            onClick={() => {
+              onTabChange(goToTab)
+              onClose()
+            }}
+          >
+            <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+            Go to {goToLabel ?? 'source'}
+          </Button>
+        )}
         <Table>
           <TableHeader>
             <TableRow>
@@ -62,9 +85,11 @@ interface AdditionalTaxesPreviewProps {
   form8960?: Form8960Lines | undefined
   capitalLossCarryover?: CapitalLossCarryoverLines | undefined
   form461?: Form461Lines | undefined
+  /** When provided, the source dialogs surface a Go-to-source affordance. */
+  onTabChange?: (tab: TaxTabId) => void
 }
 
-export default function AdditionalTaxesPreview({ schedule2, scheduleSE, form8959, form8960, capitalLossCarryover, form461 }: AdditionalTaxesPreviewProps) {
+export default function AdditionalTaxesPreview({ schedule2, scheduleSE, form8959, form8960, capitalLossCarryover, form461, onTabChange }: AdditionalTaxesPreviewProps) {
   const [wagesModal, setWagesModal] = useState(false)
   const [interestModal, setInterestModal] = useState(false)
   const [dividendModal, setDividendModal] = useState(false)
@@ -246,6 +271,9 @@ export default function AdditionalTaxesPreview({ schedule2, scheduleSE, form8959
         total={form8959.wages}
         open={wagesModal}
         onClose={() => setWagesModal(false)}
+        goToTab={TAX_TABS.w2}
+        goToLabel="W-2 documents"
+        {...(onTabChange ? { onTabChange } : {})}
       />
     )}
     {form8960 && (
@@ -257,6 +285,9 @@ export default function AdditionalTaxesPreview({ schedule2, scheduleSE, form8959
           total={form8960.taxableInterest}
           open={interestModal}
           onClose={() => setInterestModal(false)}
+          goToTab={TAX_TABS.schedules}
+          goToLabel="Schedule B"
+          {...(onTabChange ? { onTabChange } : {})}
         />
         <SourceModal
           title="Ordinary Dividend Sources — Form 8960 Line 2"
@@ -265,6 +296,9 @@ export default function AdditionalTaxesPreview({ schedule2, scheduleSE, form8959
           total={form8960.ordinaryDividends}
           open={dividendModal}
           onClose={() => setDividendModal(false)}
+          goToTab={TAX_TABS.schedules}
+          goToLabel="Schedule B"
+          {...(onTabChange ? { onTabChange } : {})}
         />
         <SourceModal
           title="Passive Income Sources — Form 8960 Line 4 (K-1 Schedule E)"
@@ -273,6 +307,9 @@ export default function AdditionalTaxesPreview({ schedule2, scheduleSE, form8959
           total={form8960.passiveIncome}
           open={passiveModal}
           onClose={() => setPassiveModal(false)}
+          goToTab={TAX_TABS.scheduleE}
+          goToLabel="Schedule E"
+          {...(onTabChange ? { onTabChange } : {})}
         />
       </>
     )}

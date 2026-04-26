@@ -104,7 +104,7 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
 
   if (route.columns.length === 0) {
     return (
-      <div className="flex h-full w-full bg-background">
+      <div className="flex w-full bg-background">
         {homeView}
         <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} registry={registry} />
       </div>
@@ -112,7 +112,7 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
   }
 
   return (
-    <div className="flex h-full w-full overflow-x-auto bg-background">
+    <div className="flex w-full overflow-x-auto bg-background">
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} registry={registry} />
       {route.columns.map((col, depth) => {
         const entry = getEntry(registry, col.form)
@@ -120,46 +120,16 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
         const instances = entry.instances ? entry.instances.list(state) : []
         const activeInstance = col.instance ? instances.find((i) => i.key === col.instance) : undefined
         const isLast = depth === route.columns.length - 1
-        const isCollapsed = !isLast
 
         const onDrill = dispatchDrill(depth)
-
-        if (isCollapsed) {
-          return (
-            <button
-              key={`${depth}-${col.form}-${col.instance ?? ''}`}
-              type="button"
-              onClick={() => truncateTo(depth + 1)}
-              className="hidden h-full w-12 shrink-0 flex-col items-center gap-2 border-r border-border bg-card py-3 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150 md:flex"
-              data-form-id={col.form}
-              data-depth={depth}
-              data-collapsed="true"
-              aria-label={`Expand ${entry.shortLabel} column`}
-            >
-              <span
-                className="font-mono text-[10px] uppercase tracking-wider text-primary [writing-mode:vertical-rl] [text-orientation:mixed]"
-                style={{ transform: 'rotate(180deg)' }}
-              >
-                {entry.shortLabel}
-              </span>
-              {activeInstance && (
-                <span
-                  className="font-mono text-[10px] text-muted-foreground [writing-mode:vertical-rl] [text-orientation:mixed]"
-                  style={{ transform: 'rotate(180deg)' }}
-                >
-                  {activeInstance.label}
-                </span>
-              )}
-            </button>
-          )
-        }
 
         return (
           <section
             key={`${depth}-${col.form}-${col.instance ?? ''}`}
-            className="flex h-full w-full flex-1 flex-col border-r border-border bg-card motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-right-4 motion-safe:duration-200 md:min-w-[440px]"
+            className={`flex w-full shrink-0 flex-col border-r border-border bg-card motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-right-4 motion-safe:duration-200 md:w-[480px] ${isLast ? '' : 'hidden md:flex'}`}
             data-form-id={col.form}
             data-depth={depth}
+            data-last={isLast ? 'true' : 'false'}
           >
             <header className="flex items-center justify-between gap-2 border-b border-border bg-card px-4 py-3">
               {depth > 0 && (
@@ -200,7 +170,7 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
                   : {})}
               />
             )}
-            <div className="flex-1 overflow-y-auto bg-card p-4">
+            <div className="flex-1 bg-card p-4">
               {entry.instances && !activeInstance ? (
                 <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
                   <p className="text-sm text-muted-foreground">No {entry.shortLabel} instance selected.</p>
