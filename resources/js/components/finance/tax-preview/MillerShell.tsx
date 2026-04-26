@@ -5,6 +5,7 @@ import { useTaxPreview } from '../TaxPreviewContext'
 import { useDockActions } from './DockActions'
 import { type FormRegistry, getEntry } from './formRegistry'
 import { InstanceTabs } from './InstanceTabs'
+import { useTaxPreviewPrefs } from './useTaxPreviewPrefs'
 import { useTaxRoute } from './useTaxRoute'
 
 /**
@@ -42,8 +43,19 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
   const { route, pushColumn, replaceFrom, truncateTo } = useTaxRoute()
   const state = useTaxPreview()
   const { openWorksheet } = useDockActions()
+  const { addRecent } = useTaxPreviewPrefs(state.year)
 
   const columnDepth = route.columns.length
+  const rightmostForm = columnDepth > 0 ? route.columns[columnDepth - 1]!.form : null
+  useEffect(() => {
+    if (!rightmostForm) {
+      return
+    }
+    const entry = registry[rightmostForm]
+    if (entry?.category === 'Schedule' || entry?.category === 'Form') {
+      addRecent(rightmostForm)
+    }
+  }, [rightmostForm, registry, addRecent])
   useEffect(() => {
     if (typeof window === 'undefined' || columnDepth === 0) {
       return
