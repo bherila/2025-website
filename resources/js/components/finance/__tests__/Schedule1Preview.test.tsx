@@ -1,7 +1,8 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import React from 'react'
 
 import Schedule1Preview, { computeSchedule1Totals } from '../Schedule1Preview'
+import { TAX_TABS } from '../tax-tab-ids'
 
 describe('computeSchedule1Totals', () => {
   it('returns zero totals when every input is zero', () => {
@@ -100,7 +101,7 @@ describe('computeSchedule1Totals', () => {
 })
 
 describe('Schedule1Preview', () => {
-  it('renders the empty-state message when every Part I input is zero', () => {
+  it('renders Part I with an empty-lines disclosure when every input is zero', () => {
     render(
       <Schedule1Preview
         selectedYear={2025}
@@ -108,8 +109,10 @@ describe('Schedule1Preview', () => {
       />,
     )
 
-    expect(screen.getByText('No Schedule 1 Part I income for this year.')).toBeInTheDocument()
-    expect(screen.queryByText('Part I — Additional Income')).not.toBeInTheDocument()
+    // Part I block still renders (for the line 10 total = 0) but all data rows
+    // are surfaced via the disclosure rather than hidden.
+    expect(screen.getByText('Part I — Additional Income')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /part i — show \d+ empty lines/i })).toBeInTheDocument()
   })
 
   it('renders only lines that have non-zero values', () => {
@@ -147,7 +150,7 @@ describe('Schedule1Preview', () => {
     expect(screen.getAllByText('$706')).toHaveLength(2)
   })
 
-  it('renders the Part II block with placeholders even when Part I is empty', () => {
+  it('surfaces Part II placeholder lines via the disclosure', () => {
     render(
       <Schedule1Preview
         selectedYear={2025}
@@ -156,8 +159,43 @@ describe('Schedule1Preview', () => {
     )
 
     expect(screen.getByText('Part II — Adjustments to Income')).toBeInTheDocument()
+    // HSA/SE health insurance/IRA/student loan are all hidden by default,
+    // listed in the Part II disclosure.
+    const partIIToggle = screen.getByRole('button', { name: /part ii — show 4 empty lines/i })
+    fireEvent.click(partIIToggle)
     expect(screen.getByText('Health savings account (HSA) deduction')).toBeInTheDocument()
     expect(screen.getByText('Self-employed health insurance deduction')).toBeInTheDocument()
+    expect(screen.getByText('IRA deduction')).toBeInTheDocument()
     expect(screen.getByText('Student loan interest deduction')).toBeInTheDocument()
+  })
+
+  it('provides a Go-to-source button for Schedule C (line 3) when onTabChange is wired', () => {
+    const onTabChange = jest.fn()
+    render(
+      <Schedule1Preview
+        selectedYear={2025}
+        schedule1={computeSchedule1Totals({})}
+        onTabChange={onTabChange}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /part i — show \d+ empty lines/i }))
+    fireEvent.click(screen.getByRole('button', { name: /go to schedule c/i }))
+    expect(onTabChange).toHaveBeenCalledWith(TAX_TABS.scheduleC)
+  })
+
+  it('always lists the manual-entry-only lines (2a alimony, 4 Form 4797, 6 Schedule F) in the Part I disclosure', () => {
+    render(
+      <Schedule1Preview
+        selectedYear={2025}
+        schedule1={computeSchedule1Totals({
+          scheduleCNetIncome: 5000,
+          scheduleEGrandTotal: 1000,
+        })}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /part i — show \d+ empty lines/i }))
+    expect(screen.getByText(/alimony received/i)).toBeInTheDocument()
+    expect(screen.getByText(/form 4797/i)).toBeInTheDocument()
+    expect(screen.getByText(/schedule f/i)).toBeInTheDocument()
   })
 })
