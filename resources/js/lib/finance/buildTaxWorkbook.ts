@@ -284,6 +284,109 @@ export function assembleRegistrySheets(
   return candidates.map((c) => c.sheet)
 }
 
+export function buildCapitalLossCarryoverSheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.capitalLossCarryover?.hasCarryover) {
+    return null
+  }
+  const c = taxReturn.capitalLossCarryover
+  return {
+    name: 'Capital Loss Carryover',
+    rows: [
+      { description: 'Net short-term capital gain/(loss)', amount: c.netShortTerm },
+      { description: 'Net long-term capital gain/(loss)', amount: c.netLongTerm },
+      { description: 'Combined net capital gain/(loss)', amount: c.combined, isTotal: true },
+      { description: 'Applied to ordinary income this year (max $3,000)', amount: c.appliedToOrdinaryIncome },
+      { description: 'Short-term capital loss carryforward', amount: -c.shortTermCarryover },
+      { description: 'Long-term capital loss carryforward', amount: -c.longTermCarryover },
+      {
+        description: 'Total capital loss carryforward → next year Schedule D',
+        amount: -c.totalCarryover,
+        isTotal: true,
+      },
+    ],
+  }
+}
+
+export function buildForm461Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.form461) {
+    return null
+  }
+  const f = taxReturn.form461
+  return {
+    name: 'Form 461',
+    rows: [
+      { line: '9', description: 'Line 9 — Aggregate trade/business income (loss)', amount: f.aggregateBusinessIncomeLoss, isTotal: true },
+      { line: '15', description: 'Line 15 — EBL limit (filing-status threshold)', amount: f.eblLimit },
+      {
+        line: '16',
+        description: f.isTriggered
+          ? 'Line 16 — Excess business loss → Schedule 1 Line 8p (NOL carryforward)'
+          : 'Line 16 — No excess (within limit)',
+        amount: f.isTriggered ? -f.excessBusinessLoss : 0,
+        isTotal: true,
+      },
+    ],
+  }
+}
+
+export function buildForm8582Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.form8582 || taxReturn.form8582.activities.length === 0) {
+    return null
+  }
+  const f = taxReturn.form8582
+  const activityRows: XlsxRow[] = f.activities.flatMap((a) => [
+    ...(a.currentIncome !== 0
+      ? [{ description: `${a.activityName}${a.isRentalRealEstate ? ' [Rental RE]' : ''} — Line 1a (income)`, amount: a.currentIncome }]
+      : []),
+    ...(a.currentLoss !== 0
+      ? [{ description: `${a.activityName}${a.isRentalRealEstate ? ' [Rental RE]' : ''} — Line 1b (loss)`, amount: a.currentLoss }]
+      : []),
+    ...(a.priorYearUnallowed !== 0
+      ? [{ description: `${a.activityName} — Line 1c (prior-year unallowed)`, amount: a.priorYearUnallowed }]
+      : []),
+  ])
+  const carryforwardRows: XlsxRow[] = f.activities
+    .filter((a) => a.allowedLossThisYear > 0 || a.suspendedLossCarryforward > 0)
+    .flatMap((a) => [
+      { description: `${a.activityName} — Allowed this year`, amount: a.allowedLossThisYear },
+      ...(a.suspendedLossCarryforward > 0
+        ? [{ description: `${a.activityName} — Suspended carryforward`, amount: a.suspendedLossCarryforward }]
+        : []),
+    ])
+  const perActivityNetRows: XlsxRow[] = f.activities.map((a) => ({
+    description: `${a.activityName}${a.isRentalRealEstate ? ' [Rental RE]' : ''} — Net gain/loss`,
+    amount: a.overallGainOrLoss,
+  }))
+  return {
+    name: 'Form 8582',
+    rows: [
+      { isHeader: true, description: 'Part I — Passive Activities' },
+      ...activityRows,
+      { line: '1a', description: 'Total passive income', amount: f.totalPassiveIncome, isTotal: true },
+      { line: '1b', description: 'Total passive loss', amount: f.totalPassiveLoss },
+      ...(f.totalPriorYearUnallowed !== 0
+        ? [{ line: '1c', description: 'Prior-year unallowed losses', amount: f.totalPriorYearUnallowed }]
+        : []),
+      { line: '1d', description: 'Net passive result', amount: f.netPassiveResult, isTotal: true },
+      { isHeader: true, description: 'Part II — Special Allowance' },
+      { description: 'Modified AGI', amount: f.magi },
+      { description: 'Rental real estate special allowance', amount: f.rentalAllowance },
+      ...(f.realEstateProfessional
+        ? [{ description: 'Real estate professional election (§469(c)(7))', amount: 0 }]
+        : []),
+      { isHeader: true, description: 'Part III — Allowed vs. Suspended' },
+      { description: 'Total allowed passive loss', amount: -f.totalAllowedLoss, isTotal: true },
+      { description: 'Net deduction to return', amount: -f.netDeductionToReturn },
+      { description: 'Suspended loss — carried forward', amount: -f.totalSuspendedLoss, isTotal: f.isLossLimited },
+      ...(carryforwardRows.length > 0
+        ? [{ isHeader: true, description: 'Worksheet 5 — Per-Activity Allocation' } as XlsxRow, ...carryforwardRows]
+        : []),
+      { isHeader: true, description: 'Per-Activity Net Gain/Loss' },
+      ...perActivityNetRows,
+    ],
+  }
+}
+
 export function buildScheduleDSheet(taxReturn: TaxReturn1040): XlsxSheet | null {
   if (!taxReturn.scheduleD) {
     return null
@@ -814,81 +917,13 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
       })()
     : null
 
-  // ── Capital Loss Carryover ────────────────────────────────────────────────────
-  const capitalLossSheet = taxReturn.capitalLossCarryover?.hasCarryover
-    ? (() => {
-        const c = taxReturn.capitalLossCarryover!
-        return buildSheet('Capital Loss Carryover', [
-          { description: 'Net short-term capital gain/(loss)', amount: c.netShortTerm },
-          { description: 'Net long-term capital gain/(loss)', amount: c.netLongTerm },
-          { description: 'Combined net capital gain/(loss)', amount: c.combined, isTotal: true },
-          { description: 'Applied to ordinary income this year (max $3,000)', amount: c.appliedToOrdinaryIncome },
-          { description: 'Short-term capital loss carryforward', amount: -c.shortTermCarryover },
-          { description: 'Long-term capital loss carryforward', amount: -c.longTermCarryover },
-          { description: 'Total capital loss carryforward → next year Schedule D', amount: -c.totalCarryover, isTotal: true },
-        ])
-      })()
-    : null
-
-  // ── Form 461 ─────────────────────────────────────────────────────────────────
-  const form461Sheet = taxReturn.form461
-    ? buildSheet('Form 461', [
-        { line: '9', description: 'Line 9 — Aggregate trade/business income (loss)', amount: taxReturn.form461.aggregateBusinessIncomeLoss, isTotal: true },
-        { line: '15', description: 'Line 15 — EBL limit (filing-status threshold)', amount: taxReturn.form461.eblLimit },
-        {
-          line: '16',
-          description: taxReturn.form461.isTriggered
-            ? 'Line 16 — Excess business loss → Schedule 1 Line 8p (NOL carryforward)'
-            : 'Line 16 — No excess (within limit)',
-          amount: taxReturn.form461.isTriggered ? -taxReturn.form461.excessBusinessLoss : 0,
-          isTotal: true,
-        },
-      ])
-    : null
-
-  // ── Form 8582 ────────────────────────────────────────────────────────────────
-  const form8582Sheet = taxReturn.form8582 && taxReturn.form8582.activities.length > 0
-    ? (() => {
-        const f = taxReturn.form8582
-        const activityRows: XlsxRow[] = f.activities.flatMap((a) => [
-          ...(a.currentIncome !== 0 ? [{ description: `${a.activityName}${a.isRentalRealEstate ? ' [Rental RE]' : ''} — Line 1a (income)`, amount: a.currentIncome }] : []),
-          ...(a.currentLoss !== 0 ? [{ description: `${a.activityName}${a.isRentalRealEstate ? ' [Rental RE]' : ''} — Line 1b (loss)`, amount: a.currentLoss }] : []),
-          ...(a.priorYearUnallowed !== 0 ? [{ description: `${a.activityName} — Line 1c (prior-year unallowed)`, amount: a.priorYearUnallowed }] : []),
-        ])
-        const carryforwardRows: XlsxRow[] = f.activities
-          .filter((a) => a.allowedLossThisYear > 0 || a.suspendedLossCarryforward > 0)
-          .flatMap((a) => [
-            { description: `${a.activityName} — Allowed this year`, amount: a.allowedLossThisYear },
-            ...(a.suspendedLossCarryforward > 0 ? [{ description: `${a.activityName} — Suspended carryforward`, amount: a.suspendedLossCarryforward }] : []),
-          ])
-        const perActivityNetRows: XlsxRow[] = f.activities.map((a) => ({
-          description: `${a.activityName}${a.isRentalRealEstate ? ' [Rental RE]' : ''} — Net gain/loss`,
-          amount: a.overallGainOrLoss,
-        }))
-        return buildSheet('Form 8582', [
-          { isHeader: true, description: 'Part I — Passive Activities' },
-          ...activityRows,
-          { line: '1a', description: 'Total passive income', amount: f.totalPassiveIncome, isTotal: true },
-          { line: '1b', description: 'Total passive loss', amount: f.totalPassiveLoss },
-          ...(f.totalPriorYearUnallowed !== 0 ? [{ line: '1c', description: 'Prior-year unallowed losses', amount: f.totalPriorYearUnallowed }] : []),
-          { line: '1d', description: 'Net passive result', amount: f.netPassiveResult, isTotal: true },
-          { isHeader: true, description: 'Part II — Special Allowance' },
-          { description: 'Modified AGI', amount: f.magi },
-          { description: 'Rental real estate special allowance', amount: f.rentalAllowance },
-          ...(f.realEstateProfessional ? [{ description: 'Real estate professional election (§469(c)(7))', amount: 0 }] : []),
-          { isHeader: true, description: 'Part III — Allowed vs. Suspended' },
-          { description: 'Total allowed passive loss', amount: -f.totalAllowedLoss, isTotal: true },
-          { description: 'Net deduction to return', amount: -f.netDeductionToReturn },
-          { description: 'Suspended loss — carried forward', amount: -f.totalSuspendedLoss, isTotal: f.isLossLimited },
-          ...(carryforwardRows.length > 0 ? [
-            { isHeader: true, description: 'Worksheet 5 — Per-Activity Allocation' },
-            ...carryforwardRows,
-          ] : []),
-          { isHeader: true, description: 'Per-Activity Net Gain/Loss' },
-          ...perActivityNetRows,
-        ])
-      })()
-    : null
+  // ── Capital Loss Carryover / Form 461 / Form 8582 (registry-driven) ─────────
+  const capitalLossRaw = buildCapitalLossCarryoverSheet(taxReturn)
+  const capitalLossSheet = capitalLossRaw ? buildSheet(capitalLossRaw.name, capitalLossRaw.rows) : null
+  const form461Raw = buildForm461Sheet(taxReturn)
+  const form461Sheet = form461Raw ? buildSheet(form461Raw.name, form461Raw.rows) : null
+  const form8582Raw = buildForm8582Sheet(taxReturn)
+  const form8582Sheet = form8582Raw ? buildSheet(form8582Raw.name, form8582Raw.rows) : null
 
   // ── Short Dividends ──────────────────────────────────────────────────────────
   const shortDivSheet = taxReturn.shortDividends

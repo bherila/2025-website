@@ -20,6 +20,7 @@ import ScheduleSEPreview from '@/components/finance/ScheduleSEPreview'
 import TaxDocuments1099Section from '@/components/finance/TaxDocuments1099Section'
 import TaxDocumentsSection from '@/components/finance/TaxDocumentsSection'
 import {
+  buildForm8582Sheet,
   buildScheduleCSheet,
   buildScheduleDSheet,
   buildScheduleESheet,
@@ -529,6 +530,11 @@ export const formRegistry: FormRegistry = {
     category: 'Form',
     presentation: 'column',
     component: Form8582Adapter,
+    xlsx: {
+      sheetName: () => 'Form 8582',
+      order: 100,
+      build: buildForm8582Sheet,
+    },
   },
   'form-4797': {
     id: 'form-4797',
