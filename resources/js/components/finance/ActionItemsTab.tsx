@@ -2,6 +2,14 @@
 
 import currency from 'currency.js'
 
+import {
+  type ActionItemConditions,
+  classifyOutstanding,
+  classifyResolved,
+  computeActionItemConditions,
+  type OutstandingAlertClassification,
+  type ResolvedItemClassification,
+} from '@/components/finance/actionItemsLogic'
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { Callout, fmtAmt, parseFieldVal } from '@/components/finance/tax-preview-primitives'
 import { TAX_TABS, type TaxTabId } from '@/components/finance/tax-tab-ids'
@@ -42,6 +50,161 @@ function pk1(data: FK1StructuredData, box: string): number {
   return isNaN(n) ? 0 : n
 }
 
+function renderOutstandingBody(
+  c: ActionItemConditions,
+  alert: OutstandingAlertClassification,
+  priorYear: number,
+): { title: string; body: React.ReactNode } {
+  switch (alert.kind) {
+    case 'turbotax-ftc':
+      return {
+        title: 'TurboTax FTC Worksheet Line 1d — Correction Required',
+        body: (
+          <p>
+            TurboTax may prefill Line 1d with Box 5 interest ({fmtAmt(c.totalK1Box5, 2)}) — but Box 5 is entirely
+            U.S.-sourced per K-3 Part II Line 6, column (a). Set Line 1d to{' '}
+            {fmtAmt(c.totalK3PassiveIncome, 2)} (K-3 passive foreign income only). Overstates foreign passive income
+            by {fmtAmt(c.totalK1Box5 - c.totalK3PassiveIncome, 2)}.
+          </p>
+        ),
+      }
+    case 'suspended-deductions':
+      return {
+        title: 'California Schedule CA — §67(g) Deductions',
+        body: (
+          <div className="space-y-2">
+            <p>
+              CA does not conform to TCJA §67(g). The following suspended federal deductions may be claimed on
+              Schedule CA (540):
+            </p>
+            <div className="rounded border border-current/20 overflow-hidden">
+              <table className="w-full text-[11px]">
+                <thead>
+                  <tr className="bg-current/10">
+                    <th className="text-left px-2 py-1 font-semibold">Fund</th>
+                    <th className="text-left px-2 py-1 font-semibold">Box</th>
+                    <th className="text-left px-2 py-1 font-semibold">Description</th>
+                    <th className="text-right px-2 py-1 font-semibold">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {c.suspendedItems.map((item, i) => (
+                    <tr key={i} className="border-t border-current/10">
+                      <td className="px-2 py-1">{item.fund}</td>
+                      <td className="px-2 py-1 font-mono">{item.box}</td>
+                      <td className="px-2 py-1">{item.description}</td>
+                      <td className="px-2 py-1 text-right font-mono tabular-nums">({fmtAmt(item.amount)})</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p>
+              Total: {fmtAmt(c.totalSuspended)} at 13.3% CA marginal rate ≈{' '}
+              <strong>{fmtAmt(c.totalSuspended * 0.133)}</strong> CA tax savings.
+            </p>
+          </div>
+        ),
+      }
+    case 'box21-no-k3': {
+      const fund = c.box21AlertFunds[alert.fundIndex ?? 0]!
+      return {
+        title: `${fund.name} Box 21 (${fmtAmt(fund.amount, 2)}) — K-3 Confirmation Required`,
+        body: (
+          <p>
+            Box 21 shows {fmtAmt(fund.amount, 2)} in foreign taxes but the K-3 Part III Section 4 has no country
+            entries. Confirm with {fund.name} that the tax is creditable under §901, and obtain country code and
+            date paid before filing Form 1116.
+          </p>
+        ),
+      }
+    }
+    case 'election-items':
+      return {
+        title: 'Box 13 Codes Requiring Taxpayer Election',
+        body: (
+          <div className="space-y-1">
+            <p>The following K-1 codes require a taxpayer decision on how to report:</p>
+            <ul className="list-disc list-inside space-y-0.5">
+              {c.electionItems.map((item, i) => (
+                <li key={i}>
+                  <strong>{item.fund}</strong> — Box {item.box}: {fmtAmt(item.amount)} — {item.description}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ),
+      }
+    case 'box-13t':
+      return {
+        title: '§163(j) Excess Business Interest — Carryover Tracking',
+        body: (
+          <div className="space-y-1">
+            <p>
+              The following K-1s report excess business interest expense under §163(j). This amount is not deducted in
+              the current year but carries forward:
+            </p>
+            <ul className="list-disc list-inside space-y-0.5">
+              {c.box13TItems.map((item, i) => (
+                <li key={i}>
+                  <strong>{item.fund}</strong>: {fmtAmt(item.amount)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ),
+      }
+    case 'prior-year-carryforward':
+      return {
+        title: 'Confirm Prior-Year Carryforwards',
+        body: (
+          <ul className="list-none space-y-1">
+            <li>☐ Form 4952 Line 7 — investment interest carryforward (assumed $0)</li>
+            <li>☐ Schedule D carryforward worksheet — any {priorYear} ST/LT capital loss carryforwards</li>
+            <li>☐ Form 1116 — any unused FTC carryforward (likely $0)</li>
+            <li className="text-[10px] mt-1 opacity-80">
+              Retrieve from your {priorYear} tax return before finalizing.
+            </li>
+          </ul>
+        ),
+      }
+    case 'large-cap-loss':
+      return {
+        title: 'Net Capital Loss Carryforward — Be Aware',
+        body: (
+          <p>
+            Combined ST + LT net loss of ~{fmtAmt(Math.abs(c.combined))} far exceeds the $3,000 annual cap. ~
+            {fmtAmt(Math.abs(c.combined) - 3000)} carries to next year. Confirm exact ST/LT split on completed Schedule
+            D.
+          </p>
+        ),
+      }
+  }
+}
+
+function renderResolvedBody(
+  c: ActionItemConditions,
+  resolved: ResolvedItemClassification,
+): { title: string; body: string } {
+  switch (resolved.kind) {
+    case 'no-qd-election':
+      return {
+        title: 'Form 4952 QD Election — No Election Needed',
+        body: `NII of ${fmtAmt(c.niiBefore)} already exceeds investment interest expense of ${fmtAmt(c.k1InvInt)}. Full deduction allowed. QDs retain 23.8% preferential rate.`,
+      }
+    case 'no-general-1116':
+      return {
+        title: 'No General Category Form 1116 Required',
+        body: 'All K-3 column (d) general category amounts have country XX ("Sourced by partner") — U.S.-source for domestic partners. One Form 1116 (passive category) only.',
+      }
+    case 'box-11zz-ordinary':
+      return {
+        title: 'Box 11ZZ Character Confirmed — All Ordinary',
+        body: 'Sec. 988 FX, swap losses, and PFIC MTM income reported in Box 11ZZ are all ordinary income/loss (IRC §§988, 1296). None flow to Schedule D.',
+      }
+  }
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 interface ActionItemsTabProps {
@@ -73,130 +236,17 @@ export default function ActionItemsTab({
     .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
     .filter((x): x is { doc: TaxDocument; data: FK1StructuredData } => x.data !== null)
 
-  // ── Compute conditions ────────────────────────────────────────────────────
+  // Shared classification — keeps this component and the dock home view's
+  // count badge (`actionItemsCounts.ts`) on the same source of truth.
+  const conditions = computeActionItemConditions({ reviewedK1Docs, reviewed1099Docs, income1099 })
+  const { k1InvInt, noQdElectionNeeded, combined } = conditions
+  const resolvedItems = classifyResolved(conditions).map((r) => renderResolvedBody(conditions, r))
+  const outstandingAlerts = classifyOutstanding(conditions).map((a) => ({
+    severity: a.severity,
+    ...renderOutstandingBody(conditions, a, priorYear),
+  }))
 
-  // §67(g) suspended deductions across all K-1s
-  const suspendedItems = k1Parsed.flatMap(({ doc, data }) => {
-    const partnerName =
-      data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
-    return (data.codes['13'] ?? [])
-      .filter((i) => i.code === 'K' || i.code === 'AE')
-      .map((i) => ({
-        fund: partnerName,
-        box: `13${i.code}`,
-        description: i.notes ?? `Box 13${i.code}`,
-        amount: Math.abs(parseFieldVal(i.value) ?? 0),
-      }))
-  })
-  const totalSuspended = suspendedItems.reduce((acc, i) => acc.add(i.amount), currency(0)).value
-  const hasSuspendedDeductions = suspendedItems.length > 0
-
-  // Box 13 codes requiring taxpayer election or manual routing
-  const electionItems = k1Parsed.flatMap(({ doc, data }) => {
-    const partnerName =
-      data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
-    return (data.codes['13'] ?? [])
-      .filter((i) => i.code === 'F' || i.code === 'ZZ')
-      .map((i) => ({
-        fund: partnerName,
-        code: i.code,
-        box: `13${i.code}`,
-        description: i.code === 'F'
-          ? '§59(e)(2) expenditures — elect to amortize or deduct (Form 4562 or Sch A)'
-          : 'Other deductions — check K-1 attached statement for destination',
-        amount: Math.abs(parseFieldVal(i.value) ?? 0),
-      }))
-  })
-  const hasElectionItems = electionItems.length > 0
-
-  // Box 13T (§163(j) excess business interest) — informational carryover
-  const box13TItems = k1Parsed.flatMap(({ doc, data }) => {
-    const partnerName =
-      data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
-    return (data.codes['13'] ?? [])
-      .filter((i) => i.code === 'T')
-      .map((i) => ({
-        fund: partnerName,
-        amount: Math.abs(parseFieldVal(i.value) ?? 0),
-      }))
-  })
-  const hasBox13T = box13TItems.length > 0
-
-  // TurboTax FTC Line 1d issue
-  const totalK1Box5 = k1Parsed.reduce((acc, { data }) => acc.add(pk1(data, '5')), currency(0)).value
-  let totalK3PassiveIncomeC = currency(0)
-  for (const { data } of k1Parsed) {
-    const k3Sections = data.k3?.sections ?? []
-    for (const sec of k3Sections) {
-      if (sec.sectionId !== 'part2_section1' && sec.sectionId !== 'part2_section2') continue
-      const rows = ((sec.data as Record<string, unknown>)?.rows as Array<Record<string, unknown>> | undefined) ?? []
-      for (const row of rows) {
-        const passive = parseFieldVal(String(row.col_c_passive ?? '')) ?? 0
-        totalK3PassiveIncomeC = totalK3PassiveIncomeC.add(passive)
-      }
-    }
-  }
-  const totalK3PassiveIncome = totalK3PassiveIncomeC.value
-  const turboTaxFTCIssue = totalK1Box5 > 0 && totalK3PassiveIncome < totalK1Box5 * 0.5
-
-  // Box 21 without K-3 Part III Section 4 country entries
-  const box21AlertFunds = k1Parsed
-    .filter(({ data }) => {
-      const box21 = pk1(data, '21')
-      if (box21 === 0) return false
-      const k3Sections = data.k3?.sections ?? []
-      const part3Sec4 = k3Sections.find((s) => s.sectionId === 'part3_section4')
-      const rows = ((part3Sec4?.data as Record<string, unknown> | undefined)?.countries as unknown[] | undefined) ?? []
-      return rows.length === 0
-    })
-    .map(({ doc, data }) => ({
-      name: data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership',
-      amount: pk1(data, '21'),
-    }))
-
-  // K-3 general category check
-  const allXXForGeneralCategory = k1Parsed.every(({ data }) => {
-    const k3Sections = data.k3?.sections ?? []
-    for (const sec of k3Sections) {
-      if (sec.sectionId !== 'part2_section1' && sec.sectionId !== 'part2_section2') continue
-      const rows = ((sec.data as Record<string, unknown>)?.rows as Array<Record<string, unknown>> | undefined) ?? []
-      for (const row of rows) {
-        const general = parseFieldVal(String(row.col_d_general ?? '')) ?? 0
-        const country = (row.country as string | undefined) ?? ''
-        if (general !== 0 && country !== 'XX' && country !== '') return false
-      }
-    }
-    return true
-  })
-
-  // Box 11ZZ items exist
-  const hasBox11ZZ = k1Parsed.some(({ data }) =>
-    (data.codes['11'] ?? []).some((i) => i.code === 'ZZ'),
-  )
-
-  // NII ≥ investment interest → no QD election needed
-  const k1InvInt = k1Parsed.reduce((acc, { data }) => {
-    const hItems = (data.codes['13'] ?? []).filter((i) => i.code === 'H' || i.code === 'G')
-    return acc.add(hItems.reduce((s, i) => s.add(Math.abs(parseFieldVal(i.value) ?? 0)), currency(0)))
-  }, currency(0)).value
-  const niiBefore = k1Parsed
-    .reduce((acc, { data }) => acc.add(pk1(data, '5')), currency(0))
-    .add(income1099.interestIncome)
-    .add(income1099.dividendIncome)
-    .subtract(income1099.qualifiedDividends)
-    .value
-  const noQdElectionNeeded = k1InvInt > 0 && niiBefore >= k1InvInt
-
-  // Capital gain/loss
-  const netST = k1Parsed.reduce((acc, { data }) => acc.add(pk1(data, '8')), currency(0)).value
-  const netLT = k1Parsed.reduce(
-    (acc, { data }) => acc.add(pk1(data, '9a')).add(pk1(data, '9b')).add(pk1(data, '9c')).add(pk1(data, '10')),
-    currency(0),
-  ).value
-  const combined = currency(netST).add(netLT).value
-  const largeCapLossCarryforward = combined < -3000
-
-  // Withholding
+  // Display-only quantities for the Estimated Tax Position Summary table below.
   const totalW2FedWH = reviewedW2Docs.reduce((acc, doc) => {
     const p = doc.parsed_data as Record<string, unknown>
     const v = p?.box2_fed_tax as number | undefined
@@ -205,12 +255,13 @@ export default function ActionItemsTab({
 
   const totalForeignTax = k1Parsed
     .reduce((acc, { data }) => acc.add(pk1(data, '21')), currency(0))
-    .add(reviewed1099Docs.reduce((acc, doc) => {
-      const p = doc.parsed_data as Record<string, unknown>
-      const v = (p?.box7_foreign_tax ?? p?.box6_foreign_tax) as number | undefined
-      return acc.add(v ?? 0)
-    }, currency(0)))
-    .value
+    .add(
+      reviewed1099Docs.reduce((acc, doc) => {
+        const p = doc.parsed_data as Record<string, unknown>
+        const v = (p?.box7_foreign_tax ?? p?.box6_foreign_tax) as number | undefined
+        return acc.add(v ?? 0)
+      }, currency(0)),
+    ).value
 
   const addlMedicare = Math.max(0, w2GrossIncome.value - 200000) * 0.009
 
@@ -231,165 +282,6 @@ export default function ActionItemsTab({
     const box13 = (data.codes['13'] ?? []).reduce((s, i) => s.add(parseFieldVal(i.value) ?? 0), currency(0))
     return acc.add(income).add(box11).add(box12 !== 0 ? -Math.abs(box12) : 0).add(box13)
   }, currency(0)).value
-
-  // ── Resolved items ────────────────────────────────────────────────────────
-  const resolvedItems: { title: string; body: string }[] = []
-
-  if (noQdElectionNeeded) {
-    resolvedItems.push({
-      title: 'Form 4952 QD Election — No Election Needed',
-      body: `NII of ${fmtAmt(niiBefore)} already exceeds investment interest expense of ${fmtAmt(k1InvInt)}. Full deduction allowed. QDs retain 23.8% preferential rate.`,
-    })
-  }
-  if (allXXForGeneralCategory && k1Parsed.length > 0) {
-    resolvedItems.push({
-      title: 'No General Category Form 1116 Required',
-      body: 'All K-3 column (d) general category amounts have country XX ("Sourced by partner") — U.S.-source for domestic partners. One Form 1116 (passive category) only.',
-    })
-  }
-  if (hasBox11ZZ) {
-    resolvedItems.push({
-      title: 'Box 11ZZ Character Confirmed — All Ordinary',
-      body: 'Sec. 988 FX, swap losses, and PFIC MTM income reported in Box 11ZZ are all ordinary income/loss (IRC §§988, 1296). None flow to Schedule D.',
-    })
-  }
-
-  // ── Outstanding items ─────────────────────────────────────────────────────
-  const outstandingAlerts: { severity: 'alert' | 'warn' | 'info'; title: string; body: React.ReactNode }[] = []
-
-  if (turboTaxFTCIssue) {
-    outstandingAlerts.push({
-      severity: 'alert',
-      title: 'TurboTax FTC Worksheet Line 1d — Correction Required',
-      body: (
-        <p>
-          TurboTax may prefill Line 1d with Box 5 interest ({fmtAmt(totalK1Box5, 2)}) — but Box 5 is entirely
-          U.S.-sourced per K-3 Part II Line 6, column (a). Set Line 1d to{' '}
-          {fmtAmt(totalK3PassiveIncome, 2)} (K-3 passive foreign income only). Overstates foreign passive income
-          by {fmtAmt(totalK1Box5 - totalK3PassiveIncome, 2)}.
-        </p>
-      ),
-    })
-  }
-
-  if (hasSuspendedDeductions) {
-    outstandingAlerts.push({
-      severity: 'alert',
-      title: 'California Schedule CA — §67(g) Deductions',
-      body: (
-        <div className="space-y-2">
-          <p>
-            CA does not conform to TCJA §67(g). The following suspended federal deductions may be claimed on
-            Schedule CA (540):
-          </p>
-          <div className="rounded border border-current/20 overflow-hidden">
-            <table className="w-full text-[11px]">
-              <thead>
-                <tr className="bg-current/10">
-                  <th className="text-left px-2 py-1 font-semibold">Fund</th>
-                  <th className="text-left px-2 py-1 font-semibold">Box</th>
-                  <th className="text-left px-2 py-1 font-semibold">Description</th>
-                  <th className="text-right px-2 py-1 font-semibold">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {suspendedItems.map((item, i) => (
-                  <tr key={i} className="border-t border-current/10">
-                    <td className="px-2 py-1">{item.fund}</td>
-                    <td className="px-2 py-1 font-mono">{item.box}</td>
-                    <td className="px-2 py-1">{item.description}</td>
-                    <td className="px-2 py-1 text-right font-mono tabular-nums">({fmtAmt(item.amount)})</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p>
-            Total: {fmtAmt(totalSuspended)} at 13.3% CA marginal rate ≈{' '}
-            <strong>{fmtAmt(totalSuspended * 0.133)}</strong> CA tax savings.
-          </p>
-        </div>
-      ),
-    })
-  }
-
-  for (const fund of box21AlertFunds) {
-    outstandingAlerts.push({
-      severity: 'alert',
-      title: `${fund.name} Box 21 (${fmtAmt(fund.amount, 2)}) — K-3 Confirmation Required`,
-      body: (
-        <p>
-          Box 21 shows {fmtAmt(fund.amount, 2)} in foreign taxes but the K-3 Part III Section 4 has no country
-          entries. Confirm with {fund.name} that the tax is creditable under §901, and obtain country code and
-          date paid before filing Form 1116.
-        </p>
-      ),
-    })
-  }
-
-  if (hasElectionItems) {
-    outstandingAlerts.push({
-      severity: 'warn',
-      title: 'Box 13 Codes Requiring Taxpayer Election',
-      body: (
-        <div className="space-y-1">
-          <p>The following K-1 codes require a taxpayer decision on how to report:</p>
-          <ul className="list-disc list-inside space-y-0.5">
-            {electionItems.map((item, i) => (
-              <li key={i}>
-                <strong>{item.fund}</strong> — Box {item.box}: {fmtAmt(item.amount)} — {item.description}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ),
-    })
-  }
-
-  if (hasBox13T) {
-    outstandingAlerts.push({
-      severity: 'info',
-      title: '§163(j) Excess Business Interest — Carryover Tracking',
-      body: (
-        <div className="space-y-1">
-          <p>The following K-1s report excess business interest expense under §163(j). This amount is not deducted in the current year but carries forward:</p>
-          <ul className="list-disc list-inside space-y-0.5">
-            {box13TItems.map((item, i) => (
-              <li key={i}><strong>{item.fund}</strong>: {fmtAmt(item.amount)}</li>
-            ))}
-          </ul>
-        </div>
-      ),
-    })
-  }
-
-  // Always show prior-year carryforward reminder
-  outstandingAlerts.push({
-    severity: 'warn',
-    title: 'Confirm Prior-Year Carryforwards',
-    body: (
-      <ul className="list-none space-y-1">
-        <li>☐ Form 4952 Line 7 — investment interest carryforward (assumed $0)</li>
-        <li>☐ Schedule D carryforward worksheet — any {priorYear} ST/LT capital loss carryforwards</li>
-        <li>☐ Form 1116 — any unused FTC carryforward (likely $0)</li>
-        <li className="text-[10px] mt-1 opacity-80">Retrieve from your {priorYear} tax return before finalizing.</li>
-      </ul>
-    ),
-  })
-
-  if (largeCapLossCarryforward) {
-    outstandingAlerts.push({
-      severity: 'info',
-      title: 'Net Capital Loss Carryforward — Be Aware',
-      body: (
-        <p>
-          Combined ST + LT net loss of ~{fmtAmt(Math.abs(combined))} far exceeds the $3,000 annual cap.
-          ~{fmtAmt(Math.abs(combined) - 3000)} carries to next year. Confirm exact ST/LT split on completed
-          Schedule D.
-        </p>
-      ),
-    })
-  }
 
   return (
     <div className="space-y-6">
