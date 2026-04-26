@@ -833,6 +833,7 @@ function TaxPreviewPageContent() {
           <Schedule1Preview
             selectedYear={selectedYear}
             schedule1={taxReturn.schedule1}
+            onTabChange={handleTabChange}
           />
         </TabsContent>
 
