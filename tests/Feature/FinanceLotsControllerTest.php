@@ -125,6 +125,37 @@ class FinanceLotsControllerTest extends TestCase
         $this->assertEquals(0, $data['summary']['total_realized']);
     }
 
+    public function test_show_all_lots_closed_with_year_returns_full_columns_for_form_8949(): void
+    {
+        $user = $this->createAdminUser();
+        $this->createAccountWithLots($user->id);
+
+        $response = $this->actingAs($user)->getJson('/api/finance/all/lots?status=closed&year=2025');
+
+        $response->assertOk();
+        $data = $response->json();
+        $this->assertCount(2, $data['lots']);
+        // Form 8949 needs symbol, description, cost_basis, proceeds, is_short_term, lot_source.
+        $lot = $data['lots'][0];
+        $this->assertArrayHasKey('symbol', $lot);
+        $this->assertArrayHasKey('description', $lot);
+        $this->assertArrayHasKey('cost_basis', $lot);
+        $this->assertArrayHasKey('proceeds', $lot);
+        $this->assertArrayHasKey('is_short_term', $lot);
+        $this->assertArrayHasKey('lot_source', $lot);
+    }
+
+    public function test_show_all_lots_closed_filters_out_other_years(): void
+    {
+        $user = $this->createAdminUser();
+        $this->createAccountWithLots($user->id);
+
+        $response = $this->actingAs($user)->getJson('/api/finance/all/lots?status=closed&year=2024');
+
+        $response->assertOk();
+        $this->assertCount(0, $response->json('lots'));
+    }
+
     public function test_create_lot_manually(): void
     {
         $user = $this->createAdminUser();

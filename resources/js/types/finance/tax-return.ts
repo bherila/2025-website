@@ -331,6 +331,30 @@ export interface Form8582ActivityLine {
   suspendedLossCarryforward: number
 }
 
+export interface Form8606Lines {
+  line1_nondeductibleContributions: number
+  line2_priorYearBasis: number
+  line3_totalBasis: number
+  line6_yearEndFmv: number
+  line7_distributionsNotConverted: number
+  line8_convertedToRoth: number
+  line9_total: number
+  line10_proRataRatio: number
+  line11_basisInConversion: number
+  line12_basisInDistributions: number
+  line13_totalBasisUsed: number
+  line14_basisCarriedForward: number
+  line15c_taxableDistributions: number
+  line18_taxableConversions: number
+  /** Taxable amount flowing to Form 1040 line 4b (sum of line 15c + line 18). */
+  taxableToForm1040Line4b: number
+  /** Per-1099-R conversion rows. */
+  conversions: { payerName: string; grossDistribution: number; taxableAmount: number; distributionCode: string; isIra: boolean }[]
+  /** Per-1099-R non-conversion distribution rows. */
+  distributions: { payerName: string; grossDistribution: number; taxableAmount: number; distributionCode: string; isIra: boolean }[]
+  hasActivity: boolean
+}
+
 export interface Form8582Lines {
   /** Per-activity breakdown. */
   activities: Form8582ActivityLine[]
@@ -389,6 +413,7 @@ export interface TaxReturn1040 {
   capitalLossCarryover?: CapitalLossCarryoverLines
   form461?: Form461Lines
   form8582?: Form8582Lines
+  form8606?: Form8606Lines
   estimatedTaxPayments?: import('@/lib/finance/estimatedTaxPayments').EstimatedTaxPaymentsData
   k1Docs?: K1ExportEntry[]
   k3Docs?: K3ExportEntry[]

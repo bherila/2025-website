@@ -12,6 +12,8 @@ interface Schedule1PreviewProps {
   schedule1?: Schedule1Lines | undefined
   /** Navigate to a source tab when the user clicks Go-to-source from the disclosure. */
   onTabChange?: (tab: TaxTabId) => void
+  /** Inline manual-entry control for line 2a alimony (pre-2019 decrees). */
+  line2aAlimonyInput?: React.ReactNode
 }
 
 export interface Schedule1Line8Breakdown {
@@ -28,6 +30,7 @@ export function computeSchedule1Totals({
   schedule1Line8Breakdown,
   schedule1Line7Unemployment = 0,
   schedule1Line1aTaxableRefunds = 0,
+  schedule1Line2aAlimony = 0,
   deductibleSeTaxAdjustment = 0,
 }: {
   scheduleCNetIncome?: number
@@ -37,6 +40,8 @@ export function computeSchedule1Totals({
   schedule1Line8Breakdown?: Schedule1Line8Breakdown
   schedule1Line7Unemployment?: number
   schedule1Line1aTaxableRefunds?: number
+  /** Alimony received from pre-2019 divorce decrees (user-entered). */
+  schedule1Line2aAlimony?: number
   deductibleSeTaxAdjustment?: number
 }): Schedule1Lines {
   const line8b = schedule1Line8Breakdown?.line8b ?? 0
@@ -50,6 +55,7 @@ export function computeSchedule1Totals({
   const line10_total = currency(scheduleCNetIncome)
     .add(scheduleEGrandTotal)
     .add(schedule1Line1aTaxableRefunds)
+    .add(schedule1Line2aAlimony)
     .add(schedule1Line7Unemployment)
     .add(line9_totalOther).value
   const line15_deductibleSeTax = deductibleSeTaxAdjustment === 0
@@ -59,7 +65,7 @@ export function computeSchedule1Totals({
   return {
     partI: {
       line1a_taxableRefunds: schedule1Line1aTaxableRefunds === 0 ? null : schedule1Line1aTaxableRefunds,
-      line2a_alimonyReceived: null,
+      line2a_alimonyReceived: schedule1Line2aAlimony === 0 ? null : schedule1Line2aAlimony,
       line3_business: scheduleCNetIncome,
       line4_otherGains: null,
       line5_rentalPartnerships: scheduleEGrandTotal,
@@ -99,12 +105,14 @@ export default function Schedule1Preview({
   selectedYear,
   schedule1,
   onTabChange,
+  line2aAlimonyInput,
 }: Schedule1PreviewProps) {
   const totals = schedule1 ?? computeSchedule1Totals({})
   const partI = totals.partI
   const partII = totals.partII
 
   const line1a = classifyPartIValue(partI.line1a_taxableRefunds)
+  const line2a = classifyPartIValue(partI.line2a_alimonyReceived)
   const line3 = classifyPartIValue(partI.line3_business)
   const line5 = classifyPartIValue(partI.line5_rentalPartnerships)
   const line7 = classifyPartIValue(partI.line7_unemploymentCompensation)
@@ -122,11 +130,14 @@ export default function Schedule1Preview({
       tooltip: line1a === 'zero' ? 'No taxable refunds reported on any 1099-G box 2.' : undefined,
     } as EmptyLine)
   }
-  partIEmpty.push({
-    lineNumber: '2a',
-    label: 'Alimony received (pre-2019 decrees only)',
-    state: 'null',
-  })
+  if (line2a !== 'visible') {
+    partIEmpty.push({
+      lineNumber: '2a',
+      label: 'Alimony received (pre-2019 decrees only)',
+      state: line2a,
+      ...(line2aAlimonyInput ? { manualEntry: line2aAlimonyInput } : {}),
+    } as EmptyLine)
+  }
   if (line3 !== 'visible') {
     partIEmpty.push({
       lineNumber: '3',
@@ -215,6 +226,12 @@ export default function Schedule1Preview({
           <>
             <FormLine boxRef="1a" label="Taxable refunds, credits, or offsets of state and local income taxes" value={partI.line1a_taxableRefunds} />
             <FormSubLine text="From 1099-G box 2" />
+          </>
+        )}
+        {line2a === 'visible' && (
+          <>
+            <FormLine boxRef="2a" label="Alimony received" value={partI.line2a_alimonyReceived} />
+            <FormSubLine text="Pre-2019 divorce decrees only (manual entry)" />
           </>
         )}
         {line3 === 'visible' && (
