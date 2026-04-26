@@ -183,7 +183,7 @@ function Schedule3Adapter({ state }: FormRenderProps): React.ReactElement {
   return <Schedule3Preview schedule3={schedule3} selectedYear={state.year} />
 }
 
-function Form1116Adapter({ state }: FormRenderProps): React.ReactElement {
+function Form1116Adapter({ state, instance }: FormRenderProps): React.ReactElement {
   const { reviewK1Doc, bulkSetSbpElection } = useDockActions()
   if (!state.taxReturn.form1116) {
     return (
@@ -194,6 +194,7 @@ function Form1116Adapter({ state }: FormRenderProps): React.ReactElement {
     )
   }
   const allK1Docs = state.accountDocuments.filter((doc) => doc.form_type === 'k1')
+  const category = instance?.key === 'general' || instance?.key === 'passive' ? instance.key : undefined
   return (
     <Form1116Preview
       form1116={state.taxReturn.form1116}
@@ -202,6 +203,7 @@ function Form1116Adapter({ state }: FormRenderProps): React.ReactElement {
       selectedYear={state.year}
       onReviewNow={reviewK1Doc}
       onBulkSetSbpElection={bulkSetSbpElection}
+      {...(category ? { category } : {})}
     />
   )
 }
@@ -496,11 +498,27 @@ export const formRegistry: FormRegistry = {
     keywords: ['1116', 'FTC', 'foreign tax credit', 'foreign income', 'passive', 'general'],
     category: 'Form',
     presentation: 'column',
-    // TODO: per-category instance tabs require Form1116Preview to accept a
-    // `category` filter prop. Currently the component renders all categories
-    // (Passive, General, etc.) internally — instance switching is a separate
-    // refactor of the preview content, tracked alongside form-1116 polish.
     component: Form1116Adapter,
+    instances: {
+      list: (state) => {
+        const f1116 = state.taxReturn.form1116
+        if (!f1116) {
+          return []
+        }
+        const list: { key: string; label: string }[] = []
+        // Passive is always present whenever Form 1116 exists.
+        list.push({ key: 'passive', label: 'Passive' })
+        // General only present when K-3 detection found general-category income.
+        if (f1116.totalGeneralIncome > 0) {
+          list.push({ key: 'general', label: 'General' })
+        }
+        return list
+      },
+      // IRS categories are an enum, not user-created. Use 'passive' as the
+      // sensible default if the create button is ever surfaced.
+      create: () => ({ key: 'passive', label: 'Passive' }),
+      allowCreate: false,
+    },
   },
   'form-8582': {
     id: 'form-8582',

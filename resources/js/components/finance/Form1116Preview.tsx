@@ -18,6 +18,8 @@ import type { Form1116Lines } from '@/types/finance/tax-return'
 export { computeForm1116Lines } from '@/finance/1116'
 export type { Form1116Lines } from '@/types/finance/tax-return'
 
+export type Form1116Category = 'passive' | 'general'
+
 interface Form1116PreviewProps {
   form1116: Form1116Lines
   foreignTaxSummaries: ForeignTaxSummary[]
@@ -25,6 +27,13 @@ interface Form1116PreviewProps {
   selectedYear?: number
   onReviewNow?: (docId: number) => void
   onBulkSetSbpElection?: (active: boolean, docIds: number[]) => Promise<string[]>
+  /**
+   * When set, scopes rendered content to a single FTC category.
+   * - 'passive': renders Parts I/II/III for passive income, hides general blocks
+   * - 'general': renders the general-category block, hides passive blocks
+   * - undefined (default): renders everything (legacy behavior for tab UI)
+   */
+  category?: Form1116Category
 }
 
 export default function Form1116Preview({
@@ -34,6 +43,7 @@ export default function Form1116Preview({
   selectedYear,
   onReviewNow,
   onBulkSetSbpElection,
+  category,
 }: Form1116PreviewProps) {
   const [bulkUpdating, setBulkUpdating] = useState(false)
   const [bulkFailures, setBulkFailures] = useState<string[]>([])
@@ -72,6 +82,15 @@ export default function Form1116Preview({
   const simplifiedElectionThreshold = 300
   const aboveSimplifiedThreshold = totalForeignTaxes > simplifiedElectionThreshold
 
+  const showPassive = category === undefined || category === 'passive'
+  const showGeneral = category === undefined || category === 'general'
+  const headerLabel =
+    category === 'general'
+      ? 'General Category'
+      : category === 'passive'
+        ? 'Passive Category'
+        : 'Foreign Tax Credit'
+
   if (totalForeignTaxes === 0 && totalPassiveIncome === 0) {
     return (
       <div className="py-12 text-center text-muted-foreground text-sm">
@@ -86,9 +105,11 @@ export default function Form1116Preview({
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold mb-0.5">Form 1116 — Foreign Tax Credit</h2>
+          <h2 className="text-base font-semibold mb-0.5">Form 1116 — {headerLabel}</h2>
           <p className="text-xs text-muted-foreground">
-            Passive category foreign tax credit — dollar-for-dollar offset against U.S. tax.
+            {category === 'general'
+              ? 'General category foreign tax credit — separate basket from passive income.'
+              : 'Passive category foreign tax credit — dollar-for-dollar offset against U.S. tax.'}
           </p>
         </div>
         {foreignTaxSummaries.length > 0 && (
@@ -141,44 +162,47 @@ export default function Form1116Preview({
         </Callout>
       )}
 
-      {totalGeneralIncome > 0 ? (
-        <Callout kind="warn" title="⚠ General Category Income Detected — Second Form 1116 Required">
-          <p>
-            General category foreign income of <strong>{fmtAmt(totalGeneralIncome, 2)}</strong> was detected in K-3
-            Part II. A separate Form 1116 (general category) is required in addition to the passive category form.
-          </p>
-        </Callout>
-      ) : (
-        <Callout kind="good" title="✓ No General Category Form 1116 Required">
-          <p>
-            All column (d) general category amounts have country code XX ("Sourced by partner"), which is U.S.-source
-            for domestic partners. One Form 1116 (passive category) only.
-          </p>
-        </Callout>
+      {category === undefined &&
+        (totalGeneralIncome > 0 ? (
+          <Callout kind="warn" title="⚠ General Category Income Detected — Second Form 1116 Required">
+            <p>
+              General category foreign income of <strong>{fmtAmt(totalGeneralIncome, 2)}</strong> was detected in K-3
+              Part II. A separate Form 1116 (general category) is required in addition to the passive category form.
+            </p>
+          </Callout>
+        ) : (
+          <Callout kind="good" title="✓ No General Category Form 1116 Required">
+            <p>
+              All column (d) general category amounts have country code XX ("Sourced by partner"), which is U.S.-source
+              for domestic partners. One Form 1116 (passive category) only.
+            </p>
+          </Callout>
+        ))}
+
+      {showPassive && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <FormBlock title="Part I — Foreign Source Passive Income">
+            {incomeSources.map((src, i) => (
+              <FormLine key={i} boxRef="1a" label={src.label} value={src.amount} />
+            ))}
+            {incomeSources.length === 0 && (
+              <FormLine boxRef="1a" label="No foreign passive income identified" raw="—" />
+            )}
+            <FormTotalLine label="Line 1c — Total foreign passive income" value={totalPassiveIncome} />
+          </FormBlock>
+
+          <FormBlock title="Part II — Foreign Taxes Paid or Accrued">
+            {taxSources.map((src, i) => (
+              <FormLine key={i} boxRef="8" label={src.label} value={src.amount} />
+            ))}
+            {taxSources.length === 0 && <FormLine boxRef="8" label="No foreign taxes identified" raw="—" />}
+            <FormTotalLine label="Line 9 — Total foreign taxes paid or accrued" value={totalForeignTaxes} />
+          </FormBlock>
+        </div>
       )}
 
-      {/* Passive Form 1116 — Parts I and II */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <FormBlock title="Part I — Foreign Source Passive Income">
-          {incomeSources.map((src, i) => (
-            <FormLine key={i} boxRef="1a" label={src.label} value={src.amount} />
-          ))}
-          {incomeSources.length === 0 && <FormLine boxRef="1a" label="No foreign passive income identified" raw="—" />}
-          <FormTotalLine label="Line 1c — Total foreign passive income" value={totalPassiveIncome} />
-        </FormBlock>
-
-        <FormBlock title="Part II — Foreign Taxes Paid or Accrued">
-          {taxSources.map((src, i) => (
-            <FormLine key={i} boxRef="8" label={src.label} value={src.amount} />
-          ))}
-          {taxSources.length === 0 && <FormLine boxRef="8" label="No foreign taxes identified" raw="—" />}
-          <FormTotalLine label="Line 9 — Total foreign taxes paid or accrued" value={totalForeignTaxes} />
-        </FormBlock>
-      </div>
-
-      {/* General Category Form 1116 — if applicable */}
-      {generalIncomeSources.length > 0 && (
-        <FormBlock title="General Category Form 1116 — Part I (Foreign Source General Income)">
+      {showGeneral && generalIncomeSources.length > 0 && (
+        <FormBlock title="Part I — Foreign Source General Income">
           {generalIncomeSources.map((src, i) => (
             <FormLine key={i} boxRef="1a" label={src.label} value={src.amount} />
           ))}
@@ -191,8 +215,17 @@ export default function Form1116Preview({
         </FormBlock>
       )}
 
-      {/* Line 4b — Apportioned Interest Expense */}
-      {line4bApportionment.length > 0 && (
+      {showGeneral && generalIncomeSources.length === 0 && category === 'general' && (
+        <Callout kind="info" title="No general category data">
+          <p>
+            No general category foreign income detected for this return. All column (d) amounts are U.S.-source
+            (country code XX). Only the passive category Form 1116 is required.
+          </p>
+        </Callout>
+      )}
+
+      {/* Line 4b — Apportioned Interest Expense (passive only) */}
+      {showPassive && line4bApportionment.length > 0 && (
         <FormBlock title="Line 4b — Apportioned Interest Expense (Asset Method)">
           {line4bApportionment.map((row, i) => (
             <div key={i} className="space-y-0.5">
@@ -212,7 +245,8 @@ export default function Form1116Preview({
         </FormBlock>
       )}
 
-      {/* Part III — Limitation */}
+      {/* Part III — Limitation (passive only — general would need its own basket calc) */}
+      {showPassive && (
       <FormBlock title="Part III — Limitation Calculation (Estimated)">
         <FormLine boxRef="1c" label="Foreign passive income (Part I)" value={totalPassiveIncome} />
         {totalLine4b > 0 && <FormLine boxRef="4b" label="Less: apportioned interest (Line 4b)" value={-totalLine4b} />}
@@ -232,6 +266,7 @@ export default function Form1116Preview({
         />
         <FormLine boxRef="14" label="Carryforward (if any)" raw="$0 (estimate)" />
       </FormBlock>
+      )}
 
       {/* Credit vs. Deduction Comparison */}
       {creditVsDeduction && (
@@ -263,7 +298,7 @@ export default function Form1116Preview({
         </FormBlock>
       )}
 
-      {sbpElections.length > 0 && (
+      {showPassive && sbpElections.length > 0 && (
         <FormBlock title="Sourced-by-Partner (Col f) Election — Form 1116 Impact">
           {sbpElections.length > 1 && onBulkSetSbpElection && (
             <div className="flex gap-2 pb-2">
@@ -318,7 +353,7 @@ export default function Form1116Preview({
         </FormBlock>
       )}
 
-      {turboTaxAlert && (
+      {showPassive && turboTaxAlert && (
         <Callout kind="alert" title="⚠ TurboTax FTC Worksheet Line 1d — Correction Required">
           <p>
             TurboTax may prefill Line 1d with K-1 Box 5 interest (
