@@ -115,6 +115,9 @@ interface TaxPreviewContextValue {
   /** Form 8606 line 6 — year-end FMV of all traditional/SEP/SIMPLE IRAs. */
   form8606YearEndFmv: number
   setForm8606YearEndFmv: Dispatch<SetStateAction<number>>
+  /** User-entered SSA-1099 gross benefits for the year (Pub 915 worksheet input). */
+  ssaGrossBenefits: number
+  setSsaGrossBenefits: Dispatch<SetStateAction<number>>
   /** Whether the user is married for the selected tax year (from marriage status settings). */
   isMarried: boolean
   /** State codes the user filed in for the selected tax year (e.g. ['CA', 'NY']). */
@@ -351,6 +354,27 @@ export function TaxPreviewProvider({
       })
     },
     [form8606FmvKey],
+  )
+
+  const ssaGrossBenefitsKey = `tax-preview-ssa-gross-benefits-${year}`
+  const [ssaGrossBenefits, setSsaGrossBenefitsRaw] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0
+    const stored = localStorage.getItem(ssaGrossBenefitsKey)
+    if (stored === null) return 0
+    const n = parseFloat(stored)
+    return isNaN(n) ? 0 : n
+  })
+  const setSsaGrossBenefits: Dispatch<SetStateAction<number>> = useCallback(
+    (value) => {
+      setSsaGrossBenefitsRaw((prev) => {
+        const next = typeof value === 'function' ? value(prev) : value
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(ssaGrossBenefitsKey, String(next))
+        }
+        return next
+      })
+    },
+    [ssaGrossBenefitsKey],
   )
 
   const realEstateProfessionalKey = `tax-preview-re-professional-${year}`
@@ -1165,6 +1189,8 @@ export function TaxPreviewProvider({
     setForm8606PriorYearBasis,
     form8606YearEndFmv,
     setForm8606YearEndFmv,
+    ssaGrossBenefits,
+    setSsaGrossBenefits,
     isMarried,
     activeTaxStates,
     setActiveTaxStates,
@@ -1221,6 +1247,8 @@ export function TaxPreviewProvider({
     setForm8606PriorYearBasis,
     form8606YearEndFmv,
     setForm8606YearEndFmv,
+    ssaGrossBenefits,
+    setSsaGrossBenefits,
     isMarried,
     activeTaxStates,
     userDeductions,

@@ -11,6 +11,16 @@ All agent-operational rules, coding standards, workflow commands, and architectu
 
 **IMPORTANT**: All testing requirements in [TESTING.md](TESTING.md) must pass before committing — this includes TypeScript (`pnpm run type-check`), ESLint (`pnpm run lint`), Jest, Laravel Pint, and PHPUnit tests.
 
+## Money math — always use currency.js
+
+All arithmetic involving money (adds, subtracts, multiplies, divides) must go through [currency.js](https://currency.js.org/). Never use raw `+ - * /` on dollar amounts; JavaScript floats produce rounding errors that compound across tax workflows.
+
+- Import: `import currency from 'currency.js'`
+- Adds/subtracts: `currency(a).add(b).subtract(c).value`
+- Multiplies/divides: `currency(a).multiply(0.25).value`, `currency(a, { precision: 6 }).divide(b).value`
+- Exported compute functions return plain `number`, never `currency` objects (`currency` instances are not JSON-serialisable)
+- `Math.max` / `Math.min` on already-computed values are fine — they're pure comparisons, not arithmetic
+
 ## How Claude Should Use Repo Guidance
 
 Claude Code should use both files together:
