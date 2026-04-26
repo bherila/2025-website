@@ -120,7 +120,9 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
         const entry = getEntry(registry, col.form)
         const Component = entry.component
         const instances = entry.instances ? entry.instances.list(state) : []
-        const activeInstance = col.instance ? instances.find((i) => i.key === col.instance) : undefined
+        // Auto-select the first tab when no instance is specified in the route.
+        const resolvedInstanceKey = col.instance ?? (instances.length > 0 ? instances[0]!.key : undefined)
+        const activeInstance = resolvedInstanceKey ? instances.find((i) => i.key === resolvedInstanceKey) : undefined
         const isLast = depth === route.columns.length - 1
 
         const onDrill = dispatchDrill(depth)
@@ -160,7 +162,7 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
             {entry.instances && (
               <InstanceTabs
                 instances={instances}
-                activeKey={col.instance}
+                activeKey={resolvedInstanceKey}
                 onSelect={(key: string) => replaceFrom(depth, { form: col.form, instance: key })}
                 {...(entry.instances.allowCreate
                   ? {

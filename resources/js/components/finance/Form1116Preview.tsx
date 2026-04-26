@@ -28,6 +28,12 @@ interface Form1116PreviewProps {
   onReviewNow?: (docId: number) => void
   onBulkSetSbpElection?: (active: boolean, docIds: number[]) => Promise<string[]>
   /**
+   * When provided, the "1116 Worksheet" button calls this instead of opening the
+   * internal modal. Used in dock mode to push the apportionment worksheet as a
+   * Miller column.
+   */
+  onOpenWorksheet?: () => void
+  /**
    * When set, scopes rendered content to a single FTC category.
    * - 'passive': renders Parts I/II/III for passive income, hides general blocks
    * - 'general': renders the general-category block, hides passive blocks
@@ -43,6 +49,7 @@ export default function Form1116Preview({
   selectedYear,
   onReviewNow,
   onBulkSetSbpElection,
+  onOpenWorksheet,
   category,
 }: Form1116PreviewProps) {
   const [bulkUpdating, setBulkUpdating] = useState(false)
@@ -117,7 +124,7 @@ export default function Form1116Preview({
             size="sm"
             variant="outline"
             className="h-7 text-xs gap-1"
-            onClick={() => setWorksheetOpen(true)}
+            onClick={() => onOpenWorksheet ? onOpenWorksheet() : setWorksheetOpen(true)}
           >
             <Calculator className="h-3 w-3" />
             1116 Worksheet
@@ -239,6 +246,7 @@ export default function Form1116Preview({
           ))}
           <FormTotalLine boxRef="4b" label="Total apportioned interest" value={totalLine4b} />
           <FormLine
+            note
             label="Enter on Form 1116, Part I, Line 4b"
             raw="Reduce passive foreign income by this amount"
           />
@@ -365,9 +373,9 @@ export default function Form1116Preview({
       )}
 
       {showPassive && turboTaxAlert && (
-        <Callout kind="alert" title="⚠ TurboTax FTC Worksheet Line 1d — Correction Required">
+        <Callout kind="alert" title="⚠ FTC Worksheet Line 1d — Correction Required">
           <p>
-            TurboTax may prefill Line 1d with K-1 Box 5 interest (
+            The FTC Worksheet may prefill Line 1d with K-1 Box 5 interest (
             <strong>{fmtAmt(totalK1Box5, 2)}</strong>) — but Box 5 interest is entirely U.S.-sourced per K-3 Part II
             Line 6, column (a). Set Line 1d to the K-3 passive foreign income amount only (
             <strong>{fmtAmt(totalPassiveIncome, 2)}</strong>). Overstating foreign passive income inflates your FTC

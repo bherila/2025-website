@@ -27,6 +27,7 @@ import TaxDocumentsSection from '@/components/finance/TaxDocumentsSection'
 import WorksheetAmtExemption from '@/components/finance/worksheets/WorksheetAmtExemption'
 import WorksheetSE401k from '@/components/finance/worksheets/WorksheetSE401k'
 import WorksheetTaxableSS from '@/components/finance/worksheets/WorksheetTaxableSS'
+import WorksheetColumn1116 from '@/finance/1116/WorksheetColumn'
 import {
   buildEstimatedTaxSheet,
   buildForm1116Sheet,
@@ -268,7 +269,7 @@ function Schedule3Adapter({ state }: FormRenderProps): React.ReactElement {
   return <Schedule3Preview schedule3={schedule3} selectedYear={state.year} />
 }
 
-function Form1116Adapter({ state, instance }: FormRenderProps): React.ReactElement {
+function Form1116Adapter({ state, instance, onDrill }: FormRenderProps): React.ReactElement {
   const { reviewK1Doc, bulkSetSbpElection } = useDockActions()
   if (!state.taxReturn.form1116) {
     return (
@@ -288,7 +289,19 @@ function Form1116Adapter({ state, instance }: FormRenderProps): React.ReactEleme
       selectedYear={state.year}
       onReviewNow={reviewK1Doc}
       onBulkSetSbpElection={bulkSetSbpElection}
+      onOpenWorksheet={() => onDrill({ form: 'wks-1116-apportionment' })}
       {...(category ? { category } : {})}
+    />
+  )
+}
+
+function Worksheet1116Adapter({ state }: FormRenderProps): React.ReactElement {
+  const { reviewK1Doc } = useDockActions()
+  return (
+    <WorksheetColumn1116
+      foreignTaxSummaries={state.foreignTaxSummaries}
+      taxYear={state.year}
+      onOpenDoc={reviewK1Doc}
     />
   )
 }
@@ -977,5 +990,15 @@ export const formRegistry: FormRegistry = {
     presentation: 'modal',
     component: WorksheetTaxableSS,
     relatedForms: ['form-1040'],
+  },
+  'wks-1116-apportionment': {
+    id: 'wks-1116-apportionment',
+    label: 'Form 1116 Apportionment Worksheet',
+    shortLabel: '1116 Wks',
+    keywords: ['1116 worksheet', 'apportionment', 'interest expense', 'asset method', 'line 4b'],
+    category: 'Worksheet',
+    presentation: 'column',
+    component: Worksheet1116Adapter,
+    relatedForms: ['form-1116'],
   },
 }

@@ -22,4 +22,5 @@ export type {
   ForeignTaxSummary,
 } from './types'
 export { isF1116Data } from './types'
+export { default as WorksheetColumn } from './WorksheetColumn'
 export { default as WorksheetModal } from './WorksheetModal'

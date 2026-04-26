@@ -34,6 +34,7 @@ export type FormId =
   | 'wks-se-401k'
   | 'wks-amt-exemption'
   | 'wks-taxable-ss'
+  | 'wks-1116-apportionment'
 
 export type Presentation = 'column' | 'modal' | 'app'
 

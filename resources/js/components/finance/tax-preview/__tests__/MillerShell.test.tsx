@@ -159,6 +159,15 @@ const mockRegistry: FormRegistry = {
     presentation: 'modal',
     component: MockComponent,
   },
+  'wks-1116-apportionment': {
+    id: 'wks-1116-apportionment',
+    label: '1116 Apportionment Worksheet',
+    shortLabel: '1116 Wks',
+    keywords: [],
+    category: 'Worksheet',
+    presentation: 'column',
+    component: MockComponent,
+  },
 }
 
 function stub(id: string, label: string, shortLabel: string): FormRegistry[keyof FormRegistry] {
@@ -240,14 +249,15 @@ describe('MillerShell', () => {
     expect(window.location.hash).toBe('#/form-1116:general')
   })
 
-  it('shows the empty-state CTA for multi-instance form without an instance', () => {
+  it('auto-selects the first tab when no instance is specified', () => {
     window.location.hash = '#/form-1116'
     render(
       <Wrapper>
         <MillerShell registry={mockRegistry} homeView={null} />
       </Wrapper>,
     )
-    expect(screen.getByText(/no .* instance selected/i)).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Passive' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByTestId('mock-content')).toHaveTextContent('instance:passive')
   })
 
   it('passes the active instance to the component', () => {
