@@ -213,6 +213,500 @@ function sumFormula(firstDetailExcelRow: number, lastDetailExcelRow: number): st
   return `=SUM(C${firstDetailExcelRow}:C${lastDetailExcelRow})`
 }
 
+/**
+ * Standalone sheet builders that registry entries can wire up via `xlsx.build`.
+ * These return plain XlsxSheet (without the rowIndex map) since they have no
+ * cross-sheet formula refs that need it. Sheets that need rowIndex (Schedule B,
+ * Schedule SE, etc.) stay inline in buildTaxWorkbook for now.
+ */
+
+export function buildScheduleCSheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.scheduleC) {
+    return null
+  }
+  return {
+    name: 'Schedule C',
+    rows: [
+      {
+        line: '31',
+        description: 'Net income / (loss)',
+        amount: taxReturn.scheduleC.total,
+        isTotal: true,
+      },
+    ],
+  }
+}
+
+export function buildScheduleESheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.scheduleE) {
+    return null
+  }
+  return {
+    name: 'Schedule E',
+    rows: [
+      { line: '1', description: 'Total passive income / (loss)', amount: taxReturn.scheduleE.totalPassive },
+      { line: '2', description: 'Total nonpassive income / (loss)', amount: taxReturn.scheduleE.totalNonpassive },
+      {
+        line: '3',
+        description: 'Schedule E combined total',
+        amount: taxReturn.scheduleE.grandTotal,
+        formula: '=C2+C3',
+        isTotal: true,
+      },
+    ],
+  }
+}
+
+/**
+ * Assemble the registry-contributed sheets from a form registry. Each entry
+ * with an `xlsx.build` field contributes one sheet (or none if `build` returns
+ * null or the sheet has no exportable content). Sheets are sorted by `order`.
+ *
+ * Used by `buildTaxWorkbook` for the migrated forms; non-migrated sheets stay
+ * inline in `buildTaxWorkbook` until their builders are extracted.
+ */
+export function assembleRegistrySheets(
+  taxReturn: TaxReturn1040,
+  registry: Record<string, { xlsx?: { sheetName: () => string; order?: number; build: (taxReturn: TaxReturn1040) => XlsxSheet | null } }>,
+): XlsxSheet[] {
+  const candidates: { order: number; sheet: XlsxSheet }[] = []
+  for (const entry of Object.values(registry)) {
+    if (!entry.xlsx) {
+      continue
+    }
+    const sheet = entry.xlsx.build(taxReturn)
+    if (!sheet || !hasExportableContent(sheet)) {
+      continue
+    }
+    candidates.push({ order: entry.xlsx.order ?? 999, sheet })
+  }
+  candidates.sort((a, b) => a.order - b.order)
+  return candidates.map((c) => c.sheet)
+}
+
+export function buildCapitalLossCarryoverSheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.capitalLossCarryover?.hasCarryover) {
+    return null
+  }
+  const c = taxReturn.capitalLossCarryover
+  return {
+    name: 'Capital Loss Carryover',
+    rows: [
+      { description: 'Net short-term capital gain/(loss)', amount: c.netShortTerm },
+      { description: 'Net long-term capital gain/(loss)', amount: c.netLongTerm },
+      { description: 'Combined net capital gain/(loss)', amount: c.combined, isTotal: true },
+      { description: 'Applied to ordinary income this year (max $3,000)', amount: c.appliedToOrdinaryIncome },
+      { description: 'Short-term capital loss carryforward', amount: -c.shortTermCarryover },
+      { description: 'Long-term capital loss carryforward', amount: -c.longTermCarryover },
+      {
+        description: 'Total capital loss carryforward → next year Schedule D',
+        amount: -c.totalCarryover,
+        isTotal: true,
+      },
+    ],
+  }
+}
+
+export function buildForm461Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.form461) {
+    return null
+  }
+  const f = taxReturn.form461
+  return {
+    name: 'Form 461',
+    rows: [
+      { line: '9', description: 'Line 9 — Aggregate trade/business income (loss)', amount: f.aggregateBusinessIncomeLoss, isTotal: true },
+      { line: '15', description: 'Line 15 — EBL limit (filing-status threshold)', amount: f.eblLimit },
+      {
+        line: '16',
+        description: f.isTriggered
+          ? 'Line 16 — Excess business loss → Schedule 1 Line 8p (NOL carryforward)'
+          : 'Line 16 — No excess (within limit)',
+        amount: f.isTriggered ? -f.excessBusinessLoss : 0,
+        isTotal: true,
+      },
+    ],
+  }
+}
+
+export function buildForm8582Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.form8582 || taxReturn.form8582.activities.length === 0) {
+    return null
+  }
+  const f = taxReturn.form8582
+  const activityRows: XlsxRow[] = f.activities.flatMap((a) => [
+    ...(a.currentIncome !== 0
+      ? [{ description: `${a.activityName}${a.isRentalRealEstate ? ' [Rental RE]' : ''} — Line 1a (income)`, amount: a.currentIncome }]
+      : []),
+    ...(a.currentLoss !== 0
+      ? [{ description: `${a.activityName}${a.isRentalRealEstate ? ' [Rental RE]' : ''} — Line 1b (loss)`, amount: a.currentLoss }]
+      : []),
+    ...(a.priorYearUnallowed !== 0
+      ? [{ description: `${a.activityName} — Line 1c (prior-year unallowed)`, amount: a.priorYearUnallowed }]
+      : []),
+  ])
+  const carryforwardRows: XlsxRow[] = f.activities
+    .filter((a) => a.allowedLossThisYear > 0 || a.suspendedLossCarryforward > 0)
+    .flatMap((a) => [
+      { description: `${a.activityName} — Allowed this year`, amount: a.allowedLossThisYear },
+      ...(a.suspendedLossCarryforward > 0
+        ? [{ description: `${a.activityName} — Suspended carryforward`, amount: a.suspendedLossCarryforward }]
+        : []),
+    ])
+  const perActivityNetRows: XlsxRow[] = f.activities.map((a) => ({
+    description: `${a.activityName}${a.isRentalRealEstate ? ' [Rental RE]' : ''} — Net gain/loss`,
+    amount: a.overallGainOrLoss,
+  }))
+  return {
+    name: 'Form 8582',
+    rows: [
+      { isHeader: true, description: 'Part I — Passive Activities' },
+      ...activityRows,
+      { line: '1a', description: 'Total passive income', amount: f.totalPassiveIncome, isTotal: true },
+      { line: '1b', description: 'Total passive loss', amount: f.totalPassiveLoss },
+      ...(f.totalPriorYearUnallowed !== 0
+        ? [{ line: '1c', description: 'Prior-year unallowed losses', amount: f.totalPriorYearUnallowed }]
+        : []),
+      { line: '1d', description: 'Net passive result', amount: f.netPassiveResult, isTotal: true },
+      { isHeader: true, description: 'Part II — Special Allowance' },
+      { description: 'Modified AGI', amount: f.magi },
+      { description: 'Rental real estate special allowance', amount: f.rentalAllowance },
+      ...(f.realEstateProfessional
+        ? [{ description: 'Real estate professional election (§469(c)(7))', amount: 0 }]
+        : []),
+      { isHeader: true, description: 'Part III — Allowed vs. Suspended' },
+      { description: 'Total allowed passive loss', amount: -f.totalAllowedLoss, isTotal: true },
+      { description: 'Net deduction to return', amount: -f.netDeductionToReturn },
+      { description: 'Suspended loss — carried forward', amount: -f.totalSuspendedLoss, isTotal: f.isLossLimited },
+      ...(carryforwardRows.length > 0
+        ? [{ isHeader: true, description: 'Worksheet 5 — Per-Activity Allocation' } as XlsxRow, ...carryforwardRows]
+        : []),
+      { isHeader: true, description: 'Per-Activity Net Gain/Loss' },
+      ...perActivityNetRows,
+    ],
+  }
+}
+
+export function buildForm6251Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.form6251) {
+    return null
+  }
+  const f = taxReturn.form6251
+  const sourceStart = 3
+  const sourceEnd = sourceStart + f.sourceEntries.length - 1
+  const rows: XlsxRow[] = [
+    { isHeader: true, description: 'K-1 Box 17 / AMT Source Items' },
+    ...f.sourceEntries.map((entry) => ({
+      description: `${entry.label} — Box 17${entry.code} → Line ${entry.line}`,
+      amount: entry.amount,
+      note: entry.description,
+    })),
+    {
+      description: 'Total K-1 AMT source items',
+      amount: f.sourceEntries.reduce((total, entry) => currency(total).add(entry.amount).value, 0),
+      formula: f.sourceEntries.length > 0 ? sumFormula(sourceStart, sourceEnd) : undefined,
+      isTotal: true,
+    },
+    { isHeader: true, description: 'Part I — Alternative Minimum Taxable Income' },
+    { line: '1', description: 'Line 1 — Taxable income', amount: f.line1TaxableIncome },
+    { line: '2a', description: 'Line 2a — Taxes / standard deduction addback', amount: f.line2aTaxesOrStandardDeduction },
+    ...(f.line2cInvestmentInterest !== 0 ? [{ line: '2c', description: 'Line 2c — Investment interest adjustment', amount: f.line2cInvestmentInterest }] : []),
+    ...(f.line2dDepletion !== 0 ? [{ line: '2d', description: 'Line 2d — Depletion adjustment', amount: f.line2dDepletion }] : []),
+    ...(f.line2kDispositionOfProperty !== 0 ? [{ line: '2k', description: 'Line 2k — Disposition of property', amount: f.line2kDispositionOfProperty }] : []),
+    ...(f.line2lPost1986Depreciation !== 0 ? [{ line: '2l', description: 'Line 2l — Post-1986 depreciation', amount: f.line2lPost1986Depreciation }] : []),
+    ...(f.line2mPassiveActivities !== 0 ? [{ line: '2m', description: 'Line 2m — Passive activities', amount: f.line2mPassiveActivities }] : []),
+    ...(f.line2nLossLimitations !== 0 ? [{ line: '2n', description: 'Line 2n — Loss limitations', amount: f.line2nLossLimitations }] : []),
+    ...(f.line2tIntangibleDrillingCosts !== 0 ? [{ line: '2t', description: 'Line 2t — Intangible drilling costs', amount: f.line2tIntangibleDrillingCosts }] : []),
+    ...(f.line3OtherAdjustments !== 0 ? [{ line: '3', description: 'Line 3 — Other adjustments', amount: f.line3OtherAdjustments }] : []),
+    { line: '4', description: 'Line 4 — Alternative minimum taxable income (AMTI)', amount: f.amti, isTotal: true },
+    { isHeader: true, description: 'Part II — Alternative Minimum Tax' },
+    {
+      line: '5',
+      description: 'Line 5 — AMT exemption',
+      amount: f.exemption,
+      note: `Base ${currency(f.exemptionBase).format()} less phaseout ${currency(f.exemptionReduction).format()}`,
+    },
+    { line: '6', description: 'Line 6 — AMT tax base after exemption', amount: f.amtTaxBase },
+    { line: '7', description: 'Line 7 — AMT before foreign tax credit', amount: f.amtBeforeForeignCredit },
+    ...(f.line8AmtForeignTaxCredit > 0 ? [{ line: '8', description: 'Line 8 — AMT foreign tax credit', amount: f.line8AmtForeignTaxCredit }] : []),
+    { line: '9', description: 'Line 9 — Tentative minimum tax', amount: f.tentativeMinTax, isTotal: true },
+    { line: '10', description: 'Line 10 — Regular tax after credits', amount: f.regularTaxAfterCredits },
+    { line: '11', description: 'Line 11 — Alternative minimum tax', amount: f.amt, isTotal: true, note: '→ Schedule 2 Line 2' },
+  ]
+  if (f.requiresStatementReview) {
+    rows.push({ isHeader: true, description: 'Manual review notes' })
+    rows.push(...f.manualReviewReasons.map((reason) => ({ description: reason })))
+  }
+  return { name: 'Form 6251', rows }
+}
+
+export function buildForm8995Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.form8995) {
+    return null
+  }
+  const f = taxReturn.form8995
+  const entryStart = 3
+  const entryEnd = entryStart + f.entries.length - 1
+  const rows: XlsxRow[] = [
+    { isHeader: true, description: 'Per-Partnership QBI (Box 20 Code S)' },
+    ...f.entries.map((e) => ({ description: `${e.label} — QBI income`, amount: e.qbiIncome })),
+    {
+      line: '1',
+      description: 'Line 1 — Total qualified business income',
+      amount: f.totalQBI,
+      formula: f.entries.length > 0 ? sumFormula(entryStart, entryEnd) : undefined,
+      isTotal: true,
+    },
+    {
+      line: '15',
+      description: 'Line 15 — Estimated taxable income',
+      amount: f.estimatedTaxableIncome,
+      note: 'Total income minus estimated standard deduction',
+    },
+    {
+      line: '16',
+      description: 'Line 16 — Net capital gains (enter from Schedule D)',
+      note: 'Enter from return — reduces taxable income cap',
+    },
+    {
+      line: '17',
+      description: 'Line 17 — Taxable income cap (20% × Line 15)',
+      amount: f.taxableIncomeCap,
+      isTotal: true,
+    },
+    {
+      line: '13',
+      description: 'Line 13 — 20% × total QBI (after netting losses)',
+      amount: f.totalQBIComponent,
+    },
+    {
+      line: '13',
+      description: 'QBI Deduction — lesser of 20% QBI or taxable income cap',
+      amount: f.estimatedDeduction,
+      isTotal: true,
+      note: '→ Form 1040 Line 13',
+    },
+  ]
+  if (f.aboveThreshold) {
+    rows.push({
+      description: '⚠ Above threshold — use Form 8995-A; W-2 wage/UBIA limitation applies',
+      note: `Threshold: Single $${f.thresholdSingle.toLocaleString()} / MFJ $${f.thresholdMFJ.toLocaleString()}`,
+    })
+  }
+  return { name: 'Form 8995', rows }
+}
+
+export function buildForm8959Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.form8959 || taxReturn.form8959.additionalTax <= 0) {
+    return null
+  }
+  const f = taxReturn.form8959
+  const srcRows: XlsxRow[] =
+    f.sources.length > 0
+      ? [
+          { isHeader: true, description: 'W-2 Sources (Box 1 wages)' },
+          ...f.sources.map((s) => ({ description: s.label, amount: s.wages })),
+        ]
+      : []
+  return {
+    name: 'Form 8959',
+    rows: [
+      ...srcRows,
+      {
+        line: '1',
+        description: 'Line 1 — Medicare wages (W-2 Box 1 approx; exact = Box 5)',
+        amount: f.wages,
+        isTotal: srcRows.length > 0,
+        note: 'Box 5 (Medicare wages) may exceed Box 1 when 401k deferrals apply',
+      },
+      {
+        line: '5',
+        description: `Line 5 — Threshold (${f.threshold === 200_000 ? 'Single/HOH' : 'MFJ'})`,
+        amount: f.threshold,
+      },
+      { line: '6', description: 'Line 6 — Wages above threshold', amount: f.excessWages },
+      {
+        line: '7',
+        description: 'Line 7 — Additional Medicare Tax (0.9%) → Schedule 2 Line 11',
+        amount: f.additionalTax,
+        isTotal: true,
+      },
+    ],
+  }
+}
+
+export function buildForm8960Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.form8960) {
+    return null
+  }
+  const f = taxReturn.form8960
+  const rows: XlsxRow[] = [
+    { isHeader: true, description: 'Part I — Net Investment Income' },
+    ...f.interestSources.map((s) => ({ description: `  ${s.label}`, amount: s.amount })),
+    { line: '1', description: 'Taxable interest (Schedule B)', amount: f.taxableInterest, isTotal: f.interestSources.length > 0 },
+    ...f.dividendSources.map((s) => ({ description: `  ${s.label}`, amount: s.amount })),
+    { line: '2', description: 'Ordinary dividends (Schedule B)', amount: f.ordinaryDividends, isTotal: f.dividendSources.length > 0 },
+    { line: '5a', description: 'Net capital gains (Schedule D, capped at 0)', amount: f.netCapGains },
+    ...f.passiveSources.map((s) => ({ description: `  ${s.label}`, amount: s.amount })),
+    { line: '4a', description: 'Net passive income (K-1 Schedule E)', amount: f.passiveIncome, isTotal: f.passiveSources.length > 0 },
+    { line: '8', description: 'Line 8 — Gross NII', amount: f.grossNII, isTotal: true },
+    { isHeader: true, description: 'Part II — Deductions' },
+    { line: '9a', description: 'Investment interest expense (Form 4952)', amount: -f.investmentInterestExpense },
+    { line: '11', description: 'Line 11 — Total deductions', amount: -f.totalDeductions, isTotal: true },
+    { isHeader: true, description: 'Part III — NIIT Computation' },
+    { line: '12', description: 'Net Investment Income (Line 8 − 11)', amount: f.netInvestmentIncome, isTotal: true },
+    { line: '13', description: 'Modified AGI (estimated)', amount: f.magi },
+    { line: '14', description: `Threshold (${f.threshold === 200_000 ? 'Single/HOH' : 'MFJ'})`, amount: f.threshold },
+    { line: '15', description: 'MAGI excess over threshold', amount: f.magiExcess },
+    {
+      line: '17',
+      description: 'NIIT (3.8% × lesser of Line 12 or 15) → Schedule 2 Line 12',
+      amount: f.niitTax,
+      isTotal: true,
+    },
+  ]
+  return { name: 'Form 8960', rows }
+}
+
+export function buildForm4952Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.form4952) {
+    return null
+  }
+  const f = taxReturn.form4952
+  const srcLines = f.invIntSources.map((s) => ({ description: s.label, amount: s.amount }))
+  const srcStart = 3
+  const srcEnd = srcStart + srcLines.length - 1
+  const expLines = (f.invExpSources ?? []).map((s) => ({ description: s.label, amount: s.amount }))
+  const rows: XlsxRow[] = [
+    { isHeader: true, description: 'Part I — Investment Interest Expense Sources' },
+    ...srcLines,
+    {
+      line: '3',
+      description: 'Line 3 — Total investment interest',
+      amount: f.totalInvIntExpense * -1,
+      formula: srcLines.length > 0 ? `=-SUM(C${srcStart}:C${srcEnd})` : undefined,
+    },
+    { isHeader: true, description: 'Part II — Net Investment Income' },
+    ...(expLines.length > 0
+      ? [
+          ...expLines,
+          {
+            line: '5',
+            description: 'Line 5 — Investment expenses (Box 20B)',
+            amount: (f.totalInvExp ?? 0) * -1,
+            note: 'Reduces NII — Box 20B investment expenses from K-1',
+          } as XlsxRow,
+        ]
+      : []),
+    {
+      line: '6',
+      description: 'Line 6 — Net investment income (Line 4h − Line 5, no QD election)',
+      amount: f.niiBefore,
+      note: 'Floored at zero; basis for Line 8 deductible interest',
+    },
+    {
+      line: '7',
+      description: 'Line 7 — Disallowed investment interest expense carried to next year',
+      amount: f.disallowedCarryforward,
+    },
+    {
+      line: '8',
+      description: 'Line 8 — Investment interest expense deduction (smaller of Line 3 or Line 6)',
+      amount: f.deductibleInvestmentInterestExpense,
+      isTotal: true,
+    },
+  ]
+  return { name: 'Form 4952', rows }
+}
+
+export function buildScheduleSESheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.scheduleSE || taxReturn.scheduleSE.entries.length === 0) {
+    return null
+  }
+  const s = taxReturn.scheduleSE
+  const sourceStart = 3
+  const sourceEnd = sourceStart + s.entries.length - 1
+  return {
+    name: 'Schedule SE',
+    rows: [
+      { isHeader: true, description: 'Part I — Self-Employment Earnings' },
+      ...s.entries.map((entry) => ({ description: entry.label, amount: entry.amount })),
+      {
+        line: '2',
+        description: 'Line 2 — Net earnings from self-employment',
+        amount: s.netEarningsFromSE,
+        formula: s.entries.length > 0 ? sumFormula(sourceStart, sourceEnd) : undefined,
+        isTotal: true,
+      },
+      { line: '4a', description: 'Line 4a — 92.35% of net earnings', amount: s.seTaxableEarnings },
+      {
+        line: '7',
+        description: 'Line 7 — Social Security wage base',
+        amount: s.socialSecurityWageBase,
+        note:
+          s.socialSecurityWages > 0
+            ? `Reduced by ${currency(s.socialSecurityWages).format()} already subject to Social Security tax`
+            : undefined,
+      },
+      { line: '8a', description: 'Line 8a — Earnings subject to Social Security tax', amount: s.socialSecurityTaxableEarnings },
+      { line: '10', description: 'Line 10 — Social Security tax (12.4%)', amount: s.socialSecurityTax },
+      { line: '11', description: 'Line 11 — Medicare tax (2.9%)', amount: s.medicareTax },
+      { line: '12', description: 'Line 12 — Self-employment tax → Schedule 2 Line 4', amount: s.seTax, isTotal: true },
+      {
+        description: 'Form 8959 — Additional Medicare tax on self-employment earnings',
+        amount: s.additionalMedicareTax,
+        note:
+          s.additionalMedicareTaxableEarnings > 0
+            ? `${currency(s.additionalMedicareTaxableEarnings).format()} above the ${currency(s.additionalMedicareThreshold).format()} threshold after wages`
+            : 'No Additional Medicare tax from self-employment earnings',
+      },
+      {
+        line: '13',
+        description: 'Line 13 — Deductible half of self-employment tax → Schedule 1 Line 15',
+        amount: s.deductibleSeTax,
+        isTotal: true,
+      },
+    ],
+  }
+}
+
+export function buildShortDividendsSheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.shortDividends) {
+    return null
+  }
+  return {
+    name: 'Short Dividends',
+    rows: [
+      { line: '1', description: 'Total itemized deduction', amount: taxReturn.shortDividends.totalItemizedDeduction },
+      { line: '2', description: 'Total cost basis', amount: taxReturn.shortDividends.totalCostBasis },
+      { line: '3', description: 'Total unknown', amount: taxReturn.shortDividends.totalUnknown },
+    ],
+  }
+}
+
+export function buildScheduleDSheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.scheduleD) {
+    return null
+  }
+  const rows: XlsxRow[] = [
+    {
+      line: '16',
+      description: 'Line 16 — Combined net capital gain (loss)',
+      amount: taxReturn.scheduleD.schD_line16,
+      isTotal: true,
+    },
+  ]
+  if (taxReturn.scheduleD.schD_line16 < 0) {
+    rows.push({
+      line: '21',
+      description: `Line 21 — Capital loss applied to ${taxReturn.year} return`,
+      amount: taxReturn.scheduleD.schD_line21,
+      isTotal: true,
+    })
+  }
+  return { name: 'Schedule D', rows }
+}
+
 function buildEstimatedTaxSheet(estimatedTaxPayments?: EstimatedTaxPaymentsData): IndexedSheet | null {
   if (!estimatedTaxPayments || estimatedTaxPayments.priorYearTax <= 0) {
     return null
@@ -329,144 +823,21 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
       })()
     : null
 
-  // ── Schedule C ──────────────────────────────────────────────────────────────
-  const scheduleCSheet = taxReturn.scheduleC
-    ? buildSheet('Schedule C', [
-        { line: '31', description: 'Net income / (loss)', amount: taxReturn.scheduleC.total, isTotal: true },
-      ])
-    : null
+  // ── Schedule C / D / E (registry-driven) ────────────────────────────────────
+  // Builders are exported standalone for the form registry to call; here we
+  // wrap with buildSheet() to get the rowIndex needed for cross-sheet refs.
+  const scheduleCRaw = buildScheduleCSheet(taxReturn)
+  const scheduleCSheet = scheduleCRaw ? buildSheet(scheduleCRaw.name, scheduleCRaw.rows) : null
+  const scheduleDRaw = buildScheduleDSheet(taxReturn)
+  const scheduleDSheet = scheduleDRaw ? buildSheet(scheduleDRaw.name, scheduleDRaw.rows) : null
+  const scheduleERaw = buildScheduleESheet(taxReturn)
+  const scheduleESheet = scheduleERaw ? buildSheet(scheduleERaw.name, scheduleERaw.rows) : null
 
-  // ── Schedule D ──────────────────────────────────────────────────────────────
-  const scheduleDSheet = taxReturn.scheduleD
-    ? buildSheet('Schedule D', [
-        { line: '16', description: 'Line 16 — Combined net capital gain (loss)', amount: taxReturn.scheduleD.schD_line16, isTotal: true },
-        ...(taxReturn.scheduleD.schD_line16 < 0
-          ? [{
-              line: '21',
-              description: `Line 21 — Capital loss applied to ${taxReturn.year} return`,
-              amount: taxReturn.scheduleD.schD_line21,
-              isTotal: true,
-            }]
-          : []),
-      ])
-    : null
-
-  // ── Schedule E ──────────────────────────────────────────────────────────────
-  const scheduleESheet = taxReturn.scheduleE
-    ? buildSheet('Schedule E', [
-        { line: '1', description: 'Total passive income / (loss)', amount: taxReturn.scheduleE.totalPassive },
-        { line: '2', description: 'Total nonpassive income / (loss)', amount: taxReturn.scheduleE.totalNonpassive },
-        {
-          line: '3',
-          description: 'Schedule E combined total',
-          amount: taxReturn.scheduleE.grandTotal,
-          formula: '=C2+C3',
-          isTotal: true,
-        },
-      ])
-    : null
-
-  // ── Schedule SE ──────────────────────────────────────────────────────────────
-  const scheduleSESheet = taxReturn.scheduleSE && taxReturn.scheduleSE.entries.length > 0
-    ? (() => {
-        const s = taxReturn.scheduleSE
-        const sourceStart = 3
-        const sourceEnd = sourceStart + s.entries.length - 1
-        return buildSheet('Schedule SE', [
-          { isHeader: true, description: 'Part I — Self-Employment Earnings' },
-          ...s.entries.map((entry) => ({ description: entry.label, amount: entry.amount })),
-          {
-            line: '2',
-            description: 'Line 2 — Net earnings from self-employment',
-            amount: s.netEarningsFromSE,
-            formula: s.entries.length > 0 ? sumFormula(sourceStart, sourceEnd) : undefined,
-            isTotal: true,
-          },
-          { line: '4a', description: 'Line 4a — 92.35% of net earnings', amount: s.seTaxableEarnings },
-          {
-            line: '7',
-            description: 'Line 7 — Social Security wage base',
-            amount: s.socialSecurityWageBase,
-            note: s.socialSecurityWages > 0
-              ? `Reduced by ${currency(s.socialSecurityWages).format()} already subject to Social Security tax`
-              : undefined,
-          },
-          { line: '8a', description: 'Line 8a — Earnings subject to Social Security tax', amount: s.socialSecurityTaxableEarnings },
-          { line: '10', description: 'Line 10 — Social Security tax (12.4%)', amount: s.socialSecurityTax },
-          { line: '11', description: 'Line 11 — Medicare tax (2.9%)', amount: s.medicareTax },
-          { line: '12', description: 'Line 12 — Self-employment tax → Schedule 2 Line 4', amount: s.seTax, isTotal: true },
-          {
-            description: 'Form 8959 — Additional Medicare tax on self-employment earnings',
-            amount: s.additionalMedicareTax,
-            note: s.additionalMedicareTaxableEarnings > 0
-              ? `${currency(s.additionalMedicareTaxableEarnings).format()} above the ${currency(s.additionalMedicareThreshold).format()} threshold after wages`
-              : 'No Additional Medicare tax from self-employment earnings',
-          },
-          {
-            line: '13',
-            description: 'Line 13 — Deductible half of self-employment tax → Schedule 1 Line 15',
-            amount: s.deductibleSeTax,
-            isTotal: true,
-          },
-        ])
-      })()
-    : null
-
-  // ── Form 4952 ────────────────────────────────────────────────────────────────
-  const form4952Sheet = taxReturn.form4952
-    ? (() => {
-        const srcLines = taxReturn.form4952.invIntSources.map((s) => ({
-          description: s.label,
-          amount: s.amount,
-        }))
-        const srcStart = 3
-        const srcEnd = srcStart + srcLines.length - 1
-        const expLines = (taxReturn.form4952.invExpSources ?? []).map((s) => ({
-          description: s.label,
-          amount: s.amount,
-        }))
-        const rows: XlsxRow[] = [
-          { isHeader: true, description: 'Part I — Investment Interest Expense Sources' },
-          ...srcLines,
-          {
-            line: '3',
-            description: 'Line 3 — Total investment interest',
-            amount: taxReturn.form4952.totalInvIntExpense * -1,
-            formula: srcLines.length > 0 ? `=-SUM(C${srcStart}:C${srcEnd})` : undefined,
-          },
-          { isHeader: true, description: 'Part II — Net Investment Income' },
-          ...(expLines.length > 0
-            ? [
-                ...expLines,
-                {
-                  line: '5',
-                  description: 'Line 5 — Investment expenses (Box 20B)',
-                  amount: (taxReturn.form4952.totalInvExp ?? 0) * -1,
-                  note: 'Reduces NII — Box 20B investment expenses from K-1',
-                } as XlsxRow,
-              ]
-            : []),
-          {
-            line: '6',
-            description: 'Line 6 — Net investment income (Line 4h − Line 5, no QD election)',
-            amount: taxReturn.form4952.niiBefore,
-            note: 'Floored at zero; basis for Line 8 deductible interest',
-          },
-          {
-            line: '7',
-            description: 'Line 7 — Disallowed investment interest expense carried to next year',
-            amount: taxReturn.form4952.disallowedCarryforward,
-          },
-          {
-            line: '8',
-            description: 'Line 8 — Investment interest expense deduction (smaller of Line 3 or Line 6)',
-            amount: taxReturn.form4952.deductibleInvestmentInterestExpense,
-            isTotal: true,
-          },
-        ]
-        return buildSheet('Form 4952', rows)
-      })()
-    : null
+  // ── Schedule SE / Form 4952 (registry-driven) ───────────────────────────────
+  const scheduleSERaw = buildScheduleSESheet(taxReturn)
+  const scheduleSESheet = scheduleSERaw ? buildSheet(scheduleSERaw.name, scheduleSERaw.rows) : null
+  const form4952Raw = buildForm4952Sheet(taxReturn)
+  const form4952Sheet = form4952Raw ? buildSheet(form4952Raw.name, form4952Raw.rows) : null
 
   // ── Schedule A ───────────────────────────────────────────────────────────────
   // Row order mirrors the IRS Schedule A: 7 → 8 → 9 → 10 → 11 → 16 → 17.
@@ -593,244 +964,27 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
       })()
     : null
 
-  // ── Form 6251 ────────────────────────────────────────────────────────────────
-  const form6251Sheet = taxReturn.form6251
-    ? (() => {
-        const f = taxReturn.form6251
-        const sourceStart = 3
-        const sourceEnd = sourceStart + f.sourceEntries.length - 1
-        const rows: XlsxRow[] = [
-          { isHeader: true, description: 'K-1 Box 17 / AMT Source Items' },
-          ...f.sourceEntries.map((entry) => ({
-            description: `${entry.label} — Box 17${entry.code} → Line ${entry.line}`,
-            amount: entry.amount,
-            note: entry.description,
-          })),
-          {
-            description: 'Total K-1 AMT source items',
-            amount: f.sourceEntries.reduce((total, entry) => currency(total).add(entry.amount).value, 0),
-            formula: f.sourceEntries.length > 0 ? sumFormula(sourceStart, sourceEnd) : undefined,
-            isTotal: true,
-          },
-          { isHeader: true, description: 'Part I — Alternative Minimum Taxable Income' },
-          { line: '1', description: 'Line 1 — Taxable income', amount: f.line1TaxableIncome },
-          { line: '2a', description: 'Line 2a — Taxes / standard deduction addback', amount: f.line2aTaxesOrStandardDeduction },
-          ...(f.line2cInvestmentInterest !== 0 ? [{ line: '2c', description: 'Line 2c — Investment interest adjustment', amount: f.line2cInvestmentInterest }] : []),
-          ...(f.line2dDepletion !== 0 ? [{ line: '2d', description: 'Line 2d — Depletion adjustment', amount: f.line2dDepletion }] : []),
-          ...(f.line2kDispositionOfProperty !== 0 ? [{ line: '2k', description: 'Line 2k — Disposition of property', amount: f.line2kDispositionOfProperty }] : []),
-          ...(f.line2lPost1986Depreciation !== 0 ? [{ line: '2l', description: 'Line 2l — Post-1986 depreciation', amount: f.line2lPost1986Depreciation }] : []),
-          ...(f.line2mPassiveActivities !== 0 ? [{ line: '2m', description: 'Line 2m — Passive activities', amount: f.line2mPassiveActivities }] : []),
-          ...(f.line2nLossLimitations !== 0 ? [{ line: '2n', description: 'Line 2n — Loss limitations', amount: f.line2nLossLimitations }] : []),
-          ...(f.line2tIntangibleDrillingCosts !== 0 ? [{ line: '2t', description: 'Line 2t — Intangible drilling costs', amount: f.line2tIntangibleDrillingCosts }] : []),
-          ...(f.line3OtherAdjustments !== 0 ? [{ line: '3', description: 'Line 3 — Other adjustments', amount: f.line3OtherAdjustments }] : []),
-          { line: '4', description: 'Line 4 — Alternative minimum taxable income (AMTI)', amount: f.amti, isTotal: true },
-          { isHeader: true, description: 'Part II — Alternative Minimum Tax' },
-          { line: '5', description: 'Line 5 — AMT exemption', amount: f.exemption, note: `Base ${currency(f.exemptionBase).format()} less phaseout ${currency(f.exemptionReduction).format()}` },
-          { line: '6', description: 'Line 6 — AMT tax base after exemption', amount: f.amtTaxBase },
-          { line: '7', description: 'Line 7 — AMT before foreign tax credit', amount: f.amtBeforeForeignCredit },
-          ...(f.line8AmtForeignTaxCredit > 0 ? [{ line: '8', description: 'Line 8 — AMT foreign tax credit', amount: f.line8AmtForeignTaxCredit }] : []),
-          { line: '9', description: 'Line 9 — Tentative minimum tax', amount: f.tentativeMinTax, isTotal: true },
-          { line: '10', description: 'Line 10 — Regular tax after credits', amount: f.regularTaxAfterCredits },
-          { line: '11', description: 'Line 11 — Alternative minimum tax', amount: f.amt, isTotal: true, note: '→ Schedule 2 Line 2' },
-        ]
+  // ── Form 6251 / 8995 / 8959 / 8960 (registry-driven) ────────────────────────
+  const form6251Raw = buildForm6251Sheet(taxReturn)
+  const form6251Sheet = form6251Raw ? buildSheet(form6251Raw.name, form6251Raw.rows) : null
+  const form8995Raw = buildForm8995Sheet(taxReturn)
+  const form8995Sheet = form8995Raw ? buildSheet(form8995Raw.name, form8995Raw.rows) : null
+  const form8959Raw = buildForm8959Sheet(taxReturn)
+  const form8959Sheet = form8959Raw ? buildSheet(form8959Raw.name, form8959Raw.rows) : null
+  const form8960Raw = buildForm8960Sheet(taxReturn)
+  const form8960Sheet = form8960Raw ? buildSheet(form8960Raw.name, form8960Raw.rows) : null
 
-        if (f.requiresStatementReview) {
-          rows.push({ isHeader: true, description: 'Manual review notes' })
-          rows.push(...f.manualReviewReasons.map((reason) => ({ description: reason })))
-        }
+  // ── Capital Loss Carryover / Form 461 / Form 8582 (registry-driven) ─────────
+  const capitalLossRaw = buildCapitalLossCarryoverSheet(taxReturn)
+  const capitalLossSheet = capitalLossRaw ? buildSheet(capitalLossRaw.name, capitalLossRaw.rows) : null
+  const form461Raw = buildForm461Sheet(taxReturn)
+  const form461Sheet = form461Raw ? buildSheet(form461Raw.name, form461Raw.rows) : null
+  const form8582Raw = buildForm8582Sheet(taxReturn)
+  const form8582Sheet = form8582Raw ? buildSheet(form8582Raw.name, form8582Raw.rows) : null
 
-        return buildSheet('Form 6251', rows)
-      })()
-    : null
-
-  // ── Form 8995 ────────────────────────────────────────────────────────────────
-  const form8995Sheet = taxReturn.form8995
-    ? (() => {
-        const f = taxReturn.form8995
-        const entryStart = 3
-        const entryEnd = entryStart + f.entries.length - 1
-        const rows: XlsxRow[] = [
-          { isHeader: true, description: 'Per-Partnership QBI (Box 20 Code S)' },
-          ...f.entries.map((e) => ({ description: `${e.label} — QBI income`, amount: e.qbiIncome })),
-          {
-            line: '1',
-            description: 'Line 1 — Total qualified business income',
-            amount: f.totalQBI,
-            formula: f.entries.length > 0 ? sumFormula(entryStart, entryEnd) : undefined,
-            isTotal: true,
-          },
-          {
-            line: '15',
-            description: 'Line 15 — Estimated taxable income',
-            amount: f.estimatedTaxableIncome,
-            note: 'Total income minus estimated standard deduction',
-          },
-          {
-            line: '16',
-            description: 'Line 16 — Net capital gains (enter from Schedule D)',
-            note: 'Enter from return — reduces taxable income cap',
-          },
-          {
-            line: '17',
-            description: 'Line 17 — Taxable income cap (20% × Line 15)',
-            amount: f.taxableIncomeCap,
-            isTotal: true,
-          },
-          {
-            line: '13',
-            description: 'Line 13 — 20% × total QBI (after netting losses)',
-            amount: f.totalQBIComponent,
-          },
-          {
-            line: '13',
-            description: 'QBI Deduction — lesser of 20% QBI or taxable income cap',
-            amount: f.estimatedDeduction,
-            isTotal: true,
-            note: '→ Form 1040 Line 13',
-          },
-        ]
-        if (f.aboveThreshold) {
-          rows.push({
-            description: '⚠ Above threshold — use Form 8995-A; W-2 wage/UBIA limitation applies',
-            note: `Threshold: Single $${f.thresholdSingle.toLocaleString()} / MFJ $${f.thresholdMFJ.toLocaleString()}`,
-          })
-        }
-        return buildSheet('Form 8995', rows)
-      })()
-    : null
-
-  // ── Form 8959 ────────────────────────────────────────────────────────────────
-  const form8959Sheet = taxReturn.form8959 && taxReturn.form8959.additionalTax > 0
-    ? (() => {
-        const f = taxReturn.form8959
-        const srcRows: XlsxRow[] = f.sources.length > 0
-          ? [
-              { isHeader: true, description: 'W-2 Sources (Box 1 wages)' },
-              ...f.sources.map(s => ({ description: s.label, amount: s.wages })),
-            ]
-          : []
-        return buildSheet('Form 8959', [
-          ...srcRows,
-          { line: '1', description: 'Line 1 — Medicare wages (W-2 Box 1 approx; exact = Box 5)', amount: f.wages, isTotal: srcRows.length > 0, note: 'Box 5 (Medicare wages) may exceed Box 1 when 401k deferrals apply' },
-          { line: '5', description: `Line 5 — Threshold (${f.threshold === 200_000 ? 'Single/HOH' : 'MFJ'})`, amount: f.threshold },
-          { line: '6', description: 'Line 6 — Wages above threshold', amount: f.excessWages },
-          { line: '7', description: 'Line 7 — Additional Medicare Tax (0.9%) → Schedule 2 Line 11', amount: f.additionalTax, isTotal: true },
-        ])
-      })()
-    : null
-
-  // ── Form 8960 ────────────────────────────────────────────────────────────────
-  const form8960Sheet = taxReturn.form8960
-    ? (() => {
-        const f = taxReturn.form8960
-        const rows: XlsxRow[] = [
-          { isHeader: true, description: 'Part I — Net Investment Income' },
-          ...f.interestSources.map(s => ({ description: `  ${s.label}`, amount: s.amount })),
-          { line: '1', description: 'Taxable interest (Schedule B)', amount: f.taxableInterest, isTotal: f.interestSources.length > 0 },
-          ...f.dividendSources.map(s => ({ description: `  ${s.label}`, amount: s.amount })),
-          { line: '2', description: 'Ordinary dividends (Schedule B)', amount: f.ordinaryDividends, isTotal: f.dividendSources.length > 0 },
-          { line: '5a', description: 'Net capital gains (Schedule D, capped at 0)', amount: f.netCapGains },
-          ...f.passiveSources.map(s => ({ description: `  ${s.label}`, amount: s.amount })),
-          { line: '4a', description: 'Net passive income (K-1 Schedule E)', amount: f.passiveIncome, isTotal: f.passiveSources.length > 0 },
-          { line: '8', description: 'Line 8 — Gross NII', amount: f.grossNII, isTotal: true },
-          { isHeader: true, description: 'Part II — Deductions' },
-          { line: '9a', description: 'Investment interest expense (Form 4952)', amount: -f.investmentInterestExpense },
-          { line: '11', description: 'Line 11 — Total deductions', amount: -f.totalDeductions, isTotal: true },
-          { isHeader: true, description: 'Part III — NIIT Computation' },
-          { line: '12', description: 'Net Investment Income (Line 8 − 11)', amount: f.netInvestmentIncome, isTotal: true },
-          { line: '13', description: 'Modified AGI (estimated)', amount: f.magi },
-          { line: '14', description: `Threshold (${f.threshold === 200_000 ? 'Single/HOH' : 'MFJ'})`, amount: f.threshold },
-          { line: '15', description: 'MAGI excess over threshold', amount: f.magiExcess },
-          { line: '17', description: 'NIIT (3.8% × lesser of Line 12 or 15) → Schedule 2 Line 12', amount: f.niitTax, isTotal: true },
-        ]
-        return buildSheet('Form 8960', rows)
-      })()
-    : null
-
-  // ── Capital Loss Carryover ────────────────────────────────────────────────────
-  const capitalLossSheet = taxReturn.capitalLossCarryover?.hasCarryover
-    ? (() => {
-        const c = taxReturn.capitalLossCarryover!
-        return buildSheet('Capital Loss Carryover', [
-          { description: 'Net short-term capital gain/(loss)', amount: c.netShortTerm },
-          { description: 'Net long-term capital gain/(loss)', amount: c.netLongTerm },
-          { description: 'Combined net capital gain/(loss)', amount: c.combined, isTotal: true },
-          { description: 'Applied to ordinary income this year (max $3,000)', amount: c.appliedToOrdinaryIncome },
-          { description: 'Short-term capital loss carryforward', amount: -c.shortTermCarryover },
-          { description: 'Long-term capital loss carryforward', amount: -c.longTermCarryover },
-          { description: 'Total capital loss carryforward → next year Schedule D', amount: -c.totalCarryover, isTotal: true },
-        ])
-      })()
-    : null
-
-  // ── Form 461 ─────────────────────────────────────────────────────────────────
-  const form461Sheet = taxReturn.form461
-    ? buildSheet('Form 461', [
-        { line: '9', description: 'Line 9 — Aggregate trade/business income (loss)', amount: taxReturn.form461.aggregateBusinessIncomeLoss, isTotal: true },
-        { line: '15', description: 'Line 15 — EBL limit (filing-status threshold)', amount: taxReturn.form461.eblLimit },
-        {
-          line: '16',
-          description: taxReturn.form461.isTriggered
-            ? 'Line 16 — Excess business loss → Schedule 1 Line 8p (NOL carryforward)'
-            : 'Line 16 — No excess (within limit)',
-          amount: taxReturn.form461.isTriggered ? -taxReturn.form461.excessBusinessLoss : 0,
-          isTotal: true,
-        },
-      ])
-    : null
-
-  // ── Form 8582 ────────────────────────────────────────────────────────────────
-  const form8582Sheet = taxReturn.form8582 && taxReturn.form8582.activities.length > 0
-    ? (() => {
-        const f = taxReturn.form8582
-        const activityRows: XlsxRow[] = f.activities.flatMap((a) => [
-          ...(a.currentIncome !== 0 ? [{ description: `${a.activityName}${a.isRentalRealEstate ? ' [Rental RE]' : ''} — Line 1a (income)`, amount: a.currentIncome }] : []),
-          ...(a.currentLoss !== 0 ? [{ description: `${a.activityName}${a.isRentalRealEstate ? ' [Rental RE]' : ''} — Line 1b (loss)`, amount: a.currentLoss }] : []),
-          ...(a.priorYearUnallowed !== 0 ? [{ description: `${a.activityName} — Line 1c (prior-year unallowed)`, amount: a.priorYearUnallowed }] : []),
-        ])
-        const carryforwardRows: XlsxRow[] = f.activities
-          .filter((a) => a.allowedLossThisYear > 0 || a.suspendedLossCarryforward > 0)
-          .flatMap((a) => [
-            { description: `${a.activityName} — Allowed this year`, amount: a.allowedLossThisYear },
-            ...(a.suspendedLossCarryforward > 0 ? [{ description: `${a.activityName} — Suspended carryforward`, amount: a.suspendedLossCarryforward }] : []),
-          ])
-        const perActivityNetRows: XlsxRow[] = f.activities.map((a) => ({
-          description: `${a.activityName}${a.isRentalRealEstate ? ' [Rental RE]' : ''} — Net gain/loss`,
-          amount: a.overallGainOrLoss,
-        }))
-        return buildSheet('Form 8582', [
-          { isHeader: true, description: 'Part I — Passive Activities' },
-          ...activityRows,
-          { line: '1a', description: 'Total passive income', amount: f.totalPassiveIncome, isTotal: true },
-          { line: '1b', description: 'Total passive loss', amount: f.totalPassiveLoss },
-          ...(f.totalPriorYearUnallowed !== 0 ? [{ line: '1c', description: 'Prior-year unallowed losses', amount: f.totalPriorYearUnallowed }] : []),
-          { line: '1d', description: 'Net passive result', amount: f.netPassiveResult, isTotal: true },
-          { isHeader: true, description: 'Part II — Special Allowance' },
-          { description: 'Modified AGI', amount: f.magi },
-          { description: 'Rental real estate special allowance', amount: f.rentalAllowance },
-          ...(f.realEstateProfessional ? [{ description: 'Real estate professional election (§469(c)(7))', amount: 0 }] : []),
-          { isHeader: true, description: 'Part III — Allowed vs. Suspended' },
-          { description: 'Total allowed passive loss', amount: -f.totalAllowedLoss, isTotal: true },
-          { description: 'Net deduction to return', amount: -f.netDeductionToReturn },
-          { description: 'Suspended loss — carried forward', amount: -f.totalSuspendedLoss, isTotal: f.isLossLimited },
-          ...(carryforwardRows.length > 0 ? [
-            { isHeader: true, description: 'Worksheet 5 — Per-Activity Allocation' },
-            ...carryforwardRows,
-          ] : []),
-          { isHeader: true, description: 'Per-Activity Net Gain/Loss' },
-          ...perActivityNetRows,
-        ])
-      })()
-    : null
-
-  // ── Short Dividends ──────────────────────────────────────────────────────────
-  const shortDivSheet = taxReturn.shortDividends
-    ? buildSheet('Short Dividends', [
-        { line: '1', description: 'Total itemized deduction', amount: taxReturn.shortDividends.totalItemizedDeduction },
-        { line: '2', description: 'Total cost basis', amount: taxReturn.shortDividends.totalCostBasis },
-        { line: '3', description: 'Total unknown', amount: taxReturn.shortDividends.totalUnknown },
-      ])
-    : null
+  // ── Short Dividends (registry-driven) ────────────────────────────────────────
+  const shortDivRaw = buildShortDividendsSheet(taxReturn)
+  const shortDivSheet = shortDivRaw ? buildSheet(shortDivRaw.name, shortDivRaw.rows) : null
 
   // ── Form 1040 cross-sheet references ────────────────────────────────────────
   const scheduleBLine4 = scheduleBSheet?.rowIndex.get('Line 4 — Total interest')
