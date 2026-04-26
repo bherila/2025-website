@@ -137,7 +137,7 @@ describe('XLSX registry integration', () => {
           dividendTotal: 50,
           qualifiedDivTotal: 30,
         },
-      } as TaxReturn1040
+      } as unknown as TaxReturn1040
       const sheet = buildScheduleBSheet(tr)
       const line4 = sheet?.rows.find((r) => r.line === '4')
       const line6 = sheet?.rows.find((r) => r.line === '6')
@@ -156,7 +156,7 @@ describe('XLSX registry integration', () => {
           dividendTotal: 0,
           qualifiedDivTotal: 0,
         },
-      } as TaxReturn1040
+      } as unknown as TaxReturn1040
       const sheet = buildScheduleBSheet(tr)
       expect(sheet?.rows.find((r) => r.line === '4')?.formula).toBeUndefined()
       expect(sheet?.rows.find((r) => r.line === '6')?.formula).toBeUndefined()
@@ -239,7 +239,7 @@ describe('XLSX registry integration', () => {
           line4bApportionment: [],
           totalLine4b: 0,
         },
-      } as TaxReturn1040
+      } as unknown as TaxReturn1040
       const sheet = buildForm1116Sheet(tr)
       const line1 = sheet?.rows.find((r) => r.line === '1')
       const line2 = sheet?.rows.find((r) => r.line === '2')
@@ -257,11 +257,12 @@ describe('XLSX registry integration', () => {
           generalIncomeSources: [{ label: 'G', amount: 500 }],
           totalPassiveIncome: 1,
           totalForeignTaxes: 1,
+
           totalGeneralIncome: 500,
           line4bApportionment: [],
           totalLine4b: 0,
         },
-      } as TaxReturn1040
+      } as unknown as TaxReturn1040
       const sheet = buildForm1116Sheet(tr)
       const generalTotal = sheet?.rows.find((r) => r.line === 'G1')
       expect(generalTotal?.amount).toBe(500)
@@ -314,7 +315,7 @@ describe('XLSX registry integration', () => {
 
   describe('buildForm1040Sheet', () => {
     it('returns null when form1040 is absent', () => {
-      const tr = { ...baseReturn, form1040: undefined } as TaxReturn1040
+      const tr = { ...baseReturn, form1040: undefined } as unknown as TaxReturn1040
       expect(buildForm1040Sheet(tr)).toBeNull()
     })
 

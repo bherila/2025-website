@@ -2,12 +2,16 @@
 
 import currency from 'currency.js'
 
+import { type EmptyLine,EmptyLinesDisclosure } from '@/components/finance/EmptyLinesDisclosure'
 import { FormBlock, FormLine, FormSubLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
+import { TAX_TABS, type TaxTabId } from '@/components/finance/tax-tab-ids'
 import type { Schedule1Lines } from '@/types/finance/tax-return'
 
 interface Schedule1PreviewProps {
   selectedYear: number
   schedule1?: Schedule1Lines | undefined
+  /** Navigate to a source tab when the user clicks Go-to-source from the disclosure. */
+  onTabChange?: (tab: TaxTabId) => void
 }
 
 export interface Schedule1Line8Breakdown {
@@ -79,13 +83,123 @@ export function computeSchedule1Totals({
   }
 }
 
+/**
+ * A Part I line is "visible" when its value is a non-zero number. A `null`
+ * value means the source form/document doesn't exist yet (structurally empty).
+ * A `0` value means source data exists but nets to zero.
+ */
+function classifyPartIValue(value: number | null): 'visible' | 'null' | 'zero' {
+  if (value === null) {
+    return 'null'
+  }
+  return value === 0 ? 'zero' : 'visible'
+}
+
 export default function Schedule1Preview({
   selectedYear,
   schedule1,
+  onTabChange,
 }: Schedule1PreviewProps) {
   const totals = schedule1 ?? computeSchedule1Totals({})
+  const partI = totals.partI
+  const partII = totals.partII
 
-  const hasAnyIncome = totals.partI.line10_total !== 0
+  const line1a = classifyPartIValue(partI.line1a_taxableRefunds)
+  const line3 = classifyPartIValue(partI.line3_business)
+  const line5 = classifyPartIValue(partI.line5_rentalPartnerships)
+  const line7 = classifyPartIValue(partI.line7_unemploymentCompensation)
+  const line8b = classifyPartIValue(partI.line8b_gambling)
+  const line8h = classifyPartIValue(partI.line8h_juryDuty)
+  const line8i = classifyPartIValue(partI.line8i_prizes)
+  const line8z = classifyPartIValue(partI.line8z_otherIncome)
+
+  const partIEmpty: EmptyLine[] = []
+  if (line1a !== 'visible') {
+    partIEmpty.push({
+      lineNumber: '1a',
+      label: 'Taxable refunds, credits, or offsets of state/local income taxes',
+      state: line1a,
+      tooltip: line1a === 'zero' ? 'No taxable refunds reported on any 1099-G box 2.' : undefined,
+    } as EmptyLine)
+  }
+  partIEmpty.push({
+    lineNumber: '2a',
+    label: 'Alimony received (pre-2019 decrees only)',
+    state: 'null',
+  })
+  if (line3 !== 'visible') {
+    partIEmpty.push({
+      lineNumber: '3',
+      label: 'Business income or (loss)',
+      state: line3,
+      sourceTab: TAX_TABS.scheduleC,
+      sourceLabel: 'Schedule C',
+    } as EmptyLine)
+  }
+  partIEmpty.push({
+    lineNumber: '4',
+    label: 'Other gains or (losses) — Form 4797',
+    state: 'null',
+  })
+  if (line5 !== 'visible') {
+    partIEmpty.push({
+      lineNumber: '5',
+      label: 'Rental real estate, royalties, partnerships, S-corps, trusts',
+      state: line5,
+      sourceTab: TAX_TABS.scheduleE,
+      sourceLabel: 'Schedule E',
+    } as EmptyLine)
+  }
+  partIEmpty.push({
+    lineNumber: '6',
+    label: 'Farm income or (loss) — Schedule F',
+    state: 'null',
+  })
+  if (line7 !== 'visible') {
+    partIEmpty.push({ lineNumber: '7', label: 'Unemployment compensation (1099-G box 1)', state: line7 } as EmptyLine)
+  }
+  if (line8b !== 'visible') {
+    partIEmpty.push({ lineNumber: '8b', label: 'Gambling winnings', state: line8b } as EmptyLine)
+  }
+  if (line8h !== 'visible') {
+    partIEmpty.push({ lineNumber: '8h', label: 'Jury duty pay', state: line8h } as EmptyLine)
+  }
+  if (line8i !== 'visible') {
+    partIEmpty.push({ lineNumber: '8i', label: 'Prizes and awards', state: line8i } as EmptyLine)
+  }
+  if (line8z !== 'visible') {
+    partIEmpty.push({ lineNumber: '8z', label: 'Other income (1099-MISC routed to line 8z)', state: line8z } as EmptyLine)
+  }
+
+  const partIIEmpty: EmptyLine[] = []
+  if (partII.line13_hsaDeduction === null || partII.line13_hsaDeduction === 0) {
+    partIIEmpty.push({
+      lineNumber: '13',
+      label: 'Health savings account (HSA) deduction',
+      state: partII.line13_hsaDeduction === 0 ? 'zero' : 'null',
+    })
+  }
+  if (partII.line17_selfEmployedHealthInsurance === null || partII.line17_selfEmployedHealthInsurance === 0) {
+    partIIEmpty.push({
+      lineNumber: '17',
+      label: 'Self-employed health insurance deduction',
+      state: partII.line17_selfEmployedHealthInsurance === 0 ? 'zero' : 'null',
+    })
+  }
+  if (partII.line20_iraDeduction === null || partII.line20_iraDeduction === 0) {
+    partIIEmpty.push({
+      lineNumber: '20',
+      label: 'IRA deduction',
+      state: partII.line20_iraDeduction === 0 ? 'zero' : 'null',
+    })
+  }
+  if (partII.line21_studentLoanInterest === null || partII.line21_studentLoanInterest === 0) {
+    partIIEmpty.push({
+      lineNumber: '21',
+      label: 'Student loan interest deduction',
+      state: partII.line21_studentLoanInterest === 0 ? 'zero' : 'null',
+    })
+  }
 
   return (
     <div className="space-y-4">
@@ -96,107 +210,90 @@ export default function Schedule1Preview({
         </p>
       </div>
 
-      {!hasAnyIncome && (
-        <p className="text-sm text-muted-foreground">No Schedule 1 Part I income for this year.</p>
-      )}
-
-      {hasAnyIncome && (
-        <FormBlock title="Part I — Additional Income">
-          {totals.partI.line1a_taxableRefunds != null && totals.partI.line1a_taxableRefunds !== 0 && (
-            <>
-              <FormLine boxRef="1a" label="Taxable refunds, credits, or offsets of state and local income taxes" value={totals.partI.line1a_taxableRefunds} />
-              <FormSubLine text="From 1099-G box 2" />
-            </>
-          )}
-          {totals.partI.line3_business !== 0 && (
-            <>
-              <FormLine boxRef="3" label="Business income or (loss)" value={totals.partI.line3_business} />
-              <FormSubLine text="From Schedule C net income" />
-            </>
-          )}
-          {totals.partI.line5_rentalPartnerships !== 0 && (
-            <>
-              <FormLine
-                boxRef="5"
-                label="Rental real estate, royalties, partnerships, S corporations, trusts"
-                value={totals.partI.line5_rentalPartnerships}
-              />
-              <FormSubLine text="From Schedule E combined total" />
-            </>
-          )}
-          {totals.partI.line7_unemploymentCompensation != null && totals.partI.line7_unemploymentCompensation !== 0 && (
-            <>
-              <FormLine boxRef="7" label="Unemployment compensation" value={totals.partI.line7_unemploymentCompensation} />
-              <FormSubLine text="From 1099-G box 1" />
-            </>
-          )}
-          {totals.partI.line8b_gambling != null && totals.partI.line8b_gambling !== 0 && (
-            <>
-              <FormLine boxRef="8b" label="Gambling winnings" value={totals.partI.line8b_gambling} />
-              <FormSubLine text="From 1099-MISC routed to Schedule 1 line 8b" />
-            </>
-          )}
-          {totals.partI.line8h_juryDuty != null && totals.partI.line8h_juryDuty !== 0 && (
-            <>
-              <FormLine boxRef="8h" label="Jury duty pay" value={totals.partI.line8h_juryDuty} />
-              <FormSubLine text="From 1099-MISC routed to Schedule 1 line 8h" />
-            </>
-          )}
-          {totals.partI.line8i_prizes != null && totals.partI.line8i_prizes !== 0 && (
-            <>
-              <FormLine boxRef="8i" label="Prizes and awards" value={totals.partI.line8i_prizes} />
-              <FormSubLine text="From 1099-MISC routed to Schedule 1 line 8i" />
-            </>
-          )}
-          {totals.partI.line8z_otherIncome !== 0 && (
-            <>
-              <FormLine boxRef="8z" label="Other income" value={totals.partI.line8z_otherIncome} />
-              <FormSubLine text="From reviewed 1099-MISC documents routed to Schedule 1 line 8" />
-            </>
-          )}
-          {totals.partI.line9_totalOther !== 0 && (
-            <FormTotalLine label="Line 9 — Total other income (sum of lines 8a-8z)" value={totals.partI.line9_totalOther} />
-          )}
-          <FormTotalLine
-            label="Line 10 — Total additional income (to Form 1040 line 8)"
-            value={totals.partI.line10_total}
-            double
-          />
-        </FormBlock>
-      )}
+      <FormBlock title="Part I — Additional Income">
+        {line1a === 'visible' && (
+          <>
+            <FormLine boxRef="1a" label="Taxable refunds, credits, or offsets of state and local income taxes" value={partI.line1a_taxableRefunds} />
+            <FormSubLine text="From 1099-G box 2" />
+          </>
+        )}
+        {line3 === 'visible' && (
+          <>
+            <FormLine boxRef="3" label="Business income or (loss)" value={partI.line3_business} />
+            <FormSubLine text="From Schedule C net income" />
+          </>
+        )}
+        {line5 === 'visible' && (
+          <>
+            <FormLine
+              boxRef="5"
+              label="Rental real estate, royalties, partnerships, S corporations, trusts"
+              value={partI.line5_rentalPartnerships}
+            />
+            <FormSubLine text="From Schedule E combined total" />
+          </>
+        )}
+        {line7 === 'visible' && (
+          <>
+            <FormLine boxRef="7" label="Unemployment compensation" value={partI.line7_unemploymentCompensation} />
+            <FormSubLine text="From 1099-G box 1" />
+          </>
+        )}
+        {line8b === 'visible' && (
+          <>
+            <FormLine boxRef="8b" label="Gambling winnings" value={partI.line8b_gambling} />
+            <FormSubLine text="From 1099-MISC routed to Schedule 1 line 8b" />
+          </>
+        )}
+        {line8h === 'visible' && (
+          <>
+            <FormLine boxRef="8h" label="Jury duty pay" value={partI.line8h_juryDuty} />
+            <FormSubLine text="From 1099-MISC routed to Schedule 1 line 8h" />
+          </>
+        )}
+        {line8i === 'visible' && (
+          <>
+            <FormLine boxRef="8i" label="Prizes and awards" value={partI.line8i_prizes} />
+            <FormSubLine text="From 1099-MISC routed to Schedule 1 line 8i" />
+          </>
+        )}
+        {line8z === 'visible' && (
+          <>
+            <FormLine boxRef="8z" label="Other income" value={partI.line8z_otherIncome} />
+            <FormSubLine text="From reviewed 1099-MISC documents routed to Schedule 1 line 8" />
+          </>
+        )}
+        {partI.line9_totalOther !== 0 && (
+          <FormTotalLine label="Line 9 — Total other income (sum of lines 8a-8z)" value={partI.line9_totalOther} />
+        )}
+        <FormTotalLine
+          label="Line 10 — Total additional income (to Form 1040 line 8)"
+          value={partI.line10_total}
+          double
+        />
+        <EmptyLinesDisclosure
+          lines={partIEmpty}
+          sectionLabel="Part I"
+          {...(onTabChange ? { onGoToSource: onTabChange } : {})}
+        />
+      </FormBlock>
 
       <FormBlock title="Part II — Adjustments to Income">
         <FormLine
-          boxRef="13"
-          label="Health savings account (HSA) deduction"
-          raw="—"
-        />
-        <FormLine
           boxRef="15"
           label="Deductible part of self-employment tax"
-          value={totals.partII.line15_deductibleSeTax}
+          value={partII.line15_deductibleSeTax}
         />
         <FormSubLine text="Computed from Schedule SE and included in Form 1040 line 10." />
-        <FormLine
-          boxRef="17"
-          label="Self-employed health insurance deduction"
-          raw="—"
-        />
-        <FormLine
-          boxRef="20"
-          label="IRA deduction"
-          raw="—"
-        />
-        <FormLine
-          boxRef="21"
-          label="Student loan interest deduction"
-          raw="—"
-        />
-        <FormSubLine text="Additional Part II manual-entry lines are not yet tracked in the tax preview UI." />
         <FormTotalLine
           label="Line 26 — Total adjustments to income (to Form 1040 line 10)"
-          value={totals.partII.line26_totalAdjustments}
+          value={partII.line26_totalAdjustments}
           double
+        />
+        <EmptyLinesDisclosure
+          lines={partIIEmpty}
+          sectionLabel="Part II"
+          {...(onTabChange ? { onGoToSource: onTabChange } : {})}
         />
       </FormBlock>
     </div>
