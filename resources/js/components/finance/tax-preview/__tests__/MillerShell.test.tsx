@@ -203,30 +203,19 @@ describe('MillerShell', () => {
     expect(sections[0]?.getAttribute('data-form-id')).toBe('form-1040')
   })
 
-  it('collapses left columns to spines when multiple are open', () => {
+  it('renders every column in the route stack side-by-side', () => {
     window.location.hash = '#/form-1040/sch-1/form-1116'
     render(
       <Wrapper>
         <MillerShell registry={mockRegistry} homeView={null} />
       </Wrapper>,
     )
-    const collapsed = document.querySelectorAll('[data-collapsed="true"]')
-    expect(collapsed).toHaveLength(2)
-    expect(collapsed[0]?.getAttribute('data-form-id')).toBe('form-1040')
-    expect(collapsed[1]?.getAttribute('data-form-id')).toBe('sch-1')
-  })
-
-  it('clicking a spine truncates back to that depth', () => {
-    window.location.hash = '#/form-1040/sch-1/form-1116'
-    render(
-      <Wrapper>
-        <MillerShell registry={mockRegistry} homeView={null} />
-      </Wrapper>,
-    )
-    const firstSpine = document.querySelector('[data-collapsed="true"][data-form-id="form-1040"]')
-    expect(firstSpine).toBeInTheDocument()
-    fireEvent.click(firstSpine as Element)
-    expect(window.location.hash).toBe('#/form-1040')
+    const sections = document.querySelectorAll('[data-form-id]')
+    expect(sections).toHaveLength(3)
+    expect(sections[0]?.getAttribute('data-form-id')).toBe('form-1040')
+    expect(sections[1]?.getAttribute('data-form-id')).toBe('sch-1')
+    expect(sections[2]?.getAttribute('data-form-id')).toBe('form-1116')
+    expect(sections[2]?.getAttribute('data-last')).toBe('true')
   })
 
   it('renders instance tabs for multi-instance form columns', () => {

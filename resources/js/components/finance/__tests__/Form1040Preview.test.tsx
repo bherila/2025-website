@@ -105,14 +105,15 @@ describe('Form1040Preview navigation', () => {
     expect(onNavigate).toHaveBeenCalledWith('capital-gains')
   })
 
-  it('calls onNavigate with "form-1116" when Line 20 row is clicked', () => {
+  it('calls onNavigate with "schedule-3" when Line 20 row is clicked', () => {
     const onNavigate = jest.fn()
     renderForm1040({}, { onNavigate })
 
     const row = screen.getByText('Foreign tax credit').closest('tr')!
     fireEvent.click(row)
 
-    expect(onNavigate).toHaveBeenCalledWith('form-1116')
+    // Line 20 (foreign tax credit) drills to Schedule 3, which hosts Form 1116.
+    expect(onNavigate).toHaveBeenCalledWith('schedule-3')
   })
 
   it('renders one unified Line 8 row and routes clicks to the Schedule 1 tab', () => {
