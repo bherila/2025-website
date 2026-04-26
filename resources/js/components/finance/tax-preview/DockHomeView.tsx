@@ -1,14 +1,14 @@
-import { ArrowRight, FileText } from 'lucide-react'
+import { ArrowRight, FileText, Pin } from 'lucide-react'
 
 import { computeActionItemSeverityCounts } from '@/components/finance/actionItemsCounts'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 import { useTaxPreview } from '../TaxPreviewContext'
 import { useDockActions } from './DockActions'
-import type { FormCategory, FormId } from './formRegistry'
+import type { FormCategory, FormId, FormRegistryEntry } from './formRegistry'
 import { formRegistry } from './registry'
+import { useTaxPreviewPrefs } from './useTaxPreviewPrefs'
 import { useTaxRoute } from './useTaxRoute'
 
 function actionItemBadge(counts: { alert: number; warn: number }): React.ReactElement | null {
@@ -29,15 +29,12 @@ function actionItemBadge(counts: { alert: number; warn: number }): React.ReactEl
   )
 }
 
-/**
- * Placeholder home view rendered when the column stack is empty (no hash).
- * Real version will host Account Documents, KPI cards, and Action Items.
- */
 export function DockHomeView(): React.ReactElement {
   const { pushColumn } = useTaxRoute()
 
   const { openWorksheet } = useDockActions()
   const taxPreview = useTaxPreview()
+  const { recent, pinned, togglePin, isPinned, clearRecent } = useTaxPreviewPrefs(taxPreview.year)
   const actionCounts = computeActionItemSeverityCounts({
     reviewedK1Docs: taxPreview.reviewedK1Docs,
     reviewed1099Docs: taxPreview.reviewed1099Docs,
@@ -50,6 +47,9 @@ export function DockHomeView(): React.ReactElement {
   const forms = columnEntries.filter((e) => e.category === 'Form')
   const apps = Object.values(formRegistry).filter((e) => e.category === 'App' && e.id !== 'home')
 
+  const pinnedEntries = resolveEntries(pinned).filter((e) => isPinnable(e))
+  const recentEntries = resolveEntries(recent).filter((e) => !pinned.includes(e.id))
+
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6 p-6">
       <header className="space-y-1">
@@ -59,6 +59,63 @@ export function DockHomeView(): React.ReactElement {
           stack; click the form name in the header bar to return here.
         </p>
       </header>
+
+      {pinnedEntries.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              Pinned
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {pinnedEntries.map((entry) => (
+                <FormButton
+                  key={entry.id}
+                  id={entry.id}
+                  label={entry.label}
+                  shortLabel={entry.shortLabel}
+                  onOpen={(form) => pushColumn({ form })}
+                  pinned
+                  onTogglePin={() => togglePin(entry.id)}
+                />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {recentEntries.length > 0 && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+            <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              Recent
+            </CardTitle>
+            <button
+              type="button"
+              onClick={clearRecent}
+              className="rounded px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              Clear
+            </button>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {recentEntries.map((entry) => (
+                <FormButton
+                  key={entry.id}
+                  id={entry.id}
+                  label={entry.label}
+                  shortLabel={entry.shortLabel}
+                  onOpen={(form) => pushColumn({ form })}
+                  pinned={false}
+                  {...(isPinnable(entry) ? { onTogglePin: () => togglePin(entry.id) } : {})}
+                />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -89,8 +146,20 @@ export function DockHomeView(): React.ReactElement {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <FormGrid label="Schedules" entries={schedules} onOpen={(form) => pushColumn({ form })} />
-          <FormGrid label="Forms" entries={forms} onOpen={(form) => pushColumn({ form })} />
+          <FormGrid
+            label="Schedules"
+            entries={schedules}
+            onOpen={(form) => pushColumn({ form })}
+            isPinned={isPinned}
+            onTogglePin={togglePin}
+          />
+          <FormGrid
+            label="Forms"
+            entries={forms}
+            onOpen={(form) => pushColumn({ form })}
+            isPinned={isPinned}
+            onTogglePin={togglePin}
+          />
         </CardContent>
       </Card>
 
@@ -124,13 +193,25 @@ export function DockHomeView(): React.ReactElement {
   )
 }
 
-interface FormGridProps {
-  label: string
-  entries: { id: FormId; label: string; shortLabel: string }[]
-  onOpen: (id: FormId) => void
+function isPinnable(entry: FormRegistryEntry): boolean {
+  return entry.category === 'Schedule' || entry.category === 'Form'
 }
 
-function FormGrid({ label, entries, onOpen }: FormGridProps): React.ReactElement {
+function resolveEntries(ids: FormId[]): FormRegistryEntry[] {
+  return ids
+    .map((id) => formRegistry[id])
+    .filter((entry): entry is FormRegistryEntry => entry !== undefined && entry.presentation === 'column')
+}
+
+interface FormGridProps {
+  label: string
+  entries: FormRegistryEntry[]
+  onOpen: (id: FormId) => void
+  isPinned: (id: FormId) => boolean
+  onTogglePin: (id: FormId) => void
+}
+
+function FormGrid({ label, entries, onOpen, isPinned, onTogglePin }: FormGridProps): React.ReactElement {
   return (
     <div className="space-y-2">
       <h3 className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{label}</h3>
@@ -142,6 +223,8 @@ function FormGrid({ label, entries, onOpen }: FormGridProps): React.ReactElement
             label={entry.label}
             shortLabel={entry.shortLabel}
             onOpen={onOpen}
+            pinned={isPinned(entry.id)}
+            onTogglePin={() => onTogglePin(entry.id)}
           />
         ))}
       </div>
@@ -155,31 +238,48 @@ function FormButton({
   shortLabel,
   onOpen,
   badge,
+  pinned,
+  onTogglePin,
 }: {
   id: FormId
   label: string
   shortLabel: string
   onOpen: (id: FormId) => void
   badge?: React.ReactNode
+  pinned?: boolean
+  onTogglePin?: () => void
 }): React.ReactElement {
   return (
-    <Button
-      variant="outline"
-      className="h-auto justify-between gap-3 border-border bg-card px-3 py-2.5 text-left transition-colors hover:bg-muted"
-      onClick={() => onOpen(id)}
-    >
-      <span className="flex min-w-0 items-center gap-2">
+    <div className="group relative flex items-stretch overflow-hidden rounded-md border border-border bg-card transition-colors hover:bg-muted">
+      <button
+        type="button"
+        onClick={() => onOpen(id)}
+        className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      >
         <FileText className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <span className="flex min-w-0 flex-col">
           <span className="truncate text-sm font-medium text-foreground">{shortLabel}</span>
           <span className="truncate text-xs text-muted-foreground">{label}</span>
         </span>
-      </span>
-      <span className="flex shrink-0 items-center gap-2">
+      </button>
+      <span className="flex shrink-0 items-center gap-2 pr-3">
         {badge}
+        {onTogglePin && (
+          <button
+            type="button"
+            onClick={onTogglePin}
+            aria-label={pinned ? `Unpin ${shortLabel}` : `Pin ${shortLabel}`}
+            aria-pressed={pinned}
+            className={`rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+              pinned ? 'opacity-100 text-foreground' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
+            }`}
+          >
+            <Pin className={`h-3.5 w-3.5 ${pinned ? 'fill-current' : ''}`} aria-hidden="true" />
+          </button>
+        )}
         <ArrowRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
       </span>
-    </Button>
+    </div>
   )
 }
 
