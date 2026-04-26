@@ -138,7 +138,7 @@ export default function ScheduleBPreview({
           {interestTotal === 0 && interestLines.length === 0 && (
             <FormLine label="No interest income reported" raw="—" />
           )}
-          <FormTotalLine label="Line 4 — Total interest" value={interestTotal} />
+          <FormTotalLine boxRef="4" label="Total interest" value={interestTotal} />
         </FormBlock>
 
         {/* Part II — Dividends */}
@@ -156,7 +156,7 @@ export default function ScheduleBPreview({
           {dividendTotal === 0 && dividendLines.length === 0 && (
             <FormLine label="No dividend income reported" raw="—" />
           )}
-          <FormTotalLine label="Line 6 — Total ordinary dividends" value={dividendTotal} />
+          <FormTotalLine boxRef="6" label="Total ordinary dividends" value={dividendTotal} />
           {qualifiedDivTotal > 0 && (
             <>
               {qualifiedDividendLines.length > 0
@@ -169,7 +169,7 @@ export default function ScheduleBPreview({
                     />
                   ))
                 : <FormLine label="Qualified dividends" value={qualifiedDivTotal} />}
-              <FormTotalLine label="Line 7 — Qualified dividends" value={qualifiedDivTotal} />
+              <FormTotalLine boxRef="7" label="Qualified dividends" value={qualifiedDivTotal} />
             </>
           )}
         </FormBlock>

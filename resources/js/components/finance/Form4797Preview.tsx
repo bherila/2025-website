@@ -57,29 +57,6 @@ interface Form4797PreviewProps {
   partIIIRecaptureInput?: React.ReactNode
 }
 
-function InputLine({
-  boxRef,
-  label,
-  value,
-  input,
-}: {
-  boxRef?: string
-  label: string
-  value: number
-  input?: React.ReactNode
-}): React.ReactElement {
-  if (!input) {
-    return <FormLine boxRef={boxRef ?? ''} label={label} value={value} />
-  }
-  return (
-    <div className="flex items-center gap-2 px-3 py-1.5">
-      <span className="w-14 shrink-0 select-none font-mono text-[10px] text-muted-foreground">{boxRef ?? ''}</span>
-      <span className="flex-1 text-[13px]">{label}</span>
-      <span className="shrink-0">{input}</span>
-    </div>
-  )
-}
-
 export default function Form4797Preview({
   selectedYear,
   form4797,
@@ -108,31 +85,27 @@ export default function Form4797Preview({
       )}
 
       <FormBlock title="Part I — §1231 property held > 1 year">
-        <InputLine
+        <FormLine
           boxRef="7"
           label="Net §1231 gain or (loss)"
-          value={f.partINet1231}
-          input={partINet1231Input}
+          {...(partINet1231Input ? { control: partINet1231Input } : { value: f.partINet1231 })}
         />
         <FormSubLine text="Net positive → Schedule D as long-term capital gain. Net negative → Schedule 1 line 4 as ordinary loss." />
       </FormBlock>
 
       <FormBlock title="Part II — Ordinary gains and losses">
-        <InputLine
+        <FormLine
           boxRef="18b"
           label="Net ordinary gain or (loss)"
-          value={f.partIIOrdinary}
-          input={partIIOrdinaryInput}
+          {...(partIIOrdinaryInput ? { control: partIIOrdinaryInput } : { value: f.partIIOrdinary })}
         />
         <FormSubLine text="Always flows to Schedule 1 line 4 as ordinary income." />
       </FormBlock>
 
       <FormBlock title="Part III — Depreciation recapture (§1245 / §1250 / §1252 / §1254 / §1255)">
-        <InputLine
-          boxRef=""
+        <FormLine
           label="Total recapture amount"
-          value={f.partIIIRecapture}
-          input={partIIIRecaptureInput}
+          {...(partIIIRecaptureInput ? { control: partIIIRecaptureInput } : { value: f.partIIIRecapture })}
         />
         <FormSubLine text="Included in Part II line 18a — treated as ordinary income." />
       </FormBlock>

@@ -808,7 +808,10 @@ export const formRegistry: FormRegistry = {
     category: 'Schedule',
     presentation: 'column',
     component: ScheduleCAdapter,
-    hasData: (state) => state.scheduleCNetIncome.total !== 0,
+    hasData: (state) =>
+      (state.scheduleCData?.years ?? []).some(
+        (y) => y.year === state.year && y.entities.length > 0,
+      ),
     xlsx: {
       sheetName: () => 'Schedule C',
       order: 30,

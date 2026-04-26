@@ -276,26 +276,30 @@ export default function ScheduleAPreview({
       <div className="grid grid-cols-1 gap-4">
         {/* Part I — Medical */}
         <FormBlock title="Part I — Medical and Dental Expenses">
-          <FormLine label="Line 1 — Medical expenses" raw="—" />
-          <FormTotalLine label="Line 4 — Deductible medical" value={0} />
+          <FormLine boxRef="1" label="Medical expenses" raw="—" />
+          <FormTotalLine boxRef="4" label="Deductible medical" value={0} />
         </FormBlock>
 
         {/* Part II — Taxes */}
         <FormBlock title="Part II — Taxes You Paid">
           <FormLine
-            label="Line 5a — State income tax withheld / estimated tax paid"
+            boxRef="5a"
+            label="State income tax withheld / estimated tax paid"
             {...(stateIncomeTax > 0 ? { value: stateIncomeTax } : { raw: '—' })}
           />
           <FormLine
-            label="Line 5c — State/local general sales taxes"
+            boxRef="5c"
+            label="State/local general sales taxes"
             {...(salesTax > 0 ? { value: salesTax } : { raw: '—' })}
           />
           <FormLine
-            label="Line 6 — Real estate taxes"
+            boxRef="6"
+            label="Real estate taxes"
             {...(realEstateTax > 0 ? { value: realEstateTax } : { raw: '—' })}
           />
           <FormTotalLine
-            label={`Line 7 — Total SALT (capped at $${SALT_CAP.toLocaleString()})`}
+            boxRef="7"
+            label={`Total SALT (capped at $${SALT_CAP.toLocaleString()})`}
             value={saltDeduction}
           />
           {totalSaltPaidBeforeCap >= SALT_CAP && (
@@ -306,29 +310,33 @@ export default function ScheduleAPreview({
         {/* Part IV — Interest */}
         <FormBlock title="Part IV — Interest You Paid">
           <FormLine
-            label="Line 8 — Home mortgage interest"
+            boxRef="8"
+            label="Home mortgage interest"
             {...(mortgageInterest > 0 ? { value: mortgageInterest } : { raw: '—' })}
           />
           <FormLine
-            label="Line 9 — Investment interest expense (from Form 4952)"
+            boxRef="9"
+            label="Investment interest expense (from Form 4952)"
             value={totalInvIntExpense > 0 ? totalInvIntExpense : null}
             {...(totalInvIntExpense === 0 ? { raw: '—' } : {})}
             {...(invIntSources.length > 0 ? { onClick: () => setShowInvIntModal(true) } : {})}
           />
-          <FormTotalLine label="Line 10 — Total interest" value={totalInterest} />
+          <FormTotalLine boxRef="10" label="Total interest" value={totalInterest} />
         </FormBlock>
 
         {/* Part V — Gifts */}
         <FormBlock title="Part V — Gifts to Charity">
           <FormLine
-            label="Line 11 — Cash contributions"
+            boxRef="11"
+            label="Cash contributions"
             {...(charitableCash > 0 ? { value: charitableCash } : { raw: '—' })}
           />
           <FormLine
-            label="Line 12 — Non-cash contributions"
+            boxRef="12"
+            label="Non-cash contributions"
             {...(charitableNoncash > 0 ? { value: charitableNoncash } : { raw: '—' })}
           />
-          <FormTotalLine label="Line 14 — Total gifts" value={charitable} />
+          <FormTotalLine boxRef="14" label="Total gifts" value={charitable} />
         </FormBlock>
 
         <FormBlock title="Other Itemized Deductions">
@@ -339,7 +347,8 @@ export default function ScheduleAPreview({
             <FormLine key={`k1-oth-${i}`} label={src.label} value={src.amount} />
           ))}
           <FormTotalLine
-            label="Line 16 — Other itemized deductions"
+            boxRef="16"
+            label="Other itemized deductions"
             value={currency(otherDeductions).add(totalOtherItemized).value}
           />
         </FormBlock>

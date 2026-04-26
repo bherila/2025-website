@@ -180,7 +180,7 @@ export default function Form1116Preview({
         ))}
 
       {showPassive && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))' }}>
           <FormBlock title="Part I — Foreign Source Passive Income">
             {incomeSources.map((src, i) => (
               <FormLine key={i} boxRef="1a" label={src.label} value={src.amount} />
@@ -188,7 +188,7 @@ export default function Form1116Preview({
             {incomeSources.length === 0 && (
               <FormLine boxRef="1a" label="No foreign passive income identified" raw="—" />
             )}
-            <FormTotalLine label="Line 1c — Total foreign passive income" value={totalPassiveIncome} />
+            <FormTotalLine boxRef="1c" label="Total foreign passive income" value={totalPassiveIncome} />
           </FormBlock>
 
           <FormBlock title="Part II — Foreign Taxes Paid or Accrued">
@@ -196,7 +196,7 @@ export default function Form1116Preview({
               <FormLine key={i} boxRef="8" label={src.label} value={src.amount} />
             ))}
             {taxSources.length === 0 && <FormLine boxRef="8" label="No foreign taxes identified" raw="—" />}
-            <FormTotalLine label="Line 9 — Total foreign taxes paid or accrued" value={totalForeignTaxes} />
+            <FormTotalLine boxRef="9" label="Total foreign taxes paid or accrued" value={totalForeignTaxes} />
           </FormBlock>
         </div>
       )}
@@ -206,7 +206,7 @@ export default function Form1116Preview({
           {generalIncomeSources.map((src, i) => (
             <FormLine key={i} boxRef="1a" label={src.label} value={src.amount} />
           ))}
-          <FormTotalLine label="Line 1c — Total foreign general income" value={totalGeneralIncome} />
+          <FormTotalLine boxRef="1c" label="Total foreign general income" value={totalGeneralIncome} />
           <FormLine
             boxRef="10"
             label="Foreign taxes attributable to general category"
@@ -237,7 +237,7 @@ export default function Form1116Preview({
               <FormLine boxRef="4b" label={`${row.label} — Line 4b (expense × ratio)`} value={row.line4b} />
             </div>
           ))}
-          <FormTotalLine label="Line 4b — Total apportioned interest" value={totalLine4b} />
+          <FormTotalLine boxRef="4b" label="Total apportioned interest" value={totalLine4b} />
           <FormLine
             label="Enter on Form 1116, Part I, Line 4b"
             raw="Reduce passive foreign income by this amount"
@@ -256,10 +256,11 @@ export default function Form1116Preview({
         <FormLine boxRef="9" label="FTC limitation (fraction × U.S. tax)" raw="~see note" />
         <FormLine boxRef="11" label="Actual foreign taxes paid (Part II)" value={totalForeignTaxes} />
         <FormTotalLine
+          boxRef="12"
           label={
             totalPassiveIncome >= currency(totalForeignTaxes).divide(ASSUMED_FOREIGN_WITHHOLDING_RATE).value
-              ? 'Line 12 — Credit allowed — likely FULLY ALLOWED ✓'
-              : 'Line 12 — Credit allowed (subject to limitation)'
+              ? 'Credit allowed — likely FULLY ALLOWED ✓'
+              : 'Credit allowed (subject to limitation)'
           }
           value={totalForeignTaxes}
           double
@@ -300,56 +301,66 @@ export default function Form1116Preview({
 
       {showPassive && sbpElections.length > 0 && (
         <FormBlock title="Sourced-by-Partner (Col f) Election — Form 1116 Impact">
-          {sbpElections.length > 1 && onBulkSetSbpElection && (
-            <div className="flex gap-2 pb-2">
-              <button
-                type="button"
-                disabled={bulkUpdating}
-                className="text-xs px-2 py-1 rounded border border-border hover:bg-muted disabled:opacity-50"
-                onClick={() => void runBulkToggle(true)}
-              >
-                {bulkUpdating ? 'Updating…' : 'Elect all'}
-              </button>
-              <button
-                type="button"
-                disabled={bulkUpdating}
-                className="text-xs px-2 py-1 rounded border border-border hover:bg-muted disabled:opacity-50"
-                onClick={() => void runBulkToggle(false)}
-              >
-                {bulkUpdating ? 'Updating…' : 'Unelect all'}
-              </button>
-            </div>
-          )}
-          {bulkFailures.length > 0 && (
-            <FormLine
-              label="Bulk update failures"
-              raw={`Could not update: ${bulkFailures.join(', ')}`}
-            />
-          )}
           <FormLine
+            note
             label="What is this?"
             raw="K-3 Part II column (f) amounts are classified 'Sourced by Partner'. By default they are treated as foreign-source income, increasing your FTC base."
           />
           <FormLine
+            note
             label="Election available"
-            raw="You may elect (per Treas. Reg. §1.861-9T) to treat these amounts as U.S.-source, which reduces FTC base but may be required if you are not subject to a tax treaty or §901(j) override."
+            raw="You may elect (per Treas. Reg. §1.861-9T) to treat these as U.S.-source, which reduces FTC base but may be required if you are not subject to a tax treaty or §901(j) override."
           />
+          {bulkFailures.length > 0 && (
+            <FormLine note label="Bulk update failures" raw={`Could not update: ${bulkFailures.join(', ')}`} />
+          )}
           {sbpElections.map((e, i) => (
-            <div key={i} className="space-y-0.5">
-              <FormLine
-                label={`${e.partnerName} — Col (f) net`}
-                value={e.sourcedByPartner}
-              />
-              <FormLine
-                label={`${e.partnerName} — Election: treat col (f) as U.S. source`}
-                raw={e.active ? '✓ Active — col (f) excluded from foreign income' : '✗ Inactive — col (f) included in foreign income'}
-              />
+            <div key={i} className="border-t border-dashed border-border/50 py-1.5 px-3 space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[13px] font-medium truncate flex-1">{e.partnerName}</span>
+                <span className={`font-mono tabular-nums text-[13px] shrink-0 ${e.sourcedByPartner < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'}`}>
+                  {fmtAmt(e.sourcedByPartner)}
+                </span>
+                {onReviewNow && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground shrink-0"
+                    onClick={() => onReviewNow(e.docId)}
+                  >
+                    Review K-1
+                  </Button>
+                )}
+              </div>
+              <div className={`text-[11px] ${e.active ? 'text-emerald-600 dark:text-emerald-500' : 'text-muted-foreground'}`}>
+                {e.active
+                  ? '✓ Elected — col (f) treated as U.S. source (excluded from foreign income)'
+                  : '✗ Not elected — col (f) treated as foreign source (included in foreign income)'}
+              </div>
             </div>
           ))}
-          <FormLine
-            label="To change this election"
-            raw="Open the K-1 review modal → scroll to the K-3 section → toggle the checkbox"
-          />
+          {sbpElections.length > 1 && onBulkSetSbpElection && (
+            <div className="flex gap-2 px-3 py-2 border-t border-border/50">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={bulkUpdating}
+                className="text-xs h-7"
+                onClick={() => void runBulkToggle(true)}
+              >
+                {bulkUpdating ? 'Updating…' : 'Elect all'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={bulkUpdating}
+                className="text-xs h-7"
+                onClick={() => void runBulkToggle(false)}
+              >
+                {bulkUpdating ? 'Updating…' : 'Unelect all'}
+              </Button>
+            </div>
+          )}
         </FormBlock>
       )}
 

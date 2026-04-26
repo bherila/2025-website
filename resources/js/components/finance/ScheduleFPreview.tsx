@@ -36,28 +36,6 @@ interface ScheduleFPreviewProps {
   totalExpensesInput?: React.ReactNode
 }
 
-function InputLine({
-  boxRef,
-  label,
-  value,
-  input,
-}: {
-  boxRef?: string
-  label: string
-  value: number
-  input?: React.ReactNode
-}): React.ReactElement {
-  if (!input) {
-    return <FormLine boxRef={boxRef ?? ''} label={label} value={value} />
-  }
-  return (
-    <div className="flex items-center gap-2 px-3 py-1.5">
-      <span className="w-14 shrink-0 select-none font-mono text-[10px] text-muted-foreground">{boxRef ?? ''}</span>
-      <span className="flex-1 text-[13px]">{label}</span>
-      <span className="shrink-0">{input}</span>
-    </div>
-  )
-}
 
 export default function ScheduleFPreview({
   selectedYear,
@@ -86,27 +64,26 @@ export default function ScheduleFPreview({
       )}
 
       <FormBlock title="Part I — Farm income (cash method)">
-        <InputLine
+        <FormLine
           boxRef="9"
           label="Gross income from farming"
-          value={f.grossFarmIncome}
-          input={grossFarmIncomeInput}
+          {...(grossFarmIncomeInput ? { control: grossFarmIncomeInput } : { value: f.grossFarmIncome })}
         />
         <FormSubLine text="Sum of lines 1b through 8 on the paper form (livestock, produce, cooperative distributions, agricultural program payments, etc.)." />
       </FormBlock>
 
       <FormBlock title="Part II — Farm expenses">
-        <InputLine
+        <FormLine
           boxRef="33"
           label="Total farm expenses"
-          value={f.totalExpenses}
-          input={totalExpensesInput}
+          {...(totalExpensesInput ? { control: totalExpensesInput } : { value: f.totalExpenses })}
         />
         <FormSubLine text="Aggregate of lines 10 through 32f — car/truck, chemicals, depreciation, feed, fertilizer, labor, interest, rent, utilities, etc." />
       </FormBlock>
 
       <FormTotalLine
-        label="Line 34 — Net farm profit or (loss) → Schedule 1 line 6"
+        boxRef="34"
+        label="Net farm profit or (loss) → Schedule 1 line 6"
         value={f.netProfitOrLoss}
         double
       />

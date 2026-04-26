@@ -361,7 +361,7 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
             </div>
           ))}
           {stLines.length === 0 && <FormLine label="No short-term items" raw="—" />}
-          <FormTotalLine label="Line 7 — Net Short-Term" value={netST} />
+          <FormTotalLine boxRef="7" label="Net Short-Term" value={netST} />
         </FormBlock>
 
         <FormBlock title="Schedule D Part II — Long-Term">
@@ -372,7 +372,7 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
             </div>
           ))}
           {ltLines.length === 0 && <FormLine label="No long-term items" raw="—" />}
-          <FormTotalLine label="Line 15 — Net Long-Term" value={netLT} />
+          <FormTotalLine boxRef="15" label="Net Long-Term" value={netLT} />
         </FormBlock>
       </div>
 
@@ -380,7 +380,7 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
       <FormBlock title="Schedule D Summary">
         <FormLine boxRef="7" label="Net short-term capital gain (loss)" value={netST} />
         <FormLine boxRef="15" label="Net long-term capital gain (loss)" value={netLT} />
-        <FormTotalLine label="Line 16 — Combined net capital gain (loss)" value={combined} />
+        <FormTotalLine boxRef="16" label="Combined net capital gain (loss)" value={combined} />
         {combined < 0 && (
           <>
             <FormLine

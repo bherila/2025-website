@@ -67,14 +67,14 @@ export default function Schedule3Preview({ schedule3, selectedYear }: Schedule3P
         <FormLine boxRef="5a" label="Residential clean energy credit (Form 5695)" value={partI.line5a_residentialCleanEnergy} />
         <FormLine boxRef="5b" label="Energy efficient home improvement credit (Form 5695)" value={partI.line5b_energyEfficientHome} />
         <FormLine boxRef="6" label="Other credits" value={partI.line6_otherCredits} />
-        <FormTotalLine label="Line 7 — Total nonrefundable credits → Form 1040 line 20" value={partI.line7_total} />
+        <FormTotalLine boxRef="7" label="Total nonrefundable credits → Form 1040 line 20" value={partI.line7_total} />
       </FormBlock>
 
       <FormBlock title="Part II — Other Payments & Refundable Credits">
         <FormLine boxRef="9" label="Amount paid with extension request" value={partII.line9_extensionPayment} />
         <FormLine boxRef="10" label="Excess Social Security tax withheld" value={partII.line10_excessSSWithheld} />
         <FormLine boxRef="11" label="Credit for federal tax on fuels (Form 4136)" value={partII.line11_fuelTaxCredit} />
-        <FormTotalLine label="Line 13 — Total → Form 1040 line 31" value={partII.line13_total} />
+        <FormTotalLine boxRef="13" label="Total → Form 1040 line 31" value={partII.line13_total} />
       </FormBlock>
     </div>
   )

@@ -210,7 +210,7 @@ export default function ScheduleSEPreview({
           <FormLine key={`${entry.label}-${index}`} label={entry.label} value={entry.amount} />
         ))}
         <FormTotalLine label="Net earnings from self-employment" value={computed.netEarningsFromSE} />
-        <FormLine label="92.35% earnings factor (Schedule SE line 4a)" value={computed.seTaxableEarnings} />
+        <FormLine boxRef="4a" label="92.35% earnings factor" value={computed.seTaxableEarnings} />
       </FormBlock>
 
       <FormBlock title="Social Security Portion (12.4%)">

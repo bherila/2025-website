@@ -118,14 +118,14 @@ export default function AdditionalTaxesPreview({ schedule2, scheduleSE, form8959
       {schedule2 && schedule2.totalAdditionalTaxes > 0 && (
         <FormBlock title="Schedule 2 — Additional Taxes (Form 1040 Line 17)">
           {schedule2.altMinimumTax > 0 && (
-            <FormLine label="Line 2 — Alternative Minimum Tax (Form 6251)" value={schedule2.altMinimumTax} />
+            <FormLine boxRef="2" label="Alternative Minimum Tax (Form 6251)" value={schedule2.altMinimumTax} />
           )}
           {schedule2.selfEmploymentTax > 0 && (
-            <FormLine label="Line 4 — Self-employment tax (Schedule SE)" value={schedule2.selfEmploymentTax} />
+            <FormLine boxRef="4" label="Self-employment tax (Schedule SE)" value={schedule2.selfEmploymentTax} />
           )}
           {schedule2.additionalMedicareTax > 0 && (
             <>
-              <FormLine label="Line 11 — Additional Medicare Tax (Form 8959)" value={schedule2.additionalMedicareTax} />
+              <FormLine boxRef="11" label="Additional Medicare Tax (Form 8959)" value={schedule2.additionalMedicareTax} />
               {scheduleSE?.additionalMedicareTax ? (
                 <FormLine
                   note
@@ -136,7 +136,7 @@ export default function AdditionalTaxesPreview({ schedule2, scheduleSE, form8959
             </>
           )}
           {schedule2.niit > 0 && (
-            <FormLine label="Line 12 — Net Investment Income Tax (Form 8960)" value={schedule2.niit} />
+            <FormLine boxRef="12" label="Net Investment Income Tax (Form 8960)" value={schedule2.niit} />
           )}
           <FormTotalLine label="Total additional taxes → Form 1040 Line 17" value={schedule2.totalAdditionalTaxes} double />
           {schedule2.altMinimumTax === 0 && (
@@ -149,16 +149,17 @@ export default function AdditionalTaxesPreview({ schedule2, scheduleSE, form8959
       {form8959 && form8959.additionalTax > 0 && (
         <FormBlock title="Form 8959 — Additional Medicare Tax (0.9%)">
           <FormLine
+            boxRef="1"
             label="Medicare wages"
             value={form8959.wages}
-            {...(form8959.sources.length > 1 ? { onClick: () => setWagesModal(true) } : {})}
+            {...(form8959.sources.length > 0 ? { onDetails: () => setWagesModal(true) } : {})}
           />
           <FormLine
             label={`Less: threshold (${fmtAmt(form8959.threshold, 0)} — ${form8959.threshold === 200_000 ? 'Single/HOH' : 'MFJ'})`}
             value={-form8959.threshold}
           />
           <FormLine label="Wages above threshold" value={form8959.excessWages} />
-          <FormTotalLine label="Additional Medicare Tax (0.9% × excess) — Schedule 2 Line 11" value={form8959.additionalTax} double />
+          <FormTotalLine boxRef="18" label="Additional Medicare Tax (0.9% × excess) → Schedule 2 Line 11" value={form8959.additionalTax} double />
           <FormLine note label="Note" raw="Employers must withhold the 0.9% once wages from that employer exceed $200,000 — that withholding is in W-2 Box 6. Your actual liability is reconciled on Form 8959 at filing and may differ if you have multiple jobs or a spouse with income." />
         </FormBlock>
       )}
@@ -181,12 +182,12 @@ export default function AdditionalTaxesPreview({ schedule2, scheduleSE, form8959
               />
             )
           })}
-          <FormTotalLine label="Net Investment Income (Line 12)" value={form8960.netInvestmentIncome} />
+          <FormTotalLine boxRef="12" label="Net Investment Income" value={form8960.netInvestmentIncome} />
           <FormLine label="Modified AGI (estimated)" value={form8960.magi} />
           <FormLine label={`Less: threshold (${fmtAmt(form8960.threshold, 0)} — ${form8960.threshold === 200_000 ? 'Single/HOH' : 'MFJ'})`} value={-form8960.threshold} />
           <FormLine label="Excess MAGI over threshold" value={form8960.magiExcess} />
           <FormLine label="NIIT base (lesser of NII or MAGI excess)" value={Math.min(form8960.netInvestmentIncome, form8960.magiExcess)} />
-          <FormTotalLine label="NIIT (3.8% × base) — Schedule 2 Line 12" value={form8960.niitTax} double />
+          <FormTotalLine boxRef="17" label="NIIT (3.8% × base) → Schedule 2 Line 12" value={form8960.niitTax} double />
           <FormLine note label="Note" raw="NIIT is not reduced by the QBI deduction (Form 8995) or the foreign tax credit (Form 1116)." />
         </FormBlock>
       )}

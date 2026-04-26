@@ -142,33 +142,6 @@ export function computeForm8606({
   }
 }
 
-/**
- * Line row that pairs the computed numeric value with an optional inline input
- * control rendered to the right. Matches FormLine's layout so the preview
- * blocks line up visually.
- */
-function InputLine({
-  boxRef,
-  label,
-  value,
-  input,
-}: {
-  boxRef?: string
-  label: string
-  value: number
-  input?: React.ReactNode
-}): React.ReactElement {
-  if (!input) {
-    return <FormLine boxRef={boxRef ?? ''} label={label} value={value} />
-  }
-  return (
-    <div className="flex items-center gap-2 px-3 py-1.5">
-      <span className="w-14 shrink-0 select-none font-mono text-[10px] text-muted-foreground">{boxRef ?? ''}</span>
-      <span className="flex-1 text-[13px]">{label}</span>
-      <span className="shrink-0">{input}</span>
-    </div>
-  )
-}
 
 interface Form8606PreviewProps {
   selectedYear: number
@@ -209,23 +182,20 @@ export default function Form8606Preview({
       )}
 
       <FormBlock title="Inputs — User entered">
-        <InputLine
+        <FormLine
           boxRef="1"
           label="Nondeductible contributions to traditional IRA this year"
-          value={f.line1_nondeductibleContributions}
-          input={nondeductibleContributionsInput}
+          {...(nondeductibleContributionsInput ? { control: nondeductibleContributionsInput } : { value: f.line1_nondeductibleContributions })}
         />
-        <InputLine
+        <FormLine
           boxRef="2"
           label="Prior-year basis (from last year's Form 8606 line 14)"
-          value={f.line2_priorYearBasis}
-          input={priorYearBasisInput}
+          {...(priorYearBasisInput ? { control: priorYearBasisInput } : { value: f.line2_priorYearBasis })}
         />
-        <InputLine
+        <FormLine
           boxRef="6"
           label="Year-end FMV of all traditional/SEP/SIMPLE IRAs"
-          value={f.line6_yearEndFmv}
-          input={yearEndFmvInput}
+          {...(yearEndFmvInput ? { control: yearEndFmvInput } : { value: f.line6_yearEndFmv })}
         />
         <FormSubLine text="FMV is required to compute the pro-rata rule (line 10)." />
       </FormBlock>
@@ -265,7 +235,7 @@ export default function Form8606Preview({
               />
             </>
           )}
-          <FormTotalLine label="Line 14 — Basis carried forward to next year" value={f.line14_basisCarriedForward} />
+          <FormTotalLine boxRef="14" label="Basis carried forward to next year" value={f.line14_basisCarriedForward} />
         </FormBlock>
       )}
 
@@ -280,7 +250,7 @@ export default function Form8606Preview({
               <FormSubLine text={`Taxable per 1099-R box 2a: ${fmtAmt(row.taxableAmount)} · Form 8606 overrides with line 18`} />
             </div>
           ))}
-          <FormTotalLine label="Line 18 — Taxable amount of Roth conversions" value={f.line18_taxableConversions} />
+          <FormTotalLine boxRef="18" label="Taxable amount of Roth conversions" value={f.line18_taxableConversions} />
         </FormBlock>
       )}
 
