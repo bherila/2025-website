@@ -20,10 +20,14 @@ import ScheduleSEPreview from '@/components/finance/ScheduleSEPreview'
 import TaxDocuments1099Section from '@/components/finance/TaxDocuments1099Section'
 import TaxDocumentsSection from '@/components/finance/TaxDocumentsSection'
 import {
+  buildEstimatedTaxSheet,
+  buildForm1116Sheet,
   buildForm4952Sheet,
   buildForm6251Sheet,
   buildForm8582Sheet,
   buildForm8995Sheet,
+  buildOverviewSheet,
+  buildScheduleBSheet,
   buildScheduleCSheet,
   buildScheduleDSheet,
   buildScheduleESheet,
@@ -346,6 +350,11 @@ export const formRegistry: FormRegistry = {
     category: 'App',
     presentation: 'app',
     component: HomePlaceholder,
+    xlsx: {
+      sheetName: () => 'Overview',
+      order: 10,
+      build: buildOverviewSheet,
+    },
   },
   'form-1040': {
     id: 'form-1040',
@@ -396,6 +405,11 @@ export const formRegistry: FormRegistry = {
     category: 'Schedule',
     presentation: 'column',
     component: ScheduleBAdapter,
+    xlsx: {
+      sheetName: () => 'Schedule B',
+      order: 25,
+      build: buildScheduleBSheet,
+    },
   },
   'sch-d': {
     id: 'sch-d',
@@ -544,6 +558,11 @@ export const formRegistry: FormRegistry = {
       create: () => ({ key: 'passive', label: 'Passive' }),
       allowCreate: false,
     },
+    xlsx: {
+      sheetName: () => 'Form 1116',
+      order: 85,
+      build: buildForm1116Sheet,
+    },
   },
   'form-8582': {
     id: 'form-8582',
@@ -607,6 +626,11 @@ export const formRegistry: FormRegistry = {
     category: 'App',
     presentation: 'app',
     component: EstimateStub,
+    xlsx: {
+      sheetName: () => 'Est. Tax Payments',
+      order: 200,
+      build: buildEstimatedTaxSheet,
+    },
   },
   documents: {
     id: 'documents',

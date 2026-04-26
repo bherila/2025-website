@@ -167,6 +167,11 @@ function buildSheet(name: string, rows: XlsxRow[]): IndexedSheet {
   return { name, rows, rowIndex }
 }
 
+/** Wrap a builder's plain-XlsxSheet output (or null) into an IndexedSheet for cross-sheet refs. */
+function wrapSheet(sheet: XlsxSheet | null): IndexedSheet | null {
+  return sheet ? buildSheet(sheet.name, sheet.rows) : null
+}
+
 function hasExportableContent(sheet: XlsxSheet): boolean {
   return sheet.rows.some(
     (row) => row.amount !== undefined || row.formula !== undefined || row.note !== undefined,
@@ -707,300 +712,268 @@ export function buildScheduleDSheet(taxReturn: TaxReturn1040): XlsxSheet | null 
   return { name: 'Schedule D', rows }
 }
 
-function buildEstimatedTaxSheet(estimatedTaxPayments?: EstimatedTaxPaymentsData): IndexedSheet | null {
-  if (!estimatedTaxPayments || estimatedTaxPayments.priorYearTax <= 0) {
+export function buildOverviewSheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.overviewSections || taxReturn.overviewSections.length === 0) {
     return null
   }
-
-  const multiplierPercent = Math.round(estimatedTaxPayments.multiplier * 100)
-  const agiThresholdMessage = estimatedTaxPayments.priorYearAgi > estimatedTaxPayments.agiThresholdApplied
-    ? `Above ${currency(estimatedTaxPayments.agiThresholdApplied).format()} threshold → ${multiplierPercent}% method`
-    : `At or below ${currency(estimatedTaxPayments.agiThresholdApplied).format()} threshold → ${multiplierPercent}% method`
-  const rows: XlsxRow[] = [
-    {
-      isHeader: true,
-      description: `Safe Harbor Method — ${multiplierPercent}% of ${estimatedTaxPayments.planningYear - 1} Tax`,
-    },
-    {
-      description: `${estimatedTaxPayments.planningYear - 1} AGI (prior year)`,
-      amount: estimatedTaxPayments.priorYearAgi,
-      note: agiThresholdMessage,
-    },
-    {
-      description: `${estimatedTaxPayments.planningYear - 1} total tax (prior year)`,
-      amount: estimatedTaxPayments.priorYearTax,
-    },
-    {
-      description: `Safe harbor amount (${multiplierPercent}%)`,
-      amount: estimatedTaxPayments.safeHarborAmount,
-      isTotal: true,
-    },
-    {
-      description: `Expected ${estimatedTaxPayments.planningYear} federal withholding`,
-      amount: estimatedTaxPayments.expectedWithholding,
-    },
-    {
-      description: 'Net estimated tax due',
-      amount: estimatedTaxPayments.netDue,
-      isTotal: true,
-    },
-    { isHeader: true, description: `${estimatedTaxPayments.planningYear} Payment Schedule` },
-    ...estimatedTaxPayments.quarterlyPayments.map((payment: EstimatedTaxPaymentsData['quarterlyPayments'][number]) => ({
-      line: `Q${payment.paymentNumber}`,
-      description: `Payment ${payment.paymentNumber} — Due ${payment.dueDate}`,
-      amount: payment.amount,
-    })),
-  ]
-
-  return buildSheet('Est. Tax Payments', rows)
+  const rows: XlsxRow[] = []
+  for (const section of taxReturn.overviewSections) {
+    rows.push({ isHeader: true, description: section.heading })
+    for (const row of section.rows) {
+      rows.push({ description: row.item, amount: row.amount, note: row.note })
+    }
+  }
+  return { name: 'Overview', rows }
 }
 
-export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
-  // ── Overview ────────────────────────────────────────────────────────────────
-  const overviewSheet = taxReturn.overviewSections && taxReturn.overviewSections.length > 0
-    ? (() => {
-        const rows: XlsxRow[] = []
-        for (const section of taxReturn.overviewSections!) {
-          rows.push({ isHeader: true, description: section.heading })
-          for (const row of section.rows) {
-            rows.push({ description: row.item, amount: row.amount, note: row.note })
-          }
-        }
-        return buildSheet('Overview', rows)
-      })()
-    : null
+export function buildScheduleBSheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.scheduleB) {
+    return null
+  }
+  // Excel rows are 1-based and the header row is row 1, so the first interest
+  // detail row is excel row 3 (row 2 is the header card from buildSheet).
+  const intStart = 3
+  const intLines = taxReturn.scheduleB.interestLines.map((line) => ({
+    description: line.label,
+    amount: line.amount,
+  }))
+  const intEnd = intStart + intLines.length - 1
+  const intTotalRow = intEnd + 1
 
+  const divStart = intTotalRow + 2 // +1 for total row, +1 for Part II header
+  const divLines = taxReturn.scheduleB.dividendLines.map((line) => ({
+    description: line.label,
+    amount: line.amount,
+  }))
+  const divEnd = divStart + divLines.length - 1
 
-  // ── Schedule B ──────────────────────────────────────────────────────────────
-  const scheduleBSheet = taxReturn.scheduleB
-    ? (() => {
-        const intStart = 3 // excel row where first interest line appears (row 2 = header)
-        const intLines = taxReturn.scheduleB.interestLines.map((line) => ({
-          description: line.label,
-          amount: line.amount,
-        }))
-        const intEnd = intStart + intLines.length - 1
-        const intTotalRow = intEnd + 1
+  const rows: XlsxRow[] = [
+    { isHeader: true, description: 'Part I — Interest Income' },
+    ...intLines,
+    {
+      line: '4',
+      description: 'Line 4 — Total interest',
+      amount: taxReturn.scheduleB.interestTotal,
+      formula: intLines.length > 0 ? sumFormula(intStart, intEnd) : undefined,
+      isTotal: true,
+    },
+    { isHeader: true, description: 'Part II — Ordinary Dividends' },
+    ...divLines,
+    {
+      line: '6',
+      description: 'Line 6 — Total ordinary dividends',
+      amount: taxReturn.scheduleB.dividendTotal,
+      formula: divLines.length > 0 ? sumFormula(divStart, divEnd) : undefined,
+      isTotal: true,
+    },
+    {
+      line: '7',
+      description: 'Line 7 — Qualified dividends',
+      amount: taxReturn.scheduleB.qualifiedDivTotal,
+    },
+  ]
+  return { name: 'Schedule B', rows }
+}
 
-        const divStart = intTotalRow + 2 // +1 for total row, +1 for Part II header
-        const divLines = taxReturn.scheduleB.dividendLines.map((line) => ({
-          description: line.label,
-          amount: line.amount,
-        }))
-        const divEnd = divStart + divLines.length - 1
-        const divTotalRow = divEnd + 1
-        const qualDivRow = divTotalRow + 1
+export function buildForm1116Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  if (!taxReturn.form1116) {
+    return null
+  }
+  const f = taxReturn.form1116
+  const incLines = f.incomeSources.map((s) => ({ description: s.label, amount: s.amount }))
+  const taxLines = f.taxSources.map((s) => ({ description: s.label, amount: s.amount }))
+  const genLines = f.generalIncomeSources.map((s) => ({ description: s.label, amount: s.amount }))
 
-        const rows: XlsxRow[] = [
-          { isHeader: true, description: 'Part I — Interest Income' },
-          ...intLines,
+  const incStart = 3
+  const incEnd = incStart + incLines.length - 1
+  const taxStart = incEnd + 3
+  const taxEnd = taxStart + taxLines.length - 1
+
+  const rows: XlsxRow[] = [
+    { isHeader: true, description: 'Part I — Foreign Source Passive Income' },
+    ...incLines,
+    {
+      line: '1',
+      description: 'Total foreign passive income',
+      amount: f.totalPassiveIncome,
+      formula: incLines.length > 0 ? sumFormula(incStart, incEnd) : undefined,
+      isTotal: true,
+    },
+    { isHeader: true, description: 'Part II — Foreign Taxes Paid' },
+    ...taxLines,
+    {
+      line: '2',
+      description: 'Total foreign taxes paid',
+      amount: f.totalForeignTaxes,
+      formula: taxLines.length > 0 ? sumFormula(taxStart, taxEnd) : undefined,
+      isTotal: true,
+    },
+  ]
+
+  if (genLines.length > 0) {
+    rows.push({ isHeader: true, description: 'General Category — Foreign Income' })
+    rows.push(...genLines)
+    rows.push({ line: 'G1', description: 'Total general category income', amount: f.totalGeneralIncome, isTotal: true })
+  }
+
+  if (f.line4bApportionment.length > 0) {
+    rows.push({ isHeader: true, description: 'Line 4b — Apportioned Interest Expense (Asset Method)' })
+    for (const row of f.line4bApportionment) {
+      rows.push({ description: `${row.label} — allocable interest`, amount: row.interestExpense })
+      rows.push({ description: `${row.label} — passive ratio`, amount: row.ratio })
+      rows.push({ description: `${row.label} — Line 4b`, amount: row.line4b })
+    }
+    rows.push({ line: '4b', description: 'Total apportioned interest (Line 4b)', amount: f.totalLine4b, isTotal: true })
+  }
+
+  if (f.creditVsDeduction) {
+    rows.push({ isHeader: true, description: 'Credit vs. Deduction Comparison' })
+    rows.push({
+      description: 'Foreign Tax Credit (Form 1116) — dollar-for-dollar',
+      amount: f.creditVsDeduction.creditValue,
+    })
+    rows.push({
+      description: 'Foreign Tax Deduction (Sch. A) — at 37% marginal',
+      amount: f.creditVsDeduction.deductionValue,
+    })
+  }
+
+  if (f.sbpElections && f.sbpElections.length > 0) {
+    rows.push({ isHeader: true, description: 'Sourced-by-Partner (Col f) Election' })
+    for (const e of f.sbpElections) {
+      rows.push({ description: `${e.partnerName} — Col (f) net`, amount: e.sourcedByPartner })
+      rows.push({
+        description: `${e.partnerName} — Treat col (f) as U.S. source`,
+        note: e.active
+          ? 'Active — col (f) excluded from foreign income'
+          : 'Inactive — col (f) included in foreign income',
+      })
+    }
+  }
+
+  void taxEnd
+  return { name: 'Form 1116', rows }
+}
+
+/**
+ * Schedule A — line 9 (investment interest expense) cross-references Form 4952
+ * line 8. The optional `refs.form4952Sheet` enables that formula; without it,
+ * the sheet still exports correctly with the computed amount but no formula.
+ */
+export function buildScheduleASheet(
+  taxReturn: TaxReturn1040,
+  refs?: { form4952Sheet?: IndexedSheet | null },
+): XlsxSheet | null {
+  if (!taxReturn.scheduleA) {
+    return null
+  }
+  const a = taxReturn.scheduleA
+  const form4952Line8Row = refs?.form4952Sheet?.rowIndex.get(
+    'Line 8 — Investment interest expense deduction (smaller of Line 3 or Line 6)',
+  )
+  const rows: XlsxRow[] = [
+    {
+      line: '7',
+      description: 'Line 7 — State and local taxes paid (SALT, capped at $10,000)',
+      amount: a.saltDeduction,
+      note: 'W-2 Box 17 + user-entered SALT (state est tax, property tax, sales tax)',
+    },
+    ...(a.mortgageInterest > 0
+      ? [{ line: '8', description: 'Line 8 — Mortgage interest', amount: a.mortgageInterest }]
+      : []),
+    {
+      line: '9',
+      description: 'Line 9 — Investment interest expense (from Form 4952)',
+      amount: a.totalInvIntExpense,
+      formula: form4952Line8Row ? formulaRef('Form 4952', form4952Line8Row) : undefined,
+    },
+    {
+      line: '10',
+      description: 'Line 10 — Total interest (mortgage + investment interest)',
+      amount: currency(a.mortgageInterest).add(a.totalInvIntExpense).value,
+      isTotal: true,
+    },
+    ...(a.charitable > 0
+      ? [{ line: '11', description: 'Lines 11–12 — Charitable contributions', amount: a.charitable }]
+      : []),
+    ...(currency(a.otherDeductions).add(a.totalOtherItemized).value > 0
+      ? [
           {
-            line: '4',
-            description: 'Line 4 — Total interest',
-            amount: taxReturn.scheduleB.interestTotal,
-            formula: intLines.length > 0 ? sumFormula(intStart, intEnd) : undefined,
-            isTotal: true,
-          },
-          { isHeader: true, description: 'Part II — Ordinary Dividends' },
-          ...divLines,
-          {
-            line: '6',
-            description: 'Line 6 — Total ordinary dividends',
-            amount: taxReturn.scheduleB.dividendTotal,
-            formula: divLines.length > 0 ? sumFormula(divStart, divEnd) : undefined,
-            isTotal: true,
-          },
-          {
-            line: '7',
-            description: 'Line 7 — Qualified dividends',
-            amount: taxReturn.scheduleB.qualifiedDivTotal,
+            line: '16',
+            description: 'Line 16 — Other itemized deductions (user-entered + K-1 Box 13L)',
+            amount: currency(a.otherDeductions).add(a.totalOtherItemized).value,
           },
         ]
-        void intTotalRow
-        void divTotalRow
-        void qualDivRow
-        return buildSheet('Schedule B', rows)
-      })()
-    : null
+      : []),
+    {
+      line: '17',
+      description: 'Line 17 — Total itemized deductions',
+      amount: a.totalItemizedDeductions,
+      isTotal: true,
+    },
+    {
+      description: `Standard deduction (${a.shouldItemize ? 'LOWER' : 'HIGHER'} — ${a.shouldItemize ? 'itemize' : 'take standard'})`,
+      amount: a.standardDeduction,
+      note: a.shouldItemize ? 'Use Schedule A' : 'Use standard deduction',
+    },
+  ]
+  return { name: 'Schedule A', rows }
+}
 
-  // ── Schedule C / D / E (registry-driven) ────────────────────────────────────
-  // Builders are exported standalone for the form registry to call; here we
-  // wrap with buildSheet() to get the rowIndex needed for cross-sheet refs.
-  const scheduleCRaw = buildScheduleCSheet(taxReturn)
-  const scheduleCSheet = scheduleCRaw ? buildSheet(scheduleCRaw.name, scheduleCRaw.rows) : null
-  const scheduleDRaw = buildScheduleDSheet(taxReturn)
-  const scheduleDSheet = scheduleDRaw ? buildSheet(scheduleDRaw.name, scheduleDRaw.rows) : null
-  const scheduleERaw = buildScheduleESheet(taxReturn)
-  const scheduleESheet = scheduleERaw ? buildSheet(scheduleERaw.name, scheduleERaw.rows) : null
+export interface Form1040SheetRefs {
+  scheduleBSheet?: IndexedSheet | null
+  scheduleCSheet?: IndexedSheet | null
+  scheduleDSheet?: IndexedSheet | null
+  scheduleESheet?: IndexedSheet | null
+  scheduleSESheet?: IndexedSheet | null
+  form1116Sheet?: IndexedSheet | null
+  form6251Sheet?: IndexedSheet | null
+  form8959Sheet?: IndexedSheet | null
+  form8960Sheet?: IndexedSheet | null
+  form8995Sheet?: IndexedSheet | null
+}
 
-  // ── Schedule SE / Form 4952 (registry-driven) ───────────────────────────────
-  const scheduleSERaw = buildScheduleSESheet(taxReturn)
-  const scheduleSESheet = scheduleSERaw ? buildSheet(scheduleSERaw.name, scheduleSERaw.rows) : null
-  const form4952Raw = buildForm4952Sheet(taxReturn)
-  const form4952Sheet = form4952Raw ? buildSheet(form4952Raw.name, form4952Raw.rows) : null
-
-  // ── Schedule A ───────────────────────────────────────────────────────────────
-  // Row order mirrors the IRS Schedule A: 7 → 8 → 9 → 10 → 11 → 16 → 17.
-  const scheduleASheet = taxReturn.scheduleA
-    ? buildSheet('Schedule A', [
-        {
-          line: '7',
-          description: 'Line 7 — State and local taxes paid (SALT, capped at $10,000)',
-          amount: taxReturn.scheduleA.saltDeduction,
-          note: 'W-2 Box 17 + user-entered SALT (state est tax, property tax, sales tax)',
-        },
-        ...(taxReturn.scheduleA.mortgageInterest > 0 ? [{
-          line: '8',
-          description: 'Line 8 — Mortgage interest',
-          amount: taxReturn.scheduleA.mortgageInterest,
-        }] : []),
-        {
-          line: '9',
-          description: 'Line 9 — Investment interest expense (from Form 4952)',
-          amount: taxReturn.scheduleA.totalInvIntExpense,
-          formula: form4952Sheet?.rowIndex.get('Line 8 — Investment interest expense deduction (smaller of Line 3 or Line 6)')
-            ? formulaRef('Form 4952', form4952Sheet.rowIndex.get('Line 8 — Investment interest expense deduction (smaller of Line 3 or Line 6)')!)
-            : undefined,
-        },
-        {
-          line: '10',
-          description: 'Line 10 — Total interest (mortgage + investment interest)',
-          amount: currency(taxReturn.scheduleA.mortgageInterest).add(taxReturn.scheduleA.totalInvIntExpense).value,
-          isTotal: true,
-        },
-        ...(taxReturn.scheduleA.charitable > 0 ? [{
-          line: '11',
-          description: 'Lines 11–12 — Charitable contributions',
-          amount: taxReturn.scheduleA.charitable,
-        }] : []),
-        ...(currency(taxReturn.scheduleA.otherDeductions).add(taxReturn.scheduleA.totalOtherItemized).value > 0 ? [{
-          line: '16',
-          description: 'Line 16 — Other itemized deductions (user-entered + K-1 Box 13L)',
-          amount: currency(taxReturn.scheduleA.otherDeductions).add(taxReturn.scheduleA.totalOtherItemized).value,
-        }] : []),
-        {
-          line: '17',
-          description: 'Line 17 — Total itemized deductions',
-          amount: taxReturn.scheduleA.totalItemizedDeductions,
-          isTotal: true,
-        },
-        {
-          description: `Standard deduction (${taxReturn.scheduleA.shouldItemize ? 'LOWER' : 'HIGHER'} — ${taxReturn.scheduleA.shouldItemize ? 'itemize' : 'take standard'})`,
-          amount: taxReturn.scheduleA.standardDeduction,
-          note: taxReturn.scheduleA.shouldItemize ? 'Use Schedule A' : 'Use standard deduction',
-        },
-      ])
-    : null
-
-  // ── Form 1116 ────────────────────────────────────────────────────────────────
-  const form1116Sheet = taxReturn.form1116
-    ? (() => {
-        const f = taxReturn.form1116
-        const incLines = f.incomeSources.map((s) => ({ description: s.label, amount: s.amount }))
-        const taxLines = f.taxSources.map((s) => ({ description: s.label, amount: s.amount }))
-        const genLines = f.generalIncomeSources.map((s) => ({ description: s.label, amount: s.amount }))
-
-        const incStart = 3
-        const incEnd = incStart + incLines.length - 1
-        const taxStart = incEnd + 3
-        const taxEnd = taxStart + taxLines.length - 1
-
-        const rows: XlsxRow[] = [
-          { isHeader: true, description: 'Part I — Foreign Source Passive Income' },
-          ...incLines,
-          {
-            line: '1',
-            description: 'Total foreign passive income',
-            amount: f.totalPassiveIncome,
-            formula: incLines.length > 0 ? sumFormula(incStart, incEnd) : undefined,
-            isTotal: true,
-          },
-          { isHeader: true, description: 'Part II — Foreign Taxes Paid' },
-          ...taxLines,
-          {
-            line: '2',
-            description: 'Total foreign taxes paid',
-            amount: f.totalForeignTaxes,
-            formula: taxLines.length > 0 ? sumFormula(taxStart, taxEnd) : undefined,
-            isTotal: true,
-          },
-        ]
-
-        if (genLines.length > 0) {
-          rows.push({ isHeader: true, description: 'General Category — Foreign Income' })
-          rows.push(...genLines)
-          rows.push({ line: 'G1', description: 'Total general category income', amount: f.totalGeneralIncome, isTotal: true })
-        }
-
-        if (f.line4bApportionment.length > 0) {
-          rows.push({ isHeader: true, description: 'Line 4b — Apportioned Interest Expense (Asset Method)' })
-          for (const row of f.line4bApportionment) {
-            rows.push({ description: `${row.label} — allocable interest`, amount: row.interestExpense })
-            rows.push({ description: `${row.label} — passive ratio`, amount: row.ratio })
-            rows.push({ description: `${row.label} — Line 4b`, amount: row.line4b })
-          }
-          rows.push({ line: '4b', description: 'Total apportioned interest (Line 4b)', amount: f.totalLine4b, isTotal: true })
-        }
-
-        if (f.creditVsDeduction) {
-          rows.push({ isHeader: true, description: 'Credit vs. Deduction Comparison' })
-          rows.push({ description: 'Foreign Tax Credit (Form 1116) — dollar-for-dollar', amount: f.creditVsDeduction.creditValue })
-          rows.push({ description: 'Foreign Tax Deduction (Sch. A) — at 37% marginal', amount: f.creditVsDeduction.deductionValue })
-        }
-
-        if (f.sbpElections && f.sbpElections.length > 0) {
-          rows.push({ isHeader: true, description: 'Sourced-by-Partner (Col f) Election' })
-          for (const e of f.sbpElections) {
-            rows.push({ description: `${e.partnerName} — Col (f) net`, amount: e.sourcedByPartner })
-            rows.push({
-              description: `${e.partnerName} — Treat col (f) as U.S. source`,
-              note: e.active ? 'Active — col (f) excluded from foreign income' : 'Inactive — col (f) included in foreign income',
-            })
-          }
-        }
-
-        void taxEnd
-        return buildSheet('Form 1116', rows)
-      })()
-    : null
-
-  // ── Form 6251 / 8995 / 8959 / 8960 (registry-driven) ────────────────────────
-  const form6251Raw = buildForm6251Sheet(taxReturn)
-  const form6251Sheet = form6251Raw ? buildSheet(form6251Raw.name, form6251Raw.rows) : null
-  const form8995Raw = buildForm8995Sheet(taxReturn)
-  const form8995Sheet = form8995Raw ? buildSheet(form8995Raw.name, form8995Raw.rows) : null
-  const form8959Raw = buildForm8959Sheet(taxReturn)
-  const form8959Sheet = form8959Raw ? buildSheet(form8959Raw.name, form8959Raw.rows) : null
-  const form8960Raw = buildForm8960Sheet(taxReturn)
-  const form8960Sheet = form8960Raw ? buildSheet(form8960Raw.name, form8960Raw.rows) : null
-
-  // ── Capital Loss Carryover / Form 461 / Form 8582 (registry-driven) ─────────
-  const capitalLossRaw = buildCapitalLossCarryoverSheet(taxReturn)
-  const capitalLossSheet = capitalLossRaw ? buildSheet(capitalLossRaw.name, capitalLossRaw.rows) : null
-  const form461Raw = buildForm461Sheet(taxReturn)
-  const form461Sheet = form461Raw ? buildSheet(form461Raw.name, form461Raw.rows) : null
-  const form8582Raw = buildForm8582Sheet(taxReturn)
-  const form8582Sheet = form8582Raw ? buildSheet(form8582Raw.name, form8582Raw.rows) : null
-
-  // ── Short Dividends (registry-driven) ────────────────────────────────────────
-  const shortDivRaw = buildShortDividendsSheet(taxReturn)
-  const shortDivSheet = shortDivRaw ? buildSheet(shortDivRaw.name, shortDivRaw.rows) : null
-
-  // ── Form 1040 cross-sheet references ────────────────────────────────────────
-  const scheduleBLine4 = scheduleBSheet?.rowIndex.get('Line 4 — Total interest')
-  const scheduleBLine6 = scheduleBSheet?.rowIndex.get('Line 6 — Total ordinary dividends')
-  const scheduleDLine16 = scheduleDSheet?.rowIndex.get('Line 16 — Combined net capital gain (loss)')
-  const scheduleDLine21 = scheduleDSheet?.rowIndex.get(`Line 21 — Capital loss applied to ${taxReturn.year} return`)
-  const scheduleCNetIncome = scheduleCSheet?.rowIndex.get('Net income / (loss)')
-  const scheduleECombined = scheduleESheet?.rowIndex.get('Schedule E combined total')
-  const form1116Line2 = form1116Sheet?.rowIndex.get('Total foreign taxes paid')
-  const form6251Line11 = form6251Sheet?.rowIndex.get('Line 11 — Alternative minimum tax')
-  const form8995Line13 = form8995Sheet?.rowIndex.get('QBI Deduction — lesser of 20% QBI or taxable income cap')
-  const scheduleSELine12 = scheduleSESheet?.rowIndex.get('Line 12 — Self-employment tax → Schedule 2 Line 4')
-  const scheduleSELine13 = scheduleSESheet?.rowIndex.get('Line 13 — Deductible half of self-employment tax → Schedule 1 Line 15')
-  const scheduleSEAdditionalMedicare = scheduleSESheet?.rowIndex.get('Form 8959 — Additional Medicare tax on self-employment earnings')
-  const form8959Line7 = form8959Sheet?.rowIndex.get('Line 7 — Additional Medicare Tax (0.9%) → Schedule 2 Line 11')
-  const form8960Line17 = form8960Sheet?.rowIndex.get('NIIT (3.8% × lesser of Line 12 or 15) → Schedule 2 Line 12')
+/**
+ * Form 1040 — references many other sheets via formula refs. Pass `refs`
+ * with the wrapped IndexedSheet for each related sheet so the formula
+ * targets resolve. Without refs, the sheet still exports correctly with
+ * computed amounts but no cross-sheet formulas.
+ */
+export function buildForm1040Sheet(
+  taxReturn: TaxReturn1040,
+  refs?: Form1040SheetRefs,
+): XlsxSheet | null {
+  if (!taxReturn.form1040) {
+    return null
+  }
+  const scheduleBLine4 = refs?.scheduleBSheet?.rowIndex.get('Line 4 — Total interest')
+  const scheduleBLine6 = refs?.scheduleBSheet?.rowIndex.get('Line 6 — Total ordinary dividends')
+  const scheduleDLine16 = refs?.scheduleDSheet?.rowIndex.get('Line 16 — Combined net capital gain (loss)')
+  const scheduleDLine21 = refs?.scheduleDSheet?.rowIndex.get(
+    `Line 21 — Capital loss applied to ${taxReturn.year} return`,
+  )
+  const scheduleCNetIncome = refs?.scheduleCSheet?.rowIndex.get('Net income / (loss)')
+  const scheduleECombined = refs?.scheduleESheet?.rowIndex.get('Schedule E combined total')
+  const form1116Line2 = refs?.form1116Sheet?.rowIndex.get('Total foreign taxes paid')
+  const form6251Line11 = refs?.form6251Sheet?.rowIndex.get('Line 11 — Alternative minimum tax')
+  const form8995Line13 = refs?.form8995Sheet?.rowIndex.get(
+    'QBI Deduction — lesser of 20% QBI or taxable income cap',
+  )
+  const scheduleSELine12 = refs?.scheduleSESheet?.rowIndex.get(
+    'Line 12 — Self-employment tax → Schedule 2 Line 4',
+  )
+  const scheduleSELine13 = refs?.scheduleSESheet?.rowIndex.get(
+    'Line 13 — Deductible half of self-employment tax → Schedule 1 Line 15',
+  )
+  const scheduleSEAdditionalMedicare = refs?.scheduleSESheet?.rowIndex.get(
+    'Form 8959 — Additional Medicare tax on self-employment earnings',
+  )
+  const form8959Line7 = refs?.form8959Sheet?.rowIndex.get(
+    'Line 7 — Additional Medicare Tax (0.9%) → Schedule 2 Line 11',
+  )
+  const form8960Line17 = refs?.form8960Sheet?.rowIndex.get(
+    'NIIT (3.8% × lesser of Line 12 or 15) → Schedule 2 Line 12',
+  )
   const schedule2FormulaRefs = [
     form6251Line11 ? formulaRef('Form 6251', form6251Line11).slice(1) : null,
     scheduleSELine12 ? formulaRef('Schedule SE', scheduleSELine12).slice(1) : null,
@@ -1009,24 +982,25 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
     form8960Line17 ? formulaRef('Form 8960', form8960Line17).slice(1) : null,
   ].filter(Boolean)
 
-  const form1040LineMap = new Map((taxReturn.form1040 ?? []).map((line) => [line.line, line.value] as const))
+  const lineMap = new Map((taxReturn.form1040 ?? []).map((line) => [line.line, line.value] as const))
 
-  const line1a = form1040LineMap.get('1a') ?? undefined
-  const line2b = form1040LineMap.get('2b') ?? (scheduleBLine4 ? taxReturn.scheduleB?.interestTotal : undefined)
-  const line3b = form1040LineMap.get('3b') ?? (scheduleBLine6 ? taxReturn.scheduleB?.dividendTotal : undefined)
-  const line4a = form1040LineMap.get('4a') ?? undefined
-  const line4b = form1040LineMap.get('4b') ?? undefined
-  const line5a = form1040LineMap.get('5a') ?? undefined
-  const line5b = form1040LineMap.get('5b') ?? undefined
-  const line7 = form1040LineMap.get('7') ?? (
-    scheduleDLine21
+  const line1a = lineMap.get('1a') ?? undefined
+  const line2b = lineMap.get('2b') ?? (scheduleBLine4 ? taxReturn.scheduleB?.interestTotal : undefined)
+  const line3b = lineMap.get('3b') ?? (scheduleBLine6 ? taxReturn.scheduleB?.dividendTotal : undefined)
+  const line4a = lineMap.get('4a') ?? undefined
+  const line4b = lineMap.get('4b') ?? undefined
+  const line5a = lineMap.get('5a') ?? undefined
+  const line5b = lineMap.get('5b') ?? undefined
+  const line7 =
+    lineMap.get('7') ??
+    (scheduleDLine21
       ? taxReturn.scheduleD?.schD_line21
       : scheduleDLine16
         ? taxReturn.scheduleD?.schD_line16
-        : undefined
-  )
+        : undefined)
 
-  const line8 = form1040LineMap.get('8') ?? (taxReturn.schedule1 ? taxReturn.schedule1.partI.line10_total : undefined)
+  const line8 =
+    lineMap.get('8') ?? (taxReturn.schedule1 ? taxReturn.schedule1.partI.line10_total : undefined)
 
   const line9Value = currency(line1a ?? 0)
     .add(line2b ?? 0)
@@ -1035,36 +1009,39 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
     .add(line5b ?? 0)
     .add(line7 ?? 0)
     .add(line8 ?? 0).value
-  const line9 = form1040LineMap.get('9') ?? (line9Value !== 0 ? line9Value : undefined)
-  const line10 = form1040LineMap.get('10') ?? taxReturn.schedule1?.partII.line26_totalAdjustments ?? undefined
-  const line11 = form1040LineMap.get('11') ?? (
-    line9 !== undefined || line10 !== undefined
+  const line9 = lineMap.get('9') ?? (line9Value !== 0 ? line9Value : undefined)
+  const line10 = lineMap.get('10') ?? taxReturn.schedule1?.partII.line26_totalAdjustments ?? undefined
+  const line11 =
+    lineMap.get('11') ??
+    (line9 !== undefined || line10 !== undefined
       ? currency(line9 ?? 0).subtract(line10 ?? 0).value
-      : undefined
-  )
-  const line17 = form1040LineMap.get('17') ?? taxReturn.schedule2?.totalAdditionalTaxes ?? undefined
-  const line20 = form1040LineMap.get('20') ?? taxReturn.form1116?.totalForeignTaxes ?? undefined
+      : undefined)
+  const line17 = lineMap.get('17') ?? taxReturn.schedule2?.totalAdditionalTaxes ?? undefined
+  const line20 = lineMap.get('20') ?? taxReturn.form1116?.totalForeignTaxes ?? undefined
 
-  // Schedule 1 "other income" residual (1099-MISC routed to line 8) — surfaced as a
-  // literal addend in the Excel formula since there's no Schedule 1 sheet to reference.
-  // Without this, the line 8 formula previously summed only Schedule C + Schedule E,
-  // silently under-reporting line 8 by the other-income amount in Excel exports.
-  const line8ScheduleCEContribution = currency(taxReturn.scheduleC?.total ?? 0)
-    .add(taxReturn.scheduleE?.grandTotal ?? 0).value
-  const line8OtherIncomeResidual = line8 !== undefined
-    ? currency(line8).subtract(line8ScheduleCEContribution).value
-    : 0
+  // Schedule 1 "other income" residual (1099-MISC routed to line 8) — surfaced
+  // as a literal addend in the Excel formula since there's no Schedule 1 sheet
+  // to reference. Without this, the line 8 formula previously summed only
+  // Schedule C + Schedule E, silently under-reporting line 8 in Excel exports.
+  const line8ScheduleCEContribution = currency(taxReturn.scheduleC?.total ?? 0).add(
+    taxReturn.scheduleE?.grandTotal ?? 0,
+  ).value
+  const line8OtherIncomeResidual =
+    line8 !== undefined ? currency(line8).subtract(line8ScheduleCEContribution).value : 0
   const line8FormulaTerms: string[] = [
     ...(scheduleCNetIncome ? [formulaRef('Schedule C', scheduleCNetIncome).slice(1)] : []),
     ...(scheduleECombined ? [formulaRef('Schedule E', scheduleECombined).slice(1)] : []),
     ...(line8OtherIncomeResidual !== 0 ? [String(line8OtherIncomeResidual)] : []),
   ]
   const line8Formula = line8FormulaTerms.length > 0 ? `=${line8FormulaTerms.join('+')}` : undefined
-  const line8Note = line8OtherIncomeResidual !== 0
-    ? '→ Schedule C / E + Schedule 1 other income'
-    : (scheduleCNetIncome || scheduleECombined ? '→ Schedule C / E' : undefined)
+  const line8Note =
+    line8OtherIncomeResidual !== 0
+      ? '→ Schedule C / E + Schedule 1 other income'
+      : scheduleCNetIncome || scheduleECombined
+        ? '→ Schedule C / E'
+        : undefined
 
-  const form1040Rows: XlsxRow[] | null = taxReturn.form1040 ? [
+  const rows: XlsxRow[] = [
     { line: '1a', description: 'Wages, salaries, tips (W-2, box 1)', amount: line1a },
     {
       line: '2b',
@@ -1122,9 +1099,8 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
       line: '17',
       description: 'Other taxes (Schedule 2)',
       amount: line17,
-      formula: schedule2FormulaRefs.length > 0
-        ? `=${schedule2FormulaRefs.join('+')}`
-        : undefined,
+      formula:
+        schedule2FormulaRefs.length > 0 ? `=${schedule2FormulaRefs.join('+')}` : undefined,
       note: '→ Form 6251 + Schedule SE + Form 8959 + Form 8960',
     },
     {
@@ -1134,56 +1110,146 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
       formula: form1116Line2 ? formulaRef('Form 1116', form1116Line2) : undefined,
       note: form1116Line2 ? '→ Form 1116' : undefined,
     },
-  ] : null
+  ]
 
-  // Self-reference formulas: line 9 = SUM of constituent income lines, line 11 = line 9 − line 10.
-  // Row positions are derived from the actual array order so that adding/removing rows above
-  // doesn't silently break formulas (the previous hardcoded C2/C3/... approach broke when
-  // 4a/4b/5a/5b were inserted).
-  if (form1040Rows) {
-    const excelRowOf = (lineLabel: string): number | null => {
-      const idx = form1040Rows.findIndex(r => r.line === lineLabel)
-      return idx >= 0 ? idx + 2 : null
-    }
-
-    const line9SourceRows = ['1a', '2b', '3b', '4b', '5b', '7', '8']
-      .map(excelRowOf)
-      .filter((r): r is number => r !== null)
-    const line9Row = form1040Rows.find(r => r.line === '9')
-    if (line9Row && line9 !== undefined && line9SourceRows.length > 1) {
-      line9Row.formula = `=${line9SourceRows.map(r => `C${r}`).join('+')}`
-    }
-
-    const line9Pos = excelRowOf('9')
-    const line10Pos = excelRowOf('10')
-    const line11Row = form1040Rows.find(r => r.line === '11')
-    if (line11Row && line11 !== undefined && line9Pos !== null && line10Pos !== null) {
-      line11Row.formula = `=C${line9Pos}-C${line10Pos}`
-    }
+  // Self-reference formulas: line 9 = SUM of constituent income lines, line 11
+  // = line 9 − line 10. Row positions are derived from the actual array order
+  // so adding/removing rows above doesn't silently break formulas.
+  const excelRowOf = (lineLabel: string): number | null => {
+    const idx = rows.findIndex((r) => r.line === lineLabel)
+    return idx >= 0 ? idx + 2 : null
   }
 
-  const form1040Sheet = form1040Rows ? buildSheet('Form 1040', form1040Rows) : null
+  const line9SourceRows = ['1a', '2b', '3b', '4b', '5b', '7', '8']
+    .map(excelRowOf)
+    .filter((r): r is number => r !== null)
+  const line9Row = rows.find((r) => r.line === '9')
+  if (line9Row && line9 !== undefined && line9SourceRows.length > 1) {
+    line9Row.formula = `=${line9SourceRows.map((r) => `C${r}`).join('+')}`
+  }
 
-  // ── K-1 / K-3 / 1099 supplemental sheets ────────────────────────────────────
+  const line9Pos = excelRowOf('9')
+  const line10Pos = excelRowOf('10')
+  const line11Row = rows.find((r) => r.line === '11')
+  if (line11Row && line11 !== undefined && line9Pos !== null && line10Pos !== null) {
+    line11Row.formula = `=C${line9Pos}-C${line10Pos}`
+  }
+
+  return { name: 'Form 1040', rows }
+}
+
+export function buildEstimatedTaxSheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  const estimatedTaxPayments = taxReturn.estimatedTaxPayments
+  if (!estimatedTaxPayments || estimatedTaxPayments.priorYearTax <= 0) {
+    return null
+  }
+
+  const multiplierPercent = Math.round(estimatedTaxPayments.multiplier * 100)
+  const agiThresholdMessage =
+    estimatedTaxPayments.priorYearAgi > estimatedTaxPayments.agiThresholdApplied
+      ? `Above ${currency(estimatedTaxPayments.agiThresholdApplied).format()} threshold → ${multiplierPercent}% method`
+      : `At or below ${currency(estimatedTaxPayments.agiThresholdApplied).format()} threshold → ${multiplierPercent}% method`
+  const rows: XlsxRow[] = [
+    {
+      isHeader: true,
+      description: `Safe Harbor Method — ${multiplierPercent}% of ${estimatedTaxPayments.planningYear - 1} Tax`,
+    },
+    {
+      description: `${estimatedTaxPayments.planningYear - 1} AGI (prior year)`,
+      amount: estimatedTaxPayments.priorYearAgi,
+      note: agiThresholdMessage,
+    },
+    {
+      description: `${estimatedTaxPayments.planningYear - 1} total tax (prior year)`,
+      amount: estimatedTaxPayments.priorYearTax,
+    },
+    {
+      description: `Safe harbor amount (${multiplierPercent}%)`,
+      amount: estimatedTaxPayments.safeHarborAmount,
+      isTotal: true,
+    },
+    {
+      description: `Expected ${estimatedTaxPayments.planningYear} federal withholding`,
+      amount: estimatedTaxPayments.expectedWithholding,
+    },
+    {
+      description: 'Net estimated tax due',
+      amount: estimatedTaxPayments.netDue,
+      isTotal: true,
+    },
+    { isHeader: true, description: `${estimatedTaxPayments.planningYear} Payment Schedule` },
+    ...estimatedTaxPayments.quarterlyPayments.map(
+      (payment: EstimatedTaxPaymentsData['quarterlyPayments'][number]) => ({
+        line: `Q${payment.paymentNumber}`,
+        description: `Payment ${payment.paymentNumber} — Due ${payment.dueDate}`,
+        amount: payment.amount,
+      }),
+    ),
+  ]
+
+  return { name: 'Est. Tax Payments', rows }
+}
+
+export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
+  // Each sheet is built via its standalone exported function. `wrapSheet()`
+  // adds the `rowIndex` map needed for cross-sheet formula refs (Schedule A
+  // line 9 → Form 4952, Form 1040 lines → many). Schedule A and Form 1040
+  // take an explicit refs param so their formulas resolve declaratively.
+  const overviewSheet = wrapSheet(buildOverviewSheet(taxReturn))
+  const scheduleBSheet = wrapSheet(buildScheduleBSheet(taxReturn))
+  const scheduleCSheet = wrapSheet(buildScheduleCSheet(taxReturn))
+  const scheduleDSheet = wrapSheet(buildScheduleDSheet(taxReturn))
+  const scheduleESheet = wrapSheet(buildScheduleESheet(taxReturn))
+  const scheduleSESheet = wrapSheet(buildScheduleSESheet(taxReturn))
+  const form4952Sheet = wrapSheet(buildForm4952Sheet(taxReturn))
+  const scheduleASheet = wrapSheet(buildScheduleASheet(taxReturn, { form4952Sheet }))
+  const form1116Sheet = wrapSheet(buildForm1116Sheet(taxReturn))
+  const form6251Sheet = wrapSheet(buildForm6251Sheet(taxReturn))
+  const form8995Sheet = wrapSheet(buildForm8995Sheet(taxReturn))
+  const form8959Sheet = wrapSheet(buildForm8959Sheet(taxReturn))
+  const form8960Sheet = wrapSheet(buildForm8960Sheet(taxReturn))
+  const capitalLossSheet = wrapSheet(buildCapitalLossCarryoverSheet(taxReturn))
+  const form461Sheet = wrapSheet(buildForm461Sheet(taxReturn))
+  const form8582Sheet = wrapSheet(buildForm8582Sheet(taxReturn))
+  const shortDivSheet = wrapSheet(buildShortDividendsSheet(taxReturn))
+
+  const form1040Sheet = wrapSheet(
+    buildForm1040Sheet(taxReturn, {
+      scheduleBSheet,
+      scheduleCSheet,
+      scheduleDSheet,
+      scheduleESheet,
+      scheduleSESheet,
+      form1116Sheet,
+      form6251Sheet,
+      form8959Sheet,
+      form8960Sheet,
+      form8995Sheet,
+    }),
+  )
+
+  // ── K-1 / K-3 / 1099 supplemental sheets (per-doc dynamic — stay inline) ────
+  // These don't fit the singleton-per-FormId registry model; one XLSX sheet
+  // is produced per document instance, so they're assembled here directly.
   const k1Sheets = (taxReturn.k1Docs ?? []).map((entry) => buildK1WorksheetSheet(entry))
 
-  const k3Sheets = (taxReturn.k3Docs ?? []).map((entry) => buildSheet(
-    `K-3 ${entry.entityName}`,
-    renderK3SectionsRows(entry.sections),
-  ))
+  const k3Sheets = (taxReturn.k3Docs ?? []).map((entry) =>
+    buildSheet(`K-3 ${entry.entityName}`, renderK3SectionsRows(entry.sections)),
+  )
 
-  const docs1099Sheets = (taxReturn.docs1099 ?? []).map((entry) => buildSheet(
-    `${entry.formType.toUpperCase().replaceAll('_', '-')} ${entry.payerName}`,
-    Object.entries(entry.parsedData).map(([key, value]) => ({
-      line: key,
-      description: key,
-      amount: typeof value === 'number' ? value : undefined,
-      note: typeof value === 'number' ? undefined : String(value ?? ''),
-    })),
-  ))
+  const docs1099Sheets = (taxReturn.docs1099 ?? []).map((entry) =>
+    buildSheet(
+      `${entry.formType.toUpperCase().replaceAll('_', '-')} ${entry.payerName}`,
+      Object.entries(entry.parsedData).map(([key, value]) => ({
+        line: key,
+        description: key,
+        amount: typeof value === 'number' ? value : undefined,
+        note: typeof value === 'number' ? undefined : String(value ?? ''),
+      })),
+    ),
+  )
 
-  // ── Estimated Tax Payments ───────────────────────────────────────────────────
-  const estTaxSheet = buildEstimatedTaxSheet(taxReturn.estimatedTaxPayments)
+  const estTaxSheet = wrapSheet(buildEstimatedTaxSheet(taxReturn))
 
   const orderedSheets = [
     overviewSheet,
