@@ -20,6 +20,10 @@ interface DockActionsValue {
   openWorksheet: (id: FormId) => void
   /** Close the active worksheet modal. */
   closeWorksheet: () => void
+  /** Whether the ⌘K command palette is currently open. */
+  paletteOpen: boolean
+  /** Imperatively open/close the palette (button trigger or programmatic). */
+  setPaletteOpen: (next: boolean | ((prev: boolean) => boolean)) => void
 }
 
 const DockActionsContext = createContext<DockActionsValue | null>(null)
@@ -39,6 +43,7 @@ export function DockActionsProvider({ children }: DockActionsProviderProps): Rea
   const [reviewOpen, setReviewOpen] = useState(false)
   const [reviewDoc, setReviewDoc] = useState<TaxDocument | undefined>(undefined)
   const [worksheetId, setWorksheetId] = useState<FormId | null>(null)
+  const [paletteOpen, setPaletteOpen] = useState(false)
 
   const openWorksheet = useCallback((id: FormId) => setWorksheetId(id), [])
   const closeWorksheet = useCallback(() => setWorksheetId(null), [])
@@ -93,8 +98,16 @@ export function DockActionsProvider({ children }: DockActionsProviderProps): Rea
   )
 
   const value = useMemo<DockActionsValue>(
-    () => ({ reviewK1Doc, openReviewQueue, bulkSetSbpElection, openWorksheet, closeWorksheet }),
-    [reviewK1Doc, openReviewQueue, bulkSetSbpElection, openWorksheet, closeWorksheet],
+    () => ({
+      reviewK1Doc,
+      openReviewQueue,
+      bulkSetSbpElection,
+      openWorksheet,
+      closeWorksheet,
+      paletteOpen,
+      setPaletteOpen,
+    }),
+    [reviewK1Doc, openReviewQueue, bulkSetSbpElection, openWorksheet, closeWorksheet, paletteOpen],
   )
 
   return (
