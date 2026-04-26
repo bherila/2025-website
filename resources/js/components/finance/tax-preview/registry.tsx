@@ -5,6 +5,7 @@ import ActionItemsTab from '@/components/finance/ActionItemsTab'
 import AdditionalTaxesPreview from '@/components/finance/AdditionalTaxesPreview'
 import Form1040Preview from '@/components/finance/Form1040Preview'
 import Form1116Preview from '@/components/finance/Form1116Preview'
+import Form4797Preview from '@/components/finance/Form4797Preview'
 import Form4952Preview from '@/components/finance/Form4952Preview'
 import Form6251Preview from '@/components/finance/Form6251Preview'
 import Form8582Preview from '@/components/finance/Form8582Preview'
@@ -18,6 +19,7 @@ import ScheduleBPreview from '@/components/finance/ScheduleBPreview'
 import ScheduleCTab from '@/components/finance/ScheduleCTab'
 import ScheduleDPreview from '@/components/finance/ScheduleDPreview'
 import ScheduleEPreview from '@/components/finance/ScheduleEPreview'
+import ScheduleFPreview from '@/components/finance/ScheduleFPreview'
 import ScheduleSEPreview from '@/components/finance/ScheduleSEPreview'
 import TaxDocuments1099Section from '@/components/finance/TaxDocuments1099Section'
 import TaxDocumentsSection from '@/components/finance/TaxDocumentsSection'
@@ -272,20 +274,101 @@ function ScheduleCAdapter({ state }: FormRenderProps): React.ReactElement {
   )
 }
 
-function Form4797Stub(): React.ReactElement {
+function Form4797Adapter({ state }: FormRenderProps): React.ReactElement {
+  if (!state.taxReturn.form4797) {
+    return (
+      <StubCard
+        title="Form 4797 — Sales of Business Property"
+        note="Form 4797 is not yet populated. Check the tax preview context wiring."
+      />
+    )
+  }
   return (
-    <StubCard
-      title="Form 4797 — Sales of Business Property"
-      note="Form 4797 doesn't exist in the codebase yet. Tracked in #319."
+    <Form4797Preview
+      selectedYear={state.year}
+      form4797={state.taxReturn.form4797}
+      partINet1231Input={
+        <NumericInput
+          value={state.form4797PartINet1231}
+          onChange={state.setForm4797PartINet1231}
+          ariaLabel="Form 4797 Part I net §1231 gain or loss"
+        />
+      }
+      partIIOrdinaryInput={
+        <NumericInput
+          value={state.form4797PartIIOrdinary}
+          onChange={state.setForm4797PartIIOrdinary}
+          ariaLabel="Form 4797 Part II ordinary gain or loss"
+        />
+      }
+      partIIIRecaptureInput={
+        <NumericInput
+          value={state.form4797PartIIIRecapture}
+          onChange={state.setForm4797PartIIIRecapture}
+          ariaLabel="Form 4797 Part III depreciation recapture"
+        />
+      }
     />
   )
 }
 
-function ScheduleFStub(): React.ReactElement {
+function ScheduleFAdapter({ state }: FormRenderProps): React.ReactElement {
+  if (!state.taxReturn.scheduleF) {
+    return (
+      <StubCard
+        title="Schedule F — Profit or Loss From Farming"
+        note="Schedule F is not yet populated. Check the tax preview context wiring."
+      />
+    )
+  }
   return (
-    <StubCard
-      title="Schedule F — Profit or Loss From Farming"
-      note="Schedule F doesn't exist in the codebase yet. Tracked in #320. Note: not currently wired to a FormId — placeholder reserved."
+    <ScheduleFPreview
+      selectedYear={state.year}
+      scheduleF={state.taxReturn.scheduleF}
+      grossFarmIncomeInput={
+        <NumericInput
+          value={state.scheduleFGrossIncome}
+          onChange={state.setScheduleFGrossIncome}
+          ariaLabel="Schedule F gross farm income"
+        />
+      }
+      totalExpensesInput={
+        <NumericInput
+          value={state.scheduleFTotalExpenses}
+          onChange={state.setScheduleFTotalExpenses}
+          ariaLabel="Schedule F total farm expenses"
+        />
+      }
+    />
+  )
+}
+
+function NumericInput({
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  value: number
+  onChange: (next: number) => void
+  ariaLabel: string
+}): React.ReactElement {
+  return (
+    <input
+      type="number"
+      aria-label={ariaLabel}
+      className="w-32 rounded border px-2 py-0.5 text-right text-[11px]"
+      value={value === 0 ? '' : value}
+      placeholder="0"
+      step="0.01"
+      onChange={(e) => {
+        const raw = e.target.value.trim()
+        if (raw === '') {
+          onChange(0)
+          return
+        }
+        const n = parseFloat(raw)
+        onChange(isNaN(n) ? 0 : n)
+      }}
     />
   )
 }
@@ -529,6 +612,16 @@ export const formRegistry: FormRegistry = {
       build: buildScheduleESheet,
     },
   },
+  'sch-f': {
+    id: 'sch-f',
+    label: 'Schedule F — Profit or Loss From Farming',
+    shortLabel: 'Sch F',
+    formNumber: 'F',
+    keywords: ['schedule F', 'farm', 'farming', 'agriculture', 'livestock', '1099-PATR'],
+    category: 'Schedule',
+    presentation: 'column',
+    component: ScheduleFAdapter,
+  },
   'sch-se': {
     id: 'sch-se',
     label: 'Schedule SE — Self-Employment Tax',
@@ -675,7 +768,7 @@ export const formRegistry: FormRegistry = {
     keywords: ['4797', 'business property', 'section 1231', 'depreciation recapture'],
     category: 'Form',
     presentation: 'column',
-    component: Form4797Stub,
+    component: Form4797Adapter,
   },
   'form-8606': {
     id: 'form-8606',

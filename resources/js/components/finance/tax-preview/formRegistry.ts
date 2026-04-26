@@ -21,6 +21,7 @@ export type FormId =
   | 'sch-c'
   | 'sch-d'
   | 'sch-e'
+  | 'sch-f'
   | 'sch-se'
   | 'form-1116'
   | 'form-4797'

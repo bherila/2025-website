@@ -168,7 +168,7 @@ export function computeActionItemConditions(input: ActionItemConditionsInput): A
     }
   }
   const totalK3PassiveIncome = totalK3PassiveIncomeC.value
-  const turboTaxFTCIssue = totalK1Box5 > 0 && totalK3PassiveIncome < totalK1Box5 * 0.5
+  const turboTaxFTCIssue = totalK1Box5 > 0 && totalK3PassiveIncome < currency(totalK1Box5).multiply(0.5).value
 
   // Per-fund Box 21 alerts when no K-3 Part III Section 4 country entries
   const box21AlertFunds: Box21AlertFund[] = k1Parsed
