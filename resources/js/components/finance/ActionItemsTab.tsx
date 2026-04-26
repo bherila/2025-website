@@ -64,7 +64,7 @@ function renderOutstandingBody(
             TurboTax may prefill Line 1d with Box 5 interest ({fmtAmt(c.totalK1Box5, 2)}) — but Box 5 is entirely
             U.S.-sourced per K-3 Part II Line 6, column (a). Set Line 1d to{' '}
             {fmtAmt(c.totalK3PassiveIncome, 2)} (K-3 passive foreign income only). Overstates foreign passive income
-            by {fmtAmt(c.totalK1Box5 - c.totalK3PassiveIncome, 2)}.
+            by {fmtAmt(currency(c.totalK1Box5).subtract(c.totalK3PassiveIncome).value, 2)}.
           </p>
         ),
       }
@@ -101,7 +101,7 @@ function renderOutstandingBody(
             </div>
             <p>
               Total: {fmtAmt(c.totalSuspended)} at 13.3% CA marginal rate ≈{' '}
-              <strong>{fmtAmt(c.totalSuspended * 0.133)}</strong> CA tax savings.
+              <strong>{fmtAmt(currency(c.totalSuspended).multiply(0.133).value)}</strong> CA tax savings.
             </p>
           </div>
         ),
