@@ -8,6 +8,8 @@ import Form1116Preview from '@/components/finance/Form1116Preview'
 import Form4952Preview from '@/components/finance/Form4952Preview'
 import Form6251Preview from '@/components/finance/Form6251Preview'
 import Form8582Preview from '@/components/finance/Form8582Preview'
+import Form8606Preview from '@/components/finance/Form8606Preview'
+import Form8949Preview from '@/components/finance/Form8949Preview'
 import Form8995Preview from '@/components/finance/Form8995Preview'
 import Schedule1Preview from '@/components/finance/Schedule1Preview'
 import Schedule3Preview, { computeSchedule3 } from '@/components/finance/Schedule3Preview'
@@ -42,7 +44,47 @@ function Form1040Adapter({ state }: FormRenderProps): React.ReactElement {
 }
 
 function Schedule1Adapter({ state }: FormRenderProps): React.ReactElement {
-  return <Schedule1Preview selectedYear={state.year} schedule1={state.taxReturn.schedule1} />
+  const alimonyInput = (
+    <Schedule1AlimonyInput
+      value={state.schedule1Line2aAlimony}
+      onChange={state.setSchedule1Line2aAlimony}
+    />
+  )
+  return (
+    <Schedule1Preview
+      selectedYear={state.year}
+      schedule1={state.taxReturn.schedule1}
+      line2aAlimonyInput={alimonyInput}
+    />
+  )
+}
+
+function Schedule1AlimonyInput({
+  value,
+  onChange,
+}: {
+  value: number
+  onChange: (next: number) => void
+}): React.ReactElement {
+  return (
+    <input
+      type="number"
+      aria-label="Alimony received (pre-2019 decrees)"
+      className="w-28 rounded border px-2 py-0.5 text-right text-[11px]"
+      value={value === 0 ? '' : value}
+      placeholder="0"
+      step="0.01"
+      onChange={(e) => {
+        const raw = e.target.value.trim()
+        if (raw === '') {
+          onChange(0)
+          return
+        }
+        const n = parseFloat(raw)
+        onChange(isNaN(n) ? 0 : n)
+      }}
+    />
+  )
 }
 
 function Schedule2Adapter({ state }: FormRenderProps): React.ReactElement {
@@ -245,17 +287,76 @@ function ScheduleFStub(): React.ReactElement {
   )
 }
 
-function Form8606Stub(): React.ReactElement {
-  return <StubCard title="Form 8606 — Nondeductible IRAs" note="Pending migration." />
-}
-
-function Form8949Stub(): React.ReactElement {
+function Form8606Adapter({ state }: FormRenderProps): React.ReactElement {
+  if (!state.taxReturn.form8606) {
+    return (
+      <StubCard
+        title="Form 8606 — Nondeductible IRAs"
+        note="Form 8606 data is not yet populated. Check the tax preview context wiring."
+      />
+    )
+  }
   return (
-    <StubCard
-      title="Form 8949 — Sales & Dispositions of Capital Assets"
-      note="Pending migration. Currently rendered inside Schedule D."
+    <Form8606Preview
+      selectedYear={state.year}
+      form8606={state.taxReturn.form8606}
+      nondeductibleContributionsInput={
+        <Form8606NumericInput
+          value={state.form8606NondeductibleContributions}
+          onChange={state.setForm8606NondeductibleContributions}
+          ariaLabel="Nondeductible contributions to traditional IRA"
+        />
+      }
+      priorYearBasisInput={
+        <Form8606NumericInput
+          value={state.form8606PriorYearBasis}
+          onChange={state.setForm8606PriorYearBasis}
+          ariaLabel="Prior-year Form 8606 basis carryforward"
+        />
+      }
+      yearEndFmvInput={
+        <Form8606NumericInput
+          value={state.form8606YearEndFmv}
+          onChange={state.setForm8606YearEndFmv}
+          ariaLabel="Year-end FMV of traditional/SEP/SIMPLE IRAs"
+        />
+      }
     />
   )
+}
+
+function Form8606NumericInput({
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  value: number
+  onChange: (next: number) => void
+  ariaLabel: string
+}): React.ReactElement {
+  return (
+    <input
+      type="number"
+      aria-label={ariaLabel}
+      className="w-28 rounded border px-2 py-0.5 text-right text-[11px]"
+      value={value === 0 ? '' : value}
+      placeholder="0"
+      step="0.01"
+      onChange={(e) => {
+        const raw = e.target.value.trim()
+        if (raw === '') {
+          onChange(0)
+          return
+        }
+        const n = parseFloat(raw)
+        onChange(isNaN(n) ? 0 : n)
+      }}
+    />
+  )
+}
+
+function Form8949Adapter({ state }: FormRenderProps): React.ReactElement {
+  return <Form8949Preview selectedYear={state.year} />
 }
 
 function ActionItemsAdapter({ state }: FormRenderProps): React.ReactElement {
@@ -597,7 +698,7 @@ export const formRegistry: FormRegistry = {
     keywords: ['8606', 'nondeductible IRA', 'IRA basis', 'backdoor Roth'],
     category: 'Form',
     presentation: 'column',
-    component: Form8606Stub,
+    component: Form8606Adapter,
   },
   'form-8949': {
     id: 'form-8949',
@@ -607,7 +708,7 @@ export const formRegistry: FormRegistry = {
     keywords: ['8949', 'capital assets', 'wash sale', 'cost basis'],
     category: 'Form',
     presentation: 'column',
-    component: Form8949Stub,
+    component: Form8949Adapter,
   },
   'action-items': {
     id: 'action-items',

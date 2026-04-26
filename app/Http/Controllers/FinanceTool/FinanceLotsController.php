@@ -28,8 +28,16 @@ class FinanceLotsController extends Controller
     {
         $accountIds = $this->getUserAccountIds();
 
-        $query = FinAccountLot::whereIn('acct_id', $accountIds)
-            ->select(['acct_id', 'cost_basis', 'purchase_date', 'sale_date']);
+        $rawStatus = $request->query('status');
+        $status = in_array($rawStatus, ['open', 'closed'], true) ? $rawStatus : 'open';
+
+        // Closed-lot mode returns full columns needed by Form 8949 (per-transaction detail).
+        // Open-lot / as_of mode remains narrow (acct_id + basis + dates) for Form 1116 worksheet.
+        $selectColumns = $status === 'closed'
+            ? ['lot_id', 'acct_id', 'symbol', 'description', 'quantity', 'purchase_date', 'cost_basis', 'sale_date', 'proceeds', 'realized_gain_loss', 'is_short_term', 'lot_source', 'tax_document_id']
+            : ['acct_id', 'cost_basis', 'purchase_date', 'sale_date'];
+
+        $query = FinAccountLot::whereIn('acct_id', $accountIds)->select($selectColumns);
 
         $asOf = $request->query('as_of');
 
@@ -39,16 +47,14 @@ class FinanceLotsController extends Controller
                 ->where(function ($q) use ($asOf): void {
                     $q->whereNull('sale_date')->orWhere('sale_date', '>', $asOf);
                 });
-        } else {
-            // Whitelist status to open|closed; any unexpected value defaults to open.
-            $rawStatus = $request->query('status');
-            $status = in_array($rawStatus, ['open', 'closed'], true) ? $rawStatus : 'open';
-
-            if ($status === 'open') {
-                $query->whereNull('sale_date');
-            } else {
-                $query->whereNotNull('sale_date');
+        } elseif ($status === 'closed') {
+            $query->whereNotNull('sale_date');
+            $year = $request->query('year');
+            if ($year !== null && ctype_digit((string) $year)) {
+                $query->whereYear('sale_date', (int) $year);
             }
+        } else {
+            $query->whereNull('sale_date');
         }
 
         $lots = $query->orderBy('purchase_date', 'desc')->get();

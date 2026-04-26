@@ -98,6 +98,21 @@ describe('computeSchedule1Totals', () => {
     expect(totals.partI.line1a_taxableRefunds).toBe(300)
     expect(totals.partI.line10_total).toBe(1800)
   })
+
+  it('wires user-entered alimony to line 2a and includes it in line 10', () => {
+    const totals = computeSchedule1Totals({
+      scheduleCNetIncome: 1000,
+      schedule1Line2aAlimony: 450,
+    })
+
+    expect(totals.partI.line2a_alimonyReceived).toBe(450)
+    expect(totals.partI.line10_total).toBe(1450)
+  })
+
+  it('treats zero alimony as null (no active pre-2019 decree)', () => {
+    const totals = computeSchedule1Totals({ schedule1Line2aAlimony: 0 })
+    expect(totals.partI.line2a_alimonyReceived).toBeNull()
+  })
 })
 
 describe('Schedule1Preview', () => {
@@ -197,5 +212,29 @@ describe('Schedule1Preview', () => {
     expect(screen.getByText(/alimony received/i)).toBeInTheDocument()
     expect(screen.getByText(/form 4797/i)).toBeInTheDocument()
     expect(screen.getByText(/schedule f/i)).toBeInTheDocument()
+  })
+
+  it('renders a visible line 2a when alimony is entered (non-zero)', () => {
+    render(
+      <Schedule1Preview
+        selectedYear={2025}
+        schedule1={computeSchedule1Totals({ schedule1Line2aAlimony: 450 })}
+      />,
+    )
+    expect(screen.getByText('Alimony received')).toBeInTheDocument()
+    expect(screen.getByText(/pre-2019 divorce decrees only/i)).toBeInTheDocument()
+    expect(screen.getAllByText('$450').length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('renders the line 2a manualEntry slot inside the Part I disclosure when provided', () => {
+    render(
+      <Schedule1Preview
+        selectedYear={2025}
+        schedule1={computeSchedule1Totals({})}
+        line2aAlimonyInput={<input data-testid="alimony-input" aria-label="Alimony received" />}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /part i — show \d+ empty lines/i }))
+    expect(screen.getByTestId('alimony-input')).toBeInTheDocument()
   })
 })

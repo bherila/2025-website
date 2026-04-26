@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 
 import { compute1099RDistributionSummary, computeForm1040Lines } from '@/components/finance/Form1040Preview'
 import { computeForm4952Lines } from '@/components/finance/Form4952Preview'
+import { computeForm8606 } from '@/components/finance/Form8606Preview'
 import { computeForm8995 } from '@/components/finance/Form8995Preview'
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { computeSchedule1Totals } from '@/components/finance/Schedule1Preview'
@@ -81,6 +82,7 @@ interface TaxPreviewContextValue {
   reviewedW2Docs: TaxDocument[]
   reviewed1099Docs: TaxDocument[]
   reviewedK1Docs: TaxDocument[]
+  reviewed1099RDocs: TaxDocument[]
   foreignTaxSummaries: ForeignTaxSummary[]
   scheduleCData: ScheduleCResponse | null
   scheduleCNetIncome: { total: number; byQuarter: { q1: number; q2: number; q3: number; q4: number } }
@@ -100,6 +102,19 @@ interface TaxPreviewContextValue {
   schedule1Line7Unemployment: number
   /** Taxable state/local income tax refunds from 1099-G box 2 (Schedule 1 line 1a). */
   schedule1Line1aTaxableRefunds: number
+  /** User-entered alimony received (pre-2019 decrees) for Schedule 1 line 2a. Persisted to localStorage per year. */
+  schedule1Line2aAlimony: number
+  /** Setter for schedule1Line2aAlimony — persisted to localStorage per tax year. */
+  setSchedule1Line2aAlimony: Dispatch<SetStateAction<number>>
+  /** Form 8606 line 1 — current-year nondeductible traditional IRA contributions (user entered). */
+  form8606NondeductibleContributions: number
+  setForm8606NondeductibleContributions: Dispatch<SetStateAction<number>>
+  /** Form 8606 line 2 — prior-year total basis carried forward. */
+  form8606PriorYearBasis: number
+  setForm8606PriorYearBasis: Dispatch<SetStateAction<number>>
+  /** Form 8606 line 6 — year-end FMV of all traditional/SEP/SIMPLE IRAs. */
+  form8606YearEndFmv: number
+  setForm8606YearEndFmv: Dispatch<SetStateAction<number>>
   /** Whether the user is married for the selected tax year (from marriage status settings). */
   isMarried: boolean
   /** State codes the user filed in for the selected tax year (e.g. ['CA', 'NY']). */
@@ -256,6 +271,88 @@ export function TaxPreviewProvider({
     },
     [priorYearAgiKey],
   )
+  const schedule1Line2aAlimonyKey = `tax-preview-schedule1-2a-alimony-${year}`
+  const [schedule1Line2aAlimony, setSchedule1Line2aAlimonyRaw] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0
+    const stored = localStorage.getItem(schedule1Line2aAlimonyKey)
+    if (stored === null) return 0
+    const n = parseFloat(stored)
+    return isNaN(n) ? 0 : n
+  })
+  const setSchedule1Line2aAlimony: Dispatch<SetStateAction<number>> = useCallback(
+    (value) => {
+      setSchedule1Line2aAlimonyRaw((prev) => {
+        const next = typeof value === 'function' ? value(prev) : value
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(schedule1Line2aAlimonyKey, String(next))
+        }
+        return next
+      })
+    },
+    [schedule1Line2aAlimonyKey],
+  )
+
+  const form8606NondeductibleKey = `tax-preview-8606-nondeductible-${year}`
+  const [form8606NondeductibleContributions, setForm8606NondeductibleRaw] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0
+    const stored = localStorage.getItem(form8606NondeductibleKey)
+    if (stored === null) return 0
+    const n = parseFloat(stored)
+    return isNaN(n) ? 0 : n
+  })
+  const setForm8606NondeductibleContributions: Dispatch<SetStateAction<number>> = useCallback(
+    (value) => {
+      setForm8606NondeductibleRaw((prev) => {
+        const next = typeof value === 'function' ? value(prev) : value
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(form8606NondeductibleKey, String(next))
+        }
+        return next
+      })
+    },
+    [form8606NondeductibleKey],
+  )
+  const form8606PriorBasisKey = `tax-preview-8606-prior-basis-${year}`
+  const [form8606PriorYearBasis, setForm8606PriorBasisRaw] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0
+    const stored = localStorage.getItem(form8606PriorBasisKey)
+    if (stored === null) return 0
+    const n = parseFloat(stored)
+    return isNaN(n) ? 0 : n
+  })
+  const setForm8606PriorYearBasis: Dispatch<SetStateAction<number>> = useCallback(
+    (value) => {
+      setForm8606PriorBasisRaw((prev) => {
+        const next = typeof value === 'function' ? value(prev) : value
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(form8606PriorBasisKey, String(next))
+        }
+        return next
+      })
+    },
+    [form8606PriorBasisKey],
+  )
+  const form8606FmvKey = `tax-preview-8606-fmv-${year}`
+  const [form8606YearEndFmv, setForm8606FmvRaw] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0
+    const stored = localStorage.getItem(form8606FmvKey)
+    if (stored === null) return 0
+    const n = parseFloat(stored)
+    return isNaN(n) ? 0 : n
+  })
+  const setForm8606YearEndFmv: Dispatch<SetStateAction<number>> = useCallback(
+    (value) => {
+      setForm8606FmvRaw((prev) => {
+        const next = typeof value === 'function' ? value(prev) : value
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(form8606FmvKey, String(next))
+        }
+        return next
+      })
+    },
+    [form8606FmvKey],
+  )
+
   const realEstateProfessionalKey = `tax-preview-re-professional-${year}`
   const [realEstateProfessional, setRealEstateProfessionalRaw] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false
@@ -809,6 +906,7 @@ export function TaxPreviewProvider({
       schedule1Line8Breakdown,
       schedule1Line7Unemployment,
       schedule1Line1aTaxableRefunds,
+      schedule1Line2aAlimony,
       deductibleSeTaxAdjustment: scheduleSE.deductibleSeTax,
     })
 
@@ -917,6 +1015,13 @@ export function TaxPreviewProvider({
       realEstateProfessional,
     })
 
+    const form8606 = computeForm8606({
+      nondeductibleContributions: form8606NondeductibleContributions,
+      priorYearBasis: form8606PriorYearBasis,
+      yearEndFmv: form8606YearEndFmv,
+      reviewed1099RDocs,
+    })
+
     const estimatedTaxPayments = !isMarried && priorYearTax > 0
       ? computeEstimatedTaxPayments({
           selectedYear: year,
@@ -963,6 +1068,7 @@ export function TaxPreviewProvider({
       form8960,
       form461: form461Lines,
       form8582,
+      form8606,
       capitalLossCarryover: computeCapitalLossCarryover(
         scheduleD.schD.schD_line7,
         scheduleD.schD.schD_line15,
@@ -1015,12 +1121,16 @@ export function TaxPreviewProvider({
     schedule1Line8Breakdown,
     schedule1Line7Unemployment,
     schedule1Line1aTaxableRefunds,
+    schedule1Line2aAlimony,
     reviewed1099RDocs,
     userDeductions,
     palCarryforwards,
     realEstateProfessional,
     priorYearAgi,
     priorYearTax,
+    form8606NondeductibleContributions,
+    form8606PriorYearBasis,
+    form8606YearEndFmv,
   ])
 
   const value = useMemo<TaxPreviewContextValue>(() => ({
@@ -1035,6 +1145,7 @@ export function TaxPreviewProvider({
     reviewedW2Docs,
     reviewed1099Docs,
     reviewedK1Docs,
+    reviewed1099RDocs,
     foreignTaxSummaries,
     scheduleCData,
     scheduleCNetIncome,
@@ -1046,6 +1157,14 @@ export function TaxPreviewProvider({
     schedule1Line8Breakdown,
     schedule1Line7Unemployment,
     schedule1Line1aTaxableRefunds,
+    schedule1Line2aAlimony,
+    setSchedule1Line2aAlimony,
+    form8606NondeductibleContributions,
+    setForm8606NondeductibleContributions,
+    form8606PriorYearBasis,
+    setForm8606PriorYearBasis,
+    form8606YearEndFmv,
+    setForm8606YearEndFmv,
     isMarried,
     activeTaxStates,
     setActiveTaxStates,
@@ -1082,6 +1201,7 @@ export function TaxPreviewProvider({
     reviewedW2Docs,
     reviewed1099Docs,
     reviewedK1Docs,
+    reviewed1099RDocs,
     foreignTaxSummaries,
     scheduleCData,
     scheduleCNetIncome,
@@ -1093,6 +1213,14 @@ export function TaxPreviewProvider({
     schedule1Line8Breakdown,
     schedule1Line7Unemployment,
     schedule1Line1aTaxableRefunds,
+    schedule1Line2aAlimony,
+    setSchedule1Line2aAlimony,
+    form8606NondeductibleContributions,
+    setForm8606NondeductibleContributions,
+    form8606PriorYearBasis,
+    setForm8606PriorYearBasis,
+    form8606YearEndFmv,
+    setForm8606YearEndFmv,
     isMarried,
     activeTaxStates,
     userDeductions,
