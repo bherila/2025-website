@@ -331,6 +331,25 @@ export interface Form8582ActivityLine {
   suspendedLossCarryforward: number
 }
 
+export interface Form4797Lines {
+  partINet1231: number
+  partIIOrdinary: number
+  partIIIRecapture: number
+  /** Net amount flowing to Schedule 1 line 4 (ordinary only). */
+  netToSchedule1Line4: number
+  /** Net §1231 gain flowing to Schedule D as long-term. */
+  netToScheduleDLongTerm: number
+  hasActivity: boolean
+}
+
+export interface ScheduleFLines {
+  grossFarmIncome: number
+  totalExpenses: number
+  /** Line 34 — net farm profit or (loss) → Schedule 1 line 6. */
+  netProfitOrLoss: number
+  hasActivity: boolean
+}
+
 export interface Form8606Lines {
   line1_nondeductibleContributions: number
   line2_priorYearBasis: number
@@ -414,6 +433,8 @@ export interface TaxReturn1040 {
   form461?: Form461Lines
   form8582?: Form8582Lines
   form8606?: Form8606Lines
+  form4797?: Form4797Lines
+  scheduleF?: ScheduleFLines
   estimatedTaxPayments?: import('@/lib/finance/estimatedTaxPayments').EstimatedTaxPaymentsData
   k1Docs?: K1ExportEntry[]
   k3Docs?: K3ExportEntry[]

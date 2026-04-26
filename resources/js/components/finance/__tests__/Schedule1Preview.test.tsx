@@ -113,6 +113,16 @@ describe('computeSchedule1Totals', () => {
     const totals = computeSchedule1Totals({ schedule1Line2aAlimony: 0 })
     expect(totals.partI.line2a_alimonyReceived).toBeNull()
   })
+
+  it('wires Form 4797 net ordinary result to line 4 and Schedule F net to line 6', () => {
+    const totals = computeSchedule1Totals({
+      schedule1Line4OtherGains: -1_500,
+      schedule1Line6FarmIncome: 7_500,
+    })
+    expect(totals.partI.line4_otherGains).toBe(-1_500)
+    expect(totals.partI.line6_farmIncome).toBe(7_500)
+    expect(totals.partI.line10_total).toBe(6_000)
+  })
 })
 
 describe('Schedule1Preview', () => {
