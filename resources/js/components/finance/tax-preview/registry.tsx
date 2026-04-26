@@ -21,6 +21,9 @@ import ScheduleEPreview from '@/components/finance/ScheduleEPreview'
 import ScheduleSEPreview from '@/components/finance/ScheduleSEPreview'
 import TaxDocuments1099Section from '@/components/finance/TaxDocuments1099Section'
 import TaxDocumentsSection from '@/components/finance/TaxDocumentsSection'
+import WorksheetAmtExemption from '@/components/finance/worksheets/WorksheetAmtExemption'
+import WorksheetSE401k from '@/components/finance/worksheets/WorksheetSE401k'
+import WorksheetTaxableSS from '@/components/finance/worksheets/WorksheetTaxableSS'
 import {
   buildEstimatedTaxSheet,
   buildForm1116Sheet,
@@ -419,22 +422,6 @@ function DocumentsAdapter({ state }: FormRenderProps): React.ReactElement {
   )
 }
 
-function WorksheetSE401kStub(): React.ReactElement {
-  return (
-    <StubCard
-      title="SE 401(k) Contribution Worksheet"
-      note="Worksheet — will open as a modal Dialog, not a column. Pulls from Schedule SE net earnings + Schedule C compensation."
-    />
-  )
-}
-
-function WorksheetAmtStub(): React.ReactElement {
-  return <StubCard title="AMT Exemption Phaseout Worksheet" note="Worksheet — will open as a modal." />
-}
-
-function WorksheetTaxableSsStub(): React.ReactElement {
-  return <StubCard title="Taxable Social Security Worksheet" note="Worksheet — will open as a modal." />
-}
 
 /**
  * Registry of all forms. Read-only forms have full adapters wired to
@@ -749,7 +736,7 @@ export const formRegistry: FormRegistry = {
     keywords: ['401k', 'self-employed retirement', 'solo 401k', 'employer contribution'],
     category: 'Worksheet',
     presentation: 'modal',
-    component: WorksheetSE401kStub,
+    component: WorksheetSE401k,
     relatedForms: ['sch-c', 'sch-se', 'sch-1'],
   },
   'wks-amt-exemption': {
@@ -759,7 +746,7 @@ export const formRegistry: FormRegistry = {
     keywords: ['AMT', 'AMT exemption', 'phaseout', 'alternative minimum tax exemption'],
     category: 'Worksheet',
     presentation: 'modal',
-    component: WorksheetAmtStub,
+    component: WorksheetAmtExemption,
     relatedForms: ['form-6251'],
   },
   'wks-taxable-ss': {
@@ -769,7 +756,7 @@ export const formRegistry: FormRegistry = {
     keywords: ['social security', 'taxable social security', 'SSA-1099'],
     category: 'Worksheet',
     presentation: 'modal',
-    component: WorksheetTaxableSsStub,
+    component: WorksheetTaxableSS,
     relatedForms: ['form-1040'],
   },
 }
