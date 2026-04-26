@@ -31,6 +31,8 @@ export function computeSchedule1Totals({
   schedule1Line7Unemployment = 0,
   schedule1Line1aTaxableRefunds = 0,
   schedule1Line2aAlimony = 0,
+  schedule1Line4OtherGains = 0,
+  schedule1Line6FarmIncome = 0,
   deductibleSeTaxAdjustment = 0,
 }: {
   scheduleCNetIncome?: number
@@ -42,6 +44,10 @@ export function computeSchedule1Totals({
   schedule1Line1aTaxableRefunds?: number
   /** Alimony received from pre-2019 divorce decrees (user-entered). */
   schedule1Line2aAlimony?: number
+  /** Net Part I result from Form 4797 (other gains/losses on business property). */
+  schedule1Line4OtherGains?: number
+  /** Net result from Schedule F (farm income/loss). */
+  schedule1Line6FarmIncome?: number
   deductibleSeTaxAdjustment?: number
 }): Schedule1Lines {
   const line8b = schedule1Line8Breakdown?.line8b ?? 0
@@ -56,6 +62,8 @@ export function computeSchedule1Totals({
     .add(scheduleEGrandTotal)
     .add(schedule1Line1aTaxableRefunds)
     .add(schedule1Line2aAlimony)
+    .add(schedule1Line4OtherGains)
+    .add(schedule1Line6FarmIncome)
     .add(schedule1Line7Unemployment)
     .add(line9_totalOther).value
   const line15_deductibleSeTax = deductibleSeTaxAdjustment === 0
@@ -67,9 +75,9 @@ export function computeSchedule1Totals({
       line1a_taxableRefunds: schedule1Line1aTaxableRefunds === 0 ? null : schedule1Line1aTaxableRefunds,
       line2a_alimonyReceived: schedule1Line2aAlimony === 0 ? null : schedule1Line2aAlimony,
       line3_business: scheduleCNetIncome,
-      line4_otherGains: null,
+      line4_otherGains: schedule1Line4OtherGains === 0 ? null : schedule1Line4OtherGains,
       line5_rentalPartnerships: scheduleEGrandTotal,
-      line6_farmIncome: null,
+      line6_farmIncome: schedule1Line6FarmIncome === 0 ? null : schedule1Line6FarmIncome,
       line7_unemploymentCompensation: schedule1Line7Unemployment === 0 ? null : schedule1Line7Unemployment,
       line8b_gambling: line8b === 0 ? null : line8b,
       line8h_juryDuty: line8h === 0 ? null : line8h,
@@ -114,7 +122,9 @@ export default function Schedule1Preview({
   const line1a = classifyPartIValue(partI.line1a_taxableRefunds)
   const line2a = classifyPartIValue(partI.line2a_alimonyReceived)
   const line3 = classifyPartIValue(partI.line3_business)
+  const line4 = classifyPartIValue(partI.line4_otherGains)
   const line5 = classifyPartIValue(partI.line5_rentalPartnerships)
+  const line6 = classifyPartIValue(partI.line6_farmIncome)
   const line7 = classifyPartIValue(partI.line7_unemploymentCompensation)
   const line8b = classifyPartIValue(partI.line8b_gambling)
   const line8h = classifyPartIValue(partI.line8h_juryDuty)
@@ -147,11 +157,13 @@ export default function Schedule1Preview({
       sourceLabel: 'Schedule C',
     } as EmptyLine)
   }
-  partIEmpty.push({
-    lineNumber: '4',
-    label: 'Other gains or (losses) — Form 4797',
-    state: 'null',
-  })
+  if (line4 !== 'visible') {
+    partIEmpty.push({
+      lineNumber: '4',
+      label: 'Other gains or (losses) — Form 4797',
+      state: line4,
+    } as EmptyLine)
+  }
   if (line5 !== 'visible') {
     partIEmpty.push({
       lineNumber: '5',
@@ -161,11 +173,13 @@ export default function Schedule1Preview({
       sourceLabel: 'Schedule E',
     } as EmptyLine)
   }
-  partIEmpty.push({
-    lineNumber: '6',
-    label: 'Farm income or (loss) — Schedule F',
-    state: 'null',
-  })
+  if (line6 !== 'visible') {
+    partIEmpty.push({
+      lineNumber: '6',
+      label: 'Farm income or (loss) — Schedule F',
+      state: line6,
+    } as EmptyLine)
+  }
   if (line7 !== 'visible') {
     partIEmpty.push({ lineNumber: '7', label: 'Unemployment compensation (1099-G box 1)', state: line7 } as EmptyLine)
   }
@@ -240,6 +254,12 @@ export default function Schedule1Preview({
             <FormSubLine text="From Schedule C net income" />
           </>
         )}
+        {line4 === 'visible' && (
+          <>
+            <FormLine boxRef="4" label="Other gains or (losses)" value={partI.line4_otherGains} />
+            <FormSubLine text="From Form 4797 Part I net result" />
+          </>
+        )}
         {line5 === 'visible' && (
           <>
             <FormLine
@@ -248,6 +268,12 @@ export default function Schedule1Preview({
               value={partI.line5_rentalPartnerships}
             />
             <FormSubLine text="From Schedule E combined total" />
+          </>
+        )}
+        {line6 === 'visible' && (
+          <>
+            <FormLine boxRef="6" label="Farm income or (loss)" value={partI.line6_farmIncome} />
+            <FormSubLine text="From Schedule F net profit/loss" />
           </>
         )}
         {line7 === 'visible' && (

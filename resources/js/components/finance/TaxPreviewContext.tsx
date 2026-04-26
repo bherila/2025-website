@@ -6,6 +6,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { toast } from 'sonner'
 
 import { compute1099RDistributionSummary, computeForm1040Lines } from '@/components/finance/Form1040Preview'
+import { computeForm4797 } from '@/components/finance/Form4797Preview'
 import { computeForm4952Lines } from '@/components/finance/Form4952Preview'
 import { computeForm8606 } from '@/components/finance/Form8606Preview'
 import { computeForm8995 } from '@/components/finance/Form8995Preview'
@@ -16,6 +17,7 @@ import { computeScheduleB } from '@/components/finance/ScheduleBPreview'
 import { computeScheduleCNetIncome } from '@/components/finance/ScheduleCPreview'
 import { computeScheduleD } from '@/components/finance/ScheduleDPreview'
 import { computeScheduleELines } from '@/components/finance/ScheduleEPreview'
+import { computeScheduleF } from '@/components/finance/ScheduleFPreview'
 import { computeScheduleSE } from '@/components/finance/ScheduleSEPreview'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { AccountLineItemSchema } from '@/data/finance/AccountLineItem'
@@ -118,6 +120,21 @@ interface TaxPreviewContextValue {
   /** User-entered SSA-1099 gross benefits for the year (Pub 915 worksheet input). */
   ssaGrossBenefits: number
   setSsaGrossBenefits: Dispatch<SetStateAction<number>>
+  /** Form 4797 Part I — net §1231 gain/(loss). */
+  form4797PartINet1231: number
+  setForm4797PartINet1231: Dispatch<SetStateAction<number>>
+  /** Form 4797 Part II — ordinary gain/(loss). */
+  form4797PartIIOrdinary: number
+  setForm4797PartIIOrdinary: Dispatch<SetStateAction<number>>
+  /** Form 4797 Part III — total depreciation recapture. */
+  form4797PartIIIRecapture: number
+  setForm4797PartIIIRecapture: Dispatch<SetStateAction<number>>
+  /** Schedule F — gross farm income (line 9). */
+  scheduleFGrossIncome: number
+  setScheduleFGrossIncome: Dispatch<SetStateAction<number>>
+  /** Schedule F — total farm expenses (line 33). */
+  scheduleFTotalExpenses: number
+  setScheduleFTotalExpenses: Dispatch<SetStateAction<number>>
   /** Whether the user is married for the selected tax year (from marriage status settings). */
   isMarried: boolean
   /** State codes the user filed in for the selected tax year (e.g. ['CA', 'NY']). */
@@ -354,6 +371,108 @@ export function TaxPreviewProvider({
       })
     },
     [form8606FmvKey],
+  )
+
+  const form4797PartIKey = `tax-preview-4797-part-i-${year}`
+  const [form4797PartINet1231, setForm4797PartINet1231Raw] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0
+    const stored = localStorage.getItem(form4797PartIKey)
+    if (stored === null) return 0
+    const n = parseFloat(stored)
+    return isNaN(n) ? 0 : n
+  })
+  const setForm4797PartINet1231: Dispatch<SetStateAction<number>> = useCallback(
+    (value) => {
+      setForm4797PartINet1231Raw((prev) => {
+        const next = typeof value === 'function' ? value(prev) : value
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(form4797PartIKey, String(next))
+        }
+        return next
+      })
+    },
+    [form4797PartIKey],
+  )
+  const form4797PartIIKey = `tax-preview-4797-part-ii-${year}`
+  const [form4797PartIIOrdinary, setForm4797PartIIOrdinaryRaw] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0
+    const stored = localStorage.getItem(form4797PartIIKey)
+    if (stored === null) return 0
+    const n = parseFloat(stored)
+    return isNaN(n) ? 0 : n
+  })
+  const setForm4797PartIIOrdinary: Dispatch<SetStateAction<number>> = useCallback(
+    (value) => {
+      setForm4797PartIIOrdinaryRaw((prev) => {
+        const next = typeof value === 'function' ? value(prev) : value
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(form4797PartIIKey, String(next))
+        }
+        return next
+      })
+    },
+    [form4797PartIIKey],
+  )
+  const form4797PartIIIKey = `tax-preview-4797-part-iii-${year}`
+  const [form4797PartIIIRecapture, setForm4797PartIIIRecaptureRaw] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0
+    const stored = localStorage.getItem(form4797PartIIIKey)
+    if (stored === null) return 0
+    const n = parseFloat(stored)
+    return isNaN(n) ? 0 : n
+  })
+  const setForm4797PartIIIRecapture: Dispatch<SetStateAction<number>> = useCallback(
+    (value) => {
+      setForm4797PartIIIRecaptureRaw((prev) => {
+        const next = typeof value === 'function' ? value(prev) : value
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(form4797PartIIIKey, String(next))
+        }
+        return next
+      })
+    },
+    [form4797PartIIIKey],
+  )
+
+  const scheduleFIncomeKey = `tax-preview-sch-f-income-${year}`
+  const [scheduleFGrossIncome, setScheduleFGrossIncomeRaw] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0
+    const stored = localStorage.getItem(scheduleFIncomeKey)
+    if (stored === null) return 0
+    const n = parseFloat(stored)
+    return isNaN(n) ? 0 : n
+  })
+  const setScheduleFGrossIncome: Dispatch<SetStateAction<number>> = useCallback(
+    (value) => {
+      setScheduleFGrossIncomeRaw((prev) => {
+        const next = typeof value === 'function' ? value(prev) : value
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(scheduleFIncomeKey, String(next))
+        }
+        return next
+      })
+    },
+    [scheduleFIncomeKey],
+  )
+  const scheduleFExpensesKey = `tax-preview-sch-f-expenses-${year}`
+  const [scheduleFTotalExpenses, setScheduleFTotalExpensesRaw] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0
+    const stored = localStorage.getItem(scheduleFExpensesKey)
+    if (stored === null) return 0
+    const n = parseFloat(stored)
+    return isNaN(n) ? 0 : n
+  })
+  const setScheduleFTotalExpenses: Dispatch<SetStateAction<number>> = useCallback(
+    (value) => {
+      setScheduleFTotalExpensesRaw((prev) => {
+        const next = typeof value === 'function' ? value(prev) : value
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(scheduleFExpensesKey, String(next))
+        }
+        return next
+      })
+    },
+    [scheduleFExpensesKey],
   )
 
   const ssaGrossBenefitsKey = `tax-preview-ssa-gross-benefits-${year}`
@@ -924,6 +1043,17 @@ export function TaxPreviewProvider({
       payslips,
     })
 
+    const form4797 = computeForm4797({
+      partINet1231: form4797PartINet1231,
+      partIIOrdinary: form4797PartIIOrdinary,
+      partIIIRecapture: form4797PartIIIRecapture,
+    })
+
+    const scheduleFComputed = computeScheduleF({
+      grossFarmIncome: scheduleFGrossIncome,
+      totalExpenses: scheduleFTotalExpenses,
+    })
+
     const schedule1 = computeSchedule1Totals({
       scheduleCNetIncome: scheduleCNetIncome.total,
       scheduleEGrandTotal: scheduleE.grandTotal,
@@ -931,6 +1061,8 @@ export function TaxPreviewProvider({
       schedule1Line7Unemployment,
       schedule1Line1aTaxableRefunds,
       schedule1Line2aAlimony,
+      schedule1Line4OtherGains: form4797.netToSchedule1Line4,
+      schedule1Line6FarmIncome: scheduleFComputed.netProfitOrLoss,
       deductibleSeTaxAdjustment: scheduleSE.deductibleSeTax,
     })
 
@@ -1093,6 +1225,8 @@ export function TaxPreviewProvider({
       form461: form461Lines,
       form8582,
       form8606,
+      form4797,
+      scheduleF: scheduleFComputed,
       capitalLossCarryover: computeCapitalLossCarryover(
         scheduleD.schD.schD_line7,
         scheduleD.schD.schD_line15,
@@ -1155,6 +1289,11 @@ export function TaxPreviewProvider({
     form8606NondeductibleContributions,
     form8606PriorYearBasis,
     form8606YearEndFmv,
+    form4797PartINet1231,
+    form4797PartIIOrdinary,
+    form4797PartIIIRecapture,
+    scheduleFGrossIncome,
+    scheduleFTotalExpenses,
   ])
 
   const value = useMemo<TaxPreviewContextValue>(() => ({
@@ -1191,6 +1330,16 @@ export function TaxPreviewProvider({
     setForm8606YearEndFmv,
     ssaGrossBenefits,
     setSsaGrossBenefits,
+    form4797PartINet1231,
+    setForm4797PartINet1231,
+    form4797PartIIOrdinary,
+    setForm4797PartIIOrdinary,
+    form4797PartIIIRecapture,
+    setForm4797PartIIIRecapture,
+    scheduleFGrossIncome,
+    setScheduleFGrossIncome,
+    scheduleFTotalExpenses,
+    setScheduleFTotalExpenses,
     isMarried,
     activeTaxStates,
     setActiveTaxStates,
@@ -1249,6 +1398,16 @@ export function TaxPreviewProvider({
     setForm8606YearEndFmv,
     ssaGrossBenefits,
     setSsaGrossBenefits,
+    form4797PartINet1231,
+    setForm4797PartINet1231,
+    form4797PartIIOrdinary,
+    setForm4797PartIIOrdinary,
+    form4797PartIIIRecapture,
+    setForm4797PartIIIRecapture,
+    scheduleFGrossIncome,
+    setScheduleFGrossIncome,
+    scheduleFTotalExpenses,
+    setScheduleFTotalExpenses,
     isMarried,
     activeTaxStates,
     userDeductions,
