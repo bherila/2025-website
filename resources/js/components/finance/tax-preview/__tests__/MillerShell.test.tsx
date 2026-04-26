@@ -305,4 +305,45 @@ describe('MillerShell', () => {
     fireEvent.click(closeBtn)
     expect(window.location.hash).toBe('#/form-1040')
   })
+
+  it('Escape truncates the rightmost column', () => {
+    window.location.hash = '#/form-1040/sch-1'
+    render(
+      <Wrapper>
+        <MillerShell registry={mockRegistry} homeView={null} />
+      </Wrapper>,
+    )
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(window.location.hash).toBe('#/form-1040')
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(window.location.hash).toBe('')
+  })
+
+  it('Escape is ignored when focus is on an editable field', () => {
+    window.location.hash = '#/form-1040/sch-1'
+    render(
+      <Wrapper>
+        <MillerShell registry={mockRegistry} homeView={null} />
+      </Wrapper>,
+    )
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    input.focus()
+    fireEvent.keyDown(input, { key: 'Escape' })
+    expect(window.location.hash).toBe('#/form-1040/sch-1')
+    document.body.removeChild(input)
+  })
+
+  it('Escape does not truncate when a dialog is open (worksheet handles it)', async () => {
+    window.location.hash = '#/form-1040'
+    render(
+      <Wrapper>
+        <MillerShell registry={mockRegistry} homeView={null} />
+      </Wrapper>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'drill-worksheet' }))
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(window.location.hash).toBe('#/form-1040')
+  })
 })

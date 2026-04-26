@@ -1,12 +1,33 @@
 import { ArrowRight, FileText } from 'lucide-react'
 
+import { computeActionItemSeverityCounts } from '@/components/finance/actionItemsCounts'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
+import { useTaxPreview } from '../TaxPreviewContext'
 import { useDockActions } from './DockActions'
 import type { FormCategory, FormId } from './formRegistry'
 import { formRegistry } from './registry'
 import { useTaxRoute } from './useTaxRoute'
+
+function actionItemBadge(counts: { alert: number; warn: number }): React.ReactElement | null {
+  if (counts.alert === 0 && counts.warn === 0) {
+    return null
+  }
+  if (counts.alert > 0) {
+    return (
+      <Badge variant="destructive" className="h-4 px-1.5 text-[10px]">
+        {counts.alert}
+      </Badge>
+    )
+  }
+  return (
+    <Badge className="h-4 bg-amber-500 px-1.5 text-[10px] text-white hover:bg-amber-600">
+      {counts.warn}
+    </Badge>
+  )
+}
 
 /**
  * Placeholder home view rendered when the column stack is empty (no hash).
@@ -16,6 +37,12 @@ export function DockHomeView(): React.ReactElement {
   const { pushColumn } = useTaxRoute()
 
   const { openWorksheet } = useDockActions()
+  const taxPreview = useTaxPreview()
+  const actionCounts = computeActionItemSeverityCounts({
+    reviewedK1Docs: taxPreview.reviewedK1Docs,
+    reviewed1099Docs: taxPreview.reviewed1099Docs,
+    income1099: taxPreview.income1099,
+  })
   const columnEntries = Object.values(formRegistry).filter((e) => e.presentation === 'column')
   const worksheets = Object.values(formRegistry).filter((e) => e.presentation === 'modal')
 
@@ -48,6 +75,7 @@ export function DockHomeView(): React.ReactElement {
                 label={entry.label}
                 shortLabel={entry.shortLabel}
                 onOpen={(form) => pushColumn({ form })}
+                badge={entry.id === 'action-items' ? actionItemBadge(actionCounts) : null}
               />
             ))}
           </div>
@@ -126,11 +154,13 @@ function FormButton({
   label,
   shortLabel,
   onOpen,
+  badge,
 }: {
   id: FormId
   label: string
   shortLabel: string
   onOpen: (id: FormId) => void
+  badge?: React.ReactNode
 }): React.ReactElement {
   return (
     <Button
@@ -145,7 +175,10 @@ function FormButton({
           <span className="truncate text-xs text-muted-foreground">{label}</span>
         </span>
       </span>
-      <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <span className="flex shrink-0 items-center gap-2">
+        {badge}
+        <ArrowRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+      </span>
     </Button>
   )
 }

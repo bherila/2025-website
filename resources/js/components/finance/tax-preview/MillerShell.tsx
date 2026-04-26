@@ -1,10 +1,27 @@
 import { ChevronLeft, X } from 'lucide-react'
+import { useEffect } from 'react'
 
 import { useTaxPreview } from '../TaxPreviewContext'
 import { useDockActions } from './DockActions'
 import { type FormRegistry, getEntry } from './formRegistry'
 import { InstanceTabs } from './InstanceTabs'
 import { useTaxRoute } from './useTaxRoute'
+
+/**
+ * Esc truncates the rightmost column (one level back). Skipped when an editable
+ * field has focus (textarea, input, contenteditable) so it doesn't fight with
+ * field clearing, and when the event was already handled by an open Dialog.
+ */
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+  if (target.isContentEditable) {
+    return true
+  }
+  const tag = target.tagName
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+}
 
 interface MillerShellProps {
   registry: FormRegistry
@@ -25,6 +42,31 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
   const { route, pushColumn, replaceFrom, truncateTo } = useTaxRoute()
   const state = useTaxPreview()
   const { openWorksheet } = useDockActions()
+
+  const columnDepth = route.columns.length
+  useEffect(() => {
+    if (typeof window === 'undefined' || columnDepth === 0) {
+      return
+    }
+    const handler = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape' || e.defaultPrevented) {
+        return
+      }
+      if (isEditableTarget(e.target)) {
+        return
+      }
+      // Don't truncate when an open Dialog (worksheet, K-1 review, etc.) is
+      // expected to handle Escape itself. Radix sets [data-state="open"].
+      if (document.querySelector('[role="dialog"][data-state="open"]')) {
+        return
+      }
+      truncateTo(columnDepth - 1)
+    }
+    window.addEventListener('keydown', handler)
+    return () => {
+      window.removeEventListener('keydown', handler)
+    }
+  }, [columnDepth, truncateTo])
 
   /**
    * Drill dispatch: column-presentation targets push/replace into the column
@@ -68,7 +110,7 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
               key={`${depth}-${col.form}-${col.instance ?? ''}`}
               type="button"
               onClick={() => truncateTo(depth + 1)}
-              className="hidden h-full w-12 shrink-0 flex-col items-center gap-2 border-r border-border bg-card py-3 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:flex"
+              className="hidden h-full w-12 shrink-0 flex-col items-center gap-2 border-r border-border bg-card py-3 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150 md:flex"
               data-form-id={col.form}
               data-depth={depth}
               data-collapsed="true"
@@ -95,7 +137,7 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
         return (
           <section
             key={`${depth}-${col.form}-${col.instance ?? ''}`}
-            className="flex h-full w-full flex-1 flex-col border-r border-border bg-card md:min-w-[440px]"
+            className="flex h-full w-full flex-1 flex-col border-r border-border bg-card motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-right-4 motion-safe:duration-200 md:min-w-[440px]"
             data-form-id={col.form}
             data-depth={depth}
           >
