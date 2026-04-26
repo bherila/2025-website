@@ -1,4 +1,4 @@
-import { createContext, type ReactNode,useCallback, useContext, useMemo, useState } from 'react'
+import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
 import TaxDocumentReviewModal from '@/components/finance/TaxDocumentReviewModal'
@@ -6,6 +6,8 @@ import { fetchWrapper } from '@/fetchWrapper'
 import type { TaxDocument } from '@/types/finance/tax-document'
 
 import { useTaxPreview } from '../TaxPreviewContext'
+import type { FormId } from './formRegistry'
+import { WorksheetModal } from './WorksheetModal'
 
 interface DockActionsValue {
   /** Open the document review modal for a specific K-1 document by id. */
@@ -14,6 +16,10 @@ interface DockActionsValue {
   openReviewQueue: () => void
   /** Bulk-update the K-3 sourcedByPartnerAsUSSource election across multiple K-1s. */
   bulkSetSbpElection: (active: boolean, docIds: number[]) => Promise<string[]>
+  /** Open a registry worksheet (presentation: 'modal') as a Dialog. */
+  openWorksheet: (id: FormId) => void
+  /** Close the active worksheet modal. */
+  closeWorksheet: () => void
 }
 
 const DockActionsContext = createContext<DockActionsValue | null>(null)
@@ -32,6 +38,10 @@ export function DockActionsProvider({ children }: DockActionsProviderProps): Rea
   const { accountDocuments, refreshAll, year: selectedYear } = useTaxPreview()
   const [reviewOpen, setReviewOpen] = useState(false)
   const [reviewDoc, setReviewDoc] = useState<TaxDocument | undefined>(undefined)
+  const [worksheetId, setWorksheetId] = useState<FormId | null>(null)
+
+  const openWorksheet = useCallback((id: FormId) => setWorksheetId(id), [])
+  const closeWorksheet = useCallback(() => setWorksheetId(null), [])
 
   const reviewK1Doc = useCallback(
     (docId: number) => {
@@ -83,8 +93,8 @@ export function DockActionsProvider({ children }: DockActionsProviderProps): Rea
   )
 
   const value = useMemo<DockActionsValue>(
-    () => ({ reviewK1Doc, openReviewQueue, bulkSetSbpElection }),
-    [reviewK1Doc, openReviewQueue, bulkSetSbpElection],
+    () => ({ reviewK1Doc, openReviewQueue, bulkSetSbpElection, openWorksheet, closeWorksheet }),
+    [reviewK1Doc, openReviewQueue, bulkSetSbpElection, openWorksheet, closeWorksheet],
   )
 
   return (
@@ -104,6 +114,7 @@ export function DockActionsProvider({ children }: DockActionsProviderProps): Rea
           void refreshAll()
         }}
       />
+      <WorksheetModal worksheetId={worksheetId} onClose={closeWorksheet} />
     </DockActionsContext.Provider>
   )
 }

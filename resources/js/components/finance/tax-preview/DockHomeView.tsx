@@ -3,6 +3,7 @@ import { ArrowRight, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
+import { useDockActions } from './DockActions'
 import type { FormCategory, FormId } from './formRegistry'
 import { formRegistry } from './registry'
 import { useTaxRoute } from './useTaxRoute'
@@ -14,7 +15,9 @@ import { useTaxRoute } from './useTaxRoute'
 export function DockHomeView(): React.ReactElement {
   const { pushColumn } = useTaxRoute()
 
+  const { openWorksheet } = useDockActions()
   const columnEntries = Object.values(formRegistry).filter((e) => e.presentation === 'column')
+  const worksheets = Object.values(formRegistry).filter((e) => e.presentation === 'modal')
 
   const schedules = columnEntries.filter((e) => e.category === 'Schedule')
   const forms = columnEntries.filter((e) => e.category === 'Form')
@@ -60,9 +63,35 @@ export function DockHomeView(): React.ReactElement {
         <CardContent className="space-y-4">
           <FormGrid label="Schedules" entries={schedules} onOpen={(form) => pushColumn({ form })} />
           <FormGrid label="Forms" entries={forms} onOpen={(form) => pushColumn({ form })} />
-          <CategoryNote category="Worksheet" />
         </CardContent>
       </Card>
+
+      {worksheets.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              Worksheets
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Worksheets compute a single value (or set of values) and write it back to the relevant form. They open
+              as a modal dialog and don&apos;t affect the column stack.
+            </p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {worksheets.map((entry) => (
+                <FormButton
+                  key={entry.id}
+                  id={entry.id}
+                  label={entry.label}
+                  shortLabel={entry.shortLabel}
+                  onOpen={(id) => openWorksheet(id)}
+                />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
@@ -121,14 +150,6 @@ function FormButton({
   )
 }
 
-function CategoryNote({ category }: { category: FormCategory }): React.ReactElement | null {
-  if (category !== 'Worksheet') {
-    return null
-  }
-  return (
-    <p className="border-t border-border pt-3 text-xs text-muted-foreground">
-      Worksheets (SE 401(k), AMT exemption, taxable Social Security) are reachable from related forms and open as
-      modal dialogs rather than columns.
-    </p>
-  )
-}
+// CategoryNote was used to flag worksheets as deferred; now they're rendered
+// in their own card so the helper isn't needed. Type kept for future use.
+type _CategoryNote = FormCategory

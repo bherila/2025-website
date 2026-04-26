@@ -1,6 +1,7 @@
 import { ChevronLeft, X } from 'lucide-react'
 
 import { useTaxPreview } from '../TaxPreviewContext'
+import { useDockActions } from './DockActions'
 import { type FormRegistry, getEntry } from './formRegistry'
 import { InstanceTabs } from './InstanceTabs'
 import { useTaxRoute } from './useTaxRoute'
@@ -23,6 +24,27 @@ interface MillerShellProps {
 export function MillerShell({ registry, homeView }: MillerShellProps): React.ReactElement {
   const { route, pushColumn, replaceFrom, truncateTo } = useTaxRoute()
   const state = useTaxPreview()
+  const { openWorksheet } = useDockActions()
+
+  /**
+   * Drill dispatch: column-presentation targets push/replace into the column
+   * stack; modal-presentation targets open as a Dialog without affecting the
+   * stack (worksheet pattern).
+   */
+  const dispatchDrill =
+    (depth: number) =>
+    (target: { form: typeof route.columns[number]['form']; instance?: string }): void => {
+      const targetEntry = registry[target.form]
+      if (targetEntry?.presentation === 'modal') {
+        openWorksheet(target.form)
+        return
+      }
+      if (depth + 1 < route.columns.length) {
+        replaceFrom(depth + 1, target)
+      } else {
+        pushColumn(target)
+      }
+    }
 
   if (route.columns.length === 0) {
     return <div className="flex h-full w-full bg-background">{homeView}</div>
@@ -38,13 +60,7 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
         const isLast = depth === route.columns.length - 1
         const isCollapsed = !isLast
 
-        const onDrill = (target: { form: typeof col.form; instance?: string }): void => {
-          if (depth + 1 < route.columns.length) {
-            replaceFrom(depth + 1, target)
-          } else {
-            pushColumn(target)
-          }
-        }
+        const onDrill = dispatchDrill(depth)
 
         if (isCollapsed) {
           return (

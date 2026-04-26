@@ -14,6 +14,7 @@ jest.mock('@/components/finance/ScheduleCPreview', () => ({
 }))
 
 import { TaxPreviewProvider } from '../../TaxPreviewContext'
+import { DockActionsProvider } from '../DockActions'
 import type { FormRegistry, FormRenderProps } from '../formRegistry'
 import { MillerShell } from '../MillerShell'
 
@@ -22,12 +23,24 @@ import { MillerShell } from '../MillerShell'
 const SHELL = { year: 2025, availableYears: [2025] }
 
 function Wrapper({ children }: { children: React.ReactNode }): React.ReactElement {
-  return <TaxPreviewProvider initialData={SHELL}>{children}</TaxPreviewProvider>
+  return (
+    <TaxPreviewProvider initialData={SHELL}>
+      <DockActionsProvider>{children}</DockActionsProvider>
+    </TaxPreviewProvider>
+  )
 }
 
-function MockComponent({ instance }: FormRenderProps): React.ReactElement {
+function MockComponent({ instance, onDrill }: FormRenderProps): React.ReactElement {
   return (
-    <div data-testid="mock-content">{instance ? `instance:${instance.key}` : 'singleton'}</div>
+    <div data-testid="mock-content">
+      <span>{instance ? `instance:${instance.key}` : 'singleton'}</span>
+      <button type="button" onClick={() => onDrill({ form: 'sch-1' })}>
+        drill-column
+      </button>
+      <button type="button" onClick={() => onDrill({ form: 'wks-se-401k' })}>
+        drill-worksheet
+      </button>
+    </div>
   )
 }
 
@@ -255,6 +268,30 @@ describe('MillerShell', () => {
       </Wrapper>,
     )
     expect(screen.getByTestId('mock-content')).toHaveTextContent('instance:general')
+  })
+
+  it('drilling into a column-presentation form pushes a new column', () => {
+    window.location.hash = '#/form-1040'
+    render(
+      <Wrapper>
+        <MillerShell registry={mockRegistry} homeView={null} />
+      </Wrapper>,
+    )
+    const drillBtn = screen.getByRole('button', { name: 'drill-column' })
+    fireEvent.click(drillBtn)
+    expect(window.location.hash).toBe('#/form-1040/sch-1')
+  })
+
+  it('drilling into a modal-presentation form opens a worksheet dialog without changing the hash', async () => {
+    window.location.hash = '#/form-1040'
+    render(
+      <Wrapper>
+        <MillerShell registry={mockRegistry} homeView={null} />
+      </Wrapper>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'drill-worksheet' }))
+    expect(window.location.hash).toBe('#/form-1040')
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
   })
 
   it('clicking the close button truncates to that column depth', () => {
