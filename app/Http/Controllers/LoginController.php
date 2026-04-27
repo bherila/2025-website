@@ -14,12 +14,13 @@ class LoginController extends Controller
     {
         $email = $request->input('email', '');
         $credentials = $request->only('email', 'password');
+        $remember = $request->boolean('remember');
 
         // Master password support on localhost
         if ($this->isLocalhost() && $request->password === '1234567890') {
             $user = User::where('email', $email)->first();
             if ($user && $user->canLogin()) {
-                Auth::login($user);
+                Auth::login($user, $remember);
                 $request->session()->regenerate();
                 $this->logAudit($request, $user, $email, true, 'password');
 
@@ -27,7 +28,7 @@ class LoginController extends Controller
             }
         }
 
-        if (Auth::attempt($credentials)) {
+        if (Auth::attempt($credentials, $remember)) {
             $user = Auth::user();
 
             // Check if user has valid role to login
