@@ -3,6 +3,7 @@
 import currency from 'currency.js'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
+import { cn } from '@/lib/utils'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import type { Form4952Lines } from '@/types/finance/tax-return'
@@ -267,12 +268,14 @@ export default function Form4952Preview({
           ? 'C'
           : 'A'
 
-  const winTh = (scen: 'A' | 'B' | 'C') =>
-    bestScenario === scen
-      ? 'bg-emerald-50 dark:bg-emerald-950/20 border-t-2 border-emerald-500 text-emerald-600 dark:text-emerald-400'
-      : ''
-  const winTd = (scen: 'A' | 'B' | 'C') =>
-    bestScenario === scen ? 'bg-emerald-50 dark:bg-emerald-950/20' : ''
+  const WIN_BG = 'bg-emerald-50 dark:bg-emerald-950/20'
+  const BASE_TH = 'text-right px-3 py-2 font-medium'
+  const BASE_TD = 'px-3 py-2 text-right font-mono tabular-nums'
+
+  const thCx = (scen: 'A' | 'B' | 'C') =>
+    cn(BASE_TH, bestScenario === scen && [WIN_BG, 'border-t-2 border-emerald-500 text-emerald-600 dark:text-emerald-400'])
+  const tdCx = (scen: 'A' | 'B' | 'C', extra?: string | false) =>
+    cn(BASE_TD, bestScenario === scen && WIN_BG, extra)
 
   // ── NII source lines ─────────────────────────────────────────────────────
   type NiiLine = { label: string; amount: number }
@@ -404,16 +407,16 @@ export default function Form4952Preview({
                 <thead className="bg-muted/20">
                   <tr>
                     <th className="text-left px-3 py-2 text-muted-foreground font-medium w-32"></th>
-                    <th className={`text-right px-3 py-2 font-medium ${winTh('A')}`}>
+                    <th className={thCx('A')}>
                       A — No QD election {bestScenario === 'A' ? '★' : ''}
                       <div className="text-[10px] font-normal text-muted-foreground">QDs taxed at 23.8%</div>
                     </th>
-                    <th className={`text-right px-3 py-2 font-medium ${winTh('B')}`}>
+                    <th className={thCx('B')}>
                       B — Full QD election {bestScenario === 'B' ? '★' : ''}
                       <div className="text-[10px] font-normal text-muted-foreground">All {fmtAmt(totalQualDiv)} QDs at 37%</div>
                     </th>
                     {scenC_qdElected > 0 && scenC_qdElected < totalQualDiv && (
-                      <th className={`text-right px-3 py-2 font-medium ${winTh('C')}`}>
+                      <th className={thCx('C')}>
                         C — Partial QD election {bestScenario === 'C' ? '★' : ''}
                         <div className="text-[10px] font-normal text-muted-foreground">Elect {fmtAmt(scenC_qdElected)}</div>
                       </th>
@@ -423,54 +426,54 @@ export default function Form4952Preview({
                 <tbody className="divide-y divide-border">
                   <tr>
                     <td className="px-3 py-2 text-muted-foreground">NII</td>
-                    <td className={`px-3 py-2 text-right font-mono tabular-nums ${winTd('A')}`}>{fmtAmt(niiBefore)}</td>
-                    <td className={`px-3 py-2 text-right font-mono tabular-nums ${winTd('B')}`}>{fmtAmt(scenB_nii)}</td>
+                    <td className={tdCx('A')}>{fmtAmt(niiBefore)}</td>
+                    <td className={tdCx('B')}>{fmtAmt(scenB_nii)}</td>
                     {scenC_qdElected > 0 && scenC_qdElected < totalQualDiv && (
-                      <td className={`px-3 py-2 text-right font-mono tabular-nums ${winTd('C')}`}>{fmtAmt(scenC_nii)}</td>
+                      <td className={tdCx('C')}>{fmtAmt(scenC_nii)}</td>
                     )}
                   </tr>
                   <tr>
                     <td className="px-3 py-2 text-muted-foreground">Deductible</td>
-                    <td className={`px-3 py-2 text-right font-mono tabular-nums text-emerald-600 dark:text-emerald-500 ${winTd('A')}`}>{fmtAmt(scenA_deductible)}</td>
-                    <td className={`px-3 py-2 text-right font-mono tabular-nums text-emerald-600 dark:text-emerald-500 ${winTd('B')}`}>{fmtAmt(scenB_deductible)}</td>
+                    <td className={tdCx('A', 'text-emerald-600 dark:text-emerald-500')}>{fmtAmt(scenA_deductible)}</td>
+                    <td className={tdCx('B', 'text-emerald-600 dark:text-emerald-500')}>{fmtAmt(scenB_deductible)}</td>
                     {scenC_qdElected > 0 && scenC_qdElected < totalQualDiv && (
-                      <td className={`px-3 py-2 text-right font-mono tabular-nums text-emerald-600 dark:text-emerald-500 ${winTd('C')}`}>{fmtAmt(scenC_deductible)}</td>
+                      <td className={tdCx('C', 'text-emerald-600 dark:text-emerald-500')}>{fmtAmt(scenC_deductible)}</td>
                     )}
                   </tr>
                   <tr>
                     <td className="px-3 py-2 text-muted-foreground">Carryforward</td>
-                    <td className={`px-3 py-2 text-right font-mono tabular-nums ${winTd('A')} ${scenA_carryforward > 0 ? 'text-destructive' : ''}`}>
+                    <td className={tdCx('A', scenA_carryforward > 0 && 'text-destructive')}>
                       {scenA_carryforward > 0 ? `(${fmtAmt(scenA_carryforward)})` : '$0'}
                     </td>
-                    <td className={`px-3 py-2 text-right font-mono tabular-nums ${winTd('B')}`}>
+                    <td className={tdCx('B')}>
                       {scenB_carryforward > 0 ? `(${fmtAmt(scenB_carryforward)})` : '$0'}
                     </td>
                     {scenC_qdElected > 0 && scenC_qdElected < totalQualDiv && (
-                      <td className={`px-3 py-2 text-right font-mono tabular-nums ${winTd('C')}`}>$0</td>
+                      <td className={tdCx('C')}>$0</td>
                     )}
                   </tr>
                   <tr>
                     <td className="px-3 py-2 text-muted-foreground">Election Cost</td>
-                    <td className={`px-3 py-2 text-right font-mono tabular-nums ${winTd('A')}`}>$0</td>
-                    <td className={`px-3 py-2 text-right font-mono tabular-nums text-destructive ${winTd('B')}`}>
+                    <td className={tdCx('A')}>$0</td>
+                    <td className={tdCx('B', 'text-destructive')}>
                       {scenB_taxCostElection > 0 ? `(${fmtAmt(scenB_taxCostElection)})` : '$0'}
                     </td>
                     {scenC_qdElected > 0 && scenC_qdElected < totalQualDiv && (
-                      <td className={`px-3 py-2 text-right font-mono tabular-nums text-destructive ${winTd('C')}`}>
+                      <td className={tdCx('C', 'text-destructive')}>
                         {scenC_taxCostElection > 0 ? `(${fmtAmt(scenC_taxCostElection)})` : '$0'}
                       </td>
                     )}
                   </tr>
                   <tr className="font-semibold">
                     <td className="px-3 py-2 text-muted-foreground">Net Benefit</td>
-                    <td className={`px-3 py-2 text-right font-mono tabular-nums ${winTd('A')} ${scenA_carryforward > 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                    <td className={tdCx('A', scenA_carryforward > 0 ? 'text-destructive' : 'text-muted-foreground')}>
                       {scenA_carryforward > 0 ? `(${fmtAmt(scenA_carryforward)}) lost` : 'Break-even'}
                     </td>
-                    <td className={`px-3 py-2 text-right font-mono tabular-nums ${winTd('B')} ${scenB_netBenefit > 0 ? 'text-emerald-600 dark:text-emerald-500' : 'text-destructive'}`}>
+                    <td className={tdCx('B', scenB_netBenefit > 0 ? 'text-emerald-600 dark:text-emerald-500' : 'text-destructive')}>
                       {scenB_netBenefit >= 0 ? '+' : ''}{fmtAmt(scenB_netBenefit)}
                     </td>
                     {scenC_qdElected > 0 && scenC_qdElected < totalQualDiv && (
-                      <td className={`px-3 py-2 text-right font-mono tabular-nums ${winTd('C')} ${scenC_netBenefit > 0 ? 'text-emerald-600 dark:text-emerald-500' : 'text-destructive'}`}>
+                      <td className={tdCx('C', scenC_netBenefit > 0 ? 'text-emerald-600 dark:text-emerald-500' : 'text-destructive')}>
                         {scenC_netBenefit >= 0 ? '+' : ''}{fmtAmt(scenC_netBenefit)}
                       </td>
                     )}
