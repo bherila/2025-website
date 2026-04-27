@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -13,8 +14,9 @@ class UserAiModelsController extends Controller
     public function fetch(Request $request): JsonResponse
     {
         $request->validate([
-            'provider' => ['required', 'string', 'in:gemini,anthropic,bedrock'],
-            'api_key' => ['required', 'string'],
+            'provider' => ['required', 'string', 'in:gemini,anthropic'],
+            'api_key' => ['nullable', 'string'],
+            'config_id' => ['nullable', 'integer'],
             'region' => ['nullable', 'string'],
             'session_token' => ['nullable', 'string'],
         ]);
@@ -22,11 +24,23 @@ class UserAiModelsController extends Controller
         $provider = $request->input('provider');
         $apiKey = $request->input('api_key');
 
+        // For edit flows, accept a config_id and reuse the saved key rather than
+        // requiring the user to re-enter it.
+        if (! $apiKey && $request->filled('config_id')) {
+            $config = Auth::user()->aiConfigurations()->find($request->input('config_id'));
+            if ($config) {
+                $apiKey = $config->api_key;
+            }
+        }
+
+        if (! $apiKey) {
+            return response()->json(['error' => 'An API key is required to fetch models.'], 422);
+        }
+
         try {
             $models = match ($provider) {
                 'gemini' => $this->fetchGeminiModels($apiKey),
                 'anthropic' => $this->fetchAnthropicModels($apiKey),
-                'bedrock' => $this->fetchBedrockModels($apiKey, $request->input('region', 'us-east-1'), $request->input('session_token')),
             };
 
             return response()->json(['models' => $models]);
@@ -72,22 +86,5 @@ class UserAiModelsController extends Controller
             ->pluck('id')
             ->values()
             ->all();
-    }
-
-    /** @return list<string> */
-    private function fetchBedrockModels(string $apiKey, string $region, ?string $sessionToken): array
-    {
-        // Bedrock requires AWS SDK; hit the REST endpoint directly using SigV4 would be complex,
-        // so we return a curated list of known on-demand models for now.
-        // This can be replaced with SDK-based listing when AWS SDK is added as a dependency.
-        return [
-            'anthropic.claude-opus-4-7',
-            'anthropic.claude-sonnet-4-6',
-            'anthropic.claude-haiku-4-5-20251001',
-            'amazon.titan-text-premier-v1:0',
-            'amazon.titan-text-express-v1',
-            'meta.llama3-70b-instruct-v1:0',
-            'meta.llama3-8b-instruct-v1:0',
-        ];
     }
 }

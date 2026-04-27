@@ -59,9 +59,9 @@ const PROVIDER_LABELS: Record<Provider, string> = {
 };
 
 const PROVIDER_BADGE_CLASS: Record<Provider, string> = {
-  gemini: 'bg-blue-100 text-blue-800',
-  anthropic: 'bg-orange-100 text-orange-800',
-  bedrock: 'bg-purple-100 text-purple-800',
+  gemini: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+  anthropic: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
+  bedrock: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
 };
 
 const EMPTY_FORM: FormState = {
@@ -141,10 +141,14 @@ export const AiConfigurationsSection: React.FC<AiConfigurationsSectionProps> = (
     setFetchingModels(true);
     setModelsError(null);
     try {
-      const payload: Record<string, string> = {
+      const payload: Record<string, string | number> = {
         provider: form.provider,
-        api_key: form.api_key || (editingConfig ? '(unchanged)' : ''),
       };
+      if (form.api_key) {
+        payload.api_key = form.api_key;
+      } else if (editingConfig) {
+        payload.config_id = editingConfig.id;
+      }
       if (form.provider === 'bedrock') {
         payload.region = form.region;
         if (form.session_token) payload.session_token = form.session_token;
@@ -233,7 +237,6 @@ export const AiConfigurationsSection: React.FC<AiConfigurationsSectionProps> = (
     }
   };
 
-  const credentialsFilled = form.api_key.length > 0 || (editingConfig !== null && form.api_key === '');
   const fetchModelsDisabled = fetchingModels || (!form.api_key && !editingConfig);
 
   return (
@@ -398,28 +401,38 @@ export const AiConfigurationsSection: React.FC<AiConfigurationsSectionProps> = (
 
             <div className="space-y-1">
               <Label htmlFor="config-model">Model</Label>
-              <div className="flex gap-2">
-                <select
+              {form.provider === 'bedrock' ? (
+                <Input
                   id="config-model"
                   required
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
                   value={form.model}
                   onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
-                >
-                  <option value="">Select a model…</option>
-                  {models.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={fetchModelsDisabled}
-                  onClick={handleFetchModels}
-                  className="shrink-0"
-                >
-                  {fetchingModels ? <><Spinner className="mr-1 size-3" />Fetching…</> : 'Fetch models'}
-                </Button>
-              </div>
+                  placeholder="e.g. anthropic.claude-3-5-sonnet-20241022-v2:0"
+                />
+              ) : (
+                <div className="flex gap-2">
+                  <select
+                    id="config-model"
+                    required
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                    value={form.model}
+                    onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
+                  >
+                    <option value="">Select a model…</option>
+                    {models.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={fetchModelsDisabled}
+                    onClick={handleFetchModels}
+                    className="shrink-0"
+                  >
+                    {fetchingModels ? <><Spinner className="mr-1 size-3" />Fetching…</> : 'Fetch models'}
+                  </Button>
+                </div>
+              )}
               {modelsError && (
                 <Alert variant="destructive" className="mt-1 py-2">
                   <AlertDescription className="text-xs">{modelsError}</AlertDescription>

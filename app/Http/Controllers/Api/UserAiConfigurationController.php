@@ -94,6 +94,9 @@ class UserAiConfigurationController extends Controller
         $config = $this->findOwned($id);
 
         DB::transaction(function () use ($config) {
+            // Lock all of the user's configs so concurrent activate calls are serialized
+            // (the partial unique index would otherwise reject the loser with a generic 500).
+            Auth::user()->aiConfigurations()->lockForUpdate()->get();
             Auth::user()->aiConfigurations()->update(['is_active' => false]);
             $config->update(['is_active' => true]);
         });
