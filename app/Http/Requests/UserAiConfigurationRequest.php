@@ -26,6 +26,7 @@ class UserAiConfigurationRequest extends FormRequest
             'region' => ['nullable', 'string', 'max:64', 'required_if:provider,bedrock'],
             'session_token' => ['nullable', 'string'],
             'model' => ['required', 'string', 'max:255'],
+            'expires_at' => ['nullable', 'date', 'after:today'],
         ];
     }
 
@@ -34,6 +35,7 @@ class UserAiConfigurationRequest extends FormRequest
         return [
             'api_key.required' => 'An API key is required when creating a configuration.',
             'region.required_if' => 'A region is required for Bedrock configurations.',
+            'expires_at.after' => 'The expiry date must be in the future.',
         ];
     }
 }

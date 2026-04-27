@@ -13,6 +13,9 @@ use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\GenAiFileHelper;
+use Bherila\GenAiLaravel\Clients\AnthropicClient;
+use Bherila\GenAiLaravel\Clients\BedrockClient;
+use Bherila\GenAiLaravel\Clients\GeminiClient;
 use Bherila\GenAiLaravel\Contracts\GenAiClient;
 use Bherila\GenAiLaravel\Exceptions\GenAiFatalException;
 use Bherila\GenAiLaravel\Exceptions\GenAiRateLimitException;
@@ -65,6 +68,13 @@ class ParseImportJob implements ShouldQueue
             return;
         }
 
+        $activeConfig = $user->activeAiConfiguration();
+        if ($activeConfig && $activeConfig->isExpired()) {
+            $job->markFailed('Your AI configuration "'.$activeConfig->name.'" has expired. Please update it in Settings.');
+
+            return;
+        }
+
         $client = $user->resolvedAiClient();
         if (! $client) {
             $job->markFailed('No AI configuration found. Please add one in Settings.');
@@ -110,7 +120,7 @@ class ParseImportJob implements ShouldQueue
 
             $job->markProcessing();
 
-            ['data' => $data, 'raw_response' => $rawResponse] = $this->callGenerateContent(
+            ['data' => $data, 'raw_response' => $rawResponse, 'input_tokens' => $inputTokens, 'output_tokens' => $outputTokens] = $this->callGenerateContent(
                 $client,
                 $dispatcher,
                 $job->job_type,
@@ -119,8 +129,19 @@ class ParseImportJob implements ShouldQueue
                 $prompt
             );
 
+            $jobUpdates = [];
             if ($rawResponse !== null) {
-                $job->update(['raw_response' => $rawResponse]);
+                $jobUpdates['raw_response'] = $rawResponse;
+            }
+            if ($activeConfig) {
+                $jobUpdates['ai_configuration_id'] = $activeConfig->id;
+            }
+            if ($inputTokens !== null) {
+                $jobUpdates['input_tokens'] = $inputTokens;
+                $jobUpdates['output_tokens'] = $outputTokens;
+            }
+            if (! empty($jobUpdates)) {
+                $job->update($jobUpdates);
             }
 
             if ($data === null) {
@@ -193,7 +214,7 @@ class ParseImportJob implements ShouldQueue
      * Uses GenAiFileHelper to handle File API vs inline fallback transparently.
      *
      * @param  resource  $fileStream
-     * @return array{data: array<string, mixed>|null, raw_response: string|null}
+     * @return array{data: array<string, mixed>|null, raw_response: string|null, input_tokens: int|null, output_tokens: int|null}
      */
     private function callGenerateContent(
         GenAiClient $client,
@@ -215,7 +236,48 @@ class ParseImportJob implements ShouldQueue
             ]);
         }
 
-        return ['data' => $data, 'raw_response' => $rawResponse];
+        [$inputTokens, $outputTokens] = $this->extractTokenUsage($client, is_array($response) ? $response : []);
+
+        return ['data' => $data, 'raw_response' => $rawResponse, 'input_tokens' => $inputTokens, 'output_tokens' => $outputTokens];
+    }
+
+    /**
+     * Extract token usage counts from a provider response.
+     * Each provider uses a different response shape.
+     *
+     * @param  array<string, mixed>  $response
+     * @return array{int|null, int|null}
+     */
+    private function extractTokenUsage(GenAiClient $client, array $response): array
+    {
+        if ($client instanceof GeminiClient) {
+            $meta = $response['usageMetadata'] ?? [];
+
+            return [
+                isset($meta['promptTokenCount']) ? (int) $meta['promptTokenCount'] : null,
+                isset($meta['candidatesTokenCount']) ? (int) $meta['candidatesTokenCount'] : null,
+            ];
+        }
+
+        if ($client instanceof AnthropicClient) {
+            $usage = $response['usage'] ?? [];
+
+            return [
+                isset($usage['input_tokens']) ? (int) $usage['input_tokens'] : null,
+                isset($usage['output_tokens']) ? (int) $usage['output_tokens'] : null,
+            ];
+        }
+
+        if ($client instanceof BedrockClient) {
+            $usage = $response['usage'] ?? [];
+
+            return [
+                isset($usage['inputTokens']) ? (int) $usage['inputTokens'] : null,
+                isset($usage['outputTokens']) ? (int) $usage['outputTokens'] : null,
+            ];
+        }
+
+        return [null, null];
     }
 
     /**

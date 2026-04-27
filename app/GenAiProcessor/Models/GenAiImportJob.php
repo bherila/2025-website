@@ -34,6 +34,7 @@ class GenAiImportJob extends Model
 
     protected $fillable = [
         'user_id',
+        'ai_configuration_id',
         'acct_id',
         'job_type',
         'file_hash',
@@ -48,6 +49,8 @@ class GenAiImportJob extends Model
         'retry_count',
         'scheduled_for',
         'parsed_at',
+        'input_tokens',
+        'output_tokens',
     ];
 
     protected $casts = [
@@ -55,6 +58,8 @@ class GenAiImportJob extends Model
         'retry_count' => 'integer',
         'scheduled_for' => 'date',
         'parsed_at' => 'datetime',
+        'input_tokens' => 'integer',
+        'output_tokens' => 'integer',
     ];
 
     protected static function boot(): void

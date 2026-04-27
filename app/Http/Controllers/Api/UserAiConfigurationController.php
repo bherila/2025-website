@@ -37,6 +37,7 @@ class UserAiConfigurationController extends Controller
                 'session_token' => $data['session_token'] ?? null,
                 'model' => $data['model'],
                 'is_active' => false,
+                'expires_at' => $data['expires_at'] ?? null,
             ]);
 
             // Auto-activate if this is the first config
@@ -61,6 +62,7 @@ class UserAiConfigurationController extends Controller
             'region' => $data['region'] ?? null,
             'session_token' => $data['session_token'] ?? null,
             'model' => $data['model'],
+            'expires_at' => $data['expires_at'] ?? null,
         ];
 
         if (! empty($data['api_key'])) {

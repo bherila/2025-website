@@ -168,6 +168,101 @@ class UserAiConfigurationTest extends TestCase
         ])->assertUnprocessable()->assertJsonValidationErrors(['provider']);
     }
 
+    // --- expires_at ---
+
+    public function test_store_accepts_future_expiry_date(): void
+    {
+        $user = User::factory()->create();
+        $futureDate = now()->addYear()->toDateString();
+
+        $this->actingAs($user)->postJson('/api/user/ai-prefs', [
+            'name' => 'Expiring Key',
+            'provider' => 'gemini',
+            'api_key' => 'fake-key',
+            'model' => 'gemini-2.0-flash',
+            'expires_at' => $futureDate,
+        ])->assertCreated()->assertJsonFragment(['expires_at' => now()->addYear()->startOfDay()->toIso8601String()]);
+    }
+
+    public function test_store_rejects_past_expiry_date(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->postJson('/api/user/ai-prefs', [
+            'name' => 'Old Key',
+            'provider' => 'gemini',
+            'api_key' => 'fake-key',
+            'model' => 'gemini-2.0-flash',
+            'expires_at' => now()->subDay()->toDateString(),
+        ])->assertUnprocessable()->assertJsonValidationErrors(['expires_at']);
+    }
+
+    public function test_update_can_clear_expiry_date(): void
+    {
+        $user = User::factory()->create();
+        $config = UserAiConfiguration::factory()->for($user)->gemini()->expiredAt(now()->addMonth())->create();
+
+        $this->actingAs($user)->putJson("/api/user/ai-prefs/{$config->id}", [
+            'name' => $config->name,
+            'provider' => 'gemini',
+            'model' => 'gemini-2.0-flash',
+        ])->assertOk()->assertJsonFragment(['expires_at' => null]);
+    }
+
+    public function test_is_expired_flag_is_true_for_past_expiry(): void
+    {
+        $user = User::factory()->create();
+        $config = UserAiConfiguration::factory()->active()->for($user)->gemini()
+            ->expiredAt(now()->subDay())
+            ->create();
+
+        $response = $this->actingAs($user)->getJson('/api/user/ai-prefs');
+        $response->assertOk();
+        $this->assertTrue($response->json('0.is_expired'));
+    }
+
+    public function test_is_expired_flag_is_false_for_future_expiry(): void
+    {
+        $user = User::factory()->create();
+        UserAiConfiguration::factory()->active()->for($user)->gemini()
+            ->expiredAt(now()->addYear())
+            ->create();
+
+        $response = $this->actingAs($user)->getJson('/api/user/ai-prefs');
+        $response->assertOk();
+        $this->assertFalse($response->json('0.is_expired'));
+    }
+
+    public function test_is_expired_flag_is_false_when_no_expiry(): void
+    {
+        $user = User::factory()->create();
+        UserAiConfiguration::factory()->active()->for($user)->gemini()->create();
+
+        $response = $this->actingAs($user)->getJson('/api/user/ai-prefs');
+        $response->assertOk();
+        $this->assertFalse($response->json('0.is_expired'));
+    }
+
+    // --- usage stats ---
+
+    public function test_index_returns_usage_stats_field(): void
+    {
+        $user = User::factory()->create();
+        UserAiConfiguration::factory()->active()->for($user)->gemini()->create();
+
+        $response = $this->actingAs($user)->getJson('/api/user/ai-prefs');
+        $response->assertOk();
+
+        $usage = $response->json('0.usage');
+        $this->assertIsArray($usage);
+        $this->assertArrayHasKey('this_month', $usage);
+        $this->assertArrayHasKey('total', $usage);
+        $this->assertSame(0, $usage['this_month']['input_tokens']);
+        $this->assertSame(0, $usage['this_month']['output_tokens']);
+        $this->assertSame(0, $usage['total']['input_tokens']);
+        $this->assertSame(0, $usage['total']['output_tokens']);
+    }
+
     // --- resolvedAiClient ---
 
     public function test_resolved_ai_client_returns_null_when_no_config_and_no_legacy_key(): void
@@ -182,6 +277,16 @@ class UserAiConfigurationTest extends TestCase
         $client = $user->resolvedAiClient();
         $this->assertNotNull($client);
         $this->assertSame('gemini', $client->provider());
+    }
+
+    public function test_resolved_ai_client_returns_null_for_expired_active_config(): void
+    {
+        $user = User::factory()->create(['gemini_api_key' => null]);
+        UserAiConfiguration::factory()->active()->gemini()->for($user)
+            ->expiredAt(now()->subDay())
+            ->create();
+
+        $this->assertNull($user->resolvedAiClient());
     }
 
     public function test_resolved_ai_client_uses_active_configuration_over_legacy_key(): void
