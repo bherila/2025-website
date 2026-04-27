@@ -884,7 +884,7 @@ export const formRegistry: FormRegistry = {
     component: Form8582Adapter,
     keyAmounts: (state) => {
       const f8582 = state.taxReturn.form8582
-      if (!f8582) {
+      if (!f8582 || f8582.activities.length === 0) {
         return null
       }
       return [{ label: 'Net', value: f8582.netPassiveResult }]
