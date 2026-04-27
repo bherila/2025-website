@@ -3,7 +3,7 @@
 This document covers the statement viewing experience and related backend enhancements.
 
 For the full transaction import workflow (supported formats, checkboxes, UI components), see [import.md](import.md).
-For the GenAI asynchronous import pipeline (architecture, API, quota), see [GenAI Import](../GenAI-Import.md).
+For the GenAI asynchronous import pipeline (architecture, API, quota), see [GenAI Import](../genai-import.md).
 
 ---
 

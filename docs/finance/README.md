@@ -11,11 +11,14 @@ Start here when you need to orient yourself in the finance codebase. Each doc be
 | Tags + characteristics | [tags.md](tags.md) | `app/Models/FinanceTool/FinAccountTag.php::TAX_CHARACTERISTICS` |
 | Transactions table UI | [transactions-table.md](transactions-table.md) | `resources/js/components/finance/TransactionsPage.tsx` |
 | CSV statement import | [import.md](import.md), [csv-parsers.md](csv-parsers.md), [statements.md](statements.md) | `app/Services/Finance/Parsers/` |
+| IB statement schema | [ib-statement-schema.md](ib-statement-schema.md) | `fin_statement_positions`, `fin_statement_performance`, etc. |
 | Auto-tagging rules | [rules-engine.md](rules-engine.md) | `app/Services/Finance/RulesEngineService.php` |
 | Payslips (W-2 prep) | [payslips.md](payslips.md) | `app/Models/FinanceTool/FinPayslips.php` |
+| RSU awards | [rsu.md](rsu.md) | `resources/js/components/rsu/` |
 | Lot accounting + short-div | [lot-analyzer.md](lot-analyzer.md) | `app/Services/Finance/LotAnalyzer*` |
 | Tax system (Tabs UI + data) | [tax-system.md](tax-system.md) | `resources/js/components/finance/TaxPreviewPage.tsx` |
 | **Tax Preview — Dock UI** | **[tax-preview-dock.md](tax-preview-dock.md)** | `resources/js/components/finance/tax-preview/` |
+| K-1 badge system (future) | [k1-badge-system-future.md](k1-badge-system-future.md) | `K1ReviewPanel.tsx` |
 | CLI (artisan commands) | [cli.md](cli.md) | `app/Console/Commands/Finance*` |
 | MCP server (AI tools) | [mcp-server.md](mcp-server.md) | `app/Mcp/` |
 

@@ -421,78 +421,6 @@ Location: `resources/js/client-management/components/portal/`
   - Details button on each card
   - Collapsible inactive section at bottom
 
-## User Workflow
-
-### Creating a New Company
-1. Admin navigates to `/client/mgmt`
-2. Clicks "New Company" button
-3. Enters company name
-4. Clicks "Create Company"
-5. Redirected to company details page with all fields available
-
-### Editing Company Details
-1. Admin navigates to company list or directly to `/client/mgmt/{id}`
-2. Edits any field (address, website, phone, rate, notes, status)
-3. Clicks "Save Changes"
-4. `last_activity` automatically updated to current timestamp
-
-### Assigning Users to Companies
-
-**From Main List Page (`/client/mgmt`):**
-1. Admin clicks "Invite People" button in top-right corner
-2. Modal opens with user and company dropdowns
-3. Current user is pre-selected in the user dropdown
-4. Selects target company from dropdown
-5. Clicks "Add User"
-6. List refreshes showing updated associations
-
-**From Company Card on List Page:**
-1. Admin clicks "+Add User" button on any company card
-2. Modal opens with the company pre-selected
-3. Current user is pre-selected in the user dropdown
-4. Clicks "Add User"
-5. List refreshes showing updated associations
-
-**From Company Details Page (`/client/mgmt/{id}`):**
-1. Admin clicks "+Add User" button in Associated Users section
-2. Modal opens with the current company pre-selected
-3. Current user is pre-selected in the user dropdown
-4. Clicks "Add User"
-5. Page refreshes showing updated user list
-
-**Creating New Users:**
-1. In the Invite People modal, select "Add a new user" from the user dropdown
-2. Enter name and email for the new user
-3. System creates user with a random password
-4. User receives access and can reset their password on first login
-5. User is automatically assigned to the selected company
-
-### Removing Users from Companies
-1. Admin views company details page
-2. Clicks X button on user badge
-3. Confirms removal
-4. User removed from company (pivot record deleted)
-
-### Deactivating Companies
-1. Admin edits company details
-2. Unchecks "Is Active" checkbox
-3. Saves changes
-4. Company moves to "Inactive Companies" section on list page
-
-## Future Enhancements
-The Client Management system is designed to support future features:
-
-### Implemented Features
-- ✅ **Projects**: Track projects per client company with slug-based URLs
-- ✅ **Task Management**: Associate tasks with projects, track priority and completion
-- ✅ **Time Tracking**: Log hours worked per project/task with billable flag
-- ✅ **File Attachments**: Upload files to client companies, projects, agreements, and tasks
-
-### Planned Additions
-- **Expense Tracking**: Track project-related expenses
-- **Reporting**: Revenue per client, project profitability, time utilization, etc.
-- **Comments**: Add comments to tasks and time entries
-
 ## File Storage System
 
 ### Overview
@@ -684,118 +612,23 @@ Individual line items on invoices.
 - `sort_order`: Display order (integer)
 - `created_at`, `updated_at`: Timestamps
 
-### Models
-
-#### `App\Models\ClientManagement\ClientAgreement`
-Location: `app/Models/ClientManagement/ClientAgreement.php`
-
-**Relationships:**
-- `clientCompany()`: Belongs to `ClientCompany`
-- `invoices()`: One-to-many relationship with `ClientInvoice`
-- `signedByUser()`: Belongs to `User` (client_company_signed_user_id)
-
-#### `App\Models\ClientManagement\ClientInvoice`
-Location: `app/Models/ClientManagement/ClientInvoice.php`
-
-**Relationships:**
-- `clientCompany()`: Belongs to `ClientCompany`
-- `agreement()`: Belongs to `ClientAgreement`
-- `lineItems()`: One-to-many relationship with `ClientInvoiceLine`
-- `payments()`: One-to-many relationship with `ClientInvoicePayment`
-
-**Computed Properties (Accessors):**
-- `payments_total`: Sum of all payment amounts
-- `remaining_balance`: `invoice_total - payments_total`
-
-**Methods:**
-- `isEditable()`: Returns true if status is 'draft'
-- `isIssued()`: Returns true if `issue_date` is set
-- `issue()`: Sets status to 'issued' and `issue_date` to now
-- `markPaid($paidDate = null)`: Sets status to 'paid' and `paid_date` (defaults to now)
-- `void()`: Sets status to 'void'
-- `unVoid(string $targetStatus)`: Reverts a voided invoice to 'issued' or 'draft' status
-- `recalculateTotal()`: Updates `invoice_total` from sum of line items
-
-#### `App\Models\ClientManagement\ClientInvoicePayment`
-Location: `app/Models/ClientManagement/ClientInvoicePayment.php`
-
-**Relationships:**
-- `invoice()`: Belongs to `ClientInvoice`
-
-#### `App\Models\ClientManagement\ClientInvoiceLine`
-Location: `app/Models/ClientManagement/ClientInvoiceLine.php`
-
-**Relationships:**
-- `invoice()`: Belongs to `ClientInvoice`
-
 ### Services
 
-#### `App\Services\ClientManagement\RolloverCalculator`
-Location: `app/Services/ClientManagement/RolloverCalculator.php`
+- **`TimeEntrySplitter`**: Deterministic allocation and fragment creation
+- **`AllocationService`**: Fragment recombination and allocation tracking
+- **`RolloverCalculator`**: Opening/closing balances with FIFO rollover (`app/Services/ClientManagement/RolloverCalculator.php`)
+- **`ClientInvoicingService`**: Orchestrates invoice generation
 
-Pure PHP class encapsulating all rollover hour calculation logic. Designed for testability and reuse.
-
-**Key Concepts:**
-- **Retainer Hours**: Monthly hours included in the service agreement
-- **Rollover Hours**: Unused hours from previous months that carry forward
-- **Rollover Months**: Number of months hours can roll over (0 = no rollover)
-- **Expired Hours**: Rollover hours that exceeded the rollover_months limit
-
-**Public Methods:**
-
-```php
-public function calculateOpeningBalance(array $monthlyData, string $yearMonth): array
-```
-Returns the opening balance for a given month:
-- `retainer_hours`: Hours included in current month
-- `rollover_hours`: Hours carried from previous months
-- `expired_hours`: Hours that expired (exceeded rollover_months limit)
-- `total_available`: retainer + rollover
-
-```php
-public function calculateClosingBalance(array $openingBalance, float $hoursWorked): array
-```
-Returns the closing balance after work:
-- `unused_hours`: Hours that can roll to next month
-- `excess_hours`: Hours beyond available (will be billed at hourly rate)
-- `status`: 'under' or 'over'
-
-```php
-public function calculateMonthSummary(array $monthlyData, string $yearMonth, float $hoursWorked): array
-```
-Combines opening and closing calculations for a complete month summary.
-
-```php
-public function calculateMultipleMonths(array $monthlyData): array
-```
-Processes all months chronologically, calculating opening and closing balances for each.
-
-**Rollover Logic:**
-
-The rollover calculation uses FIFO (First In, First Out) for tracking which hours expire:
-
-1. **rollover_months = 0**: No rollover; unused hours expire immediately
-2. **rollover_months = 1**: Hours can only be used in the month they're earned
-3. **rollover_months = 2**: Hours can roll over to the next month, then expire
-4. **rollover_months = 3+**: Hours can roll over for N-1 additional months
-
-**Example Scenarios:**
-
-| Scenario | Retainer | Worked | Rollover In | Result |
-|----------|----------|--------|-------------|--------|
-| Under retainer, no rollover | 10h | 8h | 0h | 2h unused, rolls over |
-| Over retainer, has rollover | 10h | 14h | 5h | Uses 4h rollover, 1h rollover remains |
-| Over retainer, insufficient rollover | 10h | 18h | 5h | Uses all 5h rollover, 3h billed extra |
-| Hours expire | 10h | 6h | 8h (3mo old) | 4h expire, 4h new unused |
+See [billing.md](billing.md) for full billing logic documentation.
 
 ### Time Entry Splitting & Allocation
 
-The invoicing system uses deterministic time entry splitting to allocate work across different capacity pools. When a single time entry spans multiple allocation types, it is split into fragments.
+When a single time entry spans multiple allocation types, it is split into fragments.
 
 **Allocation Order (Deterministic):**
 
 1. **Prior Month Retainer**: Hours allocated against the prior month's retainer capacity
-2. **Current Month Retainer**: Hours allocated against the current month's retainer capacity  
+2. **Current Month Retainer**: Hours allocated against the current month's retainer capacity
 3. **Catch-up Threshold**: Hours billed to maintain minimum availability (based on `catch_up_threshold_hours`)
 4. **Billable Catch-up**: Remaining hours billed at hourly rate
 
@@ -902,146 +735,6 @@ The time entries API includes delayed billing information:
 | `delayed_billing` | Prior period hours billed to current invoice |
 | `credit` | Rollover hours applied (informational, $0) |
 
-### Controllers
-
-#### `App\Http\Controllers\ClientManagement\ClientAgreementController`
-Web routes for managing agreements:
-- `index($companyId)`: List company agreements
-- `create($companyId)`: New agreement form
-- `store($companyId)`: Create agreement
-- `show($companyId, $agreementId)`: View/edit agreement
-
-#### `App\Http\Controllers\ClientManagement\ClientInvoiceController`
-Web routes for managing invoices:
-- `index($companyId)`: List company invoices
-- `show($companyId, $invoiceId)`: View/edit invoice
-- `create($companyId)`: Generate new invoice
-
-#### `App\Http\Controllers\ClientManagement\ClientInvoiceApiController`
-API endpoints for invoice operations:
-- `index($company)`: List all invoices for a company
-- `show($company, $invoice)`: Get invoice details with line items and payments
-- `preview($company)`: Preview invoice before generating
-- `store($company)`: Generate new invoice for billing period
-- `update($company, $invoice)`: Update invoice notes/due date (draft only)
-- `issue($company, $invoice)`: Issue a draft invoice
-- `markPaid($company, $invoice)`: Mark invoice as paid
-- `void($company, $invoice)`: Void an invoice (only if no payments exist)
-- `unVoid($company, $invoice)`: Revert a voided invoice to issued/draft
-- `destroy($company, $invoice)`: Delete a draft invoice
-- `addLineItem($company, $invoice, ...)`: Add custom line item
-- `updateLineItem($company, $invoice, $lineId, ...)`: Update a line item
-- `removeLineItem($company, $invoice, $lineId)`: Remove a line item
-- `getPayments($company, $invoice)`: List payments on invoice
-- `addPayment($company, $invoice, ...)`: Add payment (auto-marks paid if balance is zero)
-- `updatePayment($company, $invoice, $payment, ...)`: Update payment
-- `deletePayment($company, $invoice, $payment)`: Delete payment
-
-**Invoice Status Transitions:**
-```
-draft → issued → paid
-         ↓
-        void → issued (via unVoid)
-               ↓
-              draft (via unVoid)
-```
-
-**Validation Rules:**
-- Cannot void an invoice with payments (must delete payments first)
-- Cannot create overlapping invoice periods for the same company
-- Cannot issue an invoice that's already issued
-- Only draft invoices can be deleted
-
-### API Routes for Invoices
-
-All routes require `['web', 'auth']` middleware and Admin gate authorization:
-
-```
-GET    /api/client/mgmt/companies/{company}/invoices
-GET    /api/client/mgmt/companies/{company}/invoices/{invoice}
-POST   /api/client/mgmt/companies/{company}/invoices/generate-all
-POST   /api/client/mgmt/companies/{company}/invoices
-PUT    /api/client/mgmt/companies/{company}/invoices/{invoice}
-POST   /api/client/mgmt/companies/{company}/invoices/{invoice}/issue
-POST   /api/client/mgmt/companies/{company}/invoices/{invoice}/mark-paid
-POST   /api/client/mgmt/companies/{company}/invoices/{invoice}/void
-POST   /api/client/mgmt/companies/{company}/invoices/{invoice}/unvoid
-DELETE /api/client/mgmt/companies/{company}/invoices/{invoice}
-POST   /api/client/mgmt/companies/{company}/invoices/{invoice}/line-items
-PUT    /api/client/mgmt/companies/{company}/invoices/{invoice}/line-items/{lineId}
-DELETE /api/client/mgmt/companies/{company}/invoices/{invoice}/line-items/{lineId}
-GET    /api/client/mgmt/companies/{company}/invoices/{invoice}/payments
-POST   /api/client/mgmt/companies/{company}/invoices/{invoice}/payments
-PUT    /api/client/mgmt/companies/{company}/invoices/{invoice}/payments/{payment}
-DELETE /api/client/mgmt/companies/{company}/invoices/{invoice}/payments/{payment}
-```
-
-#### Payment API Details
-
-**GET `/api/client/mgmt/companies/{company}/invoices/{invoice}/payments`**
-- Returns array of all payments for the invoice, ordered by payment_date descending
-- Response includes: payment_id, amount, payment_date, payment_method, notes
-
-**POST `/api/client/mgmt/companies/{company}/invoices/{invoice}/payments`**
-- Creates a new payment for the invoice
-- Request body: `{ amount, payment_date, payment_method, notes? }`
-- Validation:
-  - `amount`: Required, numeric, min:0.01
-  - `payment_date`: Required, valid date
-  - `payment_method`: Required, one of: Credit Card, ACH, Wire, Check, Other
-  - `notes`: Optional, string
-- **Overpayment Protection**: Returns 422 error if payment amount exceeds remaining balance
-- Auto-marks invoice as "paid" when `remaining_balance <= 0`, setting `paid_date` to latest payment date
-- Returns 201 with payment object and updated invoice
-
-**PUT `/api/client/mgmt/companies/{company}/invoices/{invoice}/payments/{payment}`**
-- Updates an existing payment
-- Request body: Same as POST
-- Validation: Same as POST
-- **Overpayment Protection**: Returns 422 error if updated total payments would exceed invoice total
-- Auto-updates invoice status:
-  - Sets status to "paid" if `remaining_balance <= 0`
-  - Reverts status to "issued" if `remaining_balance > 0` (e.g., after reducing payment)
-- Returns 200 with updated payment and invoice
-
-**DELETE `/api/client/mgmt/companies/{company}/invoices/{invoice}/payments/{payment}`**
-- Deletes a payment
-- Auto-updates invoice status: If invoice was "paid" and `remaining_balance > 0` after deletion, reverts status to "issued" and clears `paid_date`
-- Returns 200 with updated invoice
-
-### Unit Tests
-
-#### `tests/Unit/Services/ClientManagement/RolloverCalculatorTest.php`
-
-Comprehensive test suite with 25 tests covering all rollover scenarios:
-
-**Opening Balance Tests:**
-- `test_opening_balance_first_month_no_rollover`
-- `test_opening_balance_with_prior_months`
-- `test_opening_balance_with_expired_hours`
-
-**Closing Balance Tests:**
-- `test_closing_balance_under_retainer`
-- `test_closing_balance_exact_match`
-- `test_closing_balance_over_retainer`
-
-**Multiple Months Integration Tests:**
-- `test_multiple_months_case_a_uses_rollover`: Hours exceed retainer, rollover available
-- `test_multiple_months_case_b_exceeds_rollover`: Hours exceed both retainer + rollover
-- `test_multiple_months_case_c_unused_rolls_over`: Under retainer, accumulates balance
-- `test_multiple_months_case_d_no_rollover_allowed`: rollover_months=1 means no rollover
-
-**Edge Cases:**
-- Months with zero retainer hours
-- Very large rollover balances
-- Partial month usage
-- Mixed over/under months
-
-Run tests with:
-```bash
-vendor/bin/phpunit tests/Unit/Services/ClientManagement/RolloverCalculatorTest.php
-```
-
 ### Portal API Enhancements
 
 The `getTimeEntries()` API now returns enhanced data for the monthly grouping UI:
@@ -1070,13 +763,6 @@ The `getTimeEntries()` API now returns enhanced data for the monthly grouping UI
   }
 }
 ```
-
-### Extensibility Considerations
-- Models and controllers organized in `ClientManagement` subdirectories
-- Pivot table ready for additional metadata (e.g., role, permissions)
-- `default_hourly_rate` field prepared for billing system
-- `last_activity` tracks engagement for retention analysis
-- Soft deletes preserve historical data for reporting
 
 ## Invoice Generation and Management
 
@@ -1241,23 +927,6 @@ When `payments_total >= invoice_total`:
 
 When adding a payment via UI, the amount field defaults to the remaining balance, simplifying full-payment entry.
 
-## Time Entry Splitting Logic
-
-To ensure precise tracking of billed and unbilled hours within the carry-over/rollover system, the invoicing service implements a **splitting logic** for time entries.
-
-### How it works:
-1. When generating an invoice, the system calculates the exact number of minutes that can be billed against the current month's available pool (Retainer + Rollover).
-2. If a single `TimeEntry` crosses the threshold of what can be covered by the pool, the system automatically:
-   - **Replicates** the original entry into a new database row.
-   - **Updates the original entry** to match the exact number of minutes that fit in the current invoice, and links it to the invoice line.
-   - **Assigns the remaining minutes** to the new replicated row, leaving it unlinked (`client_invoice_line_id = null`).
-3. The newly created unbilled entry will then naturally roll over to the next billing period as part of the standard "Delayed Billing" or "Rollover" flow.
-
-### Benefits:
-- **Audit Integrity**: Every minute is accounted for and clearly linked to its respective invoice.
-- **Accurate Carry-overs**: Partial hours are never "lost" or "rounded away" between months.
-- **Admin Transparency**: Admins can see the split entries in the portal, ensuring full visibility into why an entry was partially billed.
-
 ## Security
 - All routes protected by authentication middleware
 - Admin gate enforced on admin endpoints
@@ -1266,123 +935,6 @@ To ensure precise tracking of billed and unbilled hours within the carry-over/ro
 - Cascade deletes maintain referential integrity
 - Soft deletes prevent accidental data loss
 - Slug uniqueness validated on create and update
-
-## Testing Checklist
-
-### Admin Features
-- [ ] User with `user_role='Admin'` can access all admin pages
-- [ ] User ID 1 can access all admin pages regardless of role
-- [ ] Non-admin users receive 403 errors on admin routes
-- [ ] Company creation generates unique slug from name
-- [ ] Company creation with duplicate slug shows error
-- [ ] Company updates modify `last_activity`
-- [ ] Slug updates validate uniqueness
-- [ ] User assignment prevents duplicates
-- [ ] User removal works correctly
-- [ ] Inactive companies appear in collapsible section
-- [ ] Soft-deleted companies don't appear in lists
-- [ ] Foreign key constraints prevent orphaned records
-
-### Portal Features
-- [ ] Company members can access their portal via slug
-- [ ] Non-members receive 403 errors on portal routes
-- [ ] User ID 1 can access all portals regardless of membership
-- [ ] Admin users can access all portals regardless of membership
-- [ ] Projects can be created with name and description
-- [ ] Tasks can be created and assigned to projects
-- [ ] Tasks can be marked complete/incomplete
-- [ ] Time entries accept "h:mm" format (e.g., "2:30")
-- [ ] Time entries accept decimal hours (e.g., "2.5")
-- [ ] Time entries associated with projects and tasks
-- [ ] Deleting a company cascades to projects, tasks, time entries
-- [ ] Deleting a project cascades to tasks, nullifies time entries
-
-### File Management Features
-- [ ] Files can be uploaded to client companies
-- [ ] Files can be uploaded to projects
-- [ ] Files can be uploaded to agreements
-- [ ] Files can be uploaded to tasks
-- [ ] Files can be downloaded with signed URL
-- [ ] Download history is tracked
-- [ ] Files can be soft-deleted (admin only)
-- [ ] Large files upload directly to S3 via signed URL
-- [ ] Upload progress indicator shows percentage
-
-### Billing Features
-- [ ] Agreements can be created with all required fields
-- [ ] Client can sign agreement through portal
-- [ ] Invoices calculate retainer hours correctly
-- [ ] Rollover hours calculated correctly across months
-- [ ] Expired hours calculated correctly based on rollover_months
-- [ ] Invoice line items generated with correct amounts
-- [ ] Invoice status transitions work (draft → issued → paid)
-- [ ] Portal shows invoices to client users
-- [ ] Cannot create overlapping invoice periods for same company
-- [ ] Voided invoice periods can be reused
-- [ ] Cannot void invoice with payments (must delete payments first)
-- [ ] Can un-void invoice back to issued or draft status
-- [ ] Payment adds correctly with amount, date, method
-- [ ] Invoice marks as paid when balance reaches zero
-- [ ] Paid date set to latest payment date (not current date)
-- [ ] Remaining balance calculated correctly from payments
-- [ ] Payment date populates correctly in edit modal
-
-### Invoice Unit Tests (ClientInvoiceTest)
-Run with:
-```bash
-vendor/bin/phpunit tests/Feature/ClientManagement/ClientInvoiceTest.php
-```
-
-Tests include:
-- [x] Can generate invoice for period
-- [x] Cannot generate overlapping invoice
-- [x] Can generate adjacent invoices
-- [x] Voided invoice periods can be reused
-- [x] Invoice can be voided
-- [x] Invoice can be un-voided
-- [x] Un-void validates target status
-- [x] Mark paid uses provided date
-- [x] Mark paid uses now when no date provided
-- [x] Payment adds correctly
-- [x] Remaining balance calculated correctly
-- [x] Payments total accessor works
-- [x] Invoice API requires admin
-- [x] Invoice API void rejects invoice with payments
-- [x] Invoice API un-void works
-- [x] Regenerating invoice preserves manual line items
-- [x] Regenerating invoice does not duplicate system line items
-
-### Time Page Monthly Grouping
-- [ ] Time entries grouped by month (most recent first)
-- [ ] Opening balance shows retainer + rollover - expired
-- [ ] Closing balance shows unused or excess hours
-- [ ] Tabular format with consolidated Date and Project columns
-- [ ] User names abbreviated correctly (e.g., "Ben H.")
-- [ ] Edit icon (Pencil) appears in header and rows (Admin only)
-- [ ] Color coding correct (green positive, red negative)
-- [ ] Month sections collapsible
-- [ ] Skeleton loading state displays correctly
-
-### Unit Tests (RolloverCalculator)
-- [x] 25 tests passing (run `vendor/bin/phpunit tests/Unit/Services/ClientManagement/`)
-- [x] Case A: Hours exceed retainer, rollover available
-- [x] Case B: Hours exceed retainer + rollover
-- [x] Case C: Hours under retainer, rollover accumulates
-- [x] Case D: rollover_months=1 means no rollover
-
-### Feature Tests (Delayed Billing)
-- [x] Test invoice includes delayed billing entries from periods without agreement
-- [x] Test preview shows delayed billing information
-- [x] Test non-billable entries are not included in delayed billing
-- [x] Test already-invoiced entries are not included in delayed billing
-- [x] Test API endpoint shows unbilled hours for periods without agreement
-
-Run delayed billing tests with:
-```bash
-vendor/bin/phpunit tests/Feature/ClientManagement/DelayedBillingTest.php
-```
-
----
 
 ## Client Expenses
 
@@ -1474,32 +1026,4 @@ Time entries now display an "Invoiced" status badge when:
 
 The `ClientTimeEntry` model has an `is_invoiced` appended attribute that is automatically included in API responses.
 
-## Recent Updates
-
-### Client Portal Home Page Improvements (2026-02-14)
-
-**Performance Fix:**
-- Fixed infinite loop bug in `ClientPortalIndexPage` caused by including `fileManager` object in useEffect dependencies
-- Solution: Removed `fileManager` from dependency array and added eslint-disable comment to acknowledge intentional behavior
-
-**New Features:**
-1. **New Time Entry Button**: Added "New Time Entry" button in top toolbar alongside "New Project" button for quick time logging
-2. **Recent Time Entries Section**: Displays the 5 most recent time entries in a clean table format on the home page
-   - Shows date, description with badges, user (abbreviated), and time
-   - Click-to-edit for admins on non-invoiced entries
-   - "View All →" button links to full time tracking page
-3. **Compact Agreement Display**: Simplified agreement section to a single line at bottom of page
-   - Format: "Active Agreement: XX retainer hours / month"
-   - "View Agreement" button with ExternalLink icon for full details
-
-**Layout Optimization:**
-- Maintained two-column grid layout (Projects/Time on left, Files on right)
-- Moved agreement display from prominent card to subtle footer
-- Added Recent Time Entries section between Projects and bottom of page
-- All elements properly responsive and follow existing shadcn/ui design patterns
-
-**Code Reusability:**
-- Created `TimeEntryListItem.tsx` component for consistent time entry display
-- Component is designed to be reusable across different pages (though currently inline table is used on home page)
-- Extracted time entry formatting and abbreviation logic for consistency
 

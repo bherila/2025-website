@@ -152,7 +152,7 @@ See [TESTING.md](TESTING.md) for comprehensive testing documentation.
 
 ## Common Patterns
 - **Transaction CRUD**: API endpoints like `/api/finance/{account_id}/line_items` for GET/POST/DELETE
-- **RSU Management**: Track Restricted Stock Units via `/api/rsu` (GET/POST/DELETE). Table `fin_equity_awards` stores awards. Unique constraint on (grant_date, award_id, vest_date, symbol). POST endpoint supports upsert - if `id` provided, updates existing record; otherwise uses updateOrInsert. See [docs/RSU.md](docs/RSU.md) for full documentation.
+- **RSU Management**: Track Restricted Stock Units via `/api/rsu` (GET/POST/DELETE). Table `fin_equity_awards` stores awards. Unique constraint on (grant_date, award_id, vest_date, symbol). POST endpoint supports upsert - if `id` provided, updates existing record; otherwise uses updateOrInsert. See [docs/finance/rsu.md](docs/finance/rsu.md) for full documentation.
 - **Tagging System**: Many-to-many via `fin_account_line_item_tag_map` table
 - **Linking**: Transactions can link to related entries (e.g., buys/sells)
 - **Statements**: Balance snapshots with detailed line items in `fin_statement_details`
