@@ -1,5 +1,5 @@
 import { ChevronLeft, X } from 'lucide-react'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 import { ScrollArea } from '@/components/ui/scroll-area'
 
@@ -60,6 +60,26 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
       addRecent(rightmostForm)
     }
   }, [rightmostForm, registry, addRecent])
+
+  // When the rightmost column changes (push or replace), scroll the horizontal
+  // viewport so the newest column is visible. Skip on initial mount when no
+  // form columns are open yet.
+  const prevDepthRef = useRef(columnDepth)
+  useEffect(() => {
+    const prevDepth = prevDepthRef.current
+    prevDepthRef.current = columnDepth
+    if (columnDepth === 0 || columnDepth < prevDepth) {
+      return
+    }
+    // Defer until after the new column animates in so its DOM node exists.
+    const id = window.requestAnimationFrame(() => {
+      const last = document.querySelector<HTMLElement>(`section[data-form-id][data-last="true"]`)
+      last?.scrollIntoView({ behavior: 'smooth', inline: 'end', block: 'nearest' })
+    })
+    return () => {
+      window.cancelAnimationFrame(id)
+    }
+  }, [columnDepth, rightmostForm])
   useEffect(() => {
     if (typeof window === 'undefined' || columnDepth === 0) {
       return
