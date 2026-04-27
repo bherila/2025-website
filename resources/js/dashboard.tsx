@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 
 import { Alert, AlertDescription } from './components/ui/alert';
 import { Spinner } from './components/ui/spinner';
+import { AiConfigurationsSection } from './user/ai-configurations';
 import { ApiKeySection } from './user/api-key';
 import { GenAiQuotaSection } from './user/genai-quota';
 import { LoginAuditSection } from './user/login-audit-section';
@@ -75,6 +76,11 @@ const MyAccount: React.FC = () => {
       </div>
 
       <PasskeySection
+        onSuccess={setSuccess}
+        onError={(field, message) => setErrors({ [field]: message })}
+      />
+
+      <AiConfigurationsSection
         onSuccess={setSuccess}
         onError={(field, message) => setErrors({ [field]: message })}
       />

@@ -2,6 +2,8 @@
 
 use App\GenAiProcessor\Http\Controllers\AdminGenAiJobsController;
 use App\GenAiProcessor\Http\Controllers\GenAiImportController;
+use App\Http\Controllers\Api\UserAiConfigurationController;
+use App\Http\Controllers\Api\UserAiModelsController;
 use App\Http\Controllers\ClientManagement\ClientAgreementApiController;
 use App\Http\Controllers\ClientManagement\ClientCompanyApiController;
 use App\Http\Controllers\ClientManagement\ClientCompanyUserController;
@@ -173,6 +175,16 @@ Route::middleware(['web', 'auth'])->post('/finance/lots/save-assignment', [Finan
 Route::middleware(['web', 'auth'])->post('/user/update-api-key', [UserApiController::class, 'updateApiKey']);
 Route::middleware(['web', 'auth'])->post('/user/update-genai-quota', [UserApiController::class, 'updateGenAiQuota']);
 Route::middleware(['web', 'auth'])->post('/user/generate-mcp-api-key', [UserApiController::class, 'generateMcpApiKey']);
+
+// AI configuration routes
+Route::middleware(['web', 'auth'])->group(function () {
+    Route::get('/user/ai-prefs', [UserAiConfigurationController::class, 'index']);
+    Route::post('/user/ai-prefs', [UserAiConfigurationController::class, 'store']);
+    Route::put('/user/ai-prefs/{id}', [UserAiConfigurationController::class, 'update']);
+    Route::delete('/user/ai-prefs/{id}', [UserAiConfigurationController::class, 'destroy']);
+    Route::post('/user/ai-prefs/{id}/activate', [UserAiConfigurationController::class, 'activate']);
+    Route::post('/user/ai-prefs/models', [UserAiModelsController::class, 'fetch']);
+});
 
 // Passkey (WebAuthn) routes
 Route::middleware(['web', 'auth'])->get('/passkeys', [PasskeyController::class, 'index']);

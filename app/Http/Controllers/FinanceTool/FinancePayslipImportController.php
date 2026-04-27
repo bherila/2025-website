@@ -4,7 +4,7 @@ namespace App\Http\Controllers\FinanceTool;
 
 use App\Http\Controllers\Controller;
 use App\Models\FinanceTool\FinPayslips;
-use Bherila\GenAiLaravel\Clients\GeminiClient;
+use App\Services\GenAiFileHelper;
 use Bherila\GenAiLaravel\Exceptions\GenAiRateLimitException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -28,14 +28,13 @@ class FinancePayslipImportController extends Controller
         }
 
         $user = Auth::user();
-        $apiKey = $user->getGeminiApiKey();
+        $client = $user->resolvedAiClient();
 
-        if (! $apiKey) {
-            return response()->json(['error' => 'Gemini API key is not set.'], 400);
+        if (! $client) {
+            return response()->json(['error' => 'No AI configuration found. Please add one in Settings.'], 400);
         }
 
         $files = $request->file('files');
-        $gemini = new GeminiClient($apiKey);
         $prompt = $this->getPrompt(1);
 
         $successful_imports = 0;
@@ -43,31 +42,31 @@ class FinancePayslipImportController extends Controller
 
         foreach ($files as $file) {
             $originalFilename = $file->getClientOriginalName();
-            $geminiFileUri = null;
+            $fileSize = $file->getSize();
+
+            if (! GenAiFileHelper::withinSizeLimit($client, $fileSize)) {
+                Log::warning('Payslip file exceeds provider size limit', ['filename' => $originalFilename, 'size' => $fileSize, 'user_id' => $user->id]);
+                $failed_imports++;
+
+                continue;
+            }
 
             try {
                 $fileStream = fopen($file->getRealPath(), 'r');
+
                 try {
-                    $geminiFileUri = $gemini->uploadFile($fileStream, 'application/pdf', 'payslip-import-'.time());
+                    $filePrompt = "Filename: {$originalFilename}\n\n{$prompt}";
+                    $response = GenAiFileHelper::send($client, $fileStream, 'application/pdf', 'payslip-import-'.time(), $filePrompt);
                 } finally {
                     if (is_resource($fileStream)) {
                         fclose($fileStream);
                     }
                 }
 
-                if (! $geminiFileUri) {
-                    Log::error('Failed to upload payslip to Gemini File API', ['filename' => $originalFilename, 'user_id' => $user->id]);
-                    $failed_imports++;
-
-                    continue;
-                }
-
-                $filePrompt = "Filename: {$originalFilename}\n\n{$prompt}";
-                $response = $gemini->converseWithFileRef($geminiFileUri, 'application/pdf', $filePrompt);
-                $data = json_decode($gemini->extractText($response), true);
+                $data = json_decode($client->extractText($response), true);
 
                 if (! is_array($data)) {
-                    Log::error('Failed to decode Gemini JSON for payslip import', ['filename' => $originalFilename, 'user_id' => $user->id]);
+                    Log::error('Failed to decode AI JSON for payslip import', ['filename' => $originalFilename, 'user_id' => $user->id]);
                     $failed_imports++;
 
                     continue;
@@ -98,10 +97,6 @@ class FinancePayslipImportController extends Controller
                 Log::error('Error processing payslip file: '.$e->getMessage(), ['filename' => $originalFilename, 'user_id' => $user->id]);
 
                 return response()->json(['error' => 'An unexpected error occurred during import.'], 500);
-            } finally {
-                if ($geminiFileUri) {
-                    $gemini->deleteFile($geminiFileUri);
-                }
             }
         }
 

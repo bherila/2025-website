@@ -79,13 +79,21 @@ export const ApiKeySection: React.FC<ApiKeySectionProps> = ({
     performApiKeyUpdate(true);
   };
 
+  if (!user?.gemini_api_key) {
+    return null;
+  }
+
   return (
     <>
-      <Card>
+      <Card className="border-dashed border-muted-foreground/50">
         <CardHeader>
-          <CardTitle>Gemini API Key</CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-muted-foreground">Legacy — Gemini API Key</CardTitle>
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-secondary text-secondary-foreground">Deprecated</span>
+          </div>
           <CardDescription>
-            Status: {user?.gemini_api_key ? `✅ Set to key ending in ${user.gemini_api_key}` : 'Not Set'}
+            This key is used as a fallback when no AI configuration is active. Migrate to AI Configurations above.
+            {' '}Status: {user.gemini_api_key ? `✅ Set` : 'Not Set'}
           </CardDescription>
         </CardHeader>
         <CardContent>
