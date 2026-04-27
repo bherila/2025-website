@@ -392,115 +392,84 @@ export default function Form4952Preview({
         <>
           <div>
             <h3 className="text-sm font-semibold mb-2">Election Analysis: Include Qualified Dividends in NII?</h3>
-            <div className="grid grid-cols-2 gap-3">
-              {/* Scenario A */}
-              <div className={`rounded-lg border p-3 text-xs ${bestScenario === 'A' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/20' : 'border-border bg-muted/10'}`}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-semibold">A — No QD election</span>
-                  {bestScenario === 'A' && <span className="text-emerald-600 dark:text-emerald-400">★</span>}
-                </div>
-                <div className="text-muted-foreground mb-3">QDs taxed at 23.8% (20%+3.8% NIIT)</div>
-                <dl className="space-y-1">
-                  <div className="flex justify-between">
-                    <dt className="text-muted-foreground">NII</dt>
-                    <dd className="font-mono tabular-nums">{fmtAmt(niiBefore)}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-muted-foreground">Deductible</dt>
-                    <dd className="font-mono tabular-nums text-emerald-600 dark:text-emerald-500">{fmtAmt(scenA_deductible)}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-muted-foreground">Carryforward</dt>
-                    <dd className={`font-mono tabular-nums ${scenA_carryforward > 0 ? 'text-destructive' : ''}`}>
+            <div className="border rounded-lg overflow-hidden text-xs">
+              <table className="w-full">
+                <thead className="bg-muted/20">
+                  <tr>
+                    <th className="text-left px-3 py-2 text-muted-foreground font-medium w-32"></th>
+                    <th className={`text-right px-3 py-2 font-medium ${bestScenario === 'A' ? 'text-emerald-600 dark:text-emerald-400' : ''}`}>
+                      A — No QD election {bestScenario === 'A' ? '★' : ''}
+                      <div className="text-[10px] font-normal text-muted-foreground">QDs taxed at 23.8%</div>
+                    </th>
+                    <th className={`text-right px-3 py-2 font-medium ${bestScenario === 'B' ? 'text-emerald-600 dark:text-emerald-400' : ''}`}>
+                      B — Full QD election {bestScenario === 'B' ? '★' : ''}
+                      <div className="text-[10px] font-normal text-muted-foreground">All {fmtAmt(totalQualDiv)} QDs at 37%</div>
+                    </th>
+                    {scenC_qdElected > 0 && scenC_qdElected < totalQualDiv && (
+                      <th className={`text-right px-3 py-2 font-medium ${bestScenario === 'C' ? 'text-emerald-600 dark:text-emerald-400' : ''}`}>
+                        C — Partial QD election {bestScenario === 'C' ? '★' : ''}
+                        <div className="text-[10px] font-normal text-muted-foreground">Elect {fmtAmt(scenC_qdElected)}</div>
+                      </th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  <tr>
+                    <td className="px-3 py-2 text-muted-foreground">NII</td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums">{fmtAmt(niiBefore)}</td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums">{fmtAmt(scenB_nii)}</td>
+                    {scenC_qdElected > 0 && scenC_qdElected < totalQualDiv && (
+                      <td className="px-3 py-2 text-right font-mono tabular-nums">{fmtAmt(scenC_nii)}</td>
+                    )}
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2 text-muted-foreground">Deductible</td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums text-emerald-600 dark:text-emerald-500">{fmtAmt(scenA_deductible)}</td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums text-emerald-600 dark:text-emerald-500">{fmtAmt(scenB_deductible)}</td>
+                    {scenC_qdElected > 0 && scenC_qdElected < totalQualDiv && (
+                      <td className="px-3 py-2 text-right font-mono tabular-nums text-emerald-600 dark:text-emerald-500">{fmtAmt(scenC_deductible)}</td>
+                    )}
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2 text-muted-foreground">Carryforward</td>
+                    <td className={`px-3 py-2 text-right font-mono tabular-nums ${scenA_carryforward > 0 ? 'text-destructive' : ''}`}>
                       {scenA_carryforward > 0 ? `(${fmtAmt(scenA_carryforward)})` : '$0'}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-muted-foreground">Election Cost</dt>
-                    <dd className="font-mono tabular-nums">$0</dd>
-                  </div>
-                  <div className="flex justify-between border-t border-border pt-1 mt-1">
-                    <dt className="text-muted-foreground font-medium">Net Benefit</dt>
-                    <dd className={`font-mono tabular-nums font-semibold ${scenA_carryforward > 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
-                      {scenA_carryforward > 0 ? `(${fmtAmt(scenA_carryforward)}) lost` : 'Break-even'}
-                    </dd>
-                  </div>
-                </dl>
-              </div>
-
-              {/* Scenario B */}
-              <div className={`rounded-lg border p-3 text-xs ${bestScenario === 'B' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/20' : 'border-border bg-muted/10'}`}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-semibold">B — Full QD election</span>
-                  {bestScenario === 'B' && <span className="text-emerald-600 dark:text-emerald-400">★</span>}
-                </div>
-                <div className="text-muted-foreground mb-3">All {fmtAmt(totalQualDiv)} QDs reclassified as ordinary (37%)</div>
-                <dl className="space-y-1">
-                  <div className="flex justify-between">
-                    <dt className="text-muted-foreground">NII</dt>
-                    <dd className="font-mono tabular-nums">{fmtAmt(scenB_nii)}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-muted-foreground">Deductible</dt>
-                    <dd className="font-mono tabular-nums text-emerald-600 dark:text-emerald-500">{fmtAmt(scenB_deductible)}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-muted-foreground">Carryforward</dt>
-                    <dd className="font-mono tabular-nums">
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums">
                       {scenB_carryforward > 0 ? `(${fmtAmt(scenB_carryforward)})` : '$0'}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-muted-foreground">Election Cost</dt>
-                    <dd className="font-mono tabular-nums text-destructive">
+                    </td>
+                    {scenC_qdElected > 0 && scenC_qdElected < totalQualDiv && (
+                      <td className="px-3 py-2 text-right font-mono tabular-nums">$0</td>
+                    )}
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2 text-muted-foreground">Election Cost</td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums">$0</td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums text-destructive">
                       {scenB_taxCostElection > 0 ? `(${fmtAmt(scenB_taxCostElection)})` : '$0'}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between border-t border-border pt-1 mt-1">
-                    <dt className="text-muted-foreground font-medium">Net Benefit</dt>
-                    <dd className={`font-mono tabular-nums font-semibold ${scenB_netBenefit > 0 ? 'text-emerald-600 dark:text-emerald-500' : 'text-destructive'}`}>
-                      {scenB_netBenefit >= 0 ? '+' : ''}{fmtAmt(scenB_netBenefit)} net savings
-                    </dd>
-                  </div>
-                </dl>
-              </div>
-
-              {/* Scenario C — only shown when a meaningful partial election exists */}
-              {scenC_qdElected > 0 && scenC_qdElected < totalQualDiv && (
-                <div className={`rounded-lg border p-3 text-xs ${bestScenario === 'C' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/20' : 'border-border bg-muted/10'}`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-semibold">C — Partial QD election</span>
-                    {bestScenario === 'C' && <span className="text-emerald-600 dark:text-emerald-400">★</span>}
-                  </div>
-                  <div className="text-muted-foreground mb-3">Elect {fmtAmt(scenC_qdElected)} to cover gap exactly</div>
-                  <dl className="space-y-1">
-                    <div className="flex justify-between">
-                      <dt className="text-muted-foreground">NII</dt>
-                      <dd className="font-mono tabular-nums">{fmtAmt(scenC_nii)}</dd>
-                    </div>
-                    <div className="flex justify-between">
-                      <dt className="text-muted-foreground">Deductible</dt>
-                      <dd className="font-mono tabular-nums text-emerald-600 dark:text-emerald-500">{fmtAmt(scenC_deductible)}</dd>
-                    </div>
-                    <div className="flex justify-between">
-                      <dt className="text-muted-foreground">Carryforward</dt>
-                      <dd className="font-mono tabular-nums">$0</dd>
-                    </div>
-                    <div className="flex justify-between">
-                      <dt className="text-muted-foreground">Election Cost</dt>
-                      <dd className="font-mono tabular-nums text-destructive">
+                    </td>
+                    {scenC_qdElected > 0 && scenC_qdElected < totalQualDiv && (
+                      <td className="px-3 py-2 text-right font-mono tabular-nums text-destructive">
                         {scenC_taxCostElection > 0 ? `(${fmtAmt(scenC_taxCostElection)})` : '$0'}
-                      </dd>
-                    </div>
-                    <div className="flex justify-between border-t border-border pt-1 mt-1">
-                      <dt className="text-muted-foreground font-medium">Net Benefit</dt>
-                      <dd className={`font-mono tabular-nums font-semibold ${scenC_netBenefit > 0 ? 'text-emerald-600 dark:text-emerald-500' : 'text-destructive'}`}>
-                        {scenC_netBenefit >= 0 ? '+' : ''}{fmtAmt(scenC_netBenefit)} net savings
-                      </dd>
-                    </div>
-                  </dl>
-                </div>
-              )}
+                      </td>
+                    )}
+                  </tr>
+                  <tr className="bg-muted/10 font-semibold">
+                    <td className="px-3 py-2 text-muted-foreground">Net Benefit</td>
+                    <td className={`px-3 py-2 text-right font-mono tabular-nums ${scenA_carryforward > 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                      {scenA_carryforward > 0 ? `(${fmtAmt(scenA_carryforward)}) lost` : 'Break-even'}
+                    </td>
+                    <td className={`px-3 py-2 text-right font-mono tabular-nums ${scenB_netBenefit > 0 ? 'text-emerald-600 dark:text-emerald-500' : 'text-destructive'}`}>
+                      {scenB_netBenefit >= 0 ? '+' : ''}{fmtAmt(scenB_netBenefit)}
+                    </td>
+                    {scenC_qdElected > 0 && scenC_qdElected < totalQualDiv && (
+                      <td className={`px-3 py-2 text-right font-mono tabular-nums ${scenC_netBenefit > 0 ? 'text-emerald-600 dark:text-emerald-500' : 'text-destructive'}`}>
+                        {scenC_netBenefit >= 0 ? '+' : ''}{fmtAmt(scenC_netBenefit)}
+                      </td>
+                    )}
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
 
