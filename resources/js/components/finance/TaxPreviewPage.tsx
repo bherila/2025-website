@@ -651,7 +651,7 @@ function TaxPreviewPageContent() {
         <div className="flex h-full flex-col">
           <DockHeaderBar />
           <TaxEstimateHeader defaultTier={hasColumns ? 'slim' : 'expanded'} />
-          <div className="min-h-0 flex-1 overflow-hidden">
+          <div className="relative min-h-0 flex-1">
             <MillerShell registry={dockRegistry} homeView={<DockHomeView />} />
           </div>
         </div>

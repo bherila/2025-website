@@ -2,6 +2,7 @@ import { ChevronLeft, X } from 'lucide-react'
 import { useEffect } from 'react'
 
 import { ScrollArea } from '@/components/ui/scroll-area'
+
 import { useTaxPreview } from '../TaxPreviewContext'
 import { CommandPalette, useCommandPaletteShortcut } from './CommandPalette'
 import { useDockActions } from './DockActions'
@@ -106,20 +107,21 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
   const hasFormColumns = route.columns.length > 0
 
   return (
-    // Outer: Radix horizontal ScrollArea so the column strip scrolls with a
-    // styled scrollbar instead of the native browser one.
+    // Outer: horizontal ScrollArea. Base UI's Root sets `position: relative`
+    // inline, which overrides Tailwind's `.absolute`, so we size with h/w
+    // utilities against the (definite-height) parent instead of inset-0.
     <ScrollArea orientation="horizontal" className="h-full w-full">
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} registry={registry} />
       <div className="flex h-full bg-background">
-        {/* Home column — vertical Radix ScrollArea */}
+        {/* Home column */}
         <section
-          className={`flex flex-col bg-card ${
+          className={`relative flex flex-col bg-card ${
             hasFormColumns
               ? 'hidden w-[960px] shrink-0 border-r border-border md:flex'
               : 'w-full'
           }`}
         >
-          <ScrollArea className="flex-1">{homeView}</ScrollArea>
+          <ScrollArea className="h-full w-full">{homeView}</ScrollArea>
         </section>
 
         {route.columns.map((col, depth) => {
@@ -136,7 +138,7 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
           return (
             <section
               key={`${depth}-${col.form}-${col.instance ?? ''}`}
-              className={`flex shrink-0 flex-col border-r border-border bg-card motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-right-4 motion-safe:duration-200 ${entry.wide ? 'w-full md:w-[960px]' : 'w-full md:w-[480px]'} ${isLast ? '' : 'hidden md:flex'}`}
+              className={`relative flex shrink-0 flex-col border-r border-border bg-card motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-right-4 motion-safe:duration-200 ${entry.wide ? 'w-full md:w-[960px]' : 'w-full md:w-[480px]'} ${isLast ? '' : 'hidden md:flex'}`}
               data-form-id={col.form}
               data-depth={depth}
               data-last={isLast ? 'true' : 'false'}
@@ -180,34 +182,36 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
                     : {})}
                 />
               )}
-              {/* Column content — vertical Radix ScrollArea */}
-              <ScrollArea className="min-h-0 flex-1 bg-card">
-                <div className="p-4">
-                  {entry.instances && !activeInstance ? (
-                    <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-                      <p className="text-sm text-muted-foreground">No {entry.shortLabel} instance selected.</p>
-                      {entry.instances.allowCreate && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const created = entry.instances!.create(state)
-                            replaceFrom(depth, { form: col.form, instance: created.key })
-                          }}
-                          className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                          Create your first {entry.shortLabel}
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <Component
-                      state={state}
-                      {...(activeInstance ? { instance: activeInstance } : {})}
-                      onDrill={onDrill}
-                    />
-                  )}
-                </div>
-              </ScrollArea>
+              {/* Column content — flex-grown container; ScrollArea sizes to its full height */}
+              <div className="min-h-0 flex-1">
+                <ScrollArea className="h-full w-full bg-card">
+                  <div className="p-4">
+                    {entry.instances && !activeInstance ? (
+                      <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+                        <p className="text-sm text-muted-foreground">No {entry.shortLabel} instance selected.</p>
+                        {entry.instances.allowCreate && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const created = entry.instances!.create(state)
+                              replaceFrom(depth, { form: col.form, instance: created.key })
+                            }}
+                            className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            Create your first {entry.shortLabel}
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <Component
+                        state={state}
+                        {...(activeInstance ? { instance: activeInstance } : {})}
+                        onDrill={onDrill}
+                      />
+                    )}
+                  </div>
+                </ScrollArea>
+              </div>
             </section>
           )
         })}
