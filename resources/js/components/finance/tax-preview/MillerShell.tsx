@@ -105,7 +105,7 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
   const hasFormColumns = route.columns.length > 0
 
   return (
-    <div className="flex w-full overflow-x-auto bg-background">
+    <div className="flex h-full overflow-x-auto bg-background">
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} registry={registry} />
       <section
         className={`flex flex-col overflow-y-auto bg-card ${
@@ -174,7 +174,7 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
                   : {})}
               />
             )}
-            <div className="flex-1 bg-card p-4">
+            <div className="min-h-0 flex-1 overflow-y-auto bg-card p-4">
               {entry.instances && !activeInstance ? (
                 <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
                   <p className="text-sm text-muted-foreground">No {entry.shortLabel} instance selected.</p>

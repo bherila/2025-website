@@ -648,10 +648,10 @@ function TaxPreviewPageContent() {
     const hasColumns = typeof window !== 'undefined' && window.location.hash.length > 1
     return (
       <DockActionsProvider>
-        <div className="flex min-h-screen flex-col">
+        <div className="flex h-full flex-col">
           <DockHeaderBar />
           <TaxEstimateHeader defaultTier={hasColumns ? 'slim' : 'expanded'} />
-          <div className="flex-1">
+          <div className="min-h-0 flex-1 overflow-hidden">
             <MillerShell registry={dockRegistry} homeView={<DockHomeView />} />
           </div>
         </div>
