@@ -1,5 +1,7 @@
 import { ChevronLeft, X } from 'lucide-react'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
+
+import { ScrollArea } from '@/components/ui/scroll-area'
 
 import { useTaxPreview } from '../TaxPreviewContext'
 import { CommandPalette, useCommandPaletteShortcut } from './CommandPalette'
@@ -58,6 +60,26 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
       addRecent(rightmostForm)
     }
   }, [rightmostForm, registry, addRecent])
+
+  // When the rightmost column changes (push or replace), scroll the horizontal
+  // viewport so the newest column is visible. Skip on initial mount when no
+  // form columns are open yet.
+  const prevDepthRef = useRef(columnDepth)
+  useEffect(() => {
+    const prevDepth = prevDepthRef.current
+    prevDepthRef.current = columnDepth
+    if (columnDepth === 0 || columnDepth < prevDepth) {
+      return
+    }
+    // Defer until after the new column animates in so its DOM node exists.
+    const id = window.requestAnimationFrame(() => {
+      const last = document.querySelector<HTMLElement>(`section[data-form-id][data-last="true"]`)
+      last?.scrollIntoView({ behavior: 'smooth', inline: 'end', block: 'nearest' })
+    })
+    return () => {
+      window.cancelAnimationFrame(id)
+    }
+  }, [columnDepth, rightmostForm])
   useEffect(() => {
     if (typeof window === 'undefined' || columnDepth === 0) {
       return
@@ -105,103 +127,115 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
   const hasFormColumns = route.columns.length > 0
 
   return (
-    <div className="flex h-full overflow-x-auto bg-background">
+    // Outer: horizontal ScrollArea. Base UI's Root sets `position: relative`
+    // inline, which overrides Tailwind's `.absolute`, so we size with h/w
+    // utilities against the (definite-height) parent instead of inset-0.
+    <ScrollArea orientation="horizontal" className="h-full w-full">
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} registry={registry} />
-      <section
-        className={`flex flex-col overflow-y-auto bg-card ${
-          hasFormColumns
-            ? 'hidden w-[960px] shrink-0 border-r border-border md:flex'
-            : 'w-full'
-        }`}
-      >
-        {homeView}
-      </section>
-      {route.columns.map((col, depth) => {
-        const entry = getEntry(registry, col.form)
-        const Component = entry.component
-        const instances = entry.instances ? entry.instances.list(state) : []
-        // Auto-select the first tab when no instance is specified in the route.
-        const resolvedInstanceKey = col.instance ?? (instances.length > 0 ? instances[0]!.key : undefined)
-        const activeInstance = resolvedInstanceKey ? instances.find((i) => i.key === resolvedInstanceKey) : undefined
-        const isLast = depth === route.columns.length - 1
+      <div className="flex h-full bg-background">
+        {/* Home column */}
+        <section
+          className={`relative flex flex-col bg-card ${
+            hasFormColumns
+              ? 'hidden w-[960px] shrink-0 border-r border-border md:flex'
+              : 'w-full'
+          }`}
+        >
+          <ScrollArea className="h-full w-full">{homeView}</ScrollArea>
+        </section>
 
-        const onDrill = dispatchDrill(depth)
+        {route.columns.map((col, depth) => {
+          const entry = getEntry(registry, col.form)
+          const Component = entry.component
+          const instances = entry.instances ? entry.instances.list(state) : []
+          // Auto-select the first tab when no instance is specified in the route.
+          const resolvedInstanceKey = col.instance ?? (instances.length > 0 ? instances[0]!.key : undefined)
+          const activeInstance = resolvedInstanceKey ? instances.find((i) => i.key === resolvedInstanceKey) : undefined
+          const isLast = depth === route.columns.length - 1
 
-        return (
-          <section
-            key={`${depth}-${col.form}-${col.instance ?? ''}`}
-            className={`flex w-full shrink-0 flex-col border-r border-border bg-card motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-right-4 motion-safe:duration-200 ${entry.wide ? 'md:w-[960px]' : 'md:w-[480px]'} ${isLast ? '' : 'hidden md:flex'}`}
-            data-form-id={col.form}
-            data-depth={depth}
-            data-last={isLast ? 'true' : 'false'}
-          >
-            <header className="flex items-center justify-between gap-2 border-b border-border bg-card px-4 py-3">
-              {depth > 0 && (
+          const onDrill = dispatchDrill(depth)
+
+          return (
+            <section
+              key={`${depth}-${col.form}-${col.instance ?? ''}`}
+              className={`relative flex shrink-0 flex-col border-r border-border bg-card motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-right-4 motion-safe:duration-200 ${entry.wide ? 'w-full md:w-[960px]' : 'w-full md:w-[480px]'} ${isLast ? '' : 'hidden md:flex'}`}
+              data-form-id={col.form}
+              data-depth={depth}
+              data-last={isLast ? 'true' : 'false'}
+            >
+              <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-card px-4 py-3">
+                {depth > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => truncateTo(depth)}
+                    className="-ml-1 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
+                    aria-label="Back to previous column"
+                  >
+                    <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold text-foreground">{entry.shortLabel}</div>
+                  <div className="truncate text-xs text-muted-foreground">{entry.label}</div>
+                </div>
                 <button
                   type="button"
                   onClick={() => truncateTo(depth)}
-                  className="-ml-1 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
-                  aria-label="Back to previous column"
+                  className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label={`Close columns after ${entry.shortLabel}`}
                 >
-                  <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                  <X className="h-4 w-4" aria-hidden="true" />
                 </button>
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold text-foreground">{entry.shortLabel}</div>
-                <div className="truncate text-xs text-muted-foreground">{entry.label}</div>
-              </div>
-              <button
-                type="button"
-                onClick={() => truncateTo(depth)}
-                className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label={`Close columns after ${entry.shortLabel}`}
-              >
-                <X className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </header>
-            {entry.instances && (
-              <InstanceTabs
-                instances={instances}
-                activeKey={resolvedInstanceKey}
-                onSelect={(key: string) => replaceFrom(depth, { form: col.form, instance: key })}
-                {...(entry.instances.allowCreate
-                  ? {
-                      onCreate: () => {
-                        const created = entry.instances!.create(state)
-                        replaceFrom(depth, { form: col.form, instance: created.key })
-                      },
-                    }
-                  : {})}
-              />
-            )}
-            <div className="min-h-0 flex-1 overflow-y-auto bg-card p-4">
-              {entry.instances && !activeInstance ? (
-                <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-                  <p className="text-sm text-muted-foreground">No {entry.shortLabel} instance selected.</p>
-                  {entry.instances.allowCreate && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const created = entry.instances!.create(state)
-                        replaceFrom(depth, { form: col.form, instance: created.key })
-                      }}
-                      className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      Create your first {entry.shortLabel}
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <Component
-                  state={state}
-                  {...(activeInstance ? { instance: activeInstance } : {})}
-                  onDrill={onDrill}
+              </header>
+              {entry.instances && (
+                <InstanceTabs
+                  instances={instances}
+                  activeKey={resolvedInstanceKey}
+                  onSelect={(key: string) => replaceFrom(depth, { form: col.form, instance: key })}
+                  {...(entry.instances.allowCreate
+                    ? {
+                        onCreate: () => {
+                          const created = entry.instances!.create(state)
+                          replaceFrom(depth, { form: col.form, instance: created.key })
+                        },
+                      }
+                    : {})}
                 />
               )}
-            </div>
-          </section>
-        )
-      })}
-    </div>
+              {/* Column content — flex-grown container; ScrollArea sizes to its full height */}
+              <div className="min-h-0 flex-1">
+                <ScrollArea className="h-full w-full bg-card">
+                  <div className="p-4">
+                    {entry.instances && !activeInstance ? (
+                      <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+                        <p className="text-sm text-muted-foreground">No {entry.shortLabel} instance selected.</p>
+                        {entry.instances.allowCreate && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const created = entry.instances!.create(state)
+                              replaceFrom(depth, { form: col.form, instance: created.key })
+                            }}
+                            className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            Create your first {entry.shortLabel}
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <Component
+                        state={state}
+                        {...(activeInstance ? { instance: activeInstance } : {})}
+                        onDrill={onDrill}
+                      />
+                    )}
+                  </div>
+                </ScrollArea>
+              </div>
+            </section>
+          )
+        })}
+      </div>
+    </ScrollArea>
   )
 }
