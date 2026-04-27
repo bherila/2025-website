@@ -20,7 +20,7 @@ class FinancePayslipImportTest extends TestCase
         $response->assertStatus(401);
     }
 
-    public function test_import_payslips_requires_gemini_api_key(): void
+    public function test_import_payslips_requires_ai_configuration(): void
     {
         $user = User::factory()->create(['gemini_api_key' => null]);
 
@@ -31,7 +31,7 @@ class FinancePayslipImportTest extends TestCase
         ]);
 
         $response->assertStatus(400);
-        $response->assertJson(['error' => 'Gemini API key is not set.']);
+        $response->assertJson(['error' => 'No AI configuration found. Please add one in Settings.']);
     }
 
     public function test_import_payslips_successfully_processes_gemini_response(): void

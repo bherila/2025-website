@@ -64,7 +64,7 @@ class UtilityBillImportTest extends TestCase
         ]);
 
         $response->assertStatus(400);
-        $response->assertJson(['error' => 'Gemini API key is not set. Please set it in your account settings.']);
+        $response->assertJson(['error' => 'No AI configuration found. Please add one in Settings.']);
     }
 
     public function test_import_rejects_non_pdf(): void

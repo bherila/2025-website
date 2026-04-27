@@ -5,8 +5,13 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Models\ClientManagement\ClientCompany;
 use App\Traits\SerializesDatesAsLocal;
+use Bherila\GenAiLaravel\Clients\AnthropicClient;
+use Bherila\GenAiLaravel\Clients\BedrockClient;
+use Bherila\GenAiLaravel\Clients\GeminiClient;
+use Bherila\GenAiLaravel\Contracts\GenAiClient;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -82,9 +87,39 @@ class User extends Authenticatable
         ];
     }
 
-    public function getGeminiApiKey()
+    public function getGeminiApiKey(): ?string
     {
         return $this->gemini_api_key;
+    }
+
+    public function aiConfigurations(): HasMany
+    {
+        return $this->hasMany(UserAiConfiguration::class);
+    }
+
+    public function activeAiConfiguration(): ?UserAiConfiguration
+    {
+        return $this->aiConfigurations()->where('is_active', true)->first();
+    }
+
+    public function resolvedAiClient(): ?GenAiClient
+    {
+        $config = $this->activeAiConfiguration();
+
+        if ($config) {
+            return match ($config->provider) {
+                'gemini' => new GeminiClient($config->api_key, $config->model),
+                'anthropic' => new AnthropicClient($config->api_key, $config->model),
+                'bedrock' => new BedrockClient($config->api_key, $config->model, $config->region ?? 'us-east-1', $config->session_token ?? ''),
+                default => null,
+            };
+        }
+
+        if ($this->gemini_api_key) {
+            return new GeminiClient($this->gemini_api_key);
+        }
+
+        return null;
     }
 
     /**

@@ -12,7 +12,8 @@ use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
-use Bherila\GenAiLaravel\Clients\GeminiClient;
+use App\Services\GenAiFileHelper;
+use Bherila\GenAiLaravel\Contracts\GenAiClient;
 use Bherila\GenAiLaravel\Exceptions\GenAiFatalException;
 use Bherila\GenAiLaravel\Exceptions\GenAiRateLimitException;
 use Illuminate\Bus\Queueable;
@@ -64,15 +65,12 @@ class ParseImportJob implements ShouldQueue
             return;
         }
 
-        $apiKey = $user->getGeminiApiKey();
-        if (! $apiKey) {
-            $job->markFailed('Gemini API key is not set.');
+        $client = $user->resolvedAiClient();
+        if (! $client) {
+            $job->markFailed('No AI configuration found. Please add one in Settings.');
 
             return;
         }
-
-        $gemini = new GeminiClient($apiKey);
-        $geminiFileUri = null;
 
         try {
             // Stream file from S3 to avoid buffering large uploads fully into memory
@@ -83,31 +81,15 @@ class ParseImportJob implements ShouldQueue
                 return;
             }
 
-            // Upload to Gemini File API using stream
-            try {
-                $geminiFileUri = $gemini->uploadFile($fileStream, $job->mime_type ?? 'application/pdf', 'genai-import-'.time());
-            } finally {
-                if (is_resource($fileStream)) {
-                    fclose($fileStream);
-                }
-            }
-
-            if (! $geminiFileUri) {
-                $job->markFailed('Failed to upload file to Gemini File API');
-
-                return;
-            }
-
             // Build prompt
             $context = $job->getContextArray();
             $prompt = $dispatcher->buildPrompt($job->job_type, $context);
 
-            // Claim quota right before the Gemini API call to avoid double-counting
+            // Claim quota right before the AI call to avoid double-counting
             if (! $dispatcher->claimQuota($user->id, $user)) {
                 $job->markQueuedTomorrow();
                 Log::info('ParseImportJob: quota exhausted, deferred', ['job_id' => $job->id]);
 
-                // Notify user their job has been deferred
                 try {
                     Mail::to($user->email)->send(new GenAiJobDeferredMail($job));
                 } catch (\Throwable $mailEx) {
@@ -119,12 +101,11 @@ class ParseImportJob implements ShouldQueue
 
             $job->markProcessing();
 
-            // Call generateContent with file_uri
-            ['data' => $data, 'raw_response' => $rawResponse] = $this->callGeminiGenerateContent(
-                $gemini,
+            ['data' => $data, 'raw_response' => $rawResponse] = $this->callGenerateContent(
+                $client,
                 $dispatcher,
                 $job->job_type,
-                $geminiFileUri,
+                $fileStream,
                 $job->mime_type ?? 'application/pdf',
                 $prompt
             );
@@ -191,35 +172,32 @@ class ParseImportJob implements ShouldQueue
             } catch (\Throwable $mailEx) {
                 Log::warning('Failed to send failure mail', ['job_id' => $job->id]);
             }
-        } finally {
-            // Always try to clean up the Gemini file to free quota.
-            if ($geminiFileUri) {
-                $gemini->deleteFile($geminiFileUri);
-            }
         }
     }
 
     /**
-     * Call Gemini generateContent with an already-uploaded file reference.
+     * Send a file to the AI provider and extract structured data.
+     * Uses GenAiFileHelper to handle File API vs inline fallback transparently.
      *
+     * @param  resource  $fileStream
      * @return array{data: array<string, mixed>|null, raw_response: string|null}
      */
-    private function callGeminiGenerateContent(
-        GeminiClient $gemini,
+    private function callGenerateContent(
+        GenAiClient $client,
         GenAiJobDispatcherService $dispatcher,
         string $jobType,
-        string $fileUri,
+        mixed $fileStream,
         string $mimeType,
         string $prompt
     ): array {
         $toolConfig = $dispatcher->buildToolConfig($jobType, $prompt);
-        $response = $gemini->converseWithFileRef($fileUri, $mimeType, $prompt, $toolConfig ?: null);
+        $response = GenAiFileHelper::send($client, $fileStream, $mimeType, 'genai-import-'.time(), $prompt, $toolConfig ?: null);
         $rawResponse = json_encode($response);
 
         $data = $dispatcher->extractGenerateContentData($jobType, $response);
 
         if ($data === null) {
-            Log::error('Failed to decode structured response from Gemini API', [
+            Log::error('Failed to decode structured response from AI provider', [
                 'response' => $rawResponse,
             ]);
         }

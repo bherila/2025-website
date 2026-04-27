@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\UtilityBillTracker\UtilityAccount;
 use App\Models\UtilityBillTracker\UtilityBill;
 use App\Services\FileStorageService;
-use Bherila\GenAiLaravel\Clients\GeminiClient;
+use App\Services\GenAiFileHelper;
 use Bherila\GenAiLaravel\Exceptions\GenAiRateLimitException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -89,45 +89,51 @@ class UtilityBillImportController extends Controller
         $account = UtilityAccount::findOrFail($accountId);
 
         $user = Auth::user();
-        $apiKey = $user->getGeminiApiKey();
+        $client = $user->resolvedAiClient();
 
-        if (! $apiKey) {
-            return response()->json(['error' => 'Gemini API key is not set. Please set it in your account settings.'], 400);
+        if (! $client) {
+            return response()->json(['error' => 'No AI configuration found. Please add one in Settings.'], 400);
         }
 
         $files = $request->file('files');
-        $gemini = new GeminiClient($apiKey);
         $prompt = $this->getPrompt($account->account_type, 1);
 
         $results = [];
 
         foreach ($files as $file) {
             $originalFilename = $file->getClientOriginalName();
-            $geminiFileUri = null;
+            $fileSize = $file->getSize();
+
+            if (! GenAiFileHelper::withinSizeLimit($client, $fileSize)) {
+                Log::warning('Utility bill file exceeds provider size limit', ['filename' => $originalFilename, 'size' => $fileSize, 'user_id' => $user->id]);
+                $results[] = ['filename' => $originalFilename, 'status' => 'error', 'error' => 'File exceeds the size limit for your configured AI provider.'];
+
+                continue;
+            }
 
             try {
                 $fileStream = fopen($file->getRealPath(), 'r');
+
                 try {
-                    $geminiFileUri = $gemini->uploadFile($fileStream, 'application/pdf', 'utility-bill-import-'.time());
+                    $filePrompt = "Filename: {$originalFilename}\n\n{$prompt}";
+                    $response = GenAiFileHelper::send($client, $fileStream, 'application/pdf', 'utility-bill-import-'.time(), $filePrompt);
+                } catch (GenAiRateLimitException $e) {
+                    throw $e; // let the outer catch handle rate limits globally
+                } catch (\Throwable $e) {
+                    Log::error('Failed to send utility bill to AI service', ['filename' => $originalFilename, 'user_id' => $user->id, 'error' => $e->getMessage()]);
+                    $results[] = ['filename' => $originalFilename, 'status' => 'error', 'error' => 'Failed to process file with AI service.'];
+
+                    continue;
                 } finally {
                     if (is_resource($fileStream)) {
                         fclose($fileStream);
                     }
                 }
 
-                if (! $geminiFileUri) {
-                    Log::error('Failed to upload utility bill to Gemini File API', ['filename' => $originalFilename, 'user_id' => $user->id, 'account_id' => $accountId]);
-                    $results[] = ['filename' => $originalFilename, 'status' => 'error', 'error' => 'Failed to upload file to AI service.'];
-
-                    continue;
-                }
-
-                $filePrompt = "Filename: {$originalFilename}\n\n{$prompt}";
-                $response = $gemini->converseWithFileRef($geminiFileUri, 'application/pdf', $filePrompt);
-                $extractedData = json_decode($gemini->extractText($response), true);
+                $extractedData = json_decode($client->extractText($response), true);
 
                 if (! is_array($extractedData)) {
-                    Log::error('Failed to decode Gemini JSON for utility bill import', ['filename' => $originalFilename, 'user_id' => $user->id, 'account_id' => $accountId]);
+                    Log::error('Failed to decode AI JSON for utility bill import', ['filename' => $originalFilename, 'user_id' => $user->id, 'account_id' => $accountId]);
                     $results[] = ['filename' => $originalFilename, 'status' => 'error', 'error' => 'Failed to parse the extracted data from the response.'];
 
                     continue;
@@ -187,10 +193,6 @@ class UtilityBillImportController extends Controller
                 Log::error('Error during utility bill import: '.$e->getMessage(), ['user_id' => $user->id, 'account_id' => $accountId, 'filename' => $originalFilename]);
 
                 return response()->json(['error' => 'An unexpected error occurred during import: '.$e->getMessage()], 500);
-            } finally {
-                if ($geminiFileUri) {
-                    $gemini->deleteFile($geminiFileUri);
-                }
             }
         }
 
