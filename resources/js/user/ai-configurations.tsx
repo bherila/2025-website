@@ -362,7 +362,7 @@ export const AiConfigurationsSection: React.FC<AiConfigurationsSectionProps> = (
 
             <div className="space-y-1">
               <Label htmlFor="config-api-key">
-                {form.provider === 'bedrock' ? 'AWS Access Key ID' : 'API Key'}
+                {form.provider === 'bedrock' ? 'Bedrock API Key (Bearer token)' : 'API Key'}
                 {editingConfig && <span className="text-muted-foreground text-xs ml-1">(leave blank to keep current)</span>}
               </Label>
               <Input
