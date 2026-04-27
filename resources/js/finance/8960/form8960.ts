@@ -31,6 +31,7 @@ import type { Form8960Lines } from '@/types/finance/tax-return'
 export interface Form8960NiiComponent {
   label: string
   amount: number
+  boxRef?: string
 }
 
 export function computeForm8960Lines({
@@ -75,11 +76,11 @@ export function computeForm8960Lines({
   const niitTax = currency(niitBase).multiply(0.038).value
 
   const components: Form8960NiiComponent[] = [
-    { label: 'Taxable interest (Schedule B)', amount: taxableInterest },
-    { label: 'Ordinary dividends (Schedule B)', amount: ordinaryDividends },
-    { label: 'Net capital gains (Schedule D)', amount: netCapGains },
-    ...(passiveIncome !== 0 ? [{ label: 'Net passive income (K-1 Schedule E)', amount: passiveIncome }] : []),
-    ...(investmentInterestExpense > 0 ? [{ label: 'Less: investment interest expense (Form 4952)', amount: -investmentInterestExpense }] : []),
+    { boxRef: '1',  label: 'Taxable interest (Schedule B)', amount: taxableInterest },
+    { boxRef: '2',  label: 'Ordinary dividends (Schedule B)', amount: ordinaryDividends },
+    { boxRef: '5a', label: 'Net capital gains (Schedule D)', amount: netCapGains },
+    ...(passiveIncome !== 0 ? [{ boxRef: '4a', label: 'Net passive income (K-1 Schedule E)', amount: passiveIncome }] : []),
+    ...(investmentInterestExpense > 0 ? [{ boxRef: '9a', label: 'Less: investment interest expense (Form 4952)', amount: -investmentInterestExpense }] : []),
   ]
 
   return {

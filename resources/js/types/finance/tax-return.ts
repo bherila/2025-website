@@ -265,7 +265,7 @@ export interface Form8960Lines {
   threshold: number
   magiExcess: number
   niitTax: number
-  components: { label: string; amount: number }[]
+  components: { label: string; amount: number; boxRef?: string }[]
   /** Per-payer interest sources for the data source modal. */
   interestSources: { label: string; amount: number }[]
   /** Per-payer dividend sources for the data source modal. */

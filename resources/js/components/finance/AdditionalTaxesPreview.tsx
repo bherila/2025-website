@@ -174,6 +174,7 @@ export default function AdditionalTaxesPreview({ schedule2, scheduleSE, form8959
             return (
               <FormLine
                 key={i}
+                {...(c.boxRef ? { boxRef: c.boxRef } : {})}
                 label={c.label}
                 value={c.amount}
                 {...(isInterest && form8960.interestSources.length > 1 ? { onClick: () => setInterestModal(true) } : {})}
@@ -183,10 +184,10 @@ export default function AdditionalTaxesPreview({ schedule2, scheduleSE, form8959
             )
           })}
           <FormTotalLine boxRef="12" label="Net Investment Income" value={form8960.netInvestmentIncome} />
-          <FormLine label="Modified AGI (estimated)" value={form8960.magi} />
-          <FormLine label={`Less: threshold (${fmtAmt(form8960.threshold, 0)} — ${form8960.threshold === 200_000 ? 'Single/HOH' : 'MFJ'})`} value={-form8960.threshold} />
-          <FormLine label="Excess MAGI over threshold" value={form8960.magiExcess} />
-          <FormLine label="NIIT base (lesser of NII or MAGI excess)" value={Math.min(form8960.netInvestmentIncome, form8960.magiExcess)} />
+          <FormLine boxRef="13" label="Modified AGI (estimated)" value={form8960.magi} />
+          <FormLine boxRef="14" label={`Less: threshold (${fmtAmt(form8960.threshold, 0)} — ${form8960.threshold === 200_000 ? 'Single/HOH' : 'MFJ'})`} value={-form8960.threshold} />
+          <FormLine boxRef="15" label="Excess MAGI over threshold" value={form8960.magiExcess} />
+          <FormLine boxRef="16" label="NIIT base (lesser of NII or MAGI excess)" value={Math.min(form8960.netInvestmentIncome, form8960.magiExcess)} />
           <FormTotalLine boxRef="17" label="NIIT (3.8% × base) → Schedule 2 Line 12" value={form8960.niitTax} double />
           <FormLine note label="Note" raw="NIIT is not reduced by the QBI deduction (Form 8995) or the foreign tax credit (Form 1116)." />
         </FormBlock>
