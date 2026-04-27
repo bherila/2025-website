@@ -72,3 +72,5 @@ export function getStandardDeduction(
   const row = table[year] ?? table[mostRecent]
   return row?.[key] ?? 0
 }
+  /* Bounty contribution */
+}
