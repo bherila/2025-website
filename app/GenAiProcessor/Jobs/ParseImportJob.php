@@ -72,11 +72,20 @@ class ParseImportJob implements ShouldQueue
             return;
         }
 
+        $fileStream = null;
         try {
             // Stream file from S3 to avoid buffering large uploads fully into memory
             $fileStream = Storage::disk('s3')->readStream($job->s3_path);
             if (! $fileStream) {
                 $job->markFailed('File not found in S3');
+
+                return;
+            }
+
+            // Guard against oversized inline-fallback payloads for providers without a File API.
+            $fileSize = (int) (Storage::disk('s3')->size($job->s3_path) ?: 0);
+            if ($fileSize > 0 && ! GenAiFileHelper::withinSizeLimit($client, $fileSize)) {
+                $job->markFailed('File exceeds the size limit for the configured AI provider.');
 
                 return;
             }
@@ -171,6 +180,10 @@ class ParseImportJob implements ShouldQueue
                 Mail::to($user->email)->send(new GenAiJobCompleteMail($job));
             } catch (\Throwable $mailEx) {
                 Log::warning('Failed to send failure mail', ['job_id' => $job->id]);
+            }
+        } finally {
+            if (is_resource($fileStream)) {
+                fclose($fileStream);
             }
         }
     }

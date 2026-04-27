@@ -40,7 +40,7 @@ class UserAiModelsController extends Controller
     /** @return list<string> */
     private function fetchGeminiModels(string $apiKey): array
     {
-        $response = Http::get('https://generativelanguage.googleapis.com/v1beta/models', [
+        $response = Http::timeout(10)->get('https://generativelanguage.googleapis.com/v1beta/models', [
             'key' => $apiKey,
         ]);
 
@@ -59,7 +59,7 @@ class UserAiModelsController extends Controller
     /** @return list<string> */
     private function fetchAnthropicModels(string $apiKey): array
     {
-        $response = Http::withHeaders([
+        $response = Http::timeout(10)->withHeaders([
             'x-api-key' => $apiKey,
             'anthropic-version' => '2023-06-01',
         ])->get('https://api.anthropic.com/v1/models');
