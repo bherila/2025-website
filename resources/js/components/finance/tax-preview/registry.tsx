@@ -520,7 +520,13 @@ function ActionItemsAdapter({ state, onDrill }: FormRenderProps): React.ReactEle
 }
 
 function EstimateAdapter({ state }: FormRenderProps): React.ReactElement {
-  const summary = summarizeTaxEstimate(state.taxReturn.form1040 ?? [])
+  const summary = summarizeTaxEstimate({
+    taxReturn: state.taxReturn,
+    year: state.year,
+    isMarried: state.isMarried,
+    payslips: state.payslips,
+    reviewed1099RDocs: state.reviewed1099RDocs,
+  })
   return <TaxEstimateFullDetail summary={summary} />
 }
 

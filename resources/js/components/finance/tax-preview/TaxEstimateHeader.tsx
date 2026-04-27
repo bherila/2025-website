@@ -7,10 +7,13 @@ import TotalsTable from '@/components/payslip/TotalsTable.client'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { type FilingStatus, getStandardDeduction } from '@/lib/tax/standardDeductions'
+import { calculateTax } from '@/lib/tax/taxBracket'
 import { cn } from '@/lib/utils'
-import type { Form1040LineItem } from '@/types/finance/tax-return'
+import type { TaxDocument } from '@/types/finance/tax-document'
+import type { Form1040LineItem, TaxReturn1040 } from '@/types/finance/tax-return'
 
 import EstimatedTaxPaymentsSection from '../EstimatedTaxPaymentsSection'
+import { compute1099RDistributionSummary } from '../Form1040Preview'
 import StateSelectorSection from '../StateSelectorSection'
 import { useTaxPreview } from '../TaxPreviewContext'
 
@@ -30,17 +33,49 @@ function lineValue(lines: Form1040LineItem[], lineNumber: string): number {
   return lines.find((l) => l.line === lineNumber)?.value ?? 0
 }
 
-export function summarizeTaxEstimate(lines: Form1040LineItem[]): KpiSummary {
-  return summarize(lines)
+interface SummarizeInput {
+  taxReturn: TaxReturn1040
+  year: number
+  isMarried: boolean
+  payslips: fin_payslip[]
+  reviewed1099RDocs: TaxDocument[]
 }
 
-function summarize(lines: Form1040LineItem[]): KpiSummary {
+export function summarizeTaxEstimate(input: SummarizeInput): KpiSummary {
+  return summarize(input)
+}
+
+function summarize({ taxReturn, year, isMarried, payslips, reviewed1099RDocs }: SummarizeInput): KpiSummary {
+  const lines = taxReturn.form1040 ?? []
   const totalIncome = lineValue(lines, '9')
-  const totalTax = lineValue(lines, '24')
-  const totalWithheld =
-    lineValue(lines, '25a') + lineValue(lines, '25b') + lineValue(lines, '25c') + lineValue(lines, '25d')
-  const totalPayments = lineValue(lines, '33') || totalWithheld
-  const diff = totalPayments - totalTax
+  // Form 1040 lines for tax + withholding aren't computed yet, so derive them
+  // here from the same primitives the rest of the dock uses.
+  const agi = lineValue(lines, '11') || totalIncome
+  const filingStatus: FilingStatus = isMarried ? 'Married Filing Jointly' : 'Single'
+  const stdDeduction = getStandardDeduction(year, filingStatus)
+  const taxableIncome = Math.max(0, currency(agi).subtract(stdDeduction).value)
+  const bracketTax = taxableIncome > 0
+    ? calculateTax(String(year), '', currency(taxableIncome), filingStatus).totalTax.value
+    : 0
+  const additionalTaxes = taxReturn.schedule2?.totalAdditionalTaxes ?? 0
+  const foreignTaxCredit = lineValue(lines, '20')
+  const totalTax = Math.max(
+    0,
+    currency(bracketTax).add(additionalTaxes).subtract(foreignTaxCredit).value,
+  )
+
+  const yearStart = `${year}-01-01`
+  const yearEnd = `${year + 1}-01-01`
+  const payrollWithheld = payslips.reduce((acc, r) => {
+    if (!r.pay_date || r.pay_date <= yearStart || r.pay_date >= yearEnd) {
+      return acc
+    }
+    return acc.add(r.ps_fed_tax ?? 0).add(r.ps_fed_tax_addl ?? 0).subtract(r.ps_fed_tax_refunded ?? 0)
+  }, currency(0)).value
+  const retirementWithheld = compute1099RDistributionSummary(reviewed1099RDocs).federalWithholding
+  const totalWithheld = currency(payrollWithheld).add(retirementWithheld).value
+
+  const diff = currency(totalWithheld).subtract(totalTax).value
   return {
     totalIncome,
     totalTax,
@@ -70,7 +105,13 @@ export function TaxEstimateHeader({ defaultTier = 'slim' }: TaxEstimateHeaderPro
   const [tier, setTier] = useState<Tier>(defaultTier)
   const [modalOpen, setModalOpen] = useState(false)
 
-  const summary = summarize(state.taxReturn.form1040 ?? [])
+  const summary = summarize({
+    taxReturn: state.taxReturn,
+    year: state.year,
+    isMarried: state.isMarried,
+    payslips: state.payslips,
+    reviewed1099RDocs: state.reviewed1099RDocs,
+  })
 
   return (
     <>
@@ -92,7 +133,7 @@ export function TaxEstimateHeader({ defaultTier = 'slim' }: TaxEstimateHeaderPro
       </div>
 
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-h-[85vh] max-w-4xl overflow-y-auto">
+        <DialogContent className="max-h-[85vh] w-[95vw] overflow-y-auto sm:w-[90vw] sm:max-w-6xl">
           <DialogHeader>
             <DialogTitle>Tax Estimate — {state.year}</DialogTitle>
           </DialogHeader>
