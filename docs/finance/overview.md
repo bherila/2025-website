@@ -250,4 +250,6 @@ When a statement is deleted:
 - [mcp-server.md](mcp-server.md) — MCP server for AI agents
 - [statements.md](statements.md) — Statement viewing and import
 - [account-matching.md](account-matching.md) — Multi-account matching algorithm
+- [ib-statement-schema.md](ib-statement-schema.md) — IB CSV sections + schema options
+- [rsu.md](rsu.md) — RSU award tracking
 - [../exports.md](../exports.md) — Inventory of every data-export surface (XLSX, PDF, CSV, TXF, clipboard)

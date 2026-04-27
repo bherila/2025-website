@@ -169,9 +169,9 @@ describe('Schedule1Preview', () => {
       />,
     )
 
-    expect(screen.getByText('Line 10 — Total additional income (to Form 1040 line 8)')).toBeInTheDocument()
+    expect(screen.getByText('Total additional income (to Form 1040 line 8)')).toBeInTheDocument()
     expect(screen.getByText('$6,950')).toBeInTheDocument()
-    expect(screen.getByText('Line 26 — Total adjustments to income (to Form 1040 line 10)')).toBeInTheDocument()
+    expect(screen.getByText('Total adjustments to income (to Form 1040 line 10)')).toBeInTheDocument()
     expect(screen.getAllByText('$706')).toHaveLength(2)
   })
 

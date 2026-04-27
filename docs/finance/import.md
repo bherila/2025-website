@@ -31,7 +31,7 @@ The transaction import feature allows users to import transactions from various 
 
 ## PDF Import (GenAI)
 
-> **Full documentation:** See [GenAI Import](../GenAI-Import.md) for the complete architecture, API reference, and security details.
+> **Full documentation:** See [GenAI Import](../genai-import.md) for the complete architecture, API reference, and security details.
 
 PDF statements are parsed using the GenAI Import system. The frontend uploads files directly to S3 via pre-signed URLs, then creates an import job processed asynchronously by the queue worker.
 
@@ -48,7 +48,7 @@ Checkbox states are persisted globally in `localStorage`.
 
 ## Multi-Account PDF Import
 
-When a bank summary statement contains transactions for multiple accounts, the system supports automatic distribution via the `accounts` context in the import job. See [GenAI Import — Job Types & Context Schema](../GenAI-Import.md#job-types--context-schema).
+When a bank summary statement contains transactions for multiple accounts, the system supports automatic distribution via the `accounts` context in the import job. See [GenAI Import — Job Types & Context Schema](../genai-import.md#job-types--context-schema).
 
 The frontend (`accountMatcher.ts`) automatically matches each parsed account block to the user's accounts using suffix matching and name disambiguation. See [account-matching.md](account-matching.md) for the algorithm.
 

@@ -1,25 +1,41 @@
-# IB Statement Import Schema Design
+# IB Statement Schema
 
-## Overview
+Interactive Brokers CSV statements contain multiple sections beyond just trades. This doc covers what sections exist and how they're stored.
 
-Interactive Brokers CSV exports contain multiple sections beyond transactions. This document proposes a schema to store this data linked to `fin_account_balance_snapshot`.
+## IB CSV Sections
 
-## Existing Tables
+| Section | Description | Import Priority |
+|---------|-------------|-----------------|
+| `Statement` | Broker name, account info, period | Low (metadata) |
+| `Account Information` | Account details | Low (metadata) |
+| `Net Asset Value` | NAV by asset class | Medium |
+| `Change in NAV` | NAV changes | Medium |
+| `Mark-to-Market Performance Summary` | MTM P&L by symbol | High |
+| `Realized & Unrealized Performance Summary` | P&L summary | High |
+| `Cash Report` | Cash movements by currency | High |
+| `Open Positions` | End-of-period positions | High |
+| `Forex Balances` | FX position values | Medium |
+| `Trades` | Transaction details | **Already parsed** |
+| `Transaction Fees` | Detailed fee breakdown | Medium |
+| `Fees` | Fee summary | **Already parsed** |
+| `Interest` | Interest income/expense | **Already parsed** |
+| `Interest Accruals` | Accrued interest | Low |
+| `GST Details` | Tax details (Singapore) | Low |
+| `Borrow Fee Details` | Short borrow fees | Medium |
+| `Stock Yield Enhancement Program` | Securities lending | Low |
+| `Financial Instrument Information` | Instrument details | **Used for lookup** |
 
-- `fin_account_balance_snapshot` - Statement date and total balance
-- `fin_statement_details` - Flexible key-value storage for statement line items
+## Schema: Dedicated Tables (Recommended)
 
-## Proposed New Tables
+Dedicated tables provide type-safe columns, efficient queries, and clear data model. Linked to `fin_account_balance_snapshot` via `snapshot_id`.
 
-### 1. `fin_statement_positions` - Open Positions at Statement Date
-
-Stores the snapshot of holdings at the statement date.
+### `fin_statement_positions` — Open Positions
 
 ```sql
 CREATE TABLE `fin_statement_positions` (
   `position_id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `snapshot_id` bigint unsigned NOT NULL,
-  `asset_category` varchar(50) DEFAULT NULL,       -- 'Stocks', 'Equity and Index Options', 'Forex'
+  `asset_category` varchar(50) DEFAULT NULL,
   `currency` varchar(10) DEFAULT NULL,
   `symbol` varchar(50) NOT NULL,
   `quantity` decimal(18,8) DEFAULT NULL,
@@ -35,34 +51,31 @@ CREATE TABLE `fin_statement_positions` (
   PRIMARY KEY (`position_id`),
   KEY `idx_snapshot` (`snapshot_id`),
   KEY `idx_symbol` (`symbol`),
-  CONSTRAINT `fk_positions_snapshot` FOREIGN KEY (`snapshot_id`) 
+  CONSTRAINT `fk_positions_snapshot` FOREIGN KEY (`snapshot_id`)
     REFERENCES `fin_account_balance_snapshot` (`snapshot_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
 
-### 2. `fin_statement_performance` - Mark-to-Market & Realized/Unrealized Summary
-
-Stores performance data per symbol for the statement period.
+### `fin_statement_performance` — MTM & Realized/Unrealized P&L
 
 ```sql
 CREATE TABLE `fin_statement_performance` (
   `perf_id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `snapshot_id` bigint unsigned NOT NULL,
-  `perf_type` enum('mtm','realized_unrealized') NOT NULL,  -- Which summary section
+  `perf_type` enum('mtm','realized_unrealized') NOT NULL,
   `asset_category` varchar(50) DEFAULT NULL,
   `symbol` varchar(50) NOT NULL,
   `prior_quantity` decimal(18,8) DEFAULT NULL,
   `current_quantity` decimal(18,8) DEFAULT NULL,
   `prior_price` decimal(18,8) DEFAULT NULL,
   `current_price` decimal(18,8) DEFAULT NULL,
-  -- Mark-to-Market columns
+  -- MTM columns
   `mtm_pl_position` decimal(18,4) DEFAULT NULL,
   `mtm_pl_transaction` decimal(18,4) DEFAULT NULL,
   `mtm_pl_commissions` decimal(18,4) DEFAULT NULL,
   `mtm_pl_other` decimal(18,4) DEFAULT NULL,
   `mtm_pl_total` decimal(18,4) DEFAULT NULL,
   -- Realized/Unrealized columns
-  `cost_adj` decimal(18,4) DEFAULT NULL,
   `realized_st_profit` decimal(18,4) DEFAULT NULL,
   `realized_st_loss` decimal(18,4) DEFAULT NULL,
   `realized_lt_profit` decimal(18,4) DEFAULT NULL,
@@ -77,40 +90,36 @@ CREATE TABLE `fin_statement_performance` (
   PRIMARY KEY (`perf_id`),
   KEY `idx_snapshot` (`snapshot_id`),
   KEY `idx_symbol` (`symbol`),
-  CONSTRAINT `fk_performance_snapshot` FOREIGN KEY (`snapshot_id`) 
+  CONSTRAINT `fk_performance_snapshot` FOREIGN KEY (`snapshot_id`)
     REFERENCES `fin_account_balance_snapshot` (`snapshot_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
 
-### 3. `fin_statement_cash_report` - Cash Flow Summary
-
-Stores the Cash Report section data.
+### `fin_statement_cash_report` — Cash Flow Summary
 
 ```sql
 CREATE TABLE `fin_statement_cash_report` (
   `cash_id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `snapshot_id` bigint unsigned NOT NULL,
-  `currency` varchar(10) NOT NULL,              -- 'USD', 'SGD', 'Base Currency Summary'
-  `line_item` varchar(100) NOT NULL,            -- 'Starting Cash', 'Commissions', etc.
+  `currency` varchar(10) NOT NULL,
+  `line_item` varchar(100) NOT NULL,
   `total` decimal(18,4) DEFAULT NULL,
   `securities` decimal(18,4) DEFAULT NULL,
   `futures` decimal(18,4) DEFAULT NULL,
   PRIMARY KEY (`cash_id`),
   KEY `idx_snapshot` (`snapshot_id`),
-  CONSTRAINT `fk_cash_report_snapshot` FOREIGN KEY (`snapshot_id`) 
+  CONSTRAINT `fk_cash_report_snapshot` FOREIGN KEY (`snapshot_id`)
     REFERENCES `fin_account_balance_snapshot` (`snapshot_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
 
-### 4. `fin_statement_nav` - Net Asset Value Breakdown
-
-Stores the Net Asset Value section.
+### `fin_statement_nav` — Net Asset Value
 
 ```sql
 CREATE TABLE `fin_statement_nav` (
   `nav_id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `snapshot_id` bigint unsigned NOT NULL,
-  `asset_class` varchar(50) NOT NULL,           -- 'Cash', 'Stock', 'Options', etc.
+  `asset_class` varchar(50) NOT NULL,
   `prior_total` decimal(18,4) DEFAULT NULL,
   `current_long` decimal(18,4) DEFAULT NULL,
   `current_short` decimal(18,4) DEFAULT NULL,
@@ -118,12 +127,12 @@ CREATE TABLE `fin_statement_nav` (
   `change_amount` decimal(18,4) DEFAULT NULL,
   PRIMARY KEY (`nav_id`),
   KEY `idx_snapshot` (`snapshot_id`),
-  CONSTRAINT `fk_nav_snapshot` FOREIGN KEY (`snapshot_id`) 
+  CONSTRAINT `fk_nav_snapshot` FOREIGN KEY (`snapshot_id`)
     REFERENCES `fin_account_balance_snapshot` (`snapshot_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
 
-### 5. `fin_statement_securities_lent` - Stock Yield Enhancement Program
+### `fin_statement_securities_lent` — Stock Yield Enhancement Program
 
 ```sql
 CREATE TABLE `fin_statement_securities_lent` (
@@ -137,60 +146,25 @@ CREATE TABLE `fin_statement_securities_lent` (
   `interest_earned` decimal(18,4) DEFAULT NULL,
   PRIMARY KEY (`lent_id`),
   KEY `idx_snapshot` (`snapshot_id`),
-  CONSTRAINT `fk_securities_lent_snapshot` FOREIGN KEY (`snapshot_id`) 
+  CONSTRAINT `fk_securities_lent_snapshot` FOREIGN KEY (`snapshot_id`)
     REFERENCES `fin_account_balance_snapshot` (`snapshot_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
+
+## Alternative: Generic `fin_statement_details` Table
+
+For simpler initial implementation, the existing `fin_statement_details` table stores everything as key-value rows with `json_data` for complex structures. Less queryable but requires no schema changes per section.
 
 ## Import Flow
 
 1. Parse IB CSV using `parseIbCsv()`
 2. Extract statement period end date from `Statement,Data,Period`
 3. Extract total NAV from `Net Asset Value,Data,Total`
-4. Create `fin_account_balance_snapshot` record with date and balance
-5. Import each section into corresponding table:
+4. Create `fin_account_balance_snapshot` record
+5. Import each section into the corresponding table:
    - `Net Asset Value` → `fin_statement_nav`
    - `Cash Report` → `fin_statement_cash_report`
    - `Open Positions` → `fin_statement_positions`
-   - `Mark-to-Market Performance Summary` → `fin_statement_performance` (perf_type='mtm')
-   - `Realized & Unrealized Performance Summary` → `fin_statement_performance` (perf_type='realized_unrealized')
+   - `Mark-to-Market Performance Summary` → `fin_statement_performance` (`perf_type='mtm'`)
+   - `Realized & Unrealized Performance Summary` → `fin_statement_performance` (`perf_type='realized_unrealized'`)
    - `Stock Yield Enhancement Program` → `fin_statement_securities_lent`
-
-## Alternative: Use Existing `fin_statement_details`
-
-For a simpler initial implementation, we could extend the existing `fin_statement_details` table:
-
-```sql
--- Existing structure
-CREATE TABLE `fin_statement_details` (
-  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `snapshot_id` bigint unsigned NOT NULL,
-  `section` varchar(100) NOT NULL,        -- e.g., 'Net Asset Value', 'Cash Report'
-  `line_item` varchar(255) NOT NULL,      -- e.g., 'Cash', 'Starting Cash'
-  `statement_period_value` decimal(18,4) DEFAULT NULL,
-  `ytd_value` decimal(18,4) DEFAULT NULL,
-  `is_percentage` tinyint(1) DEFAULT 0,
-  -- Add new columns for IB data
-  `symbol` varchar(50) DEFAULT NULL,
-  `currency` varchar(10) DEFAULT NULL,
-  `sub_category` varchar(100) DEFAULT NULL,
-  `json_data` json DEFAULT NULL,          -- For complex row data
-  PRIMARY KEY (`id`),
-  KEY `idx_snapshot_section` (`snapshot_id`, `section`)
-);
-```
-
-This approach stores everything in one table using `json_data` for complex structures, which is simpler but less queryable.
-
-## Recommendation
-
-Start with the **dedicated tables approach** for these reasons:
-1. Type-safe columns for financial data
-2. Efficient queries for specific data types
-3. Proper decimal precision for monetary values
-4. Clear data model for future reporting
-
-The dedicated tables make it easy to build views like:
-- "Show all open positions as of date X"
-- "Compare performance between two periods"
-- "Track securities lending income over time"
