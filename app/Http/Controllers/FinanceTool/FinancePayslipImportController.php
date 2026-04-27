@@ -4,10 +4,11 @@ namespace App\Http\Controllers\FinanceTool;
 
 use App\Http\Controllers\Controller;
 use App\Models\FinanceTool\FinPayslips;
+use Bherila\GenAiLaravel\Clients\GeminiClient;
+use Bherila\GenAiLaravel\Exceptions\GenAiRateLimitException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Throwable;
@@ -16,9 +17,6 @@ class FinancePayslipImportController extends Controller
 {
     public function import(Request $request): JsonResponse
     {
-        // Set execution time limit to 5 minutes to handle multiple files
-        set_time_limit(300);
-
         $validator = Validator::make($request->all(), [
             'files' => 'required|array|max:100',
             'files.*' => 'required|file',
@@ -29,19 +27,6 @@ class FinancePayslipImportController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $files = $request->file('files');
-
-        // Calculate total size
-        $totalSize = 0;
-        foreach ($files as $file) {
-            $totalSize += $file->getSize();
-        }
-
-        // Limit to 6MB
-        if ($totalSize > 6 * 1024 * 1024) {
-            return response()->json(['error' => 'Total file size exceeds the limit (6MB). Please upload fewer files.'], 422);
-        }
-
         $user = Auth::user();
         $apiKey = $user->getGeminiApiKey();
 
@@ -49,101 +34,75 @@ class FinancePayslipImportController extends Controller
             return response()->json(['error' => 'Gemini API key is not set.'], 400);
         }
 
+        $files = $request->file('files');
+        $gemini = new GeminiClient($apiKey);
+        $prompt = $this->getPrompt(1);
+
         $successful_imports = 0;
         $failed_imports = 0;
 
-        $prompt = $this->getPrompt(count($files));
-
-        $parts = [];
-        $parts[] = ['text' => $prompt];
-
         foreach ($files as $file) {
-            $parts[] = ['text' => 'Filename: '.$file->getClientOriginalName()];
-            $parts[] = [
-                'inline_data' => [
-                    'mime_type' => 'application/pdf',
-                    'data' => base64_encode($file->get()),
-                ],
-            ];
-        }
+            $originalFilename = $file->getClientOriginalName();
+            $geminiFileUri = null;
 
-        try {
-            $response = Http::withOptions([
-                'timeout' => 180, // 3 minutes timeout
-            ])->withHeaders([
-                'x-goog-api-key' => $apiKey,
-                'Content-Type' => 'application/json',
-            ])->post('https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent', [
-                'contents' => [
-                    [
-                        'parts' => $parts,
-                    ],
-                ],
-                'generationConfig' => [
-                    'response_mime_type' => 'application/json',
-                ],
-            ]);
-
-            if ($response->successful()) {
-                $candidate = $response->json()['candidates'][0] ?? null;
-                if (! $candidate) {
-                    throw new \Exception('No candidates returned from Gemini API');
-                }
-
-                $json_string = $candidate['content']['parts'][0]['text'];
-                $data = json_decode(str_replace(['```json', '```'], '', $json_string), true);
-
-                if (json_last_error() === JSON_ERROR_NONE && is_array($data)) {
-                    // The Gemini API returns an array of objects
-                    $payslips = $data;
-
-                    foreach ($payslips as $payslipData) {
-                        $payslipData['uid'] = $user->id;
-                        $payslipData['ps_is_estimated'] = true;
-                        if ($request->filled('employment_entity_id')) {
-                            $payslipData['employment_entity_id'] = $request->input('employment_entity_id');
-                        }
-
-                        // Remove null values to rely on database defaults
-                        $payslipData = array_filter($payslipData, function ($value) {
-                            return $value !== null;
-                        });
-
-                        // We can optionally use 'original_filename' for logging or error reporting
-                        // but strictly speaking FinPayslips doesn't store the filename currently.
-                        // We remove it before creation just in case it's not in fillable
-                        unset($payslipData['original_filename']);
-
-                        try {
-                            FinPayslips::create($payslipData);
-                            $successful_imports++;
-                        } catch (\Exception $e) {
-                            Log::error('Failed to save payslip data: '.$e->getMessage(), ['data' => $payslipData]);
-                            $failed_imports++;
-                        }
+            try {
+                $fileStream = fopen($file->getRealPath(), 'r');
+                try {
+                    $geminiFileUri = $gemini->uploadFile($fileStream, 'application/pdf', 'payslip-import-'.time());
+                } finally {
+                    if (is_resource($fileStream)) {
+                        fclose($fileStream);
                     }
-                } else {
-                    Log::error('Failed to decode JSON from Gemini API', [
-                        'response' => $response->body(),
-                    ]);
-                    // If we can't parse JSON, we assume all failed
-                    $failed_imports = count($files);
-                }
-            } else {
-                Log::error('Gemini API request failed', [
-                    'status' => $response->status(),
-                    'response' => $response->body(),
-                ]);
-                if ($response->status() == 429) {
-                    return response()->json(['error' => 'API rate limit exceeded. Please wait and try again.'], 429);
                 }
 
-                return response()->json(['error' => 'Gemini API request failed.'], 500);
+                if (! $geminiFileUri) {
+                    Log::error('Failed to upload payslip to Gemini File API', ['filename' => $originalFilename, 'user_id' => $user->id]);
+                    $failed_imports++;
+
+                    continue;
+                }
+
+                $filePrompt = "Filename: {$originalFilename}\n\n{$prompt}";
+                $response = $gemini->converseWithFileRef($geminiFileUri, 'application/pdf', $filePrompt);
+                $data = json_decode($gemini->extractText($response), true);
+
+                if (! is_array($data)) {
+                    Log::error('Failed to decode Gemini JSON for payslip import', ['filename' => $originalFilename, 'user_id' => $user->id]);
+                    $failed_imports++;
+
+                    continue;
+                }
+
+                $payslips = isset($data[0]) ? $data : [$data];
+
+                foreach ($payslips as $payslipData) {
+                    $payslipData['uid'] = $user->id;
+                    $payslipData['ps_is_estimated'] = true;
+                    if ($request->filled('employment_entity_id')) {
+                        $payslipData['employment_entity_id'] = $request->input('employment_entity_id');
+                    }
+                    $payslipData = array_filter($payslipData, fn ($value) => $value !== null);
+                    unset($payslipData['original_filename']);
+
+                    try {
+                        FinPayslips::create($payslipData);
+                        $successful_imports++;
+                    } catch (\Exception $e) {
+                        Log::error('Failed to save payslip data: '.$e->getMessage(), ['data' => $payslipData]);
+                        $failed_imports++;
+                    }
+                }
+            } catch (GenAiRateLimitException) {
+                return response()->json(['error' => 'API rate limit exceeded. Please wait and try again.'], 429);
+            } catch (Throwable $e) {
+                Log::error('Error processing payslip file: '.$e->getMessage(), ['filename' => $originalFilename, 'user_id' => $user->id]);
+
+                return response()->json(['error' => 'An unexpected error occurred during import.'], 500);
+            } finally {
+                if ($geminiFileUri) {
+                    $gemini->deleteFile($geminiFileUri);
+                }
             }
-        } catch (Throwable $e) {
-            Log::error('Error during payslip import: '.$e->getMessage());
-
-            return response()->json(['error' => 'An unexpected error occurred during import.'], 500);
         }
 
         $message = "Import processing complete. Processed {$successful_imports} payslip record(s).";
