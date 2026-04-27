@@ -106,6 +106,7 @@ class UserAiConfigurationController extends Controller
 
     private function findOwned(int $id): UserAiConfiguration
     {
+        /** @var UserAiConfiguration */
         return Auth::user()->aiConfigurations()->findOrFail($id);
     }
 }

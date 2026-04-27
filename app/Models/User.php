@@ -92,6 +92,7 @@ class User extends Authenticatable
         return $this->gemini_api_key;
     }
 
+    /** @return HasMany<UserAiConfiguration, $this> */
     public function aiConfigurations(): HasMany
     {
         return $this->hasMany(UserAiConfiguration::class);
@@ -99,6 +100,7 @@ class User extends Authenticatable
 
     public function activeAiConfiguration(): ?UserAiConfiguration
     {
+        /** @var UserAiConfiguration|null */
         return $this->aiConfigurations()->where('is_active', true)->first();
     }
 
@@ -111,7 +113,6 @@ class User extends Authenticatable
                 'gemini' => new GeminiClient($config->api_key, $config->model),
                 'anthropic' => new AnthropicClient($config->api_key, $config->model),
                 'bedrock' => new BedrockClient($config->api_key, $config->model, $config->region ?? 'us-east-1', $config->session_token ?? ''),
-                default => null,
             };
         }
 

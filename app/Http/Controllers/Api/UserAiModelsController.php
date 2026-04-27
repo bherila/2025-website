@@ -21,8 +21,9 @@ class UserAiModelsController extends Controller
             'session_token' => ['nullable', 'string'],
         ]);
 
-        $provider = $request->input('provider');
+        $provider = (string) $request->input('provider');
         $apiKey = $request->input('api_key');
+        $apiKey = is_string($apiKey) ? $apiKey : null;
 
         // For edit flows, accept a config_id and reuse the saved key rather than
         // requiring the user to re-enter it.
@@ -41,6 +42,7 @@ class UserAiModelsController extends Controller
             $models = match ($provider) {
                 'gemini' => $this->fetchGeminiModels($apiKey),
                 'anthropic' => $this->fetchAnthropicModels($apiKey),
+                default => throw new \InvalidArgumentException("Unsupported provider: {$provider}"),
             };
 
             return response()->json(['models' => $models]);
@@ -62,10 +64,13 @@ class UserAiModelsController extends Controller
             throw new \RuntimeException('Gemini API error: '.$response->body());
         }
 
-        return collect($response->json('models', []))
-            ->filter(fn ($m) => in_array('generateContent', $m['supportedGenerationMethods'] ?? [], true))
+        /** @var array<int, array<string, mixed>> $models */
+        $models = $response->json('models', []) ?? [];
+
+        return collect($models)
+            ->filter(fn (array $m) => in_array('generateContent', $m['supportedGenerationMethods'] ?? [], true))
             ->pluck('name')
-            ->map(fn ($n) => str_replace('models/', '', $n))
+            ->map(fn ($n) => str_replace('models/', '', (string) $n))
             ->values()
             ->all();
     }
@@ -82,7 +87,10 @@ class UserAiModelsController extends Controller
             throw new \RuntimeException('Anthropic API error: '.$response->body());
         }
 
-        return collect($response->json('data', []))
+        /** @var array<int, array<string, mixed>> $data */
+        $data = $response->json('data', []) ?? [];
+
+        return collect($data)
             ->pluck('id')
             ->values()
             ->all();
