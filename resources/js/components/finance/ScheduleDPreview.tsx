@@ -210,7 +210,7 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
   const totalBrokerLT = brokerSources.reduce((acc, s) => acc.add(s.ltGain), currency(0)).value
 
   // ── Short-term capital gains/losses ──────────────────────────────────────
-  type CapGainLine = { label: string; amount: number; note?: string }
+  type CapGainLine = { label: string; amount: number; note?: string; boxRef?: string }
   const stLines: CapGainLine[] = []
 
   for (const { doc, data } of k1Parsed) {
@@ -218,7 +218,7 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
       data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
     const box8 = pk1(data, '8')
     if (box8 !== 0) {
-      stLines.push({ label: `${partnerName} — K-1 Box 8`, amount: box8 })
+      stLines.push({ label: `${partnerName} — K-1 Box 8`, amount: box8, boxRef: '5' })
     }
   }
 
@@ -228,6 +228,7 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
       label: 'Form 6781 40% S/T allocation (Sec. 1256)',
       amount: total6781ST,
       note: '40% of Section 1256 gain/(loss) is always short-term',
+      boxRef: '3',
     })
   }
 
@@ -235,7 +236,7 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
   if (hasBrokerData) {
     for (const src of brokerSources) {
       if (src.stGain !== 0) {
-        stLines.push({ label: `${src.label} — ST 1099-B`, amount: src.stGain })
+        stLines.push({ label: `${src.label} — ST 1099-B`, amount: src.stGain, boxRef: '1a' })
       }
     }
   } else {
@@ -243,6 +244,7 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
       label: 'Brokerage 1099-B (not yet uploaded)',
       amount: 0,
       note: 'Upload and review a 1099-B or broker_1099 document to include brokerage transactions',
+      boxRef: '1a',
     })
   }
 
@@ -257,13 +259,13 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
     const box9c = pk1(data, '9c')
     const box10 = pk1(data, '10')
 
-    if (box9a !== 0) ltLines.push({ label: `${partnerName} — K-1 Box 9a (L/T)`, amount: box9a })
+    if (box9a !== 0) ltLines.push({ label: `${partnerName} — K-1 Box 9a (L/T)`, amount: box9a, boxRef: '12' })
     if (box9b !== 0)
-      ltLines.push({ label: `${partnerName} — K-1 Box 9b (28% rate)`, amount: box9b, note: '28% collectibles rate' })
+      ltLines.push({ label: `${partnerName} — K-1 Box 9b (28% rate)`, amount: box9b, note: '28% collectibles rate', boxRef: '12' })
     if (box9c !== 0)
-      ltLines.push({ label: `${partnerName} — K-1 Box 9c (§1250 unrec.)`, amount: box9c, note: 'Unrecaptured §1250 gain' })
+      ltLines.push({ label: `${partnerName} — K-1 Box 9c (§1250 unrec.)`, amount: box9c, note: 'Unrecaptured §1250 gain', boxRef: '12' })
     if (box10 !== 0)
-      ltLines.push({ label: `${partnerName} — K-1 Box 10 (§1231)`, amount: box10, note: '§1231 gain flows to Part II' })
+      ltLines.push({ label: `${partnerName} — K-1 Box 10 (§1231)`, amount: box10, note: '§1231 gain flows to Part II', boxRef: '12' })
   }
 
   // Form 6781 60% LT allocation
@@ -272,6 +274,7 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
       label: 'Form 6781 60% L/T allocation (Sec. 1256)',
       amount: total6781LT,
       note: '60% of Section 1256 gain/(loss) is always long-term',
+      boxRef: '10',
     })
   }
 
@@ -279,7 +282,7 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
   if (hasBrokerData) {
     for (const src of brokerSources) {
       if (src.ltGain !== 0) {
-        ltLines.push({ label: `${src.label} — LT 1099-B`, amount: src.ltGain })
+        ltLines.push({ label: `${src.label} — LT 1099-B`, amount: src.ltGain, boxRef: '8a' })
       }
     }
   } else {
@@ -287,6 +290,7 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
       label: 'Brokerage 1099-B (not yet uploaded)',
       amount: 0,
       note: 'Upload and review a 1099-B or broker_1099 document to include brokerage transactions',
+      boxRef: '8a',
     })
   }
 
@@ -348,39 +352,40 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
       )}
 
       {/* Part I and II */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4">
         <FormBlock title="Schedule D Part I — Short-Term">
           {stLines.map((line, i) => (
             <div key={i}>
-              <FormLine label={line.label} value={line.amount} />
+              <FormLine {...(line.boxRef ? { boxRef: line.boxRef } : {})} label={line.label} value={line.amount} />
               {line.note && <FormSubLine text={line.note} />}
             </div>
           ))}
           {stLines.length === 0 && <FormLine label="No short-term items" raw="—" />}
-          <FormTotalLine label="Line 7 — Net Short-Term (via scheduleD())" value={netST} />
+          <FormTotalLine boxRef="7" label="Net Short-Term" value={netST} />
         </FormBlock>
 
         <FormBlock title="Schedule D Part II — Long-Term">
           {ltLines.map((line, i) => (
             <div key={i}>
-              <FormLine label={line.label} value={line.amount} />
+              <FormLine {...(line.boxRef ? { boxRef: line.boxRef } : {})} label={line.label} value={line.amount} />
               {line.note && <FormSubLine text={line.note} />}
             </div>
           ))}
           {ltLines.length === 0 && <FormLine label="No long-term items" raw="—" />}
-          <FormTotalLine label="Line 15 — Net Long-Term (via scheduleD())" value={netLT} />
+          <FormTotalLine boxRef="15" label="Net Long-Term" value={netLT} />
         </FormBlock>
       </div>
 
       {/* Summary */}
       <FormBlock title="Schedule D Summary">
-        <FormLine label="Line 7 — Net short-term capital gain (loss)" value={netST} />
-        <FormLine label="Line 15 — Net long-term capital gain (loss)" value={netLT} />
-        <FormTotalLine label="Line 16 — Combined net capital gain (loss)" value={combined} />
+        <FormLine boxRef="7" label="Net short-term capital gain (loss)" value={netST} />
+        <FormLine boxRef="15" label="Net long-term capital gain (loss)" value={netLT} />
+        <FormTotalLine boxRef="16" label="Combined net capital gain (loss)" value={combined} />
         {combined < 0 && (
           <>
             <FormLine
-              label={`Line 21 — Capital loss applied to ${taxYear} return`}
+              boxRef="21"
+              label={`Capital loss applied to ${taxYear} return`}
               value={appliedToReturn}
             />
             <FormLine

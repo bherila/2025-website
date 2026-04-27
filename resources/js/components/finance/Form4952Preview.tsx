@@ -315,26 +315,26 @@ export default function Form4952Preview({
       )}
 
       {/* Part I and Part II side by side */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))' }}>
         {/* Part I — Investment Interest Expense */}
         <FormBlock title="Part I — Total Investment Interest Expense">
           {invIntSources.map((src, i) => (
             <FormLine
               key={i}
-              boxRef={`L.${i === 0 ? '1a' : `1${String.fromCharCode(97 + i)}`}`}
+              boxRef={i === 0 ? '1a' : `1${String.fromCharCode(97 + i)}`}
               label={src.label}
               value={src.amount}
             />
           ))}
           {invIntSources.length === 0 && <FormLine label="No investment interest sources found" raw="—" />}
-          <FormLine boxRef="L.2" label="Prior-year disallowed carryforward" raw="Check prior return" />
-          <FormTotalLine label="Line 3 — Total investment interest" value={-totalInvIntExpense} />
+          <FormLine boxRef="2" label="Prior-year disallowed carryforward" raw="Check prior return" />
+          <FormTotalLine boxRef="3" label="Total investment interest" value={-totalInvIntExpense} />
         </FormBlock>
 
         {/* Part II — NII */}
         <FormBlock title="Part II — Net Investment Income (no QD election)">
           {niiLines.map((line, i) => (
-            <FormLine key={i} boxRef="L.4a" label={line.label} value={line.amount} />
+            <FormLine key={i} boxRef="4a" label={line.label} value={line.amount} />
           ))}
           {niiLines.length === 0 && <FormLine label="No NII sources found in reviewed documents" raw="—" />}
           {computedLines.invExpSources.length > 0 && (
@@ -342,13 +342,13 @@ export default function Form4952Preview({
               {computedLines.invExpSources.map((line, i) => (
                 <FormLine
                   key={`invexp-${i}`}
-                  boxRef="L.5"
+                  boxRef="5"
                   label={line.label}
                   value={line.amount}
                 />
               ))}
               <FormLine
-                boxRef="L.5"
+                boxRef="5"
                 label={
                   <span className="italic text-muted-foreground text-[10px]">
                     Box 20B expenses reduce NII (Form 4952 Part II Line 5)
@@ -363,7 +363,7 @@ export default function Form4952Preview({
               {suspendedLines.map((line, i) => (
                 <FormLine
                   key={`susp-${i}`}
-                  boxRef="L.5"
+                  boxRef="5"
                   label={
                     <span>
                       {line.label}{' '}
@@ -374,7 +374,7 @@ export default function Form4952Preview({
                 />
               ))}
               <FormLine
-                boxRef="L.5"
+                boxRef="5"
                 label={
                   <span className="italic text-muted-foreground">
                     Note: §67(g) items shown but not deducted (TCJA suspension through 2025)
@@ -384,7 +384,7 @@ export default function Form4952Preview({
               />
             </>
           )}
-          <FormTotalLine label="Line 6 — Net investment income (no QD election)" value={niiBefore} />
+          <FormTotalLine boxRef="6" label="Net investment income (no QD election)" value={niiBefore} />
         </FormBlock>
       </div>
 
@@ -520,14 +520,14 @@ export default function Form4952Preview({
           <FormBlock
             title={`Form 4952 — Final Lines (Scenario ${bestScenario}${useQdElected > 0 ? `, QD election: ${fmtAmt(useQdElected)}` : ''})`}
           >
-            <FormLine boxRef="L.3" label="Total investment interest expense" value={-totalInvIntExpense} />
-            <FormLine boxRef="L.4a" label="Gross investment income (excl. QDs)" value={niiBefore} />
+            <FormLine boxRef="3" label="Total investment interest expense" value={-totalInvIntExpense} />
+            <FormLine boxRef="4a" label="Gross investment income (excl. QDs)" value={niiBefore} />
             {useQdElected > 0 && (
-              <FormLine boxRef="L.4b" label="Qualified dividends elected into NII" value={useQdElected} />
+              <FormLine boxRef="4b" label="Qualified dividends elected into NII" value={useQdElected} />
             )}
             {suspendedLines.length > 0 && (
               <FormLine
-                boxRef="L.5"
+                boxRef="5"
                 label={
                   <span>
                     Investment expenses{' '}
@@ -537,10 +537,10 @@ export default function Form4952Preview({
                 raw={`(${fmtAmt(Math.abs(totalSuspended))})`}
               />
             )}
-            <FormLine boxRef="L.4e" label="Net investment income" value={finalNii} />
-            <FormTotalLine label="Line 8 — Investment interest expense deduction" value={finalDeductible} double />
+            <FormLine boxRef="4e" label="Net investment income" value={finalNii} />
+            <FormTotalLine boxRef="8" label="Investment interest expense deduction" value={finalDeductible} double />
             <FormLine
-              boxRef="L.7"
+              boxRef="7"
               label="Disallowed — carryforward to next year"
               value={finalCarryforward > 0 ? finalCarryforward : 0}
             />

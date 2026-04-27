@@ -157,7 +157,7 @@ describe('Form8606Preview', () => {
         })}
       />,
     )
-    expect(screen.getByText(/Line 14 — Basis carried forward to next year/i)).toBeInTheDocument()
+    expect(screen.getByText(/Basis carried forward to next year/i)).toBeInTheDocument()
     expect(screen.getAllByText('$22,000').length).toBeGreaterThanOrEqual(1)
   })
 

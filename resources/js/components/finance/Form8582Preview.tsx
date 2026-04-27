@@ -114,12 +114,12 @@ export default function Form8582Preview({
                 )}
               </div>
             ))}
-            <FormTotalLine label="Line 1a — Total passive income" value={totalPassiveIncome} />
-            <FormTotalLine label="Line 1b — Total passive loss" value={totalPassiveLoss} />
+            <FormTotalLine boxRef="1a" label="Total passive income" value={totalPassiveIncome} />
+            <FormTotalLine boxRef="1b" label="Total passive loss" value={totalPassiveLoss} />
             {totalPriorYearUnallowed !== 0 && (
-              <FormLine label="Line 1c — Prior-year unallowed losses" value={totalPriorYearUnallowed} />
+              <FormLine boxRef="1c" label="Prior-year unallowed losses" value={totalPriorYearUnallowed} />
             )}
-            <FormTotalLine label="Line 1d — Combine lines 1a through 1c" value={netPassiveResult} double />
+            <FormTotalLine boxRef="1d" label="Combine 1a through 1c" value={netPassiveResult} double />
           </>
         )}
       </FormBlock>

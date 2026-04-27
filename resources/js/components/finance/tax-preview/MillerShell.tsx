@@ -102,23 +102,27 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
       }
     }
 
-  if (route.columns.length === 0) {
-    return (
-      <div className="flex w-full bg-background">
-        {homeView}
-        <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} registry={registry} />
-      </div>
-    )
-  }
+  const hasFormColumns = route.columns.length > 0
 
   return (
     <div className="flex w-full overflow-x-auto bg-background">
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} registry={registry} />
+      <section
+        className={`flex flex-col overflow-y-auto bg-card ${
+          hasFormColumns
+            ? 'hidden w-[960px] shrink-0 border-r border-border md:flex'
+            : 'w-full'
+        }`}
+      >
+        {homeView}
+      </section>
       {route.columns.map((col, depth) => {
         const entry = getEntry(registry, col.form)
         const Component = entry.component
         const instances = entry.instances ? entry.instances.list(state) : []
-        const activeInstance = col.instance ? instances.find((i) => i.key === col.instance) : undefined
+        // Auto-select the first tab when no instance is specified in the route.
+        const resolvedInstanceKey = col.instance ?? (instances.length > 0 ? instances[0]!.key : undefined)
+        const activeInstance = resolvedInstanceKey ? instances.find((i) => i.key === resolvedInstanceKey) : undefined
         const isLast = depth === route.columns.length - 1
 
         const onDrill = dispatchDrill(depth)
@@ -126,7 +130,7 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
         return (
           <section
             key={`${depth}-${col.form}-${col.instance ?? ''}`}
-            className={`flex w-full shrink-0 flex-col border-r border-border bg-card motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-right-4 motion-safe:duration-200 md:w-[480px] ${isLast ? '' : 'hidden md:flex'}`}
+            className={`flex w-full shrink-0 flex-col border-r border-border bg-card motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-right-4 motion-safe:duration-200 ${entry.wide ? 'md:w-[960px]' : 'md:w-[480px]'} ${isLast ? '' : 'hidden md:flex'}`}
             data-form-id={col.form}
             data-depth={depth}
             data-last={isLast ? 'true' : 'false'}
@@ -158,7 +162,7 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
             {entry.instances && (
               <InstanceTabs
                 instances={instances}
-                activeKey={col.instance}
+                activeKey={resolvedInstanceKey}
                 onSelect={(key: string) => replaceFrom(depth, { form: col.form, instance: key })}
                 {...(entry.instances.allowCreate
                   ? {

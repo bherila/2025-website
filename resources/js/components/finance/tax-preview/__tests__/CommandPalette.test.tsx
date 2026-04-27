@@ -174,6 +174,15 @@ const mockRegistry: FormRegistry = {
     presentation: 'modal',
     component: MockComponent,
   },
+  'wks-1116-apportionment': {
+    id: 'wks-1116-apportionment',
+    label: '1116 Apportionment Worksheet',
+    shortLabel: '1116 Wks',
+    keywords: ['apportionment'],
+    category: 'Worksheet',
+    presentation: 'column',
+    component: MockComponent,
+  },
 }
 
 function stubColumn(id: string, label: string, shortLabel: string): FormRegistry[keyof FormRegistry] {

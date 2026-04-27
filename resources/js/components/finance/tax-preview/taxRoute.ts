@@ -92,8 +92,16 @@ export function serializeRoute(route: TaxRoute): string {
 
 /**
  * Push a new column onto the route, appending to the rightmost position.
+ * If the same form (and instance) is already in the stack, truncates to that
+ * depth instead of adding a duplicate.
  */
 export function pushColumn(route: TaxRoute, column: ColumnSpec): TaxRoute {
+  const existing = route.columns.findIndex(
+    (c) => c.form === column.form && c.instance === column.instance,
+  )
+  if (existing !== -1) {
+    return { columns: route.columns.slice(0, existing + 1) }
+  }
   return { columns: [...route.columns, column] }
 }
 

@@ -20,10 +20,10 @@ export default function Form6251Preview({ form6251, selectedYear }: Form6251Prev
   }
 
   const line2aLabel = form6251.line2aSource === 'salt_deduction'
-    ? 'Line 2a — State/local tax deduction addback (Schedule A taxes)'
+    ? 'State/local tax deduction addback (Schedule A taxes)'
     : form6251.line2aSource === 'standard_deduction'
-      ? 'Line 2a — Standard deduction addback'
-      : 'Line 2a — Taxes / standard deduction addback'
+      ? 'Standard deduction addback'
+      : 'Taxes / standard deduction addback'
 
   return (
     <div className="space-y-5">
@@ -47,54 +47,54 @@ export default function Form6251Preview({ form6251, selectedYear }: Form6251Prev
       )}
 
       <FormBlock title="Part I — Alternative Minimum Taxable Income">
-        <FormLine label="Line 1 — Taxable income" value={form6251.line1TaxableIncome} />
+        <FormLine boxRef="1" label="Taxable income" value={form6251.line1TaxableIncome} />
         {form6251.line2aTaxesOrStandardDeduction !== 0 && (
-          <FormLine label={line2aLabel} value={form6251.line2aTaxesOrStandardDeduction} />
+          <FormLine boxRef="2a" label={line2aLabel} value={form6251.line2aTaxesOrStandardDeduction} />
         )}
         {form6251.line2cInvestmentInterest !== 0 && (
-          <FormLine label="Line 2c — Investment interest adjustment" value={form6251.line2cInvestmentInterest} />
+          <FormLine boxRef="2c" label="Investment interest adjustment" value={form6251.line2cInvestmentInterest} />
         )}
         {form6251.line2dDepletion !== 0 && (
-          <FormLine label="Line 2d — Depletion" value={form6251.line2dDepletion} />
+          <FormLine boxRef="2d" label="Depletion" value={form6251.line2dDepletion} />
         )}
         {form6251.line2kDispositionOfProperty !== 0 && (
-          <FormLine label="Line 2k — Disposition of property" value={form6251.line2kDispositionOfProperty} />
+          <FormLine boxRef="2k" label="Disposition of property" value={form6251.line2kDispositionOfProperty} />
         )}
         {form6251.line2lPost1986Depreciation !== 0 && (
-          <FormLine label="Line 2l — Post-1986 depreciation" value={form6251.line2lPost1986Depreciation} />
+          <FormLine boxRef="2l" label="Post-1986 depreciation" value={form6251.line2lPost1986Depreciation} />
         )}
         {form6251.line2mPassiveActivities !== 0 && (
-          <FormLine label="Line 2m — Passive activities" value={form6251.line2mPassiveActivities} />
+          <FormLine boxRef="2m" label="Passive activities" value={form6251.line2mPassiveActivities} />
         )}
         {form6251.line2nLossLimitations !== 0 && (
-          <FormLine label="Line 2n — Loss limitations" value={form6251.line2nLossLimitations} />
+          <FormLine boxRef="2n" label="Loss limitations" value={form6251.line2nLossLimitations} />
         )}
         {form6251.line2tIntangibleDrillingCosts !== 0 && (
-          <FormLine label="Line 2t — Intangible drilling costs" value={form6251.line2tIntangibleDrillingCosts} />
+          <FormLine boxRef="2t" label="Intangible drilling costs" value={form6251.line2tIntangibleDrillingCosts} />
         )}
         {form6251.line3OtherAdjustments !== 0 && (
-          <FormLine label="Line 3 — Other adjustments" value={form6251.line3OtherAdjustments} />
+          <FormLine boxRef="3" label="Other adjustments" value={form6251.line3OtherAdjustments} />
         )}
         <FormLine label="Total adjustments" value={form6251.adjustmentTotal} />
-        <FormTotalLine label="Line 4 — Alternative minimum taxable income (AMTI)" value={form6251.amti} />
+        <FormTotalLine boxRef="4" label="Alternative minimum taxable income (AMTI)" value={form6251.amti} />
       </FormBlock>
 
       <FormBlock title="Part II — AMT">
-        <FormLine label="Line 5 — Exemption amount before phaseout" value={form6251.exemptionBase} />
+        <FormLine boxRef="5" label="Exemption amount before phaseout" value={form6251.exemptionBase} />
         <FormLine label={`Exemption phaseout threshold (${form6251.filingStatus === 'mfj' ? 'MFJ' : 'Single'})`} value={form6251.exemptionPhaseoutThreshold} />
         {form6251.exemptionReduction > 0 && (
           <FormLine label="Exemption reduction (25% of AMTI over threshold)" value={-form6251.exemptionReduction} />
         )}
-        <FormTotalLine label="Line 5 — Allowed AMT exemption" value={form6251.exemption} />
-        <FormLine label="Line 6 — AMT base after exemption" value={form6251.amtTaxBase} />
+        <FormTotalLine boxRef="5" label="Allowed AMT exemption" value={form6251.exemption} />
+        <FormLine boxRef="6" label="AMT base after exemption" value={form6251.amtTaxBase} />
         <FormLine label={`26% / 28% split threshold (${selectedYear})`} value={form6251.amtRateSplitThreshold} />
-        <FormLine label="Line 7 — AMT before foreign tax credit" value={form6251.amtBeforeForeignCredit} />
+        <FormLine boxRef="7" label="AMT before foreign tax credit" value={form6251.amtBeforeForeignCredit} />
         {form6251.line8AmtForeignTaxCredit > 0 && (
-          <FormLine label="Line 8 — AMT foreign tax credit" value={-form6251.line8AmtForeignTaxCredit} />
+          <FormLine boxRef="8" label="AMT foreign tax credit" value={-form6251.line8AmtForeignTaxCredit} />
         )}
-        <FormLine label="Line 9 — Tentative minimum tax" value={form6251.tentativeMinTax} />
-        <FormLine label="Line 10 — Regular tax after credits" value={form6251.regularTaxAfterCredits} />
-        <FormTotalLine label="Line 11 — Alternative minimum tax" value={form6251.amt} double />
+        <FormLine boxRef="9" label="Tentative minimum tax" value={form6251.tentativeMinTax} />
+        <FormLine boxRef="10" label="Regular tax after credits" value={form6251.regularTaxAfterCredits} />
+        <FormTotalLine boxRef="11" label="Alternative minimum tax" value={form6251.amt} double />
       </FormBlock>
 
       {form6251.amt > 0 ? (

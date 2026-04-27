@@ -3,10 +3,11 @@ import { ArrowRight, FileText, Pin } from 'lucide-react'
 import { computeActionItemSeverityCounts } from '@/components/finance/actionItemsCounts'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { formatFriendlyAmount } from '@/lib/formatCurrency'
 
 import { useTaxPreview } from '../TaxPreviewContext'
 import { useDockActions } from './DockActions'
-import type { FormCategory, FormId, FormRegistryEntry } from './formRegistry'
+import type { FormCategory, FormId, FormRegistryEntry, KeyAmount, TaxPreviewState } from './formRegistry'
 import { formRegistry } from './registry'
 import { useTaxPreviewPrefs } from './useTaxPreviewPrefs'
 import { useTaxRoute } from './useTaxRoute'
@@ -29,8 +30,15 @@ function actionItemBadge(counts: { alert: number; warn: number }): React.ReactEl
   )
 }
 
+function formatKeyValue(value: number): string {
+  const sign = value < 0 ? '-' : ''
+  const formatted = formatFriendlyAmount(Math.abs(value))
+  return value < 0 ? `(${formatted})` : `${sign}$${formatted}`
+}
+
 export function DockHomeView(): React.ReactElement {
-  const { pushColumn } = useTaxRoute()
+  const { replaceFrom } = useTaxRoute()
+  const openForm = (form: FormId): void => replaceFrom(0, { form })
 
   const { openWorksheet } = useDockActions()
   const taxPreview = useTaxPreview()
@@ -75,7 +83,8 @@ export function DockHomeView(): React.ReactElement {
                   id={entry.id}
                   label={entry.label}
                   shortLabel={entry.shortLabel}
-                  onOpen={(form) => pushColumn({ form })}
+                  keyAmounts={entry.keyAmounts?.(taxPreview) ?? null}
+                  onOpen={openForm}
                   pinned
                   onTogglePin={() => togglePin(entry.id)}
                 />
@@ -107,7 +116,8 @@ export function DockHomeView(): React.ReactElement {
                   id={entry.id}
                   label={entry.label}
                   shortLabel={entry.shortLabel}
-                  onOpen={(form) => pushColumn({ form })}
+                  keyAmounts={entry.keyAmounts?.(taxPreview) ?? null}
+                  onOpen={openForm}
                   pinned={false}
                   {...(isPinnable(entry) ? { onTogglePin: () => togglePin(entry.id) } : {})}
                 />
@@ -131,7 +141,7 @@ export function DockHomeView(): React.ReactElement {
                 id={entry.id}
                 label={entry.label}
                 shortLabel={entry.shortLabel}
-                onOpen={(form) => pushColumn({ form })}
+                onOpen={openForm}
                 badge={entry.id === 'action-items' ? actionItemBadge(actionCounts) : null}
               />
             ))}
@@ -149,14 +159,16 @@ export function DockHomeView(): React.ReactElement {
           <FormGrid
             label="Schedules"
             entries={schedules}
-            onOpen={(form) => pushColumn({ form })}
+            taxPreview={taxPreview}
+            onOpen={openForm}
             isPinned={isPinned}
             onTogglePin={togglePin}
           />
           <FormGrid
             label="Forms"
             entries={forms}
-            onOpen={(form) => pushColumn({ form })}
+            taxPreview={taxPreview}
+            onOpen={openForm}
             isPinned={isPinned}
             onTogglePin={togglePin}
           />
@@ -197,6 +209,16 @@ function isPinnable(entry: FormRegistryEntry): boolean {
   return entry.category === 'Schedule' || entry.category === 'Form'
 }
 
+function formHasData(entry: FormRegistryEntry, state: TaxPreviewState): boolean {
+  if (entry.keyAmounts) {
+    return entry.keyAmounts(state) !== null
+  }
+  if (entry.hasData) {
+    return entry.hasData(state)
+  }
+  return true
+}
+
 function resolveEntries(ids: FormId[]): FormRegistryEntry[] {
   return ids
     .map((id) => formRegistry[id])
@@ -206,22 +228,33 @@ function resolveEntries(ids: FormId[]): FormRegistryEntry[] {
 interface FormGridProps {
   label: string
   entries: FormRegistryEntry[]
+  taxPreview: TaxPreviewState
   onOpen: (id: FormId) => void
   isPinned: (id: FormId) => boolean
   onTogglePin: (id: FormId) => void
 }
 
-function FormGrid({ label, entries, onOpen, isPinned, onTogglePin }: FormGridProps): React.ReactElement {
+function FormGrid({ label, entries, taxPreview, onOpen, isPinned, onTogglePin }: FormGridProps): React.ReactElement {
+  const sorted = [...entries].sort((a, b) => {
+    const aActive = formHasData(a, taxPreview)
+    const bActive = formHasData(b, taxPreview)
+    if (aActive === bActive) {
+      return 0
+    }
+    return aActive ? -1 : 1
+  })
   return (
     <div className="space-y-2">
       <h3 className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{label}</h3>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {entries.map((entry) => (
+        {sorted.map((entry) => (
           <FormButton
             key={entry.id}
             id={entry.id}
             label={entry.label}
             shortLabel={entry.shortLabel}
+            keyAmounts={entry.keyAmounts?.(taxPreview) ?? null}
+            inactive={!formHasData(entry, taxPreview)}
             onOpen={onOpen}
             pinned={isPinned(entry.id)}
             onTogglePin={() => onTogglePin(entry.id)}
@@ -236,6 +269,8 @@ function FormButton({
   id,
   label,
   shortLabel,
+  keyAmounts,
+  inactive,
   onOpen,
   badge,
   pinned,
@@ -244,22 +279,36 @@ function FormButton({
   id: FormId
   label: string
   shortLabel: string
+  keyAmounts?: KeyAmount[] | null
+  inactive?: boolean
   onOpen: (id: FormId) => void
   badge?: React.ReactNode
   pinned?: boolean
   onTogglePin?: () => void
 }): React.ReactElement {
   return (
-    <div className="group relative flex items-stretch overflow-hidden rounded-md border border-border bg-card transition-colors hover:bg-muted">
+    <div className={`group relative flex items-stretch overflow-hidden rounded-md border border-border bg-card transition-colors hover:bg-muted ${inactive ? 'opacity-50' : ''}`}>
       <button
         type="button"
         onClick={() => onOpen(id)}
         className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       >
-        <FileText className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <span className="flex min-w-0 flex-col">
+        <FileText className="h-4 w-4 shrink-0 self-start pt-0.5 text-muted-foreground" aria-hidden="true" />
+        <span className="flex min-w-0 flex-col gap-0.5">
           <span className="truncate text-sm font-medium text-foreground">{shortLabel}</span>
           <span className="truncate text-xs text-muted-foreground">{label}</span>
+          {keyAmounts && keyAmounts.length > 0 && (
+            <span className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
+              {keyAmounts.map((ka) => (
+                <span key={ka.label} className="inline-flex items-baseline gap-1 font-mono text-[10px]">
+                  <span className="text-muted-foreground">{ka.label}</span>
+                  <span className={ka.value < 0 ? 'text-destructive' : 'text-foreground'}>
+                    {formatKeyValue(ka.value)}
+                  </span>
+                </span>
+              ))}
+            </span>
+          )}
         </span>
       </button>
       <span className="flex shrink-0 items-center gap-2 pr-3">
@@ -277,7 +326,7 @@ function FormButton({
             <Pin className={`h-3.5 w-3.5 ${pinned ? 'fill-current' : ''}`} aria-hidden="true" />
           </button>
         )}
-        <ArrowRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+        <ArrowRight className="h-4 w-4 shrink-0 self-start mt-1 text-muted-foreground" aria-hidden="true" />
       </span>
     </div>
   )

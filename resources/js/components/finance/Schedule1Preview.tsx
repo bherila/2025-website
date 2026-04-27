@@ -307,10 +307,11 @@ export default function Schedule1Preview({
           </>
         )}
         {partI.line9_totalOther !== 0 && (
-          <FormTotalLine label="Line 9 — Total other income (sum of lines 8a-8z)" value={partI.line9_totalOther} />
+          <FormTotalLine boxRef="9" label="Total other income (sum of lines 8a-8z)" value={partI.line9_totalOther} />
         )}
         <FormTotalLine
-          label="Line 10 — Total additional income (to Form 1040 line 8)"
+          boxRef="10"
+          label="Total additional income (to Form 1040 line 8)"
           value={partI.line10_total}
           double
         />
@@ -329,7 +330,8 @@ export default function Schedule1Preview({
         />
         <FormSubLine text="Computed from Schedule SE and included in Form 1040 line 10." />
         <FormTotalLine
-          label="Line 26 — Total adjustments to income (to Form 1040 line 10)"
+          boxRef="26"
+          label="Total adjustments to income (to Form 1040 line 10)"
           value={partII.line26_totalAdjustments}
           double
         />

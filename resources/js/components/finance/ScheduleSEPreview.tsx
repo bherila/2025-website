@@ -48,6 +48,8 @@ interface ScheduleSEPreviewProps {
   isMarried?: boolean
   reviewedW2Docs?: TaxDocument[]
   payslips?: fin_payslip[]
+  onOpenDoc?: (docId: number) => void
+  onGoToScheduleC?: () => void
 }
 
 export function computeScheduleSE({
@@ -103,6 +105,8 @@ export default function ScheduleSEPreview({
   isMarried = false,
   reviewedW2Docs = [],
   payslips = [],
+  onOpenDoc,
+  onGoToScheduleC,
 }: ScheduleSEPreviewProps) {
   const computed = computeScheduleSE({
     reviewedK1Docs,
@@ -115,8 +119,56 @@ export default function ScheduleSEPreview({
 
   if (computed.entries.length === 0) {
     return (
-      <div className="py-12 text-center text-muted-foreground text-sm">
-        No self-employment earnings found from reviewed K-1 Box 14 items or Schedule C data.
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-base font-semibold mb-0.5">Schedule SE — Self-Employment Tax</h2>
+          <p className="text-xs text-muted-foreground">
+            No self-employment earnings found from reviewed K-1 Box 14 items or Schedule C.
+          </p>
+        </div>
+        {(reviewedK1Docs.length > 0 || onGoToScheduleC) && (
+          <div className="rounded-lg border border-border divide-y divide-border text-sm">
+            {reviewedK1Docs.map((doc) => {
+              const data = isFK1StructuredData(doc.parsed_data) ? doc.parsed_data : null
+              const name =
+                data?.fields['B']?.value?.split('\n')[0] ??
+                doc.employment_entity?.display_name ??
+                doc.original_filename ??
+                'K-1 Document'
+              return (
+                <div key={doc.id} className="flex items-center justify-between gap-2 px-3 py-2">
+                  <span className="text-muted-foreground truncate">{name} — K-1 (no Box 14 SE earnings)</span>
+                  {onOpenDoc && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenDoc(doc.id)}
+                      className="shrink-0 text-xs text-primary hover:underline focus-visible:outline-none"
+                    >
+                      Open
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+            {onGoToScheduleC && (
+              <div className="flex items-center justify-between gap-2 px-3 py-2">
+                <span className="text-muted-foreground">Schedule C — self-employment business income</span>
+                <button
+                  type="button"
+                  onClick={onGoToScheduleC}
+                  className="shrink-0 text-xs text-primary hover:underline focus-visible:outline-none"
+                >
+                  Go to Sch C
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        {reviewedK1Docs.length === 0 && !onGoToScheduleC && (
+          <p className="text-center text-muted-foreground text-sm py-8">
+            Add a Schedule C or review a K-1 with Box 14 earnings to populate this schedule.
+          </p>
+        )}
       </div>
     )
   }
@@ -158,7 +210,7 @@ export default function ScheduleSEPreview({
           <FormLine key={`${entry.label}-${index}`} label={entry.label} value={entry.amount} />
         ))}
         <FormTotalLine label="Net earnings from self-employment" value={computed.netEarningsFromSE} />
-        <FormLine label="92.35% earnings factor (Schedule SE line 4a)" value={computed.seTaxableEarnings} />
+        <FormLine boxRef="4a" label="92.35% earnings factor" value={computed.seTaxableEarnings} />
       </FormBlock>
 
       <FormBlock title="Social Security Portion (12.4%)">

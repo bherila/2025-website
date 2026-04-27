@@ -79,29 +79,54 @@ export function FormLine({
   label,
   value,
   raw,
+  note,
   onClick,
   onDetails,
+  control,
 }: {
   boxRef?: string
   label: React.ReactNode
   value?: string | number | null
   raw?: string
+  note?: boolean
   onClick?: () => void
   onDetails?: () => void
+  /** Custom right-side control (e.g. a number input). When provided, replaces the value display. */
+  control?: React.ReactNode
 }) {
   const n = typeof value === 'number' ? value : parseFieldVal(value as string | null | undefined)
   const cls = n === null ? '' : n < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'
+
+  if (note) {
+    return (
+      <div className="px-3 py-1.5 space-y-0.5">
+        <span className="text-[10px] font-mono font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+        <p className="text-[12px] text-muted-foreground leading-snug">{raw}</p>
+      </div>
+    )
+  }
+
+  if (control) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-1.5">
+        <span className="text-[10px] font-mono text-muted-foreground w-10 shrink-0 select-none">{boxRef ? `${boxRef}.` : ''}</span>
+        <span className="flex-1 text-[13px]">{label}</span>
+        <span className="shrink-0">{control}</span>
+      </div>
+    )
+  }
+
   return (
     <div
-      className={`flex items-center gap-2 px-3 py-1.5 ${onClick ? 'cursor-pointer hover:bg-muted/20 transition-colors' : ''}`}
+      className={`flex items-start gap-2 px-3 py-1.5 ${onClick ? 'cursor-pointer hover:bg-muted/20 transition-colors' : ''}`}
       onClick={onClick}
     >
-      <span className="text-[10px] font-mono text-muted-foreground w-14 shrink-0 select-none">{boxRef ?? ''}</span>
+      <span className="text-[10px] font-mono text-muted-foreground w-10 shrink-0 select-none pt-0.5">{boxRef ? `${boxRef}.` : ''}</span>
       <span className="flex-1 text-[13px]">{label}</span>
-      <span className={`font-mono tabular-nums text-[13px] shrink-0 min-w-[100px] text-right ${cls}`}>
+      <span className={`font-mono tabular-nums text-[13px] min-w-[80px] max-w-[45%] text-right break-words ${cls}`}>
         {raw ?? (n === null ? '—' : fmtAmt(n))}
       </span>
-      {onClick && <ChevronRight size={14} className="text-muted-foreground shrink-0" />}
+      {onClick && <ChevronRight size={14} className="text-muted-foreground shrink-0 mt-0.5" />}
       {onDetails && <DetailsButton onClick={onDetails} />}
       {!onClick && !onDetails && <span className="w-5 shrink-0" />}
     </div>
@@ -116,16 +141,16 @@ export function FormSubLine({ text }: { text: string }) {
   )
 }
 
-export function FormTotalLine({ label, value, double }: { label: string; value: number | null; double?: boolean }) {
+export function FormTotalLine({ label, value, double, boxRef }: { label: string; value: number | null; double?: boolean; boxRef?: string }) {
   const cls =
     value === null ? 'text-muted-foreground' : value < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'
   return (
     <div
-      className={`flex items-center gap-2 px-3 py-2 font-semibold ${double ? 'border-t-2 border-double border-border' : 'border-t border-border'} bg-muted/20`}
+      className={`flex items-center gap-2 px-3 py-2 border-l-2 border-l-primary/40 ${double ? 'border-t-2 border-double border-border' : 'border-t border-border'} bg-primary/5`}
     >
-      <span className="w-14 shrink-0" />
+      <span className="text-[10px] font-mono text-muted-foreground w-10 shrink-0 select-none">{boxRef ? `${boxRef}.` : ''}</span>
       <span className="flex-1 text-[13px]">{label}</span>
-      <span className={`font-mono text-[13px] tabular-nums ${cls}`}>{value === null ? '—' : fmtAmt(value)}</span>
+      <span className={`font-mono text-[13px] tabular-nums min-w-[80px] text-right ${cls}`}>{value === null ? '—' : fmtAmt(value)}</span>
     </div>
   )
 }
