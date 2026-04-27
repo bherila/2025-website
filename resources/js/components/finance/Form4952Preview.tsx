@@ -392,7 +392,7 @@ export default function Form4952Preview({
         <>
           <div>
             <h3 className="text-sm font-semibold mb-2">Election Analysis: Include Qualified Dividends in NII?</h3>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-2 gap-3">
               {/* Scenario A */}
               <div className={`rounded-lg border p-3 text-xs ${bestScenario === 'A' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/20' : 'border-border bg-muted/10'}`}>
                 <div className="flex items-center justify-between mb-1">
