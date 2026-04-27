@@ -36,6 +36,12 @@ if (typeof Element !== 'undefined') {
   Element.prototype.scrollIntoView = jest.fn()
 }
 
+// Base UI ScrollArea calls element.getAnimations() to wait for animations
+// before measuring; jsdom doesn't implement the Web Animations API.
+if (typeof Element !== 'undefined' && !Element.prototype.getAnimations) {
+  Element.prototype.getAnimations = () => []
+}
+
 // Mock global fetch for tests (always override to keep tests deterministic)
 ;(globalThis as any).fetch = jest.fn(() =>
   Promise.resolve({
