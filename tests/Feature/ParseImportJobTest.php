@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\GenAiProcessor\Jobs\ParseImportJob;
 use App\GenAiProcessor\Services\GenAiJobDispatcherService;
 use Tests\TestCase;
 
@@ -195,5 +196,67 @@ class ParseImportJobTest extends TestCase
                 'costBasis' => 50.1,
             ],
         ], $payload['lots']);
+    }
+
+    public function test_extract_token_usage_gemini_shape(): void
+    {
+        $job = new ParseImportJob(1);
+        [$input, $output] = $job->extractTokenUsage([
+            'usageMetadata' => [
+                'promptTokenCount' => 1200,
+                'candidatesTokenCount' => 350,
+            ],
+        ]);
+
+        $this->assertSame(1200, $input);
+        $this->assertSame(350, $output);
+    }
+
+    public function test_extract_token_usage_anthropic_shape(): void
+    {
+        $job = new ParseImportJob(1);
+        [$input, $output] = $job->extractTokenUsage([
+            'usage' => [
+                'input_tokens' => 800,
+                'output_tokens' => 200,
+            ],
+        ]);
+
+        $this->assertSame(800, $input);
+        $this->assertSame(200, $output);
+    }
+
+    public function test_extract_token_usage_bedrock_shape(): void
+    {
+        $job = new ParseImportJob(1);
+        [$input, $output] = $job->extractTokenUsage([
+            'usage' => [
+                'inputTokens' => 600,
+                'outputTokens' => 150,
+            ],
+        ]);
+
+        $this->assertSame(600, $input);
+        $this->assertSame(150, $output);
+    }
+
+    public function test_extract_token_usage_returns_nulls_for_unknown_shape(): void
+    {
+        $job = new ParseImportJob(1);
+        [$input, $output] = $job->extractTokenUsage(['candidates' => []]);
+
+        $this->assertNull($input);
+        $this->assertNull($output);
+    }
+
+    public function test_extract_token_usage_handles_partial_output_only(): void
+    {
+        $job = new ParseImportJob(1);
+        [$input, $output] = $job->extractTokenUsage([
+            'usage' => ['output_tokens' => 99],
+        ]);
+
+        $this->assertNull($input);
+        $this->assertSame(99, $output);
     }
 }

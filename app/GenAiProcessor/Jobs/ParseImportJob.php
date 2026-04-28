@@ -65,6 +65,13 @@ class ParseImportJob implements ShouldQueue
             return;
         }
 
+        $activeConfig = $user->activeAiConfiguration();
+        if ($activeConfig && $activeConfig->isExpired()) {
+            $job->markFailed('Your AI configuration "'.$activeConfig->name.'" has expired. Please update it in Settings.');
+
+            return;
+        }
+
         $client = $user->resolvedAiClient();
         if (! $client) {
             $job->markFailed('No AI configuration found. Please add one in Settings.');
@@ -110,7 +117,7 @@ class ParseImportJob implements ShouldQueue
 
             $job->markProcessing();
 
-            ['data' => $data, 'raw_response' => $rawResponse] = $this->callGenerateContent(
+            ['data' => $data, 'raw_response' => $rawResponse, 'input_tokens' => $inputTokens, 'output_tokens' => $outputTokens] = $this->callGenerateContent(
                 $client,
                 $dispatcher,
                 $job->job_type,
@@ -119,8 +126,21 @@ class ParseImportJob implements ShouldQueue
                 $prompt
             );
 
+            $jobUpdates = [];
             if ($rawResponse !== null) {
-                $job->update(['raw_response' => $rawResponse]);
+                $jobUpdates['raw_response'] = $rawResponse;
+            }
+            if ($activeConfig) {
+                $jobUpdates['ai_configuration_id'] = $activeConfig->id;
+            }
+            if ($inputTokens !== null) {
+                $jobUpdates['input_tokens'] = $inputTokens;
+            }
+            if ($outputTokens !== null) {
+                $jobUpdates['output_tokens'] = $outputTokens;
+            }
+            if (! empty($jobUpdates)) {
+                $job->update($jobUpdates);
             }
 
             if ($data === null) {
@@ -193,7 +213,7 @@ class ParseImportJob implements ShouldQueue
      * Uses GenAiFileHelper to handle File API vs inline fallback transparently.
      *
      * @param  resource  $fileStream
-     * @return array{data: array<string, mixed>|null, raw_response: string|null}
+     * @return array{data: array<string, mixed>|null, raw_response: string|null, input_tokens: int|null, output_tokens: int|null}
      */
     private function callGenerateContent(
         GenAiClient $client,
@@ -215,7 +235,47 @@ class ParseImportJob implements ShouldQueue
             ]);
         }
 
-        return ['data' => $data, 'raw_response' => $rawResponse];
+        [$inputTokens, $outputTokens] = $this->extractTokenUsage(is_array($response) ? $response : []);
+
+        return ['data' => $data, 'raw_response' => $rawResponse, 'input_tokens' => $inputTokens, 'output_tokens' => $outputTokens];
+    }
+
+    /**
+     * Extract token usage counts from a provider response using shape-based detection.
+     * Gemini uses `usageMetadata`; Anthropic uses snake_case `usage`; Bedrock uses camelCase `usage`.
+     *
+     * @param  array<string, mixed>  $response
+     * @return array{int|null, int|null}
+     */
+    public function extractTokenUsage(array $response): array
+    {
+        $usageMetadata = $response['usageMetadata'] ?? null;
+        if (is_array($usageMetadata)) {
+            return [
+                isset($usageMetadata['promptTokenCount']) ? (int) $usageMetadata['promptTokenCount'] : null,
+                isset($usageMetadata['candidatesTokenCount']) ? (int) $usageMetadata['candidatesTokenCount'] : null,
+            ];
+        }
+
+        $usage = $response['usage'] ?? null;
+        if (is_array($usage)) {
+            $input = null;
+            $output = null;
+            if (isset($usage['input_tokens'])) {
+                $input = (int) $usage['input_tokens'];
+            } elseif (isset($usage['inputTokens'])) {
+                $input = (int) $usage['inputTokens'];
+            }
+            if (isset($usage['output_tokens'])) {
+                $output = (int) $usage['output_tokens'];
+            } elseif (isset($usage['outputTokens'])) {
+                $output = (int) $usage['outputTokens'];
+            }
+
+            return [$input, $output];
+        }
+
+        return [null, null];
     }
 
     /**

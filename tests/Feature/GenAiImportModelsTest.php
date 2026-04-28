@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Models\GenAiImportResult;
+use App\Models\UserAiConfiguration;
 use Tests\TestCase;
 
 class GenAiImportModelsTest extends TestCase
@@ -190,5 +191,61 @@ class GenAiImportModelsTest extends TestCase
         $result->markSkipped();
 
         $this->assertEquals('skipped', $result->status);
+    }
+
+    // ================================================================
+    // Token usage persistence tests
+    // ================================================================
+
+    public function test_token_counts_are_persisted_on_job(): void
+    {
+        $job = $this->createTestJob();
+
+        $job->update(['input_tokens' => 1200, 'output_tokens' => 350]);
+
+        $this->assertDatabaseHas('genai_import_jobs', [
+            'id' => $job->id,
+            'input_tokens' => 1200,
+            'output_tokens' => 350,
+        ]);
+        $fresh = $job->fresh();
+        $this->assertSame(1200, $fresh->input_tokens);
+        $this->assertSame(350, $fresh->output_tokens);
+    }
+
+    public function test_input_tokens_can_be_persisted_without_output_tokens(): void
+    {
+        $job = $this->createTestJob();
+
+        $job->update(['input_tokens' => 800]);
+
+        $fresh = $job->fresh();
+        $this->assertSame(800, $fresh->input_tokens);
+        $this->assertNull($fresh->output_tokens);
+    }
+
+    public function test_output_tokens_can_be_persisted_without_input_tokens(): void
+    {
+        $job = $this->createTestJob();
+
+        $job->update(['output_tokens' => 99]);
+
+        $fresh = $job->fresh();
+        $this->assertNull($fresh->input_tokens);
+        $this->assertSame(99, $fresh->output_tokens);
+    }
+
+    public function test_ai_configuration_id_is_persisted_on_job(): void
+    {
+        $user = $this->createUser();
+        $config = UserAiConfiguration::factory()->for($user)->gemini()->create();
+
+        $job = $this->createTestJob(['user_id' => $user->id]);
+        $job->update(['ai_configuration_id' => $config->id]);
+
+        $this->assertDatabaseHas('genai_import_jobs', [
+            'id' => $job->id,
+            'ai_configuration_id' => $config->id,
+        ]);
     }
 }

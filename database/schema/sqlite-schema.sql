@@ -1061,39 +1061,6 @@ CREATE INDEX "login_audit_log_user_id_index" on "login_audit_log"("user_id");
 CREATE INDEX "login_audit_log_created_at_index" on "login_audit_log"(
   "created_at"
 );
-CREATE TABLE IF NOT EXISTS "genai_import_jobs"(
-  "id" integer primary key autoincrement not null,
-  "user_id" integer not null,
-  "acct_id" integer,
-  "job_type" varchar not null,
-  "file_hash" varchar not null,
-  "original_filename" varchar not null,
-  "s3_path" varchar not null,
-  "mime_type" varchar,
-  "file_size_bytes" integer not null,
-  "context_json" text,
-  "status" varchar not null default 'pending',
-  "error_message" text,
-  "retry_count" integer not null default '0',
-  "scheduled_for" date,
-  "parsed_at" datetime,
-  "created_at" datetime,
-  "updated_at" datetime,
-  "raw_response" text,
-  foreign key("user_id") references "users"("id") on delete cascade,
-  foreign key("acct_id") references "fin_accounts"("acct_id") on delete set null
-);
-CREATE INDEX "genai_import_jobs_user_id_status_index" on "genai_import_jobs"(
-  "user_id",
-  "status"
-);
-CREATE INDEX "genai_import_jobs_file_hash_index" on "genai_import_jobs"(
-  "file_hash"
-);
-CREATE INDEX "genai_import_jobs_scheduled_for_status_index" on "genai_import_jobs"(
-  "scheduled_for",
-  "status"
-);
 CREATE TABLE IF NOT EXISTS "genai_import_results"(
   "id" integer primary key autoincrement not null,
   "job_id" integer not null,
@@ -1370,6 +1337,65 @@ CREATE UNIQUE INDEX "fin_pal_carryforwards_user_id_tax_year_activity_name_unique
   "tax_year",
   "activity_name"
 );
+CREATE TABLE IF NOT EXISTS "user_ai_configurations"(
+  "id" integer primary key autoincrement not null,
+  "user_id" integer not null,
+  "name" varchar not null,
+  "provider" varchar check("provider" in('gemini', 'anthropic', 'bedrock')) not null,
+  "api_key" text not null,
+  "region" varchar,
+  "session_token" text,
+  "model" varchar not null,
+  "is_active" tinyint(1) not null default '0',
+  "created_at" datetime,
+  "updated_at" datetime,
+  "expires_at" datetime,
+  foreign key("user_id") references "users"("id") on delete cascade
+);
+CREATE TABLE IF NOT EXISTS "genai_import_jobs"(
+  "id" integer primary key autoincrement not null,
+  "user_id" integer not null,
+  "acct_id" integer,
+  "job_type" varchar not null,
+  "file_hash" varchar not null,
+  "original_filename" varchar not null,
+  "s3_path" varchar not null,
+  "mime_type" varchar,
+  "file_size_bytes" integer not null,
+  "context_json" text,
+  "status" varchar not null default('pending'),
+  "error_message" text,
+  "retry_count" integer not null default('0'),
+  "scheduled_for" date,
+  "parsed_at" datetime,
+  "created_at" datetime,
+  "updated_at" datetime,
+  "raw_response" text,
+  "ai_configuration_id" integer,
+  "input_tokens" integer,
+  "output_tokens" integer,
+  foreign key("acct_id") references fin_accounts("acct_id") on delete set null on update no action,
+  foreign key("user_id") references users("id") on delete cascade on update no action,
+  foreign key("ai_configuration_id") references "user_ai_configurations"("id") on delete set null
+);
+CREATE INDEX "genai_import_jobs_file_hash_index" on "genai_import_jobs"(
+  "file_hash"
+);
+CREATE INDEX "genai_import_jobs_scheduled_for_status_index" on "genai_import_jobs"(
+  "scheduled_for",
+  "status"
+);
+CREATE INDEX "genai_import_jobs_user_id_status_index" on "genai_import_jobs"(
+  "user_id",
+  "status"
+);
+CREATE INDEX "genai_import_jobs_ai_configuration_id_index" on "genai_import_jobs"(
+  "ai_configuration_id"
+);
+CREATE INDEX "genai_import_jobs_ai_configuration_id_created_at_index" on "genai_import_jobs"(
+  "ai_configuration_id",
+  "created_at"
+);
 
 INSERT INTO migrations VALUES(1,'0001_01_01_000000_create_schema_baseline',1);
 INSERT INTO migrations VALUES(2,'2026_03_05_000000_create_fin_account_lots_table',2);
@@ -1432,3 +1458,6 @@ INSERT INTO migrations VALUES(59,'2026_04_19_223421_create_fin_user_deductions_t
 INSERT INTO migrations VALUES(60,'2026_04_20_033435_create_fin_pal_carryforwards_table',6);
 INSERT INTO migrations VALUES(61,'2026_04_24_070803_add_misc_routing_to_fin_tax_documents',7);
 INSERT INTO migrations VALUES(62,'2026_04_25_062100_add_misc_routing_to_fin_tax_document_accounts',8);
+INSERT INTO migrations VALUES(63,'2026_04_27_065237_create_user_ai_configurations_table',9);
+INSERT INTO migrations VALUES(64,'2026_04_27_091813_add_expires_at_to_user_ai_configurations_table',9);
+INSERT INTO migrations VALUES(65,'2026_04_27_091813_add_token_usage_to_genai_import_jobs_table',9);

@@ -44,4 +44,9 @@ class UserAiConfigurationFactory extends Factory
     {
         return $this->state(['is_active' => true]);
     }
+
+    public function expiredAt(\DateTimeInterface|string $date): static
+    {
+        return $this->state(['expires_at' => $date]);
+    }
 }

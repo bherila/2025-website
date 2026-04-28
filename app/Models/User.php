@@ -108,7 +108,7 @@ class User extends Authenticatable
     {
         $config = $this->activeAiConfiguration();
 
-        if ($config) {
+        if ($config && ! $config->isExpired()) {
             return match ($config->provider) {
                 'gemini' => new GeminiClient($config->api_key, $config->model),
                 'anthropic' => new AnthropicClient($config->api_key, $config->model),

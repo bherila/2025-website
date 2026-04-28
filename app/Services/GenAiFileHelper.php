@@ -31,7 +31,15 @@ class GenAiFileHelper
         }
 
         // Provider has no File API — read stream into memory and send inline.
+        if (stream_get_meta_data($stream)['seekable']) {
+            rewind($stream);
+        }
+
         $bytes = stream_get_contents($stream);
+
+        if ($bytes === false) {
+            throw new \RuntimeException('Failed to read file stream.');
+        }
 
         return $client->converseWithInlineFile(base64_encode($bytes), $mimeType, $prompt, '', $toolConfig);
     }

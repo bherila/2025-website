@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\GenAiProcessor\Models\GenAiImportJob;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\UserAiConfigurationRequest;
 use App\Models\UserAiConfiguration;
@@ -17,10 +18,52 @@ class UserAiConfigurationController extends Controller
             ->aiConfigurations()
             ->orderByDesc('is_active')
             ->orderBy('created_at')
-            ->get()
-            ->map(fn (UserAiConfiguration $c) => $c->toApiArray());
+            ->get();
 
-        return response()->json($configs);
+        $configIds = $configs->pluck('id');
+
+        /** @var array<int, array{input_tokens: int, output_tokens: int}> $thisMonthUsage */
+        $thisMonthUsage = GenAiImportJob::whereIn('ai_configuration_id', $configIds)
+            ->whereYear('created_at', now()->year)
+            ->whereMonth('created_at', now()->month)
+            ->groupBy('ai_configuration_id')
+            ->selectRaw('ai_configuration_id, COALESCE(SUM(input_tokens), 0) as total_input, COALESCE(SUM(output_tokens), 0) as total_output')
+            ->get()
+            ->keyBy('ai_configuration_id')
+            ->map(fn (GenAiImportJob $row): array => [
+                'input_tokens' => (int) $row->getAttribute('total_input'),
+                'output_tokens' => (int) $row->getAttribute('total_output'),
+            ])
+            ->all();
+
+        /** @var array<int, array{input_tokens: int, output_tokens: int}> $totalUsage */
+        $totalUsage = GenAiImportJob::whereIn('ai_configuration_id', $configIds)
+            ->groupBy('ai_configuration_id')
+            ->selectRaw('ai_configuration_id, COALESCE(SUM(input_tokens), 0) as total_input, COALESCE(SUM(output_tokens), 0) as total_output')
+            ->get()
+            ->keyBy('ai_configuration_id')
+            ->map(fn (GenAiImportJob $row): array => [
+                'input_tokens' => (int) $row->getAttribute('total_input'),
+                'output_tokens' => (int) $row->getAttribute('total_output'),
+            ])
+            ->all();
+
+        $result = $configs->map(function (UserAiConfiguration $c) use ($thisMonthUsage, $totalUsage) {
+            $usage = [
+                'this_month' => [
+                    'input_tokens' => $thisMonthUsage[$c->id]['input_tokens'] ?? 0,
+                    'output_tokens' => $thisMonthUsage[$c->id]['output_tokens'] ?? 0,
+                ],
+                'total' => [
+                    'input_tokens' => $totalUsage[$c->id]['input_tokens'] ?? 0,
+                    'output_tokens' => $totalUsage[$c->id]['output_tokens'] ?? 0,
+                ],
+            ];
+
+            return $c->toApiArray($usage);
+        });
+
+        return response()->json($result);
     }
 
     public function store(UserAiConfigurationRequest $request): JsonResponse
@@ -29,6 +72,9 @@ class UserAiConfigurationController extends Controller
         $user = Auth::user();
 
         $config = DB::transaction(function () use ($data, $user) {
+            // Lock existing configs to prevent a race between two concurrent first-config creates.
+            $existingCount = $user->aiConfigurations()->lockForUpdate()->count();
+
             $config = $user->aiConfigurations()->create([
                 'name' => $data['name'],
                 'provider' => $data['provider'],
@@ -36,13 +82,9 @@ class UserAiConfigurationController extends Controller
                 'region' => $data['region'] ?? null,
                 'session_token' => $data['session_token'] ?? null,
                 'model' => $data['model'],
-                'is_active' => false,
+                'is_active' => $existingCount === 0,
+                'expires_at' => $data['expires_at'] ?? null,
             ]);
-
-            // Auto-activate if this is the first config
-            if ($user->aiConfigurations()->count() === 1) {
-                $config->update(['is_active' => true]);
-            }
 
             return $config;
         });
@@ -61,6 +103,7 @@ class UserAiConfigurationController extends Controller
             'region' => $data['region'] ?? null,
             'session_token' => $data['session_token'] ?? null,
             'model' => $data['model'],
+            'expires_at' => $data['expires_at'] ?? null,
         ];
 
         if (! empty($data['api_key'])) {
