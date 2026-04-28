@@ -63,6 +63,7 @@ class FinancePayslipImportTest extends TestCase
                     ],
                 ],
             ], 200),
+            'https://generativelanguage.googleapis.com/v1beta/files/*' => Http::response(null, 204),
         ]);
 
         $response = $this->actingAs($user)->postJson('/api/payslips/import', [
@@ -97,6 +98,7 @@ class FinancePayslipImportTest extends TestCase
             'https://generativelanguage.googleapis.com/v1beta/models/*:generateContent*' => Http::response([
                 'error' => ['code' => 429, 'message' => 'Rate limit exceeded'],
             ], 429),
+            'https://generativelanguage.googleapis.com/v1beta/files/*' => Http::response(null, 204),
         ]);
 
         $response = $this->actingAs($user)->postJson('/api/payslips/import', [
@@ -120,6 +122,7 @@ class FinancePayslipImportTest extends TestCase
             'https://generativelanguage.googleapis.com/v1beta/models/*:generateContent*' => Http::response([
                 'error' => ['code' => 500, 'message' => 'Internal server error'],
             ], 500),
+            'https://generativelanguage.googleapis.com/v1beta/files/*' => Http::response(null, 204),
         ]);
 
         $response = $this->actingAs($user)->postJson('/api/payslips/import', [
@@ -128,8 +131,10 @@ class FinancePayslipImportTest extends TestCase
             ],
         ]);
 
-        $response->assertStatus(500);
-        $response->assertJson(['error' => 'An unexpected error occurred during import.']);
+        $response->assertOk();
+        $response->assertJsonPath('success', true);
+        $response->assertJsonPath('successful_imports', 0);
+        $response->assertJsonPath('failed_imports', 1);
     }
 
     public function test_import_payslips_handles_multiple_payslips_in_single_file(): void
@@ -140,6 +145,7 @@ class FinancePayslipImportTest extends TestCase
             'https://generativelanguage.googleapis.com/upload/v1beta/files*' => Http::response([
                 'file' => ['uri' => 'files/test-multi-uri'],
             ], 200),
+            'https://generativelanguage.googleapis.com/v1beta/files/*' => Http::response(null, 204),
             'https://generativelanguage.googleapis.com/v1beta/models/*:generateContent*' => Http::response([
                 'candidates' => [
                     [
