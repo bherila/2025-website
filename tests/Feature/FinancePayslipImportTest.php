@@ -34,6 +34,20 @@ class FinancePayslipImportTest extends TestCase
         $response->assertJson(['error' => 'No AI configuration found. Please add one in Settings.']);
     }
 
+    public function test_import_payslips_rejects_non_pdf_files(): void
+    {
+        $user = User::factory()->create(['gemini_api_key' => 'fake-key']);
+
+        $response = $this->actingAs($user)->postJson('/api/payslips/import', [
+            'files' => [
+                UploadedFile::fake()->create('document.txt', 10, 'text/plain'),
+            ],
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['files.0']);
+    }
+
     public function test_import_payslips_successfully_processes_gemini_response(): void
     {
         $user = User::factory()->create(['gemini_api_key' => 'fake-key']);

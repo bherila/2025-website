@@ -19,7 +19,7 @@ class FinancePayslipImportController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'files' => 'required|array|max:100',
-            'files.*' => 'required|file',
+            'files.*' => 'required|file|mimetypes:application/pdf',
             'employment_entity_id' => 'nullable|integer|exists:fin_employment_entity,id',
         ]);
 
