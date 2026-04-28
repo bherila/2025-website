@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\User;
 use App\Models\UtilityBillTracker\UtilityAccount;
 use App\Services\FileStorageService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
@@ -12,6 +13,8 @@ use Tests\TestCase;
 
 class UtilityBillImportTest extends TestCase
 {
+    use RefreshDatabase;
+
     private function makeAccount(User $user, string $accountType = 'Gas'): UtilityAccount
     {
         Auth::login($user);
@@ -20,7 +23,6 @@ class UtilityBillImportTest extends TestCase
             'user_id' => $user->id,
             'account_name' => 'Test Account',
             'account_type' => $accountType,
-            'utility_provider' => 'Test Provider',
         ]);
     }
 

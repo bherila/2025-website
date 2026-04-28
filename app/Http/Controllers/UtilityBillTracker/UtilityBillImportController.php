@@ -8,6 +8,7 @@ use App\Models\UtilityBillTracker\UtilityBill;
 use App\Services\FileStorageService;
 use App\Services\GenAiFileHelper;
 use Bherila\GenAiLaravel\Exceptions\GenAiRateLimitException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -23,7 +24,7 @@ class UtilityBillImportController extends Controller
         $this->fileService = $fileService;
     }
 
-    public function import(Request $request, int $accountId)
+    public function import(Request $request, int $accountId): JsonResponse
     {
         // Validate files. Use a tolerant validator closure because some clients or proxies
         // may present PDFs with an unexpected MIME type (e.g. application/octet-stream).
@@ -112,14 +113,21 @@ class UtilityBillImportController extends Controller
             }
 
             try {
-                $fileStream = fopen($file->getRealPath(), 'r');
+                $fileStream = @fopen($file->getRealPath(), 'r');
+
+                if (! is_resource($fileStream)) {
+                    Log::error('Failed to open uploaded utility bill file for reading', ['filename' => $originalFilename, 'user_id' => $user->id]);
+                    $results[] = ['filename' => $originalFilename, 'status' => 'error', 'error' => 'Failed to open uploaded file for reading.'];
+
+                    continue;
+                }
 
                 try {
                     $filePrompt = "Filename: {$originalFilename}\n\n{$prompt}";
                     $response = GenAiFileHelper::send($client, $fileStream, 'application/pdf', 'utility-bill-import-'.time(), $filePrompt);
                 } catch (GenAiRateLimitException $e) {
                     throw $e; // let the outer catch handle rate limits globally
-                } catch (\Throwable $e) {
+                } catch (Throwable $e) {
                     Log::error('Failed to send utility bill to AI service', ['filename' => $originalFilename, 'user_id' => $user->id, 'error' => $e->getMessage()]);
                     $results[] = ['filename' => $originalFilename, 'status' => 'error', 'error' => 'Failed to process file with AI service.'];
 
@@ -191,8 +199,9 @@ class UtilityBillImportController extends Controller
                 return response()->json(['error' => 'API rate limit exceeded. Please wait and try again.'], 429);
             } catch (Throwable $e) {
                 Log::error('Error during utility bill import: '.$e->getMessage(), ['user_id' => $user->id, 'account_id' => $accountId, 'filename' => $originalFilename]);
+                $results[] = ['filename' => $originalFilename, 'status' => 'error', 'error' => 'An unexpected error occurred during import: '.$e->getMessage()];
 
-                return response()->json(['error' => 'An unexpected error occurred during import: '.$e->getMessage()], 500);
+                continue;
             }
         }
 
