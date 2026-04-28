@@ -14,6 +14,7 @@ return new class extends Migration
             $table->unsignedInteger('output_tokens')->nullable()->after('input_tokens');
 
             $table->index('ai_configuration_id');
+            $table->index(['ai_configuration_id', 'created_at']);
 
             $table->foreign('ai_configuration_id')
                 ->references('id')
@@ -26,6 +27,8 @@ return new class extends Migration
     {
         Schema::table('genai_import_jobs', function (Blueprint $table) {
             $table->dropForeign(['ai_configuration_id']);
+            $table->dropIndex(['ai_configuration_id']);
+            $table->dropIndex(['ai_configuration_id', 'created_at']);
             $table->dropColumn(['ai_configuration_id', 'input_tokens', 'output_tokens']);
         });
     }

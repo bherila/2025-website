@@ -1389,6 +1389,13 @@ CREATE INDEX "genai_import_jobs_user_id_status_index" on "genai_import_jobs"(
   "user_id",
   "status"
 );
+CREATE INDEX "genai_import_jobs_ai_configuration_id_index" on "genai_import_jobs"(
+  "ai_configuration_id"
+);
+CREATE INDEX "genai_import_jobs_ai_configuration_id_created_at_index" on "genai_import_jobs"(
+  "ai_configuration_id",
+  "created_at"
+);
 
 INSERT INTO migrations VALUES(1,'0001_01_01_000000_create_schema_baseline',1);
 INSERT INTO migrations VALUES(2,'2026_03_05_000000_create_fin_account_lots_table',2);
