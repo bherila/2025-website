@@ -22,29 +22,41 @@ class UserAiConfigurationController extends Controller
 
         $configIds = $configs->pluck('id');
 
+        /** @var array<int, array{input_tokens: int, output_tokens: int}> $thisMonthUsage */
         $thisMonthUsage = GenAiImportJob::whereIn('ai_configuration_id', $configIds)
             ->whereYear('created_at', now()->year)
             ->whereMonth('created_at', now()->month)
             ->groupBy('ai_configuration_id')
             ->selectRaw('ai_configuration_id, COALESCE(SUM(input_tokens), 0) as total_input, COALESCE(SUM(output_tokens), 0) as total_output')
             ->get()
-            ->keyBy('ai_configuration_id');
+            ->keyBy('ai_configuration_id')
+            ->map(fn (GenAiImportJob $row): array => [
+                'input_tokens' => (int) $row->getAttribute('total_input'),
+                'output_tokens' => (int) $row->getAttribute('total_output'),
+            ])
+            ->all();
 
+        /** @var array<int, array{input_tokens: int, output_tokens: int}> $totalUsage */
         $totalUsage = GenAiImportJob::whereIn('ai_configuration_id', $configIds)
             ->groupBy('ai_configuration_id')
             ->selectRaw('ai_configuration_id, COALESCE(SUM(input_tokens), 0) as total_input, COALESCE(SUM(output_tokens), 0) as total_output')
             ->get()
-            ->keyBy('ai_configuration_id');
+            ->keyBy('ai_configuration_id')
+            ->map(fn (GenAiImportJob $row): array => [
+                'input_tokens' => (int) $row->getAttribute('total_input'),
+                'output_tokens' => (int) $row->getAttribute('total_output'),
+            ])
+            ->all();
 
         $result = $configs->map(function (UserAiConfiguration $c) use ($thisMonthUsage, $totalUsage) {
             $usage = [
                 'this_month' => [
-                    'input_tokens' => (int) ($thisMonthUsage->get($c->id)?->total_input ?? 0),
-                    'output_tokens' => (int) ($thisMonthUsage->get($c->id)?->total_output ?? 0),
+                    'input_tokens' => $thisMonthUsage[$c->id]['input_tokens'] ?? 0,
+                    'output_tokens' => $thisMonthUsage[$c->id]['output_tokens'] ?? 0,
                 ],
                 'total' => [
-                    'input_tokens' => (int) ($totalUsage->get($c->id)?->total_input ?? 0),
-                    'output_tokens' => (int) ($totalUsage->get($c->id)?->total_output ?? 0),
+                    'input_tokens' => $totalUsage[$c->id]['input_tokens'] ?? 0,
+                    'output_tokens' => $totalUsage[$c->id]['output_tokens'] ?? 0,
                 ],
             ];
 
