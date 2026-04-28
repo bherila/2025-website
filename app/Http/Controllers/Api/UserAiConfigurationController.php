@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\GenAiProcessor\Models\GenAiImportJob;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\UserAiConfigurationRequest;
 use App\Models\UserAiConfiguration;
@@ -17,10 +18,40 @@ class UserAiConfigurationController extends Controller
             ->aiConfigurations()
             ->orderByDesc('is_active')
             ->orderBy('created_at')
-            ->get()
-            ->map(fn (UserAiConfiguration $c) => $c->toApiArray());
+            ->get();
 
-        return response()->json($configs);
+        $configIds = $configs->pluck('id');
+
+        $thisMonthUsage = GenAiImportJob::whereIn('ai_configuration_id', $configIds)
+            ->whereYear('created_at', now()->year)
+            ->whereMonth('created_at', now()->month)
+            ->groupBy('ai_configuration_id')
+            ->selectRaw('ai_configuration_id, COALESCE(SUM(input_tokens), 0) as total_input, COALESCE(SUM(output_tokens), 0) as total_output')
+            ->get()
+            ->keyBy('ai_configuration_id');
+
+        $totalUsage = GenAiImportJob::whereIn('ai_configuration_id', $configIds)
+            ->groupBy('ai_configuration_id')
+            ->selectRaw('ai_configuration_id, COALESCE(SUM(input_tokens), 0) as total_input, COALESCE(SUM(output_tokens), 0) as total_output')
+            ->get()
+            ->keyBy('ai_configuration_id');
+
+        $result = $configs->map(function (UserAiConfiguration $c) use ($thisMonthUsage, $totalUsage) {
+            $usage = [
+                'this_month' => [
+                    'input_tokens' => (int) ($thisMonthUsage->get($c->id)?->total_input ?? 0),
+                    'output_tokens' => (int) ($thisMonthUsage->get($c->id)?->total_output ?? 0),
+                ],
+                'total' => [
+                    'input_tokens' => (int) ($totalUsage->get($c->id)?->total_input ?? 0),
+                    'output_tokens' => (int) ($totalUsage->get($c->id)?->total_output ?? 0),
+                ],
+            ];
+
+            return $c->toApiArray($usage);
+        });
+
+        return response()->json($result);
     }
 
     public function store(UserAiConfigurationRequest $request): JsonResponse

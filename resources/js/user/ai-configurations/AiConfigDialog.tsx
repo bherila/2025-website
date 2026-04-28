@@ -184,7 +184,7 @@ export const AiConfigDialog: React.FC<AiConfigDialogProps> = ({
             min={tomorrow}
           />
           <p className="text-xs text-muted-foreground">
-            After this date the key will not be used. Leave blank for no expiry.
+            Starting on this date the key will not be used. Leave blank for no expiry.
           </p>
         </div>
 

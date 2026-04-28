@@ -80,8 +80,11 @@ class UserAiConfiguration extends Model
         ];
     }
 
-    /** @return array{id: int, name: string, provider: string, model: string, masked_key: string, region: string|null, is_active: bool, is_expired: bool, expires_at: string|null, created_at: string|null, usage: array{this_month: array{input_tokens: int, output_tokens: int}, total: array{input_tokens: int, output_tokens: int}}} */
-    public function toApiArray(): array
+    /**
+     * @param  array{this_month: array{input_tokens: int, output_tokens: int}, total: array{input_tokens: int, output_tokens: int}}|null  $precomputedUsage
+     * @return array{id: int, name: string, provider: string, model: string, masked_key: string, region: string|null, is_active: bool, is_expired: bool, expires_at: string|null, created_at: string|null, usage: array{this_month: array{input_tokens: int, output_tokens: int}, total: array{input_tokens: int, output_tokens: int}}}
+     */
+    public function toApiArray(?array $precomputedUsage = null): array
     {
         $key = $this->api_key ?? '';
         $maskedKey = strlen($key) > 4 ? '••••'.substr($key, -4) : '••••';
@@ -97,7 +100,7 @@ class UserAiConfiguration extends Model
             'is_expired' => $this->isExpired(),
             'expires_at' => $this->expires_at?->toIso8601String(),
             'created_at' => $this->created_at?->toIso8601String(),
-            'usage' => $this->usageStats(),
+            'usage' => $precomputedUsage ?? $this->usageStats(),
         ];
     }
 }

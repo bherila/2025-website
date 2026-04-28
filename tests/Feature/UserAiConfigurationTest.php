@@ -173,15 +173,15 @@ class UserAiConfigurationTest extends TestCase
     public function test_store_accepts_future_expiry_date(): void
     {
         $user = User::factory()->create();
-        $futureDate = now()->addYear()->toDateString();
+        $futureExpiry = now()->addYear();
 
         $this->actingAs($user)->postJson('/api/user/ai-prefs', [
             'name' => 'Expiring Key',
             'provider' => 'gemini',
             'api_key' => 'fake-key',
             'model' => 'gemini-2.0-flash',
-            'expires_at' => $futureDate,
-        ])->assertCreated()->assertJsonFragment(['expires_at' => now()->addYear()->startOfDay()->toIso8601String()]);
+            'expires_at' => $futureExpiry->toDateString(),
+        ])->assertCreated()->assertJsonFragment(['expires_at' => $futureExpiry->copy()->startOfDay()->toIso8601String()]);
     }
 
     public function test_store_rejects_past_expiry_date(): void

@@ -13,9 +13,6 @@ use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\GenAiFileHelper;
-use Bherila\GenAiLaravel\Clients\AnthropicClient;
-use Bherila\GenAiLaravel\Clients\BedrockClient;
-use Bherila\GenAiLaravel\Clients\GeminiClient;
 use Bherila\GenAiLaravel\Contracts\GenAiClient;
 use Bherila\GenAiLaravel\Exceptions\GenAiFatalException;
 use Bherila\GenAiLaravel\Exceptions\GenAiRateLimitException;
@@ -138,6 +135,8 @@ class ParseImportJob implements ShouldQueue
             }
             if ($inputTokens !== null) {
                 $jobUpdates['input_tokens'] = $inputTokens;
+            }
+            if ($outputTokens !== null) {
                 $jobUpdates['output_tokens'] = $outputTokens;
             }
             if (! empty($jobUpdates)) {
@@ -236,45 +235,44 @@ class ParseImportJob implements ShouldQueue
             ]);
         }
 
-        [$inputTokens, $outputTokens] = $this->extractTokenUsage($client, is_array($response) ? $response : []);
+        [$inputTokens, $outputTokens] = $this->extractTokenUsage(is_array($response) ? $response : []);
 
         return ['data' => $data, 'raw_response' => $rawResponse, 'input_tokens' => $inputTokens, 'output_tokens' => $outputTokens];
     }
 
     /**
-     * Extract token usage counts from a provider response.
-     * Each provider uses a different response shape.
+     * Extract token usage counts from a provider response using shape-based detection.
+     * Gemini uses `usageMetadata`; Anthropic uses snake_case `usage`; Bedrock uses camelCase `usage`.
      *
      * @param  array<string, mixed>  $response
      * @return array{int|null, int|null}
      */
-    private function extractTokenUsage(GenAiClient $client, array $response): array
+    public function extractTokenUsage(array $response): array
     {
-        if ($client instanceof GeminiClient) {
-            $meta = $response['usageMetadata'] ?? [];
-
+        $usageMetadata = $response['usageMetadata'] ?? null;
+        if (is_array($usageMetadata)) {
             return [
-                isset($meta['promptTokenCount']) ? (int) $meta['promptTokenCount'] : null,
-                isset($meta['candidatesTokenCount']) ? (int) $meta['candidatesTokenCount'] : null,
+                isset($usageMetadata['promptTokenCount']) ? (int) $usageMetadata['promptTokenCount'] : null,
+                isset($usageMetadata['candidatesTokenCount']) ? (int) $usageMetadata['candidatesTokenCount'] : null,
             ];
         }
 
-        if ($client instanceof AnthropicClient) {
-            $usage = $response['usage'] ?? [];
+        $usage = $response['usage'] ?? null;
+        if (is_array($usage)) {
+            $input = null;
+            $output = null;
+            if (isset($usage['input_tokens'])) {
+                $input = (int) $usage['input_tokens'];
+            } elseif (isset($usage['inputTokens'])) {
+                $input = (int) $usage['inputTokens'];
+            }
+            if (isset($usage['output_tokens'])) {
+                $output = (int) $usage['output_tokens'];
+            } elseif (isset($usage['outputTokens'])) {
+                $output = (int) $usage['outputTokens'];
+            }
 
-            return [
-                isset($usage['input_tokens']) ? (int) $usage['input_tokens'] : null,
-                isset($usage['output_tokens']) ? (int) $usage['output_tokens'] : null,
-            ];
-        }
-
-        if ($client instanceof BedrockClient) {
-            $usage = $response['usage'] ?? [];
-
-            return [
-                isset($usage['inputTokens']) ? (int) $usage['inputTokens'] : null,
-                isset($usage['outputTokens']) ? (int) $usage['outputTokens'] : null,
-            ];
+            return [$input, $output];
         }
 
         return [null, null];

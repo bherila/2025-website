@@ -34,10 +34,11 @@ export const UsageDisplay: React.FC<UsageDisplayProps> = ({ usage }) => {
           <span>No usage</span>
         )}
       </span>
-      <div className="flex rounded border border-border overflow-hidden">
+      <div className="flex rounded border border-border overflow-hidden" role="group" aria-label="Usage period">
         <button
           type="button"
           onClick={() => setPeriod('this_month')}
+          aria-pressed={period === 'this_month'}
           className={`px-1.5 py-0.5 text-xs transition-colors ${
             period === 'this_month'
               ? 'bg-muted text-foreground font-medium'
@@ -49,6 +50,7 @@ export const UsageDisplay: React.FC<UsageDisplayProps> = ({ usage }) => {
         <button
           type="button"
           onClick={() => setPeriod('total')}
+          aria-pressed={period === 'total'}
           className={`px-1.5 py-0.5 text-xs transition-colors border-l border-border ${
             period === 'total'
               ? 'bg-muted text-foreground font-medium'

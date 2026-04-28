@@ -13,6 +13,8 @@ return new class extends Migration
             $table->unsignedInteger('input_tokens')->nullable()->after('parsed_at');
             $table->unsignedInteger('output_tokens')->nullable()->after('input_tokens');
 
+            $table->index('ai_configuration_id');
+
             $table->foreign('ai_configuration_id')
                 ->references('id')
                 ->on('user_ai_configurations')
