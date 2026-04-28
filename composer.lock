@@ -163,12 +163,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/bherila/genai-laravel.git",
-                "reference": "52c22cd8eef6d3d851fa41c165c52e88c88b9e3b"
+                "reference": "e091b9ea304307b90bf4ac7cff83eeae19ee31ce"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/bherila/genai-laravel/zipball/52c22cd8eef6d3d851fa41c165c52e88c88b9e3b",
-                "reference": "52c22cd8eef6d3d851fa41c165c52e88c88b9e3b",
+                "url": "https://api.github.com/repos/bherila/genai-laravel/zipball/e091b9ea304307b90bf4ac7cff83eeae19ee31ce",
+                "reference": "e091b9ea304307b90bf4ac7cff83eeae19ee31ce",
                 "shasum": ""
             },
             "require": {
@@ -178,9 +178,17 @@
                 "php": "^8.2"
             },
             "require-dev": {
+                "dompdf/dompdf": "^3",
                 "laravel/pint": "^1",
                 "orchestra/testbench": "^10|^11",
+                "phpoffice/phpspreadsheet": "^4|^5",
+                "phpoffice/phpword": "^1",
                 "phpunit/phpunit": "^10|^11"
+            },
+            "suggest": {
+                "dompdf/dompdf": "Required together with phpoffice/phpword to render DOC / DOCX / ODT / RTF to PDF before sending — preserves formatting and lets providers use their native PDF pipelines (Gemini vision, Anthropic document blocks). Not loaded if absent.",
+                "phpoffice/phpspreadsheet": "Enables automatic XLSX / XLS / ODS / CSV → plain-text conversion when sending spreadsheet files to Anthropic or Gemini (^4|^5). Not loaded if absent.",
+                "phpoffice/phpword": "Enables automatic DOC / DOCX / ODT / RTF → PDF conversion (when dompdf/dompdf is also installed) before sending to Anthropic or Gemini. Not loaded if absent."
             },
             "default-branch": true,
             "type": "library",
@@ -231,7 +239,7 @@
                 "source": "https://github.com/bherila/genai-laravel/tree/main",
                 "issues": "https://github.com/bherila/genai-laravel/issues"
             },
-            "time": "2026-04-17T05:43:59+00:00"
+            "time": "2026-04-27T09:19:57+00:00"
         },
         {
             "name": "brick/math",

@@ -3,10 +3,15 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use Bherila\GenAiLaravel\Clients\AnthropicClient;
+use Bherila\GenAiLaravel\Clients\BedrockClient;
+use Bherila\GenAiLaravel\Clients\GeminiClient;
+use Bherila\GenAiLaravel\Contracts\GenAiClient;
+use Bherila\GenAiLaravel\Exceptions\GenAiFatalException;
+use Bherila\GenAiLaravel\ModelInfo;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class UserAiModelsController extends Controller
@@ -14,7 +19,7 @@ class UserAiModelsController extends Controller
     public function fetch(Request $request): JsonResponse
     {
         $request->validate([
-            'provider' => ['required', 'string', 'in:gemini,anthropic'],
+            'provider' => ['required', 'string', 'in:gemini,anthropic,bedrock'],
             'api_key' => ['nullable', 'string'],
             'config_id' => ['nullable', 'integer'],
             'region' => ['nullable', 'string'],
@@ -38,14 +43,29 @@ class UserAiModelsController extends Controller
             return response()->json(['error' => 'An API key is required to fetch models.'], 422);
         }
 
+        $region = is_string($request->input('region')) ? $request->input('region') : 'us-east-1';
+        $sessionToken = is_string($request->input('session_token')) ? $request->input('session_token') : '';
+
         try {
-            $models = match ($provider) {
-                'gemini' => $this->fetchGeminiModels($apiKey),
-                'anthropic' => $this->fetchAnthropicModels($apiKey),
-                default => throw new \InvalidArgumentException("Unsupported provider: {$provider}"),
-            };
+            $client = $this->makeClient($provider, $apiKey, $region, $sessionToken);
+
+            if (! $client->checkCredentials()) {
+                return response()->json(['error' => 'Invalid API credentials.'], 422);
+            }
+
+            /** @var ModelInfo[] $modelInfos */
+            $modelInfos = $client->listModels();
+
+            $models = array_values(array_map(
+                fn (ModelInfo $m) => str_starts_with($m->id, 'models/') ? substr($m->id, 7) : $m->id,
+                $modelInfos,
+            ));
 
             return response()->json(['models' => $models]);
+        } catch (GenAiFatalException $e) {
+            Log::warning('Failed to fetch AI models', ['provider' => $provider, 'error' => $e->getMessage()]);
+
+            return response()->json(['error' => $e->getMessage()], 422);
         } catch (\Exception $e) {
             Log::warning('Failed to fetch AI models', ['provider' => $provider, 'error' => $e->getMessage()]);
 
@@ -53,46 +73,13 @@ class UserAiModelsController extends Controller
         }
     }
 
-    /** @return list<string> */
-    private function fetchGeminiModels(string $apiKey): array
+    private function makeClient(string $provider, string $apiKey, string $region, string $sessionToken): GenAiClient
     {
-        $response = Http::timeout(10)->get('https://generativelanguage.googleapis.com/v1beta/models', [
-            'key' => $apiKey,
-        ]);
-
-        if (! $response->successful()) {
-            throw new \RuntimeException('Gemini API error: '.$response->body());
-        }
-
-        /** @var array<int, array<string, mixed>> $models */
-        $models = $response->json('models', []) ?? [];
-
-        return collect($models)
-            ->filter(fn (array $m) => in_array('generateContent', $m['supportedGenerationMethods'] ?? [], true))
-            ->pluck('name')
-            ->map(fn ($n) => str_replace('models/', '', (string) $n))
-            ->values()
-            ->all();
-    }
-
-    /** @return list<string> */
-    private function fetchAnthropicModels(string $apiKey): array
-    {
-        $response = Http::timeout(10)->withHeaders([
-            'x-api-key' => $apiKey,
-            'anthropic-version' => '2023-06-01',
-        ])->get('https://api.anthropic.com/v1/models');
-
-        if (! $response->successful()) {
-            throw new \RuntimeException('Anthropic API error: '.$response->body());
-        }
-
-        /** @var array<int, array<string, mixed>> $data */
-        $data = $response->json('data', []) ?? [];
-
-        return collect($data)
-            ->pluck('id')
-            ->values()
-            ->all();
+        return match ($provider) {
+            'gemini' => new GeminiClient(apiKey: $apiKey),
+            'anthropic' => new AnthropicClient(apiKey: $apiKey),
+            'bedrock' => new BedrockClient(apiKey: $apiKey, modelId: 'any', region: $region, sessionToken: $sessionToken),
+            default => throw new \InvalidArgumentException("Unsupported provider: {$provider}"),
+        };
     }
 }
