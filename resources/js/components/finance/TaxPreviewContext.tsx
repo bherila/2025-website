@@ -1034,15 +1034,6 @@ export function TaxPreviewProvider({
     }).filter(s => s.wages > 0)
 
     const form8959 = computeForm8959Lines(medicareWages, isMarried, medicareWageSources)
-    const scheduleSE = computeScheduleSE({
-      reviewedK1Docs,
-      scheduleCNetIncome: scheduleCNetIncome.total,
-      selectedYear: year,
-      isMarried,
-      reviewedW2Docs,
-      payslips,
-    })
-
     const form4797 = computeForm4797({
       partINet1231: form4797PartINet1231,
       partIIOrdinary: form4797PartIIOrdinary,
@@ -1054,6 +1045,16 @@ export function TaxPreviewProvider({
       totalExpenses: scheduleFTotalExpenses,
     })
 
+    const scheduleSE = computeScheduleSE({
+      reviewedK1Docs,
+      scheduleCNetIncome: scheduleCNetIncome.total,
+      selectedYear: year,
+      isMarried,
+      reviewedW2Docs,
+      payslips,
+      scheduleFNetProfit: scheduleFComputed.netProfitOrLoss,
+    })
+
     const schedule1 = computeSchedule1Totals({
       scheduleCNetIncome: scheduleCNetIncome.total,
       scheduleEGrandTotal: scheduleE.grandTotal,
@@ -1061,8 +1062,8 @@ export function TaxPreviewProvider({
       schedule1Line7Unemployment,
       schedule1Line1aTaxableRefunds,
       schedule1Line2aAlimony,
-      schedule1Line4OtherGains: form4797.netToSchedule1Line4,
-      schedule1Line6FarmIncome: scheduleFComputed.netProfitOrLoss,
+      schedule1Line4OtherGains: form4797.hasActivity ? form4797.netToSchedule1Line4 : null,
+      schedule1Line6FarmIncome: scheduleFComputed.hasActivity ? scheduleFComputed.netProfitOrLoss : null,
       deductibleSeTaxAdjustment: scheduleSE.deductibleSeTax,
     })
 

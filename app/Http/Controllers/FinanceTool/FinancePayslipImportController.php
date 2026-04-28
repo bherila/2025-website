@@ -19,7 +19,7 @@ class FinancePayslipImportController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'files' => 'required|array|max:100',
-            'files.*' => 'required|file',
+            'files.*' => 'required|file|mimetypes:application/pdf',
             'employment_entity_id' => 'nullable|integer|exists:fin_employment_entity,id',
         ]);
 
@@ -52,7 +52,21 @@ class FinancePayslipImportController extends Controller
             }
 
             try {
-                $fileStream = fopen($file->getRealPath(), 'r');
+                $realPath = $file->getRealPath();
+                if ($realPath === false) {
+                    Log::error('Failed to resolve payslip temp file path for import', ['filename' => $originalFilename, 'user_id' => $user->id]);
+                    $failed_imports++;
+
+                    continue;
+                }
+
+                $fileStream = fopen($realPath, 'rb');
+                if ($fileStream === false) {
+                    Log::error('Failed to open payslip temp file for import', ['filename' => $originalFilename, 'user_id' => $user->id]);
+                    $failed_imports++;
+
+                    continue;
+                }
 
                 try {
                     $filePrompt = "Filename: {$originalFilename}\n\n{$prompt}";
@@ -75,6 +89,13 @@ class FinancePayslipImportController extends Controller
                 $payslips = isset($data[0]) ? $data : [$data];
 
                 foreach ($payslips as $payslipData) {
+                    if (! is_array($payslipData)) {
+                        Log::error('Unexpected non-array element in payslip AI response', ['filename' => $originalFilename, 'user_id' => $user->id]);
+                        $failed_imports++;
+
+                        continue;
+                    }
+
                     $payslipData['uid'] = $user->id;
                     $payslipData['ps_is_estimated'] = true;
                     if ($request->filled('employment_entity_id')) {
@@ -95,8 +116,9 @@ class FinancePayslipImportController extends Controller
                 return response()->json(['error' => 'API rate limit exceeded. Please wait and try again.'], 429);
             } catch (Throwable $e) {
                 Log::error('Error processing payslip file: '.$e->getMessage(), ['filename' => $originalFilename, 'user_id' => $user->id]);
+                $failed_imports++;
 
-                return response()->json(['error' => 'An unexpected error occurred during import.'], 500);
+                continue;
             }
         }
 

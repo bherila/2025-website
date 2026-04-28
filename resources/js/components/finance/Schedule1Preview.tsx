@@ -31,8 +31,8 @@ export function computeSchedule1Totals({
   schedule1Line7Unemployment = 0,
   schedule1Line1aTaxableRefunds = 0,
   schedule1Line2aAlimony = 0,
-  schedule1Line4OtherGains = 0,
-  schedule1Line6FarmIncome = 0,
+  schedule1Line4OtherGains = null,
+  schedule1Line6FarmIncome = null,
   deductibleSeTaxAdjustment = 0,
 }: {
   scheduleCNetIncome?: number
@@ -44,10 +44,10 @@ export function computeSchedule1Totals({
   schedule1Line1aTaxableRefunds?: number
   /** Alimony received from pre-2019 divorce decrees (user-entered). */
   schedule1Line2aAlimony?: number
-  /** Net Part I result from Form 4797 (other gains/losses on business property). */
-  schedule1Line4OtherGains?: number
-  /** Net result from Schedule F (farm income/loss). */
-  schedule1Line6FarmIncome?: number
+  /** Net ordinary amount from Form 4797 flowing to Schedule 1 line 4 (includes Part II/III and Part I only when Part I is a net loss). Pass null when Form 4797 has no activity. */
+  schedule1Line4OtherGains?: number | null
+  /** Net result from Schedule F (farm income/loss). Pass null when Schedule F has no activity. */
+  schedule1Line6FarmIncome?: number | null
   deductibleSeTaxAdjustment?: number
 }): Schedule1Lines {
   const line8b = schedule1Line8Breakdown?.line8b ?? 0
@@ -62,8 +62,8 @@ export function computeSchedule1Totals({
     .add(scheduleEGrandTotal)
     .add(schedule1Line1aTaxableRefunds)
     .add(schedule1Line2aAlimony)
-    .add(schedule1Line4OtherGains)
-    .add(schedule1Line6FarmIncome)
+    .add(schedule1Line4OtherGains ?? 0)
+    .add(schedule1Line6FarmIncome ?? 0)
     .add(schedule1Line7Unemployment)
     .add(line9_totalOther).value
   const line15_deductibleSeTax = deductibleSeTaxAdjustment === 0
@@ -75,9 +75,9 @@ export function computeSchedule1Totals({
       line1a_taxableRefunds: schedule1Line1aTaxableRefunds === 0 ? null : schedule1Line1aTaxableRefunds,
       line2a_alimonyReceived: schedule1Line2aAlimony === 0 ? null : schedule1Line2aAlimony,
       line3_business: scheduleCNetIncome,
-      line4_otherGains: schedule1Line4OtherGains === 0 ? null : schedule1Line4OtherGains,
+      line4_otherGains: schedule1Line4OtherGains,
       line5_rentalPartnerships: scheduleEGrandTotal,
-      line6_farmIncome: schedule1Line6FarmIncome === 0 ? null : schedule1Line6FarmIncome,
+      line6_farmIncome: schedule1Line6FarmIncome,
       line7_unemploymentCompensation: schedule1Line7Unemployment === 0 ? null : schedule1Line7Unemployment,
       line8b_gambling: line8b === 0 ? null : line8b,
       line8h_juryDuty: line8h === 0 ? null : line8h,
@@ -257,7 +257,7 @@ export default function Schedule1Preview({
         {line4 === 'visible' && (
           <>
             <FormLine boxRef="4" label="Other gains or (losses)" value={partI.line4_otherGains} />
-            <FormSubLine text="From Form 4797 Part I net result" />
+            <FormSubLine text="From Form 4797 ordinary gain/loss total" />
           </>
         )}
         {line5 === 'visible' && (
