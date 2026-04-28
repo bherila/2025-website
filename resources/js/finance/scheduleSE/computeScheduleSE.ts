@@ -6,7 +6,7 @@ import type { TaxDocument, W2ParsedData } from '@/types/finance/tax-document'
 export interface ScheduleSESourceEntry {
   label: string
   amount: number
-  sourceType: 'k1_box14_a' | 'k1_box14_c' | 'schedule_c'
+  sourceType: 'k1_box14_a' | 'k1_box14_c' | 'schedule_c' | 'schedule_f'
 }
 
 export interface ScheduleSELines {

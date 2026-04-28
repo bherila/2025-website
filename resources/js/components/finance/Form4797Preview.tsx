@@ -116,10 +116,13 @@ export default function Form4797Preview({
         double
       />
       {f.netToScheduleDLongTerm > 0 && (
-        <FormTotalLine
-          label="Net §1231 gain → Schedule D long-term"
-          value={f.netToScheduleDLongTerm}
-        />
+        <>
+          <FormTotalLine
+            label="Net §1231 gain → Schedule D long-term"
+            value={f.netToScheduleDLongTerm}
+          />
+          <FormSubLine text="Informational only — this amount is not yet included in Schedule D / Form 1040 totals in this preview." />
+        </>
       )}
     </div>
   )

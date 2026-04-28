@@ -48,6 +48,8 @@ interface ScheduleSEPreviewProps {
   isMarried?: boolean
   reviewedW2Docs?: TaxDocument[]
   payslips?: fin_payslip[]
+  /** Net farm profit from Schedule F line 34. Only positive values create SE tax; losses are ignored. */
+  scheduleFNetProfit?: number
   onOpenDoc?: (docId: number) => void
   onGoToScheduleC?: () => void
 }
@@ -59,6 +61,7 @@ export function computeScheduleSE({
   isMarried = false,
   reviewedW2Docs = [],
   payslips = [],
+  scheduleFNetProfit = 0,
 }: ScheduleSEPreviewProps): ScheduleSELines {
   const entries: ScheduleSESourceEntry[] = reviewedK1Docs
     .map((doc) => {
@@ -86,6 +89,14 @@ export function computeScheduleSE({
       label: 'Schedule C net earnings',
       amount: scheduleCNetIncome,
       sourceType: 'schedule_c',
+    })
+  }
+
+  if (scheduleFNetProfit > 0) {
+    entries.push({
+      label: 'Schedule F net farm profit (line 34)',
+      amount: scheduleFNetProfit,
+      sourceType: 'schedule_f',
     })
   }
 
