@@ -65,11 +65,11 @@ class UserAiModelsController extends Controller
         } catch (GenAiFatalException $e) {
             Log::warning('Failed to fetch AI models', ['provider' => $provider, 'error' => $e->getMessage()]);
 
-            return response()->json(['error' => $e->getMessage()], 422);
+            return response()->json(['error' => 'Failed to fetch models. Please check your credentials and try again.'], 422);
         } catch (\Exception $e) {
             Log::warning('Failed to fetch AI models', ['provider' => $provider, 'error' => $e->getMessage()]);
 
-            return response()->json(['error' => $e->getMessage()], 422);
+            return response()->json(['error' => 'Failed to fetch models. Please check your credentials and try again.'], 422);
         }
     }
 

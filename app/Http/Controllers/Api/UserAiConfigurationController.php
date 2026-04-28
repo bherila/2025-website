@@ -72,6 +72,9 @@ class UserAiConfigurationController extends Controller
         $user = Auth::user();
 
         $config = DB::transaction(function () use ($data, $user) {
+            // Lock existing configs to prevent a race between two concurrent first-config creates.
+            $existingCount = $user->aiConfigurations()->lockForUpdate()->count();
+
             $config = $user->aiConfigurations()->create([
                 'name' => $data['name'],
                 'provider' => $data['provider'],
@@ -79,14 +82,9 @@ class UserAiConfigurationController extends Controller
                 'region' => $data['region'] ?? null,
                 'session_token' => $data['session_token'] ?? null,
                 'model' => $data['model'],
-                'is_active' => false,
+                'is_active' => $existingCount === 0,
                 'expires_at' => $data['expires_at'] ?? null,
             ]);
-
-            // Auto-activate if this is the first config
-            if ($user->aiConfigurations()->count() === 1) {
-                $config->update(['is_active' => true]);
-            }
 
             return $config;
         });

@@ -96,7 +96,7 @@ export const AiConfigurationsSection: React.FC<AiConfigurationsSectionProps> = (
         setForm(f => ({ ...f, model: '' }));
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to fetch models';
+      const msg = err instanceof Error ? err.message : typeof err === 'string' ? err : 'Failed to fetch models';
       setModelsError(msg);
       setModels([]);
     } finally {
@@ -140,7 +140,7 @@ export const AiConfigurationsSection: React.FC<AiConfigurationsSectionProps> = (
       setDialogOpen(false);
       await loadConfigs();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to save configuration';
+      const msg = err instanceof Error ? err.message : typeof err === 'string' ? err : 'Failed to save configuration';
       setFormError(msg);
     } finally {
       setSaving(false);
@@ -154,7 +154,7 @@ export const AiConfigurationsSection: React.FC<AiConfigurationsSectionProps> = (
       onSuccess(`"${config.name}" is now active.`);
       await loadConfigs();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to activate configuration';
+      const msg = err instanceof Error ? err.message : typeof err === 'string' ? err : 'Failed to activate configuration';
       onError('aiConfig', msg);
     } finally {
       setActivatingId(null);
@@ -168,7 +168,7 @@ export const AiConfigurationsSection: React.FC<AiConfigurationsSectionProps> = (
       onSuccess(`"${config.name}" deleted.`);
       await loadConfigs();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to delete configuration';
+      const msg = err instanceof Error ? err.message : typeof err === 'string' ? err : 'Failed to delete configuration';
       onError('aiConfig', msg);
     } finally {
       setDeletingId(null);
