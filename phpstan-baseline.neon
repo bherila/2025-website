@@ -781,12 +781,6 @@ parameters:
 			path: app/Http/Controllers/UtilityBillTracker/UtilityBillApiController.php
 
 		-
-			message: '#^Method App\\Http\\Controllers\\UtilityBillTracker\\UtilityBillImportController\:\:import\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Http/Controllers/UtilityBillTracker/UtilityBillImportController.php
-
-		-
 			message: '#^Negated boolean expression is always false\.$#'
 			identifier: booleanNot.alwaysFalse
 			count: 1
