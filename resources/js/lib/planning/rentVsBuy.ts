@@ -227,14 +227,14 @@ export function computeRentVsBuy(inputs: RentVsBuyInputs): RentVsBuyResults {
       ? roundMoney(multiplyMoney(subtractMoney(itemizedDeduction, standardDeduction), marginalTaxRate))
       : 0
 
-    const annualOwnEconomicCost = roundMoney(sumMoney([
+    const annualOwnEconomicCostBeforeTax = sumMoney([
       annualMortgageInterest,
       annualPropertyTax,
       annualMaintenance,
       roundMoney(multiplyMoney(monthlyHoa, MONTHS_PER_YEAR)),
       roundMoney(inputs.homeownersInsuranceAnnual),
-      -taxBenefit,
-    ]))
+    ])
+    const annualOwnEconomicCost = roundMoney(subtractMoney(annualOwnEconomicCostBeforeTax, taxBenefit))
 
     const discountedOwnCost = discountMoney(annualOwnEconomicCost, inflationRate, year)
     const discountedRentCost = discountMoney(annualRentCashOutflow, inflationRate, year)
