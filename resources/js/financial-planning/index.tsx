@@ -19,6 +19,12 @@ const CALCULATORS: CalculatorCard[] = [
     href: '/financial-planning/solo-401k',
     shipped: true,
   },
+  {
+    title: 'Rent vs. Buy a Home',
+    description: 'Compare cumulative costs, tax treatment, equity, and renter portfolio growth across a home-buying horizon.',
+    href: '/financial-planning/rent-vs-buy',
+    shipped: true,
+  },
 ]
 
 function FinancialPlanningPage() {
