@@ -1,6 +1,6 @@
 import currency from 'currency.js'
 
-import { type FilingStatus,getLatestStandardDeductionYear, getStandardDeduction } from '@/lib/tax/standardDeductions'
+import { type FilingStatus, getLatestStandardDeductionYear, getStandardDeduction } from '@/lib/tax/standardDeductions'
 
 const MONTHS_PER_YEAR = 12
 const SALT_CAP = 10_000
