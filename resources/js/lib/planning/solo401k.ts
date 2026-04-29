@@ -5,17 +5,26 @@ import currency from 'currency.js'
  * - employeeDeferral: §402(g) elective deferral cap
  * - catchUpAge50: additional allowed for age 50+
  * - overallCap: §415(c) total annual additions cap (employee + employer, excl. catch-up)
+ * - ssWageBase: Social Security wage base (only the SS portion of SE tax is capped here;
+ *   Medicare 2.9% applies to all SE earnings × 92.35%)
  *
  * Sources: IRS Notice 2023-75 (2024 limits), IRS Notice 2024-80 (2025 limits).
  */
-export const SE_401K_LIMITS: Record<number, { employeeDeferral: number; catchUpAge50: number; overallCap: number }> = {
-  2024: { employeeDeferral: 23_000, catchUpAge50: 7_500, overallCap: 69_000 },
-  2025: { employeeDeferral: 23_500, catchUpAge50: 7_500, overallCap: 70_000 },
+export interface Se401kYearLimits {
+  employeeDeferral: number
+  catchUpAge50: number
+  overallCap: number
+  ssWageBase: number
+}
+
+export const SE_401K_LIMITS: Record<number, Se401kYearLimits> = {
+  2024: { employeeDeferral: 23_000, catchUpAge50: 7_500, overallCap: 69_000, ssWageBase: 168_600 },
+  2025: { employeeDeferral: 23_500, catchUpAge50: 7_500, overallCap: 70_000, ssWageBase: 176_100 },
 }
 
 const DEFAULT_SE_401K_YEAR = 2025
 
-export function getLimitsForYear(year: number) {
+export function getLimitsForYear(year: number): Se401kYearLimits {
   return SE_401K_LIMITS[year] ?? SE_401K_LIMITS[DEFAULT_SE_401K_YEAR]!
 }
 
@@ -41,7 +50,7 @@ export interface Se401kLines {
   /** Recommended contribution = min(employeeRoom + employerMax, overallCap). */
   recommendedContribution: number
   /** Year-specific limit block used for the calc. */
-  limits: { employeeDeferral: number; catchUpAge50: number; overallCap: number }
+  limits: Se401kYearLimits
 }
 
 /**
@@ -94,17 +103,46 @@ export function computeSe401k({
 
 /** SE tax rate constants for the deductible-half helper (Schedule SE). */
 const SE_WAGE_FACTOR = 0.9235
-const SE_TAX_RATE = 0.153
+const SS_RATE = 0.124
+const MEDICARE_RATE = 0.029
 
 /**
- * Estimates the deductible half of SE tax from net SE earnings.
- * Uses: net × 92.35% × 15.3% / 2.
- * This approximation works when all income is below the Social Security wage base.
+ * Estimates the deductible half of SE tax from net SE earnings, year-aware.
+ *
+ * Schedule SE math:
+ *   ssEarnings = min(net × 92.35%, ssWageBase) × 12.4%
+ *   medicare   = (net × 92.35%) × 2.9%
+ *   deductible = (ssEarnings + medicare) / 2
+ *
+ * Below the SS wage base this collapses to the familiar net × 92.35% × 15.3% / 2.
+ * The 0.9% Additional Medicare Tax for high earners is **not** part of the deductible half.
  */
-export function estimateDeductibleSeTax(netEarningsFromSE: number): number {
-  if (netEarningsFromSE <= 0) return 0
-  return currency(netEarningsFromSE)
-    .multiply(SE_WAGE_FACTOR)
-    .multiply(SE_TAX_RATE)
-    .divide(2).value
+export function estimateDeductibleSeTax(netEarningsFromSE: number, year?: number): number {
+  if (netEarningsFromSE <= 0) {
+    return 0
+  }
+  const ssWageBase = year != null ? getLimitsForYear(year).ssWageBase : Infinity
+  const seBase = currency(netEarningsFromSE).multiply(SE_WAGE_FACTOR).value
+  const ssTaxable = Math.min(seBase, ssWageBase)
+  const ssTax = currency(ssTaxable).multiply(SS_RATE).value
+  const medicareTax = currency(seBase).multiply(MEDICARE_RATE).value
+  return currency(ssTax).add(medicareTax).divide(2).value
+}
+
+/**
+ * Returns the maximum total Solo 401(k) contribution including the §402(g)
+ * age-50+ catch-up. Catch-up sits outside the §415(c) cap per IRS rules but is
+ * still bounded by the compensation base (you cannot contribute more than you
+ * earn). When `includeCatchup` is false, returns the recommended contribution
+ * unchanged.
+ */
+export function totalContributionWithCatchup(
+  lines: Pick<Se401kLines, 'recommendedContribution' | 'compensationBase' | 'limits'>,
+  includeCatchup: boolean,
+): number {
+  if (!includeCatchup) {
+    return lines.recommendedContribution
+  }
+  const withCatchup = currency(lines.recommendedContribution).add(lines.limits.catchUpAge50).value
+  return Math.min(withCatchup, lines.compensationBase)
 }

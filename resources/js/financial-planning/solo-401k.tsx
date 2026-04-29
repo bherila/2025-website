@@ -1,5 +1,5 @@
 import currency from 'currency.js'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 
 import Container from '@/components/container'
@@ -10,74 +10,44 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { formatCurrency } from '@/lib/formatCurrency'
 import type { Se401kInputs } from '@/lib/planning/solo401k'
-import { estimateDeductibleSeTax, getLimitsForYear, SE_401K_LIMITS } from '@/lib/planning/solo401k'
+import {
+  computeSe401k,
+  estimateDeductibleSeTax,
+  getLimitsForYear,
+  totalContributionWithCatchup,
+} from '@/lib/planning/solo401k'
 
-const AVAILABLE_YEARS = Object.keys(SE_401K_LIMITS)
-  .map(Number)
-  .sort((a, b) => b - a)
+import {
+  AVAILABLE_YEARS,
+  defaultYear,
+  parseSolo401kUrlState,
+  serializeSolo401kUrlState,
+} from './solo401kUrlState'
 
-const CURRENT_YEAR = new Date().getFullYear()
-const DEFAULT_YEAR = AVAILABLE_YEARS.includes(CURRENT_YEAR) ? CURRENT_YEAR : AVAILABLE_YEARS[0]!
-
-// ── URL query-param serialization ─────────────────────────────────────────────
-
-interface UrlParams {
-  year: number
-  ne: number
-  se: number
-  w2: number
-  catchup: boolean
-}
-
-function parseUrlParams(): UrlParams {
-  const params = new URLSearchParams(window.location.search)
-  const year = parseInt(params.get('year') ?? '', 10)
-  return {
-    year: AVAILABLE_YEARS.includes(year) ? year : DEFAULT_YEAR!,
-    ne: parseDollar(params.get('ne')),
-    se: parseDollar(params.get('se')),
-    w2: parseDollar(params.get('w2')),
-    catchup: params.get('catchup') === '1',
-  }
-}
-
-function serializeUrlParams(p: UrlParams): string {
-  const params = new URLSearchParams()
-  params.set('year', String(p.year))
-  if (p.ne) params.set('ne', String(p.ne))
-  if (p.se) params.set('se', String(p.se))
-  if (p.w2) params.set('w2', String(p.w2))
-  if (p.catchup) params.set('catchup', '1')
-  return params.toString()
-}
-
-function parseDollar(raw: string | null): number {
-  if (!raw) return 0
-  const n = currency(raw).value
-  return isNaN(n) ? 0 : Math.max(0, n)
-}
-
-// ── Input helpers ─────────────────────────────────────────────────────────────
+const DEFAULT_YEAR = defaultYear()
 
 function parseCurrencyInput(raw: string): number {
-  return parseDollar(raw.replace(/[^0-9.]/g, ''))
+  if (!raw) {
+    return 0
+  }
+  const n = currency(raw).value
+  return Number.isNaN(n) ? 0 : Math.max(0, n)
 }
 
-// ── Page component ─────────────────────────────────────────────────────────────
-
 function Solo401kPage() {
-  const initial = parseUrlParams()
+  const initial = useMemo(() => parseSolo401kUrlState(window.location.search, DEFAULT_YEAR), [])
 
   const [year, setYear] = useState(initial.year)
   const [neRaw, setNeRaw] = useState(initial.ne ? currency(initial.ne).format() : '')
   const [seRaw, setSeRaw] = useState(initial.se ? currency(initial.se).format() : '')
   const [w2Raw, setW2Raw] = useState(initial.w2 ? currency(initial.w2).format() : '')
   const [catchup, setCatchup] = useState(initial.catchup)
-  const [autoSe, setAutoSe] = useState(!initial.se && initial.ne > 0)
+  // Auto-estimate only when the URL has earnings but no explicit SE-tax value.
+  const [autoSe, setAutoSe] = useState(initial.ne > 0 && !initial.se)
 
   const ne = parseCurrencyInput(neRaw)
   const seManual = parseCurrencyInput(seRaw)
-  const se = autoSe ? estimateDeductibleSeTax(ne) : seManual
+  const se = autoSe ? estimateDeductibleSeTax(ne, year) : seManual
   const w2 = parseCurrencyInput(w2Raw)
 
   const limits = getLimitsForYear(year)
@@ -89,23 +59,33 @@ function Solo401kPage() {
     w2EmployeePretaxDeferred: w2,
   }
 
+  const lines = computeSe401k(inputs)
+  const totalWithCatchup = totalContributionWithCatchup(lines, catchup)
+  const catchupAddition = currency(totalWithCatchup).subtract(lines.recommendedContribution).value
+
   // Sync URL whenever inputs change.
   useEffect(() => {
-    const qs = serializeUrlParams({ year, ne, se: autoSe ? 0 : seManual, w2, catchup })
+    const qs = serializeSolo401kUrlState({ year, ne, se: autoSe ? 0 : seManual, w2, catchup })
     const newUrl = `${window.location.pathname}${qs ? `?${qs}` : ''}`
     window.history.replaceState(null, '', newUrl)
   }, [year, ne, seManual, autoSe, w2, catchup])
 
   function handleNeBlur() {
-    if (ne > 0) setNeRaw(currency(ne).format())
+    if (ne > 0) {
+      setNeRaw(currency(ne).format())
+    }
   }
 
   function handleSeBlur() {
-    if (seManual > 0) setSeRaw(currency(seManual).format())
+    if (seManual > 0) {
+      setSeRaw(currency(seManual).format())
+    }
   }
 
   function handleW2Blur() {
-    if (w2 > 0) setW2Raw(currency(w2).format())
+    if (w2 > 0) {
+      setW2Raw(currency(w2).format())
+    }
   }
 
   return (
@@ -159,7 +139,9 @@ function Solo401kPage() {
                   onClick={() => {
                     setAutoSe((v) => {
                       const next = !v
-                      if (next) setSeRaw('')
+                      if (next) {
+                        setSeRaw('')
+                      }
                       return next
                     })
                   }}
@@ -170,7 +152,10 @@ function Solo401kPage() {
               {autoSe ? (
                 <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
                   Estimated: {formatCurrency(se)}
-                  <span className="ml-1 text-xs">(net × 92.35% × 15.3% ÷ 2)</span>
+                  <span className="ml-1 text-xs">
+                    (SS 12.4% to {formatCurrency(limits.ssWageBase)} wage base + Medicare 2.9% on
+                    all SE earnings, halved)
+                  </span>
                 </p>
               ) : (
                 <Input
@@ -208,14 +193,6 @@ function Solo401kPage() {
                 Age 50 or older (catch-up eligible)
               </Label>
             </div>
-
-            {catchup && (
-              <p className="text-xs text-muted-foreground -mt-3">
-                Age 50+ catch-up allows an additional{' '}
-                {formatCurrency(limits.catchUpAge50)} in employee deferrals.
-                This is shown in the results below.
-              </p>
-            )}
           </CardContent>
         </Card>
 
@@ -230,22 +207,20 @@ function Solo401kPage() {
                 <p className="text-xs text-muted-foreground">
                   You may contribute an additional{' '}
                   <span className="font-semibold text-foreground">
-                    {formatCurrency(limits.catchUpAge50)}
+                    {formatCurrency(catchupAddition)}
                   </span>{' '}
-                  in employee elective deferrals (§402(g) catch-up). This is on top of the
-                  recommended contribution shown above, bringing your potential total to{' '}
+                  in employee elective deferrals (§402(g) catch-up). Catch-up sits outside the
+                  §415(c) cap, so the potential total is{' '}
                   <span className="font-semibold text-foreground">
-                    {formatCurrency(
-                      currency(
-                        Math.min(
-                          currency(inputs.netEarningsFromSE).subtract(inputs.deductibleSeTax).value,
-                          inputs.netEarningsFromSE > 0
-                            ? Infinity
-                            : 0,
-                        ),
-                      ).value,
-                    )}
-                  </span>.
+                    {formatCurrency(totalWithCatchup)}
+                  </span>
+                  {catchupAddition < limits.catchUpAge50 && (
+                    <>
+                      {' '}— bounded by the compensation base of{' '}
+                      {formatCurrency(lines.compensationBase)}
+                    </>
+                  )}
+                  .
                 </p>
               </CardContent>
             </Card>
