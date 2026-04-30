@@ -122,10 +122,7 @@ function Solo401kPage() {
                 inputMode="numeric"
                 placeholder="$0"
                 value={neRaw}
-                onChange={(e) => {
-                  setNeRaw(e.target.value)
-                  setAutoSe(false)
-                }}
+                onChange={(e) => setNeRaw(e.target.value)}
                 onBlur={handleNeBlur}
               />
             </div>

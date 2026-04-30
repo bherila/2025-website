@@ -22,7 +22,7 @@ export const SE_401K_LIMITS: Record<number, Se401kYearLimits> = {
   2025: { employeeDeferral: 23_500, catchUpAge50: 7_500, overallCap: 70_000, ssWageBase: 176_100 },
 }
 
-const DEFAULT_SE_401K_YEAR = 2025
+const DEFAULT_SE_401K_YEAR = Math.max(...Object.keys(SE_401K_LIMITS).map(Number))
 
 export function getLimitsForYear(year: number): Se401kYearLimits {
   return SE_401K_LIMITS[year] ?? SE_401K_LIMITS[DEFAULT_SE_401K_YEAR]!

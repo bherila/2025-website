@@ -69,7 +69,8 @@ describe('computeSe401k', () => {
       deductibleSeTax: 0,
       w2EmployeePretaxDeferred: 0,
     })
-    expect(result.limits.employeeDeferral).toBe(SE_401K_LIMITS[2025]!.employeeDeferral)
+    const mostRecentYear = Math.max(...Object.keys(SE_401K_LIMITS).map(Number))
+    expect(result.limits.employeeDeferral).toBe(SE_401K_LIMITS[mostRecentYear]!.employeeDeferral)
   })
 
   it('caps recommended contribution at compensation base when earnings are low', () => {
@@ -145,7 +146,7 @@ describe('totalContributionWithCatchup', () => {
 
   it('adds the year-specific catch-up amount on top of the §415(c) cap', () => {
     const total = totalContributionWithCatchup(lines, true)
-    expect(total).toBe(lines.recommendedContribution + SE_401K_LIMITS[2025]!.catchUpAge50)
+    expect(total).toBe(currency(lines.recommendedContribution).add(SE_401K_LIMITS[2025]!.catchUpAge50).value)
   })
 
   it('bounds the total at the compensation base when earnings are too low to absorb full catch-up', () => {
