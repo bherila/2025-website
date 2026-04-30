@@ -18,6 +18,7 @@ Start here when you need to orient yourself in the finance codebase. Each doc be
 | Lot accounting + short-div | [lot-analyzer.md](lot-analyzer.md) | `app/Services/Finance/LotAnalyzer*` |
 | Tax system (Tabs UI + data) | [tax-system.md](tax-system.md) | `resources/js/components/finance/TaxPreviewPage.tsx` |
 | **Tax Preview — Dock UI** | **[tax-preview-dock.md](tax-preview-dock.md)** | `resources/js/components/finance/tax-preview/` |
+| Public financial planning calculators | [../financial-planning.md](../financial-planning.md) | `resources/js/financial-planning/` |
 | K-1 badge system (future) | [k1-badge-system-future.md](k1-badge-system-future.md) | `K1ReviewPanel.tsx` |
 | CLI (artisan commands) | [cli.md](cli.md) | `app/Console/Commands/Finance*` |
 | MCP server (AI tools) | [mcp-server.md](mcp-server.md) | `app/Mcp/` |
