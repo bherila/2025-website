@@ -35,11 +35,11 @@ class UserManagementApiController extends Controller
                     'email' => $user->email,
                     'roles' => $user->getRoles(),
                     'can_login_as_client' => ! $user->hasRole('admin') && $user->canLogin() && $user->clientCompanies->isNotEmpty(),
-                    'client_companies' => $user->clientCompanies->map(fn ($c) => [
+                    'client_companies' => $user->clientCompanies->map(fn (ClientCompany $c) => [
                         'id' => $c->id,
                         'name' => $c->company_name,
                         'slug' => $c->slug,
-                    ]),
+                    ])->values()->all(),
                     'last_login_date' => $user->last_login_date,
                     'created_at' => $user->created_at,
                 ];

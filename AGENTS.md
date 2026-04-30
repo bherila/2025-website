@@ -43,6 +43,7 @@ pnpm run test                                                          # Jest - 
 # Backend
 pnpm run build                                                         # Build Vite first (required for PHPUnit)
 ./vendor/bin/pint --test                                               # Laravel Pint - must pass
+vendor/bin/phpstan analyse --no-progress                               # PHPStan - must pass for PHP changes
 composer test                                                          # PHPUnit - all tests must pass
 
 # PHP syntax check (for modified files only)
@@ -59,6 +60,7 @@ pnpm run type-check                # TypeScript strict check (no build)
 # Backend
 ./vendor/bin/pint                  # Format all PHP (Laravel Pint)
 ./vendor/bin/pint app/Models       # Format specific directory
+vendor/bin/phpstan analyse --no-progress  # Static analysis - must pass before committing PHP changes
 php -l path/to/file.php            # Syntax-check a single PHP file
 ```
 

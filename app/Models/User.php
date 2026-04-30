@@ -11,6 +11,7 @@ use Bherila\GenAiLaravel\Clients\GeminiClient;
 use Bherila\GenAiLaravel\Contracts\GenAiClient;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -219,8 +220,10 @@ class User extends Authenticatable
 
     /**
      * Get the client companies this user is associated with.
+     *
+     * @return BelongsToMany<ClientCompany, $this>
      */
-    public function clientCompanies()
+    public function clientCompanies(): BelongsToMany
     {
         return $this->belongsToMany(ClientCompany::class, 'client_company_user', 'user_id', 'client_company_id')
             ->withTimestamps();

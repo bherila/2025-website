@@ -637,54 +637,6 @@ parameters:
 			path: app/Http/Controllers/RecipeController.php
 
 		-
-			message: '#^Access to an undefined property App\\Models\\User\:\:\$clientCompanies\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/UserManagementApiController.php
-
-		-
-			message: '#^Method App\\Http\\Controllers\\UserManagementApiController\:\:addRole\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Http/Controllers/UserManagementApiController.php
-
-		-
-			message: '#^Method App\\Http\\Controllers\\UserManagementApiController\:\:create\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Http/Controllers/UserManagementApiController.php
-
-		-
-			message: '#^Method App\\Http\\Controllers\\UserManagementApiController\:\:index\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Http/Controllers/UserManagementApiController.php
-
-		-
-			message: '#^Method App\\Http\\Controllers\\UserManagementApiController\:\:removeRole\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Http/Controllers/UserManagementApiController.php
-
-		-
-			message: '#^Method App\\Http\\Controllers\\UserManagementApiController\:\:setPassword\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Http/Controllers/UserManagementApiController.php
-
-		-
-			message: '#^Method App\\Http\\Controllers\\UserManagementApiController\:\:updateEmail\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Http/Controllers/UserManagementApiController.php
-
-		-
-			message: '#^Relation ''clientCompanies'' is not found in App\\Models\\User model\.$#'
-			identifier: larastan.relationExistence
-			count: 1
-			path: app/Http/Controllers/UserManagementApiController.php
-
-		-
 			message: '#^Method App\\Http\\Controllers\\UserManagementController\:\:index\(\) has no return type specified\.$#'
 			identifier: missingType.return
 			count: 1
@@ -1721,12 +1673,6 @@ parameters:
 			identifier: missingType.generics
 			count: 1
 			path: app/Models/TimeSeriesSeries.php
-
-		-
-			message: '#^Method App\\Models\\User\:\:clientCompanies\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/User.php
 
 		-
 			message: '#^Method App\\Models\\User\:\:getRoles\(\) return type has no value type specified in iterable type array\.$#'
