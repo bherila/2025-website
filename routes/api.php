@@ -161,6 +161,9 @@ Route::middleware(['web', 'auth'])->post('/finance/{account_id}/import-pdf-state
 
 // Lots API routes
 Route::middleware(['web', 'auth'])->get('/finance/all/lots', [FinanceLotsController::class, 'showAllLots']);
+Route::middleware(['web', 'auth'])->get('/finance/lots/reconciliation', [FinanceLotsController::class, 'reconciliation']);
+Route::middleware(['web', 'auth'])->get('/finance/{account_id}/lots/reconciliation', [FinanceLotsController::class, 'accountReconciliation']);
+Route::middleware(['web', 'auth'])->post('/finance/{account_id}/lots/reconciliation/apply', [FinanceLotsController::class, 'applyReconciliation']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/lots', [FinanceLotsController::class, 'index']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/lots', [FinanceLotsController::class, 'store']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/lots/import', [FinanceLotsController::class, 'importLots']);

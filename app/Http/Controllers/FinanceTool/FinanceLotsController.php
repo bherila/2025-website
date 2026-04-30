@@ -4,12 +4,17 @@ namespace App\Http\Controllers\FinanceTool;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\FinanceTool\Concerns\QueriesUserAccounts;
+use App\Http\Requests\Finance\ApplyLotReconciliationRequest;
+use App\Http\Requests\Finance\TaxLotReconciliationRequest;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
+use App\Services\Finance\TaxLotReconciliationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class FinanceLotsController extends Controller
 {
@@ -38,6 +43,9 @@ class FinanceLotsController extends Controller
             : ['acct_id', 'cost_basis', 'purchase_date', 'sale_date'];
 
         $query = FinAccountLot::whereIn('acct_id', $accountIds)->select($selectColumns);
+        if (! $request->boolean('include_superseded')) {
+            $query->whereNull('superseded_by_lot_id');
+        }
 
         $asOf = $request->query('as_of');
 
@@ -71,6 +79,9 @@ class FinanceLotsController extends Controller
         $account = $this->resolveOwnedAccount($account_id);
 
         $query = FinAccountLot::where('acct_id', $account->acct_id);
+        if (! $request->boolean('include_superseded')) {
+            $query->whereNull('superseded_by_lot_id');
+        }
 
         $status = $request->query('status', 'open');
 
@@ -114,6 +125,7 @@ class FinanceLotsController extends Controller
         if (DB::getDriverName() === 'sqlite') {
             $closedYears = DB::table('fin_account_lots')
                 ->where('acct_id', $account->acct_id)
+                ->whereNull('superseded_by_lot_id')
                 ->whereNotNull('sale_date')
                 ->selectRaw('DISTINCT strftime("%Y", sale_date) as year')
                 ->orderByDesc('year')
@@ -123,6 +135,7 @@ class FinanceLotsController extends Controller
         } else {
             $closedYears = DB::table('fin_account_lots')
                 ->where('acct_id', $account->acct_id)
+                ->whereNull('superseded_by_lot_id')
                 ->whereNotNull('sale_date')
                 ->selectRaw('DISTINCT YEAR(sale_date) as year')
                 ->orderByDesc('year')
@@ -135,6 +148,120 @@ class FinanceLotsController extends Controller
             'summary' => $summary,
             'closedYears' => $closedYears,
         ]);
+    }
+
+    public function reconciliation(TaxLotReconciliationRequest $request, TaxLotReconciliationService $service): JsonResponse
+    {
+        $validated = $request->validated();
+
+        return response()->json($service->reconcile((int) Auth::id(), (int) $validated['tax_year']));
+    }
+
+    public function accountReconciliation(
+        TaxLotReconciliationRequest $request,
+        int $account_id,
+        TaxLotReconciliationService $service,
+    ): JsonResponse {
+        $account = $this->resolveOwnedAccount($account_id);
+        $validated = $request->validated();
+
+        return response()->json($service->reconcile((int) Auth::id(), (int) $validated['tax_year'], (int) $account->acct_id));
+    }
+
+    public function applyReconciliation(ApplyLotReconciliationRequest $request, int $account_id): JsonResponse
+    {
+        $account = $this->resolveOwnedAccount($account_id);
+        $supersedeRows = $request->supersedeRows();
+        $acceptedLotIds = $request->acceptedLotIds();
+        $conflictRows = $request->conflictRows();
+
+        DB::transaction(function () use ($account, $supersedeRows, $acceptedLotIds, $conflictRows): void {
+            $lotIds = [];
+            foreach ($supersedeRows as $row) {
+                $lotIds[] = $row['keep_lot_id'];
+                $lotIds[] = $row['drop_lot_id'];
+            }
+            foreach ($acceptedLotIds as $lotId) {
+                $lotIds[] = $lotId;
+            }
+            foreach ($conflictRows as $row) {
+                $lotIds[] = $row['lot_id'];
+            }
+            $lotIds = array_values(array_unique($lotIds));
+
+            $lots = $this->reconciliationLotsById((int) $account->acct_id, $lotIds);
+
+            if (count($lots) !== count($lotIds)) {
+                throw ValidationException::withMessages([
+                    'lot_id' => 'All reconciliation lots must belong to this account.',
+                ]);
+            }
+
+            foreach ($supersedeRows as $row) {
+                $keepLotId = $row['keep_lot_id'];
+                $dropLotId = $row['drop_lot_id'];
+
+                if ($keepLotId === $dropLotId) {
+                    throw ValidationException::withMessages([
+                        'supersede' => 'A lot cannot supersede itself.',
+                    ]);
+                }
+
+                $dropLot = $this->reconciliationLotFromMap($lots, $dropLotId);
+                $dropLot->update([
+                    'superseded_by_lot_id' => $keepLotId,
+                    'reconciliation_status' => 'accepted',
+                ]);
+
+                $keepLot = $this->reconciliationLotFromMap($lots, $keepLotId);
+                $keepLot->update(['reconciliation_status' => 'accepted']);
+            }
+
+            foreach ($acceptedLotIds as $lotId) {
+                $lot = $this->reconciliationLotFromMap($lots, $lotId);
+                $lot->update(['reconciliation_status' => 'accepted']);
+            }
+
+            foreach ($conflictRows as $row) {
+                $lot = $this->reconciliationLotFromMap($lots, $row['lot_id']);
+                $lot->update([
+                    'reconciliation_status' => $row['status'],
+                    'reconciliation_notes' => $row['notes'],
+                ]);
+            }
+        });
+
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * @param  int[]  $lotIds
+     * @return array<int, FinAccountLot>
+     */
+    private function reconciliationLotsById(int $accountId, array $lotIds): array
+    {
+        $lots = [];
+
+        foreach (FinAccountLot::where('acct_id', $accountId)->whereIn('lot_id', $lotIds)->get() as $lot) {
+            $lots[(int) $lot->lot_id] = $lot;
+        }
+
+        return $lots;
+    }
+
+    /**
+     * @param  array<int, FinAccountLot>  $lots
+     */
+    private function reconciliationLotFromMap(array $lots, int $lotId): FinAccountLot
+    {
+        $lot = $lots[$lotId] ?? null;
+        if (! $lot instanceof FinAccountLot) {
+            throw ValidationException::withMessages([
+                'lot_id' => 'All reconciliation lots must belong to this account.',
+            ]);
+        }
+
+        return $lot;
     }
 
     /**

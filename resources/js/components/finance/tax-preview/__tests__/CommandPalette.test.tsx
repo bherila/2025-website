@@ -70,6 +70,14 @@ const mockRegistry: FormRegistry = {
     presentation: 'app',
     ...sharedDefaults,
   },
+  'tax-lot-reconciliation': {
+    id: 'tax-lot-reconciliation',
+    label: '1099-B Reconciliation',
+    shortLabel: '1099-B',
+    category: 'App',
+    presentation: 'app',
+    ...sharedDefaults,
+  },
   'form-1040': {
     id: 'form-1040',
     label: 'Form 1040 — U.S. Individual Income Tax Return',

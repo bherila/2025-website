@@ -24,6 +24,7 @@ import ScheduleSEPreview from '@/components/finance/ScheduleSEPreview'
 import { TAB_TO_FORM_ID, type TaxTabId } from '@/components/finance/tax-tab-ids'
 import TaxDocuments1099Section from '@/components/finance/TaxDocuments1099Section'
 import TaxDocumentsSection from '@/components/finance/TaxDocumentsSection'
+import TaxLotReconciliationPanel from '@/components/finance/TaxLotReconciliationPanel'
 import WorksheetAmtExemption from '@/components/finance/worksheets/WorksheetAmtExemption'
 import WorksheetSE401k from '@/components/finance/worksheets/WorksheetSE401k'
 import WorksheetTaxableSS from '@/components/finance/worksheets/WorksheetTaxableSS'
@@ -554,6 +555,10 @@ function DocumentsAdapter({ state }: FormRenderProps): React.ReactElement {
   )
 }
 
+function TaxLotReconciliationAdapter({ state }: FormRenderProps): React.ReactElement {
+  return <TaxLotReconciliationPanel selectedYear={state.year} />
+}
+
 
 /**
  * Registry of all forms. Read-only forms have full adapters wired to
@@ -965,6 +970,16 @@ export const formRegistry: FormRegistry = {
     category: 'App',
     presentation: 'app',
     component: DocumentsAdapter,
+    wide: true,
+  },
+  'tax-lot-reconciliation': {
+    id: 'tax-lot-reconciliation',
+    label: '1099-B Lot Reconciliation',
+    shortLabel: '1099-B Reconcile',
+    keywords: ['1099-B', 'broker lots', 'tax lots', 'reconciliation', 'Form 8949'],
+    category: 'App',
+    presentation: 'app',
+    component: TaxLotReconciliationAdapter,
     wide: true,
   },
   'wks-se-401k': {
