@@ -121,6 +121,14 @@ Route::get('/tools/irs-f461', function () {
     return view('tools.irs-f461');
 });
 
+Route::get('/financial-planning', function () {
+    return view('financial-planning.index');
+});
+
+Route::get('/financial-planning/solo-401k', function () {
+    return view('financial-planning.solo-401k');
+});
+
 Route::get('/recipes', [RecipeController::class, 'index'])->name('recipes.index');
 Route::get('/recipes/{slug}', [RecipeController::class, 'show'])->name('recipes.show');
 

@@ -749,6 +749,18 @@ The Tax Preview page (`TaxPreviewPage.tsx`) is a tabbed interface (see Tab Struc
 
 All schedule computations (Schedule 1, B, C, D, E, SE, Forms 1116/4952/6251/8582/8959/8960/8995) run once in `TaxPreviewContext` and their results are stored on `TaxReturn1040`. Preview components receive pre-computed data — they do not recompute.
 
+### SE 401(k) Worksheet
+
+The Tax Preview dock includes `wks-se-401k`, a read-only Solo 401(k) worksheet registered in `resources/js/components/finance/tax-preview/registry.tsx`.
+
+The worksheet is intentionally a thin adapter:
+
+- Reads Schedule SE net earnings and deductible SE tax from `state.taxReturn.scheduleSE`.
+- Sums W-2 pre-tax 401(k) deferrals from `state.payslips[*].ps_401k_pretax`.
+- Passes those values into `SoloSE401kForm`.
+
+The underlying Pub 560 calculation lives in `resources/js/lib/planning/solo401k.ts` and is shared with the public `/financial-planning/solo-401k` calculator. See [../financial-planning.md](../financial-planning.md) for the standalone route, URL state, and shared component notes.
+
 ### Frontend Components
 
 - **`TaxDocumentsSection`** (`TaxDocumentsSection.tsx`) — W-2/W-2c documents grouped by employment entity. Combined Review column. Delete moved to Review modal.
