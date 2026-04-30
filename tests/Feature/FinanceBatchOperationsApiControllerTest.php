@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\FinanceTool\FinAccountLineItems;
+use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -95,6 +96,37 @@ class FinanceBatchOperationsApiControllerTest extends TestCase
         // Should succeed (200) but delete 0 rows — the attacker's accounts don't own these
         $response->assertOk()->assertJson(['deleted' => 0]);
         $this->assertDatabaseCount('fin_account_line_items', 2);
+    }
+
+
+    public function test_batch_delete_does_not_unlink_other_users_lots(): void
+    {
+        $owner = $this->createUser();
+        $attacker = $this->createUser();
+
+        $ownerAccount = $this->createAccountWithTransactions($owner->id, 1);
+        $ownerTransactionId = FinAccountLineItems::where('t_account', $ownerAccount->acct_id)->value('t_id');
+
+        $ownerLot = FinAccountLot::create([
+            'acct_id' => $ownerAccount->acct_id,
+            'symbol' => 'AAPL',
+            'quantity' => 1,
+            'purchase_date' => '2024-01-01',
+            'cost_basis' => 100,
+            'cost_per_unit' => 100,
+            'open_t_id' => $ownerTransactionId,
+        ]);
+
+        $response = $this->actingAs($attacker)->postJson('/api/finance/transactions/batch-delete', [
+            't_ids' => [$ownerTransactionId],
+        ]);
+
+        $response->assertOk()->assertJson(['deleted' => 0]);
+
+        $this->assertDatabaseHas('fin_account_lots', [
+            'lot_id' => $ownerLot->lot_id,
+            'open_t_id' => $ownerTransactionId,
+        ]);
     }
 
     public function test_batch_delete_requires_t_ids_array(): void
