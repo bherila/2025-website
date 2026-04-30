@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 
 class User extends Authenticatable
 {
@@ -204,6 +205,11 @@ class User extends Authenticatable
         $roles = $this->getRoles();
         $roles = array_filter($roles, fn ($r) => $r !== $role);
         $this->user_role = empty($roles) ? '' : implode(',', $roles);
+
+        if (! $this->canLogin()) {
+            $this->setRememberToken(Str::random(60));
+        }
+
         $this->save();
 
         return true;

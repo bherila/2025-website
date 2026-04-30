@@ -122,7 +122,7 @@ class UserRolesFeatureTest extends TestCase
      */
     public function test_remove_role_sets_empty_when_last_role_removed(): void
     {
-        $user = User::factory()->create(['user_role' => 'user']);
+        $user = User::factory()->create(['user_role' => 'user', 'remember_token' => 'existing-token']);
         $this->assertNotEquals(1, $user->id, 'Test should not use user ID 1');
 
         $result = $user->removeRole('user');
@@ -130,6 +130,22 @@ class UserRolesFeatureTest extends TestCase
         $this->assertTrue($result);
         $user->refresh();
         $this->assertEquals('', $user->user_role);
+        $this->assertNotEquals('existing-token', $user->getRememberToken());
+    }
+
+    /**
+     * Test removeRole keeps remember token when login access remains.
+     */
+    public function test_remove_role_keeps_remember_token_when_user_still_can_login(): void
+    {
+        $user = User::factory()->create(['user_role' => 'admin,user', 'remember_token' => 'existing-token']);
+        $this->assertNotEquals(1, $user->id, 'Test should not use user ID 1');
+
+        $result = $user->removeRole('admin');
+
+        $this->assertTrue($result);
+        $user->refresh();
+        $this->assertEquals('existing-token', $user->getRememberToken());
     }
 
     /**
