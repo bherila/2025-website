@@ -317,12 +317,19 @@ class FinanceTransactionsApiController extends Controller
         $userAccountIds = $this->getUserAccountIds();
 
         $tIds = $request->input('t_ids');
+        $ownedTransactionIds = FinAccountLineItems::whereIn('t_id', $tIds)
+            ->whereIn('t_account', $userAccountIds)
+            ->pluck('t_id');
 
-        // Unlink lots referencing these transactions
-        FinAccountLot::whereIn('open_t_id', $tIds)->update(['open_t_id' => null]);
-        FinAccountLot::whereIn('close_t_id', $tIds)->update(['close_t_id' => null]);
+        // Unlink lots referencing only this user's transactions
+        FinAccountLot::whereIn('acct_id', $userAccountIds)
+            ->whereIn('open_t_id', $ownedTransactionIds)
+            ->update(['open_t_id' => null]);
+        FinAccountLot::whereIn('acct_id', $userAccountIds)
+            ->whereIn('close_t_id', $ownedTransactionIds)
+            ->update(['close_t_id' => null]);
 
-        $deleted = FinAccountLineItems::whereIn('t_id', $tIds)
+        $deleted = FinAccountLineItems::whereIn('t_id', $ownedTransactionIds)
             ->whereIn('t_account', $userAccountIds)
             ->delete();
 
