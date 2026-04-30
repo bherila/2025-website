@@ -127,6 +127,27 @@ class McpFinanceToolsTest extends TestCase
         $response->assertStatus(200);
     }
 
+    public function test_mcp_http_endpoint_rejects_token_for_disabled_user(): void
+    {
+        $rawToken = 'disabled-user-test-token-1234567890';
+        $user = $this->createUser([
+            'mcp_api_key' => hash('sha256', $rawToken),
+            'user_role' => 'guest',
+        ]);
+
+        $this->assertFalse($user->canLogin());
+
+        $response = $this->postJson('/mcp/finance', [
+            'jsonrpc' => '2.0',
+            'id' => 1,
+            'method' => 'tools/list',
+        ], [
+            'Authorization' => "Bearer {$rawToken}",
+        ]);
+
+        $response->assertStatus(401);
+    }
+
     // -------------------------------------------------------------------------
     // Tax Preview tool (via TaxPreviewDataController endpoint)
     // -------------------------------------------------------------------------
