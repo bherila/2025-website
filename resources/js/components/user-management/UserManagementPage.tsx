@@ -20,6 +20,7 @@ export interface User {
   name: string
   email: string
   roles: string[]
+  can_login_as_client: boolean
   client_companies: { id: number; name: string; slug: string }[]
   last_login_date: string | null
   created_at: string

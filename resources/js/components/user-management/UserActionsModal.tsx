@@ -1,6 +1,6 @@
 'use client'
 
-import { X } from 'lucide-react'
+import { LogIn, X } from 'lucide-react'
 import { useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
@@ -52,6 +52,7 @@ export default function UserActionsModal({
   const rolesNotAssigned = availableRoles.filter(
     (role) => !user.roles.includes(role)
   )
+  const canPreviewClientPortal = user.can_login_as_client && user.client_companies.length > 0
 
   const handleUpdateEmail = async () => {
     if (!newEmail || !newEmail.includes('@')) {
@@ -147,6 +148,24 @@ export default function UserActionsModal({
     }
   }
 
+  const handleLoginAs = async (clientCompanyId: number) => {
+    setLoading(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const response = await fetchWrapper.post(`/api/admin/users/${user.id}/login-as`, {
+        client_company_id: clientCompanyId,
+      }) as { redirect_url: string }
+
+      window.location.assign(response.redirect_url)
+    } catch (err) {
+      setError('Failed to start client portal preview')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-[500px]">
@@ -177,6 +196,10 @@ export default function UserActionsModal({
               <Input
                 id="email"
                 type="email"
+                name="admin-user-email-edit"
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
                 value={newEmail}
                 onChange={(e) => setNewEmail(e.target.value)}
               />
@@ -197,7 +220,7 @@ export default function UserActionsModal({
                 <SelectTrigger className="flex-1">
                   <SelectValue placeholder="Select role to add" />
                 </SelectTrigger>
-                <SelectContent position="popper" sideOffset={4}>
+                <SelectContent alignItemWithTrigger={false} sideOffset={4}>
                   {rolesNotAssigned.length === 0 ? (
                     <SelectItem value="_none" disabled>
                       No roles available
@@ -274,6 +297,27 @@ export default function UserActionsModal({
               </Button>
             </div>
           </div>
+
+          {canPreviewClientPortal && (
+            <div className="space-y-2">
+              <Label>Client Portal Preview</Label>
+              <div className="flex flex-wrap gap-2">
+                {user.client_companies.map((company) => (
+                  <Button
+                    key={company.id}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleLoginAs(company.id)}
+                    disabled={loading}
+                  >
+                    <LogIn className="h-4 w-4 mr-2" />
+                    Login as {company.name}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <DialogFooter>
