@@ -278,6 +278,7 @@ Route::middleware(['web', 'auth'])->post('/admin/users/{id}/roles', [UserManagem
 Route::middleware(['web', 'auth'])->delete('/admin/users/{id}/roles/{role}', [UserManagementApiController::class, 'removeRole']);
 Route::middleware(['web', 'auth'])->post('/admin/users/{id}/password', [UserManagementApiController::class, 'setPassword']);
 Route::middleware(['web', 'auth'])->post('/admin/users/{id}/email', [UserManagementApiController::class, 'updateEmail']);
+Route::middleware(['web', 'auth'])->post('/admin/users/{id}/login-as', [UserManagementApiController::class, 'loginAs']);
 
 // Admin GenAI Jobs API
 Route::middleware(['web', 'auth'])->get('/admin/genai-jobs', [AdminGenAiJobsController::class, 'index']);
