@@ -39,6 +39,7 @@ export function computeForm8960Lines({
   ordinaryDividends,
   netCapGainsRaw,
   passiveIncome,
+  nonpassiveTradingIncome = 0,
   investmentInterestExpense,
   magi,
   isMarried,
@@ -51,6 +52,8 @@ export function computeForm8960Lines({
   /** Raw Schedule D line 16 value (may be negative). */
   netCapGainsRaw: number
   passiveIncome: number
+  /** Signed Schedule E trader-fund ordinary income/loss that is NII. */
+  nonpassiveTradingIncome?: number
   /** Positive number — will be applied as a deduction. */
   investmentInterestExpense: number
   magi: number
@@ -65,7 +68,8 @@ export function computeForm8960Lines({
   const grossNII = currency(taxableInterest)
     .add(ordinaryDividends)
     .add(netCapGains)
-    .add(passiveIncome).value
+    .add(passiveIncome)
+    .add(nonpassiveTradingIncome).value
 
   const totalDeductions = investmentInterestExpense
   const netInvestmentIncome = Math.max(0, currency(grossNII).subtract(totalDeductions).value)
@@ -80,6 +84,7 @@ export function computeForm8960Lines({
     { boxRef: '2',  label: 'Ordinary dividends (Schedule B)', amount: ordinaryDividends },
     { boxRef: '5a', label: 'Net capital gains (Schedule D)', amount: netCapGains },
     ...(passiveIncome !== 0 ? [{ boxRef: '4a', label: 'Net passive income (K-1 Schedule E)', amount: passiveIncome }] : []),
+    ...(nonpassiveTradingIncome !== 0 ? [{ boxRef: '4a', label: 'Net nonpassive trading income/loss (K-1 Schedule E)', amount: nonpassiveTradingIncome }] : []),
     ...(investmentInterestExpense > 0 ? [{ boxRef: '9a', label: 'Less: investment interest expense (Form 4952)', amount: -investmentInterestExpense }] : []),
   ]
 
@@ -88,6 +93,7 @@ export function computeForm8960Lines({
     ordinaryDividends,
     netCapGains,
     passiveIncome,
+    nonpassiveTradingIncome,
     investmentInterestExpense,
     grossNII,
     totalDeductions,

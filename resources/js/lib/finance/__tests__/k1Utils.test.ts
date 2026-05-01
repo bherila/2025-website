@@ -2,12 +2,14 @@ import type { FK1StructuredData } from '@/types/finance/k1-data'
 
 import {
   classify11SCharacter,
+  extractK1Form461Disclosure,
   getK1ActivityClassification,
   getK1CompletenessChecklist,
   getK1sWithAMTItems,
   getK1sWithPassiveLosses,
   getK1sWithSEItems,
   getUnroutedCodes,
+  isTraderFundK1,
   k1NetIncome,
   parseK1Codes,
   parseK1Field,
@@ -132,6 +134,38 @@ describe('sumAbsK1CodeItems', () => {
     })
 
     expect(sumAbsK1CodeItems(data, '13', 'ZZ')).toBe(9151)
+  })
+})
+
+describe('trader fund helpers', () => {
+  it('detects trader fund K-1s from statement notes', () => {
+    const data = makeData({
+      codes: {
+        '13': [{ code: 'ZZ', value: '8893', notes: 'Trader deductions from trading activities' }],
+      },
+    })
+
+    expect(isTraderFundK1(data)).toBe(true)
+  })
+
+  it('extracts Box 20AJ Form 461 support disclosure', () => {
+    const data = makeData({
+      codes: {
+        '20': [{
+          code: 'AJ',
+          value: '-79535',
+          notes: 'Capital gains from trade or business: $124,206; Capital losses from trade or business: ($155,469); Other income from trade or business: $65,845; Other deductions from trade or business: ($114,117).',
+        }],
+      },
+    })
+
+    expect(extractK1Form461Disclosure(data)).toEqual({
+      capitalGains: 124206,
+      capitalLosses: -155469,
+      otherIncome: 65845,
+      otherDeductions: -114117,
+      net: -79535,
+    })
   })
 })
 

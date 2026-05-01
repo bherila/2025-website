@@ -343,6 +343,18 @@ export function buildForm461Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
     name: 'Form 461',
     rows: [
       { line: '9', description: 'Line 9 — Aggregate trade/business income (loss)', amount: f.aggregateBusinessIncomeLoss, isTotal: true },
+      ...(f.k1Disclosures && f.k1Disclosures.length > 0
+        ? [
+            { isHeader: true, description: 'K-1 Box 20AJ Support — Informational Only' } as XlsxRow,
+            ...f.k1Disclosures.flatMap((row) => [
+              { description: `${row.partnerName} — capital gains from trade/business`, amount: row.capitalGains },
+              { description: `${row.partnerName} — capital losses from trade/business`, amount: row.capitalLosses },
+              { description: `${row.partnerName} — other income from trade/business`, amount: row.otherIncome },
+              { description: `${row.partnerName} — other deductions from trade/business`, amount: row.otherDeductions },
+              { description: `${row.partnerName} — Box 20AJ disclosed net`, amount: row.net, note: 'Support for Form 461 only; do not separately deduct.' },
+            ] satisfies XlsxRow[]),
+          ]
+        : []),
       { line: '15', description: 'Line 15 — EBL limit (filing-status threshold)', amount: f.eblLimit },
       {
         line: '16',
@@ -576,6 +588,9 @@ export function buildForm8960Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
     { line: '5a', description: 'Net capital gains (Schedule D, capped at 0)', amount: f.netCapGains },
     ...f.passiveSources.map((s) => ({ description: `  ${s.label}`, amount: s.amount })),
     { line: '4a', description: 'Net passive income (K-1 Schedule E)', amount: f.passiveIncome, isTotal: f.passiveSources.length > 0 },
+    ...(f.nonpassiveTradingIncome !== 0
+      ? [{ line: '4a', description: 'Net nonpassive trading income/loss (K-1 Schedule E)', amount: f.nonpassiveTradingIncome, note: 'Trader-fund ordinary items included in NII.' }]
+      : []),
     { line: '8', description: 'Line 8 — Gross NII', amount: f.grossNII, isTotal: true },
     { isHeader: true, description: 'Part II — Deductions' },
     { line: '9a', description: 'Investment interest expense (Form 4952)', amount: -f.investmentInterestExpense },
@@ -600,7 +615,13 @@ export function buildForm4952Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
     return null
   }
   const f = taxReturn.form4952
-  const srcLines = f.invIntSources.map((s) => ({ description: s.label, amount: s.amount }))
+  const srcLines = f.invIntSources.map((s) => ({
+    description: s.label,
+    amount: s.amount,
+    note: s.scheduleEDeductionEligible
+      ? `Allowed ${currency(s.allowedAmount ?? 0).format()} routes to Schedule E Part II; disallowed amount carries forward.`
+      : undefined,
+  }))
   const srcStart = 3
   const srcEnd = srcStart + srcLines.length - 1
   const expLines = (f.invExpSources ?? []).map((s) => ({ description: s.label, amount: s.amount }))
@@ -636,6 +657,13 @@ export function buildForm4952Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
       description: 'Line 7 — Disallowed investment interest expense carried to next year',
       amount: f.disallowedCarryforward,
     },
+    ...(f.scheduleEDeductibleInvestmentInterestExpense > 0
+      ? [{
+          description: 'Allowed Box 13H routed to Schedule E Part II nonpassive',
+          amount: f.scheduleEDeductibleInvestmentInterestExpense,
+          note: 'AQR-style K-1 footnote treatment; included in Schedule E, not Schedule A.',
+        } as XlsxRow]
+      : []),
     {
       line: '8',
       description: 'Line 8 — Investment interest expense deduction (smaller of Line 3 or Line 6)',

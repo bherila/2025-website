@@ -30,7 +30,7 @@ import { computeForm8960Lines } from '@/finance/8960/form8960'
 import { computeCapitalLossCarryover } from '@/finance/capitalLoss/capitalLossCarryover'
 import { computeMedicareWages } from '@/finance/scheduleSE/computeScheduleSE'
 import { computeEstimatedTaxPayments } from '@/lib/finance/estimatedTaxPayments'
-import { getK1CodeItems, k1NetIncome, parseK1Field } from '@/lib/finance/k1Utils'
+import { extractK1Form461Disclosure, getK1CodeItems, getK1PartnerName, k1NetIncome, parseK1Field } from '@/lib/finance/k1Utils'
 import { parseMoneyOrZero } from '@/lib/finance/money'
 import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import { extractLinkParsedData, getDocAmounts, hasNonZeroNumericValue } from '@/lib/finance/taxDocumentUtils'
@@ -982,7 +982,13 @@ export function TaxPreviewProvider({
       ...(taxPositionRows.length > 0 ? [{ heading: 'Estimated Tax Positions', rows: taxPositionRows }] : []),
     ]
     const scheduleB = computeScheduleB(reviewedK1Docs, reviewed1099Docs, income1099)
-    const scheduleE = computeScheduleELines(reviewedK1Docs, reviewed1099Docs)
+    const form4952 = computeForm4952Lines({
+      reviewedK1Docs,
+      reviewed1099Docs,
+      income1099,
+      shortDividendDeduction: shortDividendSummary?.totalItemizedDeduction ?? 0,
+    })
+    const scheduleE = computeScheduleELines(reviewedK1Docs, reviewed1099Docs, form4952)
     const saltPaid = reviewedW2Docs.reduce((acc, doc) => {
       const p = doc.parsed_data as { box17_state_tax?: number | null } | null
       return currency(acc).add(p?.box17_state_tax ?? 0).value
@@ -995,12 +1001,7 @@ export function TaxPreviewProvider({
       year,
       isMarried,
       userDeductions,
-    })
-    const form4952 = computeForm4952Lines({
-      reviewedK1Docs,
-      reviewed1099Docs,
-      income1099,
-      shortDividendDeduction: shortDividendSummary?.totalItemizedDeduction ?? 0,
+      form4952,
     })
     const form1116 = computeForm1116Lines({ reviewedK1Docs, reviewed1099Docs, foreignTaxSummaries })
     // Schedule D line 21 carries the Form 1040 loss limitation when applicable;
@@ -1016,12 +1017,25 @@ export function TaxPreviewProvider({
       scheduleDData: scheduleD.schD,
       override_f461_line15: null,
     })
+    const k1Form461Disclosures = k1Parsed.flatMap(({ doc, data }) => {
+      const disclosure = extractK1Form461Disclosure(data)
+      if (!disclosure) {
+        return []
+      }
+
+      return [{
+        docId: doc.id,
+        partnerName: getK1PartnerName(data, doc.employment_entity?.display_name ?? 'Partnership'),
+        ...disclosure,
+      }]
+    })
     const form461Lines = {
       aggregateBusinessIncomeLoss: eblData.f461_line9,
       eblLimit: eblData.f461_line15, // form461() already computes the limit via ExcessBusinessLossLimitation()
       excessBusinessLoss: eblData.f461_line16,
       isTriggered: eblData.f461_line16 > 0,
       isMarried,
+      k1Disclosures: k1Form461Disclosures,
     }
 
     const medicareWageSources = reviewedW2Docs.map((doc) => {
@@ -1084,6 +1098,7 @@ export function TaxPreviewProvider({
       ordinaryDividends: scheduleB.dividendTotal,
       netCapGainsRaw: capitalGainOrLossToReturn,
       passiveIncome: scheduleE.totalPassive,
+      nonpassiveTradingIncome: scheduleE.totalTraderNii,
       investmentInterestExpense: form4952.deductibleInvestmentInterestExpense,
       magi: form8960EstimatedMagi,
       isMarried,
@@ -1213,6 +1228,7 @@ export function TaxPreviewProvider({
         grandTotal: scheduleE.grandTotal,
         totalPassive: scheduleE.totalPassive,
         totalNonpassive: scheduleE.totalNonpassive,
+        totalTraderNii: scheduleE.totalTraderNii,
       },
       scheduleSE,
       form4952,

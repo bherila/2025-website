@@ -2,7 +2,7 @@ import currency from 'currency.js'
 
 import { ALL_K1_CODES } from '@/components/finance/k1/k1-codes'
 import { K1_CODE_ROUTING_NOTES } from '@/lib/finance/k1RoutingNotes'
-import { parseMoneyOrZero, sumMoneyValues } from '@/lib/finance/money'
+import { parseMoney, parseMoneyOrZero, sumMoneyValues } from '@/lib/finance/money'
 import type { FK1StructuredData, K1CodeItem } from '@/types/finance/k1-data'
 import { isFK1StructuredData } from '@/types/finance/k1-data'
 
@@ -34,6 +34,10 @@ export function isK1Code(code: string, expectedCode: string): boolean {
 
 export function getK1CodeItems(data: FK1StructuredData, box: string, code: string): K1CodeItem[] {
   return (data.codes[box] ?? []).filter((item) => isK1Code(item.code, code))
+}
+
+export function getK1PartnerName(data: FK1StructuredData, fallback = 'Partnership'): string {
+  return data.fields['B']?.value?.split('\n')[0] ?? fallback
 }
 
 export function sumK1CodeItems(data: FK1StructuredData, box: string, code: string): number {
@@ -72,6 +76,66 @@ export function classify11SCharacter(notes?: string | null): 'short' | 'long' | 
  */
 export function resolve11SCharacter(item: { character?: 'short' | 'long'; notes?: string }): 'short' | 'long' | undefined {
   return item.character ?? classify11SCharacter(item.notes)
+}
+
+export function isTraderFundK1(data: FK1StructuredData): boolean {
+  if (data.fields['partnershipPosition_traderInSecurities']?.value === 'true') return true
+  const haystack = [
+    data.raw_text,
+    ...(data.warnings ?? []),
+    ...Object.values(data.codes).flatMap((items) => items.map((item) => item.notes ?? '')),
+  ].join(' ').toLowerCase()
+
+  return [
+    'trader in securities',
+    'trader deductions',
+    'trading activities',
+    'trading in financial instruments',
+    'trading in financial instruments/commodities',
+  ].some((needle) => haystack.includes(needle))
+}
+
+export function routesInvestmentInterestToScheduleE(item: K1CodeItem): boolean {
+  const notes = item.notes?.toLowerCase() ?? ''
+  return notes.includes('schedule e') && notes.includes('nonpassive')
+}
+
+export interface K1Form461Disclosure {
+  capitalGains: number
+  capitalLosses: number
+  otherIncome: number
+  otherDeductions: number
+  net: number
+}
+
+function noteAmount(notes: string, label: string): number | null {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const match = notes.match(new RegExp(`${escaped}:\\s*(\\(?\\$?[\\d,]+(?:\\.\\d+)?\\)?)`, 'i'))
+  if (!match?.[1]) return null
+  return parseMoney(match[1])
+}
+
+export function extractK1Form461Disclosure(data: FK1StructuredData): K1Form461Disclosure | null {
+  const item = getK1CodeItems(data, '20', 'AJ')[0]
+  const notes = item?.notes
+  if (!notes) return null
+
+  const capitalGains = noteAmount(notes, 'Capital gains from trade or business')
+  const capitalLosses = noteAmount(notes, 'Capital losses from trade or business')
+  const otherIncome = noteAmount(notes, 'Other income from trade or business')
+  const otherDeductions = noteAmount(notes, 'Other deductions from trade or business')
+
+  if (capitalGains === null || capitalLosses === null || otherIncome === null || otherDeductions === null) {
+    return null
+  }
+
+  return {
+    capitalGains,
+    capitalLosses,
+    otherIncome,
+    otherDeductions,
+    net: currency(capitalGains).add(capitalLosses).add(otherIncome).add(otherDeductions).value,
+  }
 }
 
 export function k1NetIncome(data: FK1StructuredData): number {

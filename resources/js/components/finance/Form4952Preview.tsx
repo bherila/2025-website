@@ -3,7 +3,7 @@
 import currency from 'currency.js'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
-import { getK1CodeItems, parseK1Field } from '@/lib/finance/k1Utils'
+import { getK1CodeItems, isTraderFundK1, parseK1Field, routesInvestmentInterestToScheduleE } from '@/lib/finance/k1Utils'
 import { parseMoney } from '@/lib/finance/money'
 import { cn } from '@/lib/utils'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
@@ -24,6 +24,8 @@ function parseK1Codes(data: FK1StructuredData, box: string, filterCodes?: string
       return n === null ? acc : acc.add(n)
     }, currency(0)).value
 }
+
+type InvIntSource = Form4952Lines['invIntSources'][number]
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -49,7 +51,7 @@ export function computeForm4952Lines({
   income1099,
   shortDividendDeduction = 0,
 }: Form4952PreviewProps): Form4952Lines {
-  const invIntSources: { label: string; amount: number }[] = []
+  const invIntSources: InvIntSource[] = []
   const invExpSources: { label: string; amount: number }[] = []
   const k1Parsed = reviewedK1Docs
     .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
@@ -74,7 +76,14 @@ export function computeForm4952Lines({
     ]) {
       const n = parseMoney(item.value)
       if (n !== null && n !== 0) {
-        invIntSources.push({ label: `${partnerName} — Box 13${item.code}`, amount: currency(0).subtract(Math.abs(n)).value })
+        invIntSources.push({
+          label: `${partnerName} — Box 13${item.code}`,
+          amount: currency(0).subtract(Math.abs(n)).value,
+          docId: doc.id,
+          box: '13',
+          code: item.code,
+          scheduleEDeductionEligible: routesInvestmentInterestToScheduleE(item) || (item.code.trim().toUpperCase() === 'H' && isTraderFundK1(data)),
+        })
       }
     }
   }
@@ -85,7 +94,7 @@ export function computeForm4952Lines({
     const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? ''
     const invExp = p?.box5_investment_expense
     if (typeof invExp === 'number' && invExp !== 0) {
-      invIntSources.push({ label: `${payer} — 1099-INT Box 5 (investment expense)`, amount: -Math.abs(invExp) })
+      invIntSources.push({ label: `${payer} — 1099-INT Box 5 (investment expense)`, amount: currency(0).subtract(Math.abs(invExp)).value })
     }
   }
 
@@ -146,13 +155,25 @@ export function computeForm4952Lines({
           : 'A'
 
   const useQdElected = bestScenario === 'B' ? totalQualDiv : bestScenario === 'C' ? scenC_qdElected : 0
-  const finalNii = niiBefore + useQdElected
+  const finalNii = currency(niiBefore).add(useQdElected).value
   const finalDeductible = Math.min(totalInvIntExpense, finalNii)
-  const finalCarryforward = totalInvIntExpense - finalDeductible
+  const finalCarryforward = currency(totalInvIntExpense).subtract(finalDeductible).value
+  const invIntSourcesWithAllowance = invIntSources.map((source) => {
+    const sourceExpense = Math.abs(source.amount)
+    const allowedAmount = totalInvIntExpense > 0
+      ? currency(finalDeductible).multiply(sourceExpense / totalInvIntExpense).value
+      : 0
+    return { ...source, allowedAmount }
+  })
+  const scheduleEDeductibleInvestmentInterestExpense = invIntSourcesWithAllowance.reduce(
+    (acc, source) => source.scheduleEDeductionEligible ? acc.add(source.allowedAmount ?? 0) : acc,
+    currency(0),
+  ).value
 
   return {
-    invIntSources,
+    invIntSources: invIntSourcesWithAllowance,
     totalInvIntExpense,
+    scheduleEDeductibleInvestmentInterestExpense,
     invExpSources,
     totalInvExp,
     niiBefore,

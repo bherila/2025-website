@@ -150,7 +150,7 @@ describe('buildTaxWorkbook — Form 1040 sheet formulas', () => {
     return {
       year: 2025,
       scheduleC: { total: 5000, byQuarter: { q1: 0, q2: 0, q3: 0, q4: 0 } },
-      scheduleE: { grandTotal: 1200, totalPassive: 0, totalNonpassive: 1200 },
+      scheduleE: { grandTotal: 1200, totalPassive: 0, totalNonpassive: 1200, totalTraderNii: 0 },
       schedule1: {
         partI: {
           line1a_taxableRefunds: null, line2a_alimonyReceived: null,

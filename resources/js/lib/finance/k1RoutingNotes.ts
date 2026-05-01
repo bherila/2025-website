@@ -28,7 +28,7 @@ export const K1_CODE_ROUTING_NOTES: Record<string, Record<string, string>> = {
     E: '>> Form 8582 (capital loss limitation — passive activity rules apply)',
     F: '>> Form 4562 or Sch A (§59(e)(2) — taxpayer election required)',
     G: '>> Form 4952 line 1 (investment interest expense)',
-    H: '>> Form 4952 line 1 (investment interest expense)',
+    H: '>> Form 4952 line 1 (investment interest expense). For AQR/trader-fund footnotes, only the Form 4952-allowed portion routes onward to Sch E Part II nonpassive; disallowed amount carries forward.',
     K: '§67(g) suspended (2% floor misc itemized deduction) — not deductible TY 2018–2025',
     L: '>> Sch A line 16 (portfolio deduction, no 2% floor) — do NOT enter on Form 8582',
     T: '§163(j) excess business interest expense — carryover tracking only',
@@ -59,6 +59,6 @@ export const K1_CODE_ROUTING_NOTES: Record<string, Record<string, string>> = {
     B: '>> Form 4952, II, line 5 (investment expenses)',
     Z: '>> Form 8995 / 8995-A — QBI deduction (20% of qualified income, Statement A) | >> Form 1040 Line 13',
     AA: 'Section 704(c) information — informational only; adjusts basis allocation between partners. No current-year deduction.',
-    AJ: '>> Form 461 — excess business loss limitation (Schedule 1 line 8p as NOL carryforward if triggered)',
+    AJ: '>> Form 461 support only — excess business loss limitation disclosure; do not separately deduct',
   },
 }

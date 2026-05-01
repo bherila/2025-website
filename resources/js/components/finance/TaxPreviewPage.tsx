@@ -807,6 +807,7 @@ function TaxPreviewPageContent() {
             saltPaid={w2SaltPaid}
             isMarried={isMarried}
             userDeductions={userDeductions}
+            form4952={taxReturn.form4952}
             {...(shortDividendSummary ? { shortDividendSummary } : {})}
           />
           <div>
@@ -835,6 +836,7 @@ function TaxPreviewPageContent() {
             reviewedK1Docs={reviewedK1Docs}
             reviewed1099Docs={reviewed1099Docs}
             selectedYear={selectedYear}
+            form4952={taxReturn.form4952}
           />
         </TabsContent>
 
