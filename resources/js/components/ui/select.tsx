@@ -14,13 +14,19 @@ type SelectProps = Omit<
 }
 
 function Select({
+  defaultValue,
   onValueChange,
+  value,
   ...props
 }: SelectProps) {
   return (
     <SelectPrimitive.Root
       data-slot="select"
-      onValueChange={(value) => onValueChange?.(String(value))}
+      defaultValue={defaultValue ?? undefined}
+      onValueChange={(nextValue) =>
+        onValueChange?.(nextValue == null ? "" : String(nextValue))
+      }
+      value={value ?? undefined}
       {...props}
     />
   )
