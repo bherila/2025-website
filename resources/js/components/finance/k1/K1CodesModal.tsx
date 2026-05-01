@@ -16,6 +16,8 @@ import type { K1CodeItem } from './k1-types'
 interface K1CodesModalProps {
   open: boolean
   boxLabel: string
+  /** Box number this modal is editing (e.g. "11", "13"). Drives box-specific behavior. */
+  box?: string
   /** Code → description mapping for this box. */
   codeDefinitions: Record<string, string>
   items: K1CodeItem[]
@@ -25,8 +27,26 @@ interface K1CodesModalProps {
   onChange: (items: K1CodeItem[]) => void
 }
 
+/**
+ * Codes whose sub-lines carry a separate ST/LT capital-gain character that
+ * the user may need to override (typically because the supplemental statement
+ * splits the box into multiple ST and LT amounts and the LLM cannot infer it
+ * from the line description alone).
+ *
+ * Today only Box 11 code S (non-portfolio capital gain/loss) qualifies, but
+ * the lookup is keyed by box+code so additional rules can be added later.
+ */
+const CHARACTER_ELIGIBLE: Record<string, ReadonlySet<string>> = {
+  '11': new Set(['S']),
+}
+
+function isCharacterEligible(box: string | undefined, code: string): boolean {
+  if (!box) return false
+  return CHARACTER_ELIGIBLE[box]?.has(code.toUpperCase()) ?? false
+}
+
 /** Sub-modal for viewing / editing coded items on a single K-1 box (e.g. Box 11, Box 13). */
-export default function K1CodesModal({ open, boxLabel, codeDefinitions, items, readOnly = false, onClose, onChange }: K1CodesModalProps) {
+export default function K1CodesModal({ open, boxLabel, box, codeDefinitions, items, readOnly = false, onClose, onChange }: K1CodesModalProps) {
   const [localItems, setLocalItems] = useState<K1CodeItem[]>(items)
 
   const handleOpen = (isOpen: boolean) => {
@@ -39,6 +59,20 @@ export default function K1CodesModal({ open, boxLabel, codeDefinitions, items, r
 
   const updateItem = (index: number, patch: Partial<K1CodeItem>) => {
     setLocalItems((prev) => prev.map((item, i) => (i === index ? { ...item, ...patch, manualOverride: true } : item)))
+  }
+
+  const setItemCharacter = (index: number, character: 'short' | 'long' | null) => {
+    setLocalItems((prev) =>
+      prev.map((item, i) => {
+        if (i !== index) return item
+        if (character === null) {
+          const next = { ...item, manualOverride: true }
+          delete next.character
+          return next
+        }
+        return { ...item, character, manualOverride: true }
+      }),
+    )
   }
 
   const addItem = () => {
@@ -61,6 +95,8 @@ export default function K1CodesModal({ open, boxLabel, codeDefinitions, items, r
     return v !== null ? acc + v : acc
   }, 0)
 
+  const showCharacterColumn = localItems.some((item) => isCharacterEligible(box, item.code))
+
   return (
     <Dialog open={open} onOpenChange={handleOpen}>
       <DialogContent className="w-[80vw] max-w-[80vw] sm:max-w-[80vw] min-w-[min(80vw,900px)] max-h-[90vh] flex flex-col">
@@ -77,6 +113,7 @@ export default function K1CodesModal({ open, boxLabel, codeDefinitions, items, r
                 <TableRow>
                   <TableHead className="w-72">Code</TableHead>
                   <TableHead className="w-32 text-right">Amount</TableHead>
+                  {showCharacterColumn && <TableHead className="w-32">S/T or L/T</TableHead>}
                   <TableHead>Notes</TableHead>
                   {!readOnly && <TableHead className="w-10" />}
                 </TableRow>
@@ -112,6 +149,33 @@ export default function K1CodesModal({ open, boxLabel, codeDefinitions, items, r
                         placeholder="0.00"
                       />
                     </TableCell>
+                    {showCharacterColumn && (
+                      <TableCell className="py-2 align-top">
+                        {isCharacterEligible(box, item.code) ? (
+                          readOnly ? (
+                            <span className="text-sm text-muted-foreground">
+                              {item.character === 'short' ? 'Short-term' : item.character === 'long' ? 'Long-term' : 'Auto (notes)'}
+                            </span>
+                          ) : (
+                            <Select
+                              value={item.character ?? 'auto'}
+                              onValueChange={(val) =>
+                                setItemCharacter(idx, val === 'auto' ? null : (val as 'short' | 'long'))
+                              }
+                            >
+                              <SelectTrigger className="h-9 text-sm">
+                                <SelectValue placeholder="Auto (notes)" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="auto">Auto (from notes)</SelectItem>
+                                <SelectItem value="short">Short-term</SelectItem>
+                                <SelectItem value="long">Long-term</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          )
+                        ) : null}
+                      </TableCell>
+                    )}
                     <TableCell className="py-2 align-top">
                       <Textarea
                         className="min-h-[72px] text-sm resize-y"

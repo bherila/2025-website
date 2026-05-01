@@ -18,6 +18,17 @@ function parseK1Field(data: FK1StructuredData, box: string): number {
   return isNaN(n) ? 0 : n
 }
 
+/** Sum the values of code items on a given box that match `code`. */
+function sumK1CodeItems(data: FK1StructuredData, box: string, code: string): number {
+  const items = data.codes[box] ?? []
+  return items
+    .filter((item) => item.code.toUpperCase() === code.toUpperCase())
+    .reduce((acc, item) => {
+      const n = parseFloat(item.value)
+      return isNaN(n) ? acc : acc.add(n)
+    }, currency(0)).value
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface PartnerRow {
@@ -29,6 +40,10 @@ interface PartnerRow {
   box3OtherNetRental: number
   box4GuaranteedPayments: number
   box5Interest: number
+  /** Box 11ZZ — partnership-statement "other ordinary income/loss" (signed). For trader funds: §988 FX, swap, PFIC MTM. Reports as nonpassive ordinary on Schedule E Part II. */
+  box11ZZOtherIncome: number
+  /** Box 13ZZ — partnership-statement "other deductions" (positive magnitude). For trader funds: trader/management fees, admin expenses. Subtracted from Schedule E Part II nonpassive. */
+  box13ZZOtherDeductions: number
   netPassive: number
   netNonpassive: number
 }
@@ -49,6 +64,8 @@ export interface ScheduleELines {
   totalBox3: number
   totalBox4: number
   totalBox5: number
+  totalBox11ZZ: number
+  totalBox13ZZ: number
   totalPassive: number
   totalNonpassive: number
   grandTotal: number
@@ -127,9 +144,16 @@ export function computeScheduleELines(reviewedK1Docs: TaxDocument[], reviewed109
     const box3OtherNetRental = parseK1Field(data, '3')
     const box4GuaranteedPayments = parseK1Field(data, '4')
     const box5Interest = parseK1Field(data, '5')
+    // Box 11ZZ items are signed (gains positive, losses negative).
+    const box11ZZOtherIncome = sumK1CodeItems(data, '11', 'ZZ')
+    // Box 13ZZ items are reported as positive magnitudes representing deductions.
+    const box13ZZOtherDeductions = sumK1CodeItems(data, '13', 'ZZ')
 
     const netPassive = currency(box2NetRentalRealEstate).add(box3OtherNetRental).value
-    const netNonpassive = currency(box1OrdinaryIncome).add(box4GuaranteedPayments).value
+    const netNonpassive = currency(box1OrdinaryIncome)
+      .add(box4GuaranteedPayments)
+      .add(box11ZZOtherIncome)
+      .subtract(box13ZZOtherDeductions).value
 
     return {
       docId: doc.id,
@@ -140,6 +164,8 @@ export function computeScheduleELines(reviewedK1Docs: TaxDocument[], reviewed109
       box3OtherNetRental,
       box4GuaranteedPayments,
       box5Interest,
+      box11ZZOtherIncome,
+      box13ZZOtherDeductions,
       netPassive,
       netNonpassive,
     }
@@ -150,6 +176,8 @@ export function computeScheduleELines(reviewedK1Docs: TaxDocument[], reviewed109
   const totalBox3 = partnerRows.reduce((acc, r) => acc.add(r.box3OtherNetRental), currency(0)).value
   const totalBox4 = partnerRows.reduce((acc, r) => acc.add(r.box4GuaranteedPayments), currency(0)).value
   const totalBox5 = partnerRows.reduce((acc, r) => acc.add(r.box5Interest), currency(0)).value
+  const totalBox11ZZ = partnerRows.reduce((acc, r) => acc.add(r.box11ZZOtherIncome), currency(0)).value
+  const totalBox13ZZ = partnerRows.reduce((acc, r) => acc.add(r.box13ZZOtherDeductions), currency(0)).value
   const miscIncomeTotal = miscIncomeRows.reduce((acc, row) => acc.add(row.amount), currency(0)).value
   const totalPassive = partnerRows.reduce((acc, r) => acc.add(r.netPassive), currency(0)).value
   const totalNonpassive = partnerRows.reduce((acc, r) => acc.add(r.netNonpassive), currency(0)).value
@@ -164,6 +192,8 @@ export function computeScheduleELines(reviewedK1Docs: TaxDocument[], reviewed109
     totalBox3,
     totalBox4,
     totalBox5,
+    totalBox11ZZ,
+    totalBox13ZZ,
     totalPassive,
     totalNonpassive,
     grandTotal,
@@ -188,6 +218,8 @@ export default function ScheduleEPreview({ reviewedK1Docs, reviewed1099Docs = []
     totalBox3,
     totalBox4,
     totalBox5,
+    totalBox11ZZ,
+    totalBox13ZZ,
     totalPassive,
     totalNonpassive,
     grandTotal,
@@ -267,6 +299,18 @@ export default function ScheduleEPreview({ reviewedK1Docs, reviewed1099Docs = []
                 value={r.box5Interest}
               />
             )}
+            {r.box11ZZOtherIncome !== 0 && (
+              <FormLine
+                label={`${r.partnerName} — Box 11ZZ other ordinary income/(loss)`}
+                value={r.box11ZZOtherIncome}
+              />
+            )}
+            {r.box13ZZOtherDeductions !== 0 && (
+              <FormLine
+                label={`${r.partnerName} — Box 13ZZ other deductions`}
+                value={-r.box13ZZOtherDeductions}
+              />
+            )}
           </div>
         ))}
         <FormTotalLine label="Total nonpassive income / (loss) — Part II" value={totalNonpassive} />
@@ -292,7 +336,13 @@ export default function ScheduleEPreview({ reviewedK1Docs, reviewed1099Docs = []
               value={totalBox5}
             />
           )}
-          {totalNonpassive === 0 && totalBox1 === 0 && totalBox4 === 0 && (
+          {totalBox11ZZ !== 0 && (
+            <FormLine label="Other ordinary income / (loss) (Box 11ZZ)" value={totalBox11ZZ} />
+          )}
+          {totalBox13ZZ !== 0 && (
+            <FormLine label="Other deductions (Box 13ZZ)" value={-totalBox13ZZ} />
+          )}
+          {totalNonpassive === 0 && totalBox1 === 0 && totalBox4 === 0 && totalBox11ZZ === 0 && totalBox13ZZ === 0 && (
             <FormLine label="No nonpassive K-1 activity" raw="—" />
           )}
           <FormTotalLine label="Total nonpassive income / (loss)" value={totalNonpassive} />

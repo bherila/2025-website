@@ -30,6 +30,33 @@ export function parseK1Codes(data: FK1StructuredData, box: string): number {
   }, currency(0)).value
 }
 
+/**
+ * Classifies a Box 11 Code S (non-portfolio capital gain/loss) line as
+ * short-term or long-term using the partnership's supplemental-statement
+ * notes. AQR-style K-1s annotate each sub-line with text like
+ * "Net short-term capital loss" or "Net long-term capital gain, assets held
+ * more than 3 years"; this helper extracts that character so the amount can
+ * route to Schedule D line 5 (ST) or line 12 (LT).
+ *
+ * Returns undefined when the notes are missing or ambiguous, leaving the
+ * caller to surface a warning rather than silently misclassify.
+ */
+export function classify11SCharacter(notes?: string | null): 'short' | 'long' | undefined {
+  if (!notes) return undefined
+  if (/short[- ]term/i.test(notes)) return 'short'
+  if (/long[- ]term/i.test(notes)) return 'long'
+  return undefined
+}
+
+/**
+ * Resolves the ST/LT character of a Box 11S sub-line: the user-supplied
+ * `character` override wins; otherwise the supplemental-statement notes are
+ * scanned for a "short term" / "long term" phrase.
+ */
+export function resolve11SCharacter(item: { character?: 'short' | 'long'; notes?: string }): 'short' | 'long' | undefined {
+  return item.character ?? classify11SCharacter(item.notes)
+}
+
 export function k1NetIncome(data: FK1StructuredData): number {
   // Box 6b (qualified dividends) is a subset of Box 6a (ordinary dividends) — exclude to avoid double-counting.
   const INCOME_BOXES = ['1', '2', '3', '4', '5', '6a', '6c', '7', '8', '9a', '9b', '9c', '10']

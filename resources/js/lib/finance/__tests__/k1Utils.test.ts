@@ -1,6 +1,7 @@
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 
 import {
+  classify11SCharacter,
   getK1ActivityClassification,
   getK1CompletenessChecklist,
   getK1sWithAMTItems,
@@ -10,6 +11,7 @@ import {
   k1NetIncome,
   parseK1Codes,
   parseK1Field,
+  resolve11SCharacter,
 } from '../k1Utils'
 
 function makeData(overrides: Partial<FK1StructuredData> = {}): FK1StructuredData {
@@ -33,6 +35,45 @@ describe('parseK1Field', () => {
 
   it('parses negative value', () => {
     expect(parseK1Field(makeData({ fields: { '8': { value: '-500' } } }), '8')).toBe(-500)
+  })
+})
+
+describe('classify11SCharacter', () => {
+  it('returns undefined when notes are missing', () => {
+    expect(classify11SCharacter(undefined)).toBeUndefined()
+    expect(classify11SCharacter(null)).toBeUndefined()
+    expect(classify11SCharacter('')).toBeUndefined()
+  })
+
+  it('classifies short-term notes', () => {
+    expect(classify11SCharacter('Net short-term capital loss. Report on Schedule D / Form 8949 Part I.')).toBe('short')
+    expect(classify11SCharacter('short term gain')).toBe('short')
+  })
+
+  it('classifies long-term notes', () => {
+    expect(classify11SCharacter('Net long-term capital gain, assets held more than 3 years.')).toBe('long')
+    expect(classify11SCharacter('long-term capital gain')).toBe('long')
+  })
+
+  it('returns undefined when notes do not mention character', () => {
+    expect(classify11SCharacter('Non-portfolio capital gain (loss)')).toBeUndefined()
+  })
+})
+
+describe('resolve11SCharacter', () => {
+  it('prefers explicit user override over notes', () => {
+    expect(resolve11SCharacter({ character: 'short', notes: 'long-term gain' })).toBe('short')
+    expect(resolve11SCharacter({ character: 'long', notes: 'short-term loss' })).toBe('long')
+  })
+
+  it('falls back to notes when no override', () => {
+    expect(resolve11SCharacter({ notes: 'Net long-term capital gain' })).toBe('long')
+    expect(resolve11SCharacter({ notes: 'Net short-term capital loss' })).toBe('short')
+  })
+
+  it('returns undefined when neither override nor notes classify', () => {
+    expect(resolve11SCharacter({})).toBeUndefined()
+    expect(resolve11SCharacter({ notes: 'Non-portfolio capital gain' })).toBeUndefined()
   })
 })
 

@@ -17,8 +17,8 @@ export const K1_CODE_ROUTING_NOTES: Record<string, Record<string, string>> = {
   '11': {
     A: '>> Sch E Part II / Sch B (other portfolio income)',
     C: '>> Form 6781 line 1 / Sch D line 4 (ST 40%) + line 11 (LT 60%)',
-    S: '>> Form 8582 (per-activity passive income/loss from supplemental statement — passiveActivities field)',
-    ZZ: 'Other ordinary income/loss — varies by footnote; check K-1 attached statement. Sec. 988 FX, swap, PFIC MTM items report to Schedule E Part II (nonpassive ordinary).',
+    S: '>> Sch D line 5 (ST) / line 12 (LT) — non-portfolio capital gain/loss; ST/LT character per supplemental-statement notes',
+    ZZ: '>> Sch E Part II nonpassive (ordinary). Common AQR/trader-fund items: §988 FX, swap, PFIC MTM. Always confirm against the K-1 attached statement.',
   },
   '13': {
     A: '>> Sch A line 12 (charitable contributions — 50% AGI limit)',
@@ -37,7 +37,7 @@ export const K1_CODE_ROUTING_NOTES: Record<string, Record<string, string>> = {
     AC: '>> Form 4952 line 1 (debt-financed distribution interest expense)',
     AD: '>> Form 4952 line 1 (interest expense on oil/gas)',
     AE: '§67(g) suspended (portfolio income deduction, 2% floor) — not deductible TY 2018–2025',
-    ZZ: 'Other deductions — varies by footnote; check K-1 attached statement',
+    ZZ: '>> Sch E Part II nonpassive (ordinary deduction). Common AQR/trader-fund items: trader/management fees, administrative expenses. Always confirm against the K-1 attached statement.',
   },
   '14': {
     A: '>> Schedule SE (self-employment tax) | >> Schedule 1 line 15 (deductible half) | >> Form 1040 line 23',

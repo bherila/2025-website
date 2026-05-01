@@ -4,6 +4,7 @@ import currency from 'currency.js'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { Callout, fmtAmt, FormBlock, FormLine, FormSubLine, FormTotalLine, parseFieldVal } from '@/components/finance/tax-preview-primitives'
+import { resolve11SCharacter } from '@/lib/finance/k1Utils'
 import { getDocAmounts } from '@/lib/finance/taxDocumentUtils'
 import { scheduleD } from '@/lib/tax/scheduleD'
 import type { FK1StructuredData, K1CodeItem } from '@/types/finance/k1-data'
@@ -67,6 +68,25 @@ export function computeScheduleD(reviewedK1Docs: TaxDocument[], reviewed1099Docs
   const total6781LT = sec1256Sources.reduce((acc, source) => acc.add(source.lt), currency(0)).value
   const total6781ST = sec1256Sources.reduce((acc, source) => acc.add(source.st), currency(0)).value
 
+  // Box 11S — non-portfolio capital gain/loss (e.g., AQR/trader-fund supplemental statements).
+  // Each sub-line's notes describe ST/LT character; ambiguous lines default to LT but are
+  // reflected in the surface UI for manual review.
+  let nonPortfolio11sST = currency(0)
+  let nonPortfolio11sLT = currency(0)
+  for (const { data } of k1Parsed) {
+    const sItems = (data.codes['11'] ?? []).filter((i: K1CodeItem) => i.code === 'S')
+    for (const item of sItems) {
+      const n = parseFieldVal(item.value) ?? 0
+      if (n === 0) continue
+      const character = resolve11SCharacter(item)
+      if (character === 'short') {
+        nonPortfolio11sST = nonPortfolio11sST.add(n)
+      } else {
+        nonPortfolio11sLT = nonPortfolio11sLT.add(n)
+      }
+    }
+  }
+
   const brokerSources = reviewed1099Docs
     .filter((d) => d.form_type === 'broker_1099' || d.form_type === '1099_b' || d.form_type === '1099_b_c')
     .map((doc) => {
@@ -106,12 +126,14 @@ export function computeScheduleD(reviewedK1Docs: TaxDocument[], reviewed1099Docs
     return acc.add(getDocAmounts(doc).capGain ?? 0)
   }, currency(0)).value
 
-  const k1ST = k1Parsed.reduce((acc, { data }) => acc.add(pk1(data, '8')), currency(0)).value
+  const k1ST = k1Parsed.reduce((acc, { data }) => acc.add(pk1(data, '8')), currency(0))
+    .add(nonPortfolio11sST).value
   const k1LT = k1Parsed.reduce((acc, { data }) => acc
     .add(pk1(data, '9a'))
     .add(pk1(data, '9b'))
     .add(pk1(data, '9c'))
-    .add(pk1(data, '10')), currency(0)).value
+    .add(pk1(data, '10')), currency(0))
+    .add(nonPortfolio11sLT).value
 
   const schD = scheduleD({
     line1a_gain_loss: totalBrokerST,
@@ -213,12 +235,33 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
   type CapGainLine = { label: string; amount: number; note?: string; boxRef?: string }
   const stLines: CapGainLine[] = []
 
+  let has11sAmbiguous = false
+
   for (const { doc, data } of k1Parsed) {
     const partnerName =
       data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
     const box8 = pk1(data, '8')
     if (box8 !== 0) {
       stLines.push({ label: `${partnerName} — K-1 Box 8`, amount: box8, boxRef: '5' })
+    }
+    // Box 11S — non-portfolio capital gain/loss (AQR/trader-fund supplemental statements).
+    // Only the lines whose notes mark them as short-term land on Schedule D line 5.
+    const sItems = (data.codes['11'] ?? []).filter((i: K1CodeItem) => i.code === 'S')
+    for (const item of sItems) {
+      const n = parseFieldVal(item.value) ?? 0
+      if (n === 0) continue
+      const character = resolve11SCharacter(item)
+      if (character === 'short') {
+        const line: CapGainLine = {
+          label: `${partnerName} — K-1 Box 11S (S/T non-portfolio)`,
+          amount: n,
+          boxRef: '5',
+        }
+        if (item.notes) line.note = item.notes
+        stLines.push(line)
+      } else if (character === undefined) {
+        has11sAmbiguous = true
+      }
     }
   }
 
@@ -266,6 +309,30 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
       ltLines.push({ label: `${partnerName} — K-1 Box 9c (§1250 unrec.)`, amount: box9c, note: 'Unrecaptured §1250 gain', boxRef: '12' })
     if (box10 !== 0)
       ltLines.push({ label: `${partnerName} — K-1 Box 10 (§1231)`, amount: box10, note: '§1231 gain flows to Part II', boxRef: '12' })
+
+    // Box 11S — long-term sub-lines (and ambiguous ones, conservatively grouped here for visibility).
+    const sItems = (data.codes['11'] ?? []).filter((i: K1CodeItem) => i.code === 'S')
+    for (const item of sItems) {
+      const n = parseFieldVal(item.value) ?? 0
+      if (n === 0) continue
+      const character = resolve11SCharacter(item)
+      if (character === 'long') {
+        const line: CapGainLine = {
+          label: `${partnerName} — K-1 Box 11S (L/T non-portfolio)`,
+          amount: n,
+          boxRef: '12',
+        }
+        if (item.notes) line.note = item.notes
+        ltLines.push(line)
+      } else if (character === undefined) {
+        ltLines.push({
+          label: `${partnerName} — K-1 Box 11S (assumed L/T — review notes)`,
+          amount: n,
+          note: item.notes ?? 'Notes did not identify ST/LT character. Confirm against the K-1 supplemental statement.',
+          boxRef: '12',
+        })
+      }
+    }
   }
 
   // Form 6781 60% LT allocation
@@ -349,6 +416,16 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
             </p>
           </Callout>
         </>
+      )}
+
+      {has11sAmbiguous && (
+        <Callout kind="warn" title="⚠ Box 11S — Confirm S/T vs. L/T character">
+          <p>
+            One or more K-1 Box 11S lines could not be classified as short-term or long-term from their notes.
+            Those amounts have been grouped under long-term as a default. Open the K-1 supplemental statement
+            and confirm the holding-period character before filing.
+          </p>
+        </Callout>
       )}
 
       {/* Part I and II */}

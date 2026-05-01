@@ -19,6 +19,7 @@ function makeTaxReturn(): TaxReturn1040 {
       codes: {
         '13': [
           { code: 'K', value: '30' },
+          { code: 'F', value: '15' },
           { code: 'ZZ', value: '15' },
         ],
         '14': [

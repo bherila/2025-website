@@ -53,4 +53,57 @@ describe('ScheduleEPreview', () => {
     expect(lines.miscIncomeTotal).toBe(900)
     expect(lines.grandTotal).toBe(900)
   })
+
+  it('routes Box 11ZZ ordinary income/loss and Box 13ZZ deductions to Part II nonpassive', () => {
+    const k1Doc: TaxDocument = {
+      id: 99,
+      user_id: 1,
+      tax_year: 2025,
+      form_type: 'k1',
+      employment_entity_id: null,
+      account_id: null,
+      original_filename: 'aqr-delphi.pdf',
+      stored_filename: null,
+      s3_path: null,
+      mime_type: 'application/pdf',
+      file_size_bytes: 1,
+      file_hash: 'aqr',
+      is_reviewed: true,
+      misc_routing: null,
+      notes: null,
+      human_file_size: '1 B',
+      download_count: 0,
+      genai_job_id: null,
+      genai_status: 'parsed',
+      parsed_data: {
+        schemaVersion: '2026.1',
+        formType: '1065',
+        fields: { B: { value: 'AQR TA DELPHI PLUS FUND, LLC' } },
+        codes: {
+          '11': [
+            { code: 'ZZ', value: '-23167', notes: 'Section 988 FX loss' },
+            { code: 'ZZ', value: '-54237', notes: 'Swap loss' },
+            { code: 'ZZ', value: '3198', notes: 'PFIC MTM income' },
+          ],
+          '13': [
+            { code: 'ZZ', value: '8893', notes: 'Trader deductions' },
+            { code: 'ZZ', value: '258', notes: 'Administrative expenses' },
+          ],
+        },
+      },
+      uploader: null,
+      employment_entity: null,
+      account: null,
+      account_links: [],
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    }
+
+    const lines = computeScheduleELines([k1Doc], [])
+
+    expect(lines.totalBox11ZZ).toBeCloseTo(-74206)
+    expect(lines.totalBox13ZZ).toBeCloseTo(9151)
+    expect(lines.totalNonpassive).toBeCloseTo(-83357)
+    expect(lines.grandTotal).toBeCloseTo(-83357)
+  })
 })

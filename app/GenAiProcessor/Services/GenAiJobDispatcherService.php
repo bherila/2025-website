@@ -1287,11 +1287,11 @@ PROMPT;
      * We stringify the value here for consistent storage in the FK1StructuredData shape
      * (K1CodeItem.value is string on the frontend).
      *
-     * Each item must have a 'code' key; 'value' and 'notes' are optional.
+     * Each item must have a 'code' key; 'value', 'notes', and 'character' are optional.
      * Invalid items (non-array, missing 'code') are silently dropped.
      *
      * @param  array<mixed>  $rawItems
-     * @return array<array{code: string, value: string, notes: string}>
+     * @return array<array{code: string, value: string, notes: string, character?: 'short'|'long'}>
      */
     private function normalizeCodeItems(array $rawItems): array
     {
@@ -1301,11 +1301,16 @@ PROMPT;
                 continue;
             }
             $rawValue = $item['value'] ?? null;
-            $result[] = [
+            $rawCharacter = isset($item['character']) ? strtolower(trim((string) $item['character'])) : '';
+            $entry = [
                 'code' => (string) $item['code'],
                 'value' => is_numeric($rawValue) ? (string) (float) $rawValue : (string) ($rawValue ?? ''),
                 'notes' => isset($item['notes']) ? (string) $item['notes'] : '',
             ];
+            if ($rawCharacter === 'short' || $rawCharacter === 'long') {
+                $entry['character'] = $rawCharacter;
+            }
+            $result[] = $entry;
         }
 
         return $result;
@@ -1520,6 +1525,12 @@ PROMPT;
                     'code' => Schema::string(),
                     'value' => Schema::string(),
                     'notes' => Schema::string(),
+                    // Capital-gain character override. Required for Box 11 code S sub-lines
+                    // when the partnership's supplemental statement reports separate ST/LT
+                    // amounts; should be set to "short" or "long" so Schedule D routes to
+                    // line 5 (ST) vs. line 12 (LT). Leave empty for codes that have no
+                    // ST/LT character (e.g. Box 11A, Box 11C, Box 13H, Box 11ZZ, Box 13ZZ).
+                    'character' => Schema::string('"short" | "long" — set ONLY for Box 11 code S sub-lines that the supplemental statement classifies as short-term or long-term capital gain/loss.'),
                 ],
                 ['code', 'value'],
             )
