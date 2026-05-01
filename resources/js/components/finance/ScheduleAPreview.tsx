@@ -14,6 +14,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { getK1CodeItems } from '@/lib/finance/k1Utils'
+import { parseMoney } from '@/lib/finance/money'
 import type { ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import { SALT_CATEGORIES } from '@/lib/tax/deductionCategories'
 import { type FilingStatus, getStandardDeduction } from '@/lib/tax/standardDeductions'
@@ -71,25 +73,25 @@ export function computeScheduleALines({
   for (const { doc, data } of k1Parsed) {
     const partnerName =
       data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
-    const hItems = (data.codes['13'] ?? []).filter((item) => item.code === 'H')
+    const hItems = getK1CodeItems(data, '13', 'H')
     for (const item of hItems) {
-      const n = parseFloat(item.value)
-      if (!isNaN(n) && n !== 0) {
-        invIntSources.push({ label: `${partnerName} — K-1 Box 13H (investment interest)`, amount: -Math.abs(n) })
+      const n = parseMoney(item.value)
+      if (n !== null && n !== 0) {
+        invIntSources.push({ label: `${partnerName} — K-1 Box 13H (investment interest)`, amount: currency(0).subtract(Math.abs(n)).value })
       }
     }
-    const gItems = (data.codes['13'] ?? []).filter((item) => item.code === 'G')
+    const gItems = getK1CodeItems(data, '13', 'G')
     for (const item of gItems) {
-      const n = parseFloat(item.value)
-      if (!isNaN(n) && n !== 0) {
-        invIntSources.push({ label: `${partnerName} — K-1 Box 13G (investment interest)`, amount: -Math.abs(n) })
+      const n = parseMoney(item.value)
+      if (n !== null && n !== 0) {
+        invIntSources.push({ label: `${partnerName} — K-1 Box 13G (investment interest)`, amount: currency(0).subtract(Math.abs(n)).value })
       }
     }
     // Box 13L — portfolio deduction (no 2% floor) → Sch A Line 16
-    const lItems = (data.codes['13'] ?? []).filter((item) => item.code === 'L')
+    const lItems = getK1CodeItems(data, '13', 'L')
     for (const item of lItems) {
-      const n = parseFloat(item.value)
-      if (!isNaN(n) && n !== 0) {
+      const n = parseMoney(item.value)
+      if (n !== null && n !== 0) {
         otherItemizedSources.push({
           label: `${partnerName} — K-1 Box 13L (portfolio deduction, no 2% floor)`,
           amount: Math.abs(n),
@@ -103,11 +105,11 @@ export function computeScheduleALines({
     const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? '1099'
     const box5 = p?.box5_investment_expense ?? p?.int_5_investment_expenses
     if (typeof box5 === 'number' && box5 !== 0) {
-      invIntSources.push({ label: `${payer} — 1099-INT Box 5 (investment expense)`, amount: -Math.abs(box5) })
+      invIntSources.push({ label: `${payer} — 1099-INT Box 5 (investment expense)`, amount: currency(0).subtract(Math.abs(box5)).value })
     }
     const bIntInvExp = p?.b_investment_expenses
     if (typeof bIntInvExp === 'number' && bIntInvExp !== 0) {
-      invIntSources.push({ label: `${payer} — 1099-B investment expense`, amount: -Math.abs(bIntInvExp) })
+      invIntSources.push({ label: `${payer} — 1099-B investment expense`, amount: currency(0).subtract(Math.abs(bIntInvExp)).value })
     }
   }
 
@@ -115,7 +117,7 @@ export function computeScheduleALines({
   if (shortDivDeduction > 0) {
     invIntSources.push({
       label: 'Short dividends — positions held > 45 days (IRS Pub. 550)',
-      amount: -shortDivDeduction,
+      amount: currency(0).subtract(shortDivDeduction).value,
     })
   }
 

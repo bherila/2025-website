@@ -1,3 +1,4 @@
+import { parseMoney } from '@/lib/finance/money'
 import type { ParsedLotRow } from '@/types/finance/lot'
 
 /**
@@ -22,13 +23,8 @@ function parseFidelityDate(dateStr: string): string {
  * Parse a currency string like "$2.25", "-$0.19", or "--" into a number or null.
  */
 function parseCurrency(value: string): number | null {
-    const trimmed = value.trim()
-    if (trimmed === '--' || trimmed === '') return null
-    const negative = trimmed.startsWith('-')
-    const cleaned = trimmed.replace(/[$,-]/g, '')
-    const num = parseFloat(cleaned)
-    if (isNaN(num)) return null
-    return negative ? -num : num
+    if (value.trim() === '--') return null
+    return parseMoney(value)
 }
 
 /**

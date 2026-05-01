@@ -1,17 +1,16 @@
 'use client'
 
 import currency from 'currency.js'
-import { ChevronRight, Search } from 'lucide-react'
+import { ChevronRight, HelpCircle, Search } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { parseMoney } from '@/lib/finance/money'
 
 // ── Value helpers ─────────────────────────────────────────────────────────────
 
 export function parseFieldVal(v: string | null | undefined): number | null {
-  if (v === null || v === undefined || v === '' || v === 'null') return null
-  const n = parseFloat(v)
-  return isNaN(n) ? null : n
+  return parseMoney(v)
 }
 
 export function parseCurrencyInput(raw: string): number {
@@ -20,9 +19,7 @@ export function parseCurrencyInput(raw: string): number {
   const normalized = decimals.length > 0
     ? `${whole}.${decimals.join('')}`
     : whole
-  if (normalized === '') return 0
-  const n = parseFloat(normalized)
-  return isNaN(n) ? 0 : n
+  return parseMoney(normalized) ?? 0
 }
 
 export function fmtAmt(n: number, precision = 0): string {
@@ -59,6 +56,19 @@ export function DetailsButton({ onClick, isReviewed }: { onClick: () => void; is
         </Button>
       </TooltipTrigger>
       <TooltipContent>View Details</TooltipContent>
+    </Tooltip>
+  )
+}
+
+export function InfoTooltip({ children }: { children: React.ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground hover:text-foreground align-middle">
+          <HelpCircle className="h-3.5 w-3.5" />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs text-xs leading-snug">{children}</TooltipContent>
     </Tooltip>
   )
 }

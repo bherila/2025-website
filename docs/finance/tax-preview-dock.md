@@ -109,6 +109,15 @@ Adding a new line? Set `navTab: TAX_TABS.<key>` in `computeForm1040Lines` and ma
 
 `AdditionalTaxesPreview.SourceModal` accepts `goToTab` + `goToLabel` + `onTabChange`. The Schedule 2 adapter passes `onTabChange={tabToDrill(onDrill)}`, which makes the "Go to Schedule B / W-2 / Schedule E" buttons push the right column onto the Miller stack.
 
+Tax-preview source navigation is intentionally form-level today:
+
+- Form 1040 line drill uses `navTab` / `TAB_TO_FORM_ID`.
+- Action Items source buttons route to the form tab that owns the computation.
+- Schedule 2 data-source dialogs route to the contributing form via `goToTab`.
+- K-1 trader-fund routing rows currently surface source labels and inline tooltips; deep linking to an exact K-1 code row remains a future improvement.
+
+When adding source navigation, keep the Tabs and Dock paths aligned: legacy components should continue accepting `onTabChange(tab)`, and dock adapters should translate that tab through `tabToDrill(onDrill)`.
+
 ---
 
 ## URL hash format
@@ -155,6 +164,7 @@ Both light and dark variants are defined. Avoid hardcoded palette classes (`bg-g
 - **Formatter strips unused imports**: the post-edit formatter hook removes unused imports. When adding a type import, include the usage in the same edit, or the import will be removed before you can reference it.
 - **Schedule C data shape**: `ScheduleCSummaryService` only emits rows whose tags have a non-empty `tax_characteristic`. Tags without one never appear in Schedule C output.
 - **Currency math**: all money math MUST go through `currency.js`. Exported `compute*` functions return plain `number`, never `currency` instances (those aren't JSON-serialisable). See `CLAUDE.md`.
+- **Trader-fund K-1s**: Box 11S requires explicit short-term vs. long-term character before Schedule D routing. Ambiguous rows are displayed but excluded from totals until the K-1 code row is set. Box 11ZZ/13ZZ trader-fund ordinary items flow to Schedule E Part II nonpassive.
 
 ---
 

@@ -16,6 +16,7 @@ import { TAX_TABS, type TaxTabId } from '@/components/finance/tax-tab-ids'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { getK1CodeItems, parseK1Field } from '@/lib/finance/k1Utils'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 
@@ -41,13 +42,6 @@ function GoToSourceButton({
       {label} →
     </Button>
   )
-}
-
-function pk1(data: FK1StructuredData, box: string): number {
-  const v = data.fields[box]?.value
-  if (!v) return 0
-  const n = parseFloat(v)
-  return isNaN(n) ? 0 : n
 }
 
 function renderOutstandingBody(
@@ -254,12 +248,12 @@ export default function ActionItemsTab({
   }, currency(0)).value
 
   const totalForeignTax = k1Parsed
-    .reduce((acc, { data }) => acc.add(pk1(data, '21')), currency(0))
+    .reduce((acc, { data }) => acc.add(parseK1Field(data, '21')), currency(0))
     .add(
       reviewed1099Docs.reduce((acc, doc) => {
         const p = doc.parsed_data as Record<string, unknown>
-        const v = (p?.box7_foreign_tax ?? p?.box6_foreign_tax) as number | undefined
-        return acc.add(v ?? 0)
+        const v = parseFieldVal(String(p?.box7_foreign_tax ?? p?.box6_foreign_tax ?? '')) ?? 0
+        return acc.add(v)
       }, currency(0)),
     ).value
 
@@ -268,17 +262,16 @@ export default function ActionItemsTab({
   // AQR ordinary items (Box 11ZZ sum)
   const aqrBox11ZZSum = k1Parsed.reduce((acc, { data }) => {
     return acc.add(
-      (data.codes['11'] ?? [])
-        .filter((i) => i.code === 'ZZ')
+      getK1CodeItems(data, '11', 'ZZ')
         .reduce((s, i) => s.add(parseFieldVal(i.value) ?? 0), currency(0)),
     )
   }, currency(0)).value
 
   const k1NetTotal = k1Parsed.reduce((acc, { data }) => {
     const incomeBoxes = ['1', '2', '3', '4', '5', '6a', '7', '8', '9a', '9b', '9c', '10']
-    const income = incomeBoxes.reduce((s, b) => s.add(pk1(data, b)), currency(0))
+    const income = incomeBoxes.reduce((s, b) => s.add(parseK1Field(data, b)), currency(0))
     const box11 = (data.codes['11'] ?? []).reduce((s, i) => s.add(parseFieldVal(i.value) ?? 0), currency(0))
-    const box12 = pk1(data, '12')
+    const box12 = parseK1Field(data, '12')
     const box13 = (data.codes['13'] ?? []).reduce((s, i) => s.add(parseFieldVal(i.value) ?? 0), currency(0))
     return acc.add(income).add(box11).add(box12 !== 0 ? -Math.abs(box12) : 0).add(box13)
   }, currency(0)).value

@@ -3,6 +3,8 @@
 import currency from 'currency.js'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
+import { getK1CodeItems, parseK1Field } from '@/lib/finance/k1Utils'
+import { parseMoney } from '@/lib/finance/money'
 import { cn } from '@/lib/utils'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
@@ -10,24 +12,16 @@ import type { Form4952Lines } from '@/types/finance/tax-return'
 
 export type { Form4952Lines } from '@/types/finance/tax-return'
 
-import { Callout, fmtAmt,FormBlock, FormLine, FormTotalLine } from './tax-preview-primitives'
-
-// ── K-1 data helpers ──────────────────────────────────────────────────────────
-
-function parseK1Field(data: FK1StructuredData, box: string): number {
-  const v = data.fields[box]?.value
-  if (!v) return 0
-  const n = parseFloat(v)
-  return isNaN(n) ? 0 : n
-}
+import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine } from './tax-preview-primitives'
 
 function parseK1Codes(data: FK1StructuredData, box: string, filterCodes?: string[]): number {
-  const items = data.codes[box] ?? []
+  const items = filterCodes
+    ? filterCodes.flatMap((code) => getK1CodeItems(data, box, code))
+    : (data.codes[box] ?? [])
   return items
-    .filter((item) => !filterCodes || filterCodes.includes(item.code))
     .reduce((acc, item) => {
-      const n = parseFloat(item.value)
-      return isNaN(n) ? acc : acc.add(n)
+      const n = parseMoney(item.value)
+      return n === null ? acc : acc.add(n)
     }, currency(0)).value
 }
 
@@ -72,12 +66,15 @@ export function computeForm4952Lines({
   for (const { doc, data } of k1Parsed) {
     const partnerName =
       data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
-    for (const item of data.codes['13'] ?? []) {
-      if (item.code === 'H' || item.code === 'G' || item.code === 'AC' || item.code === 'AD') {
-        const n = parseFloat(item.value)
-        if (!isNaN(n) && n !== 0) {
-          invIntSources.push({ label: `${partnerName} — Box 13${item.code}`, amount: -Math.abs(n) })
-        }
+    for (const item of [
+      ...getK1CodeItems(data, '13', 'H'),
+      ...getK1CodeItems(data, '13', 'G'),
+      ...getK1CodeItems(data, '13', 'AC'),
+      ...getK1CodeItems(data, '13', 'AD'),
+    ]) {
+      const n = parseMoney(item.value)
+      if (n !== null && n !== 0) {
+        invIntSources.push({ label: `${partnerName} — Box 13${item.code}`, amount: currency(0).subtract(Math.abs(n)).value })
       }
     }
   }
@@ -97,12 +94,10 @@ export function computeForm4952Lines({
   for (const { doc, data } of k1Parsed) {
     const partnerName =
       data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
-    for (const item of data.codes['20'] ?? []) {
-      if (item.code === 'B') {
-        const n = parseFloat(item.value)
-        if (!isNaN(n) && n !== 0) {
-          invExpSources.push({ label: `${partnerName} — Box 20B (investment expenses)`, amount: -Math.abs(n) })
-        }
+    for (const item of getK1CodeItems(data, '20', 'B')) {
+      const n = parseMoney(item.value)
+      if (n !== null && n !== 0) {
+        invExpSources.push({ label: `${partnerName} — Box 20B (investment expenses)`, amount: currency(0).subtract(Math.abs(n)).value })
       }
     }
   }

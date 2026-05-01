@@ -1,5 +1,6 @@
 'use client'
 
+import currency from 'currency.js'
 import { Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -9,8 +10,9 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
+import { normalizeK1Code, resolve11SCharacter } from '@/lib/finance/k1Utils'
 
-import { fmtAmt, parseFieldVal } from '../tax-preview-primitives'
+import { fmtAmt, InfoTooltip, parseFieldVal } from '../tax-preview-primitives'
 import type { K1CodeItem } from './k1-types'
 
 interface K1CodesModalProps {
@@ -42,7 +44,7 @@ const CHARACTER_ELIGIBLE: Record<string, ReadonlySet<string>> = {
 
 function isCharacterEligible(box: string | undefined, code: string): boolean {
   if (!box) return false
-  return CHARACTER_ELIGIBLE[box]?.has(code.toUpperCase()) ?? false
+  return CHARACTER_ELIGIBLE[box]?.has(normalizeK1Code(code)) ?? false
 }
 
 /** Sub-modal for viewing / editing coded items on a single K-1 box (e.g. Box 11, Box 13). */
@@ -84,7 +86,9 @@ export default function K1CodesModal({ open, boxLabel, box, codeDefinitions, ite
   }
 
   const handleSave = () => {
-    onChange(localItems.filter((item) => item.code.trim() !== ''))
+    onChange(localItems
+      .filter((item) => item.code.trim() !== '')
+      .map((item) => ({ ...item, code: normalizeK1Code(item.code) })))
     onClose()
   }
 
@@ -92,8 +96,8 @@ export default function K1CodesModal({ open, boxLabel, box, codeDefinitions, ite
 
   const boxTotal = localItems.reduce((acc, item) => {
     const v = parseFieldVal(item.value)
-    return v !== null ? acc + v : acc
-  }, 0)
+    return v !== null ? acc.add(v) : acc
+  }, currency(0)).value
 
   const showCharacterColumn = localItems.some((item) => isCharacterEligible(box, item.code))
 
@@ -113,7 +117,17 @@ export default function K1CodesModal({ open, boxLabel, box, codeDefinitions, ite
                 <TableRow>
                   <TableHead className="w-72">Code</TableHead>
                   <TableHead className="w-32 text-right">Amount</TableHead>
-                  {showCharacterColumn && <TableHead className="w-32">S/T or L/T</TableHead>}
+                  {showCharacterColumn && (
+                    <TableHead className="w-32">
+                      <span className="inline-flex items-center gap-1">
+                        S/T or L/T
+                        <InfoTooltip>
+                          Box 11 code S routes to Schedule D line 5 when short-term and line 12 when long-term.
+                          Use Auto only when the notes identify exactly one character.
+                        </InfoTooltip>
+                      </span>
+                    </TableHead>
+                  )}
                   <TableHead>Notes</TableHead>
                   {!readOnly && <TableHead className="w-10" />}
                 </TableRow>
@@ -154,7 +168,11 @@ export default function K1CodesModal({ open, boxLabel, box, codeDefinitions, ite
                         {isCharacterEligible(box, item.code) ? (
                           readOnly ? (
                             <span className="text-sm text-muted-foreground">
-                              {item.character === 'short' ? 'Short-term' : item.character === 'long' ? 'Long-term' : 'Auto (notes)'}
+                              {resolve11SCharacter(item) === 'short'
+                                ? 'Short-term'
+                                : resolve11SCharacter(item) === 'long'
+                                  ? 'Long-term'
+                                  : 'Needs review'}
                             </span>
                           ) : (
                             <Select

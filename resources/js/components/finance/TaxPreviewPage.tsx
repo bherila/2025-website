@@ -35,7 +35,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { fetchWrapper } from '@/fetchWrapper'
 import { buildTaxWorkbook } from '@/lib/finance/buildTaxWorkbook'
-import { parseK1Field } from '@/lib/finance/k1Utils'
+import { getK1CodeItems, parseK1Field } from '@/lib/finance/k1Utils'
+import { parseMoneyOrZero } from '@/lib/finance/money'
 import { type FilingStatus, getStandardDeduction } from '@/lib/tax/standardDeductions'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
@@ -120,14 +121,8 @@ function TaxIncomeOverview({
     .add(parseK1Field(data, '10')), currency(0)).value
   const k1ForeignTax = k1Parsed.reduce((acc, { data }) => acc.add(parseK1Field(data, '21')), currency(0)).value
   const k1InvInterest = k1Parsed.reduce((acc, { data }) => {
-    const items = data.codes['13'] ?? []
-
-    const itemTotal = items
-      .filter((item) => item.code === 'G' || item.code === 'H')
-      .reduce((sum, item) => {
-        const n = parseFloat(item.value)
-        return isNaN(n) ? sum : sum.add(n)
-      }, currency(0))
+    const itemTotal = [...getK1CodeItems(data, '13', 'G'), ...getK1CodeItems(data, '13', 'H')]
+      .reduce((sum, item) => sum.add(parseMoneyOrZero(item.value)), currency(0))
 
     return acc.add(itemTotal)
   }, currency(0)).value
@@ -137,9 +132,7 @@ function TaxIncomeOverview({
     .filter((d) => d.form_type === '1099_div' || d.form_type === '1099_div_c')
     .reduce((acc, d) => {
       const parsed = d.parsed_data as Record<string, unknown>
-      const value = parsed?.box7_foreign_tax
-      const n = typeof value === 'number' ? value : typeof value === 'string' ? parseFloat(value) : 0
-      return isNaN(n) ? acc : acc.add(n)
+      return acc.add(parseMoneyOrZero(parsed?.box7_foreign_tax))
     }, currency(0)).value
 
   const totalInterest = income1099.interestIncome.add(k1Interest).value

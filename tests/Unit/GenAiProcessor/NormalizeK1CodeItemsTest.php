@@ -29,7 +29,7 @@ class NormalizeK1CodeItemsTest extends TestCase
     public function test_basic_code_item_without_character(): void
     {
         $result = $this->normalize([
-            ['code' => 'C', 'value' => 32545, 'notes' => 'Section 1256 contracts'],
+            ['code' => ' c ', 'value' => 32545, 'notes' => 'Section 1256 contracts'],
         ]);
 
         $this->assertSame([
@@ -83,5 +83,16 @@ class NormalizeK1CodeItemsTest extends TestCase
         $this->assertSame('A', $result[0]['code']);
         $this->assertSame('B', $result[1]['code']);
         $this->assertSame('', $result[1]['value']);
+    }
+
+    public function test_normalizes_code_casing_and_whitespace(): void
+    {
+        $result = $this->normalize([
+            ['code' => ' zz ', 'value' => -10],
+            ['code' => 's', 'value' => 20],
+        ]);
+
+        $this->assertSame('ZZ', $result[0]['code']);
+        $this->assertSame('S', $result[1]['code']);
     }
 }

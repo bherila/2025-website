@@ -201,7 +201,7 @@ export interface K1ExportEntry {
   entityName: string
   ein?: string
   fields: Record<string, string | number>
-  codes: Record<string, { code: string; value: string }[]>
+  codes: Record<string, { code: string; value: string; notes?: string; character?: 'short' | 'long' }[]>
   k3Sections?: K3Section[]
   /** Box 11 S — per-activity passive income/loss from supplemental statement (Form 8582). */
   passiveActivities?: import('@/types/finance/k1-data').K1PassiveActivity[]

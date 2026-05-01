@@ -3,10 +3,17 @@ import currency from 'currency.js'
 import { ALL_K1_CODES, K1_SPEC_BY_BOX } from '@/components/finance/k1'
 import { renderK3SectionsRows } from '@/finance/1116/k3-row-renderer'
 import { K1_CODE_ROUTING_NOTES, K1_ROUTING_NOTES } from '@/lib/finance/k1RoutingNotes'
+import { normalizeK1Code } from '@/lib/finance/k1Utils'
+import { parseMoney } from '@/lib/finance/money'
 import type { EstimatedTaxPaymentsData, TaxReturn1040 } from '@/types/finance/tax-return'
 import type { XlsxRow, XlsxSheet, XlsxWorkbook } from '@/types/finance/xlsx-export'
 
 export { K1_CODE_ROUTING_NOTES, K1_ROUTING_NOTES }
+
+function joinNotes(parts: Array<string | null | undefined>): string | undefined {
+  const notes = parts.filter((part): part is string => Boolean(part))
+  return notes.length > 0 ? notes.join(' | ') : undefined
+}
 
 function parseDestinationRows(
   source: string,
@@ -87,15 +94,25 @@ function buildK1WorksheetSheet(entry: NonNullable<TaxReturn1040['k1Docs']>[numbe
   if (codedRows.length > 0) {
     rows.push({ isHeader: true, description: '3. Part III — Coded Items' })
     rows.push(...codedRows.map(({ box, item }) => {
-      const code = item.code.toUpperCase()
+      const code = normalizeK1Code(item.code)
       const codeLabel = ALL_K1_CODES[box]?.[code] ?? `Code ${code}`
-      const numVal = Number(item.value)
+      const numVal = parseMoney(item.value)
       const routing = K1_CODE_ROUTING_NOTES[box]?.[code]
+      const character = item.character === 'short'
+        ? 'Character: short-term'
+        : item.character === 'long'
+          ? 'Character: long-term'
+          : undefined
       return {
         line: `${box}${code}`,
         description: `Box ${box} ${code} — ${codeLabel}`,
-        ...(Number.isFinite(numVal) ? { amount: numVal } : {}),
-        ...(routing ? { note: routing } : (!Number.isFinite(numVal) && item.value ? { note: item.value } : {})),
+        ...(numVal !== null ? { amount: numVal } : {}),
+        note: joinNotes([
+          item.notes ? `Statement: ${item.notes}` : undefined,
+          character,
+          routing,
+          numVal === null && item.value ? `Raw value: ${item.value}` : undefined,
+        ]),
       }
     }))
   }
@@ -128,10 +145,15 @@ function buildK1WorksheetSheet(entry: NonNullable<TaxReturn1040['k1Docs']>[numbe
     rows.push({ isHeader: true, description: '5. Destination Summary — Where each line flows' })
     rows.push(
       ...codedRows.flatMap(({ box, item }) => {
-        const code = item.code.toUpperCase()
-        const amount = Number.isFinite(Number(item.value)) ? Number(item.value) : undefined
+        const code = normalizeK1Code(item.code)
+        const amount = parseMoney(item.value) ?? undefined
         const routing = K1_CODE_ROUTING_NOTES[box]?.[code]
-        return parseDestinationRows(`Box ${box}${code}`, amount, routing)
+        const characterNote = item.character === 'short'
+          ? 'Character: short-term'
+          : item.character === 'long'
+            ? 'Character: long-term'
+            : undefined
+        return parseDestinationRows(`Box ${box}${code}`, amount, joinNotes([item.notes, characterNote, routing]))
       }),
       ...routedFieldRows.flatMap((row) => parseDestinationRows(
         `Box ${row.box}`,

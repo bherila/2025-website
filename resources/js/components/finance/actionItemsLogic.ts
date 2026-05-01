@@ -2,6 +2,7 @@ import currency from 'currency.js'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { parseFieldVal } from '@/components/finance/tax-preview-primitives'
+import { getK1CodeItems, isK1Code, parseK1Field } from '@/lib/finance/k1Utils'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 
@@ -83,15 +84,6 @@ export interface ResolvedItemClassification {
   kind: ResolvedItemKind
 }
 
-function pk1(data: FK1StructuredData, box: string): number {
-  const v = data.fields[box]?.value
-  if (!v) {
-    return 0
-  }
-  const n = parseFloat(v)
-  return isNaN(n) ? 0 : n
-}
-
 function partnerName(doc: TaxDocument, data: FK1StructuredData): string {
   return data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
 }
@@ -112,8 +104,7 @@ export function computeActionItemConditions(input: ActionItemConditionsInput): A
   // §67(g) suspended deductions across all K-1s
   const suspendedItems: SuspendedItem[] = k1Parsed.flatMap(({ doc, data }) => {
     const fund = partnerName(doc, data)
-    return (data.codes['13'] ?? [])
-      .filter((i) => i.code === 'K' || i.code === 'AE')
+    return [...getK1CodeItems(data, '13', 'K'), ...getK1CodeItems(data, '13', 'AE')]
       .map((i) => ({
         fund,
         box: `13${i.code}`,
@@ -126,14 +117,13 @@ export function computeActionItemConditions(input: ActionItemConditionsInput): A
   // Box 13 codes requiring taxpayer election (F or ZZ)
   const electionItems: ElectionItem[] = k1Parsed.flatMap(({ doc, data }) => {
     const fund = partnerName(doc, data)
-    return (data.codes['13'] ?? [])
-      .filter((i) => i.code === 'F' || i.code === 'ZZ')
+    return [...getK1CodeItems(data, '13', 'F'), ...getK1CodeItems(data, '13', 'ZZ')]
       .map((i) => ({
         fund,
         code: i.code,
         box: `13${i.code}`,
         description:
-          i.code === 'F'
+          isK1Code(i.code, 'F')
             ? '§59(e)(2) expenditures — elect to amortize or deduct (Form 4562 or Sch A)'
             : 'Other deductions — check K-1 attached statement for destination',
         amount: Math.abs(parseFieldVal(i.value) ?? 0),
@@ -143,8 +133,7 @@ export function computeActionItemConditions(input: ActionItemConditionsInput): A
   // Box 13T (§163(j) excess business interest) — informational carryover
   const box13TItems: Box13TItem[] = k1Parsed.flatMap(({ doc, data }) => {
     const fund = partnerName(doc, data)
-    return (data.codes['13'] ?? [])
-      .filter((i) => i.code === 'T')
+    return getK1CodeItems(data, '13', 'T')
       .map((i) => ({
         fund,
         amount: Math.abs(parseFieldVal(i.value) ?? 0),
@@ -152,7 +141,7 @@ export function computeActionItemConditions(input: ActionItemConditionsInput): A
   })
 
   // TurboTax FTC Line 1d issue: K-1 Box 5 > 0 and K-3 passive income < half
-  const totalK1Box5 = k1Parsed.reduce((acc, { data }) => acc.add(pk1(data, '5')), currency(0)).value
+  const totalK1Box5 = k1Parsed.reduce((acc, { data }) => acc.add(parseK1Field(data, '5')), currency(0)).value
   let totalK3PassiveIncomeC = currency(0)
   for (const { data } of k1Parsed) {
     const k3Sections = data.k3?.sections ?? []
@@ -173,7 +162,7 @@ export function computeActionItemConditions(input: ActionItemConditionsInput): A
   // Per-fund Box 21 alerts when no K-3 Part III Section 4 country entries
   const box21AlertFunds: Box21AlertFund[] = k1Parsed
     .filter(({ data }) => {
-      const box21 = pk1(data, '21')
+      const box21 = parseK1Field(data, '21')
       if (box21 === 0) {
         return false
       }
@@ -184,7 +173,7 @@ export function computeActionItemConditions(input: ActionItemConditionsInput): A
     })
     .map(({ doc, data }) => ({
       name: partnerName(doc, data),
-      amount: pk1(data, '21'),
+      amount: parseK1Field(data, '21'),
     }))
 
   // K-3 general category check (resolved when all "XX" or empty)
@@ -207,24 +196,24 @@ export function computeActionItemConditions(input: ActionItemConditionsInput): A
   })
 
   // Box 11ZZ items exist
-  const hasBox11ZZ = k1Parsed.some(({ data }) => (data.codes['11'] ?? []).some((i) => i.code === 'ZZ'))
+  const hasBox11ZZ = k1Parsed.some(({ data }) => getK1CodeItems(data, '11', 'ZZ').length > 0)
 
   // NII ≥ investment interest → no QD election needed
   const k1InvInt = k1Parsed.reduce((acc, { data }) => {
-    const hItems = (data.codes['13'] ?? []).filter((i) => i.code === 'H' || i.code === 'G')
+    const hItems = [...getK1CodeItems(data, '13', 'H'), ...getK1CodeItems(data, '13', 'G')]
     return acc.add(hItems.reduce((s, i) => s.add(Math.abs(parseFieldVal(i.value) ?? 0)), currency(0)))
   }, currency(0)).value
   const niiBefore = k1Parsed
-    .reduce((acc, { data }) => acc.add(pk1(data, '5')), currency(0))
+    .reduce((acc, { data }) => acc.add(parseK1Field(data, '5')), currency(0))
     .add(income1099.interestIncome)
     .add(income1099.dividendIncome)
     .subtract(income1099.qualifiedDividends).value
   const noQdElectionNeeded = k1InvInt > 0 && niiBefore >= k1InvInt
 
   // Capital gain/loss carryforward
-  const netST = k1Parsed.reduce((acc, { data }) => acc.add(pk1(data, '8')), currency(0)).value
+  const netST = k1Parsed.reduce((acc, { data }) => acc.add(parseK1Field(data, '8')), currency(0)).value
   const netLT = k1Parsed.reduce(
-    (acc, { data }) => acc.add(pk1(data, '9a')).add(pk1(data, '9b')).add(pk1(data, '9c')).add(pk1(data, '10')),
+    (acc, { data }) => acc.add(parseK1Field(data, '9a')).add(parseK1Field(data, '9b')).add(parseK1Field(data, '9c')).add(parseK1Field(data, '10')),
     currency(0),
   ).value
   const combined = currency(netST).add(netLT).value

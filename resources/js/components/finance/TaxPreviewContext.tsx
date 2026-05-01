@@ -30,7 +30,8 @@ import { computeForm8960Lines } from '@/finance/8960/form8960'
 import { computeCapitalLossCarryover } from '@/finance/capitalLoss/capitalLossCarryover'
 import { computeMedicareWages } from '@/finance/scheduleSE/computeScheduleSE'
 import { computeEstimatedTaxPayments } from '@/lib/finance/estimatedTaxPayments'
-import { k1NetIncome } from '@/lib/finance/k1Utils'
+import { getK1CodeItems, k1NetIncome, parseK1Field } from '@/lib/finance/k1Utils'
+import { parseMoneyOrZero } from '@/lib/finance/money'
 import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import { extractLinkParsedData, getDocAmounts, hasNonZeroNumericValue } from '@/lib/finance/taxDocumentUtils'
 import { form461 } from '@/lib/tax/form461'
@@ -208,7 +209,12 @@ function toTaxReturnYearK1Entries(reviewedK1Docs: TaxDocument[]) {
       const codes = Object.fromEntries(
         Object.entries(doc.parsed_data.codes).map(([box, items]) => [
           box,
-          items.map(item => ({ code: item.code, value: item.value })),
+          items.map(item => ({
+            code: item.code,
+            value: item.value,
+            ...(item.notes ? { notes: item.notes } : {}),
+            ...(item.character ? { character: item.character } : {}),
+          })),
         ]),
       )
 
@@ -847,40 +853,32 @@ export function TaxPreviewProvider({
     const reviewedIntDocs = reviewed1099Docs.filter((doc) => doc.form_type === '1099_int' || doc.form_type === '1099_int_c')
     const reviewedDivDocs = reviewed1099Docs.filter((doc) => doc.form_type === '1099_div' || doc.form_type === '1099_div_c')
     const retirementDistributionSummary = compute1099RDistributionSummary(reviewed1099RDocs)
+    const scheduleD = computeScheduleD(reviewedK1Docs, reviewed1099Docs)
 
     // ── Overview sheet data ───────────────────────────────────────────────────
-    function parseK1FieldLocal(data: FK1StructuredData, box: string): number {
-      const v = data.fields[box]?.value
-      if (!v) return 0
-      const n = parseFloat(v)
-      return isNaN(n) ? 0 : n
-    }
-
     const k1Parsed = reviewedK1Docs
       .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
       .filter((x): x is { doc: TaxDocument; data: FK1StructuredData } => x.data !== null)
 
-    const k1Interest = k1Parsed.reduce((acc, { data }) => acc.add(parseK1FieldLocal(data, '5')), currency(0)).value
-    const k1OrdinaryDiv = k1Parsed.reduce((acc, { data }) => acc.add(parseK1FieldLocal(data, '6a')), currency(0)).value
-    const k1StCapital = k1Parsed.reduce((acc, { data }) => acc.add(parseK1FieldLocal(data, '8')), currency(0)).value
+    const k1Interest = k1Parsed.reduce((acc, { data }) => acc.add(parseK1Field(data, '5')), currency(0)).value
+    const k1OrdinaryDiv = k1Parsed.reduce((acc, { data }) => acc.add(parseK1Field(data, '6a')), currency(0)).value
+    const k1StCapital = k1Parsed.reduce((acc, { data }) => acc.add(parseK1Field(data, '8')), currency(0)).value
     const k1LtCapital = k1Parsed.reduce((acc, { data }) => acc
-      .add(parseK1FieldLocal(data, '9a'))
-      .add(parseK1FieldLocal(data, '9b'))
-      .add(parseK1FieldLocal(data, '9c'))
-      .add(parseK1FieldLocal(data, '10')), currency(0)).value
-    const k1ForeignTax = k1Parsed.reduce((acc, { data }) => acc.add(parseK1FieldLocal(data, '21')), currency(0)).value
+      .add(parseK1Field(data, '9a'))
+      .add(parseK1Field(data, '9b'))
+      .add(parseK1Field(data, '9c'))
+      .add(parseK1Field(data, '10')), currency(0)).value
+    const k1ForeignTax = k1Parsed.reduce((acc, { data }) => acc.add(parseK1Field(data, '21')), currency(0)).value
     const k1InvInterest = k1Parsed.reduce((acc, { data }) => {
-      const items = data.codes['13'] ?? []
-      return acc.add(items.filter((i) => i.code === 'G' || i.code === 'H')
-        .reduce((s, i) => { const n = parseFloat(i.value); return isNaN(n) ? s : s.add(n) }, currency(0)))
+      const items = [...getK1CodeItems(data, '13', 'G'), ...getK1CodeItems(data, '13', 'H')]
+      return acc.add(items.reduce((s, i) => s.add(parseMoneyOrZero(i.value)), currency(0)))
     }, currency(0)).value
 
     const div1099ForeignTax = reviewed1099Docs
       .filter((d) => d.form_type === '1099_div' || d.form_type === '1099_div_c')
       .reduce((acc, d) => {
         const p = d.parsed_data as Record<string, unknown>
-        const n = typeof p?.box7_foreign_tax === 'number' ? p.box7_foreign_tax : typeof p?.box7_foreign_tax === 'string' ? parseFloat(p.box7_foreign_tax as string) : 0
-        return isNaN(n) ? acc : acc.add(n)
+        return acc.add(parseMoneyOrZero(p?.box7_foreign_tax))
       }, currency(0)).value
 
     const totalInterest = income1099.interestIncome.add(k1Interest).value
@@ -912,8 +910,8 @@ export function TaxPreviewProvider({
     for (const { doc, data } of k1Parsed) {
       const partnerName = data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership K-1'
       const net = k1NetIncome(data)
-      const interest = parseK1FieldLocal(data, '5')
-      const foreignTax = parseK1FieldLocal(data, '21')
+      const interest = parseK1Field(data, '5')
+      const foreignTax = parseK1Field(data, '21')
       const noteParts = [
         net < 0 ? 'Net loss — Schedule E' : 'Net income — Schedule E',
         interest !== 0 ? `Interest: ${currency(interest).format()}` : null,
@@ -959,6 +957,7 @@ export function TaxPreviewProvider({
     if (w2GrossIncome.value > 0) taxPositionRows.push({ item: 'W-2 Wages', amount: w2GrossIncome.value, note: 'Box 1 — includes RSU vesting and bonuses' })
     if (totalInvestmentIncome !== 0) taxPositionRows.push({ item: 'Net investment income (interest + divs)', amount: totalInvestmentIncome, note: 'Before deductions; subject to NIIT (3.8%)' })
     if (k1StCapital !== 0 || k1LtCapital !== 0) taxPositionRows.push({ item: 'Net capital gain (loss) — K-1s', amount: totalCapitalGains, note: `S/T ${k1StCapital.toLocaleString()} · L/T ${k1LtCapital.toLocaleString()}` })
+    if (scheduleD.has11SAmbiguous) taxPositionRows.push({ item: 'K-1 Box 11S character review needed', amount: scheduleD.ambiguous11SAmount, note: `${scheduleD.ambiguous11SCount} non-portfolio capital gain/loss line(s) need S/T or L/T classification before Schedule D routing.` })
     if (k1InvInterest !== 0) taxPositionRows.push({ item: 'Investment interest deduction (Form 4952)', amount: k1InvInterest, note: 'From K-1 Box 13G/H — flows to Schedule E' })
     if (totalForeignTax !== 0) taxPositionRows.push({ item: 'Foreign tax credit (Form 1116)', amount: totalForeignTax, note: 'Dollar-for-dollar vs. income tax' })
     if (totalFederalWithholding > 0) {
@@ -983,7 +982,6 @@ export function TaxPreviewProvider({
       ...(taxPositionRows.length > 0 ? [{ heading: 'Estimated Tax Positions', rows: taxPositionRows }] : []),
     ]
     const scheduleB = computeScheduleB(reviewedK1Docs, reviewed1099Docs, income1099)
-    const scheduleD = computeScheduleD(reviewedK1Docs, reviewed1099Docs)
     const scheduleE = computeScheduleELines(reviewedK1Docs, reviewed1099Docs)
     const saltPaid = reviewedW2Docs.reduce((acc, doc) => {
       const p = doc.parsed_data as { box17_state_tax?: number | null } | null

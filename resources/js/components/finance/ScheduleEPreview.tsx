@@ -3,7 +3,9 @@
 import currency from 'currency.js'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
-import { FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
+import { FormBlock, FormLine, FormTotalLine, InfoTooltip } from '@/components/finance/tax-preview-primitives'
+import { sumAbsK1CodeItems, sumK1CodeItems } from '@/lib/finance/k1Utils'
+import { parseMoneyOrZero } from '@/lib/finance/money'
 import { getDocAmounts, getPayerName, hasNonZeroNumericValue } from '@/lib/finance/taxDocumentUtils'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
@@ -12,21 +14,7 @@ import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 // ── K-1 field helpers ─────────────────────────────────────────────────────────
 
 function parseK1Field(data: FK1StructuredData, box: string): number {
-  const v = data.fields[box]?.value
-  if (!v) return 0
-  const n = parseFloat(v)
-  return isNaN(n) ? 0 : n
-}
-
-/** Sum the values of code items on a given box that match `code`. */
-function sumK1CodeItems(data: FK1StructuredData, box: string, code: string): number {
-  const items = data.codes[box] ?? []
-  return items
-    .filter((item) => item.code.toUpperCase() === code.toUpperCase())
-    .reduce((acc, item) => {
-      const n = parseFloat(item.value)
-      return isNaN(n) ? acc : acc.add(n)
-    }, currency(0)).value
+  return parseMoneyOrZero(data.fields[box]?.value)
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -147,7 +135,7 @@ export function computeScheduleELines(reviewedK1Docs: TaxDocument[], reviewed109
     // Box 11ZZ items are signed (gains positive, losses negative).
     const box11ZZOtherIncome = sumK1CodeItems(data, '11', 'ZZ')
     // Box 13ZZ items are reported as positive magnitudes representing deductions.
-    const box13ZZOtherDeductions = sumK1CodeItems(data, '13', 'ZZ')
+    const box13ZZOtherDeductions = sumAbsK1CodeItems(data, '13', 'ZZ')
 
     const netPassive = currency(box2NetRentalRealEstate).add(box3OtherNetRental).value
     const netNonpassive = currency(box1OrdinaryIncome)
@@ -301,14 +289,30 @@ export default function ScheduleEPreview({ reviewedK1Docs, reviewed1099Docs = []
             )}
             {r.box11ZZOtherIncome !== 0 && (
               <FormLine
-                label={`${r.partnerName} — Box 11ZZ other ordinary income/(loss)`}
+                label={(
+                  <span className="inline-flex items-center gap-1">
+                    {r.partnerName} — Box 11ZZ other ordinary income/(loss)
+                    <InfoTooltip>
+                      Trader-fund statement items such as Section 988 FX, swaps, and PFIC mark-to-market are ordinary
+                      income or loss on Schedule E Part II, not Schedule D capital gain or loss.
+                    </InfoTooltip>
+                  </span>
+                )}
                 value={r.box11ZZOtherIncome}
               />
             )}
             {r.box13ZZOtherDeductions !== 0 && (
               <FormLine
-                label={`${r.partnerName} — Box 13ZZ other deductions`}
-                value={-r.box13ZZOtherDeductions}
+                label={(
+                  <span className="inline-flex items-center gap-1">
+                    {r.partnerName} — Box 13ZZ other deductions
+                    <InfoTooltip>
+                      Trader-fund management, admin, and similar statement deductions reduce Schedule E Part II
+                      nonpassive income in this preview.
+                    </InfoTooltip>
+                  </span>
+                )}
+                value={currency(0).subtract(r.box13ZZOtherDeductions).value}
               />
             )}
           </div>
@@ -340,7 +344,7 @@ export default function ScheduleEPreview({ reviewedK1Docs, reviewed1099Docs = []
             <FormLine label="Other ordinary income / (loss) (Box 11ZZ)" value={totalBox11ZZ} />
           )}
           {totalBox13ZZ !== 0 && (
-            <FormLine label="Other deductions (Box 13ZZ)" value={-totalBox13ZZ} />
+            <FormLine label="Other deductions (Box 13ZZ)" value={currency(0).subtract(totalBox13ZZ).value} />
           )}
           {totalNonpassive === 0 && totalBox1 === 0 && totalBox4 === 0 && totalBox11ZZ === 0 && totalBox13ZZ === 0 && (
             <FormLine label="No nonpassive K-1 activity" raw="—" />
@@ -352,7 +356,7 @@ export default function ScheduleEPreview({ reviewedK1Docs, reviewed1099Docs = []
       <FormBlock title="Schedule E — Combined Net Income / (Loss)">
         {miscIncomeTotal !== 0 && <FormLine label="1099-MISC rental & royalty income" value={miscIncomeTotal} />}
         <FormLine label="Passive (rental / other rental)" value={totalPassive} />
-        <FormLine label="Nonpassive (ordinary + guaranteed payments)" value={totalNonpassive} />
+        <FormLine label="Nonpassive (ordinary + guaranteed payments + trader fund statement items)" value={totalNonpassive} />
         <FormTotalLine label="Schedule E combined total" value={grandTotal} double />
       </FormBlock>
     </div>

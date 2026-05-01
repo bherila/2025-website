@@ -22,6 +22,9 @@ function makeTaxReturn(): TaxReturn1040 {
           { code: 'F', value: '15' },
           { code: 'ZZ', value: '15' },
         ],
+        '11': [
+          { code: ' s ', value: '(1,234)', notes: 'Net short-term capital loss', character: 'short' },
+        ],
         '14': [
           { code: 'A', value: '150' },
           { code: 'Z', value: '10' },
@@ -79,6 +82,9 @@ describe('buildTaxWorkbook — K-1/K-3 sheets', () => {
     expect(k1Sheet?.rows.some((row) => row.description.includes('Box 14 A'))).toBe(true)
     expect(k1Sheet?.rows.some((row) => row.note?.includes('Schedule SE'))).toBe(true)
     expect(k1Sheet?.rows.some((row) => row.note?.includes('Form 6251'))).toBe(true)
+    expect(k1Sheet?.rows.some((row) => row.description.includes('Box 11 S') && row.amount === -1234)).toBe(true)
+    expect(k1Sheet?.rows.some((row) => row.note?.includes('Statement: Net short-term capital loss'))).toBe(true)
+    expect(k1Sheet?.rows.some((row) => row.note?.includes('Character: short-term'))).toBe(true)
     expect(k1Sheet?.rows.some((row) => row.note?.includes('Status: Suspended'))).toBe(true)
     expect(k1Sheet?.rows.some((row) => row.note?.includes('Status: User action'))).toBe(true)
     expect(k1Sheet?.rows.some((row) => row.note?.includes('Status: Unrouted'))).toBe(true)

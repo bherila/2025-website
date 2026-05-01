@@ -81,13 +81,13 @@ describe('ScheduleEPreview', () => {
         fields: { B: { value: 'AQR TA DELPHI PLUS FUND, LLC' } },
         codes: {
           '11': [
-            { code: 'ZZ', value: '-23167', notes: 'Section 988 FX loss' },
-            { code: 'ZZ', value: '-54237', notes: 'Swap loss' },
-            { code: 'ZZ', value: '3198', notes: 'PFIC MTM income' },
+            { code: ' zz ', value: '(23,167)', notes: 'Section 988 FX loss' },
+            { code: 'ZZ', value: '-54,237', notes: 'Swap loss' },
+            { code: 'ZZ', value: '3,198', notes: 'PFIC MTM income' },
           ],
           '13': [
-            { code: 'ZZ', value: '8893', notes: 'Trader deductions' },
-            { code: 'ZZ', value: '258', notes: 'Administrative expenses' },
+            { code: 'zz', value: '8,893', notes: 'Trader deductions' },
+            { code: 'ZZ', value: '(258)', notes: 'Administrative expenses' },
           ],
         },
       },

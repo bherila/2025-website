@@ -143,9 +143,9 @@ Overview | W-2 | Schedules | Schedule A | Schedule 1 | Schedule E | Schedule SE 
 | Schedules | `ScheduleBPreview` + `Form4952Preview` | Schedule B (interest/dividends) + Form 4952 (investment interest) |
 | Schedule A | `ScheduleAPreview` + `UserDeductionsSection` | Itemized deductions — investment interest (K-1, 1099, short dividends) + user-entered SALT/mortgage/charitable via `fin_user_deductions` |
 | Schedule 1 | `Schedule1Preview` | Part I (additional income: Schedule C line 3, Schedule E line 5, 1099-MISC line 8z → line 10 total) + Part II (adjustments: deductible SE tax line 15, placeholders for HSA/health insurance/IRA/student loan → line 26 total). Feeds Form 1040 lines 8 and 10. |
-| Schedule E | `ScheduleEPreview` | Partnership/S-corp income from K-1 — Box 1 ordinary, Box 2/3 rental, Box 4 guaranteed payments |
+| Schedule E | `ScheduleEPreview` | Partnership/S-corp income from K-1 — Box 1 ordinary, Box 2/3 rental, Box 4 guaranteed payments, trader-fund Box 11ZZ ordinary items, and Box 13ZZ other deductions |
 | Schedule SE | `ScheduleSEPreview` | Self-employment tax computation from K-1 Box 14A/14C + Schedule C |
-| Capital Gains | `ScheduleDPreview` | Form 6781 + Schedule D |
+| Capital Gains | `ScheduleDPreview` | Form 6781 + Schedule D, including K-1 Box 11S non-portfolio capital gain/loss when ST/LT character is known |
 | Form 1116 | `Form1116Preview` | Passive foreign tax credit |
 | Form 6251 | `Form6251Preview` | Alternative minimum tax computation |
 | Form 8582 | `Form8582Preview` | Passive activity loss limitations with per-activity breakdown and carryforward persistence |
@@ -155,6 +155,19 @@ Overview | W-2 | Schedules | Schedule A | Schedule 1 | Schedule E | Schedule SE 
 | Action Items | `ActionItemsTab` | Resolved/outstanding alerts |
 
 **Short dividend integration:** `TaxPreviewContext` fetches transactions for all active accounts on load, runs `analyzeShortDividends()`, and exposes `shortDividendSummary` on the context. `Form4952Preview` receives `shortDividendDeduction` (the >45-day bucket total) as investment interest expense. `ScheduleAPreview` renders both the K-1/1099 sources and the short dividend breakdown in one place. See [lot-analyzer.md](lot-analyzer.md#short-dividend-analysis) for details.
+
+### Trader-Fund K-1 Processing
+
+For tax year 2025 trader-fund K-1s, the preview treats attached statement detail as authoritative when the face-page box is an aggregate:
+
+- Box 11 code S is non-portfolio capital gain/loss. Each sub-line routes to Schedule D line 5 when classified short-term and line 12 when classified long-term.
+- Box 11S lines with missing or mixed ST/LT wording are not routed by default. They surface as unclassified Schedule D rows and require the K-1 review modal's Short-term / Long-term setting before inclusion.
+- Box 11 code ZZ trader-fund items such as Section 988 FX, swap income/loss, and PFIC mark-to-market are ordinary income/loss on Schedule E Part II nonpassive, not Schedule D.
+- Box 13 code ZZ trader, management, administrative, and similar statement deductions reduce Schedule E Part II nonpassive income.
+- K-1 code values and flat K-1 money fields are parsed through the shared `currency.js` helper so commas, currency symbols, signs, and accounting parentheses are handled consistently.
+- GenAI extraction normalizes code casing/whitespace server-side and may set `character: "short" | "long"` on Box 11S sub-lines only when the supporting statement identifies the exact character.
+
+Inline tooltips in the K-1 code modal, Schedule D, and Schedule E explain the routing where users commonly need to validate statement treatment.
 
 ### Schedule C Tab
 

@@ -5,9 +5,12 @@
  * and the per-account entries stored in the parent document's parsed_data array.
  */
 
+import currency from 'currency.js'
+
 import type { ForeignTaxSummary } from '@/finance/1116'
 import { extractForeignTaxFromK1 } from '@/finance/1116/k3-to-1116'
 import { k1NetIncome } from '@/lib/finance/k1Utils'
+import { parseMoney } from '@/lib/finance/money'
 import type { FK1StructuredData, MiscRouting, MultiAccountParsedEntry, TaxDocument, TaxDocumentAccountLink } from '@/types/finance/tax-document'
 import { isFK1StructuredData, isLine8MiscRouting } from '@/types/finance/tax-document'
 
@@ -164,15 +167,9 @@ function getNumericValue(
   ...keys: readonly string[]
 ): number | null {
   for (const key of keys) {
-    const value = data[key]
-    if (typeof value === 'number' && !Number.isNaN(value)) {
-      return value
-    }
-    if (typeof value === 'string') {
-      const parsed = Number.parseFloat(value)
-      if (!Number.isNaN(parsed)) {
-        return parsed
-      }
+    const parsed = parseMoney(data[key] as string | number | null | undefined)
+    if (parsed !== null) {
+      return parsed
     }
   }
 
@@ -193,7 +190,7 @@ function sumNumericValues(
   data: Record<string, unknown>,
   keys: readonly string[],
 ): number | null {
-  let total = 0
+  let total = currency(0)
   let hasValue = false
 
   for (const key of keys) {
@@ -201,11 +198,11 @@ function sumNumericValues(
     if (value === null) {
       continue
     }
-    total += value
+    total = total.add(value)
     hasValue = true
   }
 
-  return hasValue && total !== 0 ? total : null
+  return hasValue && total.value !== 0 ? total.value : null
 }
 
 function inferMiscRouting(parsedData: Record<string, unknown>): MiscRouting | null {
@@ -290,7 +287,7 @@ function getSharedForeignTaxAmount(
 
       return true
     })
-    .reduce((sum, summary) => sum + summary.totalForeignTaxPaid, 0)
+    .reduce((sum, summary) => sum.add(summary.totalForeignTaxPaid), currency(0)).value
 
   return total === 0 ? null : total
 }

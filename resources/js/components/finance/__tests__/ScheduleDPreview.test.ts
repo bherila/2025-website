@@ -160,4 +160,18 @@ describe('computeScheduleD', () => {
     expect(result.schD.schD_line5).toBeCloseTo(0)
     expect(result.schD.schD_line12).toBeCloseTo(-101298 + 62473 + 7562)
   })
+
+  it('does not route ambiguous Box 11S lines until character is classified', () => {
+    const doc = makeK1WithBox11S()
+    const codes11 = (doc.parsed_data as { codes: { '11': { code: string; value: string; notes: string }[] } }).codes['11']
+    codes11.push({ code: 's', value: '1,234', notes: 'Statement includes short-term and long-term capital gain lines' })
+
+    const result = computeScheduleD([doc], [])
+
+    expect(result.has11SAmbiguous).toBe(true)
+    expect(result.ambiguous11SCount).toBe(1)
+    expect(result.ambiguous11SAmount).toBe(1234)
+    expect(result.schD.schD_line5).toBeCloseTo(-101298)
+    expect(result.schD.schD_line12).toBeCloseTo(70035)
+  })
 })

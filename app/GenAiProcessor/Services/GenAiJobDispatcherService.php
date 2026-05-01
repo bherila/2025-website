@@ -10,6 +10,7 @@ use App\GenAiProcessor\Services\Prompts\PayslipPromptTemplate;
 use App\GenAiProcessor\Services\Prompts\PromptTemplate;
 use App\GenAiProcessor\Services\Prompts\TaxDocumentPromptTemplate;
 use App\GenAiProcessor\Services\Prompts\UtilityBillPromptTemplate;
+use App\GenAiProcessor\Support\K1CodeItemNormalizer;
 use App\Models\User;
 use Bherila\GenAiLaravel\Schema;
 use Bherila\GenAiLaravel\ToolChoice;
@@ -1295,25 +1296,7 @@ PROMPT;
      */
     private function normalizeCodeItems(array $rawItems): array
     {
-        $result = [];
-        foreach ($rawItems as $item) {
-            if (! is_array($item) || ! isset($item['code'])) {
-                continue;
-            }
-            $rawValue = $item['value'] ?? null;
-            $rawCharacter = isset($item['character']) ? strtolower(trim((string) $item['character'])) : '';
-            $entry = [
-                'code' => (string) $item['code'],
-                'value' => is_numeric($rawValue) ? (string) (float) $rawValue : (string) ($rawValue ?? ''),
-                'notes' => isset($item['notes']) ? (string) $item['notes'] : '',
-            ];
-            if ($rawCharacter === 'short' || $rawCharacter === 'long') {
-                $entry['character'] = $rawCharacter;
-            }
-            $result[] = $entry;
-        }
-
-        return $result;
+        return (new K1CodeItemNormalizer)->normalize($rawItems);
     }
 
     /**
@@ -1522,9 +1505,9 @@ PROMPT;
         $codeItemsProp = Schema::arrayOf(
             Schema::object(
                 [
-                    'code' => Schema::string(),
-                    'value' => Schema::string(),
-                    'notes' => Schema::string(),
+                    'code' => Schema::string('K-1 box code exactly as shown, e.g. C, S, ZZ.'),
+                    'value' => Schema::string('Signed dollar amount for this code item. Preserve losses as negative amounts when shown with a minus sign or accounting parentheses.'),
+                    'notes' => Schema::string('Supplemental-statement label or explanation. For trader funds, preserve labels such as Section 988 FX, swap income/loss, PFIC MTM, trader deductions, management fees, and admin expenses.'),
                     // Capital-gain character override. Required for Box 11 code S sub-lines
                     // when the partnership's supplemental statement reports separate ST/LT
                     // amounts; should be set to "short" or "long" so Schedule D routes to
