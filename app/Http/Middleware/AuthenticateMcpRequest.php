@@ -31,8 +31,8 @@ class AuthenticateMcpRequest
         // Only the SHA-256 hash of the raw token is stored; hash before lookup.
         $user = User::where('mcp_api_key', hash('sha256', $token))->first();
 
-        if (! $user) {
-            return response()->json(['error' => 'Unauthorized – invalid MCP API key'], 401);
+        if (! $user || ! $user->canLogin()) {
+            return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         // setUser is stateless — no session/cookie side-effects.
