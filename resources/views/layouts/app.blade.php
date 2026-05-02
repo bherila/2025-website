@@ -24,6 +24,13 @@
         ['type' => 'link', 'label' => 'Utility Bill Tracker', 'href' => '/utility-bill-tracker'],
       ] : [];
 
+      // Build Financial Planning submenu (public)
+      $__financialPlanningItems = [
+        ['type' => 'link', 'label' => 'Overview', 'href' => '/financial-planning'],
+        ['type' => 'link', 'label' => 'Solo 401(k)', 'href' => '/financial-planning/solo-401k'],
+        ['type' => 'link', 'label' => 'Rent vs Buy', 'href' => '/financial-planning/rent-vs-buy'],
+      ];
+
       // Build Tools submenu (admin sub-items filtered server-side)
       $__toolsItems = array_values(array_filter([
         ['type' => 'group', 'label' => 'Utilities'],
@@ -48,6 +55,7 @@
         ['type' => 'link', 'label' => 'Recipes', 'href' => '/recipes'],
         ['type' => 'link', 'label' => 'Projects', 'href' => '/projects'],
         $__isAuthenticated ? ['type' => 'dropdown', 'label' => 'Finance', 'items' => $__financeItems] : null,
+        ['type' => 'dropdown', 'label' => 'Financial Planning', 'items' => $__financialPlanningItems],
         ['type' => 'dropdown', 'label' => 'Tools', 'items' => $__toolsItems],
         $__clientCompanies->count() > 0 ? ['type' => 'dropdown', 'label' => 'Client Portal', 'items' => $__clientPortalItems] : null,
       ]));
