@@ -5,22 +5,11 @@ import currency from 'currency.js'
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { Callout, fmtAmt, FormBlock, FormLine, FormSubLine, FormTotalLine, InfoTooltip, parseFieldVal } from '@/components/finance/tax-preview-primitives'
 import { getK1CodeItems, parseK1Field, resolve11SCharacter } from '@/lib/finance/k1Utils'
-import { parseMoney } from '@/lib/finance/money'
+import { readScheduleDBrokerGains, type ScheduleDBrokerLine } from '@/lib/finance/scheduleDBrokerGains'
 import { getDocAmounts } from '@/lib/finance/taxDocumentUtils'
 import { scheduleD } from '@/lib/tax/scheduleD'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-/** Read a numeric field from broker_1099 or 1099_b parsed_data. */
-function readBrokerField(p: Record<string, unknown>, ...keys: string[]): number {
-  for (const key of keys) {
-    const value = parseMoney(p[key])
-    if (value !== null) return value
-  }
-  return 0
-}
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -92,21 +81,20 @@ export function computeScheduleD(reviewedK1Docs: TaxDocument[], reviewed1099Docs
     .filter((d) => d.form_type === 'broker_1099' || d.form_type === '1099_b' || d.form_type === '1099_b_c')
     .map((doc) => {
       const p = (doc.parsed_data ?? {}) as Record<string, unknown>
-      const stGain = readBrokerField(p, 'b_st_gain_loss', 'b_st_reported_gain_loss')
-      const ltGain = readBrokerField(p, 'b_lt_gain_loss', 'b_lt_reported_gain_loss')
-      const totalGain = readBrokerField(p, 'b_total_gain_loss', 'total_realized_gain_loss')
-      if (stGain !== 0 || ltGain !== 0 || totalGain !== 0) {
+      const gains = readScheduleDBrokerGains(p)
+      if (gains.shortTermGain !== 0 || gains.longTermGain !== 0 || gains.totalGain !== 0) {
         return {
-          stGain: stGain || (totalGain !== 0 ? totalGain : 0),
-          ltGain,
+          stGain: gains.shortTermGain,
+          ltGain: gains.longTermGain,
+          lineAmounts: gains.lineAmounts,
         }
       }
       return null
     })
     .filter((source): source is NonNullable<typeof source> => source !== null)
 
-  const totalBrokerST = brokerSources.reduce((acc, s) => acc.add(s.stGain), currency(0)).value
-  const totalBrokerLT = brokerSources.reduce((acc, s) => acc.add(s.ltGain), currency(0)).value
+  const brokerLineAmount = (line: ScheduleDBrokerLine): number =>
+    brokerSources.reduce((acc, source) => acc.add(source.lineAmounts[line] ?? 0), currency(0)).value
 
   const totalCapitalGainDistributions = reviewed1099Docs.reduce((acc, doc) => {
     const links = doc.account_links ?? []
@@ -137,12 +125,16 @@ export function computeScheduleD(reviewedK1Docs: TaxDocument[], reviewed1099Docs
     .add(nonPortfolio11sLT).value
 
   const schD = scheduleD({
-    line1a_gain_loss: totalBrokerST,
+    line1a_gain_loss: brokerLineAmount('1a'),
+    line1b_gain_loss: brokerLineAmount('1b'),
+    line2_gain_loss: brokerLineAmount('2'),
+    line3_gain_loss: currency(brokerLineAmount('3')).add(total6781ST).value,
     line5: k1ST,
-    line8a_gain_loss: totalBrokerLT,
+    line8a_gain_loss: brokerLineAmount('8a'),
+    line8b_gain_loss: brokerLineAmount('8b'),
+    line9_gain_loss: brokerLineAmount('9'),
+    line10_gain_loss: currency(brokerLineAmount('10')).add(total6781LT).value,
     line12: k1LT,
-    line3_gain_loss: total6781ST,
-    line10_gain_loss: total6781LT,
     line13_capital_gain_distributions: totalCapitalGainDistributions,
   })
 
@@ -206,7 +198,12 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
   // Our imported broker_1099 documents (stored via finance:tax-import or Tax Preview UI)
   // use field names like b_st_reported_gain_loss / b_lt_gain_loss.
   // AI-extracted 1099_b documents use total_realized_gain_loss with is_short_term per lot.
-  type BrokerGainSource = { label: string; stGain: number; ltGain: number }
+  type BrokerGainSource = {
+    label: string
+    stGain: number
+    ltGain: number
+    lineAmounts: Partial<Record<ScheduleDBrokerLine, number>>
+  }
   const brokerSources: BrokerGainSource[] = []
 
   const brokerDocs = reviewed1099Docs.filter(
@@ -218,22 +215,21 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
     const payer = (p.payer_name as string | undefined) ?? doc.account?.acct_name ?? doc.original_filename ?? 'Brokerage'
 
     // Our manually-imported broker_1099 format (fields set by finance:tax-import / tinker)
-    const stGain = readBrokerField(p, 'b_st_gain_loss', 'b_st_reported_gain_loss')
-    const ltGain = readBrokerField(p, 'b_lt_gain_loss', 'b_lt_reported_gain_loss')
-    const totalGain = readBrokerField(p, 'b_total_gain_loss', 'total_realized_gain_loss')
+    const gains = readScheduleDBrokerGains(p)
 
-    if (stGain !== 0 || ltGain !== 0 || totalGain !== 0) {
+    if (gains.shortTermGain !== 0 || gains.longTermGain !== 0 || gains.totalGain !== 0) {
       brokerSources.push({
         label: payer,
-        stGain: stGain || (totalGain !== 0 ? totalGain : 0), // fallback if no ST/LT split
-        ltGain,
+        stGain: gains.shortTermGain,
+        ltGain: gains.longTermGain,
+        lineAmounts: gains.lineAmounts,
       })
     }
   }
 
   const hasBrokerData = brokerSources.length > 0
-  const totalBrokerST = brokerSources.reduce((acc, s) => acc.add(s.stGain), currency(0)).value
-  const totalBrokerLT = brokerSources.reduce((acc, s) => acc.add(s.ltGain), currency(0)).value
+  const brokerLineAmount = (line: ScheduleDBrokerLine): number =>
+    brokerSources.reduce((acc, source) => acc.add(source.lineAmounts[line] ?? 0), currency(0)).value
 
   // ── Short-term capital gains/losses ──────────────────────────────────────
   type CapGainLine = { label: string; amount: number; note?: string; boxRef?: string }
@@ -374,13 +370,16 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
     .reduce((acc, l) => acc.add(l.amount), currency(0)).value
 
   const schD = scheduleD({
-    line1a_gain_loss: totalBrokerST,   // ST brokerage (basis reported, Box A/1a)
+    line1a_gain_loss: brokerLineAmount('1a'), // ST brokerage summary without Form 8949 detail
+    line1b_gain_loss: brokerLineAmount('1b'),
+    line2_gain_loss: brokerLineAmount('2'),
+    line3_gain_loss: currency(brokerLineAmount('3')).add(total6781ST).value,
     line5: k1ST,                        // ST from K-1 partnerships (Line 5)
-    line8a_gain_loss: totalBrokerLT,   // LT brokerage (basis reported, Box D/8a)
+    line8a_gain_loss: brokerLineAmount('8a'), // LT brokerage summary without Form 8949 detail
+    line8b_gain_loss: brokerLineAmount('8b'),
+    line9_gain_loss: brokerLineAmount('9'),
+    line10_gain_loss: currency(brokerLineAmount('10')).add(total6781LT).value,
     line12: k1LT,                       // LT from K-1 partnerships (Line 12)
-    // Sec. 1256 split into the 6781 lines
-    line3_gain_loss: total6781ST,       // Form 6781 ST 40% portion
-    line10_gain_loss: total6781LT,      // Form 6781 LT 60% portion
   })
 
   const netST = schD.schD_line7

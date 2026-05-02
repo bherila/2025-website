@@ -51,6 +51,9 @@ class TaxPreviewExportControllerTest extends TestCase
         @unlink($tempPath);
 
         $sheet = $spreadsheet->getSheet(0);
+        $this->assertNull($sheet->getCell('A2')->getValue());
+        $this->assertSame('Part I — Income', $sheet->getCell('B2')->getValue());
+        $this->assertNull($sheet->getCell('C2')->getValue());
         $this->assertSame('Wages', $sheet->getCell('B3')->getValue());
         $this->assertSame(100000.0, (float) $sheet->getCell('C3')->getCalculatedValue());
         $this->assertTrue($sheet->getStyle('B2')->getFont()->getBold());

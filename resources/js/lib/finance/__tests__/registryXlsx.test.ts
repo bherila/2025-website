@@ -110,6 +110,115 @@ describe('XLSX registry integration', () => {
       expect(line16?.formula).toMatch(/^=C\d+\+C\d+$/)
     })
 
+    it('flags reconciliation adjustment rows when detail does not match canonical Schedule D values', () => {
+      const tr = {
+        ...baseReturn,
+        scheduleD: {
+          schD_line1a_gain_loss: 150,
+          schD_line7: 150,
+          schD_line15: 0,
+          schD_line16: 150,
+          schD_line21: 150,
+        } as never,
+        docs1099: [
+          { formType: 'broker_1099', payerName: 'Fidelity', parsedData: { b_st_reported_gain_loss: 120 } },
+        ],
+      } as TaxReturn1040
+
+      const sheet = buildScheduleDSheet(tr)
+      const adjustment = sheet?.rows.find((row) => row.description === 'Line 1a — Short-term totals reported on Form 1099-B — reconciliation adjustment')
+
+      expect(adjustment?.amount).toBe(30)
+      expect(adjustment?.note).toContain('Detail rows do not reconcile')
+    })
+
+    it('does not use combined 1099-B total as short-term fallback when long-term detail is present', () => {
+      const tr = {
+        ...baseReturn,
+        scheduleD: {
+          schD_line1a_gain_loss: 0,
+          schD_line7: 0,
+          schD_line8a_gain_loss: 200,
+          schD_line15: 200,
+          schD_line16: 200,
+          schD_line21: 200,
+        } as never,
+        docs1099: [
+          { formType: 'broker_1099', payerName: 'Fidelity', parsedData: { total_realized_gain_loss: 200, b_lt_gain_loss: 200 } },
+        ],
+      } as TaxReturn1040
+
+      const sheet = buildScheduleDSheet(tr)
+
+      expect(sheet?.rows.some((row) => row.description === 'Fidelity — S/T 1099-B')).toBe(false)
+      expect(sheet?.rows.find((row) => row.description === 'Fidelity — L/T 1099-B')?.amount).toBe(200)
+    })
+
+    it('routes parsed 1099-B transactions to Form 8949-backed Schedule D lines', () => {
+      const tr = {
+        ...baseReturn,
+        scheduleD: {
+          schD_line1a_gain_loss: 0,
+          schD_line1b_gain_loss: 100,
+          schD_line2_gain_loss: 50,
+          schD_line7: 150,
+          schD_line8a_gain_loss: 0,
+          schD_line8b_gain_loss: 200,
+          schD_line9_gain_loss: -25,
+          schD_line15: 175,
+          schD_line16: 325,
+          schD_line21: 325,
+        } as never,
+        docs1099: [
+          {
+            formType: '1099_b',
+            payerName: 'Fidelity',
+            parsedData: {
+              total_realized_gain_loss: 325,
+              transactions: [
+                { description: 'Short covered', realized_gain_loss: 100, is_short_term: true, form_8949_box: 'A', is_covered: true },
+                { description: 'Short noncovered', realized_gain_loss: 50, is_short_term: true, form_8949_box: 'B', is_covered: false },
+                { description: 'Long covered', realized_gain_loss: 200, is_short_term: false, form_8949_box: 'D', is_covered: true },
+                { description: 'Long noncovered', realized_gain_loss: -25, is_short_term: false, form_8949_box: 'E', is_covered: false },
+              ],
+            },
+          },
+        ],
+      } as TaxReturn1040
+
+      const sheet = buildScheduleDSheet(tr)
+
+      expect(sheet?.rows.find((row) => row.description === 'Fidelity — Short covered')?.note).toBe('Form 8949 Box A')
+      expect(sheet?.rows.find((row) => row.line === '1b')?.formula).toMatch(/^=SUM\(C\d+:C\d+\)$/)
+      expect(sheet?.rows.find((row) => row.line === '2')?.formula).toMatch(/^=SUM\(C\d+:C\d+\)$/)
+      expect(sheet?.rows.find((row) => row.line === '8b')?.formula).toMatch(/^=SUM\(C\d+:C\d+\)$/)
+      expect(sheet?.rows.find((row) => row.line === '9')?.formula).toMatch(/^=SUM\(C\d+:C\d+\)$/)
+      expect(sheet?.rows.some((row) => row.description === 'Fidelity — S/T 1099-B')).toBe(false)
+      expect(sheet?.rows.some((row) => row.description === 'Fidelity — L/T 1099-B')).toBe(false)
+    })
+
+    it('notes when total 1099-B gain is used as the short-term fallback', () => {
+      const tr = {
+        ...baseReturn,
+        scheduleD: {
+          schD_line1a_gain_loss: 123,
+          schD_line7: 123,
+          schD_line15: 0,
+          schD_line16: 123,
+          schD_line21: 123,
+        } as never,
+        docs1099: [
+          { formType: '1099_b', payerName: 'Fidelity', parsedData: { total_realized_gain_loss: 123 } },
+        ],
+      } as TaxReturn1040
+
+      const sheet = buildScheduleDSheet(tr)
+      const fallbackSource = sheet?.rows.find((row) => row.description === 'Fidelity — S/T 1099-B')
+
+      expect(fallbackSource?.amount).toBe(123)
+      expect(fallbackSource?.note).toBe('Used total realized gain/loss as short-term fallback because no ST/LT split was present.')
+    })
+
     it('omits line 21 when net is non-negative', () => {
       const tr = { ...baseReturn, scheduleD: { schD_line16: 5000, schD_line21: 0 } } as TaxReturn1040
       const sheet = buildScheduleDSheet(tr)
@@ -121,12 +230,14 @@ describe('XLSX registry integration', () => {
       const tr = {
         ...baseReturn,
         year: 2025,
-        scheduleD: { schD_line16: -3000, schD_line21: -3000 },
+        scheduleD: { schD_line16: -5000, schD_line21: -1500 },
       } as TaxReturn1040
       const sheet = buildScheduleDSheet(tr)
       const line21 = sheet?.rows.find((row) => row.line === '21')
       expect(line21?.description).toContain('2025')
-      expect(line21?.formula).toMatch(/^=MAX\(C\d+,-3000\)$/)
+      expect(line21?.amount).toBe(-1500)
+      expect(line21?.formula).toBeUndefined()
+      expect(line21?.note).toContain('canonical Schedule D line 21')
     })
   })
 

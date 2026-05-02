@@ -3,29 +3,37 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { DockHeaderBar } from '../DockHeaderBar'
 
 const mockSetPaletteOpen = jest.fn()
+const mockExportXlsx = jest.fn()
+let mockIsExportingXlsx = false
 
 jest.mock('../DockActions', () => ({
-  useDockActions: () => ({ setPaletteOpen: mockSetPaletteOpen }),
+  useDockActions: () => ({
+    exportXlsx: mockExportXlsx,
+    isExportingXlsx: mockIsExportingXlsx,
+    setPaletteOpen: mockSetPaletteOpen,
+  }),
 }))
 
 describe('DockHeaderBar', () => {
   beforeEach(() => {
     mockSetPaletteOpen.mockClear()
+    mockExportXlsx.mockClear()
+    mockIsExportingXlsx = false
   })
 
   it('shows the XLSX export action in dock mode chrome', () => {
-    const onExportXlsx = jest.fn()
-
-    render(<DockHeaderBar onExportXlsx={onExportXlsx} isExporting={false} />)
+    render(<DockHeaderBar />)
 
     const exportButton = screen.getByRole('button', { name: /export xlsx/i })
     expect(exportButton).toBeInTheDocument()
     fireEvent.click(exportButton)
-    expect(onExportXlsx).toHaveBeenCalledTimes(1)
+    expect(mockExportXlsx).toHaveBeenCalledTimes(1)
   })
 
   it('disables the XLSX export action while generating', () => {
-    render(<DockHeaderBar onExportXlsx={jest.fn()} isExporting />)
+    mockIsExportingXlsx = true
+
+    render(<DockHeaderBar />)
 
     expect(screen.getByRole('button', { name: /generating/i })).toBeDisabled()
   })

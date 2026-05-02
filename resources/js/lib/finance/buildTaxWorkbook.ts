@@ -5,6 +5,7 @@ import { renderK3SectionsRows } from '@/finance/1116/k3-row-renderer'
 import { K1_CODE_ROUTING_NOTES, K1_ROUTING_NOTES } from '@/lib/finance/k1RoutingNotes'
 import { normalizeK1Code, resolve11SCharacter } from '@/lib/finance/k1Utils'
 import { parseMoney } from '@/lib/finance/money'
+import { readScheduleDBrokerGains, type ScheduleDBrokerLine } from '@/lib/finance/scheduleDBrokerGains'
 import type { EstimatedTaxPaymentsData, TaxReturn1040 } from '@/types/finance/tax-return'
 import type { XlsxRow, XlsxSheet, XlsxWorkbook } from '@/types/finance/xlsx-export'
 
@@ -764,11 +765,26 @@ export function buildScheduleDSheet(taxReturn: TaxReturn1040): XlsxSheet | null 
   if (!taxReturn.scheduleD) {
     return null
   }
+  type ScheduleDLine = ScheduleDBrokerLine
+    | '4'
+    | '5'
+    | '6'
+    | '7'
+    | '11'
+    | '12'
+    | '13'
+    | '14'
+    | '15'
+    | '16'
+    | '21'
   type ScheduleDSource = { description: string; amount: number; note?: string }
-  type ScheduleDSourceBuckets = Record<string, ScheduleDSource[]>
+  type ScheduleDSourceBuckets = Partial<Record<ScheduleDLine, ScheduleDSource[]>>
 
   const sourceBuckets: ScheduleDSourceBuckets = {}
-  const addSource = (line: string, source: ScheduleDSource): void => {
+  const reconciliationNote = 'Detail rows do not reconcile to the canonical Schedule D amount; verify source documents and tax preview calculations.'
+  const shortTerm1099BNote = '1099-B summary data lacks Form 8949 box detail; routed to line 1a instead of 1b/2/3.'
+  const longTerm1099BNote = '1099-B summary data lacks Form 8949 box detail; routed to line 8a instead of 8b/9/10.'
+  const addSource = (line: ScheduleDLine, source: ScheduleDSource): void => {
     if (!isNonZero(source.amount)) {
       return
     }
@@ -826,19 +842,29 @@ export function buildScheduleDSheet(taxReturn: TaxReturn1040): XlsxSheet | null 
 
   for (const doc of taxReturn.docs1099 ?? []) {
     const parsed = doc.parsedData
-    const stGain = numericValue(parsed.b_st_gain_loss ?? parsed.b_st_reported_gain_loss)
-    const ltGain = numericValue(parsed.b_lt_gain_loss ?? parsed.b_lt_reported_gain_loss)
-    const totalGain = numericValue(parsed.b_total_gain_loss ?? parsed.total_realized_gain_loss)
+    const gains = readScheduleDBrokerGains(parsed)
 
     if (doc.formType === 'broker_1099' || doc.formType === '1099_b' || doc.formType === '1099_b_c') {
-      addSource('1a', {
-        description: `${doc.payerName} — S/T 1099-B`,
-        amount: stGain || (isNonZero(totalGain) ? totalGain : 0),
-      })
-      addSource('8a', {
-        description: `${doc.payerName} — L/T 1099-B`,
-        amount: ltGain,
-      })
+      if (gains.transactionSources.length > 0) {
+        for (const source of gains.transactionSources) {
+          addSource(source.line, {
+            description: `${doc.payerName} — ${source.description}`,
+            amount: source.amount,
+            note: `Form 8949 Box ${source.form8949Box}`,
+          })
+        }
+      } else {
+        addSource('1a', {
+          description: `${doc.payerName} — S/T 1099-B`,
+          amount: gains.shortTermGain,
+          note: gains.usedTotalAsShortTermFallback ? 'Used total realized gain/loss as short-term fallback because no ST/LT split was present.' : shortTerm1099BNote,
+        })
+        addSource('8a', {
+          description: `${doc.payerName} — L/T 1099-B`,
+          amount: gains.longTermGain,
+          note: longTerm1099BNote,
+        })
+      }
     }
 
     if (doc.formType === 'broker_1099' || doc.formType === '1099_div' || doc.formType === '1099_div_c') {
@@ -855,14 +881,14 @@ export function buildScheduleDSheet(taxReturn: TaxReturn1040): XlsxSheet | null 
     rows.push({ isHeader: true, description })
   }
 
-  const addLine = (line: string, description: string, amount: number): number => {
+  const addLine = (line: ScheduleDLine, description: string, amount: number): number => {
     const sources = [...(sourceBuckets[line] ?? [])]
     const sourceTotal = sumAmounts(sources)
     const difference = currency(amount).subtract(sourceTotal).value
     if (sources.length === 0 && isNonZero(amount)) {
       sources.push({ description: `${description} — computed amount`, amount })
     } else if (isNonZero(difference)) {
-      sources.push({ description: `${description} — reconciliation adjustment`, amount: difference })
+      sources.push({ description: `${description} — reconciliation adjustment`, amount: difference, note: reconciliationNote })
     }
 
     let formula: string | undefined
@@ -885,7 +911,7 @@ export function buildScheduleDSheet(taxReturn: TaxReturn1040): XlsxSheet | null 
   }
 
   const addTotalLine = (
-    line: string,
+    line: ScheduleDLine,
     description: string,
     amount: number,
     rowRefs: number[],
@@ -898,7 +924,7 @@ export function buildScheduleDSheet(taxReturn: TaxReturn1040): XlsxSheet | null 
     const difference = currency(amount).subtract(referencedAmount).value
     const formulaRefs = [...rowRefs]
     if (isNonZero(difference)) {
-      rows.push({ description: adjustmentDescription, amount: difference })
+      rows.push({ description: adjustmentDescription, amount: difference, note: reconciliationNote })
       formulaRefs.push(excelRowNumber(rows))
     }
 
@@ -961,7 +987,7 @@ export function buildScheduleDSheet(taxReturn: TaxReturn1040): XlsxSheet | null 
       line: '21',
       description: `Line 21 — Capital loss applied to ${taxReturn.year} return`,
       amount: numericValue(s.schD_line21),
-      formula: `=MAX(C${line16},-3000)`,
+      note: 'Uses the canonical Schedule D line 21 amount from tax preview calculations.',
       isTotal: true,
     })
   }

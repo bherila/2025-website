@@ -7,17 +7,13 @@ import { useDockActions } from './DockActions'
 
 /**
  * Top header bar shown when dock mode is active. Holds the title, the
- * "Dock preview" badge, the ⌘K palette trigger, and the disable hint.
+ * "Dock preview" badge, the ⌘K palette trigger, dock actions, and the
+ * disable hint.
  *
  * Must be rendered inside `<DockActionsProvider>` so `useDockActions` resolves.
  */
-interface DockHeaderBarProps {
-  onExportXlsx: () => void
-  isExporting: boolean
-}
-
-export function DockHeaderBar({ onExportXlsx, isExporting }: DockHeaderBarProps): React.ReactElement {
-  const { setPaletteOpen } = useDockActions()
+export function DockHeaderBar(): React.ReactElement {
+  const { exportXlsx, isExportingXlsx, setPaletteOpen } = useDockActions()
   const meta = navigatorMeta()
 
   return (
@@ -43,11 +39,11 @@ export function DockHeaderBar({ onExportXlsx, isExporting }: DockHeaderBarProps)
         variant="outline"
         size="sm"
         className="ml-auto h-7 gap-1.5 px-2.5 text-xs"
-        onClick={onExportXlsx}
-        disabled={isExporting}
+        onClick={exportXlsx}
+        disabled={isExportingXlsx}
       >
         <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />
-        {isExporting ? 'Generating…' : 'Export XLSX'}
+        {isExportingXlsx ? 'Generating…' : 'Export XLSX'}
       </Button>
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <span className="hidden sm:inline">
