@@ -90,6 +90,24 @@ class UserAiConfigurationTest extends TestCase
         ])->assertOk()->assertJsonFragment(['name' => 'New name']);
     }
 
+    public function test_update_cannot_change_provider(): void
+    {
+        $user = User::factory()->create();
+        $config = UserAiConfiguration::factory()->for($user)->gemini()->create();
+
+        $this->actingAs($user)->putJson("/api/user/ai-prefs/{$config->id}", [
+            'name' => $config->name,
+            'provider' => 'anthropic',
+            'model' => 'claude-sonnet-4-6',
+        ])->assertUnprocessable()
+            ->assertJsonFragment(['error' => 'Provider cannot be changed after an API key configuration is created.']);
+
+        $this->assertDatabaseHas('user_ai_configurations', [
+            'id' => $config->id,
+            'provider' => 'gemini',
+        ]);
+    }
+
     public function test_update_cannot_access_other_users_config(): void
     {
         $owner = User::factory()->create();
@@ -243,6 +261,65 @@ class UserAiConfigurationTest extends TestCase
         $this->assertFalse($response->json('0.is_expired'));
     }
 
+    // --- invalid API keys ---
+
+    public function test_index_returns_invalid_api_key_fields(): void
+    {
+        $user = User::factory()->create();
+        $config = UserAiConfiguration::factory()->active()->for($user)->gemini()->create();
+        $config->markApiKeyInvalid('Invalid API Key format');
+
+        $response = $this->actingAs($user)->getJson('/api/user/ai-prefs');
+
+        $response->assertOk();
+        $this->assertTrue($response->json('0.has_invalid_api_key'));
+        $this->assertNotNull($response->json('0.api_key_invalid_at'));
+        $this->assertSame('Invalid API Key format', $response->json('0.api_key_invalid_reason'));
+    }
+
+    public function test_update_with_new_api_key_clears_invalid_api_key_fields(): void
+    {
+        $user = User::factory()->create();
+        $config = UserAiConfiguration::factory()->active()->for($user)->gemini()->create();
+        $config->markApiKeyInvalid('Invalid API Key format');
+
+        $this->actingAs($user)->putJson("/api/user/ai-prefs/{$config->id}", [
+            'name' => $config->name,
+            'provider' => 'gemini',
+            'api_key' => 'fixed-key',
+            'model' => 'gemini-2.0-flash',
+        ])->assertOk()->assertJsonFragment(['has_invalid_api_key' => false]);
+
+        $this->assertDatabaseHas('user_ai_configurations', [
+            'id' => $config->id,
+            'api_key_invalid_at' => null,
+            'api_key_invalid_reason' => null,
+        ]);
+    }
+
+    public function test_activate_rejects_invalid_api_key_configuration(): void
+    {
+        $user = User::factory()->create();
+        $config = UserAiConfiguration::factory()->for($user)->gemini()->create();
+        $config->markApiKeyInvalid('Invalid API Key format');
+
+        $this->actingAs($user)->postJson("/api/user/ai-prefs/{$config->id}/activate", [])
+            ->assertUnprocessable()
+            ->assertJsonFragment(['error' => 'This API key has been marked invalid. Edit the configuration with a valid key before activating it.']);
+    }
+
+    public function test_activate_rejects_expired_configuration(): void
+    {
+        $user = User::factory()->create();
+        $config = UserAiConfiguration::factory()->for($user)->gemini()
+            ->expiredAt(now()->subDay())
+            ->create();
+
+        $this->actingAs($user)->postJson("/api/user/ai-prefs/{$config->id}/activate", [])
+            ->assertUnprocessable()
+            ->assertJsonFragment(['error' => 'This API key has expired. Edit the configuration before activating it.']);
+    }
+
     // --- usage stats ---
 
     public function test_index_returns_usage_stats_field(): void
@@ -285,6 +362,15 @@ class UserAiConfigurationTest extends TestCase
         UserAiConfiguration::factory()->active()->gemini()->for($user)
             ->expiredAt(now()->subDay())
             ->create();
+
+        $this->assertNull($user->resolvedAiClient());
+    }
+
+    public function test_resolved_ai_client_returns_null_for_invalid_active_config(): void
+    {
+        $user = User::factory()->create(['gemini_api_key' => null]);
+        $config = UserAiConfiguration::factory()->active()->gemini()->for($user)->create();
+        $config->markApiKeyInvalid('Invalid API Key format');
 
         $this->assertNull($user->resolvedAiClient());
     }

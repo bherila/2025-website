@@ -118,7 +118,7 @@ function SelectTrigger({
 type SelectContentProps = React.ComponentProps<typeof SelectPrimitive.Popup> &
   Pick<
     React.ComponentProps<typeof SelectPrimitive.Positioner>,
-    "align" | "alignItemWithTrigger" | "alignOffset" | "collisionPadding" | "side" | "sideOffset"
+    "align" | "alignItemWithTrigger" | "alignOffset" | "collisionPadding" | "positionMethod" | "side" | "sideOffset"
   > & {
     position?: "item-aligned" | "popper"
   }
@@ -131,6 +131,7 @@ function SelectContent({
   alignItemWithTrigger,
   alignOffset,
   collisionPadding,
+  positionMethod = "fixed",
   side,
   sideOffset,
   ...props
@@ -144,6 +145,7 @@ function SelectContent({
         alignItemWithTrigger={alignItemWithTrigger ?? position !== "popper"}
         alignOffset={alignOffset}
         collisionPadding={collisionPadding}
+        positionMethod={positionMethod}
         side={side}
         sideOffset={sideOffset}
         className="z-50"

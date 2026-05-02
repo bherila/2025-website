@@ -13,7 +13,40 @@ import {
 } from "@/components/ui/input-group"
 import { cn } from "@/lib/utils"
 
-const Combobox = ComboboxPrimitive.Root
+interface ComboboxContextValue {
+  anchorElement: HTMLElement | null
+  portalContainer: HTMLElement | null
+  setAnchorElement: (element: HTMLElement | null) => void
+}
+
+const ComboboxContext = React.createContext<ComboboxContextValue | null>(null)
+
+function useComboboxContext(): ComboboxContextValue | null {
+  return React.useContext(ComboboxContext)
+}
+
+function Combobox<Value, Multiple extends boolean | undefined = false>({
+  children,
+  ...props
+}: ComboboxPrimitive.Root.Props<Value, Multiple>) {
+  const [anchorElement, setAnchorElement] = React.useState<HTMLElement | null>(null)
+  const portalContainer = React.useMemo(
+    () =>
+      anchorElement?.closest<HTMLElement>("[data-slot='dialog-portal']") ??
+      null,
+    [anchorElement]
+  )
+  const contextValue = React.useMemo<ComboboxContextValue>(
+    () => ({ anchorElement, portalContainer, setAnchorElement }),
+    [anchorElement, portalContainer]
+  )
+
+  return (
+    <ComboboxContext.Provider value={contextValue}>
+      <ComboboxPrimitive.Root {...props}>{children}</ComboboxPrimitive.Root>
+    </ComboboxContext.Provider>
+  )
+}
 
 function ComboboxValue({ ...props }: ComboboxPrimitive.Value.Props) {
   return <ComboboxPrimitive.Value data-slot="combobox-value" {...props} />
@@ -63,8 +96,10 @@ function ComboboxInput({
   showTrigger?: boolean
   showClear?: boolean
 }) {
+  const comboboxContext = useComboboxContext()
+
   return (
-    <InputGroup className={cn("w-auto", className)}>
+    <InputGroup ref={comboboxContext?.setAnchorElement} className={cn("w-auto", className)}>
       <ComboboxPrimitive.Input
         render={<InputGroupInput disabled={disabled} />}
         {...props}
@@ -96,20 +131,24 @@ function ComboboxContent({
   align = "start",
   alignOffset = 0,
   anchor,
+  positionMethod = "fixed",
   ...props
 }: ComboboxPrimitive.Popup.Props &
   Pick<
     ComboboxPrimitive.Positioner.Props,
-    "side" | "align" | "sideOffset" | "alignOffset" | "anchor"
+    "side" | "align" | "sideOffset" | "alignOffset" | "anchor" | "positionMethod"
   >) {
+  const comboboxContext = useComboboxContext()
+
   return (
-    <ComboboxPrimitive.Portal>
+    <ComboboxPrimitive.Portal container={comboboxContext?.portalContainer ?? undefined}>
       <ComboboxPrimitive.Positioner
         side={side}
         sideOffset={sideOffset}
         align={align}
         alignOffset={alignOffset}
-        anchor={anchor}
+        anchor={anchor ?? comboboxContext?.anchorElement ?? undefined}
+        positionMethod={positionMethod}
         className="isolate z-50"
       >
         <ComboboxPrimitive.Popup

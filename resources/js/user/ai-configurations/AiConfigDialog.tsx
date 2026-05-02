@@ -3,6 +3,14 @@ import React from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from '@/components/ui/combobox';
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -16,6 +24,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Spinner } from '@/components/ui/spinner';
 
 import type { AiConfig, FormState, Provider } from './types';
+import { BEDROCK_REGIONS } from './types';
 
 interface AiConfigDialogProps {
   open: boolean;
@@ -39,7 +48,6 @@ const providerOptions: { value: Provider; label: string }[] = [
   { value: 'anthropic', label: 'Anthropic' },
   { value: 'bedrock', label: 'Bedrock' },
 ];
-const selectClassName = 'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring';
 
 export const AiConfigDialog: React.FC<AiConfigDialogProps> = ({
   open,
@@ -82,6 +90,7 @@ export const AiConfigDialog: React.FC<AiConfigDialogProps> = ({
         <div className="space-y-1">
           <Label htmlFor="config-provider">Provider</Label>
           <Select
+            disabled={editingConfig !== null}
             value={form.provider}
             onValueChange={value => setForm(f => ({ ...f, provider: value as Provider, model: '' }))}
           >
@@ -117,13 +126,27 @@ export const AiConfigDialog: React.FC<AiConfigDialogProps> = ({
           <>
             <div className="space-y-1">
               <Label htmlFor="config-region">Region</Label>
-              <Input
-                id="config-region"
-                required
+              <Select
                 value={form.region}
-                onChange={e => setForm(f => ({ ...f, region: e.target.value }))}
-                placeholder="us-east-1"
-              />
+                onValueChange={value => setForm(f => ({ ...f, region: value }))}
+              >
+                <SelectTrigger id="config-region" className="w-full">
+                  <SelectValue>
+                    {(value: string | null) => {
+                      const region = BEDROCK_REGIONS.find(option => option.value === value);
+
+                      return region ? `${region.label} (${region.value})` : value ?? '';
+                    }}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {BEDROCK_REGIONS.map(region => (
+                    <SelectItem key={region.value} value={region.value}>
+                      {region.label} ({region.value})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1">
               <Label htmlFor="config-session-token">
@@ -141,38 +164,46 @@ export const AiConfigDialog: React.FC<AiConfigDialogProps> = ({
 
         <div className="space-y-1">
           <Label htmlFor="config-model">Model</Label>
-          {form.provider === 'bedrock' ? (
-            <Input
-              id="config-model"
-              required
-              value={form.model}
-              onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
-              placeholder="e.g. anthropic.claude-3-5-sonnet-20241022-v2:0"
-            />
-          ) : (
-            <div className="flex gap-2">
-              <select
-                id="config-model"
-                required
-                className={selectClassName}
+          <div className="flex gap-2">
+            <div className="min-w-0 flex-1">
+              <Combobox
+                items={models}
                 value={form.model}
-                onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
+                inputValue={form.model}
+                onInputValueChange={value => setForm(f => ({ ...f, model: value }))}
+                onValueChange={value => setForm(f => ({ ...f, model: String(value ?? '') }))}
+                autoHighlight
               >
-                <option value="">Select a model…</option>
-                {models.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={fetchModelsDisabled}
-                onClick={onFetchModels}
-                className="shrink-0"
-              >
-                {fetchingModels ? <><Spinner className="mr-1 size-3" />Fetching…</> : 'Fetch models'}
-              </Button>
+                <ComboboxInput
+                  id="config-model"
+                  required
+                  className="w-full min-w-0"
+                  placeholder={models.length > 0 ? 'Type or search models…' : 'Type model ID or fetch models…'}
+                  showClear
+                />
+                <ComboboxContent align="start">
+                  <ComboboxEmpty>No models found.</ComboboxEmpty>
+                  <ComboboxList>
+                    {models.map(model => (
+                      <ComboboxItem key={model} value={model}>
+                        {model}
+                      </ComboboxItem>
+                    ))}
+                  </ComboboxList>
+                </ComboboxContent>
+              </Combobox>
             </div>
-          )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={fetchModelsDisabled}
+              onClick={onFetchModels}
+              className="shrink-0"
+            >
+              {fetchingModels ? <><Spinner className="mr-1 size-3" />Fetching…</> : 'Fetch models'}
+            </Button>
+          </div>
           {modelsError && (
             <Alert variant="destructive" className="mt-1 py-2">
               <AlertDescription className="text-xs">{modelsError}</AlertDescription>

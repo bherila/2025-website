@@ -7,6 +7,7 @@ use App\GenAiProcessor\Mail\GenAiJobDeferredMail;
 use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Models\GenAiImportResult;
 use App\GenAiProcessor\Services\GenAiJobDispatcherService;
+use App\GenAiProcessor\Support\GenAiCredentialErrorClassifier;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
@@ -69,6 +70,11 @@ class ParseImportJob implements ShouldQueue
         $activeConfig = $user->activeAiConfiguration();
         if ($activeConfig && $activeConfig->isExpired()) {
             $job->markFailed('Your AI configuration "'.$activeConfig->name.'" has expired. Please update it in Settings.');
+
+            return;
+        }
+        if ($activeConfig && $activeConfig->hasInvalidApiKey()) {
+            $job->markFailed('Your AI configuration "'.$activeConfig->name.'" has an invalid API key. Please update it in Settings.');
 
             return;
         }
@@ -176,6 +182,10 @@ class ParseImportJob implements ShouldQueue
                 Log::warning('Failed to send failure mail', ['job_id' => $job->id]);
             }
         } catch (GenAiFatalException $e) {
+            if ($activeConfig && GenAiCredentialErrorClassifier::isInvalidCredential($activeConfig->provider, $e)) {
+                $activeConfig->markApiKeyInvalid($e->getMessage());
+            }
+
             // Fatal errors (400 Bad Request, etc.) - mark as failed immediately with max retries
             $job->update([
                 'status' => 'failed',

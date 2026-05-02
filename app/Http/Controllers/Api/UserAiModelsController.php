@@ -2,7 +2,14 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\GenAiProcessor\Support\GenAiCredentialErrorClassifier;
 use App\Http\Controllers\Controller;
+use App\Models\UserAiConfiguration;
+use Bherila\GenAiLaravel\Clients\AnthropicClient;
+use Bherila\GenAiLaravel\Clients\BedrockClient;
+use Bherila\GenAiLaravel\Clients\GeminiClient;
+use Bherila\GenAiLaravel\Contracts\GenAiClient;
+use Bherila\GenAiLaravel\Exceptions\GenAiFatalException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -12,10 +19,6 @@ use Illuminate\Support\Facades\Log;
 
 class UserAiModelsController extends Controller
 {
-    private const INVALID_CREDENTIALS_ERROR = 'Invalid API credentials.';
-
-    private const FETCH_MODELS_ERROR = 'Failed to fetch models. Please check your credentials and try again.';
-
     public function fetch(Request $request): JsonResponse
     {
         $request->validate([
@@ -29,10 +32,13 @@ class UserAiModelsController extends Controller
         $provider = (string) $request->input('provider');
         $apiKey = $request->input('api_key');
         $apiKey = is_string($apiKey) ? $apiKey : null;
+        /** @var UserAiConfiguration|null $config */
+        $config = null;
 
         // For edit flows, accept a config_id and reuse the saved key rather than
         // requiring the user to re-enter it.
         if (! $apiKey && $request->filled('config_id')) {
+            /** @var UserAiConfiguration|null $config */
             $config = Auth::user()->aiConfigurations()->find($request->input('config_id'));
             if ($config) {
                 $apiKey = $config->api_key;
@@ -49,16 +55,34 @@ class UserAiModelsController extends Controller
         try {
             $models = $this->listModels($provider, $apiKey, $region, $sessionToken);
 
+            if ($config?->hasInvalidApiKey()) {
+                $config->clearApiKeyInvalid();
+            }
+
             return response()->json(['models' => $models]);
-        } catch (\UnexpectedValueException $e) {
+        } catch (GenAiFatalException $e) {
             Log::warning('Failed to fetch AI models', ['provider' => $provider, 'error' => $e->getMessage()]);
 
-            return response()->json(['error' => self::INVALID_CREDENTIALS_ERROR], 422);
+            if (GenAiCredentialErrorClassifier::isInvalidCredential($provider, $e)) {
+                return response()->json(['error' => 'Invalid API credentials.'], 422);
+            }
+
+            return response()->json(['error' => 'Failed to fetch models. Please check your credentials and try again.'], 422);
         } catch (\Exception $e) {
             Log::warning('Failed to fetch AI models', ['provider' => $provider, 'error' => $e->getMessage()]);
 
-            return response()->json(['error' => self::FETCH_MODELS_ERROR], 422);
+            return response()->json(['error' => 'Failed to fetch models. Please check your credentials and try again.'], 422);
         }
+    }
+
+    private function makeClient(string $provider, string $apiKey, string $region, string $sessionToken): GenAiClient
+    {
+        return match ($provider) {
+            'gemini' => new GeminiClient(apiKey: $apiKey),
+            'anthropic' => new AnthropicClient(apiKey: $apiKey),
+            'bedrock' => new BedrockClient(apiKey: $apiKey, modelId: 'any', region: $region, sessionToken: $sessionToken),
+            default => throw new \InvalidArgumentException("Unsupported provider: {$provider}"),
+        };
     }
 
     /**
@@ -66,6 +90,14 @@ class UserAiModelsController extends Controller
      */
     private function listModels(string $provider, string $apiKey, string $region, string $sessionToken): array
     {
+        $client = $this->makeClient($provider, $apiKey, $region, $sessionToken);
+        if (in_array('listModels', get_class_methods($client), true)) {
+            /** @var mixed $modelInfos */
+            $modelInfos = call_user_func([$client, 'listModels']);
+
+            return $this->normalizeModelInfoList($modelInfos);
+        }
+
         return match ($provider) {
             'gemini' => $this->listGeminiModels($apiKey),
             'anthropic' => $this->listAnthropicModels($apiKey),
@@ -79,11 +111,9 @@ class UserAiModelsController extends Controller
      */
     private function listGeminiModels(string $apiKey): array
     {
-        $request = Http::withHeaders(['x-goog-api-key' => $apiKey]);
-        $this->ensureCredentialsAreValid($request->get('https://generativelanguage.googleapis.com/v1beta/models'));
-
-        $response = $request->get('https://generativelanguage.googleapis.com/v1beta/models');
-        $this->ensureCredentialsAreValid($response);
+        $response = Http::withHeaders(['x-goog-api-key' => $apiKey])
+            ->get('https://generativelanguage.googleapis.com/v1beta/models');
+        $this->ensureResponseSuccessful($response, 'gemini');
 
         $models = $response->json('models');
         if (! is_array($models)) {
@@ -115,15 +145,11 @@ class UserAiModelsController extends Controller
      */
     private function listAnthropicModels(string $apiKey): array
     {
-        $request = Http::withHeaders([
+        $response = Http::withHeaders([
             'x-api-key' => $apiKey,
             'anthropic-version' => '2023-06-01',
-        ]);
-
-        $this->ensureCredentialsAreValid($request->get('https://api.anthropic.com/v1/models'));
-
-        $response = $request->get('https://api.anthropic.com/v1/models');
-        $this->ensureCredentialsAreValid($response);
+        ])->get('https://api.anthropic.com/v1/models');
+        $this->ensureResponseSuccessful($response, 'anthropic');
 
         $models = $response->json('data');
         if (! is_array($models)) {
@@ -151,15 +177,12 @@ class UserAiModelsController extends Controller
         }
 
         $request = Http::withToken($apiKey)->withHeaders($headers);
-        $foundationModelsUrl = "https://bedrock.{$region}.amazonaws.com/foundation-models";
 
-        $this->ensureCredentialsAreValid($request->get($foundationModelsUrl));
-
-        $foundationModelsResponse = $request->get($foundationModelsUrl);
-        $this->ensureCredentialsAreValid($foundationModelsResponse);
+        $foundationModelsResponse = $request->get("https://bedrock.{$region}.amazonaws.com/foundation-models");
+        $this->ensureResponseSuccessful($foundationModelsResponse, 'bedrock');
 
         $inferenceProfilesResponse = $request->get("https://bedrock.{$region}.amazonaws.com/inference-profiles");
-        $this->ensureCredentialsAreValid($inferenceProfilesResponse);
+        $this->ensureResponseSuccessful($inferenceProfilesResponse, 'bedrock');
 
         return [
             ...$this->pluckModelIds($foundationModelsResponse, 'modelSummaries', 'modelId'),
@@ -167,10 +190,10 @@ class UserAiModelsController extends Controller
         ];
     }
 
-    private function ensureCredentialsAreValid(Response $response): void
+    private function ensureResponseSuccessful(Response $response, string $provider): void
     {
         if (! $response->successful()) {
-            throw new \UnexpectedValueException(self::INVALID_CREDENTIALS_ERROR);
+            throw new GenAiFatalException("{$provider} model listing failed: ".$response->body());
         }
     }
 
@@ -193,6 +216,32 @@ class UserAiModelsController extends Controller
         foreach ($models as $model) {
             if (is_array($model) && is_string($model[$idKey] ?? null)) {
                 $modelIds[] = $model[$idKey];
+            }
+        }
+
+        return $modelIds;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function normalizeModelInfoList(mixed $modelInfos): array
+    {
+        if (! is_iterable($modelInfos)) {
+            return [];
+        }
+
+        $modelIds = [];
+        foreach ($modelInfos as $modelInfo) {
+            $modelId = null;
+            if (is_object($modelInfo) && isset($modelInfo->id) && is_string($modelInfo->id)) {
+                $modelId = $modelInfo->id;
+            } elseif (is_array($modelInfo) && is_string($modelInfo['id'] ?? null)) {
+                $modelId = $modelInfo['id'];
+            }
+
+            if ($modelId !== null) {
+                $modelIds[] = $this->normalizeGeminiModelId($modelId);
             }
         }
 
