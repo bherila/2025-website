@@ -24,6 +24,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Spinner } from '@/components/ui/spinner';
 
 import type { AiConfig, FormState, Provider } from './types';
+import { BEDROCK_REGIONS } from './types';
 
 interface AiConfigDialogProps {
   open: boolean;
@@ -89,6 +90,7 @@ export const AiConfigDialog: React.FC<AiConfigDialogProps> = ({
         <div className="space-y-1">
           <Label htmlFor="config-provider">Provider</Label>
           <Select
+            disabled={editingConfig !== null}
             value={form.provider}
             onValueChange={value => setForm(f => ({ ...f, provider: value as Provider, model: '' }))}
           >
@@ -124,13 +126,27 @@ export const AiConfigDialog: React.FC<AiConfigDialogProps> = ({
           <>
             <div className="space-y-1">
               <Label htmlFor="config-region">Region</Label>
-              <Input
-                id="config-region"
-                required
+              <Select
                 value={form.region}
-                onChange={e => setForm(f => ({ ...f, region: e.target.value }))}
-                placeholder="us-east-1"
-              />
+                onValueChange={value => setForm(f => ({ ...f, region: value }))}
+              >
+                <SelectTrigger id="config-region" className="w-full">
+                  <SelectValue>
+                    {(value: string | null) => {
+                      const region = BEDROCK_REGIONS.find(option => option.value === value);
+
+                      return region ? `${region.label} (${region.value})` : value ?? '';
+                    }}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {BEDROCK_REGIONS.map(region => (
+                    <SelectItem key={region.value} value={region.value}>
+                      {region.label} ({region.value})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1">
               <Label htmlFor="config-session-token">
@@ -153,6 +169,8 @@ export const AiConfigDialog: React.FC<AiConfigDialogProps> = ({
               <Combobox
                 items={models}
                 value={form.model}
+                inputValue={form.model}
+                onInputValueChange={value => setForm(f => ({ ...f, model: value }))}
                 onValueChange={value => setForm(f => ({ ...f, model: String(value ?? '') }))}
                 autoHighlight
               >
@@ -160,7 +178,7 @@ export const AiConfigDialog: React.FC<AiConfigDialogProps> = ({
                   id="config-model"
                   required
                   className="w-full min-w-0"
-                  placeholder={models.length > 0 ? 'Search models…' : 'Fetch models to select…'}
+                  placeholder={models.length > 0 ? 'Type or search models…' : 'Type model ID or fetch models…'}
                   showClear
                 />
                 <ComboboxContent align="start">

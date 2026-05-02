@@ -7,6 +7,7 @@ use App\GenAiProcessor\Mail\GenAiJobDeferredMail;
 use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Models\GenAiImportResult;
 use App\GenAiProcessor\Services\GenAiJobDispatcherService;
+use App\GenAiProcessor\Support\GenAiCredentialErrorClassifier;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
@@ -181,7 +182,7 @@ class ParseImportJob implements ShouldQueue
                 Log::warning('Failed to send failure mail', ['job_id' => $job->id]);
             }
         } catch (GenAiFatalException $e) {
-            if ($activeConfig && $this->isInvalidApiKeyError($e)) {
+            if ($activeConfig && GenAiCredentialErrorClassifier::isInvalidCredential($activeConfig->provider, $e)) {
                 $activeConfig->markApiKeyInvalid($e->getMessage());
             }
 
@@ -248,18 +249,6 @@ class ParseImportJob implements ShouldQueue
         [$inputTokens, $outputTokens] = $this->extractTokenUsage(is_array($response) ? $response : []);
 
         return ['data' => $data, 'raw_response' => $rawResponse, 'input_tokens' => $inputTokens, 'output_tokens' => $outputTokens];
-    }
-
-    private function isInvalidApiKeyError(\Throwable $e): bool
-    {
-        $message = strtolower($e->getMessage());
-
-        return str_contains($message, 'invalid api key')
-            || str_contains($message, 'api key format')
-            || str_contains($message, 'invalid api credentials')
-            || str_contains($message, 'unauthorized')
-            || str_contains($message, 'forbidden')
-            || str_contains($message, 'authentication');
     }
 
     /**

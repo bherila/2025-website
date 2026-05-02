@@ -92,9 +92,6 @@ export const AiConfigurationsSection: React.FC<AiConfigurationsSectionProps> = (
       }
       const data = (await fetchWrapper.post('/api/user/ai-prefs/models', payload)) as { models: string[] };
       setModels(data.models);
-      if (!data.models.includes(form.model)) {
-        setForm(f => ({ ...f, model: '' }));
-      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : typeof err === 'string' ? err : 'Failed to fetch models';
       setModelsError(msg);

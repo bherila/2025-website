@@ -62,7 +62,10 @@ function InvalidApiKeyBadge({ config }: { config: AiConfig }) {
   if (!config.has_invalid_api_key) return null;
 
   return (
-    <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+    <span
+      className="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
+      title={config.api_key_invalid_reason ?? undefined}
+    >
       Invalid key
     </span>
   );

@@ -97,9 +97,14 @@ class UserAiConfigurationController extends Controller
         $config = $this->findOwned($id);
         $data = $request->validated();
 
+        if ($data['provider'] !== $config->provider) {
+            return response()->json([
+                'error' => 'Provider cannot be changed after an API key configuration is created.',
+            ], 422);
+        }
+
         $update = [
             'name' => $data['name'],
-            'provider' => $data['provider'],
             'region' => $data['region'] ?? null,
             'session_token' => $data['session_token'] ?? null,
             'model' => $data['model'],
@@ -141,6 +146,12 @@ class UserAiConfigurationController extends Controller
         if ($config->hasInvalidApiKey()) {
             return response()->json([
                 'error' => 'This API key has been marked invalid. Edit the configuration with a valid key before activating it.',
+            ], 422);
+        }
+
+        if ($config->isExpired()) {
+            return response()->json([
+                'error' => 'This API key has expired. Edit the configuration before activating it.',
             ], 422);
         }
 

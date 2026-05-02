@@ -90,6 +90,24 @@ class UserAiConfigurationTest extends TestCase
         ])->assertOk()->assertJsonFragment(['name' => 'New name']);
     }
 
+    public function test_update_cannot_change_provider(): void
+    {
+        $user = User::factory()->create();
+        $config = UserAiConfiguration::factory()->for($user)->gemini()->create();
+
+        $this->actingAs($user)->putJson("/api/user/ai-prefs/{$config->id}", [
+            'name' => $config->name,
+            'provider' => 'anthropic',
+            'model' => 'claude-sonnet-4-6',
+        ])->assertUnprocessable()
+            ->assertJsonFragment(['error' => 'Provider cannot be changed after an API key configuration is created.']);
+
+        $this->assertDatabaseHas('user_ai_configurations', [
+            'id' => $config->id,
+            'provider' => 'gemini',
+        ]);
+    }
+
     public function test_update_cannot_access_other_users_config(): void
     {
         $owner = User::factory()->create();
@@ -288,6 +306,18 @@ class UserAiConfigurationTest extends TestCase
         $this->actingAs($user)->postJson("/api/user/ai-prefs/{$config->id}/activate", [])
             ->assertUnprocessable()
             ->assertJsonFragment(['error' => 'This API key has been marked invalid. Edit the configuration with a valid key before activating it.']);
+    }
+
+    public function test_activate_rejects_expired_configuration(): void
+    {
+        $user = User::factory()->create();
+        $config = UserAiConfiguration::factory()->for($user)->gemini()
+            ->expiredAt(now()->subDay())
+            ->create();
+
+        $this->actingAs($user)->postJson("/api/user/ai-prefs/{$config->id}/activate", [])
+            ->assertUnprocessable()
+            ->assertJsonFragment(['error' => 'This API key has expired. Edit the configuration before activating it.']);
     }
 
     // --- usage stats ---

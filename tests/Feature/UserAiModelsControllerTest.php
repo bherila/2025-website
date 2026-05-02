@@ -74,7 +74,9 @@ class UserAiModelsControllerTest extends TestCase
         $user = User::factory()->create();
 
         Http::fake([
-            'generativelanguage.googleapis.com/v1beta/models*' => Http::response(['error' => 'unauthorized'], 401),
+            'generativelanguage.googleapis.com/v1beta/models*' => Http::response([
+                'error' => ['message' => 'API key not valid. Please pass a valid API key.'],
+            ], 401),
         ]);
 
         $this->actingAs($user)->postJson('/api/user/ai-prefs/models', [
@@ -115,7 +117,9 @@ class UserAiModelsControllerTest extends TestCase
         $user = User::factory()->create();
 
         Http::fake([
-            'api.anthropic.com/v1/models*' => Http::response(['error' => 'unauthorized'], 401),
+            'api.anthropic.com/v1/models*' => Http::response([
+                'error' => ['message' => 'invalid x-api-key'],
+            ], 401),
         ]);
 
         $this->actingAs($user)->postJson('/api/user/ai-prefs/models', [
@@ -171,5 +175,29 @@ class UserAiModelsControllerTest extends TestCase
 
         $response->assertOk();
         $this->assertContains('gemini-2.0-flash', $response->json('models'));
+    }
+
+    public function test_successful_fetch_with_config_id_clears_invalid_api_key_marker(): void
+    {
+        $user = User::factory()->create();
+        $config = UserAiConfiguration::factory()->for($user)->gemini()->create(['api_key' => 'saved-key']);
+        $config->markApiKeyInvalid('API key not valid');
+
+        Http::fake([
+            'generativelanguage.googleapis.com/v1beta/models*' => Http::response([
+                'models' => [
+                    ['name' => 'models/gemini-2.0-flash', 'supportedGenerationMethods' => ['generateContent']],
+                ],
+            ], 200),
+        ]);
+
+        $this->actingAs($user)->postJson('/api/user/ai-prefs/models', [
+            'provider' => 'gemini',
+            'config_id' => $config->id,
+        ])->assertOk();
+
+        $config->refresh();
+        $this->assertFalse($config->hasInvalidApiKey());
+        $this->assertNull($config->api_key_invalid_reason);
     }
 }
