@@ -478,6 +478,23 @@ class UserAiConfigurationTest extends TestCase
         $this->assertSame('gemini', $client->provider());
     }
 
+    public function test_resolved_gemini_client_allows_prompt_selected_response_format(): void
+    {
+        $user = User::factory()->create(['gemini_api_key' => null]);
+        UserAiConfiguration::factory()->active()->gemini()->for($user)->create();
+
+        $client = $user->resolvedAiClient();
+
+        $this->assertNotNull($client);
+        $this->assertSame('gemini', $client->provider());
+
+        $reflection = new \ReflectionClass($client);
+        $property = $reflection->getProperty('responseMimeType');
+        $property->setAccessible(true);
+
+        $this->assertNull($property->getValue($client));
+    }
+
     public function test_resolved_ai_client_returns_null_for_expired_active_config(): void
     {
         $user = User::factory()->create(['gemini_api_key' => null]);

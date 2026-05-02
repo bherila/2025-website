@@ -16,10 +16,10 @@ Analyze the provided {$fileCount} payslip PDF document(s).
 I have provided each file preceded by "Filename: [name]".
 
 For EACH file, extract the following fields.
-Return a SINGLE JSON ARRAY containing objects.
+Return a SINGLE TOON array containing objects.
 If a single file contains multiple payslips, create separate objects for each payslip, using the same `original_filename`.
 
-**JSON Fields:**
+**TOON Fields:**
 - `original_filename`: The filename provided.
 - `period_start`: Pay period start date (YYYY-MM-DD)
 - `period_end`: Pay period end date (YYYY-MM-DD)
@@ -51,8 +51,8 @@ If a single file contains multiple payslips, create separate objects for each pa
 - `ps_comment`: Any notes or comments.
 
 **Instructions:**
-1.  Return the data in a clean JSON format. Do not include any explanatory text outside of the JSON structure.
-2.  If a field is not present in the document, omit it from the JSON or set its value to `null`.
+1.  Return only TOON (Token-Oriented Object Notation). Do not include Markdown fences or explanatory text.
+2.  If a field is not present in the document, omit it from the TOON object or set its value to `null`.
 3.  All monetary values should be numbers (e.g., `1234.56`).
 4.  All dates must be in `YYYY-MM-DD` format.
 

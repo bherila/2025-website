@@ -112,14 +112,23 @@ class User extends Authenticatable
 
         if ($config && ! $config->isExpired() && ! $config->hasInvalidApiKey()) {
             return match ($config->provider) {
-                'gemini' => new GeminiClient($config->api_key, $config->model),
+                'gemini' => new GeminiClient(
+                    apiKey: $config->api_key,
+                    model: $config->model,
+                    timeout: (int) config('genai.providers.gemini.timeout', 240),
+                    responseMimeType: null,
+                ),
                 'anthropic' => new AnthropicClient($config->api_key, $config->model),
                 'bedrock' => new BedrockClient($config->api_key, $config->model, $config->region ?? 'us-east-1', $config->session_token ?? ''),
             };
         }
 
         if ($this->gemini_api_key) {
-            return new GeminiClient($this->gemini_api_key);
+            return new GeminiClient(
+                apiKey: $this->gemini_api_key,
+                timeout: (int) config('genai.providers.gemini.timeout', 240),
+                responseMimeType: null,
+            );
         }
 
         return null;

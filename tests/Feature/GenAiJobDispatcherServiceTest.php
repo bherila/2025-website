@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\GenAiProcessor\Models\GenAiDailyQuota;
 use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Services\GenAiJobDispatcherService;
+use HelgeSverre\Toon\Toon;
 use Tests\TestCase;
 
 class GenAiJobDispatcherServiceTest extends TestCase
@@ -182,7 +183,8 @@ class GenAiJobDispatcherServiceTest extends TestCase
 
         $prompt = $service->buildPrompt('finance_transactions', []);
         $this->assertStringContainsString('addFinanceAccount', $prompt);
-        $this->assertStringContainsString('{"accounts":[ACCOUNT,...]}', $prompt);
+        $this->assertStringContainsString('return ONLY valid TOON', $prompt);
+        $this->assertStringContainsString('accounts', $prompt);
         $this->assertStringContainsString('Statement detail section mappings', $prompt);
         $this->assertStringContainsString('transactions', $prompt);
         $this->assertStringContainsString('lots', $prompt);
@@ -201,7 +203,7 @@ class GenAiJobDispatcherServiceTest extends TestCase
         ]);
         $this->assertStringContainsString('Known user accounts', $prompt);
         $this->assertStringContainsString('My Savings: last 4 digits 1234', $prompt);
-        $this->assertStringContainsString('{"accounts":[ACCOUNT,...]}', $prompt);
+        $this->assertStringContainsString('return ONLY valid TOON', $prompt);
     }
 
     public function test_build_generate_content_payload_uses_tool_calling_for_finance_transactions(): void
@@ -222,6 +224,20 @@ class GenAiJobDispatcherServiceTest extends TestCase
             $payload['tools'][0]['function_declarations'][0]['name']
         );
         $this->assertSame('ANY', $payload['toolConfig']['functionCallingConfig']['mode']);
+        $this->assertArrayNotHasKey('generationConfig', $payload);
+    }
+
+    public function test_build_generate_content_payload_does_not_force_json_for_text_outputs(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $payload = $service->buildGenerateContentPayload(
+            'finance_payslip',
+            'files/abc123',
+            'application/pdf',
+            'Prompt'
+        );
+
         $this->assertArrayNotHasKey('generationConfig', $payload);
     }
 
@@ -362,6 +378,121 @@ class GenAiJobDispatcherServiceTest extends TestCase
         $this->assertIsArray($data['box12_codes']);
         $this->assertEquals('DD', $data['box12_codes'][0]['code']);
         $this->assertTrue($data['box13_retirement']);
+    }
+
+    public function test_extract_tax_document_data_from_anthropic_tool_use_response(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $response = [
+            'content' => [[
+                'type' => 'tool_use',
+                'name' => GenAiJobDispatcherService::TAX_DOCUMENT_1099INT_TOOL_NAME,
+                'input' => [
+                    'payer_name' => 'First National Bank',
+                    'box1_interest' => '523.45',
+                ],
+            ]],
+        ];
+
+        $data = $service->extractGenerateContentData('tax_document', $response);
+
+        $this->assertIsArray($data);
+        $this->assertSame('First National Bank', $data['payer_name']);
+        $this->assertSame(523.45, $data['box1_interest']);
+    }
+
+    public function test_extract_multi_account_tax_import_from_anthropic_fenced_text_response(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $response = [
+            'content' => [[
+                'type' => 'text',
+                'text' => "```json\n".json_encode([
+                    [
+                        'account_identifier' => 'X65-385336',
+                        'account_name' => 'Fidelity Brokerage Services LLC',
+                        'form_type' => '1099_int',
+                        'tax_year' => 2025,
+                        'parsed_data' => ['box1_interest' => 12.34],
+                    ],
+                ])."\n```",
+            ]],
+            'stop_reason' => 'end_turn',
+        ];
+
+        $data = $service->extractGenerateContentData('tax_form_multi_account_import', $response);
+
+        $this->assertIsArray($data);
+        $this->assertSame('X65-385336', $data[0]['account_identifier']);
+        $this->assertSame(12.34, $data[0]['parsed_data']['box1_interest']);
+    }
+
+    public function test_extract_multi_account_tax_import_from_toon_text_response(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $toon = Toon::encode([
+            [
+                'account_identifier' => 'X65-385336',
+                'account_name' => 'Fidelity Brokerage Services LLC',
+                'form_type' => '1099_b',
+                'tax_year' => 2025,
+                'parsed_data' => [
+                    'payer_name' => 'National Financial Services LLC',
+                    'transactions' => [
+                        [
+                            'symbol' => 'NET',
+                            'description' => 'CLOUDFLARE INC CL A COM',
+                            'quantity' => 10,
+                            'proceeds' => 1229.74,
+                        ],
+                        [
+                            'symbol' => 'FDMO',
+                            'description' => 'FIDELITY MOMENTUM FACTOR ETF',
+                            'quantity' => 0.028,
+                            'proceeds' => 1.88,
+                        ],
+                    ],
+                ],
+            ],
+        ]);
+
+        $data = $service->extractGenerateContentData('tax_form_multi_account_import', [
+            'content' => [['type' => 'text', 'text' => $toon]],
+            'stop_reason' => 'end_turn',
+        ]);
+
+        $this->assertIsArray($data);
+        $this->assertSame('1099_b', $data[0]['form_type']);
+        $this->assertSame('NET', $data[0]['parsed_data']['transactions'][0]['symbol']);
+        $this->assertSame(1229.74, $data[0]['parsed_data']['transactions'][0]['proceeds']);
+    }
+
+    public function test_multi_account_tax_import_prompt_requests_toon(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $prompt = $service->buildPrompt('tax_form_multi_account_import', [
+            'tax_year' => 2025,
+            'accounts' => [],
+        ]);
+
+        $this->assertStringContainsString('Return ONLY TOON', $prompt);
+        $this->assertStringContainsString('transactions[2]{symbol,description', $prompt);
+    }
+
+    public function test_describe_response_failure_reports_truncated_anthropic_response(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $message = $service->describeResponseExtractionFailure([
+            'content' => [['type' => 'text', 'text' => '```json {"incomplete":']],
+            'stop_reason' => 'max_tokens',
+        ]);
+
+        $this->assertStringContainsString('max output token limit', $message);
     }
 
     public function test_coerce_tax_document_args_converts_string_numbers(): void

@@ -25,7 +25,7 @@ You are processing a consolidated brokerage tax statement (e.g. Fidelity Tax Rep
 
 This PDF may contain forms for multiple accounts (1099-DIV, 1099-INT, 1099-MISC, 1099-B, etc.) across one or more brokerage accounts.{$accountHints}
 
-Return a JSON **array** where each element represents one account/form combination. Each element must have these fields:
+Return a TOON **array** where each element represents one account/form combination. Each element must have these fields:
 - `account_identifier`: The full or partial account number found in the PDF (string, e.g. "...1234" or "8W163GBF")
 - `account_name`: The brokerage/account name found in the PDF (string, e.g. "Fidelity Brokerage")
 - `form_type`: The specific IRS form type found in this section. Use one of: 1099_int, 1099_div, 1099_misc, 1099_b, k1 (string). Do NOT use "broker_1099" — that is the container type for the uploaded PDF, not a form type you should return.
@@ -44,7 +44,7 @@ If the PDF is a consolidated 1099 that covers multiple form types for the same a
 
 **1099-B** (`form_type: "1099_b"`): Extract the summary totals AND all individual transaction lots.
 - Summary fields: `payer_name`, `payer_tin`, `total_proceeds`, `total_cost_basis`, `total_wash_sale_disallowed`, `total_realized_gain_loss`
-- `transactions`: JSON array of every individual lot line from the 1099-B sections (short-term covered, long-term covered, etc.). Each transaction object:
+- `transactions`: TOON array of every individual lot line from the 1099-B sections (short-term covered, long-term covered, etc.). Each transaction object:
   - `symbol`: ticker symbol if shown, otherwise null (string or null)
   - `description`: security name / description (string)
   - `cusip`: CUSIP number if shown (string or null)
@@ -63,7 +63,25 @@ If the PDF is a consolidated 1099 that covers multiple form types for the same a
 
 Extract EVERY individual lot line. Do not skip lines or summarize. If a security shows subtotals, emit a separate transaction row for each individual lot line (not the subtotal row).
 
-Return ONLY the JSON array, no other text.
+Return ONLY TOON, no Markdown fences and no other text.
+
+Use TOON tabular arrays for repeated rows whenever possible, especially `transactions`, to avoid repeating field names. Example shape:
+
+[1]:
+  - account_identifier: X65-385336
+    account_name: Fidelity Brokerage Services LLC
+    form_type: 1099_b
+    tax_year: {$taxYear}
+    parsed_data:
+      payer_name: National Financial Services LLC
+      payer_tin: 04-3523567
+      total_proceeds: 1234.56
+      total_cost_basis: 1000
+      total_wash_sale_disallowed: 0
+      total_realized_gain_loss: 234.56
+      transactions[2]{symbol,description,cusip,quantity,purchase_date,sale_date,proceeds,cost_basis,accrued_market_discount,wash_sale_disallowed,realized_gain_loss,is_short_term,form_8949_box,is_covered,additional_info}:
+        NET,CLOUDFLARE INC CL A COM,18915M107,10,2025-03-27,2025-05-06,1229.74,1191.4,null,0,38.34,true,A,true,null
+        FDMO,FIDELITY MOMENTUM FACTOR ETF,316092816,0.028,2024-06-24,2025-05-06,1.88,1.78,null,0,0.1,true,A,true,null
 PROMPT;
     }
 }

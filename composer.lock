@@ -163,12 +163,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/bherila/genai-laravel.git",
-                "reference": "e091b9ea304307b90bf4ac7cff83eeae19ee31ce"
+                "reference": "f2e573a4c67a6596afb621bc72b4e769fc3f3483"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/bherila/genai-laravel/zipball/e091b9ea304307b90bf4ac7cff83eeae19ee31ce",
-                "reference": "e091b9ea304307b90bf4ac7cff83eeae19ee31ce",
+                "url": "https://api.github.com/repos/bherila/genai-laravel/zipball/f2e573a4c67a6596afb621bc72b4e769fc3f3483",
+                "reference": "f2e573a4c67a6596afb621bc72b4e769fc3f3483",
                 "shasum": ""
             },
             "require": {
@@ -239,7 +239,7 @@
                 "source": "https://github.com/bherila/genai-laravel/tree/main",
                 "issues": "https://github.com/bherila/genai-laravel/issues"
             },
-            "time": "2026-04-27T09:19:57+00:00"
+            "time": "2026-05-02T19:36:29+00:00"
         },
         {
             "name": "brick/math",
