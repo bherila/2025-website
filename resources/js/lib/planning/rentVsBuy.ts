@@ -234,6 +234,7 @@ export function computeRentVsBuy(inputs: RentVsBuyInputs): RentVsBuyResults {
   let prop13AssessedValue = purchasePrice
   let monthlyRent = roundMoney(inputs.monthlyRent)
   let investedPortfolio = avoidedUpfrontInvestment
+  let foregoneUpfrontInvestment = avoidedUpfrontInvestment
   let ownCumulativeCost = closingCosts
   let rentCumulativeCost = 0
 
@@ -306,12 +307,19 @@ export function computeRentVsBuy(inputs: RentVsBuyInputs): RentVsBuyResults {
       annualHomeownersInsurance,
     ])
     const annualOwnEconomicCost = roundMoney(subtractMoney(annualOwnEconomicCostBeforeTax, taxBenefit))
+    const annualUpfrontOpportunityCost = roundMoney(multiplyMoney(foregoneUpfrontInvestment, investmentReturnRate))
 
-    const discountedOwnCost = discountMoney(annualOwnEconomicCost, inflationRate, year)
+    const discountedOwnCost = discountMoney(
+      addMoney(annualOwnEconomicCost, annualUpfrontOpportunityCost),
+      inflationRate,
+      year,
+    )
     const discountedRentCost = discountMoney(annualRentCashOutflow, inflationRate, year)
 
     ownCumulativeCost = roundMoney(addMoney(ownCumulativeCost, discountedOwnCost))
     rentCumulativeCost = roundMoney(addMoney(rentCumulativeCost, discountedRentCost))
+
+    foregoneUpfrontInvestment = roundMoney(addMoney(foregoneUpfrontInvestment, annualUpfrontOpportunityCost))
 
     const annualSavingsContribution = maxMoney(subtractMoney(annualOwnCashOutflow, annualRentCashOutflow), 0)
     investedPortfolio = roundMoney(addMoney(

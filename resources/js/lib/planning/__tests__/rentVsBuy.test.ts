@@ -85,19 +85,19 @@ describe('computeRentVsBuy', () => {
     expect(result.rows[0]?.ownCumulativeCost).toBeLessThan(result.rows[0]?.rentCumulativeCost ?? 0)
   })
 
-  it('changes the outcome when the horizon gets longer', () => {
+  it('changes the outcome when the horizon gets longer and investment returns are low', () => {
     const shortHorizon = computeRentVsBuy(makeInputs({
       homePrice: 550_000,
       monthlyRent: 2_850,
       appreciationPercent: 3.5,
-      investmentReturnPercent: 6.5,
+      investmentReturnPercent: 1,
       timeHorizonYears: 5,
     }))
     const longHorizon = computeRentVsBuy(makeInputs({
       homePrice: 550_000,
       monthlyRent: 2_850,
       appreciationPercent: 3.5,
-      investmentReturnPercent: 6.5,
+      investmentReturnPercent: 1,
       timeHorizonYears: 15,
     }))
 
@@ -200,6 +200,37 @@ describe('computeRentVsBuy', () => {
     expect(Number.isFinite(result.rows[0]?.ownCumulativeCost ?? Number.NaN)).toBe(true)
   })
 
+  it('counts compounded opportunity cost for a full-cash purchase', () => {
+    const result = computeRentVsBuy(makeInputs({
+      homePrice: 100_000,
+      downPaymentPercent: 100,
+      mortgageRatePercent: 5,
+      mortgageTermYears: 30,
+      closingCostsValue: 0,
+      closingCostsType: 'amount',
+      propertyTaxRatePercent: 0,
+      hoaAmount: 0,
+      homeownersInsuranceAnnual: 0,
+      maintenancePercent: 0,
+      appreciationPercent: 0,
+      sellingCostsPercent: 0,
+      monthlyRent: 0,
+      rentersInsuranceAmount: 0,
+      rentIncreasePercent: 0,
+      investmentReturnPercent: 10,
+      marginalTaxRatePercent: 0,
+      capitalGainsTaxRatePercent: 0,
+      timeHorizonYears: 3,
+      inflationRatePercent: 0,
+    }))
+
+    expect(result.breakEvenYear).toBeNull()
+    expect(result.rows[0]?.ownCumulativeCost).toBeCloseTo(10_000, 2)
+    expect(result.rows[1]?.ownCumulativeCost).toBeCloseTo(21_000, 2)
+    expect(result.rows[2]?.ownCumulativeCost).toBeCloseTo(33_100, 2)
+    expect(result.rows[2]?.investedPortfolio).toBeCloseTo(133_100, 2)
+  })
+
   it('treats a zero-rate or zero-term mortgage as a full-cash purchase', () => {
     const result = computeRentVsBuy(makeInputs({
       homePrice: 300_000,
@@ -286,6 +317,12 @@ describe('computeRentVsBuy', () => {
 
     expect(annualCostIncrease(growingCosts.rows, 1) - annualCostIncrease(flatCosts.rows, 1)).toBeCloseTo(360, 2)
     expect((growingCosts.rows[1]?.rentCumulativeCost ?? 0) - (flatCosts.rows[1]?.rentCumulativeCost ?? 0)).toBeCloseTo(60, 2)
+
+    // Year 1 must not include growth — growth is applied at year-end and first
+    // shows up in year 2. This guards against the year-2 row being accidentally
+    // fed pre-growth amounts: any drift would change year 1's cost too because
+    // the same accumulator is reused across years.
+    expect(annualCostIncrease(growingCosts.rows, 0)).toBeCloseTo(annualCostIncrease(flatCosts.rows, 0), 2)
   })
 
   it('supports closing costs as either a percent or dollar amount', () => {
