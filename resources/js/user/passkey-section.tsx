@@ -263,33 +263,35 @@ export const PasskeySection: React.FC<PasskeySectionProps> = ({ onSuccess, onErr
       </Card>
 
       {/* Name dialog */}
-      <Dialog open={showNameDialog} onOpenChange={setShowNameDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Name Your Passkey</DialogTitle>
-            <DialogDescription>
-              Give this passkey a memorable name (e.g. "MacBook Touch ID").
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-2">
-            <Label htmlFor="passkey-name">Name</Label>
-            <Input
-              id="passkey-name"
-              value={newPasskeyName}
-              onChange={(e) => setNewPasskeyName(e.target.value)}
-              placeholder="My Passkey"
-              onKeyDown={(e) => e.key === 'Enter' && registerPasskey()}
-              autoFocus
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowNameDialog(false)}>
-              Cancel
-            </Button>
-            <Button onClick={registerPasskey}>Continue</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {showNameDialog && (
+        <Dialog open={showNameDialog} onOpenChange={setShowNameDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Name Your Passkey</DialogTitle>
+              <DialogDescription>
+                Give this passkey a memorable name (e.g. "MacBook Touch ID").
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-2">
+              <Label htmlFor="passkey-name">Name</Label>
+              <Input
+                id="passkey-name"
+                value={newPasskeyName}
+                onChange={(e) => setNewPasskeyName(e.target.value)}
+                placeholder="My Passkey"
+                onKeyDown={(e) => e.key === 'Enter' && registerPasskey()}
+                autoFocus
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowNameDialog(false)}>
+                Cancel
+              </Button>
+              <Button onClick={registerPasskey}>Continue</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Delete confirm dialog */}
       <Dialog open={deleteId !== null} onOpenChange={(open) => !open && setDeleteId(null)}>

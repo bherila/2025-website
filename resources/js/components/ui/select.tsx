@@ -48,7 +48,6 @@ function Select({
   const [triggerElement, setTriggerElement] = React.useState<HTMLElement | null>(null)
   const portalContainer = React.useMemo(
     () =>
-      triggerElement?.closest<HTMLElement>("[data-slot='dialog-content']") ??
       triggerElement?.closest<HTMLElement>("[data-slot='dialog-portal']") ??
       null,
     [triggerElement]
