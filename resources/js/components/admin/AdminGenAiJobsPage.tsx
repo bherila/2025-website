@@ -123,7 +123,7 @@ function JobDetailModal({ job, open, onClose }: JobDetailModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-[95vw] 2xl:max-w-[1800px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[95vw] min-w-[min(95vw,1100px)] max-w-[95vw] sm:max-w-[95vw] 2xl:max-w-[1800px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle className="flex items-center gap-2">
@@ -157,6 +157,24 @@ function JobDetailModal({ job, open, onClose }: JobDetailModalProps) {
             <div>
               <div className="font-semibold text-muted-foreground">Job Type</div>
               <div>{JOB_TYPE_LABELS[job.job_type] ?? job.job_type}</div>
+            </div>
+            <div>
+              <div className="font-semibold text-muted-foreground">AI Provider</div>
+              <div>{job.ai_provider ?? '—'}</div>
+            </div>
+            <div>
+              <div className="font-semibold text-muted-foreground">AI Model</div>
+              <div className="font-mono text-xs break-all">{job.ai_model ?? '—'}</div>
+            </div>
+            <div>
+              <div className="font-semibold text-muted-foreground">User API Key ID</div>
+              <div>{job.ai_configuration_id ?? '—'}</div>
+            </div>
+            <div>
+              <div className="font-semibold text-muted-foreground">Token Usage</div>
+              <div>
+                {job.input_tokens ?? '—'} input / {job.output_tokens ?? '—'} output
+              </div>
             </div>
             <div>
               <div className="font-semibold text-muted-foreground">Created</div>

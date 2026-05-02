@@ -29,6 +29,9 @@ export interface GenAiImportResultData {
 export interface GenAiImportJobData {
   id: number
   user_id: number
+  ai_configuration_id: number | null
+  ai_provider: string | null
+  ai_model: string | null
   acct_id: number | null
   job_type: GenAiJobType
   file_hash: string
@@ -43,6 +46,8 @@ export interface GenAiImportJobData {
   retry_count: number
   scheduled_for: string | null
   parsed_at: string | null
+  input_tokens: number | null
+  output_tokens: number | null
   created_at: string
   updated_at: string
   results?: GenAiImportResultData[]

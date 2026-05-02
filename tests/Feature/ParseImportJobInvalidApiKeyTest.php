@@ -50,6 +50,9 @@ class ParseImportJobInvalidApiKeyTest extends TestCase
         $config->refresh();
 
         $this->assertSame('failed', $job->status);
+        $this->assertSame($config->id, $job->ai_configuration_id);
+        $this->assertSame('bedrock', $job->ai_provider);
+        $this->assertSame('anthropic.claude-sonnet-4-6', $job->ai_model);
         $this->assertStringContainsString('Invalid API Key format', $job->error_message);
         $this->assertSame(GenAiImportJob::MAX_RETRIES, $job->retry_count);
         $this->assertTrue($config->hasInvalidApiKey());

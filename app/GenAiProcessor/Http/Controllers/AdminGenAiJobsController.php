@@ -63,6 +63,11 @@ class AdminGenAiJobsController extends Controller
             'error_message' => null,
             'raw_response' => null,
             'retry_count' => 0,
+            'ai_configuration_id' => null,
+            'ai_provider' => null,
+            'ai_model' => null,
+            'input_tokens' => null,
+            'output_tokens' => null,
         ]);
 
         // Note: We don't dispatch here; we let the scheduled task / cron pick it up as requested.
