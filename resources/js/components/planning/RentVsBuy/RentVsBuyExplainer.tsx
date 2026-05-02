@@ -17,7 +17,8 @@ export default function RentVsBuyExplainer(): ReactElement {
           <li>Tax benefit is only counted when mortgage interest plus deductible property tax beats the federal standard deduction for the selected filing status.</li>
           <li>Property-tax deductions are capped at the current $10,000 SALT limit. Mortgage-interest deductions assume the current $750,000 acquisition-debt cap for new loans.</li>
           <li>CA Prop 13 limits the assessed value used for property taxes to 2% annual growth until it catches up with the modeled home value.</li>
-          <li>Closing costs are treated as upfront economic cost. Selling costs and estimated capital gains tax are applied when estimating sellable equity at each year-end.</li>
+          <li>Closing costs are treated as upfront economic cost. Down payment and closing-cost cash also create a compounded opportunity cost using the investment-return input.</li>
+          <li>Selling costs and estimated capital gains tax are applied when estimating sellable equity at each year-end.</li>
           <li>Home-sale capital gains tax applies the selected tax rate after the homeowner exclusion: $250,000 for single filers and $500,000 for married filing jointly.</li>
           <li>Homeowners insurance, renter&apos;s insurance, and HOA fees grow annually using their own growth-rate inputs. Property tax and maintenance scale with the modeled assessed or market value.</li>
           <li>Rent grows by the rent-increase input each year. Home value and the renter&apos;s portfolio compound annually using the appreciation and investment-return inputs.</li>

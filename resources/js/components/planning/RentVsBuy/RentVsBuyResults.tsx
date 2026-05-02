@@ -64,7 +64,7 @@ export default function RentVsBuyResults({ results }: RentVsBuyResultsProps): Re
         <CardHeader>
           <CardTitle>Ownership vs. renting over time</CardTitle>
           <CardDescription>
-            Cumulative economic cost is shown in today&apos;s dollars using the inflation assumption.
+            Cumulative economic cost includes operating costs, tax effects, and the foregone compound return on upfront purchase cash.
           </CardDescription>
         </CardHeader>
         <CardContent className="h-[420px]">
