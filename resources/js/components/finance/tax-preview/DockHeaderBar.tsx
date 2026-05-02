@@ -1,6 +1,7 @@
-import { Search } from 'lucide-react'
+import { FileSpreadsheet, Search } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 
 import { useDockActions } from './DockActions'
 
@@ -10,7 +11,12 @@ import { useDockActions } from './DockActions'
  *
  * Must be rendered inside `<DockActionsProvider>` so `useDockActions` resolves.
  */
-export function DockHeaderBar(): React.ReactElement {
+interface DockHeaderBarProps {
+  onExportXlsx: () => void
+  isExporting: boolean
+}
+
+export function DockHeaderBar({ onExportXlsx, isExporting }: DockHeaderBarProps): React.ReactElement {
   const { setPaletteOpen } = useDockActions()
   const meta = navigatorMeta()
 
@@ -32,8 +38,19 @@ export function DockHeaderBar(): React.ReactElement {
           {meta}K
         </kbd>
       </button>
-      <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-        <span>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="ml-auto h-7 gap-1.5 px-2.5 text-xs"
+        onClick={onExportXlsx}
+        disabled={isExporting}
+      >
+        <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />
+        {isExporting ? 'Generating…' : 'Export XLSX'}
+      </Button>
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <span className="hidden sm:inline">
           Append <code className="rounded bg-muted px-1 py-0.5 font-mono">?dock=0</code> to disable
         </span>
       </div>

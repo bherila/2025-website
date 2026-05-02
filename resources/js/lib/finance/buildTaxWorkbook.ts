@@ -3,7 +3,7 @@ import currency from 'currency.js'
 import { ALL_K1_CODES, K1_SPEC_BY_BOX } from '@/components/finance/k1'
 import { renderK3SectionsRows } from '@/finance/1116/k3-row-renderer'
 import { K1_CODE_ROUTING_NOTES, K1_ROUTING_NOTES } from '@/lib/finance/k1RoutingNotes'
-import { normalizeK1Code } from '@/lib/finance/k1Utils'
+import { normalizeK1Code, resolve11SCharacter } from '@/lib/finance/k1Utils'
 import { parseMoney } from '@/lib/finance/money'
 import type { EstimatedTaxPaymentsData, TaxReturn1040 } from '@/types/finance/tax-return'
 import type { XlsxRow, XlsxSheet, XlsxWorkbook } from '@/types/finance/xlsx-export'
@@ -238,6 +238,27 @@ function formulaRef(sheetName: string, row: number): string {
 /** Build a SUM formula over a range of detail rows (header row excluded), falling back to the computed value. */
 function sumFormula(firstDetailExcelRow: number, lastDetailExcelRow: number): string {
   return `=SUM(C${firstDetailExcelRow}:C${lastDetailExcelRow})`
+}
+
+function addFormula(rowNumbers: number[]): string | undefined {
+  const refs = rowNumbers.filter((rowNumber) => rowNumber > 0).map((rowNumber) => `C${rowNumber}`)
+  return refs.length > 0 ? `=${refs.join('+')}` : undefined
+}
+
+function excelRowNumber(rows: XlsxRow[]): number {
+  return rows.length + 1
+}
+
+function numericValue(value: unknown): number {
+  return parseMoney(value as string | number | null | undefined) ?? 0
+}
+
+function isNonZero(value: number): boolean {
+  return currency(value).value !== 0
+}
+
+function sumAmounts(rows: Array<{ amount: number }>): number {
+  return rows.reduce((acc, row) => acc.add(row.amount), currency(0)).value
 }
 
 /**
@@ -743,22 +764,208 @@ export function buildScheduleDSheet(taxReturn: TaxReturn1040): XlsxSheet | null 
   if (!taxReturn.scheduleD) {
     return null
   }
-  const rows: XlsxRow[] = [
-    {
-      line: '16',
-      description: 'Line 16 — Combined net capital gain (loss)',
-      amount: taxReturn.scheduleD.schD_line16,
+  type ScheduleDSource = { description: string; amount: number; note?: string }
+  type ScheduleDSourceBuckets = Record<string, ScheduleDSource[]>
+
+  const sourceBuckets: ScheduleDSourceBuckets = {}
+  const addSource = (line: string, source: ScheduleDSource): void => {
+    if (!isNonZero(source.amount)) {
+      return
+    }
+    sourceBuckets[line] = [...(sourceBuckets[line] ?? []), source]
+  }
+
+  for (const doc of taxReturn.k1Docs ?? []) {
+    const partnerName = doc.entityName
+    const box8 = numericValue(doc.fields['8'])
+    addSource('5', { description: `${partnerName} — K-1 Box 8`, amount: box8 })
+
+    for (const box of ['9a', '9b', '9c', '10']) {
+      const amount = numericValue(doc.fields[box])
+      addSource('12', { description: `${partnerName} — K-1 Box ${box}`, amount })
+    }
+
+    for (const item of doc.codes['11'] ?? []) {
+      const code = normalizeK1Code(item.code)
+      const amount = numericValue(item.value)
+
+      if (code === 'C') {
+        addSource('3', {
+          description: `${partnerName} — K-1 Box 11C, 40% S/T allocation`,
+          amount: currency(amount).multiply(0.4).value,
+          ...(item.notes ? { note: item.notes } : {}),
+        })
+        addSource('10', {
+          description: `${partnerName} — K-1 Box 11C, 60% L/T allocation`,
+          amount: currency(amount).multiply(0.6).value,
+          ...(item.notes ? { note: item.notes } : {}),
+        })
+        continue
+      }
+
+      if (code !== 'S') {
+        continue
+      }
+
+      const character = resolve11SCharacter(item)
+      if (character === 'short') {
+        addSource('5', {
+          description: `${partnerName} — K-1 Box 11S, S/T non-portfolio`,
+          amount,
+          ...(item.notes ? { note: item.notes } : {}),
+        })
+      } else if (character === 'long') {
+        addSource('12', {
+          description: `${partnerName} — K-1 Box 11S, L/T non-portfolio`,
+          amount,
+          ...(item.notes ? { note: item.notes } : {}),
+        })
+      }
+    }
+  }
+
+  for (const doc of taxReturn.docs1099 ?? []) {
+    const parsed = doc.parsedData
+    const stGain = numericValue(parsed.b_st_gain_loss ?? parsed.b_st_reported_gain_loss)
+    const ltGain = numericValue(parsed.b_lt_gain_loss ?? parsed.b_lt_reported_gain_loss)
+    const totalGain = numericValue(parsed.b_total_gain_loss ?? parsed.total_realized_gain_loss)
+
+    if (doc.formType === 'broker_1099' || doc.formType === '1099_b' || doc.formType === '1099_b_c') {
+      addSource('1a', {
+        description: `${doc.payerName} — S/T 1099-B`,
+        amount: stGain || (isNonZero(totalGain) ? totalGain : 0),
+      })
+      addSource('8a', {
+        description: `${doc.payerName} — L/T 1099-B`,
+        amount: ltGain,
+      })
+    }
+
+    if (doc.formType === 'broker_1099' || doc.formType === '1099_div' || doc.formType === '1099_div_c') {
+      addSource('13', {
+        description: `${doc.payerName} — 1099-DIV capital gain distributions`,
+        amount: numericValue(parsed.div_2a_cap_gain ?? parsed.box2a_cap_gain),
+      })
+    }
+  }
+
+  const rows: XlsxRow[] = []
+
+  const addHeader = (description: string): void => {
+    rows.push({ isHeader: true, description })
+  }
+
+  const addLine = (line: string, description: string, amount: number): number => {
+    const sources = [...(sourceBuckets[line] ?? [])]
+    const sourceTotal = sumAmounts(sources)
+    const difference = currency(amount).subtract(sourceTotal).value
+    if (sources.length === 0 && isNonZero(amount)) {
+      sources.push({ description: `${description} — computed amount`, amount })
+    } else if (isNonZero(difference)) {
+      sources.push({ description: `${description} — reconciliation adjustment`, amount: difference })
+    }
+
+    let formula: string | undefined
+    if (sources.length > 0) {
+      const firstSourceExcelRow = rows.length + 2
+      for (const source of sources) {
+        rows.push({ description: source.description, amount: source.amount, note: source.note })
+      }
+      formula = sumFormula(firstSourceExcelRow, rows.length + 1)
+    }
+
+    rows.push({
+      line,
+      description,
+      amount,
+      formula,
+    })
+    const rowNumber = excelRowNumber(rows)
+    return rowNumber
+  }
+
+  const addTotalLine = (
+    line: string,
+    description: string,
+    amount: number,
+    rowRefs: number[],
+    adjustmentDescription: string,
+  ): number => {
+    const referencedAmount = rowRefs.reduce((acc, rowRef) => {
+      const row = rows[rowRef - 2]
+      return acc.add(row?.amount ?? 0)
+    }, currency(0)).value
+    const difference = currency(amount).subtract(referencedAmount).value
+    const formulaRefs = [...rowRefs]
+    if (isNonZero(difference)) {
+      rows.push({ description: adjustmentDescription, amount: difference })
+      formulaRefs.push(excelRowNumber(rows))
+    }
+
+    rows.push({
+      line,
+      description,
+      amount,
+      formula: addFormula(formulaRefs),
       isTotal: true,
-    },
-  ]
-  if (taxReturn.scheduleD.schD_line16 < 0) {
+    })
+    const rowNumber = excelRowNumber(rows)
+    return rowNumber
+  }
+
+  const s = taxReturn.scheduleD
+  addHeader('Part I — Short-Term Capital Gains and Losses')
+  const line1a = addLine('1a', 'Line 1a — Short-term totals reported on Form 1099-B', numericValue(s.schD_line1a_gain_loss))
+  const line1b = addLine('1b', 'Line 1b — Short-term Form 8949 Box A transactions', numericValue(s.schD_line1b_gain_loss))
+  const line2 = addLine('2', 'Line 2 — Short-term Form 8949 Box B transactions', numericValue(s.schD_line2_gain_loss))
+  const line3 = addLine('3', 'Line 3 — Short-term Form 8949 Box C transactions', numericValue(s.schD_line3_gain_loss))
+  const line4 = addLine('4', 'Line 4 — Short-term gain from Form 6252 and other forms', numericValue(s.schD_line4))
+  const line5 = addLine('5', 'Line 5 — Short-term gain/loss from partnerships and S corps', numericValue(s.schD_line5))
+  const line6 = addLine('6', 'Line 6 — Short-term capital loss carryover', numericValue(s.schD_line6))
+  const line7 = addTotalLine(
+    '7',
+    'Line 7 — Net short-term capital gain or (loss)',
+    numericValue(s.schD_line7),
+    [line1a, line1b, line2, line3, line4, line5, line6],
+    'Line 7 — reconciliation adjustment',
+  )
+
+  addHeader('Part II — Long-Term Capital Gains and Losses')
+  const line8a = addLine('8a', 'Line 8a — Long-term totals reported on Form 1099-B', numericValue(s.schD_line8a_gain_loss))
+  const line8b = addLine('8b', 'Line 8b — Long-term Form 8949 Box D transactions', numericValue(s.schD_line8b_gain_loss))
+  const line9 = addLine('9', 'Line 9 — Long-term Form 8949 Box E transactions', numericValue(s.schD_line9_gain_loss))
+  const line10 = addLine('10', 'Line 10 — Long-term Form 8949 Box F transactions', numericValue(s.schD_line10_gain_loss))
+  const line11 = addLine('11', 'Line 11 — Gain from Form 4797 and other long-term gains', numericValue(s.schD_line11))
+  const line12 = addLine('12', 'Line 12 — Net long-term gain from partnerships and S corps', numericValue(s.schD_line12))
+  const line13 = addLine('13', 'Line 13 — Capital gain distributions', numericValue(s.schD_line13))
+  const line14 = addLine('14', 'Line 14 — Long-term capital loss carryover', numericValue(s.schD_line14))
+  const line15 = addTotalLine(
+    '15',
+    'Line 15 — Net long-term capital gain or (loss)',
+    numericValue(s.schD_line15),
+    [line8a, line8b, line9, line10, line11, line12, line13, line14],
+    'Line 15 — reconciliation adjustment',
+  )
+
+  addHeader('Part III — Summary')
+  const line16 = addTotalLine(
+    '16',
+    'Line 16 — Combined net capital gain (loss)',
+    numericValue(s.schD_line16),
+    [line7, line15],
+    'Line 16 — reconciliation adjustment',
+  )
+
+  if (numericValue(s.schD_line16) < 0) {
     rows.push({
       line: '21',
       description: `Line 21 — Capital loss applied to ${taxReturn.year} return`,
-      amount: taxReturn.scheduleD.schD_line21,
+      amount: numericValue(s.schD_line21),
+      formula: `=MAX(C${line16},-3000)`,
       isTotal: true,
     })
   }
+
   return { name: 'Schedule D', rows }
 }
 

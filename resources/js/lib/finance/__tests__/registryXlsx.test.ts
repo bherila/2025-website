@@ -56,11 +56,65 @@ describe('XLSX registry integration', () => {
       expect(buildScheduleDSheet(baseReturn)).toBeNull()
     })
 
+    it('builds supporting detail rows and formulas for Schedule D lines', () => {
+      const tr = {
+        ...baseReturn,
+        scheduleD: {
+          schD_line1a_gain_loss: 120,
+          schD_line1b_gain_loss: 0,
+          schD_line2_gain_loss: 0,
+          schD_line3_gain_loss: 40,
+          schD_line4: 0,
+          schD_line5: -80,
+          schD_line6: 0,
+          schD_line7: 80,
+          schD_line8a_gain_loss: 200,
+          schD_line8b_gain_loss: 0,
+          schD_line9_gain_loss: 0,
+          schD_line10_gain_loss: 60,
+          schD_line11: 0,
+          schD_line12: 300,
+          schD_line13: 25,
+          schD_line14: 0,
+          schD_line15: 585,
+          schD_line16: 665,
+          schD_line21: 665,
+        } as never,
+        k1Docs: [{
+          entityName: 'AQR Fund',
+          fields: { '9a': 300 },
+          codes: {
+            '11': [
+              { code: 'S', value: '-80', notes: 'Net short-term capital loss', character: 'short' },
+              { code: 'C', value: '100', notes: 'Section 1256 contracts' },
+            ],
+          },
+        }],
+        docs1099: [
+          { formType: 'broker_1099', payerName: 'Fidelity', parsedData: { b_st_reported_gain_loss: 120, b_lt_gain_loss: 200 } },
+          { formType: '1099_div', payerName: 'Vanguard', parsedData: { box2a_cap_gain: 25 } },
+        ],
+      } as TaxReturn1040
+      const sheet = buildScheduleDSheet(tr)
+      const line7 = sheet?.rows.find((row) => row.line === '7')
+      const line15 = sheet?.rows.find((row) => row.line === '15')
+      const line16 = sheet?.rows.find((row) => row.line === '16')
+
+      expect(sheet?.rows.some((row) => row.description === 'Fidelity — S/T 1099-B')).toBe(true)
+      expect(sheet?.rows.some((row) => row.description === 'AQR Fund — K-1 Box 11S, S/T non-portfolio')).toBe(true)
+      expect(sheet?.rows.some((row) => row.description === 'Vanguard — 1099-DIV capital gain distributions')).toBe(true)
+      expect(sheet?.rows.find((row) => row.line === '1a')?.formula).toMatch(/^=SUM\(C\d+:C\d+\)$/)
+      expect(sheet?.rows.find((row) => row.line === '5')?.formula).toMatch(/^=SUM\(C\d+:C\d+\)$/)
+      expect(line7?.formula).toMatch(/^=C\d+(\+C\d+)+$/)
+      expect(line15?.formula).toMatch(/^=C\d+(\+C\d+)+$/)
+      expect(line16?.formula).toMatch(/^=C\d+\+C\d+$/)
+    })
+
     it('omits line 21 when net is non-negative', () => {
       const tr = { ...baseReturn, scheduleD: { schD_line16: 5000, schD_line21: 0 } } as TaxReturn1040
       const sheet = buildScheduleDSheet(tr)
-      expect(sheet?.rows).toHaveLength(1)
-      expect(sheet?.rows[0]?.line).toBe('16')
+      expect(sheet?.rows.some((row) => row.line === '21')).toBe(false)
+      expect(sheet?.rows.find((row) => row.line === '16')?.amount).toBe(5000)
     })
 
     it('includes line 21 when net is negative', () => {
@@ -70,9 +124,9 @@ describe('XLSX registry integration', () => {
         scheduleD: { schD_line16: -3000, schD_line21: -3000 },
       } as TaxReturn1040
       const sheet = buildScheduleDSheet(tr)
-      expect(sheet?.rows).toHaveLength(2)
-      expect(sheet?.rows[1]?.line).toBe('21')
-      expect(sheet?.rows[1]?.description).toContain('2025')
+      const line21 = sheet?.rows.find((row) => row.line === '21')
+      expect(line21?.description).toContain('2025')
+      expect(line21?.formula).toMatch(/^=MAX\(C\d+,-3000\)$/)
     })
   })
 

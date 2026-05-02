@@ -642,7 +642,7 @@ function TaxPreviewPageContent() {
     return (
       <DockActionsProvider>
         <div className="flex h-full flex-col">
-          <DockHeaderBar />
+          <DockHeaderBar onExportXlsx={handleExportXlsx} isExporting={isExporting} />
           <TaxEstimateHeader defaultTier={hasColumns ? 'slim' : 'expanded'} />
           <div className="relative min-h-0 flex-1">
             <MillerShell registry={dockRegistry} homeView={<DockHomeView />} />
