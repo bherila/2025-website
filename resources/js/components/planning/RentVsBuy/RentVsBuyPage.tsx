@@ -16,18 +16,23 @@ const DEFAULT_INPUTS: RentVsBuyInputs = {
   downPaymentPercent: 20,
   mortgageRatePercent: 7.25,
   mortgageTermYears: 30,
-  closingCostsPercent: 3,
+  closingCostsValue: 3,
+  closingCostsType: 'percent',
   propertyTaxRatePercent: 1.1,
-  hoaMonthly: 350,
+  useCaliforniaProp13: false,
+  hoaAmount: 350,
+  hoaPeriod: 'monthly',
   homeownersInsuranceAnnual: 2_000,
   maintenancePercent: 1,
   appreciationPercent: 3,
   sellingCostsPercent: 6,
   monthlyRent: 3_500,
-  rentersInsuranceAnnual: 240,
+  rentersInsuranceAmount: 240,
+  rentersInsurancePeriod: 'annual',
   rentIncreasePercent: 3,
   investmentReturnPercent: 6,
   marginalTaxRatePercent: 30,
+  capitalGainsTaxRatePercent: 15,
   filingStatus: 'Single',
   timeHorizonYears: 10,
   inflationRatePercent: 2.5,
@@ -45,18 +50,23 @@ const QUERY_KEYS: Record<keyof RentVsBuyInputs, string> = {
   downPaymentPercent: 'down',
   mortgageRatePercent: 'rate',
   mortgageTermYears: 'term',
-  closingCostsPercent: 'closing',
+  closingCostsValue: 'closing',
+  closingCostsType: 'closing_type',
   propertyTaxRatePercent: 'tax',
-  hoaMonthly: 'hoa',
+  useCaliforniaProp13: 'prop13',
+  hoaAmount: 'hoa',
+  hoaPeriod: 'hoa_period',
   homeownersInsuranceAnnual: 'home_ins',
   maintenancePercent: 'maint',
   appreciationPercent: 'app',
   sellingCostsPercent: 'sell',
   monthlyRent: 'rent',
-  rentersInsuranceAnnual: 'rent_ins',
+  rentersInsuranceAmount: 'rent_ins',
+  rentersInsurancePeriod: 'rent_ins_period',
   rentIncreasePercent: 'rent_grow',
   investmentReturnPercent: 'invest',
   marginalTaxRatePercent: 'marginal_tax',
+  capitalGainsTaxRatePercent: 'capital_gains_tax',
   filingStatus: 'filing',
   timeHorizonYears: 'horizon',
   inflationRatePercent: 'inflation',
@@ -68,11 +78,21 @@ type NumericRentVsBuyInputKey = {
 
 const moneyInputKeys = new Set<NumericRentVsBuyInputKey>([
   'homePrice',
-  'hoaMonthly',
+  'hoaAmount',
   'homeownersInsuranceAnnual',
   'monthlyRent',
-  'rentersInsuranceAnnual',
+  'rentersInsuranceAmount',
 ])
+
+function parseBoolean(searchParams: URLSearchParams, key: keyof RentVsBuyInputs): boolean {
+  const alias = QUERY_KEYS[key]
+  const raw = searchParams.get(alias)
+  if (raw === null) {
+    return Boolean(DEFAULT_INPUTS[key])
+  }
+
+  return raw === 'true' || raw === '1'
+}
 
 function parseNumber(searchParams: URLSearchParams, key: NumericRentVsBuyInputKey): number {
   const alias = QUERY_KEYS[key]
@@ -85,6 +105,20 @@ function parseNumber(searchParams: URLSearchParams, key: NumericRentVsBuyInputKe
   return Number.isFinite(parsed) ? parsed : DEFAULT_INPUTS[key]
 }
 
+function parseExpensePeriod(searchParams: URLSearchParams, key: keyof RentVsBuyInputs): 'monthly' | 'annual' {
+  const raw = searchParams.get(QUERY_KEYS[key])
+  return raw === 'monthly' || raw === 'annual'
+    ? raw
+    : DEFAULT_INPUTS[key] as 'monthly' | 'annual'
+}
+
+function parseClosingCostsType(searchParams: URLSearchParams): 'percent' | 'amount' {
+  const raw = searchParams.get(QUERY_KEYS.closingCostsType)
+  return raw === 'percent' || raw === 'amount'
+    ? raw
+    : DEFAULT_INPUTS.closingCostsType
+}
+
 function parseInputs(search: string): RentVsBuyInputs {
   const searchParams = new URLSearchParams(search)
   const filingStatus = searchParams.get(QUERY_KEYS.filingStatus)
@@ -94,18 +128,23 @@ function parseInputs(search: string): RentVsBuyInputs {
     downPaymentPercent: parseNumber(searchParams, 'downPaymentPercent'),
     mortgageRatePercent: parseNumber(searchParams, 'mortgageRatePercent'),
     mortgageTermYears: parseNumber(searchParams, 'mortgageTermYears'),
-    closingCostsPercent: parseNumber(searchParams, 'closingCostsPercent'),
+    closingCostsValue: parseNumber(searchParams, 'closingCostsValue'),
+    closingCostsType: parseClosingCostsType(searchParams),
     propertyTaxRatePercent: parseNumber(searchParams, 'propertyTaxRatePercent'),
-    hoaMonthly: parseNumber(searchParams, 'hoaMonthly'),
+    useCaliforniaProp13: parseBoolean(searchParams, 'useCaliforniaProp13'),
+    hoaAmount: parseNumber(searchParams, 'hoaAmount'),
+    hoaPeriod: parseExpensePeriod(searchParams, 'hoaPeriod'),
     homeownersInsuranceAnnual: parseNumber(searchParams, 'homeownersInsuranceAnnual'),
     maintenancePercent: parseNumber(searchParams, 'maintenancePercent'),
     appreciationPercent: parseNumber(searchParams, 'appreciationPercent'),
     sellingCostsPercent: parseNumber(searchParams, 'sellingCostsPercent'),
     monthlyRent: parseNumber(searchParams, 'monthlyRent'),
-    rentersInsuranceAnnual: parseNumber(searchParams, 'rentersInsuranceAnnual'),
+    rentersInsuranceAmount: parseNumber(searchParams, 'rentersInsuranceAmount'),
+    rentersInsurancePeriod: parseExpensePeriod(searchParams, 'rentersInsurancePeriod'),
     rentIncreasePercent: parseNumber(searchParams, 'rentIncreasePercent'),
     investmentReturnPercent: parseNumber(searchParams, 'investmentReturnPercent'),
     marginalTaxRatePercent: parseNumber(searchParams, 'marginalTaxRatePercent'),
+    capitalGainsTaxRatePercent: parseNumber(searchParams, 'capitalGainsTaxRatePercent'),
     filingStatus: filingStatus && filingStatuses.has(filingStatus as FilingStatus)
       ? filingStatus as FilingStatus
       : DEFAULT_INPUTS.filingStatus,
