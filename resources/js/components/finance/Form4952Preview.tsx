@@ -158,13 +158,33 @@ export function computeForm4952Lines({
   const finalNii = currency(niiBefore).add(useQdElected).value
   const finalDeductible = Math.min(totalInvIntExpense, finalNii)
   const finalCarryforward = currency(totalInvIntExpense).subtract(finalDeductible).value
-  const invIntSourcesWithAllowance = invIntSources.map((source) => {
-    const sourceExpense = Math.abs(source.amount)
-    const allowedAmount = totalInvIntExpense > 0
-      ? currency(finalDeductible).multiply(sourceExpense / totalInvIntExpense).value
-      : 0
-    return { ...source, allowedAmount }
-  })
+  const invIntSourcesWithAllowance: InvIntSource[] = invIntSources.map((source) => ({
+    ...source,
+    allowedAmount: 0,
+  }))
+  if (totalInvIntExpense > 0 && finalDeductible > 0 && invIntSourcesWithAllowance.length > 0) {
+    // Largest source absorbs the per-line rounding remainder so the sum of
+    // allowedAmount lines reconciles exactly to finalDeductible (avoids drift
+    // in the Schedule E vs. Schedule A split when there are multiple sources).
+    let largestIdx = 0
+    let largestAbs = Math.abs(invIntSourcesWithAllowance[0]!.amount)
+    for (let i = 1; i < invIntSourcesWithAllowance.length; i++) {
+      const abs = Math.abs(invIntSourcesWithAllowance[i]!.amount)
+      if (abs > largestAbs) {
+        largestIdx = i
+        largestAbs = abs
+      }
+    }
+    let allocated = currency(0)
+    invIntSourcesWithAllowance.forEach((source, i) => {
+      if (i === largestIdx) return
+      const sourceExpense = Math.abs(source.amount)
+      const share = currency(finalDeductible).multiply(sourceExpense / totalInvIntExpense).value
+      source.allowedAmount = share
+      allocated = allocated.add(share)
+    })
+    invIntSourcesWithAllowance[largestIdx]!.allowedAmount = currency(finalDeductible).subtract(allocated).value
+  }
   const scheduleEDeductibleInvestmentInterestExpense = invIntSourcesWithAllowance.reduce(
     (acc, source) => source.scheduleEDeductionEligible ? acc.add(source.allowedAmount ?? 0) : acc,
     currency(0),

@@ -64,9 +64,13 @@ export function InfoTooltip({ children }: { children: React.ReactNode }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground hover:text-foreground align-middle">
-          <HelpCircle className="h-3.5 w-3.5" />
-        </span>
+        <button
+          type="button"
+          aria-label="More information"
+          className="inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground hover:text-foreground align-middle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
+          <HelpCircle aria-hidden="true" className="h-3.5 w-3.5" />
+        </button>
       </TooltipTrigger>
       <TooltipContent className="max-w-xs text-xs leading-snug">{children}</TooltipContent>
     </Tooltip>
