@@ -319,9 +319,9 @@ function RowAction({
   onAcceptAccountLot: (row: TaxLotReconciliationRow) => void
 }) {
   const supersede = supersedeRows(row)
-  const accepted = supersede.length > 0 && row.account_lot?.superseded_by_lot_id === row.reported_lot?.lot_id
+  const supersedeApplied = isSupersedeApplied(row)
 
-  if (accepted) {
+  if (supersedeApplied) {
     return <span className="text-xs text-muted-foreground">Applied</span>
   }
 
@@ -335,6 +335,10 @@ function RowAction({
   }
 
   if (row.status === 'missing_1099b' && row.account_lot) {
+    if (row.account_lot.reconciliation_status === 'accepted') {
+      return <span className="text-xs text-muted-foreground">Accepted</span>
+    }
+
     return (
       <Button size="sm" variant="outline" disabled={applying} onClick={() => onAcceptAccountLot(row)}>
         Accept
@@ -343,6 +347,17 @@ function RowAction({
   }
 
   return <span className="text-xs text-muted-foreground">Review</span>
+}
+
+function isSupersedeApplied(row: TaxLotReconciliationRow): boolean {
+  const reportedLot = row.reported_lot
+  if (!reportedLot) {
+    return false
+  }
+
+  const accountLots = row.status === 'duplicate' ? row.candidate_lots : row.account_lot ? [row.account_lot] : []
+
+  return accountLots.length > 0 && accountLots.every(lot => lot.superseded_by_lot_id === reportedLot.lot_id)
 }
 
 function supersedeRows(row: TaxLotReconciliationRow): Array<{ keep_lot_id: number; drop_lot_id: number }> {

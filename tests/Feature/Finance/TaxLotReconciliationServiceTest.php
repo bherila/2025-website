@@ -180,4 +180,28 @@ class TaxLotReconciliationServiceTest extends TestCase
         $this->assertContains('duplicate', $statuses);
         $this->assertSame('Unmatched Brokerage', $result['unresolved_account_links'][0]['ai_account_name']);
     }
+
+    public function test_reconcile_matches_lots_inside_disposition_tolerances(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $taxDocument = $this->makeTaxDocument($user->id);
+
+        $this->makeLot($account, [
+            'lot_source' => '1099b',
+            'tax_document_id' => $taxDocument->id,
+            'quantity' => 10.000001,
+            'proceeds' => 1250.02,
+        ]);
+        $this->makeLot($account, [
+            'lot_source' => 'analyzer',
+            'quantity' => 10.000000,
+            'proceeds' => 1250.01,
+        ]);
+
+        $result = app(TaxLotReconciliationService::class)->reconcile($user->id, 2025);
+
+        $this->assertSame(1, $result['summary']['matched']);
+        $this->assertSame('matched', $result['accounts'][0]['rows'][0]['status']);
+    }
 }

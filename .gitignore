@@ -6,6 +6,7 @@ package-lock.json
 .env.production
 .phpactor.json
 .phpunit.result.cache
+.playwright-mcp/
 /.fleet
 /.idea
 /.nova

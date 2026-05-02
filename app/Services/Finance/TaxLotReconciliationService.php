@@ -10,6 +10,10 @@ use Illuminate\Support\Collection;
 
 class TaxLotReconciliationService
 {
+    private const MONEY_BUCKET_SCALE = 100;
+
+    private const QUANTITY_BUCKET_SCALE = 1_000_000;
+
     public function __construct(
         private LotMatcher $lotMatcher,
     ) {}
@@ -77,9 +81,10 @@ class TaxLotReconciliationService
         $summary = $this->emptySummary();
         $usedAccountLotIds = [];
         $rows = [];
+        $accountLotsByDisposition = $this->accountLotsByDisposition($accountLots);
 
         foreach ($reportedLots as $reportedLot) {
-            $candidates = $accountLots
+            $candidates = $this->candidateAccountLots($reportedLot, $accountLotsByDisposition)
                 ->filter(fn (FinAccountLot $accountLot): bool => $this->lotMatcher->sameDisposition($reportedLot, $accountLot))
                 ->values();
 
@@ -128,6 +133,83 @@ class TaxLotReconciliationService
             'summary' => $summary,
             'rows' => $rows,
         ];
+    }
+
+    /**
+     * @param  Collection<int, FinAccountLot>  $accountLots
+     * @return array<string, array<int, FinAccountLot>>
+     */
+    private function accountLotsByDisposition(Collection $accountLots): array
+    {
+        $indexedLots = [];
+
+        foreach ($accountLots as $accountLot) {
+            $key = $this->dispositionKey(
+                $accountLot,
+                $this->quantityBucket($accountLot),
+                $this->moneyBucket($accountLot->proceeds),
+            );
+
+            $indexedLots[$key][] = $accountLot;
+        }
+
+        return $indexedLots;
+    }
+
+    /**
+     * @param  array<string, array<int, FinAccountLot>>  $accountLotsByDisposition
+     * @return Collection<int, FinAccountLot>
+     */
+    private function candidateAccountLots(FinAccountLot $reportedLot, array $accountLotsByDisposition): Collection
+    {
+        $candidates = [];
+
+        foreach ($this->dispositionCandidateKeys($reportedLot) as $key) {
+            foreach ($accountLotsByDisposition[$key] ?? [] as $accountLot) {
+                $candidates[(int) $accountLot->lot_id] = $accountLot;
+            }
+        }
+
+        return collect(array_values($candidates));
+    }
+
+    /**
+     * @return string[]
+     */
+    private function dispositionCandidateKeys(FinAccountLot $lot): array
+    {
+        $quantityBucket = $this->quantityBucket($lot);
+        $proceedsBucket = $this->moneyBucket($lot->proceeds);
+        $keys = [];
+
+        foreach ([-1, 0, 1] as $quantityOffset) {
+            foreach ([-1, 0, 1] as $proceedsOffset) {
+                $keys[] = $this->dispositionKey($lot, $quantityBucket + $quantityOffset, $proceedsBucket + $proceedsOffset);
+            }
+        }
+
+        return array_values(array_unique($keys));
+    }
+
+    private function dispositionKey(FinAccountLot $lot, int $quantityBucket, int $proceedsBucket): string
+    {
+        return implode('|', [
+            (int) $lot->acct_id,
+            strtoupper(trim((string) $lot->symbol)),
+            $this->lotMatcher->dateValue($lot->sale_date) ?? '',
+            $quantityBucket,
+            $proceedsBucket,
+        ]);
+    }
+
+    private function quantityBucket(FinAccountLot $lot): int
+    {
+        return (int) round(abs($this->lotMatcher->numericValue($lot->quantity)) * self::QUANTITY_BUCKET_SCALE);
+    }
+
+    private function moneyBucket(mixed $value): int
+    {
+        return (int) round($this->lotMatcher->numericValue($value) * self::MONEY_BUCKET_SCALE);
     }
 
     /**

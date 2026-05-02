@@ -132,4 +132,64 @@ describe('TaxLotReconciliationPanel', () => {
     })
     expect(mockGet).toHaveBeenCalledTimes(2)
   })
+
+  it('renders applied state for rows that were already superseded', async () => {
+    mockGet.mockResolvedValue({
+      ...response,
+      accounts: [{
+        ...response.accounts[0]!,
+        rows: [{
+          ...response.accounts[0]!.rows[0]!,
+          account_lot: lot(202, {
+            lot_source: 'analyzer',
+            superseded_by_lot_id: 101,
+            reconciliation_status: 'accepted',
+          }),
+          candidate_lots: [lot(202, {
+            lot_source: 'analyzer',
+            superseded_by_lot_id: 101,
+            reconciliation_status: 'accepted',
+          })],
+        }],
+      }],
+    })
+
+    render(<TaxLotReconciliationPanel selectedYear={2025} />)
+
+    await waitFor(() => expect(screen.getByText('Applied')).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: /use 1099-b/i })).not.toBeInTheDocument()
+  })
+
+  it('renders accepted state for accepted account-only lots', async () => {
+    mockGet.mockResolvedValue({
+      ...response,
+      accounts: [{
+        ...response.accounts[0]!,
+        rows: [{
+          status: 'missing_1099b',
+          reported_lot: null,
+          account_lot: lot(303, {
+            lot_source: 'analyzer',
+            reconciliation_status: 'accepted',
+          }),
+          candidate_lots: [lot(303, {
+            lot_source: 'analyzer',
+            reconciliation_status: 'accepted',
+          })],
+          deltas: {
+            quantity: null,
+            proceeds: null,
+            cost_basis: null,
+            realized_gain_loss: null,
+            sale_date_days: null,
+          },
+        }],
+      }],
+    })
+
+    render(<TaxLotReconciliationPanel selectedYear={2025} />)
+
+    await waitFor(() => expect(screen.getAllByText('Accepted').length).toBeGreaterThanOrEqual(2))
+    expect(screen.queryByRole('button', { name: /^accept$/i })).not.toBeInTheDocument()
+  })
 })

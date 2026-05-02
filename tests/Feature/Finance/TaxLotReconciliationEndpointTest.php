@@ -123,4 +123,30 @@ class TaxLotReconciliationEndpointTest extends TestCase
 
         $response->assertStatus(422);
     }
+
+    public function test_apply_reconciliation_rejects_invalid_lot_ids_before_scope_checks(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+
+        $response = $this->actingAs($user)->postJson("/api/finance/{$account->acct_id}/lots/reconciliation/apply", [
+            'supersede' => [[
+                'keep_lot_id' => 0,
+                'drop_lot_id' => -1,
+            ]],
+            'accept' => [0],
+            'conflicts' => [[
+                'lot_id' => 0,
+                'status' => 'accepted',
+            ]],
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors([
+                'supersede.0.keep_lot_id',
+                'supersede.0.drop_lot_id',
+                'accept.0',
+                'conflicts.0.lot_id',
+            ]);
+    }
 }

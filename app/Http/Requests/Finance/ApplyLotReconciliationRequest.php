@@ -24,12 +24,12 @@ class ApplyLotReconciliationRequest extends FormRequest
     {
         return [
             'supersede' => ['sometimes', 'array'],
-            'supersede.*.keep_lot_id' => ['required', 'integer'],
-            'supersede.*.drop_lot_id' => ['required', 'integer'],
+            'supersede.*.keep_lot_id' => ['required', 'integer', 'min:1'],
+            'supersede.*.drop_lot_id' => ['required', 'integer', 'min:1'],
             'accept' => ['sometimes', 'array'],
-            'accept.*' => ['integer'],
+            'accept.*' => ['integer', 'min:1', 'distinct'],
             'conflicts' => ['sometimes', 'array'],
-            'conflicts.*.lot_id' => ['required', 'integer'],
+            'conflicts.*.lot_id' => ['required', 'integer', 'min:1', 'distinct'],
             'conflicts.*.status' => ['required', 'string', 'in:matched,variance,missing_account,missing_1099b,duplicate,accepted,ignored,conflict'],
             'conflicts.*.notes' => ['nullable', 'string', 'max:2000'],
         ];
@@ -51,9 +51,13 @@ class ApplyLotReconciliationRequest extends FormRequest
                 continue;
             }
 
+            if (! isset($row['keep_lot_id'], $row['drop_lot_id'])) {
+                continue;
+            }
+
             $result[] = [
-                'keep_lot_id' => (int) ($row['keep_lot_id'] ?? 0),
-                'drop_lot_id' => (int) ($row['drop_lot_id'] ?? 0),
+                'keep_lot_id' => (int) $row['keep_lot_id'],
+                'drop_lot_id' => (int) $row['drop_lot_id'],
             ];
         }
 
@@ -89,9 +93,13 @@ class ApplyLotReconciliationRequest extends FormRequest
                 continue;
             }
 
+            if (! isset($row['lot_id'], $row['status'])) {
+                continue;
+            }
+
             $result[] = [
-                'lot_id' => (int) ($row['lot_id'] ?? 0),
-                'status' => (string) ($row['status'] ?? ''),
+                'lot_id' => (int) $row['lot_id'],
+                'status' => (string) $row['status'],
                 'notes' => isset($row['notes']) ? (string) $row['notes'] : null,
             ];
         }
