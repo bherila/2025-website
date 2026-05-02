@@ -5,11 +5,61 @@ namespace Tests\Feature;
 use App\Models\User;
 use App\Models\UserAiConfiguration;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class UserAiConfigurationTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Http::fake(function (Request $request) {
+            $headers = json_encode($request->headers());
+            if (is_string($headers) && str_contains($headers, 'bad-key')) {
+                return Http::response([
+                    'error' => ['message' => 'API key not valid. Please pass a valid API key.'],
+                ], 401);
+            }
+
+            if (str_contains($request->url(), 'generativelanguage.googleapis.com')) {
+                return Http::response([
+                    'models' => [
+                        ['name' => 'models/gemini-2.0-flash', 'supportedGenerationMethods' => ['generateContent']],
+                        ['name' => 'models/gemini-1.5-pro', 'supportedGenerationMethods' => ['generateContent']],
+                    ],
+                ], 200);
+            }
+
+            if (str_contains($request->url(), 'api.anthropic.com')) {
+                return Http::response([
+                    'data' => [
+                        ['id' => 'claude-sonnet-4-6', 'display_name' => 'Claude Sonnet 4.6'],
+                        ['id' => 'claude-haiku-4-5', 'display_name' => 'Claude Haiku 4.5'],
+                    ],
+                ], 200);
+            }
+
+            if (str_contains($request->url(), '/foundation-models')) {
+                return Http::response([
+                    'modelSummaries' => [
+                        ['modelId' => 'anthropic.claude-sonnet-4-6', 'modelName' => 'Claude Sonnet'],
+                    ],
+                ], 200);
+            }
+
+            if (str_contains($request->url(), '/inference-profiles')) {
+                return Http::response([
+                    'inferenceProfileSummaries' => [],
+                ], 200);
+            }
+
+            return Http::response([], 404);
+        });
+    }
 
     // --- Auth guard ---
 
@@ -43,7 +93,8 @@ class UserAiConfigurationTest extends TestCase
             'api_key' => 'fake-api-key',
             'model' => 'gemini-2.0-flash',
         ])->assertCreated()
-            ->assertJsonFragment(['name' => 'My Gemini', 'provider' => 'gemini']);
+            ->assertJsonFragment(['name' => 'My Gemini', 'provider' => 'gemini'])
+            ->assertJsonFragment(['available_models' => ['gemini-2.0-flash', 'gemini-1.5-pro']]);
 
         $this->assertDatabaseHas('user_ai_configurations', [
             'user_id' => $user->id,
@@ -78,6 +129,28 @@ class UserAiConfigurationTest extends TestCase
         ])->assertCreated()->assertJsonFragment(['is_active' => false]);
     }
 
+    public function test_store_can_create_configuration_after_key_validation_before_model_is_selected(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->postJson('/api/user/ai-prefs', [
+            'name' => 'My Gemini',
+            'provider' => 'gemini',
+            'api_key' => 'fake-api-key',
+        ])->assertCreated()
+            ->assertJsonFragment([
+                'name' => 'My Gemini',
+                'provider' => 'gemini',
+                'model' => 'gemini-2.0-flash',
+            ]);
+
+        $this->assertDatabaseHas('user_ai_configurations', [
+            'user_id' => $user->id,
+            'name' => 'My Gemini',
+            'model' => 'gemini-2.0-flash',
+        ]);
+    }
+
     public function test_update_configuration(): void
     {
         $user = User::factory()->create();
@@ -88,6 +161,21 @@ class UserAiConfigurationTest extends TestCase
             'provider' => 'gemini',
             'model' => 'gemini-2.0-flash',
         ])->assertOk()->assertJsonFragment(['name' => 'New name']);
+    }
+
+    public function test_update_with_new_api_key_validates_credentials_and_returns_models(): void
+    {
+        $user = User::factory()->create();
+        $config = UserAiConfiguration::factory()->for($user)->gemini()->create(['name' => 'Old name']);
+
+        $this->actingAs($user)->putJson("/api/user/ai-prefs/{$config->id}", [
+            'name' => 'New name',
+            'provider' => 'gemini',
+            'api_key' => 'new-key',
+            'model' => 'gemini-2.0-flash',
+        ])->assertOk()
+            ->assertJsonFragment(['name' => 'New name'])
+            ->assertJsonFragment(['available_models' => ['gemini-2.0-flash', 'gemini-1.5-pro']]);
     }
 
     public function test_update_cannot_change_provider(): void
@@ -171,7 +259,7 @@ class UserAiConfigurationTest extends TestCase
 
         $this->actingAs($user)->postJson('/api/user/ai-prefs', [])
             ->assertUnprocessable()
-            ->assertJsonValidationErrors(['name', 'provider', 'api_key', 'model']);
+            ->assertJsonValidationErrors(['name', 'provider', 'api_key']);
     }
 
     public function test_store_validates_provider_enum(): void
@@ -295,6 +383,40 @@ class UserAiConfigurationTest extends TestCase
             'api_key_invalid_at' => null,
             'api_key_invalid_reason' => null,
         ]);
+    }
+
+    public function test_store_rejects_invalid_api_key_credentials(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->postJson('/api/user/ai-prefs', [
+            'name' => 'Bad key',
+            'provider' => 'gemini',
+            'api_key' => 'bad-key',
+        ])->assertUnprocessable()
+            ->assertJsonFragment(['error' => 'Invalid API credentials.']);
+
+        $this->assertDatabaseMissing('user_ai_configurations', [
+            'user_id' => $user->id,
+            'name' => 'Bad key',
+        ]);
+    }
+
+    public function test_update_rejects_invalid_new_api_key_credentials(): void
+    {
+        $user = User::factory()->create();
+        $config = UserAiConfiguration::factory()->for($user)->gemini()->create(['api_key' => 'old-key']);
+
+        $this->actingAs($user)->putJson("/api/user/ai-prefs/{$config->id}", [
+            'name' => $config->name,
+            'provider' => 'gemini',
+            'api_key' => 'bad-key',
+            'model' => 'gemini-2.0-flash',
+        ])->assertUnprocessable()
+            ->assertJsonFragment(['error' => 'Invalid API credentials.']);
+
+        $config->refresh();
+        $this->assertSame('old-key', $config->api_key);
     }
 
     public function test_activate_rejects_invalid_api_key_configuration(): void
