@@ -62,6 +62,7 @@ describe('computeSe401k', () => {
       deductibleSeTax: 0,
       w2EmployeePretaxDeferred: 0,
     })
-    expect(result.limits.employeeDeferral).toBe(SE_401K_LIMITS[2025]!.employeeDeferral)
+    const mostRecentYear = Math.max(...Object.keys(SE_401K_LIMITS).map(Number))
+    expect(result.limits.employeeDeferral).toBe(SE_401K_LIMITS[mostRecentYear]!.employeeDeferral)
   })
 })

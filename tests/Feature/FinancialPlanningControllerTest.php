@@ -20,15 +20,24 @@ class FinancialPlanningControllerTest extends TestCase
         $response->assertSee('id="app"', false);
     }
 
-    public function test_solo_401k_calculator_page_is_public(): void
+    public function test_retirement_contribution_calculator_page_is_public(): void
+    {
+        $this->withoutVite();
+
+        $response = $this->get('/financial-planning/retirement-contribution-calculator');
+
+        $response->assertStatus(200);
+        $response->assertSee('<title>Retirement Contribution Calculator | '.config('app.name', 'Ben Herila').'</title>', false);
+        $response->assertSee('id="app"', false);
+    }
+
+    public function test_old_solo_401k_calculator_route_is_not_registered(): void
     {
         $this->withoutVite();
 
         $response = $this->get('/financial-planning/solo-401k');
 
-        $response->assertStatus(200);
-        $response->assertSee('<title>Solo 401(k) Calculator | '.config('app.name', 'Ben Herila').'</title>', false);
-        $response->assertSee('id="app"', false);
+        $response->assertNotFound();
     }
 
     public function test_rent_vs_buy_page_has_title(): void

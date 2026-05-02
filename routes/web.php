@@ -125,8 +125,8 @@ Route::get('/financial-planning', function () {
     return view('financial-planning.index');
 });
 
-Route::get('/financial-planning/solo-401k', function () {
-    return view('financial-planning.solo-401k');
+Route::get('/financial-planning/retirement-contribution-calculator', function () {
+    return view('financial-planning.retirement-contribution-calculator');
 });
 
 Route::get('/financial-planning/rent-vs-buy', function () {

@@ -5,6 +5,14 @@ import { render, screen } from '@testing-library/react'
 import FinancialPlanningPage from '@/components/planning/FinancialPlanningPage'
 
 describe('FinancialPlanningPage', () => {
+  it('links to the retirement contribution calculator', () => {
+    render(<FinancialPlanningPage />)
+
+    const link = screen.getByRole('link', { name: /Retirement Contribution Calculator/i })
+
+    expect(link).toHaveAttribute('href', '/financial-planning/retirement-contribution-calculator')
+  })
+
   it('links to the rent vs buy calculator', () => {
     render(<FinancialPlanningPage />)
 
