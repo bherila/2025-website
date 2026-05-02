@@ -9,12 +9,6 @@ type AsChildProps = {
   children?: React.ReactNode
 }
 
-interface DialogContextValue {
-  open: boolean
-}
-
-const DialogContext = React.createContext<DialogContextValue | null>(null)
-
 type DialogProps = Omit<
   React.ComponentProps<typeof DialogPrimitive.Root>,
   "children"
@@ -40,29 +34,14 @@ function Dialog({
   open: controlledOpen,
   ...props
 }: DialogProps) {
-  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(defaultOpen)
-  const open = controlledOpen ?? uncontrolledOpen
-  const contextValue = React.useMemo<DialogContextValue>(
-    () => ({ open }),
-    [open]
-  )
-
   return (
-    <DialogContext.Provider value={contextValue}>
-      <DialogPrimitive.Root
-        data-slot="dialog"
-        defaultOpen={defaultOpen}
-        onOpenChange={(nextOpen, eventDetails) => {
-          if (controlledOpen === undefined) {
-            setUncontrolledOpen(nextOpen)
-          }
-
-          onOpenChange?.(nextOpen, eventDetails)
-        }}
-        open={controlledOpen}
-        {...props}
-      />
-    </DialogContext.Provider>
+    <DialogPrimitive.Root
+      data-slot="dialog"
+      defaultOpen={defaultOpen}
+      onOpenChange={onOpenChange}
+      open={controlledOpen}
+      {...props}
+    />
   )
 }
 
@@ -108,8 +87,6 @@ function DialogOverlay({
   className,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Backdrop>) {
-  const dialogContext = React.useContext(DialogContext)
-
   return (
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
@@ -129,12 +106,6 @@ function DialogContent({
   showCloseButton = true,
   ...props
 }: DialogContentProps) {
-  const dialogContext = React.useContext(DialogContext)
-
-  if (dialogContext?.open === false) {
-    return null
-  }
-
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />

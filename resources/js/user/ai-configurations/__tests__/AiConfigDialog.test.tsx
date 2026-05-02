@@ -35,8 +35,10 @@ describe('AiConfigDialog', () => {
     fireEvent.click(screen.getByRole('combobox', { name: 'Provider' }));
     const bedrockOption = screen.getByRole('option', { name: 'Bedrock' });
     const dialogContent = screen.getByRole('dialog');
+    const dialogPortal = document.querySelector('[data-slot="dialog-portal"]');
 
-    expect(dialogContent).toContainElement(bedrockOption);
+    expect(dialogContent).not.toContainElement(bedrockOption);
+    expect(dialogPortal).toContainElement(bedrockOption);
 
     fireEvent.pointerEnter(bedrockOption, { pointerType: 'mouse' });
     fireEvent.mouseMove(bedrockOption);
