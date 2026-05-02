@@ -51,7 +51,15 @@ describe('Client-portal hydration', () => {
       line_items: [],
       payments: [],
       remaining_balance: '100.00',
-      payments_total: '0.00'
+      payments_total: '0.00',
+      deferred_pending: [
+        {
+          id: 10,
+          hours: 2,
+          date_worked: '2024-01-10',
+          name: 'Deferred Feature Work',
+        },
+      ],
     }
 
     await act(async () => {
@@ -68,6 +76,8 @@ describe('Client-portal hydration', () => {
 
     // Renders synchronously from hydrated prop (use heading to avoid duplicate-text matches)
     expect(screen.getByRole('heading', { name: /Invoice TEST-001/ })).toBeInTheDocument()
+    expect(screen.getByText(/1 entry deferred to a future invoice/)).toBeInTheDocument()
+    expect(screen.getByText('Deferred Feature Work')).toBeInTheDocument()
     // ensure no invoice-specific network request was made
     expect((window as any).fetch).not.toHaveBeenCalledWith(expect.stringContaining('/api/client/portal/acme/invoices/1'))
   })

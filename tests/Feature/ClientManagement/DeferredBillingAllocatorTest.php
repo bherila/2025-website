@@ -152,6 +152,40 @@ class DeferredBillingAllocatorTest extends TestCase
         $this->assertEquals(2.0, $payload['deferred_pending'][0]['hours']);
     }
 
+    public function test_issued_invoice_keeps_original_period_deferred_entries_after_future_billing(): void
+    {
+        $this->entry(minutes: 20 * 60, date: '2026-01-03', deferred: false);
+        $deferred = $this->entry(2 * 60, '2026-01-10');
+
+        $januaryInvoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2026, 1, 1),
+            Carbon::create(2026, 1, 31),
+        );
+        $januaryInvoice->issue();
+
+        $februaryInvoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2026, 2, 1),
+            Carbon::create(2026, 2, 28),
+        );
+
+        $deferred->refresh();
+        $this->assertNotNull($deferred->client_invoice_line_id);
+        $this->assertEquals(
+            $februaryInvoice->client_invoice_id,
+            $deferred->invoiceLine->client_invoice_id,
+            'Deferred entry should be billed on a future invoice.',
+        );
+
+        $payload = $januaryInvoice->fresh()->toDetailedArray();
+
+        $this->assertEquals('issued', $payload['status']);
+        $this->assertCount(1, $payload['deferred_pending']);
+        $this->assertEquals($deferred->id, $payload['deferred_pending'][0]['id']);
+        $this->assertEquals(2.0, $payload['deferred_pending'][0]['hours']);
+    }
+
     public function test_regeneration_re_evaluates_deferred(): void
     {
         // Start with capacity for the deferred entry.

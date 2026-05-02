@@ -395,9 +395,7 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                             </TableBody>
                         </Table>
 
-                        {/* Deferred-to-future-invoice note (admin only). Shows only when a draft
-                          invoice has deferred entries that did not fit this cycle's capacity. */}
-                        {isAdmin && invoice.deferred_pending && invoice.deferred_pending.length > 0 && (
+                        {invoice.deferred_pending && invoice.deferred_pending.length > 0 && (
                             <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm dark:border-amber-700 dark:bg-amber-950">
                                 <div className="mb-2 flex items-center gap-2">
                                     <DeferredBadge />
@@ -424,8 +422,9 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                                     </tbody>
                                 </table>
                                 <p className="mt-2 text-xs text-amber-800/80 dark:text-amber-300/80">
-                                    These entries will roll forward until a future invoice has retainer capacity
-                                    (or until the agreement is terminated, at which point they are billed at the hourly rate).
+                                    {invoice.status === 'draft'
+                                        ? 'These entries will roll forward until a future invoice has retainer capacity (or until the agreement is terminated, at which point they are billed at the hourly rate).'
+                                        : 'These entries were worked during this invoice period and deferred to a later invoice instead of being billed here.'}
                                 </p>
                             </div>
                         )}
