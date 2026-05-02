@@ -1,4 +1,6 @@
-import { computeRentVsBuy, type RentVsBuyInputs } from '@/lib/planning/rentVsBuy'
+import currency from 'currency.js'
+
+import { computeRentVsBuy, type RentVsBuyInputs, type RentVsBuyYearRow } from '@/lib/planning/rentVsBuy'
 
 function makeInputs(overrides: Partial<RentVsBuyInputs> = {}): RentVsBuyInputs {
   return {
@@ -23,6 +25,12 @@ function makeInputs(overrides: Partial<RentVsBuyInputs> = {}): RentVsBuyInputs {
     inflationRatePercent: 2.5,
     ...overrides,
   }
+}
+
+function annualCostIncrease(rows: RentVsBuyYearRow[], index: number): number {
+  return currency(rows[index]?.ownCumulativeCost ?? 0)
+    .subtract(index > 0 ? rows[index - 1]?.ownCumulativeCost ?? 0 : 0)
+    .value
 }
 
 describe('computeRentVsBuy', () => {
@@ -202,5 +210,39 @@ describe('computeRentVsBuy', () => {
     }))
 
     expect(result.rows[0]?.homeEquity).toBeCloseTo(282_000, 2)
+  })
+
+  it('increases deductible mortgage interest once acquisition debt amortizes below the cap', () => {
+    const cappedDebt = computeRentVsBuy(makeInputs({
+      homePrice: 760_000,
+      downPaymentPercent: 0,
+      mortgageRatePercent: 7,
+      propertyTaxRatePercent: 0,
+      maintenancePercent: 0,
+      homeownersInsuranceAnnual: 0,
+      monthlyRent: 10_000,
+      rentersInsuranceAnnual: 0,
+      marginalTaxRatePercent: 35,
+      timeHorizonYears: 3,
+      inflationRatePercent: 0,
+    }))
+    const atCapDebt = computeRentVsBuy(makeInputs({
+      homePrice: 750_000,
+      downPaymentPercent: 0,
+      mortgageRatePercent: 7,
+      propertyTaxRatePercent: 0,
+      maintenancePercent: 0,
+      homeownersInsuranceAnnual: 0,
+      monthlyRent: 10_000,
+      rentersInsuranceAnnual: 0,
+      marginalTaxRatePercent: 35,
+      timeHorizonYears: 3,
+      inflationRatePercent: 0,
+    }))
+
+    const cappedDebtCostIncrease = annualCostIncrease(cappedDebt.rows, 2)
+    const atCapDebtCostIncrease = annualCostIncrease(atCapDebt.rows, 2)
+
+    expect(cappedDebtCostIncrease).toBeCloseTo(atCapDebtCostIncrease, -3)
   })
 })

@@ -1,5 +1,6 @@
 'use client'
 
+import currency from 'currency.js'
 import type { ReactElement } from 'react'
 import { CartesianGrid, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
@@ -13,7 +14,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { formatCurrency } from '@/lib/formatCurrency'
 import type { RentVsBuyResults } from '@/lib/planning/rentVsBuy'
 
 interface RentVsBuyResultsProps {
@@ -23,16 +23,20 @@ interface RentVsBuyResultsProps {
 export default function RentVsBuyResults({ results }: RentVsBuyResultsProps): ReactElement {
   const finalRow = results.rows.at(-1)
 
+  function formatMoney(value: number | string | undefined): string {
+    if (value === undefined) {
+      return currency(0).format()
+    }
+
+    return currency(value).format()
+  }
+
+  function absoluteMoney(value: number): number {
+    return value < 0 ? currency(value).multiply(-1).value : currency(value).value
+  }
+
   function formatTooltipValue(value: number | string | undefined): string {
-    if (typeof value === 'number') {
-      return formatCurrency(value)
-    }
-
-    if (typeof value === 'string') {
-      return formatCurrency(Number.parseFloat(value))
-    }
-
-    return formatCurrency(0)
+    return formatMoney(value)
   }
 
   return (
@@ -43,13 +47,13 @@ export default function RentVsBuyResults({ results }: RentVsBuyResultsProps): Re
         </SummaryTile>
         <SummaryTile title="Own vs. rent wealth delta" kind={results.finalWealthDelta >= 0 ? 'green' : 'red'}>
           {results.finalWealthDelta >= 0 ? '+' : '-'}
-          {formatCurrency(Math.abs(results.finalWealthDelta))}
+          {formatMoney(absoluteMoney(results.finalWealthDelta))}
         </SummaryTile>
         <SummaryTile title="Sellable home equity">
-          {formatCurrency(finalRow?.homeEquity ?? 0)}
+          {formatMoney(finalRow?.homeEquity)}
         </SummaryTile>
         <SummaryTile title="Invested rent portfolio">
-          {formatCurrency(finalRow?.investedPortfolio ?? 0)}
+          {formatMoney(finalRow?.investedPortfolio)}
         </SummaryTile>
       </div>
 
@@ -73,7 +77,7 @@ export default function RentVsBuyResults({ results }: RentVsBuyResultsProps): Re
             >
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="year" allowDecimals={false} />
-              <YAxis tickFormatter={(value: number) => formatCurrency(value)} width={96} />
+              <YAxis tickFormatter={(value: number) => formatMoney(value)} width={96} />
               <Tooltip formatter={(value) => formatTooltipValue(value as number | string | undefined)} />
               <Legend />
               {results.breakEvenYear !== null ? (
@@ -113,12 +117,12 @@ export default function RentVsBuyResults({ results }: RentVsBuyResultsProps): Re
                   {results.rows.map((row) => (
                     <TableRow key={row.year} className={results.breakEvenYear === row.year ? 'bg-success/10' : undefined}>
                       <TableCell>{row.year}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(row.ownCumulativeCost)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(row.rentCumulativeCost)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(row.homeEquity)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(row.investedPortfolio)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(row.netOwnPosition)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(row.netRentPosition)}</TableCell>
+                      <TableCell className="text-right">{formatMoney(row.ownCumulativeCost)}</TableCell>
+                      <TableCell className="text-right">{formatMoney(row.rentCumulativeCost)}</TableCell>
+                      <TableCell className="text-right">{formatMoney(row.homeEquity)}</TableCell>
+                      <TableCell className="text-right">{formatMoney(row.investedPortfolio)}</TableCell>
+                      <TableCell className="text-right">{formatMoney(row.netOwnPosition)}</TableCell>
+                      <TableCell className="text-right">{formatMoney(row.netRentPosition)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

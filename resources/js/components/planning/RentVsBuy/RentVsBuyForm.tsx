@@ -1,7 +1,8 @@
 'use client'
 
+import currency from 'currency.js'
 import { Home, PiggyBank } from 'lucide-react'
-import type { ChangeEvent, ReactElement } from 'react'
+import { type ChangeEvent, type FocusEvent, type ReactElement, useEffect, useState } from 'react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -29,12 +30,27 @@ interface NumberFieldProps {
   onChange: (next: number) => void
 }
 
+interface MoneyFieldProps {
+  label: string
+  value: number
+  onChange: (next: number) => void
+}
+
 const filingStatuses: FilingStatus[] = [
   'Single',
   'Married Filing Jointly',
   'Married Filing Separately',
   'Head of Household',
 ]
+
+function parseMoney(raw: string): number {
+  const parsed = currency(raw).value
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function formatMoney(value: number): string {
+  return currency(value).format()
+}
 
 function NumberField({ label, value, step = '0.01', suffix, onChange }: NumberFieldProps): ReactElement {
   function handleChange(event: ChangeEvent<HTMLInputElement>): void {
@@ -53,6 +69,44 @@ function NumberField({ label, value, step = '0.01', suffix, onChange }: NumberFi
           </span>
         ) : null}
       </div>
+    </div>
+  )
+}
+
+function MoneyField({ label, value, onChange }: MoneyFieldProps): ReactElement {
+  const [rawValue, setRawValue] = useState(() => formatMoney(value))
+
+  useEffect(() => {
+    if (parseMoney(rawValue) !== value) {
+      setRawValue(formatMoney(value))
+    }
+  }, [rawValue, value])
+
+  function handleChange(event: ChangeEvent<HTMLInputElement>): void {
+    const nextValue = event.target.value
+    setRawValue(nextValue)
+    onChange(parseMoney(nextValue))
+  }
+
+  function handleFocus(event: FocusEvent<HTMLInputElement>): void {
+    event.target.select()
+  }
+
+  function handleBlur(): void {
+    setRawValue(formatMoney(value))
+  }
+
+  return (
+    <div className="grid gap-2">
+      <Label>{label}</Label>
+      <Input
+        type="text"
+        inputMode="decimal"
+        value={rawValue}
+        onChange={handleChange}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+      />
     </div>
   )
 }
@@ -76,14 +130,14 @@ export default function RentVsBuyForm({ inputs, onChange }: RentVsBuyFormProps):
           <CardDescription>Purchase assumptions, carrying costs, appreciation, and sale assumptions.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          <NumberField label="Home price" value={inputs.homePrice} onChange={(value) => update('homePrice', value)} />
+          <MoneyField label="Home price" value={inputs.homePrice} onChange={(value) => update('homePrice', value)} />
           <NumberField label="Down payment" value={inputs.downPaymentPercent} suffix="%" onChange={(value) => update('downPaymentPercent', value)} />
           <NumberField label="Mortgage rate" value={inputs.mortgageRatePercent} suffix="%" onChange={(value) => update('mortgageRatePercent', value)} />
           <NumberField label="Mortgage term" value={inputs.mortgageTermYears} step="1" suffix="yrs" onChange={(value) => update('mortgageTermYears', value)} />
           <NumberField label="Closing costs" value={inputs.closingCostsPercent} suffix="%" onChange={(value) => update('closingCostsPercent', value)} />
           <NumberField label="Property tax rate" value={inputs.propertyTaxRatePercent} suffix="% / yr" onChange={(value) => update('propertyTaxRatePercent', value)} />
-          <NumberField label="HOA / condo fees" value={inputs.hoaMonthly} onChange={(value) => update('hoaMonthly', value)} />
-          <NumberField label="Homeowners insurance" value={inputs.homeownersInsuranceAnnual} onChange={(value) => update('homeownersInsuranceAnnual', value)} />
+          <MoneyField label="HOA / condo fees" value={inputs.hoaMonthly} onChange={(value) => update('hoaMonthly', value)} />
+          <MoneyField label="Homeowners insurance" value={inputs.homeownersInsuranceAnnual} onChange={(value) => update('homeownersInsuranceAnnual', value)} />
           <NumberField label="Maintenance" value={inputs.maintenancePercent} suffix="% / yr" onChange={(value) => update('maintenancePercent', value)} />
           <NumberField label="Home appreciation" value={inputs.appreciationPercent} suffix="% / yr" onChange={(value) => update('appreciationPercent', value)} />
           <NumberField label="Selling costs" value={inputs.sellingCostsPercent} suffix="%" onChange={(value) => update('sellingCostsPercent', value)} />
@@ -99,8 +153,8 @@ export default function RentVsBuyForm({ inputs, onChange }: RentVsBuyFormProps):
           <CardDescription>Baseline rent, renter insurance, and expected annual rent growth.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
-          <NumberField label="Monthly rent" value={inputs.monthlyRent} onChange={(value) => update('monthlyRent', value)} />
-          <NumberField label="Renter's insurance" value={inputs.rentersInsuranceAnnual} onChange={(value) => update('rentersInsuranceAnnual', value)} />
+          <MoneyField label="Monthly rent" value={inputs.monthlyRent} onChange={(value) => update('monthlyRent', value)} />
+          <MoneyField label="Renter's insurance" value={inputs.rentersInsuranceAnnual} onChange={(value) => update('rentersInsuranceAnnual', value)} />
           <NumberField label="Rent increase" value={inputs.rentIncreasePercent} suffix="% / yr" onChange={(value) => update('rentIncreasePercent', value)} />
         </CardContent>
       </Card>

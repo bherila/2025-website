@@ -85,6 +85,14 @@ function divideMoney(amount: number, divisor: number): number {
   return divisor === 0 ? 0 : preciseMoney(amount).divide(divisor).value
 }
 
+function minMoney(left: number, right: number): number {
+  return roundMoney(left <= right ? left : right)
+}
+
+function maxMoney(left: number, right: number): number {
+  return roundMoney(left >= right ? left : right)
+}
+
 function sumMoney(values: number[]): number {
   return values.reduce((total, value) => currency(total).add(value).value, 0)
 }
@@ -114,16 +122,13 @@ function getMonthlyMortgagePayment(principal: number, annualRate: number, termYe
   return roundMoney(divideMoney(numerator, growth - 1))
 }
 
-/**
- * Assumes the TCJA-era $750k principal cap applies to new acquisition debt.
- */
-function getDeductibleMortgageInterest(interestPaid: number, originalPrincipal: number): number {
-  if (interestPaid <= 0 || originalPrincipal <= 0) {
+function getDeductibleMortgageInterest(interestPaid: number, acquisitionDebt: number): number {
+  if (interestPaid <= 0 || acquisitionDebt <= 0) {
     return 0
   }
 
-  const deductiblePrincipal = Math.min(originalPrincipal, MORTGAGE_INTEREST_DEDUCTION_CAP)
-  const deductibleRatio = deductiblePrincipal / originalPrincipal
+  const deductiblePrincipal = minMoney(acquisitionDebt, MORTGAGE_INTEREST_DEDUCTION_CAP)
+  const deductibleRatio = deductiblePrincipal / acquisitionDebt
 
   return roundMoney(multiplyMoney(interestPaid, deductibleRatio))
 }
@@ -155,7 +160,6 @@ export function computeRentVsBuy(inputs: RentVsBuyInputs): RentVsBuyResults {
   const usesMortgage = mortgageRate > 0 && termYears > 0
   const downPayment = usesMortgage ? roundMoney(multiplyMoney(purchasePrice, downPaymentRate)) : purchasePrice
   const loanPrincipal = usesMortgage ? roundMoney(subtractMoney(purchasePrice, downPayment)) : 0
-  const originalLoanPrincipal = loanPrincipal
   const closingCosts = roundMoney(multiplyMoney(purchasePrice, toRate(inputs.closingCostsPercent)))
   const monthlyMortgagePayment = usesMortgage ? getMonthlyMortgagePayment(loanPrincipal, mortgageRate, termYears) : 0
 
@@ -183,6 +187,7 @@ export function computeRentVsBuy(inputs: RentVsBuyInputs): RentVsBuyResults {
     const monthlyMaintenance = divideMoney(annualMaintenance, MONTHS_PER_YEAR)
 
     let annualMortgageInterest = 0
+    let annualDeductibleMortgageInterest = 0
     let annualOwnCashOutflow = 0
     let annualRentCashOutflow = 0
 
@@ -193,6 +198,10 @@ export function computeRentVsBuy(inputs: RentVsBuyInputs): RentVsBuyResults {
 
       if (remainingBalance > 0 && monthlyMortgagePayment > 0) {
         interestPayment = roundMoney(multiplyMoney(remainingBalance, mortgageRate / MONTHS_PER_YEAR))
+        annualDeductibleMortgageInterest = roundMoney(addMoney(
+          annualDeductibleMortgageInterest,
+          getDeductibleMortgageInterest(interestPayment, remainingBalance),
+        ))
         principalPayment = roundMoney(subtractMoney(monthlyMortgagePayment, interestPayment))
 
         if (principalPayment > remainingBalance) {
@@ -219,10 +228,9 @@ export function computeRentVsBuy(inputs: RentVsBuyInputs): RentVsBuyResults {
       annualRentCashOutflow = roundMoney(addMoney(annualRentCashOutflow, rentMonthlyOutflow))
     }
 
-    const deductibleMortgageInterest = getDeductibleMortgageInterest(annualMortgageInterest, originalLoanPrincipal)
-    const deductiblePropertyTax = Math.min(annualPropertyTax, SALT_CAP)
-    const itemizedDeduction = roundMoney(addMoney(deductibleMortgageInterest, deductiblePropertyTax))
-    const standardDeduction = getStandardDeduction(latestTaxYear + year - 1, inputs.filingStatus)
+    const deductiblePropertyTax = minMoney(annualPropertyTax, SALT_CAP)
+    const itemizedDeduction = roundMoney(addMoney(annualDeductibleMortgageInterest, deductiblePropertyTax))
+    const standardDeduction = getStandardDeduction(latestTaxYear, inputs.filingStatus)
     const taxBenefit = standardDeduction > 0 && itemizedDeduction > standardDeduction
       ? roundMoney(multiplyMoney(subtractMoney(itemizedDeduction, standardDeduction), marginalTaxRate))
       : 0
@@ -242,7 +250,7 @@ export function computeRentVsBuy(inputs: RentVsBuyInputs): RentVsBuyResults {
     ownCumulativeCost = roundMoney(addMoney(ownCumulativeCost, discountedOwnCost))
     rentCumulativeCost = roundMoney(addMoney(rentCumulativeCost, discountedRentCost))
 
-    const annualSavingsContribution = Math.max(subtractMoney(annualOwnCashOutflow, annualRentCashOutflow), 0)
+    const annualSavingsContribution = maxMoney(subtractMoney(annualOwnCashOutflow, annualRentCashOutflow), 0)
     investedPortfolio = roundMoney(addMoney(
       multiplyMoney(investedPortfolio, 1 + investmentReturnRate),
       annualSavingsContribution,
@@ -251,7 +259,7 @@ export function computeRentVsBuy(inputs: RentVsBuyInputs): RentVsBuyResults {
     homeValue = roundMoney(multiplyMoney(homeValue, 1 + appreciationRate))
 
     const sellingCosts = roundMoney(multiplyMoney(homeValue, sellingCostsRate))
-    const sellableEquity = Math.max(
+    const sellableEquity = maxMoney(
       subtractMoney(subtractMoney(homeValue, sellingCosts), remainingBalance),
       0,
     )

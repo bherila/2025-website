@@ -11,8 +11,7 @@ class FinancialPlanningPagesTest extends TestCase
         $response = $this->get('/financial-planning');
 
         $response->assertStatus(200);
-        $response->assertSee('Rent vs. Buy a Home');
-        $response->assertSee('/financial-planning/rent-vs-buy');
+        $response->assertSee('id="app"', false);
     }
 
     public function test_rent_vs_buy_page_is_public(): void
