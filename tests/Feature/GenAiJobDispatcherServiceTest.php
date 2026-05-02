@@ -5,6 +5,10 @@ namespace Tests\Feature;
 use App\GenAiProcessor\Models\GenAiDailyQuota;
 use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Services\GenAiJobDispatcherService;
+use Bherila\GenAiLaravel\Contracts\GenAiClient;
+use Bherila\GenAiLaravel\ModelInfo;
+use Bherila\GenAiLaravel\ToolConfig;
+use Bherila\GenAiLaravel\Usage;
 use HelgeSverre\Toon\Toon;
 use Tests\TestCase;
 
@@ -470,6 +474,33 @@ class GenAiJobDispatcherServiceTest extends TestCase
         $this->assertSame(1229.74, $data[0]['parsed_data']['transactions'][0]['proceeds']);
     }
 
+    public function test_extract_multi_account_tax_import_from_simple_toon_array_with_bracket_text(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $toon = Toon::encode([
+            [
+                'account_identifier' => 'X65-385336',
+                'account_name' => 'Fidelity Brokerage [archived]',
+                'form_type' => '1099_int',
+                'tax_year' => 2025,
+                'parsed_data' => [
+                    'payer_name' => 'National Financial Services LLC',
+                    'box1_interest' => 12.34,
+                ],
+            ],
+        ]);
+
+        $data = $service->extractGenerateContentData('tax_form_multi_account_import', [
+            'content' => [['type' => 'text', 'text' => $toon]],
+            'stop_reason' => 'end_turn',
+        ]);
+
+        $this->assertIsArray($data);
+        $this->assertSame('Fidelity Brokerage [archived]', $data[0]['account_name']);
+        $this->assertSame(12.34, $data[0]['parsed_data']['box1_interest']);
+    }
+
     public function test_multi_account_tax_import_prompt_requests_toon(): void
     {
         $service = new GenAiJobDispatcherService;
@@ -493,6 +524,32 @@ class GenAiJobDispatcherServiceTest extends TestCase
         ]);
 
         $this->assertStringContainsString('max output token limit', $message);
+    }
+
+    public function test_describe_response_failure_reports_unusable_tool_output(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $message = $service->describeResponseExtractionFailure([
+            'content' => [[
+                'type' => 'tool_use',
+                'name' => 'unexpectedTool',
+                'input' => ['field' => 'value'],
+            ]],
+            'stop_reason' => 'end_turn',
+        ]);
+
+        $this->assertStringContainsString('structured tool output', $message);
+    }
+
+    public function test_describe_response_failure_uses_client_extracted_text(): void
+    {
+        $service = new GenAiJobDispatcherService;
+        $client = $this->fakeGenAiClient(text: 'not valid structured output');
+
+        $message = $service->describeResponseExtractionFailure(['provider_specific' => true], $client);
+
+        $this->assertStringContainsString('returned text', $message);
     }
 
     public function test_coerce_tax_document_args_converts_string_numbers(): void
@@ -725,5 +782,84 @@ class GenAiJobDispatcherServiceTest extends TestCase
         $this->assertArrayHasKey('20', $data['codes']);
         $this->assertCount(1, $data['codes']['20']);
         $this->assertSame('V', $data['codes']['20'][0]['code']);
+    }
+
+    /**
+     * @param  list<array{name: string, input: array<string, mixed>}>  $toolCalls
+     */
+    private function fakeGenAiClient(string $text = '', array $toolCalls = []): GenAiClient
+    {
+        return new class($text, $toolCalls) implements GenAiClient
+        {
+            /**
+             * @param  list<array{name: string, input: array<string, mixed>}>  $toolCalls
+             */
+            public function __construct(
+                private readonly string $text,
+                private readonly array $toolCalls,
+            ) {}
+
+            public function provider(): string
+            {
+                return 'test';
+            }
+
+            public function model(): string
+            {
+                return 'test-model';
+            }
+
+            public static function maxFileBytes(): int
+            {
+                return 1;
+            }
+
+            public function converse(string $system, array $messages, ?ToolConfig $toolConfig = null): array
+            {
+                return [];
+            }
+
+            public function uploadFile(mixed $fileContent, string $mimeType, string $displayName = ''): ?string
+            {
+                return null;
+            }
+
+            public function deleteFile(string $fileRef): void {}
+
+            public function converseWithFileRef(string $fileRef, string $mimeType, string $prompt, ?ToolConfig $toolConfig = null): array
+            {
+                return [];
+            }
+
+            public function converseWithInlineFile(string $fileBytes, string $mimeType, string $prompt, string $system = '', ?ToolConfig $toolConfig = null): array
+            {
+                return [];
+            }
+
+            public function extractText(array $response): string
+            {
+                return $this->text;
+            }
+
+            public function extractToolCalls(array $response): array
+            {
+                return $this->toolCalls;
+            }
+
+            public function checkCredentials(): bool
+            {
+                return true;
+            }
+
+            public function listModels(): array
+            {
+                return [new ModelInfo(id: 'test-model', name: 'Test Model', provider: 'test')];
+            }
+
+            public function extractUsage(array $response): Usage
+            {
+                return Usage::empty();
+            }
+        };
     }
 }

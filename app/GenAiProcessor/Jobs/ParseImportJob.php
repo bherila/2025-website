@@ -242,7 +242,7 @@ class ParseImportJob implements ShouldQueue
         $parseError = null;
 
         if ($data === null) {
-            $parseError = $dispatcher->describeResponseExtractionFailure(is_array($response) ? $response : []);
+            $parseError = $dispatcher->describeResponseExtractionFailure(is_array($response) ? $response : [], $client);
             Log::error('Failed to decode structured response from AI provider', [
                 'response' => $rawResponse,
                 'parse_error' => $parseError,

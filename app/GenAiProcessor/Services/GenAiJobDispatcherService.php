@@ -367,13 +367,17 @@ PROMPT;
     /**
      * @param  array<string, mixed>  $responseBody
      */
-    public function describeResponseExtractionFailure(array $responseBody): string
+    public function describeResponseExtractionFailure(array $responseBody, ?GenAiClient $client = null): string
     {
         if ($this->responseStoppedAtMaxTokens($responseBody)) {
             return 'AI response was truncated before completing structured output because the model reached its max output token limit.';
         }
 
-        if ($this->extractResponseText($responseBody) !== '') {
+        if ($this->extractResponseToolCalls($responseBody, $client) !== []) {
+            return 'AI returned structured tool output, but it did not match the expected schema or job type.';
+        }
+
+        if (trim($this->extractResponseText($responseBody, $client)) !== '') {
             return 'AI returned text, but it was not valid TOON, JSON, or structured tool output.';
         }
 
@@ -480,12 +484,12 @@ PROMPT;
     {
         if ($client !== null) {
             $text = $client->extractText($responseBody);
-            if ($text !== '') {
-                return $this->stripMarkdownJsonFence($text);
+            if (trim($text) !== '') {
+                return $text;
             }
         }
 
-        return $this->stripMarkdownJsonFence($this->extractTextParts($responseBody));
+        return $this->extractTextParts($responseBody);
     }
 
     /**
@@ -563,10 +567,18 @@ PROMPT;
             }
         }
 
+        if (trim($text) !== '') {
+            return $text;
+        }
+
         foreach ($responseBody['content'] ?? [] as $block) {
             if (is_array($block) && ($block['type'] ?? null) === 'text' && is_string($block['text'] ?? null)) {
                 $text .= $block['text'];
             }
+        }
+
+        if (trim($text) !== '') {
+            return $text;
         }
 
         $content = $responseBody['output']['message']['content'] ?? [];
@@ -599,29 +611,9 @@ PROMPT;
             return null;
         }
 
-        $jsonCandidates = [$text];
-        $firstObject = strpos($text, '{');
-        $firstArray = strpos($text, '[');
-        $firstJson = match (true) {
-            $firstObject === false => $firstArray,
-            $firstArray === false => $firstObject,
-            default => min($firstObject, $firstArray),
-        };
-
-        if ($firstJson !== false) {
-            $lastObject = strrpos($text, '}');
-            $lastArray = strrpos($text, ']');
-            $lastJson = max($lastObject === false ? -1 : $lastObject, $lastArray === false ? -1 : $lastArray);
-            if ($lastJson >= $firstJson) {
-                $jsonCandidates[] = substr($text, $firstJson, $lastJson - $firstJson + 1);
-            }
-        }
-
-        foreach (array_unique($jsonCandidates) as $candidate) {
-            $data = json_decode($candidate, true);
-            if (json_last_error() === JSON_ERROR_NONE && is_array($data)) {
-                return $data;
-            }
+        $jsonData = json_decode($text, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($jsonData)) {
+            return $jsonData;
         }
 
         try {
@@ -641,14 +633,17 @@ PROMPT;
      */
     private function responseStoppedAtMaxTokens(array $responseBody): bool
     {
+        // Anthropic direct API.
         if (($responseBody['stop_reason'] ?? null) === 'max_tokens') {
             return true;
         }
 
+        // AWS Bedrock Converse API.
         if (($responseBody['stopReason'] ?? null) === 'max_tokens') {
             return true;
         }
 
+        // Google Gemini API.
         return ($responseBody['candidates'][0]['finishReason'] ?? null) === 'MAX_TOKENS';
     }
 

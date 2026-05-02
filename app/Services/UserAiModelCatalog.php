@@ -15,10 +15,8 @@ class UserAiModelCatalog
     public function listModels(string $provider, string $apiKey, string $region = 'us-east-1', string $sessionToken = ''): array
     {
         $client = $this->makeClient($provider, $apiKey, $region, $sessionToken);
-        /** @var mixed $modelInfos */
-        $modelInfos = call_user_func([$client, 'listModels']);
 
-        return $this->normalizeModelInfoList($modelInfos);
+        return $this->normalizeModelInfoList($client->listModels());
     }
 
     private function makeClient(string $provider, string $apiKey, string $region, string $sessionToken): GenAiClient
