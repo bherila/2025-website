@@ -235,7 +235,15 @@ class ParseImportJob implements ShouldQueue
         string $prompt
     ): array {
         $toolConfig = $dispatcher->buildToolConfig($jobType, $prompt);
-        $response = GenAiFileHelper::send($client, $fileStream, $mimeType, 'genai-import-'.time(), $prompt, $toolConfig ?: null);
+        $response = GenAiFileHelper::send(
+            $client,
+            $fileStream,
+            $mimeType,
+            'genai-import-'.time(),
+            $prompt,
+            $toolConfig ?: null,
+            $dispatcher->assistantPrefillForJobType($jobType, $client),
+        );
         $rawResponse = json_encode($response);
 
         $data = $dispatcher->extractGenerateContentData($jobType, $response, $client);

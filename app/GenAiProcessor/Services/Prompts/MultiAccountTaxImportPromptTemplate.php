@@ -25,7 +25,21 @@ You are processing a consolidated brokerage tax statement (e.g. Fidelity Tax Rep
 
 This PDF may contain forms for multiple accounts (1099-DIV, 1099-INT, 1099-MISC, 1099-B, etc.) across one or more brokerage accounts.{$accountHints}
 
-Return a TOON **array** where each element represents one account/form combination. Each element must have these fields:
+Return ONLY TOON, no Markdown fences and no other text.
+
+The first non-blank line of your complete response must be `accounts[N]:` where `[N]` is the number of account/form rows you return. Do NOT return a top-level YAML list like `- account_identifier: ...`.
+
+Return a TOON **named array** called `accounts` where each row represents one account/form combination:
+
+accounts[N]:
+  - account_identifier: ...
+    account_name: ...
+    form_type: ...
+    tax_year: ...
+    parsed_data:
+      ...
+
+Each `accounts` row must have these fields:
 - `account_identifier`: The full or partial account number found in the PDF (string, e.g. "...1234" or "8W163GBF")
 - `account_name`: The brokerage/account name found in the PDF (string, e.g. "Fidelity Brokerage")
 - `form_type`: The specific IRS form type found in this section. Use one of: 1099_int, 1099_div, 1099_misc, 1099_b, k1 (string). Do NOT use "broker_1099" — that is the container type for the uploaded PDF, not a form type you should return.
@@ -63,11 +77,9 @@ If the PDF is a consolidated 1099 that covers multiple form types for the same a
 
 Extract EVERY individual lot line. Do not skip lines or summarize. If a security shows subtotals, emit a separate transaction row for each individual lot line (not the subtotal row).
 
-Return ONLY TOON, no Markdown fences and no other text.
-
 Use TOON tabular arrays for repeated rows whenever possible, especially `transactions`, to avoid repeating field names. Example shape:
 
-[1]:
+accounts[1]:
   - account_identifier: X65-385336
     account_name: Fidelity Brokerage Services LLC
     form_type: 1099_b
