@@ -55,7 +55,7 @@ describe('NewTimeEntryModal - Defer billing', () => {
         onSuccess={() => {}}
       />,
     )
-    expect(screen.getByLabelText(/Defer billing/i)).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: /Defer billing/i })).toBeInTheDocument()
   })
 
   it('hides the "Defer billing" checkbox for non-admins', () => {
@@ -70,7 +70,7 @@ describe('NewTimeEntryModal - Defer billing', () => {
         onSuccess={() => {}}
       />,
     )
-    expect(screen.queryByLabelText(/Defer billing/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /Defer billing/i })).not.toBeInTheDocument()
   })
 
   it('disables + clears the Defer checkbox when "Billable" is turned off', () => {
@@ -85,15 +85,15 @@ describe('NewTimeEntryModal - Defer billing', () => {
         onSuccess={() => {}}
       />,
     )
-    const defer = screen.getByLabelText(/Defer billing/i) as HTMLInputElement
-    const billable = screen.getByLabelText('Billable') as HTMLInputElement
+    const defer = screen.getByRole('checkbox', { name: /Defer billing/i })
+    const billable = screen.getByRole('checkbox', { name: 'Billable' })
 
     fireEvent.click(defer)
-    expect(defer.getAttribute('data-state')).toBe('checked')
+    expect(defer).toHaveAttribute('data-checked')
 
     fireEvent.click(billable)
     // After unbilling, defer should be unchecked and disabled.
-    expect(defer.getAttribute('data-state')).toBe('unchecked')
+    expect(defer).toHaveAttribute('data-unchecked')
     expect(defer.hasAttribute('disabled') || defer.getAttribute('aria-disabled') === 'true').toBe(true)
   })
 
@@ -117,7 +117,7 @@ describe('NewTimeEntryModal - Defer billing', () => {
     fireEvent.change(screen.getByLabelText(/Enter time/i), { target: { value: '1:30' } })
 
     // Check defer billing
-    fireEvent.click(screen.getByLabelText(/Defer billing/i))
+    fireEvent.click(screen.getByRole('checkbox', { name: /Defer billing/i }))
 
     // Submit
     fireEvent.click(screen.getByRole('button', { name: /Add Time Record/i }))
@@ -146,7 +146,7 @@ describe('NewTimeEntryModal - Defer billing', () => {
 
     fireEvent.change(screen.getByLabelText(/Enter time/i), { target: { value: '1:30' } })
     // Toggle billable OFF (it starts checked)
-    fireEvent.click(screen.getByLabelText('Billable'))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Billable' }))
     fireEvent.click(screen.getByRole('button', { name: /Add Time Record/i }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled())
