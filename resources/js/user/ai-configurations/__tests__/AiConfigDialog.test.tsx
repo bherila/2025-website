@@ -10,6 +10,8 @@ interface DialogHarnessProps {
   editingConfig?: AiConfig | null;
   initialForm?: FormState;
   models?: string[];
+  detailsVisible?: boolean;
+  requiresKeySave?: boolean;
 }
 
 const editingGeminiConfig: AiConfig = {
@@ -36,6 +38,8 @@ function DialogHarness({
   editingConfig = null,
   initialForm = EMPTY_FORM,
   models = ['gemini-2.5-pro'],
+  detailsVisible = editingConfig !== null,
+  requiresKeySave = !detailsVisible,
 }: DialogHarnessProps = {}): React.ReactElement {
   const [form, setForm] = useState<FormState>(initialForm);
 
@@ -52,6 +56,8 @@ function DialogHarness({
       fetchingModels={false}
       modelsError={null}
       fetchModelsDisabled={false}
+      detailsVisible={detailsVisible}
+      requiresKeySave={requiresKeySave}
       onFetchModels={jest.fn()}
       onSave={(event) => event.preventDefault()}
     />
@@ -76,24 +82,66 @@ describe('AiConfigDialog', () => {
 
     expect(await screen.findByLabelText('Bedrock API Key (Bearer token)')).toBeInTheDocument();
     expect(screen.getByLabelText('Region')).toBeInTheDocument();
-    expect(screen.getByLabelText('Model')).toHaveAttribute(
-      'placeholder',
-      'Type or search models…',
-    );
-    expect(screen.getByRole('button', { name: 'Fetch models' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Model')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Fetch models' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('combobox', { name: 'Region' }));
     expect(screen.getByRole('option', { name: 'US West (Oregon) (us-west-2)' })).toBeInTheDocument();
   });
 
   it('keeps model entry editable when no fetched models are available', () => {
-    render(<DialogHarness models={[]} />);
+    render(
+      <DialogHarness
+        editingConfig={editingGeminiConfig}
+        initialForm={{
+          ...EMPTY_FORM,
+          name: editingGeminiConfig.name,
+          provider: editingGeminiConfig.provider,
+          model: editingGeminiConfig.model,
+        }}
+        models={[]}
+      />,
+    );
 
     const modelInput = screen.getByLabelText('Model');
     fireEvent.change(modelInput, { target: { value: 'custom.model-id' } });
 
     expect(modelInput).toHaveValue('custom.model-id');
     expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+  });
+
+  it('requires saving a new key before model options are shown', () => {
+    render(<DialogHarness />);
+
+    expect(screen.queryByLabelText('Model')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save key' })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText('API Key'), { target: { value: 'new-key' } });
+
+    expect(screen.getByRole('button', { name: 'Save key' })).toBeEnabled();
+  });
+
+  it('hides model options again when a saved configuration key is changed', () => {
+    render(
+      <DialogHarness
+        editingConfig={editingGeminiConfig}
+        initialForm={{
+          ...EMPTY_FORM,
+          name: editingGeminiConfig.name,
+          provider: editingGeminiConfig.provider,
+          model: editingGeminiConfig.model,
+        }}
+        detailsVisible={false}
+        requiresKeySave
+      />,
+    );
+
+    expect(screen.queryByLabelText('Model')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save key' })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText('API Key'), { target: { value: 'replacement-key' } });
+
+    expect(screen.getByRole('button', { name: 'Save key' })).toBeEnabled();
   });
 
   it('does not allow provider changes when editing an existing configuration', () => {

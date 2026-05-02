@@ -25,7 +25,7 @@ class UserAiConfigurationRequest extends FormRequest
             'api_key' => [$isCreate ? 'required' : 'nullable', 'string', 'max:500'],
             'region' => ['nullable', 'string', 'max:64', 'required_if:provider,bedrock'],
             'session_token' => ['nullable', 'string'],
-            'model' => ['required', 'string', 'max:255'],
+            'model' => ['nullable', 'string', 'max:255'],
             'expires_at' => ['nullable', 'date', 'after:today'],
         ];
     }

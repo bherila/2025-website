@@ -3,15 +3,21 @@
 namespace App\Http\Controllers\Api;
 
 use App\GenAiProcessor\Models\GenAiImportJob;
+use App\GenAiProcessor\Support\GenAiCredentialErrorClassifier;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\UserAiConfigurationRequest;
 use App\Models\UserAiConfiguration;
+use App\Services\UserAiModelCatalog;
+use Bherila\GenAiLaravel\Exceptions\GenAiFatalException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class UserAiConfigurationController extends Controller
 {
+    public function __construct(private readonly UserAiModelCatalog $modelCatalog) {}
+
     public function index(): JsonResponse
     {
         $configs = Auth::user()
@@ -70,8 +76,21 @@ class UserAiConfigurationController extends Controller
     {
         $data = $request->validated();
         $user = Auth::user();
+        $models = $this->validateCredentials(
+            provider: $data['provider'],
+            apiKey: $data['api_key'],
+            region: $data['region'] ?? 'us-east-1',
+            sessionToken: $data['session_token'] ?? '',
+        );
+        $model = $data['model'] ?? $models[0] ?? null;
 
-        $config = DB::transaction(function () use ($data, $user) {
+        if (! $model) {
+            return response()->json([
+                'error' => 'No usable models were found for these API credentials.',
+            ], 422);
+        }
+
+        $config = DB::transaction(function () use ($data, $model, $user) {
             // Lock existing configs to prevent a race between two concurrent first-config creates.
             $existingCount = $user->aiConfigurations()->lockForUpdate()->count();
 
@@ -81,7 +100,7 @@ class UserAiConfigurationController extends Controller
                 'api_key' => $data['api_key'],
                 'region' => $data['region'] ?? null,
                 'session_token' => $data['session_token'] ?? null,
-                'model' => $data['model'],
+                'model' => $model,
                 'is_active' => $existingCount === 0,
                 'expires_at' => $data['expires_at'] ?? null,
             ]);
@@ -89,7 +108,10 @@ class UserAiConfigurationController extends Controller
             return $config;
         });
 
-        return response()->json($config->toApiArray(), 201);
+        return response()->json([
+            ...$config->toApiArray(),
+            'available_models' => $models,
+        ], 201);
     }
 
     public function update(UserAiConfigurationRequest $request, int $id): JsonResponse
@@ -103,11 +125,32 @@ class UserAiConfigurationController extends Controller
             ], 422);
         }
 
+        $models = null;
+        if (! empty($data['api_key'])) {
+            $models = $this->validateCredentials(
+                provider: $data['provider'],
+                apiKey: $data['api_key'],
+                region: $data['region'] ?? 'us-east-1',
+                sessionToken: $data['session_token'] ?? '',
+            );
+
+            if ($models === []) {
+                return response()->json([
+                    'error' => 'No usable models were found for these API credentials.',
+                ], 422);
+            }
+        }
+
+        $model = $data['model'] ?? $config->model;
+        if ($models !== null && ! in_array($model, $models, true)) {
+            $model = $models[0];
+        }
+
         $update = [
             'name' => $data['name'],
             'region' => $data['region'] ?? null,
             'session_token' => $data['session_token'] ?? null,
-            'model' => $data['model'],
+            'model' => $model,
             'expires_at' => $data['expires_at'] ?? null,
         ];
 
@@ -119,7 +162,10 @@ class UserAiConfigurationController extends Controller
 
         $config->update($update);
 
-        return response()->json($config->toApiArray());
+        return response()->json([
+            ...$config->toApiArray(),
+            'available_models' => $models,
+        ]);
     }
 
     public function destroy(int $id): JsonResponse
@@ -170,5 +216,33 @@ class UserAiConfigurationController extends Controller
     {
         /** @var UserAiConfiguration */
         return Auth::user()->aiConfigurations()->findOrFail($id);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function validateCredentials(string $provider, string $apiKey, string $region, string $sessionToken): array
+    {
+        try {
+            return $this->modelCatalog->listModels($provider, $apiKey, $region, $sessionToken);
+        } catch (GenAiFatalException $e) {
+            Log::warning('Failed to validate AI configuration credentials', [
+                'provider' => $provider,
+                'error' => $e->getMessage(),
+            ]);
+
+            if (GenAiCredentialErrorClassifier::isInvalidCredential($provider, $e)) {
+                abort(response()->json(['error' => 'Invalid API credentials.'], 422));
+            }
+        } catch (\Exception $e) {
+            Log::warning('Failed to validate AI configuration credentials', [
+                'provider' => $provider,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        abort(response()->json([
+            'error' => 'Failed to validate API credentials. Please check your credentials and try again.',
+        ], 422));
     }
 }

@@ -38,6 +38,8 @@ interface AiConfigDialogProps {
   fetchingModels: boolean;
   modelsError: string | null;
   fetchModelsDisabled: boolean;
+  detailsVisible: boolean;
+  requiresKeySave: boolean;
   onFetchModels: () => void;
   onSave: (e: React.FormEvent) => void;
 }
@@ -61,6 +63,8 @@ export const AiConfigDialog: React.FC<AiConfigDialogProps> = ({
   fetchingModels,
   modelsError,
   fetchModelsDisabled,
+  detailsVisible,
+  requiresKeySave,
   onFetchModels,
   onSave,
 }) => (
@@ -70,8 +74,8 @@ export const AiConfigDialog: React.FC<AiConfigDialogProps> = ({
         <DialogTitle>{editingConfig ? 'Edit configuration' : 'Add configuration'}</DialogTitle>
         <DialogDescription>
           {editingConfig
-            ? 'Leave the API key blank to keep the existing key.'
-            : 'Configure an AI provider for document processing.'}
+            ? 'Save a new API key before changing model options.'
+            : 'Save and validate an API key before choosing model options.'}
         </DialogDescription>
       </DialogHeader>
       <form onSubmit={onSave} className="space-y-4">
@@ -110,12 +114,12 @@ export const AiConfigDialog: React.FC<AiConfigDialogProps> = ({
         <div className="space-y-1">
           <Label htmlFor="config-api-key">
             {form.provider === 'bedrock' ? 'Bedrock API Key (Bearer token)' : 'API Key'}
-            {editingConfig && <span className="text-muted-foreground text-xs ml-1">(leave blank to keep current)</span>}
+            {detailsVisible && editingConfig && <span className="text-muted-foreground text-xs ml-1">(leave blank to keep current)</span>}
           </Label>
           <Input
             id="config-api-key"
             type="password"
-            required={!editingConfig}
+            required={!editingConfig || requiresKeySave}
             value={form.api_key}
             onChange={e => setForm(f => ({ ...f, api_key: e.target.value }))}
             placeholder={editingConfig ? '••••••••' : ''}
@@ -162,70 +166,74 @@ export const AiConfigDialog: React.FC<AiConfigDialogProps> = ({
           </>
         )}
 
-        <div className="space-y-1">
-          <Label htmlFor="config-model">Model</Label>
-          <div className="flex gap-2">
-            <div className="min-w-0 flex-1">
-              <Combobox
-                items={models}
-                value={form.model}
-                inputValue={form.model}
-                onInputValueChange={value => setForm(f => ({ ...f, model: value }))}
-                onValueChange={value => setForm(f => ({ ...f, model: String(value ?? '') }))}
-                autoHighlight
-              >
-                <ComboboxInput
-                  id="config-model"
-                  required
-                  className="w-full min-w-0"
-                  placeholder={models.length > 0 ? 'Type or search models…' : 'Type model ID or fetch models…'}
-                  showClear
-                />
-                <ComboboxContent align="start">
-                  <ComboboxEmpty>No models found.</ComboboxEmpty>
-                  <ComboboxList>
-                    {models.map(model => (
-                      <ComboboxItem key={model} value={model}>
-                        {model}
-                      </ComboboxItem>
-                    ))}
-                  </ComboboxList>
-                </ComboboxContent>
-              </Combobox>
+        {detailsVisible && (
+          <>
+            <div className="space-y-1">
+              <Label htmlFor="config-model">Model</Label>
+              <div className="flex gap-2">
+                <div className="min-w-0 flex-1">
+                  <Combobox
+                    items={models}
+                    value={form.model}
+                    inputValue={form.model}
+                    onInputValueChange={value => setForm(f => ({ ...f, model: value }))}
+                    onValueChange={value => setForm(f => ({ ...f, model: String(value ?? '') }))}
+                    autoHighlight
+                  >
+                    <ComboboxInput
+                      id="config-model"
+                      required
+                      className="w-full min-w-0"
+                      placeholder={models.length > 0 ? 'Type or search models…' : 'Type model ID or fetch models…'}
+                      showClear
+                    />
+                    <ComboboxContent align="start">
+                      <ComboboxEmpty>No models found.</ComboboxEmpty>
+                      <ComboboxList>
+                        {models.map(model => (
+                          <ComboboxItem key={model} value={model}>
+                            {model}
+                          </ComboboxItem>
+                        ))}
+                      </ComboboxList>
+                    </ComboboxContent>
+                  </Combobox>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={fetchModelsDisabled}
+                  onClick={onFetchModels}
+                  className="shrink-0"
+                >
+                  {fetchingModels ? <><Spinner className="mr-1 size-3" />Fetching…</> : 'Fetch models'}
+                </Button>
+              </div>
+              {modelsError && (
+                <Alert variant="destructive" className="mt-1 py-2">
+                  <AlertDescription className="text-xs">{modelsError}</AlertDescription>
+                </Alert>
+              )}
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={fetchModelsDisabled}
-              onClick={onFetchModels}
-              className="shrink-0"
-            >
-              {fetchingModels ? <><Spinner className="mr-1 size-3" />Fetching…</> : 'Fetch models'}
-            </Button>
-          </div>
-          {modelsError && (
-            <Alert variant="destructive" className="mt-1 py-2">
-              <AlertDescription className="text-xs">{modelsError}</AlertDescription>
-            </Alert>
-          )}
-        </div>
 
-        <div className="space-y-1">
-          <Label htmlFor="config-expires-at">
-            Expiry date <span className="text-muted-foreground text-xs">(optional)</span>
-          </Label>
-          <Input
-            id="config-expires-at"
-            type="date"
-            value={form.expires_at}
-            onChange={e => setForm(f => ({ ...f, expires_at: e.target.value }))}
-            min={tomorrow}
-          />
-          <p className="text-xs text-muted-foreground">
-            Starting on this date the key will not be used. Leave blank for no expiry.
-          </p>
-        </div>
+            <div className="space-y-1">
+              <Label htmlFor="config-expires-at">
+                Expiry date <span className="text-muted-foreground text-xs">(optional)</span>
+              </Label>
+              <Input
+                id="config-expires-at"
+                type="date"
+                value={form.expires_at}
+                onChange={e => setForm(f => ({ ...f, expires_at: e.target.value }))}
+                min={tomorrow}
+              />
+              <p className="text-xs text-muted-foreground">
+                Starting on this date the key will not be used. Leave blank for no expiry.
+              </p>
+            </div>
+          </>
+        )}
 
         {formError && (
           <Alert variant="destructive">
@@ -235,8 +243,8 @@ export const AiConfigDialog: React.FC<AiConfigDialogProps> = ({
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button type="submit" disabled={saving || !form.model || fetchingModels}>
-            {saving ? <><Spinner className="mr-1 size-3" />Saving…</> : 'Save'}
+          <Button type="submit" disabled={saving || fetchingModels || (detailsVisible && !form.model) || (requiresKeySave && !form.api_key.trim())}>
+            {saving ? <><Spinner className="mr-1 size-3" />Saving…</> : requiresKeySave ? 'Save key' : 'Save'}
           </Button>
         </DialogFooter>
       </form>

@@ -11,6 +11,10 @@ import { AiConfigDialog } from './AiConfigDialog';
 import type { AiConfig, FormState } from './types';
 import { EMPTY_FORM } from './types';
 
+interface AiConfigSaveResponse extends AiConfig {
+  available_models?: string[] | null;
+}
+
 interface AiConfigurationsSectionProps {
   onSuccess: (message: string) => void;
   onError: (field: string, message: string) => void;
@@ -103,8 +107,16 @@ export const AiConfigurationsSection: React.FC<AiConfigurationsSectionProps> = (
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.model) {
+    const trimmedApiKey = form.api_key.trim();
+    const requiresKeySave = editingConfig === null || trimmedApiKey !== '';
+    const detailsVisible = editingConfig !== null && !requiresKeySave;
+
+    if (detailsVisible && !form.model) {
       setFormError('Please select a model.');
+      return;
+    }
+    if (requiresKeySave && !trimmedApiKey) {
+      setFormError('API key is required.');
       return;
     }
     setSaving(true);
@@ -113,9 +125,9 @@ export const AiConfigurationsSection: React.FC<AiConfigurationsSectionProps> = (
       const payload: Record<string, string> = {
         name: form.name,
         provider: form.provider,
-        model: form.model,
       };
-      if (form.api_key) payload.api_key = form.api_key;
+      if (form.model) payload.model = form.model;
+      if (trimmedApiKey) payload.api_key = trimmedApiKey;
       if (form.provider === 'bedrock') {
         payload.region = form.region;
         if (form.session_token) payload.session_token = form.session_token;
@@ -123,16 +135,43 @@ export const AiConfigurationsSection: React.FC<AiConfigurationsSectionProps> = (
       if (form.expires_at) payload.expires_at = form.expires_at;
 
       if (editingConfig) {
-        await fetchWrapper.put(`/api/user/ai-prefs/${editingConfig.id}`, payload);
-        onSuccess('Configuration updated.');
-      } else {
-        if (!form.api_key) {
-          setFormError('API key is required.');
+        const savedConfig = (await fetchWrapper.put(`/api/user/ai-prefs/${editingConfig.id}`, payload)) as AiConfigSaveResponse;
+        if (requiresKeySave) {
+          setEditingConfig(savedConfig);
+          setForm({
+            name: savedConfig.name,
+            provider: savedConfig.provider,
+            api_key: '',
+            region: savedConfig.region ?? 'us-east-1',
+            session_token: '',
+            model: savedConfig.model,
+            expires_at: savedConfig.expires_at ? savedConfig.expires_at.slice(0, 10) : '',
+          });
+          setModels(savedConfig.available_models ?? [savedConfig.model]);
+          setModelsError(null);
+          onSuccess('API key saved.');
+          await loadConfigs();
           return;
         }
-        payload.api_key = form.api_key;
-        await fetchWrapper.post('/api/user/ai-prefs', payload);
-        onSuccess('Configuration added.');
+        onSuccess('Configuration updated.');
+      } else {
+        payload.api_key = trimmedApiKey;
+        const savedConfig = (await fetchWrapper.post('/api/user/ai-prefs', payload)) as AiConfigSaveResponse;
+        setEditingConfig(savedConfig);
+        setForm({
+          name: savedConfig.name,
+          provider: savedConfig.provider,
+          api_key: '',
+          region: savedConfig.region ?? 'us-east-1',
+          session_token: '',
+          model: savedConfig.model,
+          expires_at: savedConfig.expires_at ? savedConfig.expires_at.slice(0, 10) : '',
+        });
+        setModels(savedConfig.available_models ?? [savedConfig.model]);
+        setModelsError(null);
+        onSuccess('API key saved.');
+        await loadConfigs();
+        return;
       }
       setDialogOpen(false);
       await loadConfigs();
@@ -172,7 +211,9 @@ export const AiConfigurationsSection: React.FC<AiConfigurationsSectionProps> = (
     }
   };
 
-  const fetchModelsDisabled = fetchingModels || (!form.api_key && !editingConfig);
+  const requiresKeySave = editingConfig === null || form.api_key.trim() !== '';
+  const detailsVisible = editingConfig !== null && !requiresKeySave;
+  const fetchModelsDisabled = fetchingModels || !detailsVisible;
 
   return (
     <>
@@ -232,6 +273,8 @@ export const AiConfigurationsSection: React.FC<AiConfigurationsSectionProps> = (
         fetchingModels={fetchingModels}
         modelsError={modelsError}
         fetchModelsDisabled={fetchModelsDisabled}
+        detailsVisible={detailsVisible}
+        requiresKeySave={requiresKeySave}
         onFetchModels={handleFetchModels}
         onSave={handleSave}
       />
