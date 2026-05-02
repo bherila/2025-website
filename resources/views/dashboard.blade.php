@@ -1,5 +1,7 @@
 @extends('layouts.app')
 
+@section('title', 'User Settings | ' . config('app.name', 'Ben Herila'))
+
 @section('content')
 <div class="max-w-4xl mx-auto px-4 py-8">
     <h1 class="text-3xl font-bold mb-6">My Account</h1>
