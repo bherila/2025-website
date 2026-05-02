@@ -17,10 +17,10 @@ Analyze the provided {$fileCount} utility bill PDF document(s).
 I have provided each file preceded by "Filename: [name]".
 
 For EACH file, extract the following fields.
-Return a SINGLE JSON ARRAY containing {$fileCount} objects, one for each file.
+Return a SINGLE TOON array containing {$fileCount} objects, one for each file.
 Each object MUST include the `original_filename` to identify which file it belongs to.
 
-**JSON Fields per object:**
+**TOON Fields per object:**
 - `original_filename`: The filename provided in the text preceding the file.
 - `bill_start_date`: Billing period start date (YYYY-MM-DD)
 - `bill_end_date`: Billing period end date (YYYY-MM-DD)
@@ -49,7 +49,7 @@ PROMPT;
 
         $basePrompt .= <<<'PROMPT'
 
-Return ONLY the JSON array.
+Return ONLY TOON. Do not include Markdown fences or explanatory text.
 PROMPT;
 
         return $basePrompt;

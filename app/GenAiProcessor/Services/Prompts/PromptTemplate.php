@@ -6,7 +6,7 @@ namespace App\GenAiProcessor\Services\Prompts;
  * Base class for GenAI prompt templates.
  *
  * Each job type has its own subclass that implements `build()`.
- * Shared helpers (accounts context, JSON-output instructions) live here
+ * Shared helpers (accounts context, structured-output instructions) live here
  * so they are not duplicated across templates.
  */
 abstract class PromptTemplate
@@ -37,13 +37,5 @@ abstract class PromptTemplate
         );
 
         return "\n\nKnown user accounts (use these to assign transactions to the correct account):\n".implode("\n", $lines);
-    }
-
-    /**
-     * Append standard "Return ONLY JSON" instructions to a prompt.
-     */
-    protected function wrapJsonInstructions(string $prompt): string
-    {
-        return $prompt."\n\nReturn ONLY the JSON array.";
     }
 }

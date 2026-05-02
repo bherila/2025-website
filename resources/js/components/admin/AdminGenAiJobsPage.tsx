@@ -58,6 +58,7 @@ const JOB_TYPE_LABELS: Record<string, string> = {
   finance_payslip: 'Payslip',
   utility_bill: 'Utility Bill',
   tax_document: 'Tax Document',
+  tax_form_multi_account_import: 'Multi-account Tax Import',
 }
 
 function formatBytes(bytes: number): string {
@@ -213,7 +214,7 @@ function JobDetailModal({ job, open, onClose }: JobDetailModalProps) {
                 <div className="font-semibold text-muted-foreground">Raw LLM Response</div>
                 <CopyToClipboard text={job.raw_response} />
               </div>
-              <pre className="bg-gray-50 dark:bg-gray-900 border rounded p-3 text-xs overflow-auto max-h-64 font-mono">
+              <pre className="bg-gray-50 dark:bg-gray-900 border rounded p-3 text-xs overflow-auto max-h-64 font-mono whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                 {job.raw_response}
               </pre>
             </div>
@@ -235,7 +236,7 @@ function JobDetailModal({ job, open, onClose }: JobDetailModalProps) {
                         <Badge variant="outline">{result.status}</Badge>
                       </div>
                     </div>
-                    <pre className="p-3 text-xs overflow-auto max-h-64 font-mono">
+                    <pre className="p-3 text-xs overflow-auto max-h-64 font-mono whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                       {JSON.stringify(JSON.parse(result.result_json), null, 2)}
                     </pre>
                   </div>

@@ -3,6 +3,7 @@ export type GenAiJobType =
   | 'finance_payslip'
   | 'utility_bill'
   | 'tax_document'
+  | 'tax_form_multi_account_import'
 
 export type GenAiJobStatus =
   | 'pending'

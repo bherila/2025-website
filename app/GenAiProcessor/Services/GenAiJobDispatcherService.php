@@ -12,10 +12,14 @@ use App\GenAiProcessor\Services\Prompts\TaxDocumentPromptTemplate;
 use App\GenAiProcessor\Services\Prompts\UtilityBillPromptTemplate;
 use App\GenAiProcessor\Support\K1CodeItemNormalizer;
 use App\Models\User;
+use Bherila\GenAiLaravel\Contracts\GenAiClient;
 use Bherila\GenAiLaravel\Schema;
 use Bherila\GenAiLaravel\ToolChoice;
 use Bherila\GenAiLaravel\ToolConfig;
 use Bherila\GenAiLaravel\ToolDefinition;
+use HelgeSverre\Toon\DecodeOptions;
+use HelgeSverre\Toon\Exceptions\DecodeException;
+use HelgeSverre\Toon\Toon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -247,7 +251,7 @@ PROMPT;
 
     /**
      * Build the tool configuration for a given job type.
-     * Returns null for job types that use JSON-mode output instead of function calling.
+     * Returns null for job types that use text output instead of function calling.
      *
      * @param  string  $prompt  Required for tax_document jobs to extract the form type marker.
      */
@@ -270,7 +274,7 @@ PROMPT;
             }
         }
 
-        // All other job types use JSON-mode output
+        // All other job types use TOON/JSON text output.
         return null;
     }
 
@@ -333,10 +337,6 @@ PROMPT;
             }
         }
 
-        $payload['generationConfig'] = [
-            'response_mime_type' => 'application/json',
-        ];
-
         return $payload;
     }
 
@@ -346,35 +346,42 @@ PROMPT;
      * @param  array<string, mixed>  $responseBody
      * @return array<string, mixed>|null
      */
-    public function extractGenerateContentData(string $jobType, array $responseBody): ?array
+    public function extractGenerateContentData(string $jobType, array $responseBody, ?GenAiClient $client = null): ?array
     {
         if ($jobType === 'finance_transactions') {
-            return $this->extractFinanceGenerateContentData($responseBody);
+            return $this->extractFinanceGenerateContentData($responseBody, $client);
         }
 
         if ($jobType === 'tax_document') {
-            return $this->extractTaxDocumentGenerateContentData($responseBody);
+            return $this->extractTaxDocumentGenerateContentData($responseBody, $client);
         }
 
         if ($jobType === 'tax_form_multi_account_import') {
-            // Expects a JSON array of per-account entries from the model.
-            $jsonText = $this->extractTextParts($responseBody);
-            if ($jsonText === '') {
-                return null;
-            }
-            $data = json_decode($jsonText, true);
-
-            return json_last_error() === JSON_ERROR_NONE ? $data : null;
+            // Expects a TOON or JSON array of per-account entries from the model.
+            return $this->decodeStructuredText($this->extractResponseText($responseBody, $client));
         }
 
-        $jsonText = $this->extractTextParts($responseBody);
-        if ($jsonText === '') {
-            return null;
+        return $this->decodeStructuredText($this->extractResponseText($responseBody, $client));
+    }
+
+    /**
+     * @param  array<string, mixed>  $responseBody
+     */
+    public function describeResponseExtractionFailure(array $responseBody, ?GenAiClient $client = null): string
+    {
+        if ($this->responseStoppedAtMaxTokens($responseBody)) {
+            return 'AI response was truncated before completing structured output because the model reached its max output token limit.';
         }
 
-        $data = json_decode($jsonText, true);
+        if ($this->extractResponseToolCalls($responseBody, $client) !== []) {
+            return 'AI returned structured tool output, but it did not match the expected schema or job type.';
+        }
 
-        return json_last_error() === JSON_ERROR_NONE ? $data : null;
+        if (trim($this->extractResponseText($responseBody, $client)) !== '') {
+            return 'AI returned text, but it was not valid TOON, JSON, or structured tool output.';
+        }
+
+        return 'AI response did not contain text or structured tool output.';
     }
 
     /**
@@ -443,45 +450,27 @@ PROMPT;
      * @param  array<string, mixed>  $responseBody
      * @return array<string, mixed>|null
      */
-    private function extractFinanceGenerateContentData(array $responseBody): ?array
+    private function extractFinanceGenerateContentData(array $responseBody, ?GenAiClient $client = null): ?array
     {
         $toolCalls = [];
 
-        $parts = $responseBody['candidates'][0]['content']['parts'] ?? [];
-        if (is_array($parts)) {
-            foreach ($parts as $part) {
-                if (! is_array($part)) {
-                    continue;
-                }
-
-                $functionCall = $part['functionCall'] ?? null;
-                if (! is_array($functionCall) || ($functionCall['name'] ?? null) !== self::FINANCE_ACCOUNT_TOOL_NAME) {
-                    continue;
-                }
-
-                $args = $functionCall['args'] ?? [];
-                if (! is_array($args)) {
-                    continue;
-                }
-
-                $toolCalls[] = [
-                    'toolName' => self::FINANCE_ACCOUNT_TOOL_NAME,
-                    'payload' => $this->normalizeFinanceAccountPayload($args),
-                ];
+        foreach ($this->extractResponseToolCalls($responseBody, $client) as $toolCall) {
+            if ($toolCall['name'] !== self::FINANCE_ACCOUNT_TOOL_NAME) {
+                continue;
             }
+
+            $toolCalls[] = [
+                'toolName' => self::FINANCE_ACCOUNT_TOOL_NAME,
+                'payload' => $this->normalizeFinanceAccountPayload($toolCall['input']),
+            ];
         }
 
         if ($toolCalls !== []) {
             return ['toolCalls' => $toolCalls];
         }
 
-        $jsonText = $this->extractTextParts($responseBody);
-        if ($jsonText === '') {
-            return null;
-        }
-
-        $data = json_decode($jsonText, true);
-        if (json_last_error() !== JSON_ERROR_NONE || ! is_array($data)) {
+        $data = $this->decodeStructuredText($this->extractResponseText($responseBody, $client));
+        if ($data === null) {
             return null;
         }
 
@@ -491,23 +480,171 @@ PROMPT;
     /**
      * @param  array<string, mixed>  $responseBody
      */
+    private function extractResponseText(array $responseBody, ?GenAiClient $client = null): string
+    {
+        if ($client !== null) {
+            $text = $client->extractText($responseBody);
+            if (trim($text) !== '') {
+                return $text;
+            }
+        }
+
+        return $this->extractTextParts($responseBody);
+    }
+
+    /**
+     * @param  array<string, mixed>  $responseBody
+     * @return list<array{name: string, input: array<string, mixed>}>
+     */
+    private function extractResponseToolCalls(array $responseBody, ?GenAiClient $client = null): array
+    {
+        if ($client !== null) {
+            $toolCalls = $client->extractToolCalls($responseBody);
+            if ($toolCalls !== []) {
+                return $toolCalls;
+            }
+        }
+
+        $toolCalls = [];
+
+        $parts = $responseBody['candidates'][0]['content']['parts'] ?? [];
+        if (is_array($parts)) {
+            foreach ($parts as $part) {
+                if (! is_array($part)) {
+                    continue;
+                }
+                $functionCall = $part['functionCall'] ?? null;
+                if (! is_array($functionCall) || ! isset($functionCall['name'])) {
+                    continue;
+                }
+                $toolCalls[] = [
+                    'name' => (string) $functionCall['name'],
+                    'input' => is_array($functionCall['args'] ?? null) ? $functionCall['args'] : [],
+                ];
+            }
+        }
+
+        foreach ($responseBody['content'] ?? [] as $block) {
+            if (! is_array($block) || ($block['type'] ?? null) !== 'tool_use') {
+                continue;
+            }
+            $toolCalls[] = [
+                'name' => (string) ($block['name'] ?? ''),
+                'input' => is_array($block['input'] ?? null) ? $block['input'] : [],
+            ];
+        }
+
+        $content = $responseBody['output']['message']['content'] ?? [];
+        if (is_array($content)) {
+            foreach ($content as $block) {
+                if (! is_array($block) || ! isset($block['toolUse']['name'])) {
+                    continue;
+                }
+                $toolCalls[] = [
+                    'name' => (string) $block['toolUse']['name'],
+                    'input' => is_array($block['toolUse']['input'] ?? null) ? $block['toolUse']['input'] : [],
+                ];
+            }
+        }
+
+        return $toolCalls;
+    }
+
+    /**
+     * @param  array<string, mixed>  $responseBody
+     */
     private function extractTextParts(array $responseBody): string
     {
         $parts = $responseBody['candidates'][0]['content']['parts'] ?? [];
-        if (! is_array($parts)) {
-            return '';
-        }
-
         $text = '';
-        foreach ($parts as $part) {
-            if (! is_array($part) || ! isset($part['text']) || ! is_string($part['text'])) {
-                continue;
-            }
+        if (is_array($parts)) {
+            foreach ($parts as $part) {
+                if (! is_array($part) || ! isset($part['text']) || ! is_string($part['text'])) {
+                    continue;
+                }
 
-            $text .= $part['text'];
+                $text .= $part['text'];
+            }
         }
 
-        return preg_replace('/^```json\s*|\s*```$/s', '', trim($text)) ?? '';
+        if (trim($text) !== '') {
+            return $text;
+        }
+
+        foreach ($responseBody['content'] ?? [] as $block) {
+            if (is_array($block) && ($block['type'] ?? null) === 'text' && is_string($block['text'] ?? null)) {
+                $text .= $block['text'];
+            }
+        }
+
+        if (trim($text) !== '') {
+            return $text;
+        }
+
+        $content = $responseBody['output']['message']['content'] ?? [];
+        if (is_array($content)) {
+            foreach ($content as $block) {
+                if (is_array($block) && is_string($block['text'] ?? null)) {
+                    $text .= $block['text'];
+                }
+            }
+        }
+
+        return $text;
+    }
+
+    private function stripMarkdownJsonFence(string $text): string
+    {
+        $text = trim($text);
+        $text = preg_replace('/^```[a-z0-9_-]*\s*/i', '', $text) ?? $text;
+
+        return preg_replace('/\s*```\s*$/', '', trim($text)) ?? $text;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function decodeStructuredText(string $text): ?array
+    {
+        $text = $this->stripMarkdownJsonFence($text);
+        if ($text === '') {
+            return null;
+        }
+
+        $jsonData = json_decode($text, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($jsonData)) {
+            return $jsonData;
+        }
+
+        try {
+            $decoded = Toon::decode($text, DecodeOptions::lenient());
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        } catch (DecodeException) {
+            return null;
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $responseBody
+     */
+    private function responseStoppedAtMaxTokens(array $responseBody): bool
+    {
+        // Anthropic direct API.
+        if (($responseBody['stop_reason'] ?? null) === 'max_tokens') {
+            return true;
+        }
+
+        // AWS Bedrock Converse API.
+        if (($responseBody['stopReason'] ?? null) === 'max_tokens') {
+            return true;
+        }
+
+        // Google Gemini API.
+        return ($responseBody['candidates'][0]['finishReason'] ?? null) === 'MAX_TOKENS';
     }
 
     /**
@@ -903,12 +1040,12 @@ PROMPT;
 
     /**
      * Extract structured data from a tax_document Gemini tool-call response.
-     * Falls back to JSON text parsing if no function call is found.
+     * Falls back to TOON/JSON text parsing if no function call is found.
      *
      * @param  array<string, mixed>  $responseBody
      * @return array<string, mixed>|null
      */
-    private function extractTaxDocumentGenerateContentData(array $responseBody): ?array
+    private function extractTaxDocumentGenerateContentData(array $responseBody, ?GenAiClient $client = null): ?array
     {
         $taxToolNames = [
             self::TAX_DOCUMENT_W2_TOOL_NAME,
@@ -919,37 +1056,16 @@ PROMPT;
             self::TAX_DOCUMENT_K1_TOOL_NAME,
         ];
 
-        $parts = $responseBody['candidates'][0]['content']['parts'] ?? [];
-        if (is_array($parts)) {
-            foreach ($parts as $part) {
-                if (! is_array($part)) {
-                    continue;
-                }
-                $functionCall = $part['functionCall'] ?? null;
-                if (! is_array($functionCall)) {
-                    continue;
-                }
-                $toolName = $functionCall['name'] ?? null;
-                if (! in_array($toolName, $taxToolNames, true)) {
-                    continue;
-                }
-                $args = $functionCall['args'] ?? [];
-                if (! is_array($args)) {
-                    continue;
-                }
-
-                return $this->coerceTaxDocumentArgs($toolName, $args);
+        foreach ($this->extractResponseToolCalls($responseBody, $client) as $toolCall) {
+            if (! in_array($toolCall['name'], $taxToolNames, true)) {
+                continue;
             }
+
+            return $this->coerceTaxDocumentArgs($toolCall['name'], $toolCall['input']);
         }
 
-        // Fallback: try to extract JSON from text parts
-        $jsonText = $this->extractTextParts($responseBody);
-        if ($jsonText === '') {
-            return null;
-        }
-        $data = json_decode($jsonText, true);
-
-        return (json_last_error() === JSON_ERROR_NONE && is_array($data)) ? $data : null;
+        // Fallback: try to extract TOON/JSON from text parts
+        return $this->decodeStructuredText($this->extractResponseText($responseBody, $client));
     }
 
     /**

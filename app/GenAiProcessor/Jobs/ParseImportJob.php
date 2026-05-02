@@ -124,7 +124,7 @@ class ParseImportJob implements ShouldQueue
 
             $job->markProcessing();
 
-            ['data' => $data, 'raw_response' => $rawResponse, 'input_tokens' => $inputTokens, 'output_tokens' => $outputTokens] = $this->callGenerateContent(
+            ['data' => $data, 'raw_response' => $rawResponse, 'input_tokens' => $inputTokens, 'output_tokens' => $outputTokens, 'parse_error' => $parseError] = $this->callGenerateContent(
                 $client,
                 $dispatcher,
                 $job->job_type,
@@ -151,7 +151,7 @@ class ParseImportJob implements ShouldQueue
             }
 
             if ($data === null) {
-                $job->markFailed('Failed to parse response from AI.');
+                $job->markFailed($parseError ?? 'Failed to parse response from AI.');
 
                 return;
             }
@@ -224,7 +224,7 @@ class ParseImportJob implements ShouldQueue
      * Uses GenAiFileHelper to handle File API vs inline fallback transparently.
      *
      * @param  resource  $fileStream
-     * @return array{data: array<string, mixed>|null, raw_response: string|null, input_tokens: int|null, output_tokens: int|null}
+     * @return array{data: array<string, mixed>|null, raw_response: string|null, input_tokens: int|null, output_tokens: int|null, parse_error: string|null}
      */
     private function callGenerateContent(
         GenAiClient $client,
@@ -238,17 +238,20 @@ class ParseImportJob implements ShouldQueue
         $response = GenAiFileHelper::send($client, $fileStream, $mimeType, 'genai-import-'.time(), $prompt, $toolConfig ?: null);
         $rawResponse = json_encode($response);
 
-        $data = $dispatcher->extractGenerateContentData($jobType, $response);
+        $data = $dispatcher->extractGenerateContentData($jobType, $response, $client);
+        $parseError = null;
 
         if ($data === null) {
+            $parseError = $dispatcher->describeResponseExtractionFailure(is_array($response) ? $response : [], $client);
             Log::error('Failed to decode structured response from AI provider', [
                 'response' => $rawResponse,
+                'parse_error' => $parseError,
             ]);
         }
 
         [$inputTokens, $outputTokens] = $this->extractTokenUsage(is_array($response) ? $response : []);
 
-        return ['data' => $data, 'raw_response' => $rawResponse, 'input_tokens' => $inputTokens, 'output_tokens' => $outputTokens];
+        return ['data' => $data, 'raw_response' => $rawResponse, 'input_tokens' => $inputTokens, 'output_tokens' => $outputTokens, 'parse_error' => $parseError];
     }
 
     /**

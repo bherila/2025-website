@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use App\Models\UserAiConfiguration;
+use Bherila\GenAiLaravel\ContentBlock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
@@ -476,6 +477,39 @@ class UserAiConfigurationTest extends TestCase
         $client = $user->resolvedAiClient();
         $this->assertNotNull($client);
         $this->assertSame('gemini', $client->provider());
+    }
+
+    public function test_resolved_gemini_client_allows_prompt_selected_response_format(): void
+    {
+        Http::fake(function (Request $request) {
+            if (str_contains($request->url(), ':generateContent')) {
+                return Http::response([
+                    'candidates' => [[
+                        'content' => ['parts' => [['text' => 'ok']]],
+                    ]],
+                ], 200);
+            }
+
+            return Http::response([], 404);
+        });
+
+        $user = User::factory()->create(['gemini_api_key' => null]);
+        UserAiConfiguration::factory()->active()->gemini()->for($user)->create();
+
+        $client = $user->resolvedAiClient();
+
+        $this->assertNotNull($client);
+        $this->assertSame('gemini', $client->provider());
+
+        $client->converse('', [[
+            'role' => 'user',
+            'content' => [ContentBlock::text('Return ONLY TOON')],
+        ]]);
+
+        Http::assertSent(function (Request $request) {
+            return str_contains($request->url(), ':generateContent')
+                && ! array_key_exists('generationConfig', $request->data());
+        });
     }
 
     public function test_resolved_ai_client_returns_null_for_expired_active_config(): void
