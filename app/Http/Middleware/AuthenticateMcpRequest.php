@@ -32,7 +32,7 @@ class AuthenticateMcpRequest
         $user = User::where('mcp_api_key', hash('sha256', $token))->first();
 
         if (! $user || ! $user->canLogin()) {
-            return response()->json(['error' => 'Unauthorized – invalid MCP API key'], 401);
+            return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         // setUser is stateless — no session/cookie side-effects.

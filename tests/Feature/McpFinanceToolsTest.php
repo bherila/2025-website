@@ -136,7 +136,7 @@ class McpFinanceToolsTest extends TestCase
         $rawToken = 'disabled-user-test-token-1234567890';
         $user = $this->createUser([
             'mcp_api_key' => hash('sha256', $rawToken),
-            'user_role' => 'guest',
+            'user_role' => '',
         ]);
 
         $this->assertFalse($user->canLogin());
