@@ -1,15 +1,20 @@
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 
 import {
+  classify11SCharacter,
+  extractK1Form461Disclosure,
   getK1ActivityClassification,
   getK1CompletenessChecklist,
   getK1sWithAMTItems,
   getK1sWithPassiveLosses,
   getK1sWithSEItems,
   getUnroutedCodes,
+  isTraderFundK1,
   k1NetIncome,
   parseK1Codes,
   parseK1Field,
+  resolve11SCharacter,
+  sumAbsK1CodeItems,
 } from '../k1Utils'
 
 function makeData(overrides: Partial<FK1StructuredData> = {}): FK1StructuredData {
@@ -34,6 +39,54 @@ describe('parseK1Field', () => {
   it('parses negative value', () => {
     expect(parseK1Field(makeData({ fields: { '8': { value: '-500' } } }), '8')).toBe(-500)
   })
+
+  it('parses formatted accounting values', () => {
+    expect(parseK1Field(makeData({ fields: { '5': { value: '8,893' } } }), '5')).toBe(8893)
+    expect(parseK1Field(makeData({ fields: { '5': { value: '(8,893)' } } }), '5')).toBe(-8893)
+  })
+})
+
+describe('classify11SCharacter', () => {
+  it('returns undefined when notes are missing', () => {
+    expect(classify11SCharacter(undefined)).toBeUndefined()
+    expect(classify11SCharacter(null)).toBeUndefined()
+    expect(classify11SCharacter('')).toBeUndefined()
+  })
+
+  it('classifies short-term notes', () => {
+    expect(classify11SCharacter('Net short-term capital loss. Report on Schedule D / Form 8949 Part I.')).toBe('short')
+    expect(classify11SCharacter('short term gain')).toBe('short')
+  })
+
+  it('classifies long-term notes', () => {
+    expect(classify11SCharacter('Net long-term capital gain, assets held more than 3 years.')).toBe('long')
+    expect(classify11SCharacter('long-term capital gain')).toBe('long')
+  })
+
+  it('returns undefined when notes do not mention character', () => {
+    expect(classify11SCharacter('Non-portfolio capital gain (loss)')).toBeUndefined()
+  })
+
+  it('returns undefined when notes mention both short-term and long-term', () => {
+    expect(classify11SCharacter('Statement includes short-term and long-term capital gain subtotals')).toBeUndefined()
+  })
+})
+
+describe('resolve11SCharacter', () => {
+  it('prefers explicit user override over notes', () => {
+    expect(resolve11SCharacter({ character: 'short', notes: 'long-term gain' })).toBe('short')
+    expect(resolve11SCharacter({ character: 'long', notes: 'short-term loss' })).toBe('long')
+  })
+
+  it('falls back to notes when no override', () => {
+    expect(resolve11SCharacter({ notes: 'Net long-term capital gain' })).toBe('long')
+    expect(resolve11SCharacter({ notes: 'Net short-term capital loss' })).toBe('short')
+  })
+
+  it('returns undefined when neither override nor notes classify', () => {
+    expect(resolve11SCharacter({})).toBeUndefined()
+    expect(resolve11SCharacter({ notes: 'Non-portfolio capital gain' })).toBeUndefined()
+  })
 })
 
 describe('parseK1Codes', () => {
@@ -53,6 +106,66 @@ describe('parseK1Codes', () => {
       },
     })
     expect(parseK1Codes(data, '11')).toBeCloseTo(-41661)
+  })
+
+  it('sums formatted code values for a box', () => {
+    const data = makeData({
+      codes: {
+        '13': [
+          { code: 'ZZ', value: '8,893' },
+          { code: 'ZZ', value: '(258)' },
+        ],
+      },
+    })
+    expect(parseK1Codes(data, '13')).toBe(8635)
+  })
+})
+
+describe('sumAbsK1CodeItems', () => {
+  it('sums matching code values as positive magnitudes', () => {
+    const data = makeData({
+      codes: {
+        '13': [
+          { code: 'zz', value: '8,893' },
+          { code: 'ZZ', value: '(258)' },
+          { code: 'H', value: '100' },
+        ],
+      },
+    })
+
+    expect(sumAbsK1CodeItems(data, '13', 'ZZ')).toBe(9151)
+  })
+})
+
+describe('trader fund helpers', () => {
+  it('detects trader fund K-1s from statement notes', () => {
+    const data = makeData({
+      codes: {
+        '13': [{ code: 'ZZ', value: '8893', notes: 'Trader deductions from trading activities' }],
+      },
+    })
+
+    expect(isTraderFundK1(data)).toBe(true)
+  })
+
+  it('extracts Box 20AJ Form 461 support disclosure', () => {
+    const data = makeData({
+      codes: {
+        '20': [{
+          code: 'AJ',
+          value: '-79535',
+          notes: 'Capital gains from trade or business: $124,206; Capital losses from trade or business: ($155,469); Other income from trade or business: $65,845; Other deductions from trade or business: ($114,117).',
+        }],
+      },
+    })
+
+    expect(extractK1Form461Disclosure(data)).toEqual({
+      capitalGains: 124206,
+      capitalLosses: -155469,
+      otherIncome: 65845,
+      otherDeductions: -114117,
+      net: -79535,
+    })
   })
 })
 
@@ -197,7 +310,7 @@ describe('k1NetIncome', () => {
 
 describe('getUnroutedCodes', () => {
   it('returns empty when all codes have routing entries', () => {
-    const data = makeData({ codes: { '20': [{ code: 'Z', value: '5000' }] } })
+    const data = makeData({ codes: { '20': [{ code: ' z ', value: '5000' }] } })
     expect(getUnroutedCodes(data)).toEqual([])
   })
 

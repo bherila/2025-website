@@ -60,4 +60,16 @@ describe('computeForm8960Lines', () => {
     expect(r.netCapGains).toBe(0)
     expect(r.grossNII).toBe(0)
   })
+
+  it('includes nonpassive K-1 trading income or loss in NII', () => {
+    const r = computeForm8960Lines({
+      ...base,
+      taxableInterest: 100_000,
+      nonpassiveTradingIncome: -20_000,
+      magi: 400_000,
+    })
+
+    expect(r.grossNII).toBe(80_000)
+    expect(r.components.find((c) => c.label.includes('nonpassive trading'))?.amount).toBe(-20_000)
+  })
 })

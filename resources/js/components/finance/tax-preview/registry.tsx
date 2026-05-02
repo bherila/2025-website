@@ -138,6 +138,7 @@ function ScheduleAAdapter({ state }: FormRenderProps): React.ReactElement {
       reviewed1099Docs={state.reviewed1099Docs}
       isMarried={state.isMarried}
       userDeductions={state.userDeductions}
+      form4952={state.taxReturn.form4952}
       {...(state.shortDividendSummary ? { shortDividendSummary: state.shortDividendSummary } : {})}
     />
   )
@@ -174,6 +175,7 @@ function ScheduleEAdapter({ state }: FormRenderProps): React.ReactElement {
       reviewedK1Docs={state.reviewedK1Docs}
       reviewed1099Docs={state.reviewed1099Docs}
       selectedYear={state.year}
+      form4952={state.taxReturn.form4952}
     />
   )
 }

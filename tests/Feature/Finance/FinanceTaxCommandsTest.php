@@ -8,6 +8,7 @@ use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
 use Tests\TestCase;
 
 class FinanceTaxCommandsTest extends TestCase
@@ -129,6 +130,50 @@ class FinanceTaxCommandsTest extends TestCase
         $this->artisan('finance:tax-docs', ['--year' => '2024', '--format' => 'json'])
             ->assertExitCode(0)
             ->expectsOutputToContain('[]');
+    }
+
+    // -------------------------------------------------------------------------
+    // finance:k1-codes
+    // -------------------------------------------------------------------------
+
+    public function test_k1_codes_lists_resolved_box_11s_character_from_notes(): void
+    {
+        $account = FinAccounts::withoutEvents(function () {
+            return FinAccounts::withoutGlobalScopes()->forceCreate([
+                'acct_owner' => $this->user->id,
+                'acct_name' => 'Delphi Plus',
+            ]);
+        });
+
+        $doc = $this->makeTaxDoc('k1', 2025, [
+            'schemaVersion' => '2026.1',
+            'formType' => '1065',
+            'fields' => [
+                'A' => ['value' => '85-3677952'],
+                'B' => ['value' => "AQR TA DELPHI PLUS FUND, LLC\nGREENWICH, CT"],
+            ],
+            'codes' => [
+                '11' => [
+                    ['code' => 's', 'value' => '-101298', 'notes' => 'Non-portfolio capital gain (loss) – Net short-term capital loss.'],
+                    ['code' => ' S ', 'value' => '70035', 'notes' => 'Non-portfolio capital gain (loss) – Net long-term capital gain.'],
+                ],
+            ],
+        ]);
+        TaxDocumentAccount::createLink($doc->id, $account->acct_id, 'k1', 2025);
+
+        $exitCode = Artisan::call('finance:k1-codes', [
+            '--year' => '2025',
+            '--account' => (string) $account->acct_id,
+            '--box' => '11',
+            '--code' => 'S',
+            '--format' => 'json',
+        ]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exitCode);
+        $this->assertStringContainsString('"character": "short"', $output);
+        $this->assertStringContainsString('"character_source": "notes"', $output);
+        $this->assertStringContainsString('Schedule D line 12', $output);
     }
 
     // -------------------------------------------------------------------------

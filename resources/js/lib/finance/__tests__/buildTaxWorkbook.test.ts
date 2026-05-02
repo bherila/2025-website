@@ -19,7 +19,11 @@ function makeTaxReturn(): TaxReturn1040 {
       codes: {
         '13': [
           { code: 'K', value: '30' },
+          { code: 'F', value: '15' },
           { code: 'ZZ', value: '15' },
+        ],
+        '11': [
+          { code: ' s ', value: '(1,234)', notes: 'Net short-term capital loss', character: 'short' },
         ],
         '14': [
           { code: 'A', value: '150' },
@@ -78,6 +82,9 @@ describe('buildTaxWorkbook — K-1/K-3 sheets', () => {
     expect(k1Sheet?.rows.some((row) => row.description.includes('Box 14 A'))).toBe(true)
     expect(k1Sheet?.rows.some((row) => row.note?.includes('Schedule SE'))).toBe(true)
     expect(k1Sheet?.rows.some((row) => row.note?.includes('Form 6251'))).toBe(true)
+    expect(k1Sheet?.rows.some((row) => row.description.includes('Box 11 S') && row.amount === -1234)).toBe(true)
+    expect(k1Sheet?.rows.some((row) => row.note?.includes('Statement: Net short-term capital loss'))).toBe(true)
+    expect(k1Sheet?.rows.some((row) => row.note?.includes('Character: short-term'))).toBe(true)
     expect(k1Sheet?.rows.some((row) => row.note?.includes('Status: Suspended'))).toBe(true)
     expect(k1Sheet?.rows.some((row) => row.note?.includes('Status: User action'))).toBe(true)
     expect(k1Sheet?.rows.some((row) => row.note?.includes('Status: Unrouted'))).toBe(true)
@@ -143,7 +150,7 @@ describe('buildTaxWorkbook — Form 1040 sheet formulas', () => {
     return {
       year: 2025,
       scheduleC: { total: 5000, byQuarter: { q1: 0, q2: 0, q3: 0, q4: 0 } },
-      scheduleE: { grandTotal: 1200, totalPassive: 0, totalNonpassive: 1200 },
+      scheduleE: { grandTotal: 1200, totalPassive: 0, totalNonpassive: 1200, totalTraderNii: 0 },
       schedule1: {
         partI: {
           line1a_taxableRefunds: null, line2a_alimonyReceived: null,

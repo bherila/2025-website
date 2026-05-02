@@ -23,8 +23,19 @@
 - Persist the Schedule C office/home square-foot inputs so Form 8829 comparisons survive refreshes.
 - Add explicit empty/error states per data domain (W-2 docs, account docs, Schedule C, estimates) rather than one shared error banner.
 - Add a tab-level dirty-state / last-refreshed indicator to make context refreshes more visible.
-- Add reusable money-input helpers backed by `currency.js` for consistent parsing/formatting of editable monetary fields.
+- Expand reusable money-input controls backed by `currency.js` for editable fields outside the K-1/tax-preview parsing path.
 - Replace remaining plain `<a>` links in Tax Preview-related components with shared UI/link primitives where appropriate.
+- Add deeper source drilldowns from Schedule D/E rows directly to the originating K-1 code row in the review modal. Today the app surfaces tab-level "Go to source" navigation and inline row notes, but not row-level modal deep links.
+- Add a UI entry point that runs the same audit as `finance:k1-codes` for the selected K-1, so users can inspect stored vs. notes-inferred routing without leaving the app.
+
+## K-1 / Trader Funds
+
+- Add a first-class review queue item for unclassified Box 11S rows so users can jump from Action Items to the exact K-1 code row that needs ST/LT character.
+- Consider persisting a richer `taxCharacter` structure for coded K-1 statement rows if more boxes need explicit ordinary/capital/passive/nonpassive settings beyond the current Box 11S `character` field.
+- Add form-level export annotations for Box 11S rows whose character was manually overridden vs. inferred from notes.
+- Add a richer Form 461 worksheet that uses Box 20AJ disclosures to show gross trader-business capital gains, capital losses, other income, and other deductions before the final §461(l) limitation.
+- Add Form 8960 line-level source drilldowns for nonpassive trader-fund ordinary items, including Box 11ZZ, Box 13ZZ, and Form 4952-allowed Box 13H.
+- Extend GenAI prompt/test fixtures with more real-world trader-fund supplemental statement formats, especially statements that list short-term and long-term headings separately from the amounts.
 
 ## Performance
 
@@ -43,7 +54,7 @@
 
 - Consider using Laravel JSON script helpers consistently anywhere server state is embedded in Blade.
 - Add stricter validation for tax-preview query params and explicit bounds checking on years.
-- Audit all tax-preview monetary calculations periodically to ensure `currency.js` remains the only arithmetic path.
+- Audit all tax-preview monetary calculations periodically to ensure `currency.js` remains the only arithmetic path, including display-only summaries and XLSX export helpers.
 
 ## State Filings & Deductions (follow-ups to #257)
 

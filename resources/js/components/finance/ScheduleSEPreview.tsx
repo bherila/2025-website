@@ -1,6 +1,5 @@
 'use client'
 
-import currency from 'currency.js'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
@@ -12,33 +11,14 @@ import {
   type ScheduleSELines,
   type ScheduleSESourceEntry,
 } from '@/finance/scheduleSE/computeScheduleSE'
+import { sumK1CodeItems } from '@/lib/finance/k1Utils'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 
 export type { ScheduleSELines } from '@/finance/scheduleSE/computeScheduleSE'
 
-function normalizeNumericString(value: string): string {
-  const trimmed = value.trim()
-  if (!trimmed) return ''
-  const isNegative = /^\(.*\)$/.test(trimmed)
-  const inner = isNegative ? trimmed.slice(1, -1) : trimmed
-  const digits = inner.replace(/[$,\s]/g, '')
-  return isNegative ? `-${digits}` : digits
-}
-
-function toNum(value: unknown): number {
-  if (value == null || value === '') return 0
-  if (typeof value === 'number') return Number.isFinite(value) ? value : 0
-  const normalized = normalizeNumericString(String(value))
-  if (!normalized) return 0
-  const parsed = parseFloat(normalized)
-  return Number.isFinite(parsed) ? parsed : 0
-}
-
 function getCodeValue(data: FK1StructuredData, box: string, code: string): number {
-  return (data.codes[box] ?? [])
-    .filter(item => item.code.toUpperCase() === code.toUpperCase())
-    .reduce((acc, item) => currency(acc).add(toNum(item.value)).value, 0)
+  return sumK1CodeItems(data, box, code)
 }
 
 interface ScheduleSEPreviewProps {

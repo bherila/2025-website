@@ -10,24 +10,15 @@ import K1CodesModal from '@/components/finance/k1/K1CodesModal'
 import { Callout, fmtAmt, FormBlock, FormLine, FormSubLine, FormTotalLine, parseFieldVal } from '@/components/finance/tax-preview-primitives'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { getK1CodeItems, isK1Code, parseK1Field } from '@/lib/finance/k1Utils'
+import { sumMoneyValues } from '@/lib/finance/money'
 import type { FK1StructuredData, K1CodeItem, K3Section } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function pk1(data: FK1StructuredData, box: string): number {
-  const v = data.fields[box]?.value
-  if (!v) return 0
-  const n = parseFloat(v)
-  return isNaN(n) ? 0 : n
-}
-
-
 function codeSum(items: K1CodeItem[]): number {
-  return items.reduce((acc, i) => {
-    const n = parseFloat(i.value)
-    return isNaN(n) ? acc : acc.add(n)
-  }, currency(0)).value
+  return sumMoneyValues(items.map((i) => i.value))
 }
 
 // ── K-3 Part II table ─────────────────────────────────────────────────────────
@@ -158,25 +149,25 @@ function K1Card({ doc, data }: { doc: TaxDocument; data: FK1StructuredData }) {
   const jEndingCapital = parseFieldVal(data.fields['J_capital_ending']?.value ?? data.fields['J']?.value)
   const kEndingInterest = parseFieldVal(data.fields['J_profit']?.value)
 
-  const box5 = pk1(data, '5')
-  const box6a = pk1(data, '6a')
-  const box6b = pk1(data, '6b')
-  const box7 = pk1(data, '7')
-  const box8 = pk1(data, '8')
-  const box9a = pk1(data, '9a')
-  const box9b = pk1(data, '9b')
-  const box9c = pk1(data, '9c')
-  const box10 = pk1(data, '10')
-  const box21 = pk1(data, '21')
+  const box5 = parseK1Field(data, '5')
+  const box6a = parseK1Field(data, '6a')
+  const box6b = parseK1Field(data, '6b')
+  const box7 = parseK1Field(data, '7')
+  const box8 = parseK1Field(data, '8')
+  const box9a = parseK1Field(data, '9a')
+  const box9b = parseK1Field(data, '9b')
+  const box9c = parseK1Field(data, '9c')
+  const box10 = parseK1Field(data, '10')
+  const box21 = parseK1Field(data, '21')
 
   // Box 11 code items
   const box11Items = data.codes['11'] ?? []
-  const box11ZZItems = box11Items.filter((i) => i.code === 'ZZ')
-  const box11NonZZ = box11Items.filter((i) => i.code !== 'ZZ')
+  const box11ZZItems = getK1CodeItems(data, '11', 'ZZ')
+  const box11NonZZ = box11Items.filter((i) => !isK1Code(i.code, 'ZZ'))
 
   // Box 13 code items
   const box13Items = data.codes['13'] ?? []
-  const box13Suspended = box13Items.filter((i) => i.code === 'K' || i.code === 'AE')
+  const box13Suspended = [...getK1CodeItems(data, '13', 'K'), ...getK1CodeItems(data, '13', 'AE')]
 
   // K-3
   const k3Sections = data.k3?.sections ?? []
@@ -355,6 +346,7 @@ function K1Card({ doc, data }: { doc: TaxDocument; data: FK1StructuredData }) {
         <K1CodesModal
           open
           boxLabel={`Box ${activeCodesSpec.box}: ${activeCodesSpec.label}`}
+          box={activeCodesSpec.box}
           codeDefinitions={activeCodesSpec.codes}
           items={data.codes[codesModal.box] ?? []}
           readOnly
@@ -383,8 +375,7 @@ export default function K1DetailsTab({ reviewedK1Docs, selectedYear }: K1Details
   const allSuspended = k1Parsed.flatMap(({ doc, data }) => {
     const partnerName =
       data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
-    return (data.codes['13'] ?? [])
-      .filter((i) => i.code === 'K' || i.code === 'AE')
+    return [...getK1CodeItems(data, '13', 'K'), ...getK1CodeItems(data, '13', 'AE')]
       .map((i) => ({
         fund: partnerName,
         code: i.code,

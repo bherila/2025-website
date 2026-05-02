@@ -111,6 +111,37 @@ php artisan finance:transactions
 
 ---
 
+### `finance:k1-codes`
+
+Inspect coded Schedule K-1 statement rows for the configured user. This is useful for auditing trader-fund routing without dumping the full `parsed_data` blob.
+
+```
+php artisan finance:k1-codes
+  [--year=YEAR]
+  [--account=ACCT_ID]
+  [--document=TAX_DOCUMENT_ID]
+  [--box=BOX]
+  [--code=CODE]
+  [--format=table|json]
+```
+
+**Options**
+- `--year` — tax year to inspect; required unless `--document` is provided
+- `--account` — filter to K-1s linked to one account
+- `--document` — inspect one `fin_tax_documents.id`
+- `--box` / `--code` — narrow to rows such as Box 11 Code S or Box 20 Code AJ
+- `--format` — output format (default: `table`)
+
+For AQR/Delphi Plus checks:
+
+```bash
+php artisan finance:k1-codes --year=2025 --account=32 --box=11 --code=S --format=json
+```
+
+The command reports stored character metadata, notes-derived ST/LT character for Box 11S, and the resulting destination such as Schedule D line 5 or line 12.
+
+---
+
 ### `finance:import-transactions`
 
 Insert transactions from a JSON payload read from stdin.

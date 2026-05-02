@@ -10,6 +10,7 @@ use App\GenAiProcessor\Services\Prompts\PayslipPromptTemplate;
 use App\GenAiProcessor\Services\Prompts\PromptTemplate;
 use App\GenAiProcessor\Services\Prompts\TaxDocumentPromptTemplate;
 use App\GenAiProcessor\Services\Prompts\UtilityBillPromptTemplate;
+use App\GenAiProcessor\Support\K1CodeItemNormalizer;
 use App\Models\User;
 use Bherila\GenAiLaravel\Schema;
 use Bherila\GenAiLaravel\ToolChoice;
@@ -1287,28 +1288,15 @@ PROMPT;
      * We stringify the value here for consistent storage in the FK1StructuredData shape
      * (K1CodeItem.value is string on the frontend).
      *
-     * Each item must have a 'code' key; 'value' and 'notes' are optional.
+     * Each item must have a 'code' key; 'value', 'notes', and 'character' are optional.
      * Invalid items (non-array, missing 'code') are silently dropped.
      *
      * @param  array<mixed>  $rawItems
-     * @return array<array{code: string, value: string, notes: string}>
+     * @return array<array{code: string, value: string, notes: string, character?: 'short'|'long'}>
      */
     private function normalizeCodeItems(array $rawItems): array
     {
-        $result = [];
-        foreach ($rawItems as $item) {
-            if (! is_array($item) || ! isset($item['code'])) {
-                continue;
-            }
-            $rawValue = $item['value'] ?? null;
-            $result[] = [
-                'code' => (string) $item['code'],
-                'value' => is_numeric($rawValue) ? (string) (float) $rawValue : (string) ($rawValue ?? ''),
-                'notes' => isset($item['notes']) ? (string) $item['notes'] : '',
-            ];
-        }
-
-        return $result;
+        return (new K1CodeItemNormalizer)->normalize($rawItems);
     }
 
     /**
@@ -1517,9 +1505,15 @@ PROMPT;
         $codeItemsProp = Schema::arrayOf(
             Schema::object(
                 [
-                    'code' => Schema::string(),
-                    'value' => Schema::string(),
-                    'notes' => Schema::string(),
+                    'code' => Schema::string('K-1 box code exactly as shown, e.g. C, S, ZZ.'),
+                    'value' => Schema::string('Signed dollar amount for this code item. Preserve losses as negative amounts when shown with a minus sign or accounting parentheses.'),
+                    'notes' => Schema::string('Supplemental-statement label or explanation. For trader funds, preserve labels such as Section 988 FX, swap income/loss, PFIC MTM, trader deductions, management fees, and admin expenses.'),
+                    // Capital-gain character override. Required for Box 11 code S sub-lines
+                    // when the partnership's supplemental statement reports separate ST/LT
+                    // amounts; should be set to "short" or "long" so Schedule D routes to
+                    // line 5 (ST) vs. line 12 (LT). Leave empty for codes that have no
+                    // ST/LT character (e.g. Box 11A, Box 11C, Box 13H, Box 11ZZ, Box 13ZZ).
+                    'character' => Schema::string('"short" | "long" — set ONLY for Box 11 code S sub-lines that the supplemental statement classifies as short-term or long-term capital gain/loss.'),
                 ],
                 ['code', 'value'],
             )

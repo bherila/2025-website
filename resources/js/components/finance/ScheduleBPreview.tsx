@@ -4,6 +4,7 @@ import currency from 'currency.js'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
+import { parseK1Field } from '@/lib/finance/k1Utils'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import type { ScheduleBLines, ScheduleBSourceLine } from '@/types/finance/tax-return'
 
@@ -41,16 +42,16 @@ export function computeScheduleB(
       doc.employment_entity?.display_name ??
       'Partnership'
 
-    const box5 = parseFloat(data.fields['5']?.value ?? '0')
-    if (!isNaN(box5) && box5 !== 0) {
+    const box5 = parseK1Field(data, '5')
+    if (box5 !== 0) {
       interestLines.push({ label: `${partnerName} — K-1 Box 5`, amount: box5, docId: doc.id })
     }
-    const box6a = parseFloat(data.fields['6a']?.value ?? '0')
-    if (!isNaN(box6a) && box6a !== 0) {
+    const box6a = parseK1Field(data, '6a')
+    if (box6a !== 0) {
       dividendLines.push({ label: `${partnerName} — K-1 Box 6a`, amount: box6a, docId: doc.id })
     }
-    const box6b = parseFloat(data.fields['6b']?.value ?? '0')
-    if (!isNaN(box6b) && box6b !== 0) {
+    const box6b = parseK1Field(data, '6b')
+    if (box6b !== 0) {
       qualDividendLines.push({ label: `${partnerName} — K-1 Box 6b`, amount: box6b, docId: doc.id })
     }
   }

@@ -132,7 +132,7 @@ describe('buildTaxWorkbook', () => {
         limitedBusinessCapGains: 0,
         limitedPersonalCapGains: 0,
       },
-      scheduleE: { grandTotal: 100, totalPassive: 60, totalNonpassive: 40 },
+      scheduleE: { grandTotal: 100, totalPassive: 60, totalNonpassive: 40, totalTraderNii: 0 },
       scheduleSE: {
         entries: [{ label: 'Blue Harbor — Box 14A', amount: 10_000, sourceType: 'k1_box14_a' }],
         netEarningsFromSE: 10_000,
@@ -166,6 +166,7 @@ describe('buildTaxWorkbook', () => {
       form4952: {
         invIntSources: [],
         totalInvIntExpense: 10,
+        scheduleEDeductibleInvestmentInterestExpense: 0,
         invExpSources: [],
         totalInvExp: 0,
         niiBefore: 200,

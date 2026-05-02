@@ -3,6 +3,8 @@
 import currency from 'currency.js'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
+import { getK1CodeItems, isTraderFundK1, parseK1Field, routesInvestmentInterestToScheduleE } from '@/lib/finance/k1Utils'
+import { parseMoney } from '@/lib/finance/money'
 import { cn } from '@/lib/utils'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
@@ -10,26 +12,20 @@ import type { Form4952Lines } from '@/types/finance/tax-return'
 
 export type { Form4952Lines } from '@/types/finance/tax-return'
 
-import { Callout, fmtAmt,FormBlock, FormLine, FormTotalLine } from './tax-preview-primitives'
-
-// ── K-1 data helpers ──────────────────────────────────────────────────────────
-
-function parseK1Field(data: FK1StructuredData, box: string): number {
-  const v = data.fields[box]?.value
-  if (!v) return 0
-  const n = parseFloat(v)
-  return isNaN(n) ? 0 : n
-}
+import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine } from './tax-preview-primitives'
 
 function parseK1Codes(data: FK1StructuredData, box: string, filterCodes?: string[]): number {
-  const items = data.codes[box] ?? []
+  const items = filterCodes
+    ? filterCodes.flatMap((code) => getK1CodeItems(data, box, code))
+    : (data.codes[box] ?? [])
   return items
-    .filter((item) => !filterCodes || filterCodes.includes(item.code))
     .reduce((acc, item) => {
-      const n = parseFloat(item.value)
-      return isNaN(n) ? acc : acc.add(n)
+      const n = parseMoney(item.value)
+      return n === null ? acc : acc.add(n)
     }, currency(0)).value
 }
+
+type InvIntSource = Form4952Lines['invIntSources'][number]
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -55,7 +51,7 @@ export function computeForm4952Lines({
   income1099,
   shortDividendDeduction = 0,
 }: Form4952PreviewProps): Form4952Lines {
-  const invIntSources: { label: string; amount: number }[] = []
+  const invIntSources: InvIntSource[] = []
   const invExpSources: { label: string; amount: number }[] = []
   const k1Parsed = reviewedK1Docs
     .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
@@ -72,12 +68,22 @@ export function computeForm4952Lines({
   for (const { doc, data } of k1Parsed) {
     const partnerName =
       data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
-    for (const item of data.codes['13'] ?? []) {
-      if (item.code === 'H' || item.code === 'G' || item.code === 'AC' || item.code === 'AD') {
-        const n = parseFloat(item.value)
-        if (!isNaN(n) && n !== 0) {
-          invIntSources.push({ label: `${partnerName} — Box 13${item.code}`, amount: -Math.abs(n) })
-        }
+    for (const item of [
+      ...getK1CodeItems(data, '13', 'H'),
+      ...getK1CodeItems(data, '13', 'G'),
+      ...getK1CodeItems(data, '13', 'AC'),
+      ...getK1CodeItems(data, '13', 'AD'),
+    ]) {
+      const n = parseMoney(item.value)
+      if (n !== null && n !== 0) {
+        invIntSources.push({
+          label: `${partnerName} — Box 13${item.code}`,
+          amount: currency(0).subtract(Math.abs(n)).value,
+          docId: doc.id,
+          box: '13',
+          code: item.code,
+          scheduleEDeductionEligible: routesInvestmentInterestToScheduleE(item) || (item.code.trim().toUpperCase() === 'H' && isTraderFundK1(data)),
+        })
       }
     }
   }
@@ -88,7 +94,7 @@ export function computeForm4952Lines({
     const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? ''
     const invExp = p?.box5_investment_expense
     if (typeof invExp === 'number' && invExp !== 0) {
-      invIntSources.push({ label: `${payer} — 1099-INT Box 5 (investment expense)`, amount: -Math.abs(invExp) })
+      invIntSources.push({ label: `${payer} — 1099-INT Box 5 (investment expense)`, amount: currency(0).subtract(Math.abs(invExp)).value })
     }
   }
 
@@ -97,12 +103,10 @@ export function computeForm4952Lines({
   for (const { doc, data } of k1Parsed) {
     const partnerName =
       data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
-    for (const item of data.codes['20'] ?? []) {
-      if (item.code === 'B') {
-        const n = parseFloat(item.value)
-        if (!isNaN(n) && n !== 0) {
-          invExpSources.push({ label: `${partnerName} — Box 20B (investment expenses)`, amount: -Math.abs(n) })
-        }
+    for (const item of getK1CodeItems(data, '20', 'B')) {
+      const n = parseMoney(item.value)
+      if (n !== null && n !== 0) {
+        invExpSources.push({ label: `${partnerName} — Box 20B (investment expenses)`, amount: currency(0).subtract(Math.abs(n)).value })
       }
     }
   }
@@ -151,13 +155,45 @@ export function computeForm4952Lines({
           : 'A'
 
   const useQdElected = bestScenario === 'B' ? totalQualDiv : bestScenario === 'C' ? scenC_qdElected : 0
-  const finalNii = niiBefore + useQdElected
+  const finalNii = currency(niiBefore).add(useQdElected).value
   const finalDeductible = Math.min(totalInvIntExpense, finalNii)
-  const finalCarryforward = totalInvIntExpense - finalDeductible
+  const finalCarryforward = currency(totalInvIntExpense).subtract(finalDeductible).value
+  const invIntSourcesWithAllowance: InvIntSource[] = invIntSources.map((source) => ({
+    ...source,
+    allowedAmount: 0,
+  }))
+  if (totalInvIntExpense > 0 && finalDeductible > 0 && invIntSourcesWithAllowance.length > 0) {
+    // Largest source absorbs the per-line rounding remainder so the sum of
+    // allowedAmount lines reconciles exactly to finalDeductible (avoids drift
+    // in the Schedule E vs. Schedule A split when there are multiple sources).
+    let largestIdx = 0
+    let largestAbs = Math.abs(invIntSourcesWithAllowance[0]!.amount)
+    for (let i = 1; i < invIntSourcesWithAllowance.length; i++) {
+      const abs = Math.abs(invIntSourcesWithAllowance[i]!.amount)
+      if (abs > largestAbs) {
+        largestIdx = i
+        largestAbs = abs
+      }
+    }
+    let allocated = currency(0)
+    invIntSourcesWithAllowance.forEach((source, i) => {
+      if (i === largestIdx) return
+      const sourceExpense = Math.abs(source.amount)
+      const share = currency(finalDeductible).multiply(sourceExpense / totalInvIntExpense).value
+      source.allowedAmount = share
+      allocated = allocated.add(share)
+    })
+    invIntSourcesWithAllowance[largestIdx]!.allowedAmount = currency(finalDeductible).subtract(allocated).value
+  }
+  const scheduleEDeductibleInvestmentInterestExpense = invIntSourcesWithAllowance.reduce(
+    (acc, source) => source.scheduleEDeductionEligible ? acc.add(source.allowedAmount ?? 0) : acc,
+    currency(0),
+  ).value
 
   return {
-    invIntSources,
+    invIntSources: invIntSourcesWithAllowance,
     totalInvIntExpense,
+    scheduleEDeductibleInvestmentInterestExpense,
     invExpSources,
     totalInvExp,
     niiBefore,

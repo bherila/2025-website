@@ -1579,6 +1579,7 @@ export default function K1ReviewPanel({ data, onChange, readOnly = false }: K1Re
         <K1CodesModal
           open
           boxLabel={`Box ${activeCodesSpec.box}: ${activeCodesSpec.label}`}
+          box={activeCodesSpec.box}
           codeDefinitions={activeCodesSpec.codes}
           items={data.codes[codesModal.box] ?? []}
           readOnly={readOnly}

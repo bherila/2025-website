@@ -109,6 +109,15 @@ Adding a new line? Set `navTab: TAX_TABS.<key>` in `computeForm1040Lines` and ma
 
 `AdditionalTaxesPreview.SourceModal` accepts `goToTab` + `goToLabel` + `onTabChange`. The Schedule 2 adapter passes `onTabChange={tabToDrill(onDrill)}`, which makes the "Go to Schedule B / W-2 / Schedule E" buttons push the right column onto the Miller stack.
 
+Tax-preview source navigation is intentionally form-level today:
+
+- Form 1040 line drill uses `navTab` / `TAB_TO_FORM_ID`.
+- Action Items source buttons route to the form tab that owns the computation.
+- Schedule 2 data-source dialogs route to the contributing form via `goToTab`.
+- K-1 trader-fund routing rows surface source labels and inline tooltips. Exact K-1 code-row deep links remain a future improvement; use `finance:k1-codes` for a CLI audit trail when reviewing AQR/Delphi Plus rows.
+
+When adding source navigation, keep the Tabs and Dock paths aligned: legacy components should continue accepting `onTabChange(tab)`, and dock adapters should translate that tab through `tabToDrill(onDrill)`.
+
 ---
 
 ## URL hash format
@@ -155,6 +164,7 @@ Both light and dark variants are defined. Avoid hardcoded palette classes (`bg-g
 - **Formatter strips unused imports**: the post-edit formatter hook removes unused imports. When adding a type import, include the usage in the same edit, or the import will be removed before you can reference it.
 - **Schedule C data shape**: `ScheduleCSummaryService` only emits rows whose tags have a non-empty `tax_characteristic`. Tags without one never appear in Schedule C output.
 - **Currency math**: all money math MUST go through `currency.js`. Exported `compute*` functions return plain `number`, never `currency` instances (those aren't JSON-serialisable). See `CLAUDE.md`.
+- **Trader-fund K-1s**: Box 11S is footnote-driven, not inherently Schedule D. AQR/Delphi Plus notes classify ST/LT rows, so they route to Schedule D line 5 / line 12. Box 11ZZ/13ZZ ordinary trader items flow to Schedule E Part II nonpassive and Form 8960 NII. Box 13H runs through Form 4952 first; only the allowed portion reaches Schedule E, with disallowed interest carried forward. Box 20AJ supports Form 461 only.
 
 ---
 

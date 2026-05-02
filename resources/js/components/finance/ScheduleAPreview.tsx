@@ -14,12 +14,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { getK1CodeItems, isTraderFundK1, routesInvestmentInterestToScheduleE } from '@/lib/finance/k1Utils'
+import { parseMoney } from '@/lib/finance/money'
 import type { ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import { SALT_CATEGORIES } from '@/lib/tax/deductionCategories'
 import { type FilingStatus, getStandardDeduction } from '@/lib/tax/standardDeductions'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
-import type { ScheduleALines, UserDeductionEntry } from '@/types/finance/tax-return'
+import type { Form4952Lines, ScheduleALines, UserDeductionEntry } from '@/types/finance/tax-return'
 
 import { ShortDividendSummaryCard } from './ShortDividendDetailModal'
 
@@ -29,6 +31,7 @@ interface InvIntSource {
   label: string
   /** Negative means expense (charge). Positive means income. */
   amount: number
+  scheduleEDeductionEligible?: boolean
 }
 
 const SALT_CAP = 10_000
@@ -51,6 +54,7 @@ export function computeScheduleALines({
   year = new Date().getFullYear(),
   isMarried = false,
   userDeductions = [],
+  form4952,
 }: {
   reviewedK1Docs?: TaxDocument[]
   reviewed1099Docs?: TaxDocument[]
@@ -60,6 +64,7 @@ export function computeScheduleALines({
   year?: number
   isMarried?: boolean
   userDeductions?: UserDeductionEntry[]
+  form4952?: Form4952Lines | undefined
 }): ScheduleALines {
   const invIntSources: InvIntSource[] = []
   const otherItemizedSources: { label: string; amount: number }[] = []
@@ -71,25 +76,29 @@ export function computeScheduleALines({
   for (const { doc, data } of k1Parsed) {
     const partnerName =
       data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
-    const hItems = (data.codes['13'] ?? []).filter((item) => item.code === 'H')
+    const hItems = getK1CodeItems(data, '13', 'H')
     for (const item of hItems) {
-      const n = parseFloat(item.value)
-      if (!isNaN(n) && n !== 0) {
-        invIntSources.push({ label: `${partnerName} — K-1 Box 13H (investment interest)`, amount: -Math.abs(n) })
+      const n = parseMoney(item.value)
+      if (n !== null && n !== 0) {
+        invIntSources.push({
+          label: `${partnerName} — K-1 Box 13H (investment interest)`,
+          amount: currency(0).subtract(Math.abs(n)).value,
+          scheduleEDeductionEligible: routesInvestmentInterestToScheduleE(item) || (item.code.trim().toUpperCase() === 'H' && isTraderFundK1(data)),
+        })
       }
     }
-    const gItems = (data.codes['13'] ?? []).filter((item) => item.code === 'G')
+    const gItems = getK1CodeItems(data, '13', 'G')
     for (const item of gItems) {
-      const n = parseFloat(item.value)
-      if (!isNaN(n) && n !== 0) {
-        invIntSources.push({ label: `${partnerName} — K-1 Box 13G (investment interest)`, amount: -Math.abs(n) })
+      const n = parseMoney(item.value)
+      if (n !== null && n !== 0) {
+        invIntSources.push({ label: `${partnerName} — K-1 Box 13G (investment interest)`, amount: currency(0).subtract(Math.abs(n)).value })
       }
     }
     // Box 13L — portfolio deduction (no 2% floor) → Sch A Line 16
-    const lItems = (data.codes['13'] ?? []).filter((item) => item.code === 'L')
+    const lItems = getK1CodeItems(data, '13', 'L')
     for (const item of lItems) {
-      const n = parseFloat(item.value)
-      if (!isNaN(n) && n !== 0) {
+      const n = parseMoney(item.value)
+      if (n !== null && n !== 0) {
         otherItemizedSources.push({
           label: `${partnerName} — K-1 Box 13L (portfolio deduction, no 2% floor)`,
           amount: Math.abs(n),
@@ -103,11 +112,11 @@ export function computeScheduleALines({
     const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? '1099'
     const box5 = p?.box5_investment_expense ?? p?.int_5_investment_expenses
     if (typeof box5 === 'number' && box5 !== 0) {
-      invIntSources.push({ label: `${payer} — 1099-INT Box 5 (investment expense)`, amount: -Math.abs(box5) })
+      invIntSources.push({ label: `${payer} — 1099-INT Box 5 (investment expense)`, amount: currency(0).subtract(Math.abs(box5)).value })
     }
     const bIntInvExp = p?.b_investment_expenses
     if (typeof bIntInvExp === 'number' && bIntInvExp !== 0) {
-      invIntSources.push({ label: `${payer} — 1099-B investment expense`, amount: -Math.abs(bIntInvExp) })
+      invIntSources.push({ label: `${payer} — 1099-B investment expense`, amount: currency(0).subtract(Math.abs(bIntInvExp)).value })
     }
   }
 
@@ -115,14 +124,17 @@ export function computeScheduleALines({
   if (shortDivDeduction > 0) {
     invIntSources.push({
       label: 'Short dividends — positions held > 45 days (IRS Pub. 550)',
-      amount: -shortDivDeduction,
+      amount: currency(0).subtract(shortDivDeduction).value,
     })
   }
 
-  const totalInvIntExpense = invIntSources.reduce(
+  const rawInvIntExpense = invIntSources.reduce(
     (acc, s) => acc.add(Math.abs(s.amount)),
     currency(0),
   ).value
+  const totalInvIntExpense = form4952
+    ? Math.max(0, currency(form4952.deductibleInvestmentInterestExpense).subtract(form4952.scheduleEDeductibleInvestmentInterestExpense).value)
+    : rawInvIntExpense
 
   const buckets = bucketUserDeductions(userDeductions)
   const userSalt = SALT_CATEGORIES_LIST.reduce(
@@ -177,6 +189,7 @@ interface ScheduleAPreviewProps {
   saltPaid?: number
   isMarried?: boolean
   userDeductions?: UserDeductionEntry[]
+  form4952?: Form4952Lines | undefined
 }
 
 /** Modal showing all sources that contribute to investment interest expense. */
@@ -244,6 +257,7 @@ export default function ScheduleAPreview({
   saltPaid = 0,
   isMarried = false,
   userDeductions = [],
+  form4952,
 }: ScheduleAPreviewProps) {
   const [showInvIntModal, setShowInvIntModal] = useState(false)
 
@@ -256,6 +270,7 @@ export default function ScheduleAPreview({
     year: selectedYear,
     isMarried,
     userDeductions,
+    form4952,
   })
 
   const buckets = bucketUserDeductions(userDeductions)

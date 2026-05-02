@@ -134,6 +134,12 @@ EXTRACTION RULES:
    The `notes` field must include: (a) what the item is, (b) its tax character
    (ordinary vs. capital), and (c) where it goes on the return (e.g., "Schedule E Part II
    nonpassive" or "Schedule D"). Quote the K-1 footnote verbatim when it specifies treatment.
+   For Box 11 Code S, set `character` to "short" or "long" only when the supporting
+   statement identifies that exact sub-line as short-term or long-term. If one note mentions
+   both short-term and long-term totals, leave `character` blank and add a warning.
+   For trader funds, Box 11 Code ZZ items such as §988 FX, swaps, and PFIC MTM are ordinary
+   income/loss to Schedule E Part II nonpassive; Box 13 Code ZZ trader/management/admin
+   expenses are other deductions to Schedule E Part II nonpassive.
 
 3. SUPPORTING STATEMENTS:
    Read ALL supplemental pages. Box totals on the face page are often aggregates;

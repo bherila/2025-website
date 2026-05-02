@@ -2,7 +2,8 @@ import currency from 'currency.js'
 
 import { ALL_K1_CODES } from '@/components/finance/k1/k1-codes'
 import { K1_CODE_ROUTING_NOTES } from '@/lib/finance/k1RoutingNotes'
-import type { FK1StructuredData } from '@/types/finance/k1-data'
+import { parseMoney, parseMoneyOrZero, sumMoneyValues } from '@/lib/finance/money'
+import type { FK1StructuredData, K1CodeItem } from '@/types/finance/k1-data'
 import { isFK1StructuredData } from '@/types/finance/k1-data'
 
 /**
@@ -16,18 +17,125 @@ export function getSbpElection(data: unknown): boolean {
 }
 
 export function parseK1Field(data: FK1StructuredData, box: string): number {
-  const v = data.fields[box]?.value
-  if (!v) return 0
-  const n = parseFloat(v)
-  return isNaN(n) ? 0 : n
+  return parseMoneyOrZero(data.fields[box]?.value)
 }
 
 export function parseK1Codes(data: FK1StructuredData, box: string): number {
-  const items = data.codes[box] ?? []
-  return items.reduce((acc, item) => {
-    const n = parseFloat(item.value)
-    return isNaN(n) ? acc : acc.add(n)
-  }, currency(0)).value
+  return sumMoneyValues((data.codes[box] ?? []).map((item) => item.value))
+}
+
+export function normalizeK1Code(code: string): string {
+  return code.trim().toUpperCase()
+}
+
+export function isK1Code(code: string, expectedCode: string): boolean {
+  return normalizeK1Code(code) === normalizeK1Code(expectedCode)
+}
+
+export function getK1CodeItems(data: FK1StructuredData, box: string, code: string): K1CodeItem[] {
+  return (data.codes[box] ?? []).filter((item) => isK1Code(item.code, code))
+}
+
+export function getK1PartnerName(data: FK1StructuredData, fallback = 'Partnership'): string {
+  return data.fields['B']?.value?.split('\n')[0] ?? fallback
+}
+
+export function sumK1CodeItems(data: FK1StructuredData, box: string, code: string): number {
+  return sumMoneyValues(getK1CodeItems(data, box, code).map((item) => item.value))
+}
+
+export function sumAbsK1CodeItems(data: FK1StructuredData, box: string, code: string): number {
+  return getK1CodeItems(data, box, code)
+    .reduce((acc, item) => acc.add(Math.abs(parseMoneyOrZero(item.value))), currency(0)).value
+}
+
+/**
+ * Classifies a Box 11 Code S (non-portfolio capital gain/loss) line as
+ * short-term or long-term using the partnership's supplemental-statement
+ * notes. AQR-style K-1s annotate each sub-line with text like
+ * "Net short-term capital loss" or "Net long-term capital gain, assets held
+ * more than 3 years"; this helper extracts that character so the amount can
+ * route to Schedule D line 5 (ST) or line 12 (LT).
+ *
+ * Returns undefined when the notes are missing or ambiguous, leaving the
+ * caller to surface a warning rather than silently misclassify.
+ */
+export function classify11SCharacter(notes?: string | null): 'short' | 'long' | undefined {
+  if (!notes) return undefined
+  const hasShort = /short[- ]term/i.test(notes)
+  const hasLong = /long[- ]term/i.test(notes)
+  if (hasShort && !hasLong) return 'short'
+  if (hasLong && !hasShort) return 'long'
+  return undefined
+}
+
+/**
+ * Resolves the ST/LT character of a Box 11S sub-line: the user-supplied
+ * `character` override wins; otherwise the supplemental-statement notes are
+ * scanned for a "short term" / "long term" phrase.
+ */
+export function resolve11SCharacter(item: { character?: 'short' | 'long'; notes?: string }): 'short' | 'long' | undefined {
+  return item.character ?? classify11SCharacter(item.notes)
+}
+
+export function isTraderFundK1(data: FK1StructuredData): boolean {
+  if (data.fields['partnershipPosition_traderInSecurities']?.value === 'true') return true
+  const haystack = [
+    data.raw_text,
+    ...(data.warnings ?? []),
+    ...Object.values(data.codes).flatMap((items) => items.map((item) => item.notes ?? '')),
+  ].join(' ').toLowerCase()
+
+  return [
+    'trader in securities',
+    'trader deductions',
+    'trading activities',
+    'trading in financial instruments',
+    'trading in financial instruments/commodities',
+  ].some((needle) => haystack.includes(needle))
+}
+
+export function routesInvestmentInterestToScheduleE(item: K1CodeItem): boolean {
+  const notes = item.notes?.toLowerCase() ?? ''
+  return notes.includes('schedule e') && notes.includes('nonpassive')
+}
+
+export interface K1Form461Disclosure {
+  capitalGains: number
+  capitalLosses: number
+  otherIncome: number
+  otherDeductions: number
+  net: number
+}
+
+function noteAmount(notes: string, label: string): number | null {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const match = notes.match(new RegExp(`${escaped}:\\s*(\\(?\\$?[\\d,]+(?:\\.\\d+)?\\)?)`, 'i'))
+  if (!match?.[1]) return null
+  return parseMoney(match[1])
+}
+
+export function extractK1Form461Disclosure(data: FK1StructuredData): K1Form461Disclosure | null {
+  const item = getK1CodeItems(data, '20', 'AJ')[0]
+  const notes = item?.notes
+  if (!notes) return null
+
+  const capitalGains = noteAmount(notes, 'Capital gains from trade or business')
+  const capitalLosses = noteAmount(notes, 'Capital losses from trade or business')
+  const otherIncome = noteAmount(notes, 'Other income from trade or business')
+  const otherDeductions = noteAmount(notes, 'Other deductions from trade or business')
+
+  if (capitalGains === null || capitalLosses === null || otherIncome === null || otherDeductions === null) {
+    return null
+  }
+
+  return {
+    capitalGains,
+    capitalLosses,
+    otherIncome,
+    otherDeductions,
+    net: currency(capitalGains).add(capitalLosses).add(otherIncome).add(otherDeductions).value,
+  }
 }
 
 export function k1NetIncome(data: FK1StructuredData): number {
@@ -39,9 +147,9 @@ export function k1NetIncome(data: FK1StructuredData): number {
   const box13 = parseK1Codes(data, '13')
   const box21 = parseK1Field(data, '21')
   const deductionTotal = currency(0)
-    .add(box12 !== 0 ? -Math.abs(box12) : 0)
-    .add(box13 !== 0 ? -Math.abs(box13) : 0)
-    .add(box21 !== 0 ? -Math.abs(box21) : 0)
+    .subtract(Math.abs(box12))
+    .subtract(Math.abs(box13))
+    .subtract(Math.abs(box21))
   return incomeTotal.add(deductionTotal).value
 }
 
@@ -61,7 +169,7 @@ export function getUnroutedCodes(data: FK1StructuredData): UnroutedCode[] {
   const results: UnroutedCode[] = []
   for (const box of CODED_BOXES) {
     for (const item of data.codes[box] ?? []) {
-      const code = item.code.toUpperCase()
+      const code = normalizeK1Code(item.code)
       if (K1_CODE_ROUTING_NOTES[box]?.[code] === undefined) {
         results.push({ box, code, label: ALL_K1_CODES[box]?.[code] ?? `Code ${code}`, value: item.value })
       }
@@ -97,7 +205,7 @@ export function getK1sWithAMTItems(k1s: FK1StructuredData[]): string[] {
 export function getK1sWithSEItems(k1s: FK1StructuredData[]): string[] {
   return k1s
     .filter((d) => (d.codes['14'] ?? []).some((item) => {
-      const code = item.code.toUpperCase()
+      const code = normalizeK1Code(item.code)
       return code === 'A' || code === 'C'
     }))
     .map((d) => d.fields['B']?.value?.split('\n')[0] ?? 'Unknown entity')
@@ -127,7 +235,7 @@ export function getK1CompletenessChecklist(data: FK1StructuredData): Completenes
     })
   }
 
-  const hasBox20Z = (data.codes['20'] ?? []).some((i) => i.code.toUpperCase() === 'Z')
+  const hasBox20Z = (data.codes['20'] ?? []).some((i) => isK1Code(i.code, 'Z'))
   if (hasBox20Z) {
     const hasStatementA = data.statementA != null
     items.push({
@@ -152,7 +260,7 @@ export function getK1CompletenessChecklist(data: FK1StructuredData): Completenes
 
   const otherCodes: [string, string][] = [['11', 'F'], ['13', 'ZZ'], ['20', 'Y']]
   const hasOther = otherCodes.some(([box, code]) =>
-    (data.codes[box] ?? []).some((i) => i.code.toUpperCase() === code),
+    (data.codes[box] ?? []).some((i) => isK1Code(i.code, code)),
   )
   if (hasOther) {
     items.push({ item: '"Other" codes present — check attached statement for categorization', status: 'needs_user_action' })

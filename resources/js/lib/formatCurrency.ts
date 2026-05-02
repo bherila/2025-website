@@ -1,3 +1,7 @@
+import currency from 'currency.js'
+
+import { parseMoney } from '@/lib/finance/money'
+
 export function formatFriendlyAmount(amount: number): string {
   const absAmount = Math.abs(amount)
   if (absAmount >= 1000000) {
@@ -11,8 +15,6 @@ export function formatFriendlyAmount(amount: number): string {
 }
 
 export function formatCurrency(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) return '-';
-  const num = typeof value === 'string' ? parseFloat(value) : value;
-  if (isNaN(num)) return '-';
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(num);
+  const amount = parseMoney(value)
+  return amount === null ? '-' : currency(amount).format()
 }

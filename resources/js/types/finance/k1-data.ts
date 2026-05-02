@@ -27,6 +27,16 @@ export interface K1CodeItem {
   notes?: string
   confidence?: number
   manualOverride?: boolean
+  /**
+   * Capital-gain character override.
+   *
+   * Used today for Box 11 code S (non-portfolio capital gain/loss): partnerships
+   * such as AQR break the single line into multiple ST/LT sub-amounts via the
+   * supplemental statement. When extraction can't classify the character from
+   * the notes, the user can pin it here so Schedule D routes to line 5 (ST) vs
+   * line 12 (LT) deterministically.
+   */
+  character?: 'short' | 'long'
 }
 
 /** A section of Schedule K-3 (Foreign Tax Reporting). */

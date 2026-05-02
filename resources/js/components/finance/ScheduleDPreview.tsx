@@ -3,26 +3,21 @@
 import currency from 'currency.js'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
-import { Callout, fmtAmt, FormBlock, FormLine, FormSubLine, FormTotalLine, parseFieldVal } from '@/components/finance/tax-preview-primitives'
+import { Callout, fmtAmt, FormBlock, FormLine, FormSubLine, FormTotalLine, InfoTooltip, parseFieldVal } from '@/components/finance/tax-preview-primitives'
+import { getK1CodeItems, parseK1Field, resolve11SCharacter } from '@/lib/finance/k1Utils'
+import { parseMoney } from '@/lib/finance/money'
 import { getDocAmounts } from '@/lib/finance/taxDocumentUtils'
 import { scheduleD } from '@/lib/tax/scheduleD'
-import type { FK1StructuredData, K1CodeItem } from '@/types/finance/k1-data'
+import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function pk1(data: FK1StructuredData, box: string): number {
-  const v = data.fields[box]?.value
-  if (!v) return 0
-  const n = parseFloat(v)
-  return isNaN(n) ? 0 : n
-}
-
 /** Read a numeric field from broker_1099 or 1099_b parsed_data. */
 function readBrokerField(p: Record<string, unknown>, ...keys: string[]): number {
   for (const key of keys) {
-    const v = p[key]
-    if (typeof v === 'number' && !isNaN(v)) return v
+    const value = parseMoney(p[key])
+    if (value !== null) return value
   }
   return 0
 }
@@ -42,6 +37,9 @@ export interface ScheduleDComputedData {
   combined: number
   appliedToReturn: number
   carryforward: number
+  ambiguous11SCount: number
+  ambiguous11SAmount: number
+  has11SAmbiguous: boolean
 }
 
 export function computeScheduleD(reviewedK1Docs: TaxDocument[], reviewed1099Docs: TaxDocument[]): ScheduleDComputedData {
@@ -51,7 +49,7 @@ export function computeScheduleD(reviewedK1Docs: TaxDocument[], reviewed1099Docs
 
   const sec1256Sources: { amount: number; lt: number; st: number }[] = []
   for (const { data } of k1Parsed) {
-    const cItems = (data.codes['11'] ?? []).filter((i: K1CodeItem) => i.code === 'C')
+    const cItems = getK1CodeItems(data, '11', 'C')
     for (const item of cItems) {
       const n = parseFieldVal(item.value) ?? 0
       if (n !== 0) {
@@ -66,6 +64,29 @@ export function computeScheduleD(reviewedK1Docs: TaxDocument[], reviewed1099Docs
 
   const total6781LT = sec1256Sources.reduce((acc, source) => acc.add(source.lt), currency(0)).value
   const total6781ST = sec1256Sources.reduce((acc, source) => acc.add(source.st), currency(0)).value
+
+  // Box 11S — non-portfolio capital gain/loss (e.g., AQR/trader-fund supplemental statements).
+  // Each sub-line's notes or user override must identify ST/LT character before routing.
+  let nonPortfolio11sST = currency(0)
+  let nonPortfolio11sLT = currency(0)
+  let ambiguous11SCount = 0
+  let ambiguous11SAmount = currency(0)
+  for (const { data } of k1Parsed) {
+    const sItems = getK1CodeItems(data, '11', 'S')
+    for (const item of sItems) {
+      const n = parseFieldVal(item.value) ?? 0
+      if (n === 0) continue
+      const character = resolve11SCharacter(item)
+      if (character === 'short') {
+        nonPortfolio11sST = nonPortfolio11sST.add(n)
+      } else if (character === 'long') {
+        nonPortfolio11sLT = nonPortfolio11sLT.add(n)
+      } else {
+        ambiguous11SCount += 1
+        ambiguous11SAmount = ambiguous11SAmount.add(n)
+      }
+    }
+  }
 
   const brokerSources = reviewed1099Docs
     .filter((d) => d.form_type === 'broker_1099' || d.form_type === '1099_b' || d.form_type === '1099_b_c')
@@ -106,12 +127,14 @@ export function computeScheduleD(reviewedK1Docs: TaxDocument[], reviewed1099Docs
     return acc.add(getDocAmounts(doc).capGain ?? 0)
   }, currency(0)).value
 
-  const k1ST = k1Parsed.reduce((acc, { data }) => acc.add(pk1(data, '8')), currency(0)).value
+  const k1ST = k1Parsed.reduce((acc, { data }) => acc.add(parseK1Field(data, '8')), currency(0))
+    .add(nonPortfolio11sST).value
   const k1LT = k1Parsed.reduce((acc, { data }) => acc
-    .add(pk1(data, '9a'))
-    .add(pk1(data, '9b'))
-    .add(pk1(data, '9c'))
-    .add(pk1(data, '10')), currency(0)).value
+    .add(parseK1Field(data, '9a'))
+    .add(parseK1Field(data, '9b'))
+    .add(parseK1Field(data, '9c'))
+    .add(parseK1Field(data, '10')), currency(0))
+    .add(nonPortfolio11sLT).value
 
   const schD = scheduleD({
     line1a_gain_loss: totalBrokerST,
@@ -133,6 +156,9 @@ export function computeScheduleD(reviewedK1Docs: TaxDocument[], reviewed1099Docs
     combined,
     appliedToReturn,
     carryforward: combined < 0 ? currency(combined).subtract(appliedToReturn).value : 0,
+    ambiguous11SCount,
+    ambiguous11SAmount: ambiguous11SAmount.value,
+    has11SAmbiguous: ambiguous11SCount > 0,
   }
 }
 
@@ -157,7 +183,7 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
   for (const { doc, data } of k1Parsed) {
     const partnerName =
       data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
-    const cItems = (data.codes['11'] ?? []).filter((i: K1CodeItem) => i.code === 'C')
+    const cItems = getK1CodeItems(data, '11', 'C')
     for (const item of cItems) {
       const n = parseFieldVal(item.value) ?? 0
       if (n !== 0) {
@@ -212,13 +238,40 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
   // ── Short-term capital gains/losses ──────────────────────────────────────
   type CapGainLine = { label: string; amount: number; note?: string; boxRef?: string }
   const stLines: CapGainLine[] = []
+  const ambiguous11SLines: CapGainLine[] = []
+
+  let has11sAmbiguous = false
 
   for (const { doc, data } of k1Parsed) {
     const partnerName =
       data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
-    const box8 = pk1(data, '8')
+    const box8 = parseK1Field(data, '8')
     if (box8 !== 0) {
       stLines.push({ label: `${partnerName} — K-1 Box 8`, amount: box8, boxRef: '5' })
+    }
+    // Box 11S — non-portfolio capital gain/loss (AQR/trader-fund supplemental statements).
+    // Only the lines whose notes mark them as short-term land on Schedule D line 5.
+    const sItems = getK1CodeItems(data, '11', 'S')
+    for (const item of sItems) {
+      const n = parseFieldVal(item.value) ?? 0
+      if (n === 0) continue
+      const character = resolve11SCharacter(item)
+      if (character === 'short') {
+        const line: CapGainLine = {
+          label: `${partnerName} — K-1 Box 11S (S/T non-portfolio)`,
+          amount: n,
+          boxRef: '5',
+        }
+        if (item.notes) line.note = item.notes
+        stLines.push(line)
+      } else if (character === undefined) {
+        has11sAmbiguous = true
+        ambiguous11SLines.push({
+          label: `${partnerName} — K-1 Box 11S (character needed)`,
+          amount: n,
+          note: item.notes ?? 'Notes did not identify S/T or L/T character.',
+        })
+      }
     }
   }
 
@@ -254,10 +307,10 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
   for (const { doc, data } of k1Parsed) {
     const partnerName =
       data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
-    const box9a = pk1(data, '9a')
-    const box9b = pk1(data, '9b')
-    const box9c = pk1(data, '9c')
-    const box10 = pk1(data, '10')
+    const box9a = parseK1Field(data, '9a')
+    const box9b = parseK1Field(data, '9b')
+    const box9c = parseK1Field(data, '9c')
+    const box10 = parseK1Field(data, '10')
 
     if (box9a !== 0) ltLines.push({ label: `${partnerName} — K-1 Box 9a (L/T)`, amount: box9a, boxRef: '12' })
     if (box9b !== 0)
@@ -266,6 +319,23 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
       ltLines.push({ label: `${partnerName} — K-1 Box 9c (§1250 unrec.)`, amount: box9c, note: 'Unrecaptured §1250 gain', boxRef: '12' })
     if (box10 !== 0)
       ltLines.push({ label: `${partnerName} — K-1 Box 10 (§1231)`, amount: box10, note: '§1231 gain flows to Part II', boxRef: '12' })
+
+    // Box 11S — long-term sub-lines. Ambiguous lines are shown separately below instead of routed.
+    const sItems = getK1CodeItems(data, '11', 'S')
+    for (const item of sItems) {
+      const n = parseFieldVal(item.value) ?? 0
+      if (n === 0) continue
+      const character = resolve11SCharacter(item)
+      if (character === 'long') {
+        const line: CapGainLine = {
+          label: `${partnerName} — K-1 Box 11S (L/T non-portfolio)`,
+          amount: n,
+          boxRef: '12',
+        }
+        if (item.notes) line.note = item.notes
+        ltLines.push(line)
+      }
+    }
   }
 
   // Form 6781 60% LT allocation
@@ -349,6 +419,42 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
             </p>
           </Callout>
         </>
+      )}
+
+      {has11sAmbiguous && (
+        <Callout kind="warn" title="⚠ Box 11S — Confirm S/T vs. L/T character">
+          <p>
+            One or more K-1 Box 11S lines could not be classified as short-term or long-term from their notes.
+            Those amounts are not included in Schedule D totals until the K-1 code row is set to Short-term
+            or Long-term. Open the K-1 review modal and confirm the holding-period character from the supplemental statement.
+          </p>
+        </Callout>
+      )}
+
+      {ambiguous11SLines.length > 0 && (
+        <FormBlock title="Box 11S — Unclassified Non-Portfolio Capital Gain / (Loss)">
+          {ambiguous11SLines.map((line, i) => (
+            <div key={i}>
+              <FormLine
+                label={(
+                  <span className="inline-flex items-center gap-1">
+                    {line.label}
+                    <InfoTooltip>
+                      This line is intentionally excluded from Schedule D until the K-1 code row is marked short-term
+                      or long-term in the review modal.
+                    </InfoTooltip>
+                  </span>
+                )}
+                value={line.amount}
+              />
+              {line.note && <FormSubLine text={line.note} />}
+            </div>
+          ))}
+          <FormTotalLine
+            label="Not yet routed to Schedule D"
+            value={ambiguous11SLines.reduce((acc, line) => acc.add(line.amount), currency(0)).value}
+          />
+        </FormBlock>
       )}
 
       {/* Part I and II */}

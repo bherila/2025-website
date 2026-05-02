@@ -26,7 +26,7 @@ export interface UserDeductionEntry {
 }
 
 export interface ScheduleALines {
-  invIntSources: { label: string; amount: number }[]
+  invIntSources: { label: string; amount: number; scheduleEDeductionEligible?: boolean }[]
   totalInvIntExpense: number
   /** Raw SALT paid before the $10,000 cap (W-2 Box 17 + user-entered SALT categories). */
   saltPaid: number
@@ -76,11 +76,21 @@ export interface ScheduleELines {
   grandTotal: number
   totalPassive: number
   totalNonpassive: number
+  totalTraderNii: number
 }
 
 export interface Form4952Lines {
-  invIntSources: { label: string; amount: number }[]
+  invIntSources: {
+    label: string
+    amount: number
+    docId?: number
+    box?: string
+    code?: string
+    scheduleEDeductionEligible?: boolean
+    allowedAmount?: number
+  }[]
   totalInvIntExpense: number
+  scheduleEDeductibleInvestmentInterestExpense: number
   /** Box 20B investment expenses (Form 4952 Part II Line 5) — reduce NII. Separate from Part I interest. */
   invExpSources: { label: string; amount: number }[]
   totalInvExp: number
@@ -201,7 +211,7 @@ export interface K1ExportEntry {
   entityName: string
   ein?: string
   fields: Record<string, string | number>
-  codes: Record<string, { code: string; value: string }[]>
+  codes: Record<string, { code: string; value: string; notes?: string; character?: 'short' | 'long' }[]>
   k3Sections?: K3Section[]
   /** Box 11 S — per-activity passive income/loss from supplemental statement (Form 8582). */
   passiveActivities?: import('@/types/finance/k1-data').K1PassiveActivity[]
@@ -257,6 +267,7 @@ export interface Form8960Lines {
   ordinaryDividends: number
   netCapGains: number
   passiveIncome: number
+  nonpassiveTradingIncome: number
   investmentInterestExpense: number
   grossNII: number
   totalDeductions: number
@@ -309,6 +320,16 @@ export interface Form461Lines {
   isTriggered: boolean
   /** Filing status used for the threshold lookup. */
   isMarried: boolean
+  /** K-1 Box 20AJ disclosures used to audit §461(l) trader-business economics. */
+  k1Disclosures?: {
+    docId: number
+    partnerName: string
+    capitalGains: number
+    capitalLosses: number
+    otherIncome: number
+    otherDeductions: number
+    net: number
+  }[]
 }
 
 export interface Form8582ActivityLine {

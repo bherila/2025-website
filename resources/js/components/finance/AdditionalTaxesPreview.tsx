@@ -206,6 +206,14 @@ export default function AdditionalTaxesPreview({ schedule2, scheduleSE, form8959
         <FormBlock title={`Form 461 — Excess Business Loss Limitation (${form461.isTriggered ? '⚠ EBL Applies' : '✓ Within Limit'})`}>
           <FormLine label="Aggregate trade/business income (loss)" value={form461.aggregateBusinessIncomeLoss} />
           <FormLine label={`EBL limit (${fmtAmt(form461.eblLimit, 0)} — ${form461.isMarried ? 'MFJ' : 'Single'})`} value={form461.eblLimit} />
+          {form461.k1Disclosures?.map((row) => (
+            <FormLine
+              key={row.docId}
+              note
+              label={`${row.partnerName} — K-1 Box 20AJ support`}
+              raw={`Capital gains ${fmtAmt(row.capitalGains, 0)}; capital losses ${fmtAmt(row.capitalLosses, 0)}; other income ${fmtAmt(row.otherIncome, 0)}; other deductions ${fmtAmt(row.otherDeductions, 0)}; net ${fmtAmt(row.net, 0)}. Informational only — no separate deduction.`}
+            />
+          ))}
           {form461.isTriggered ? (
             <>
               <FormTotalLine label="Excess business loss — disallowed this year" value={-form461.excessBusinessLoss} double />
