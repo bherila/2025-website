@@ -32,6 +32,7 @@ export default defineConfig({
         'resources/js/irsf461/irsf461.tsx',
         'resources/js/financial-planning/index.tsx',
         'resources/js/financial-planning/solo-401k.tsx',
+        'resources/js/financial-planning/rent-vs-buy.tsx',
         'resources/js/license-manager.tsx',
         'resources/js/client-management/admin.tsx',
         'resources/js/client-management/portal.tsx',

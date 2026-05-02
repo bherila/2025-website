@@ -54,6 +54,15 @@ const STATE_TABLES: Record<string, Record<number, YearTable>> = {
   NY,
 }
 
+function getStandardDeductionTable(state = ''): Record<number, YearTable> | undefined {
+  return state === '' ? FEDERAL : STATE_TABLES[state]
+}
+
+export function getLatestStandardDeductionYear(state = ''): number {
+  const table = getStandardDeductionTable(state)
+  return table ? Math.max(...Object.keys(table).map(Number)) : 0
+}
+
 /**
  * Returns the standard deduction for the given year/state/status.
  * Unknown state or year → 0. Federal uses an empty-string state.
@@ -64,11 +73,11 @@ export function getStandardDeduction(
   state = '',
 ): number {
   const key = STATUS_KEY[filingStatus]
-  const table = state === '' ? FEDERAL : STATE_TABLES[state]
+  const table = getStandardDeductionTable(state)
   if (!table) {
     return 0
   }
-  const mostRecent = Math.max(...Object.keys(table).map(Number))
+  const mostRecent = getLatestStandardDeductionYear(state)
   const row = table[year] ?? table[mostRecent]
   return row?.[key] ?? 0
 }

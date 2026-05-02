@@ -129,6 +129,10 @@ Route::get('/financial-planning/solo-401k', function () {
     return view('financial-planning.solo-401k');
 });
 
+Route::get('/financial-planning/rent-vs-buy', function () {
+    return view('financial-planning.rent-vs-buy');
+})->name('financial-planning.rent-vs-buy');
+
 Route::get('/recipes', [RecipeController::class, 'index'])->name('recipes.index');
 Route::get('/recipes/{slug}', [RecipeController::class, 'show'])->name('recipes.show');
 
