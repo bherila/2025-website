@@ -12,6 +12,7 @@ use Illuminate\Support\Carbon;
 
 /**
  * @property Carbon|null $expires_at
+ * @property Carbon|null $api_key_invalid_at
  */
 class UserAiConfiguration extends Model
 {
@@ -28,6 +29,8 @@ class UserAiConfiguration extends Model
         'model',
         'is_active',
         'expires_at',
+        'api_key_invalid_at',
+        'api_key_invalid_reason',
     ];
 
     protected function casts(): array
@@ -37,6 +40,7 @@ class UserAiConfiguration extends Model
             'session_token' => 'encrypted',
             'is_active' => 'boolean',
             'expires_at' => 'datetime',
+            'api_key_invalid_at' => 'datetime',
         ];
     }
 
@@ -55,6 +59,27 @@ class UserAiConfiguration extends Model
     public function isExpired(): bool
     {
         return $this->expires_at !== null && $this->expires_at->isPast();
+    }
+
+    public function hasInvalidApiKey(): bool
+    {
+        return $this->api_key_invalid_at !== null;
+    }
+
+    public function markApiKeyInvalid(string $reason): void
+    {
+        $this->update([
+            'api_key_invalid_at' => now(),
+            'api_key_invalid_reason' => $reason,
+        ]);
+    }
+
+    public function clearApiKeyInvalid(): void
+    {
+        $this->update([
+            'api_key_invalid_at' => null,
+            'api_key_invalid_reason' => null,
+        ]);
     }
 
     /**
@@ -86,7 +111,7 @@ class UserAiConfiguration extends Model
 
     /**
      * @param  array{this_month: array{input_tokens: int, output_tokens: int}, total: array{input_tokens: int, output_tokens: int}}|null  $precomputedUsage
-     * @return array{id: int, name: string, provider: string, model: string, masked_key: string, region: string|null, is_active: bool, is_expired: bool, expires_at: string|null, created_at: string|null, usage: array{this_month: array{input_tokens: int, output_tokens: int}, total: array{input_tokens: int, output_tokens: int}}}
+     * @return array{id: int, name: string, provider: string, model: string, masked_key: string, region: string|null, is_active: bool, is_expired: bool, expires_at: string|null, has_invalid_api_key: bool, api_key_invalid_at: string|null, api_key_invalid_reason: string|null, created_at: string|null, usage: array{this_month: array{input_tokens: int, output_tokens: int}, total: array{input_tokens: int, output_tokens: int}}}
      */
     public function toApiArray(?array $precomputedUsage = null): array
     {
@@ -103,6 +128,9 @@ class UserAiConfiguration extends Model
             'is_active' => $this->is_active,
             'is_expired' => $this->isExpired(),
             'expires_at' => $this->expires_at?->toIso8601String(),
+            'has_invalid_api_key' => $this->hasInvalidApiKey(),
+            'api_key_invalid_at' => $this->api_key_invalid_at?->toIso8601String(),
+            'api_key_invalid_reason' => $this->api_key_invalid_reason,
             'created_at' => $this->created_at?->toIso8601String(),
             'usage' => $precomputedUsage ?? $this->usageStats(),
         ];

@@ -108,6 +108,8 @@ class UserAiConfigurationController extends Controller
 
         if (! empty($data['api_key'])) {
             $update['api_key'] = $data['api_key'];
+            $update['api_key_invalid_at'] = null;
+            $update['api_key_invalid_reason'] = null;
         }
 
         $config->update($update);
@@ -135,6 +137,12 @@ class UserAiConfigurationController extends Controller
     public function activate(int $id): JsonResponse
     {
         $config = $this->findOwned($id);
+
+        if ($config->hasInvalidApiKey()) {
+            return response()->json([
+                'error' => 'This API key has been marked invalid. Edit the configuration with a valid key before activating it.',
+            ], 422);
+        }
 
         DB::transaction(function () use ($config) {
             // Lock all of the user's configs so concurrent activate calls are serialized

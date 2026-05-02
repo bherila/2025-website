@@ -58,6 +58,16 @@ function ExpiryBadge({ config }: { config: AiConfig }) {
   );
 }
 
+function InvalidApiKeyBadge({ config }: { config: AiConfig }) {
+  if (!config.has_invalid_api_key) return null;
+
+  return (
+    <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+      Invalid key
+    </span>
+  );
+}
+
 export const AiConfigCard: React.FC<AiConfigCardProps> = ({
   config,
   activatingId,
@@ -74,6 +84,7 @@ export const AiConfigCard: React.FC<AiConfigCardProps> = ({
       </span>
       <span className="text-sm text-muted-foreground">{config.model}</span>
       {config.is_active && <Badge>Active</Badge>}
+      <InvalidApiKeyBadge config={config} />
       <ExpiryBadge config={config} />
     </div>
     <div className="text-xs text-muted-foreground">
@@ -82,7 +93,7 @@ export const AiConfigCard: React.FC<AiConfigCardProps> = ({
     </div>
     <UsageDisplay usage={config.usage} />
     <div className="flex gap-2 pt-1">
-      {!config.is_active && !config.is_expired && (
+      {!config.is_active && !config.is_expired && !config.has_invalid_api_key && (
         <Button
           size="sm"
           variant="outline"

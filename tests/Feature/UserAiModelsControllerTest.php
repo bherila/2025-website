@@ -49,12 +49,12 @@ class UserAiModelsControllerTest extends TestCase
         $user = User::factory()->create();
 
         Http::fake([
-            'generativelanguage.googleapis.com/v1beta/models*' => Http::sequence()
-                ->push(['models' => []], 200)
-                ->push(['models' => [
+            'generativelanguage.googleapis.com/v1beta/models*' => Http::response([
+                'models' => [
                     ['name' => 'models/gemini-2.0-flash', 'supportedGenerationMethods' => ['generateContent']],
                     ['name' => 'models/gemini-1.5-pro', 'supportedGenerationMethods' => ['generateContent']],
-                ]], 200),
+                ],
+            ], 200),
         ]);
 
         $response = $this->actingAs($user)->postJson('/api/user/ai-prefs/models', [
@@ -90,12 +90,13 @@ class UserAiModelsControllerTest extends TestCase
         $user = User::factory()->create();
 
         Http::fake([
-            'api.anthropic.com/v1/models*' => Http::sequence()
-                ->push(['data' => [], 'has_more' => false], 200)
-                ->push(['data' => [
+            'api.anthropic.com/v1/models*' => Http::response([
+                'data' => [
                     ['id' => 'claude-sonnet-4-6', 'display_name' => 'Claude Sonnet 4.6'],
                     ['id' => 'claude-haiku-4-5', 'display_name' => 'Claude Haiku 4.5'],
-                ], 'has_more' => false], 200),
+                ],
+                'has_more' => false,
+            ], 200),
         ]);
 
         $response = $this->actingAs($user)->postJson('/api/user/ai-prefs/models', [
@@ -130,11 +131,11 @@ class UserAiModelsControllerTest extends TestCase
         $user = User::factory()->create();
 
         Http::fake([
-            'bedrock.us-east-1.amazonaws.com/foundation-models' => Http::sequence()
-                ->push(['modelSummaries' => []], 200)
-                ->push(['modelSummaries' => [
+            'bedrock.us-east-1.amazonaws.com/foundation-models' => Http::response([
+                'modelSummaries' => [
                     ['modelId' => 'anthropic.claude-3-5-sonnet-20241022-v2:0', 'modelName' => 'Claude 3.5 Sonnet'],
-                ]], 200),
+                ],
+            ], 200),
             'bedrock.us-east-1.amazonaws.com/inference-profiles' => Http::response(['inferenceProfileSummaries' => []], 200),
         ]);
 
@@ -156,11 +157,11 @@ class UserAiModelsControllerTest extends TestCase
         $config = UserAiConfiguration::factory()->for($user)->gemini()->create(['api_key' => 'saved-key']);
 
         Http::fake([
-            'generativelanguage.googleapis.com/v1beta/models*' => Http::sequence()
-                ->push(['models' => []], 200)
-                ->push(['models' => [
+            'generativelanguage.googleapis.com/v1beta/models*' => Http::response([
+                'models' => [
                     ['name' => 'models/gemini-2.0-flash', 'supportedGenerationMethods' => ['generateContent']],
-                ]], 200),
+                ],
+            ], 200),
         ]);
 
         $response = $this->actingAs($user)->postJson('/api/user/ai-prefs/models', [

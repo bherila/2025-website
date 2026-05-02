@@ -48,7 +48,8 @@ describe('AiConfigDialog', () => {
     expect(screen.getByLabelText('Region')).toBeInTheDocument();
     expect(screen.getByLabelText('Model')).toHaveAttribute(
       'placeholder',
-      'e.g. anthropic.claude-3-5-sonnet-20241022-v2:0',
+      'Search models…',
     );
+    expect(screen.getByRole('button', { name: 'Fetch models' })).toBeInTheDocument();
   });
 });

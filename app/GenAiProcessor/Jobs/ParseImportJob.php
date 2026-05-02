@@ -72,6 +72,11 @@ class ParseImportJob implements ShouldQueue
 
             return;
         }
+        if ($activeConfig && $activeConfig->hasInvalidApiKey()) {
+            $job->markFailed('Your AI configuration "'.$activeConfig->name.'" has an invalid API key. Please update it in Settings.');
+
+            return;
+        }
 
         $client = $user->resolvedAiClient();
         if (! $client) {
@@ -176,6 +181,10 @@ class ParseImportJob implements ShouldQueue
                 Log::warning('Failed to send failure mail', ['job_id' => $job->id]);
             }
         } catch (GenAiFatalException $e) {
+            if ($activeConfig && $this->isInvalidApiKeyError($e)) {
+                $activeConfig->markApiKeyInvalid($e->getMessage());
+            }
+
             // Fatal errors (400 Bad Request, etc.) - mark as failed immediately with max retries
             $job->update([
                 'status' => 'failed',
@@ -239,6 +248,18 @@ class ParseImportJob implements ShouldQueue
         [$inputTokens, $outputTokens] = $this->extractTokenUsage(is_array($response) ? $response : []);
 
         return ['data' => $data, 'raw_response' => $rawResponse, 'input_tokens' => $inputTokens, 'output_tokens' => $outputTokens];
+    }
+
+    private function isInvalidApiKeyError(\Throwable $e): bool
+    {
+        $message = strtolower($e->getMessage());
+
+        return str_contains($message, 'invalid api key')
+            || str_contains($message, 'api key format')
+            || str_contains($message, 'invalid api credentials')
+            || str_contains($message, 'unauthorized')
+            || str_contains($message, 'forbidden')
+            || str_contains($message, 'authentication');
     }
 
     /**

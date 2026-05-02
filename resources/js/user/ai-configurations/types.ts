@@ -20,6 +20,9 @@ export interface AiConfig {
   is_active: boolean;
   is_expired: boolean;
   expires_at: string | null;
+  has_invalid_api_key: boolean;
+  api_key_invalid_at: string | null;
+  api_key_invalid_reason: string | null;
   created_at: string | null;
   usage: AiConfigUsage;
 }
