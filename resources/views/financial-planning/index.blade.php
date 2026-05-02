@@ -1,5 +1,7 @@
 @extends('layouts.app')
 
+@section('title', 'Financial Planning | ' . config('app.name', 'Ben Herila'))
+
 @section('content')
   <div id="app"></div>
 @endsection
