@@ -12,6 +12,7 @@ use App\GenAiProcessor\Services\Prompts\TaxDocumentPromptTemplate;
 use App\GenAiProcessor\Services\Prompts\UtilityBillPromptTemplate;
 use App\GenAiProcessor\Support\K1CodeItemNormalizer;
 use App\Models\User;
+use App\Services\GenAiFileHelper;
 use Bherila\GenAiLaravel\Contracts\GenAiClient;
 use Bherila\GenAiLaravel\Schema;
 use Bherila\GenAiLaravel\ToolChoice;
@@ -22,6 +23,8 @@ use HelgeSverre\Toon\Exceptions\DecodeException;
 use HelgeSverre\Toon\Toon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Symfony\Component\Yaml\Exception\ParseException as YamlParseException;
+use Symfony\Component\Yaml\Yaml;
 
 class GenAiJobDispatcherService
 {
@@ -278,6 +281,32 @@ PROMPT;
         return null;
     }
 
+    public function assistantPrefillForJobType(string $jobType, ?GenAiClient $client = null): ?string
+    {
+        if ($client !== null && ! $this->clientSupportsAssistantPrefill($client)) {
+            return null;
+        }
+
+        return match ($jobType) {
+            'tax_form_multi_account_import' => 'accounts[',
+            default => null,
+        };
+    }
+
+    private function clientSupportsAssistantPrefill(GenAiClient $client): bool
+    {
+        if (! in_array($client->provider(), ['anthropic', 'bedrock'], true)) {
+            return false;
+        }
+
+        $model = strtolower($client->model());
+
+        return ! str_contains($model, 'claude-sonnet-4-6')
+            && ! str_contains($model, 'claude-opus-4-6')
+            && ! str_contains($model, 'claude-opus-4-7')
+            && ! str_contains($model, 'claude-mythos');
+    }
+
     /**
      * Build the Gemini generateContent payload for the given job type.
      *
@@ -344,7 +373,7 @@ PROMPT;
      * Extract typed structured data from a Gemini generateContent response.
      *
      * @param  array<string, mixed>  $responseBody
-     * @return array<string, mixed>|null
+     * @return array<int|string, mixed>|null
      */
     public function extractGenerateContentData(string $jobType, array $responseBody, ?GenAiClient $client = null): ?array
     {
@@ -358,7 +387,18 @@ PROMPT;
 
         if ($jobType === 'tax_form_multi_account_import') {
             // Expects a TOON or JSON array of per-account entries from the model.
-            return $this->decodeStructuredText($this->extractResponseText($responseBody, $client));
+            $data = $this->decodeStructuredText($this->extractResponseText($responseBody, $client));
+            if (! is_array($data)) {
+                return null;
+            }
+
+            if (array_key_exists('accounts', $data)) {
+                return is_array($data['accounts']) && array_is_list($data['accounts'])
+                    ? $data['accounts']
+                    : null;
+            }
+
+            return $data;
         }
 
         return $this->decodeStructuredText($this->extractResponseText($responseBody, $client));
@@ -485,11 +525,28 @@ PROMPT;
         if ($client !== null) {
             $text = $client->extractText($responseBody);
             if (trim($text) !== '') {
-                return $text;
+                return $this->applyAssistantPrefill($responseBody, $text);
             }
         }
 
-        return $this->extractTextParts($responseBody);
+        return $this->applyAssistantPrefill($responseBody, $this->extractTextParts($responseBody));
+    }
+
+    /**
+     * @param  array<string, mixed>  $responseBody
+     */
+    private function applyAssistantPrefill(array $responseBody, string $text): string
+    {
+        $prefill = $responseBody[GenAiFileHelper::ASSISTANT_PREFILL_RESPONSE_KEY] ?? null;
+        if (! is_string($prefill) || $prefill === '') {
+            return $text;
+        }
+
+        if (str_starts_with(ltrim($text), $prefill)) {
+            return $text;
+        }
+
+        return $prefill.ltrim($text);
     }
 
     /**
@@ -616,6 +673,15 @@ PROMPT;
             return $jsonData;
         }
 
+        if (str_starts_with($text, '- ')) {
+            $yamlData = $this->decodeYamlLikeStructuredText($text);
+            if ($yamlData !== null) {
+                Log::warning('GenAI returned YAML-shaped output, recovering');
+
+                return $yamlData;
+            }
+        }
+
         try {
             $decoded = Toon::decode($text, DecodeOptions::lenient());
             if (is_array($decoded)) {
@@ -626,6 +692,165 @@ PROMPT;
         }
 
         return null;
+    }
+
+    /**
+     * Accept common LLM drift where a requested TOON array is returned as a YAML list,
+     * while preserving TOON tabular nested arrays such as transactions[43]{...}.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function decodeYamlLikeStructuredText(string $text): ?array
+    {
+        try {
+            $decoded = Yaml::parse($this->expandToonTabularBlocksForYaml($text));
+        } catch (YamlParseException) {
+            return null;
+        }
+
+        if (! is_array($decoded)) {
+            return null;
+        }
+
+        return $this->normalizeToonTabularArrays($decoded);
+    }
+
+    private function expandToonTabularBlocksForYaml(string $text): string
+    {
+        $lines = preg_split('/\R/', $text);
+        if ($lines === false) {
+            return $text;
+        }
+
+        $expanded = [];
+        for ($index = 0; $index < count($lines); $index++) {
+            $line = $lines[$index];
+            if (! preg_match('/^(\s*)([A-Za-z_][A-Za-z0-9_]*)\[\d+\]\{([^}]+)\}:\s*$/', $line, $matches)) {
+                $expanded[] = $line;
+
+                continue;
+            }
+
+            $baseIndent = $matches[1];
+            $baseIndentLength = strlen($baseIndent);
+            $columns = array_map('trim', explode(',', $matches[3]));
+            $expanded[] = "{$baseIndent}{$matches[2]}:";
+
+            for ($rowIndex = $index + 1; $rowIndex < count($lines); $rowIndex++) {
+                $rowLine = $lines[$rowIndex];
+                if (trim($rowLine) === '' || $this->leadingSpaceCount($rowLine) <= $baseIndentLength) {
+                    break;
+                }
+
+                $values = str_getcsv(trim($rowLine));
+                $pairs = [];
+                foreach ($columns as $columnIndex => $column) {
+                    $encodedValue = json_encode($this->coerceStructuredScalar($values[$columnIndex] ?? null, $column));
+                    $pairs[] = "{$column}: {$encodedValue}";
+                }
+                $expanded[] = $baseIndent.'  - {'.implode(', ', $pairs).'}';
+                $index = $rowIndex;
+            }
+        }
+
+        return implode("\n", $expanded);
+    }
+
+    private function leadingSpaceCount(string $value): int
+    {
+        return strlen($value) - strlen(ltrim($value, ' '));
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function normalizeToonTabularArrays(array $data): array
+    {
+        foreach ($data as $key => $value) {
+            if (is_array($value)) {
+                $data[$key] = $this->normalizeToonTabularArrays($value);
+
+                continue;
+            }
+
+            if ($this->shouldPreserveStructuredString((string) $key) && (is_int($value) || is_float($value))) {
+                $data[$key] = (string) $value;
+
+                continue;
+            }
+
+            if (! is_string($value)) {
+                continue;
+            }
+
+            if (! preg_match('/^([A-Za-z_][A-Za-z0-9_]*)\[\d+\]\{([^}]+)\}$/', $key, $matches)) {
+                continue;
+            }
+
+            $columns = array_map('trim', explode(',', $matches[2]));
+            $rows = [];
+            foreach (preg_split('/\R/', trim($value)) ?: [] as $line) {
+                $line = trim($line);
+                if ($line === '') {
+                    continue;
+                }
+
+                $values = str_getcsv($line);
+                $row = [];
+                foreach ($columns as $index => $column) {
+                    $row[$column] = $this->coerceStructuredScalar($values[$index] ?? null, $column);
+                }
+                $rows[] = $row;
+            }
+
+            unset($data[$key]);
+            $data[$matches[1]] = $rows;
+        }
+
+        return $data;
+    }
+
+    private function coerceStructuredScalar(mixed $value, ?string $key = null): mixed
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $value = trim((string) $value);
+        if ($value === '' || strtolower($value) === 'null') {
+            return null;
+        }
+
+        if ($key !== null && $this->shouldPreserveStructuredString($key)) {
+            return $value;
+        }
+
+        if (strtolower($value) === 'true') {
+            return true;
+        }
+
+        if (strtolower($value) === 'false') {
+            return false;
+        }
+
+        if (is_numeric($value)) {
+            return str_contains($value, '.') ? (float) $value : (int) $value;
+        }
+
+        return $value;
+    }
+
+    private function shouldPreserveStructuredString(string $key): bool
+    {
+        $key = strtolower($key);
+
+        return str_contains($key, 'identifier')
+            || str_contains($key, 'cusip')
+            || str_contains($key, 'tin')
+            || str_contains($key, 'account_number')
+            || str_contains($key, 'acct_number')
+            || str_ends_with($key, 'last4');
     }
 
     /**

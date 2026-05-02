@@ -2,10 +2,14 @@
 
 namespace App\Services;
 
+use Bherila\GenAiLaravel\ContentBlock;
 use Bherila\GenAiLaravel\Contracts\GenAiClient;
+use Bherila\GenAiLaravel\ToolConfig;
 
 class GenAiFileHelper
 {
+    public const ASSISTANT_PREFILL_RESPONSE_KEY = '_assistant_prefill';
+
     /**
      * Upload a file to the provider's File API if supported, then converse.
      * For providers without a File API (Anthropic, Bedrock), falls back to inline base64.
@@ -18,7 +22,8 @@ class GenAiFileHelper
         string $mimeType,
         string $name,
         string $prompt,
-        mixed $toolConfig = null,
+        ?ToolConfig $toolConfig = null,
+        ?string $assistantPrefill = null,
     ): mixed {
         $fileUri = $client->uploadFile($stream, $mimeType, $name);
 
@@ -41,7 +46,31 @@ class GenAiFileHelper
             throw new \RuntimeException('Failed to read file stream.');
         }
 
-        return $client->converseWithInlineFile(base64_encode($bytes), $mimeType, $prompt, '', $toolConfig);
+        $base64 = base64_encode($bytes);
+
+        if ($assistantPrefill === null || $assistantPrefill === '') {
+            return $client->converseWithInlineFile($base64, $mimeType, $prompt, '', $toolConfig);
+        }
+
+        $response = $client->converse('', [
+            [
+                'role' => 'user',
+                'content' => [
+                    ContentBlock::document($base64, $mimeType),
+                    ContentBlock::text($prompt),
+                ],
+            ],
+            [
+                'role' => 'assistant',
+                'content' => [
+                    ContentBlock::text($assistantPrefill),
+                ],
+            ],
+        ], $toolConfig);
+
+        $response[self::ASSISTANT_PREFILL_RESPONSE_KEY] = $assistantPrefill;
+
+        return $response;
     }
 
     /**

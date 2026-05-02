@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\GenAiProcessor\Models\GenAiDailyQuota;
 use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Services\GenAiJobDispatcherService;
+use App\Services\GenAiFileHelper;
 use Bherila\GenAiLaravel\Contracts\GenAiClient;
 use Bherila\GenAiLaravel\ModelInfo;
 use Bherila\GenAiLaravel\ToolConfig;
@@ -501,6 +502,183 @@ class GenAiJobDispatcherServiceTest extends TestCase
         $this->assertSame(12.34, $data[0]['parsed_data']['box1_interest']);
     }
 
+    public function test_extract_multi_account_tax_import_from_yaml_like_toon_response(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $response = [
+            'content' => [[
+                'type' => 'text',
+                'text' => <<<'TEXT'
+- account_identifier: X65-385336
+  account_name: Fidelity Brokerage Services LLC
+  form_type: 1099_b
+  tax_year: 2025
+  parsed_data:
+    payer_name: National Financial Services LLC
+    total_proceeds: 123.45
+    transactions[2]{symbol,description,cusip,quantity,purchase_date,sale_date,proceeds,cost_basis,accrued_market_discount,wash_sale_disallowed,realized_gain_loss,is_short_term,form_8949_box,is_covered,additional_info}:
+      NET,CLOUDFLARE INC CL A COM,18915M107,10,2025-03-27,2025-05-06,1229.74,1191.40,null,0,38.34,true,A,true,null
+      VOO,VANGUARD S&P 500 ETF,922908363,7,2025-02-20,2025-06-20,3843.77,3917.34,null,0,-73.57,true,A,true,null
+
+- account_identifier: X65-385336
+  account_name: Fidelity Brokerage Services LLC
+  form_type: 1099_int
+  tax_year: 2025
+  parsed_data:
+    payer_name: National Financial Services LLC
+    box1_interest: 12.34
+TEXT,
+            ]],
+            'stop_reason' => 'end_turn',
+        ];
+
+        $data = $service->extractGenerateContentData('tax_form_multi_account_import', $response);
+
+        $this->assertIsArray($data);
+        $this->assertCount(2, $data);
+        $this->assertSame('X65-385336', $data[0]['account_identifier']);
+        $this->assertSame('1099_b', $data[0]['form_type']);
+        $this->assertSame('NET', $data[0]['parsed_data']['transactions'][0]['symbol']);
+        $this->assertSame('922908363', $data[0]['parsed_data']['transactions'][1]['cusip']);
+        $this->assertSame(1229.74, $data[0]['parsed_data']['transactions'][0]['proceeds']);
+        $this->assertTrue($data[0]['parsed_data']['transactions'][0]['is_short_term']);
+        $this->assertNull($data[0]['parsed_data']['transactions'][0]['additional_info']);
+        $this->assertSame('1099_int', $data[1]['form_type']);
+        $this->assertSame(12.34, $data[1]['parsed_data']['box1_interest']);
+    }
+
+    public function test_extract_multi_account_tax_import_preserves_numeric_identifiers_as_strings(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $response = [
+            'content' => [[
+                'type' => 'text',
+                'text' => <<<'TEXT'
+- account_identifier: 123456789
+  account_name: Fidelity Brokerage Services LLC
+  form_type: 1099_int
+  tax_year: 2025
+  parsed_data:
+    payer_tin: 43523567
+    box1_interest: 12.34
+TEXT,
+            ]],
+            'stop_reason' => 'end_turn',
+        ];
+
+        $data = $service->extractGenerateContentData('tax_form_multi_account_import', $response);
+
+        $this->assertIsArray($data);
+        $this->assertSame('123456789', $data[0]['account_identifier']);
+        $this->assertSame('43523567', $data[0]['parsed_data']['payer_tin']);
+        $this->assertSame(12.34, $data[0]['parsed_data']['box1_interest']);
+    }
+
+    public function test_extract_multi_account_tax_import_returns_null_when_text_decode_fails(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $data = $service->extractGenerateContentData('tax_form_multi_account_import', [
+            'content' => [['type' => 'text', 'text' => 'not valid structured output']],
+            'stop_reason' => 'end_turn',
+        ]);
+
+        $this->assertNull($data);
+    }
+
+    public function test_extract_multi_account_tax_import_rejects_non_list_accounts_payload(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $data = $service->extractGenerateContentData('tax_form_multi_account_import', [
+            'content' => [[
+                'type' => 'text',
+                'text' => <<<'TEXT'
+accounts:
+  account_identifier: X65-385336
+  form_type: 1099_int
+TEXT,
+            ]],
+            'stop_reason' => 'end_turn',
+        ]);
+
+        $this->assertNull($data);
+    }
+
+    public function test_extract_multi_account_tax_import_from_named_accounts_toon_response(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $toon = Toon::encode([
+            'accounts' => [[
+                'account_identifier' => 'X65-385336',
+                'account_name' => 'Fidelity Brokerage Services LLC',
+                'form_type' => '1099_int',
+                'tax_year' => 2025,
+                'parsed_data' => [
+                    'payer_name' => 'National Financial Services LLC',
+                    'box1_interest' => 12.34,
+                ],
+            ]],
+        ]);
+
+        $data = $service->extractGenerateContentData('tax_form_multi_account_import', [
+            'content' => [['type' => 'text', 'text' => $toon]],
+            'stop_reason' => 'end_turn',
+        ]);
+
+        $this->assertIsArray($data);
+        $this->assertSame('X65-385336', $data[0]['account_identifier']);
+        $this->assertSame('1099_int', $data[0]['form_type']);
+        $this->assertSame(12.34, $data[0]['parsed_data']['box1_interest']);
+    }
+
+    public function test_extract_multi_account_tax_import_reconstructs_assistant_prefill(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $response = [
+            GenAiFileHelper::ASSISTANT_PREFILL_RESPONSE_KEY => 'accounts[',
+        ];
+        $client = $this->fakeGenAiClient(<<<'TEXT'
+1]:
+  - account_identifier: X65-385336
+    account_name: Fidelity Brokerage Services LLC
+    form_type: 1099_int
+    tax_year: 2025
+    parsed_data:
+      payer_name: National Financial Services LLC
+      box1_interest: 12.34
+TEXT);
+
+        $data = $service->extractGenerateContentData('tax_form_multi_account_import', $response, $client);
+
+        $this->assertIsArray($data);
+        $this->assertSame('X65-385336', $data[0]['account_identifier']);
+        $this->assertSame('1099_int', $data[0]['form_type']);
+        $this->assertSame(12.34, $data[0]['parsed_data']['box1_interest']);
+    }
+
+    public function test_multi_account_tax_import_uses_assistant_prefill(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $client = $this->fakeGenAiClient(provider: 'anthropic', model: 'claude-sonnet-4-5');
+
+        $this->assertSame('accounts[', $service->assistantPrefillForJobType('tax_form_multi_account_import', $client));
+        $this->assertNull($service->assistantPrefillForJobType('tax_document', $client));
+    }
+
+    public function test_multi_account_tax_import_does_not_prefill_unsupported_claude_models(): void
+    {
+        $service = new GenAiJobDispatcherService;
+        $client = $this->fakeGenAiClient(provider: 'bedrock', model: 'us.anthropic.claude-sonnet-4-6');
+
+        $this->assertNull($service->assistantPrefillForJobType('tax_form_multi_account_import', $client));
+    }
+
     public function test_multi_account_tax_import_prompt_requests_toon(): void
     {
         $service = new GenAiJobDispatcherService;
@@ -511,6 +689,9 @@ class GenAiJobDispatcherServiceTest extends TestCase
         ]);
 
         $this->assertStringContainsString('Return ONLY TOON', $prompt);
+        $this->assertStringContainsString('The first non-blank line of your complete response must be `accounts[N]:`', $prompt);
+        $this->assertStringContainsString('Do NOT return a top-level YAML list like `- account_identifier: ...`', $prompt);
+        $this->assertStringContainsString('accounts[N]:', $prompt);
         $this->assertStringContainsString('transactions[2]{symbol,description', $prompt);
     }
 
@@ -787,9 +968,9 @@ class GenAiJobDispatcherServiceTest extends TestCase
     /**
      * @param  list<array{name: string, input: array<string, mixed>}>  $toolCalls
      */
-    private function fakeGenAiClient(string $text = '', array $toolCalls = []): GenAiClient
+    private function fakeGenAiClient(string $text = '', array $toolCalls = [], string $provider = 'test', string $model = 'test-model'): GenAiClient
     {
-        return new class($text, $toolCalls) implements GenAiClient
+        return new class($text, $toolCalls, $provider, $model) implements GenAiClient
         {
             /**
              * @param  list<array{name: string, input: array<string, mixed>}>  $toolCalls
@@ -797,16 +978,18 @@ class GenAiJobDispatcherServiceTest extends TestCase
             public function __construct(
                 private readonly string $text,
                 private readonly array $toolCalls,
+                private readonly string $provider,
+                private readonly string $model,
             ) {}
 
             public function provider(): string
             {
-                return 'test';
+                return $this->provider;
             }
 
             public function model(): string
             {
-                return 'test-model';
+                return $this->model;
             }
 
             public static function maxFileBytes(): int

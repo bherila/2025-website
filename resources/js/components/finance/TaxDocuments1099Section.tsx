@@ -255,20 +255,25 @@ export default function TaxDocuments1099Section({
     return () => clearTimeout(timer)
   }, [documents, fetchDocuments])
 
-  // broker_1099 docs that are still processing (no links yet) or have unresolved links (null account_id).
+  // broker_1099 docs with no account placement stay in the fallback section until parsing/assignment resolves them.
   const pendingBrokerDocs = documents.filter(
     d => d.form_type === 'broker_1099' &&
-      (d.genai_status === 'pending' || d.genai_status === 'processing'),
+      (d.genai_status === 'pending' || d.genai_status === 'processing') &&
+      d.account_id === null &&
+      !(d.account_links ?? []).some(l => l.account_id !== null),
   )
   const unresolvedBrokerDocs = documents.filter(
     d => d.form_type === 'broker_1099' &&
       d.genai_status === 'parsed' &&
-      (d.account_links ?? []).some(l => l.account_id === null),
+      ((d.account_links ?? []).length === 0 || (d.account_links ?? []).some(l => l.account_id === null)),
   )
 
   // Accounts with at least one 1099/k-1 document (via join table) should be promoted to active section.
   const accountsWithDocs = new Set(
-    documents.flatMap(d => (d.account_links ?? []).map(l => l.account_id)).filter(Boolean) as number[],
+    documents.flatMap(d => [
+      ...(d.account_links ?? []).map(l => l.account_id),
+      d.account_id,
+    ]).filter(Boolean) as number[],
   )
 
   /** Split accounts: active = has transactions OR has 1099 docs; inactive = neither */
