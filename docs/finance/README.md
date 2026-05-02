@@ -16,8 +16,9 @@ Start here when you need to orient yourself in the finance codebase. Each doc be
 | Payslips (W-2 prep) | [payslips.md](payslips.md) | `app/Models/FinanceTool/FinPayslips.php` |
 | RSU awards | [rsu.md](rsu.md) | `resources/js/components/rsu/` |
 | Lot accounting + short-div | [lot-analyzer.md](lot-analyzer.md) | `app/Services/Finance/LotAnalyzer*` |
-| Tax system (Tabs UI + data) | [tax-system.md](tax-system.md) | `resources/js/components/finance/TaxPreviewPage.tsx` |
+| Tax system data model | [tax-system.md](tax-system.md) | `resources/js/components/finance/TaxPreviewContext.tsx` |
 | **Tax Preview — Dock UI** | **[tax-preview-dock.md](tax-preview-dock.md)** | `resources/js/components/finance/tax-preview/` |
+| 1099-B lot reconciliation | [tax-lot-reconciliation.md](tax-lot-reconciliation.md) | `TaxLotReconciliationPanel.tsx`, `TaxLotReconciliationService.php` |
 | Public financial planning calculators | [../financial-planning.md](../financial-planning.md) | `resources/js/financial-planning/` |
 | K-1 badge system (future) | [k1-badge-system-future.md](k1-badge-system-future.md) | `K1ReviewPanel.tsx` |
 | CLI (artisan commands) | [cli.md](cli.md) | `app/Console/Commands/Finance*` |

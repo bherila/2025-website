@@ -1,7 +1,7 @@
 # BWH PHP Copilot Instructions
 
 ## Architecture Overview
-This is a hybrid Laravel 12 + React TypeScript application for personal finance management. It combines server-side Blade templates with client-side React components for interactive features.
+This is a hybrid Laravel 13 + React TypeScript application for personal finance management. It combines server-side Blade templates with client-side React components for interactive features.
 
 ### Key Components
 - **Backend**: Laravel controllers return Blade views with data attributes
@@ -52,7 +52,7 @@ Fallbacks & migration:
 ## Development Workflow
 
 ### Verification Steps (Mandatory)
-All validations in [TESTING.md](TESTING.md) must pass before committing:
+All validations in [TESTING.md](../TESTING.md) must pass before committing:
 1. **TypeScript**: `pnpm run type-check` — must pass with no errors
 2. **ESLint**: `pnpm run lint` — must pass with no errors
 3. **Jest**: `pnpm run test` — all tests must pass
@@ -132,7 +132,7 @@ class MyTest extends TestCase
 
 **IMPORTANT**: Never run `php artisan migrate` or `php artisan schema:dump` unless the user **explicitly requests it**. When asked, always pass `--database=sqlite --no-interaction` — the `.env` may point to a staging/production MySQL host and omitting this flag risks running against real data. Never use `--prune` with `schema:dump`. Always use migration files (`database/migrations/`) for schema changes.
 
-See [TESTING.md](TESTING.md) for comprehensive testing documentation.
+See [TESTING.md](../TESTING.md) for comprehensive testing documentation.
 
 ## Key Conventions
 - **Models**: Use Eloquent relationships (e.g., `FinAccountLineItems` belongs to `FinAccounts`); organize domain-specific models in subdirectories (e.g., `app/Models/ClientManagement/`)
@@ -152,11 +152,11 @@ See [TESTING.md](TESTING.md) for comprehensive testing documentation.
 
 ## Common Patterns
 - **Transaction CRUD**: API endpoints like `/api/finance/{account_id}/line_items` for GET/POST/DELETE
-- **RSU Management**: Track Restricted Stock Units via `/api/rsu` (GET/POST/DELETE). Table `fin_equity_awards` stores awards. Unique constraint on (grant_date, award_id, vest_date, symbol). POST endpoint supports upsert - if `id` provided, updates existing record; otherwise uses updateOrInsert. See [docs/finance/rsu.md](docs/finance/rsu.md) for full documentation.
+- **RSU Management**: Track Restricted Stock Units via `/api/rsu` (GET/POST/DELETE). Table `fin_equity_awards` stores awards. Unique constraint on (grant_date, award_id, vest_date, symbol). POST endpoint supports upsert - if `id` provided, updates existing record; otherwise uses updateOrInsert. See [docs/finance/rsu.md](../docs/finance/rsu.md) for full documentation.
 - **Tagging System**: Many-to-many via `fin_account_line_item_tag_map` table
 - **Linking**: Transactions can link to related entries (e.g., buys/sells)
 - **Statements**: Balance snapshots with detailed line items in `fin_statement_details`
-- **Lot Tracking**: Investment lots stored in `fin_account_lots`; handles ST/LT holding periods (365 day threshold) and realized gain/loss calculation. Lot Analyzer component performs client-side FIFO matching and wash sale detection using currency.js for precise arithmetic. Supports four wash sale settings (adjustSameUnderlying, adjustShortLong, adjustStockToOption, adjustOptionToStock) with Method 1 (same underlying) and Method 2 (identical ticker) presets. Analysis results can be saved to the database via `POST /api/finance/{account_id}/lots/save-analyzed`. One closing transaction can map to multiple opening lots. Year-of-sale tabs group Form 8949 output by tax year. TXF export (`txfExport.ts`) generates TXF files for tax software import. Manual lot matching via `LotMatchSearchModal` queries backend for opening transactions by symbol across all accounts (`POST /api/finance/lots/search-opening`); assignments saved via `POST /api/finance/lots/save-assignment`. This is distinct from TransactionLinkModal which links cross-account transfers. See [docs/finance/lot-analyzer.md](docs/finance/lot-analyzer.md).
+- **Lot Tracking**: Investment lots stored in `fin_account_lots`; handles ST/LT holding periods (365 day threshold) and realized gain/loss calculation. Lot Analyzer component performs client-side FIFO matching and wash sale detection using currency.js for precise arithmetic. Supports four wash sale settings (adjustSameUnderlying, adjustShortLong, adjustStockToOption, adjustOptionToStock) with Method 1 (same underlying) and Method 2 (identical ticker) presets. Analysis results can be saved to the database via `POST /api/finance/{account_id}/lots/save-analyzed`. One closing transaction can map to multiple opening lots. Year-of-sale tabs group Form 8949 output by tax year. TXF export (`txfExport.ts`) generates TXF files for tax software import. Manual lot matching via `LotMatchSearchModal` queries backend for opening transactions by symbol across all accounts (`POST /api/finance/lots/search-opening`); assignments saved via `POST /api/finance/lots/save-assignment`. This is distinct from TransactionLinkModal which links cross-account transfers. See [docs/finance/lot-analyzer.md](../docs/finance/lot-analyzer.md).
 - **File Uploads**: Handle CSV imports with validation and parsing logic
 - **Prior-Month Billing**: Invoices for month M cover work from M-1 (dated last day of M-1) plus retainer for M (dated first day of M). The system uses a "give and take" model where overages in M-1 are carried forward as a negative balance rather than billed immediately. Retainer hours in future months first offset any carried-forward negative balance. Pre-agreement months are treated as having 0 retainer hours, with their hours naturally carrying forward into the first active agreement month's pool.
 - **Minimum Availability Rule**: If the carried-forward negative balance reduces the new month's availability (Retainer - Debt) below 1 hour, the system automatically bills "catch-up hours" (appearing as `additional_hours`) to pay down the debt enough to restore 1 hour of availability.
@@ -189,7 +189,7 @@ See [TESTING.md](TESTING.md) for comprehensive testing documentation.
 - `routes/api.php`: Finance API endpoints
 - `routes/web.php`: Web routes for pages
 - `docs/`: Import schemas, data formats, and feature documentation
-- `docs/finance/`: Finance module docs — [lot-analyzer.md](docs/finance/lot-analyzer.md), [transactions-table.md](docs/finance/transactions-table.md), [overview.md](docs/finance/overview.md)
+- `docs/finance/`: Finance module docs — [lot-analyzer.md](../docs/finance/lot-analyzer.md), [transactions-table.md](../docs/finance/transactions-table.md), [overview.md](../docs/finance/overview.md)
 - `training_data/`: Sample CSV files for testing imports
 
 Focus on financial data integrity, proper error handling for imports, and maintaining relationships between accounts, transactions, and statements.</content>

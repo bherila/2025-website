@@ -1,5 +1,7 @@
 # BWH PHP Project
 
+See [docs/README.md](docs/README.md) for the project documentation index.
+
 ## Features
 
 ### Finance Management
@@ -42,7 +44,7 @@ Run tests with:
 composer test
 ```
 
-Tests use an in-memory SQLite database to ensure they never accidentally touch MySQL databases. See [docs/TESTING.md](docs/TESTING.md) for detailed testing documentation.
+Tests use an in-memory SQLite database to ensure they never accidentally touch MySQL databases. See [TESTING.md](TESTING.md) for detailed testing documentation.
 
 ### SQLite Version Requirement
 
@@ -73,7 +75,7 @@ All scheduled commands use `withoutOverlapping()` to prevent concurrent executio
 These instructions are for deploying to a cPanel-hosted Apache server with the document root set to `~/public_html`.
 
 ### Prerequisites
-- PHP 8.1 or higher
+- PHP 8.3 or higher
 - Composer
 - Node.js 18+ and pnpm
 - MySQL or compatible database (if using database features)
