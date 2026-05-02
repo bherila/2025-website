@@ -1,3 +1,4 @@
+export { default as RentVsBuyDetailsModal } from './RentVsBuyDetailsModal'
 export { default as RentVsBuyExplainer } from './RentVsBuyExplainer'
 export { default as RentVsBuyForm } from './RentVsBuyForm'
 export { default as RentVsBuyPage } from './RentVsBuyPage'

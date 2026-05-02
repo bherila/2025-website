@@ -45,19 +45,52 @@ export interface RentVsBuyInputs {
 
 export interface RentVsBuyYearRow {
   year: number
-  ownCumulativeCost: number
-  rentCumulativeCost: number
-  homeEquity: number
-  investedPortfolio: number
-  capitalGainsTax: number
-  netOwnPosition: number
-  netRentPosition: number
+  buyNonrecoverableCosts: RentVsBuyOwnershipCostBreakdown
+  rentNonrecoverableCosts: RentVsBuyRentCostBreakdown
+  buyerPortfolio: RentVsBuyPortfolioBreakdown
+  renterPortfolio: RentVsBuyPortfolioBreakdown
+  homeSale: RentVsBuyHomeSaleBreakdown
+  buyerTotalWealth: number
+  renterTotalWealth: number
+  wealthDelta: number
 }
 
 export interface RentVsBuyResults {
   rows: RentVsBuyYearRow[]
   breakEvenYear: number | null
   finalWealthDelta: number
+}
+
+export interface RentVsBuyOwnershipCostBreakdown {
+  closingCosts: number
+  mortgageInterest: number
+  propertyTax: number
+  maintenance: number
+  hoa: number
+  homeownersInsurance: number
+  taxBenefit: number
+  total: number
+}
+
+export interface RentVsBuyRentCostBreakdown {
+  rent: number
+  rentersInsurance: number
+  total: number
+}
+
+export interface RentVsBuyPortfolioBreakdown {
+  startingBalance: number
+  cashFlowContributions: number
+  investmentGrowth: number
+  total: number
+}
+
+export interface RentVsBuyHomeSaleBreakdown {
+  homeValue: number
+  sellingCosts: number
+  capitalGainsTax: number
+  mortgagePayoff: number
+  netSaleCash: number
 }
 
 function clampPercent(percent: number): number {
@@ -110,6 +143,24 @@ function maxMoney(left: number, right: number): number {
 
 function sumMoney(values: number[]): number {
   return values.reduce((total, value) => currency(total).add(value).value, 0)
+}
+
+function calculateOwnershipCostTotal(costs: Omit<RentVsBuyOwnershipCostBreakdown, 'total'>): number {
+  return roundMoney(subtractMoney(sumMoney([
+    costs.closingCosts,
+    costs.mortgageInterest,
+    costs.propertyTax,
+    costs.maintenance,
+    costs.hoa,
+    costs.homeownersInsurance,
+  ]), costs.taxBenefit))
+}
+
+function calculateRentCostTotal(costs: Omit<RentVsBuyRentCostBreakdown, 'total'>): number {
+  return sumMoney([
+    costs.rent,
+    costs.rentersInsurance,
+  ])
 }
 
 function discountMoney(amount: number, inflationRate: number, year: number): number {
@@ -233,10 +284,36 @@ export function computeRentVsBuy(inputs: RentVsBuyInputs): RentVsBuyResults {
   let homeValue = purchasePrice
   let prop13AssessedValue = purchasePrice
   let monthlyRent = roundMoney(inputs.monthlyRent)
-  let investedPortfolio = avoidedUpfrontInvestment
-  let foregoneUpfrontInvestment = avoidedUpfrontInvestment
-  let ownCumulativeCost = closingCosts
-  let rentCumulativeCost = 0
+  let buyerPortfolioValue = 0
+  let renterPortfolioValue = avoidedUpfrontInvestment
+
+  const buyNonrecoverableCosts: RentVsBuyOwnershipCostBreakdown = {
+    closingCosts,
+    mortgageInterest: 0,
+    propertyTax: 0,
+    maintenance: 0,
+    hoa: 0,
+    homeownersInsurance: 0,
+    taxBenefit: 0,
+    total: closingCosts,
+  }
+  const rentNonrecoverableCosts: RentVsBuyRentCostBreakdown = {
+    rent: 0,
+    rentersInsurance: 0,
+    total: 0,
+  }
+  const buyerPortfolio: RentVsBuyPortfolioBreakdown = {
+    startingBalance: 0,
+    cashFlowContributions: 0,
+    investmentGrowth: 0,
+    total: 0,
+  }
+  const renterPortfolio: RentVsBuyPortfolioBreakdown = {
+    startingBalance: avoidedUpfrontInvestment,
+    cashFlowContributions: 0,
+    investmentGrowth: 0,
+    total: avoidedUpfrontInvestment,
+  }
 
   const rows: RentVsBuyYearRow[] = []
 
@@ -299,33 +376,77 @@ export function computeRentVsBuy(inputs: RentVsBuyInputs): RentVsBuyResults {
       ? roundMoney(multiplyMoney(subtractMoney(itemizedDeduction, standardDeduction), marginalTaxRate))
       : 0
 
-    const annualOwnEconomicCostBeforeTax = sumMoney([
-      annualMortgageInterest,
-      annualPropertyTax,
-      annualMaintenance,
-      annualHoa,
-      annualHomeownersInsurance,
-    ])
-    const annualOwnEconomicCost = roundMoney(subtractMoney(annualOwnEconomicCostBeforeTax, taxBenefit))
-    const annualUpfrontOpportunityCost = roundMoney(multiplyMoney(foregoneUpfrontInvestment, investmentReturnRate))
+    const annualRentOnlyOutflow = roundMoney(multiplyMoney(monthlyRent, MONTHS_PER_YEAR))
+    const annualRentersInsuranceOutflow = roundMoney(subtractMoney(annualRentCashOutflow, annualRentOnlyOutflow))
 
-    const discountedOwnCost = discountMoney(
-      addMoney(annualOwnEconomicCost, annualUpfrontOpportunityCost),
-      inflationRate,
-      year,
+    buyNonrecoverableCosts.mortgageInterest = addMoney(
+      buyNonrecoverableCosts.mortgageInterest,
+      discountMoney(annualMortgageInterest, inflationRate, year),
     )
-    const discountedRentCost = discountMoney(annualRentCashOutflow, inflationRate, year)
+    buyNonrecoverableCosts.propertyTax = addMoney(
+      buyNonrecoverableCosts.propertyTax,
+      discountMoney(annualPropertyTax, inflationRate, year),
+    )
+    buyNonrecoverableCosts.maintenance = addMoney(
+      buyNonrecoverableCosts.maintenance,
+      discountMoney(annualMaintenance, inflationRate, year),
+    )
+    buyNonrecoverableCosts.hoa = addMoney(
+      buyNonrecoverableCosts.hoa,
+      discountMoney(annualHoa, inflationRate, year),
+    )
+    buyNonrecoverableCosts.homeownersInsurance = addMoney(
+      buyNonrecoverableCosts.homeownersInsurance,
+      discountMoney(annualHomeownersInsurance, inflationRate, year),
+    )
+    buyNonrecoverableCosts.taxBenefit = addMoney(
+      buyNonrecoverableCosts.taxBenefit,
+      discountMoney(taxBenefit, inflationRate, year),
+    )
+    buyNonrecoverableCosts.total = calculateOwnershipCostTotal(buyNonrecoverableCosts)
 
-    ownCumulativeCost = roundMoney(addMoney(ownCumulativeCost, discountedOwnCost))
-    rentCumulativeCost = roundMoney(addMoney(rentCumulativeCost, discountedRentCost))
+    rentNonrecoverableCosts.rent = addMoney(
+      rentNonrecoverableCosts.rent,
+      discountMoney(annualRentOnlyOutflow, inflationRate, year),
+    )
+    rentNonrecoverableCosts.rentersInsurance = addMoney(
+      rentNonrecoverableCosts.rentersInsurance,
+      discountMoney(annualRentersInsuranceOutflow, inflationRate, year),
+    )
+    rentNonrecoverableCosts.total = calculateRentCostTotal(rentNonrecoverableCosts)
 
-    foregoneUpfrontInvestment = roundMoney(addMoney(foregoneUpfrontInvestment, annualUpfrontOpportunityCost))
+    const buyerCashFlowContribution = maxMoney(subtractMoney(annualRentCashOutflow, annualOwnCashOutflow), 0)
+    const renterCashFlowContribution = maxMoney(subtractMoney(annualOwnCashOutflow, annualRentCashOutflow), 0)
+    const buyerPortfolioGrowth = roundMoney(multiplyMoney(buyerPortfolioValue, investmentReturnRate))
+    const renterPortfolioGrowth = roundMoney(multiplyMoney(renterPortfolioValue, investmentReturnRate))
 
-    const annualSavingsContribution = maxMoney(subtractMoney(annualOwnCashOutflow, annualRentCashOutflow), 0)
-    investedPortfolio = roundMoney(addMoney(
-      multiplyMoney(investedPortfolio, 1 + investmentReturnRate),
-      annualSavingsContribution,
-    ))
+    buyerPortfolioValue = roundMoney(sumMoney([
+      buyerPortfolioValue,
+      buyerPortfolioGrowth,
+      buyerCashFlowContribution,
+    ]))
+    renterPortfolioValue = roundMoney(sumMoney([
+      renterPortfolioValue,
+      renterPortfolioGrowth,
+      renterCashFlowContribution,
+    ]))
+
+    buyerPortfolio.cashFlowContributions = addMoney(
+      buyerPortfolio.cashFlowContributions,
+      discountMoney(buyerCashFlowContribution, inflationRate, year),
+    )
+    buyerPortfolio.investmentGrowth = addMoney(
+      buyerPortfolio.investmentGrowth,
+      discountMoney(buyerPortfolioGrowth, inflationRate, year),
+    )
+    renterPortfolio.cashFlowContributions = addMoney(
+      renterPortfolio.cashFlowContributions,
+      discountMoney(renterCashFlowContribution, inflationRate, year),
+    )
+    renterPortfolio.investmentGrowth = addMoney(
+      renterPortfolio.investmentGrowth,
+      discountMoney(renterPortfolioGrowth, inflationRate, year),
+    )
 
     homeValue = roundMoney(multiplyMoney(homeValue, 1 + appreciationRate))
     if (inputs.useCaliforniaProp13) {
@@ -349,18 +470,31 @@ export function computeRentVsBuy(inputs: RentVsBuyInputs): RentVsBuyResults {
       0,
     )
 
-    const discountedEquity = discountMoney(sellableEquity, inflationRate, year)
-    const discountedPortfolio = discountMoney(investedPortfolio, inflationRate, year)
+    const discountedHomeSaleCash = discountMoney(sellableEquity, inflationRate, year)
+    const discountedBuyerPortfolioValue = discountMoney(buyerPortfolioValue, inflationRate, year)
+    const discountedRenterPortfolioValue = discountMoney(renterPortfolioValue, inflationRate, year)
+    const buyerTotalWealth = addMoney(discountedHomeSaleCash, discountedBuyerPortfolioValue)
+    const renterTotalWealth = discountedRenterPortfolioValue
+
+    buyerPortfolio.total = discountedBuyerPortfolioValue
+    renterPortfolio.total = discountedRenterPortfolioValue
 
     rows.push({
       year,
-      ownCumulativeCost,
-      rentCumulativeCost,
-      homeEquity: discountedEquity,
-      investedPortfolio: discountedPortfolio,
-      capitalGainsTax: discountMoney(capitalGainsTax, inflationRate, year),
-      netOwnPosition: roundMoney(subtractMoney(discountedEquity, ownCumulativeCost)),
-      netRentPosition: roundMoney(subtractMoney(discountedPortfolio, rentCumulativeCost)),
+      buyNonrecoverableCosts: { ...buyNonrecoverableCosts },
+      rentNonrecoverableCosts: { ...rentNonrecoverableCosts },
+      buyerPortfolio: { ...buyerPortfolio },
+      renterPortfolio: { ...renterPortfolio },
+      homeSale: {
+        homeValue: discountMoney(homeValue, inflationRate, year),
+        sellingCosts: discountMoney(sellingCosts, inflationRate, year),
+        capitalGainsTax: discountMoney(capitalGainsTax, inflationRate, year),
+        mortgagePayoff: discountMoney(remainingBalance, inflationRate, year),
+        netSaleCash: discountedHomeSaleCash,
+      },
+      buyerTotalWealth,
+      renterTotalWealth,
+      wealthDelta: roundMoney(subtractMoney(buyerTotalWealth, renterTotalWealth)),
     })
 
     monthlyRent = roundMoney(multiplyMoney(monthlyRent, 1 + rentIncreaseRate))
@@ -369,12 +503,12 @@ export function computeRentVsBuy(inputs: RentVsBuyInputs): RentVsBuyResults {
     annualRentersInsurance = roundMoney(multiplyMoney(annualRentersInsurance, 1 + rentersInsuranceGrowthRate))
   }
 
-  const breakEvenYear = rows.find((row) => row.ownCumulativeCost <= row.rentCumulativeCost)?.year ?? null
+  const breakEvenYear = rows.find((row) => row.buyerTotalWealth >= row.renterTotalWealth)?.year ?? null
   const finalRow = rows.at(-1)
 
   return {
     rows,
     breakEvenYear,
-    finalWealthDelta: finalRow ? roundMoney(subtractMoney(finalRow.homeEquity, finalRow.investedPortfolio)) : 0,
+    finalWealthDelta: finalRow ? finalRow.wealthDelta : 0,
   }
 }

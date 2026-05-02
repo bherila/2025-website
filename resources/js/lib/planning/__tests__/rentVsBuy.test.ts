@@ -36,8 +36,8 @@ function makeInputs(overrides: Partial<RentVsBuyInputs> = {}): RentVsBuyInputs {
 }
 
 function annualCostIncrease(rows: RentVsBuyYearRow[], index: number): number {
-  return currency(rows[index]?.ownCumulativeCost ?? 0)
-    .subtract(index > 0 ? rows[index - 1]?.ownCumulativeCost ?? 0 : 0)
+  return currency(rows[index]?.buyNonrecoverableCosts.total ?? 0)
+    .subtract(index > 0 ? rows[index - 1]?.buyNonrecoverableCosts.total ?? 0 : 0)
     .value
 }
 
@@ -82,10 +82,10 @@ describe('computeRentVsBuy', () => {
     }))
 
     expect(result.breakEvenYear).toBe(1)
-    expect(result.rows[0]?.ownCumulativeCost).toBeLessThan(result.rows[0]?.rentCumulativeCost ?? 0)
+    expect(result.rows[0]?.buyerTotalWealth).toBeGreaterThanOrEqual(result.rows[0]?.renterTotalWealth ?? 0)
   })
 
-  it('changes the outcome when the horizon gets longer and investment returns are low', () => {
+  it('compares total wealth and compounds the outcome over longer horizons', () => {
     const shortHorizon = computeRentVsBuy(makeInputs({
       homePrice: 550_000,
       monthlyRent: 2_850,
@@ -101,7 +101,7 @@ describe('computeRentVsBuy', () => {
       timeHorizonYears: 15,
     }))
 
-    expect(shortHorizon.breakEvenYear).toBeNull()
+    expect(shortHorizon.breakEvenYear).not.toBeNull()
     expect(longHorizon.breakEvenYear).not.toBeNull()
     expect(longHorizon.finalWealthDelta).toBeGreaterThan(shortHorizon.finalWealthDelta)
   })
@@ -132,7 +132,7 @@ describe('computeRentVsBuy', () => {
       inflationRatePercent: 0,
     }))
 
-    expect((overCap.rows[0]?.ownCumulativeCost ?? 0) - (underCap.rows[0]?.ownCumulativeCost ?? 0)).toBeCloseTo(2_700, 0)
+    expect((overCap.rows[0]?.buyNonrecoverableCosts.total ?? 0) - (underCap.rows[0]?.buyNonrecoverableCosts.total ?? 0)).toBeCloseTo(2_700, 0)
   })
 
   it('applies the marginal rate when property tax stays below the SALT cap', () => {
@@ -161,7 +161,7 @@ describe('computeRentVsBuy', () => {
       inflationRatePercent: 0,
     }))
 
-    expect((higherTax.rows[0]?.ownCumulativeCost ?? 0) - (lowerTax.rows[0]?.ownCumulativeCost ?? 0)).toBeCloseTo(700, 0)
+    expect((higherTax.rows[0]?.buyNonrecoverableCosts.total ?? 0) - (lowerTax.rows[0]?.buyNonrecoverableCosts.total ?? 0)).toBeCloseTo(700, 0)
   })
 
   it('does not create a tax benefit when the standard deduction still wins', () => {
@@ -186,7 +186,7 @@ describe('computeRentVsBuy', () => {
       inflationRatePercent: 0,
     }))
 
-    expect(highTaxRate.rows[0]?.ownCumulativeCost).toBeCloseTo(noTaxRate.rows[0]?.ownCumulativeCost ?? 0, 2)
+    expect(highTaxRate.rows[0]?.buyNonrecoverableCosts.total).toBeCloseTo(noTaxRate.rows[0]?.buyNonrecoverableCosts.total ?? 0, 2)
   })
 
   it('handles zero down payment without producing invalid values', () => {
@@ -196,11 +196,11 @@ describe('computeRentVsBuy', () => {
     }))
 
     expect(result.rows).toHaveLength(3)
-    expect(Number.isFinite(result.rows[0]?.homeEquity ?? Number.NaN)).toBe(true)
-    expect(Number.isFinite(result.rows[0]?.ownCumulativeCost ?? Number.NaN)).toBe(true)
+    expect(Number.isFinite(result.rows[0]?.homeSale.netSaleCash ?? Number.NaN)).toBe(true)
+    expect(Number.isFinite(result.rows[0]?.buyNonrecoverableCosts.total ?? Number.NaN)).toBe(true)
   })
 
-  it('counts compounded opportunity cost for a full-cash purchase', () => {
+  it('counts compounded opportunity cost through the renter portfolio for a full-cash purchase', () => {
     const result = computeRentVsBuy(makeInputs({
       homePrice: 100_000,
       downPaymentPercent: 100,
@@ -225,10 +225,13 @@ describe('computeRentVsBuy', () => {
     }))
 
     expect(result.breakEvenYear).toBeNull()
-    expect(result.rows[0]?.ownCumulativeCost).toBeCloseTo(10_000, 2)
-    expect(result.rows[1]?.ownCumulativeCost).toBeCloseTo(21_000, 2)
-    expect(result.rows[2]?.ownCumulativeCost).toBeCloseTo(33_100, 2)
-    expect(result.rows[2]?.investedPortfolio).toBeCloseTo(133_100, 2)
+    expect(result.rows[0]?.buyNonrecoverableCosts.total).toBeCloseTo(0, 2)
+    expect(result.rows[0]?.rentNonrecoverableCosts.total).toBeCloseTo(0, 2)
+    expect(result.rows[0]?.buyerTotalWealth).toBeCloseTo(100_000, 2)
+    expect(result.rows[0]?.renterPortfolio.total).toBeCloseTo(110_000, 2)
+    expect(result.rows[1]?.renterPortfolio.total).toBeCloseTo(121_000, 2)
+    expect(result.rows[2]?.renterPortfolio.total).toBeCloseTo(133_100, 2)
+    expect(result.rows[2]?.wealthDelta).toBeCloseTo(-33_100, 2)
   })
 
   it('treats a zero-rate or zero-term mortgage as a full-cash purchase', () => {
@@ -248,7 +251,7 @@ describe('computeRentVsBuy', () => {
       inflationRatePercent: 0,
     }))
 
-    expect(result.rows[0]?.homeEquity).toBeCloseTo(282_000, 2)
+    expect(result.rows[0]?.homeSale.netSaleCash).toBeCloseTo(282_000, 2)
   })
 
   it('treats monthly and annual HOA and renter insurance periods equivalently', () => {
@@ -316,7 +319,7 @@ describe('computeRentVsBuy', () => {
     }))
 
     expect(annualCostIncrease(growingCosts.rows, 1) - annualCostIncrease(flatCosts.rows, 1)).toBeCloseTo(360, 2)
-    expect((growingCosts.rows[1]?.rentCumulativeCost ?? 0) - (flatCosts.rows[1]?.rentCumulativeCost ?? 0)).toBeCloseTo(60, 2)
+    expect((growingCosts.rows[1]?.rentNonrecoverableCosts.total ?? 0) - (flatCosts.rows[1]?.rentNonrecoverableCosts.total ?? 0)).toBeCloseTo(60, 2)
 
     // Year 1 must not include growth — growth is applied at year-end and first
     // shows up in year 2. This guards against the year-2 row being accidentally
@@ -407,9 +410,9 @@ describe('computeRentVsBuy', () => {
       inflationRatePercent: 0,
     }))
 
-    expect(single.rows[0]?.capitalGainsTax).toBeCloseTo(50_000, 2)
-    expect(married.rows[0]?.capitalGainsTax).toBeCloseTo(0, 2)
-    expect((married.rows[0]?.homeEquity ?? 0) - (single.rows[0]?.homeEquity ?? 0)).toBeCloseTo(50_000, 2)
+    expect(single.rows[0]?.homeSale.capitalGainsTax).toBeCloseTo(50_000, 2)
+    expect(married.rows[0]?.homeSale.capitalGainsTax).toBeCloseTo(0, 2)
+    expect((married.rows[0]?.homeSale.netSaleCash ?? 0) - (single.rows[0]?.homeSale.netSaleCash ?? 0)).toBeCloseTo(50_000, 2)
   })
 
   it('increases deductible mortgage interest once acquisition debt amortizes below the cap', () => {
