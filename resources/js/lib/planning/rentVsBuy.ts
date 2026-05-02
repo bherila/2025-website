@@ -24,13 +24,16 @@ export interface RentVsBuyInputs {
   useCaliforniaProp13: boolean
   hoaAmount: number
   hoaPeriod: ExpensePeriod
+  hoaGrowthPercent: number
   homeownersInsuranceAnnual: number
+  homeownersInsuranceGrowthPercent: number
   maintenancePercent: number
   appreciationPercent: number
   sellingCostsPercent: number
   monthlyRent: number
   rentersInsuranceAmount: number
   rentersInsurancePeriod: ExpensePeriod
+  rentersInsuranceGrowthPercent: number
   rentIncreasePercent: number
   investmentReturnPercent: number
   marginalTaxRatePercent: number
@@ -124,12 +127,6 @@ function getAnnualizedExpense(amount: number, period: ExpensePeriod): number {
     : roundMoney(amount)
 }
 
-function getMonthlyExpense(amount: number, period: ExpensePeriod): number {
-  return period === 'monthly'
-    ? roundMoney(amount)
-    : divideMoney(amount, MONTHS_PER_YEAR)
-}
-
 function getClosingCosts(purchasePrice: number, inputs: RentVsBuyInputs): number {
   if (inputs.closingCostsType === 'amount') {
     return roundMoney(inputs.closingCostsValue)
@@ -204,9 +201,12 @@ export function computeRentVsBuy(inputs: RentVsBuyInputs): RentVsBuyResults {
   const downPaymentRate = toRate(inputs.downPaymentPercent)
   const mortgageRate = toRate(inputs.mortgageRatePercent)
   const propertyTaxRate = toRate(inputs.propertyTaxRatePercent)
+  const hoaGrowthRate = toRate(inputs.hoaGrowthPercent)
+  const homeownersInsuranceGrowthRate = toRate(inputs.homeownersInsuranceGrowthPercent)
   const maintenanceRate = toRate(inputs.maintenancePercent)
   const appreciationRate = toRate(inputs.appreciationPercent)
   const sellingCostsRate = toRate(inputs.sellingCostsPercent)
+  const rentersInsuranceGrowthRate = toRate(inputs.rentersInsuranceGrowthPercent)
   const rentIncreaseRate = toRate(inputs.rentIncreasePercent)
   const investmentReturnRate = toRate(inputs.investmentReturnPercent)
   const marginalTaxRate = toRate(inputs.marginalTaxRatePercent)
@@ -225,10 +225,9 @@ export function computeRentVsBuy(inputs: RentVsBuyInputs): RentVsBuyResults {
     ? roundMoney(addMoney(downPayment, closingCosts))
     : roundMoney(addMoney(purchasePrice, closingCosts))
 
-  const monthlyHomeownersInsurance = divideMoney(inputs.homeownersInsuranceAnnual, MONTHS_PER_YEAR)
-  const monthlyRentersInsurance = getMonthlyExpense(inputs.rentersInsuranceAmount, inputs.rentersInsurancePeriod)
-  const monthlyHoa = getMonthlyExpense(inputs.hoaAmount, inputs.hoaPeriod)
-  const annualHoa = getAnnualizedExpense(inputs.hoaAmount, inputs.hoaPeriod)
+  let annualHomeownersInsurance = roundMoney(inputs.homeownersInsuranceAnnual)
+  let annualRentersInsurance = getAnnualizedExpense(inputs.rentersInsuranceAmount, inputs.rentersInsurancePeriod)
+  let annualHoa = getAnnualizedExpense(inputs.hoaAmount, inputs.hoaPeriod)
 
   let remainingBalance = loanPrincipal
   let homeValue = purchasePrice
@@ -246,6 +245,9 @@ export function computeRentVsBuy(inputs: RentVsBuyInputs): RentVsBuyResults {
     const annualMaintenance = roundMoney(multiplyMoney(homeValue, maintenanceRate))
     const monthlyPropertyTax = divideMoney(annualPropertyTax, MONTHS_PER_YEAR)
     const monthlyMaintenance = divideMoney(annualMaintenance, MONTHS_PER_YEAR)
+    const monthlyHomeownersInsurance = divideMoney(annualHomeownersInsurance, MONTHS_PER_YEAR)
+    const monthlyRentersInsurance = divideMoney(annualRentersInsurance, MONTHS_PER_YEAR)
+    const monthlyHoa = divideMoney(annualHoa, MONTHS_PER_YEAR)
 
     let annualMortgageInterest = 0
     let annualDeductibleMortgageInterest = 0
@@ -301,7 +303,7 @@ export function computeRentVsBuy(inputs: RentVsBuyInputs): RentVsBuyResults {
       annualPropertyTax,
       annualMaintenance,
       annualHoa,
-      roundMoney(inputs.homeownersInsuranceAnnual),
+      annualHomeownersInsurance,
     ])
     const annualOwnEconomicCost = roundMoney(subtractMoney(annualOwnEconomicCostBeforeTax, taxBenefit))
 
@@ -354,6 +356,9 @@ export function computeRentVsBuy(inputs: RentVsBuyInputs): RentVsBuyResults {
     })
 
     monthlyRent = roundMoney(multiplyMoney(monthlyRent, 1 + rentIncreaseRate))
+    annualHoa = roundMoney(multiplyMoney(annualHoa, 1 + hoaGrowthRate))
+    annualHomeownersInsurance = roundMoney(multiplyMoney(annualHomeownersInsurance, 1 + homeownersInsuranceGrowthRate))
+    annualRentersInsurance = roundMoney(multiplyMoney(annualRentersInsurance, 1 + rentersInsuranceGrowthRate))
   }
 
   const breakEvenYear = rows.find((row) => row.ownCumulativeCost <= row.rentCumulativeCost)?.year ?? null
