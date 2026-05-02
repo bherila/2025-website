@@ -10,6 +10,10 @@ import type { FormId } from './formRegistry'
 import { WorksheetModal } from './WorksheetModal'
 
 interface DockActionsValue {
+  /** Export the current tax preview workbook. */
+  exportXlsx: () => void
+  /** True while the current tax preview workbook is being generated. */
+  isExportingXlsx: boolean
   /** Open the document review modal for a specific K-1 document by id. */
   reviewK1Doc: (docId: number) => void
   /** Open the review modal in "select a document" mode (no specific doc). */
@@ -30,7 +34,11 @@ const DockActionsContext = createContext<DockActionsValue | null>(null)
 
 interface DockActionsProviderProps {
   children: ReactNode
+  exportXlsx?: () => void
+  isExportingXlsx?: boolean
 }
+
+const noopExportXlsx = (): void => {}
 
 /**
  * Manages imperative dock-mode actions (modal opening, bulk K-1 mutations)
@@ -38,7 +46,7 @@ interface DockActionsProviderProps {
  * `useDockActions()` so they can wire up callbacks without threading
  * handlers through the registry shape.
  */
-export function DockActionsProvider({ children }: DockActionsProviderProps): React.ReactElement {
+export function DockActionsProvider({ children, exportXlsx, isExportingXlsx }: DockActionsProviderProps): React.ReactElement {
   const { accountDocuments, refreshAll, year: selectedYear } = useTaxPreview()
   const [reviewOpen, setReviewOpen] = useState(false)
   const [reviewDoc, setReviewDoc] = useState<TaxDocument | undefined>(undefined)
@@ -99,6 +107,8 @@ export function DockActionsProvider({ children }: DockActionsProviderProps): Rea
 
   const value = useMemo<DockActionsValue>(
     () => ({
+      exportXlsx: exportXlsx ?? noopExportXlsx,
+      isExportingXlsx: isExportingXlsx ?? false,
       reviewK1Doc,
       openReviewQueue,
       bulkSetSbpElection,
@@ -107,7 +117,7 @@ export function DockActionsProvider({ children }: DockActionsProviderProps): Rea
       paletteOpen,
       setPaletteOpen,
     }),
-    [reviewK1Doc, openReviewQueue, bulkSetSbpElection, openWorksheet, closeWorksheet, paletteOpen],
+    [exportXlsx, isExportingXlsx, reviewK1Doc, openReviewQueue, bulkSetSbpElection, openWorksheet, closeWorksheet, paletteOpen],
   )
 
   return (

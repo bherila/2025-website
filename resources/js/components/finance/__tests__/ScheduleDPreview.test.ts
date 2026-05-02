@@ -130,6 +130,50 @@ describe('computeScheduleD', () => {
     expect(result.schD.schD_line16).toBe(650)
   })
 
+  it('does not use combined 1099-B total as short-term fallback when long-term detail is present', () => {
+    const result = computeScheduleD([], [
+      make1099DivDoc({
+        id: 4,
+        form_type: 'broker_1099',
+        parsed_data: {
+          payer_name: 'Broker',
+          total_realized_gain_loss: 200,
+          b_lt_gain_loss: 200,
+        },
+      }),
+    ])
+
+    expect(result.schD.schD_line1a_gain_loss).toBe(0)
+    expect(result.schD.schD_line8a_gain_loss).toBe(200)
+    expect(result.schD.schD_line16).toBe(200)
+  })
+
+  it('routes AI-imported 1099-B transaction lots to Form 8949 Schedule D lines', () => {
+    const result = computeScheduleD([], [
+      make1099DivDoc({
+        id: 5,
+        form_type: '1099_b',
+        parsed_data: {
+          payer_name: 'Broker',
+          transactions: [
+            { description: 'Short covered', realized_gain_loss: 100, is_short_term: true, form_8949_box: 'A', is_covered: true },
+            { description: 'Short noncovered', realized_gain_loss: 50, is_short_term: true, form_8949_box: 'B', is_covered: false },
+            { description: 'Long covered', realized_gain_loss: 200, is_short_term: false, form_8949_box: 'D', is_covered: true },
+            { description: 'Long noncovered', realized_gain_loss: -25, is_short_term: false, form_8949_box: 'E', is_covered: false },
+          ],
+        },
+      }),
+    ])
+
+    expect(result.schD.schD_line1a_gain_loss).toBe(0)
+    expect(result.schD.schD_line1b_gain_loss).toBe(100)
+    expect(result.schD.schD_line2_gain_loss).toBe(50)
+    expect(result.schD.schD_line8a_gain_loss).toBe(0)
+    expect(result.schD.schD_line8b_gain_loss).toBe(200)
+    expect(result.schD.schD_line9_gain_loss).toBe(-25)
+    expect(result.schD.schD_line16).toBe(325)
+  })
+
   it('splits Box 11C into 60/40 LT/ST and routes Box 11S to lines 5/12 by character', () => {
     const result = computeScheduleD([makeK1WithBox11S()], [])
 
