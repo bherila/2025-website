@@ -92,8 +92,8 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
         return
       }
       // Don't truncate when an open Dialog (worksheet, K-1 review, etc.) is
-      // expected to handle Escape itself. Radix sets [data-state="open"].
-      if (document.querySelector('[role="dialog"][data-state="open"]')) {
+      // expected to handle Escape itself.
+      if (document.querySelector('[role="dialog"][data-open]')) {
         return
       }
       truncateTo(columnDepth - 1)

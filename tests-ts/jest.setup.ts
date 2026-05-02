@@ -25,15 +25,21 @@ Object.defineProperty(window, 'scrollTo', {
   value: jest.fn(),
 });
 
-// Mock window.scrollIntoView and Element.prototype.scrollIntoView for Radix UI Select
+// Mock window.scrollIntoView and Element.prototype.scrollIntoView for positioned UI controls
 Object.defineProperty(window, 'scrollIntoView', {
   writable: true,
   value: jest.fn(),
 });
 
-// Also mock on Element.prototype since Radix may call it on elements
+// Also mock on Element.prototype since headless UI controls may call it on elements
 if (typeof Element !== 'undefined') {
   Element.prototype.scrollIntoView = jest.fn()
+}
+
+// Base UI dispatches PointerEvent from non-native checkbox/switch roots.
+// jsdom does not provide PointerEvent by default.
+if (!window.PointerEvent) {
+  window.PointerEvent = MouseEvent as unknown as typeof PointerEvent
 }
 
 // Base UI ScrollArea calls element.getAnimations() to wait for animations
@@ -51,7 +57,7 @@ if (typeof Element !== 'undefined' && !Element.prototype.getAnimations) {
   })
 ) as jest.Mock
 
-// Provide a minimal ResizeObserver mock for components that rely on it (Radix use-size)
+// Provide a minimal ResizeObserver mock for components that rely on element sizing.
 // Some tests render components which use ResizeObserver; Jest DOM doesn't provide it by default.
 class ResizeObserverMock {
   observe() {}

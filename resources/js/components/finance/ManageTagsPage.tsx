@@ -155,7 +155,7 @@ function TaxCharacteristicCombobox({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] max-w-sm p-0" align="start">
+      <PopoverContent className="w-[--anchor-width] max-w-sm p-0" align="start">
         <div className="p-2 border-b">
           <Input
             placeholder="Search tax characteristics…"
