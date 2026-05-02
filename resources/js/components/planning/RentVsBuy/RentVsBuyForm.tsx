@@ -83,6 +83,22 @@ function parseNumber(raw: string): number {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+export function getConvertedClosingCostsValue(inputs: RentVsBuyInputs, nextType: ClosingCostsType): number {
+  if (inputs.closingCostsType === nextType) {
+    return inputs.closingCostsValue
+  }
+
+  if (nextType === 'amount') {
+    return currency(inputs.homePrice).multiply(inputs.closingCostsValue).divide(100).value
+  }
+
+  if (inputs.homePrice <= 0) {
+    return 0
+  }
+
+  return currency(inputs.closingCostsValue).divide(inputs.homePrice).multiply(100).value
+}
+
 function NumberField({ label, value, className, labelClassName, suffix, onChange }: NumberFieldProps): ReactElement {
   const inputId = useId()
   const [rawValue, setRawValue] = useState(() => formatNumber(value))
@@ -268,6 +284,14 @@ export default function RentVsBuyForm({ inputs, onChange }: RentVsBuyFormProps):
     })
   }
 
+  function updateClosingCostsType(value: ClosingCostsType): void {
+    onChange({
+      ...inputs,
+      closingCostsType: value,
+      closingCostsValue: getConvertedClosingCostsValue(inputs, value),
+    })
+  }
+
   return (
     <div className="grid gap-6 xl:grid-cols-[1.2fr_1fr_1fr]">
       <Card className="h-full">
@@ -288,16 +312,19 @@ export default function RentVsBuyForm({ inputs, onChange }: RentVsBuyFormProps):
             value={inputs.closingCostsValue}
             type={inputs.closingCostsType}
             onValueChange={(value) => update('closingCostsValue', value)}
-            onTypeChange={(value) => update('closingCostsType', value)}
+            onTypeChange={updateClosingCostsType}
           />
           <div className="grid gap-3 sm:col-span-2 sm:grid-cols-[minmax(0,1fr)_12rem] sm:items-end">
             <NumberField label="Property tax rate" value={inputs.propertyTaxRatePercent} suffix="% / yr" onChange={(value) => update('propertyTaxRatePercent', value)} />
-            <label className="flex h-9 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm text-muted-foreground shadow-sm">
+            <label className="flex min-h-9 items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm text-muted-foreground shadow-sm">
               <Checkbox
                 checked={inputs.useCaliforniaProp13}
                 onCheckedChange={(checked) => update('useCaliforniaProp13', checked === true)}
               />
-              CA Prop 13
+              <span className="grid leading-tight">
+                <span>CA Prop 13</span>
+                <span className="text-xs text-muted-foreground/80">Caps assessed value growth at 2% / yr</span>
+              </span>
             </label>
           </div>
           <div className="grid gap-4 sm:col-span-2 lg:grid-cols-[minmax(0,1fr)_10rem]">
@@ -311,7 +338,7 @@ export default function RentVsBuyForm({ inputs, onChange }: RentVsBuyFormProps):
             <NumberField label="HOA growth" value={inputs.hoaGrowthPercent} suffix="% / yr" onChange={(value) => update('hoaGrowthPercent', value)} />
           </div>
           <div className="grid gap-4 sm:col-span-2 lg:grid-cols-[minmax(0,1fr)_10rem]">
-            <MoneyField label="Homeowners insurance" value={inputs.homeownersInsuranceAnnual} onChange={(value) => update('homeownersInsuranceAnnual', value)} />
+            <MoneyField label="Homeowners insurance (annual)" value={inputs.homeownersInsuranceAnnual} onChange={(value) => update('homeownersInsuranceAnnual', value)} />
             <NumberField
               label="Insurance growth"
               value={inputs.homeownersInsuranceGrowthPercent}

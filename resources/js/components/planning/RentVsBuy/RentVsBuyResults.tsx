@@ -111,7 +111,7 @@ export default function RentVsBuyResults({ results }: RentVsBuyResultsProps): Re
                     <TableHead className="text-right">Buy cost</TableHead>
                     <TableHead className="text-right">Rent cost</TableHead>
                     <TableHead className="text-right">Sellable equity</TableHead>
-                    <TableHead className="text-right">Cap. gains tax</TableHead>
+                    <TableHead className="text-right">Tax if sold</TableHead>
                     <TableHead className="text-right">Portfolio</TableHead>
                     <TableHead className="text-right">Net own</TableHead>
                     <TableHead className="text-right">Net rent</TableHead>

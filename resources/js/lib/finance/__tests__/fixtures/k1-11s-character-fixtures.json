@@ -1,0 +1,30 @@
+[
+  {
+    "notes": "Net short-term capital loss",
+    "expected": "short"
+  },
+  {
+    "notes": "ST capital gain",
+    "expected": "short"
+  },
+  {
+    "notes": "long-term capital gain, assets held more than 3 years",
+    "expected": "long"
+  },
+  {
+    "notes": "LT capital loss",
+    "expected": "long"
+  },
+  {
+    "notes": "shortterm capital loss",
+    "expected": null
+  },
+  {
+    "notes": "Partner address: 123 Main St., Suite 4; 1st floor; contact St. Louis office. Supplemental statement does not provide holding period.",
+    "expected": null
+  },
+  {
+    "notes": "Statement includes short-term and long-term capital gain subtotals",
+    "expected": null
+  }
+]

@@ -14,11 +14,19 @@ export type InvoiceLineTimeEntry = z.infer<typeof InvoiceLineTimeEntrySchema>
 
 // A single deferred time entry that did not fit the retainer capacity this cycle.
 // Surfaced under the invoice's line items so admins can see what is rolling forward.
+export const DeferredPendingBilledInvoiceSchema = z.object({
+  id: z.number(),
+  invoice_number: z.string().nullable(),
+  issue_date: z.string().nullable(),
+})
+export type DeferredPendingBilledInvoice = z.infer<typeof DeferredPendingBilledInvoiceSchema>
+
 export const DeferredPendingEntrySchema = z.object({
   id: z.number(),
   hours: z.number(),
   date_worked: z.string(),
   name: z.string().nullable(),
+  billed_invoice: DeferredPendingBilledInvoiceSchema.optional(),
 })
 export type DeferredPendingEntry = z.infer<typeof DeferredPendingEntrySchema>
 

@@ -52,6 +52,24 @@ describe('buildTaxWorkbook', () => {
     expect(vRow!.note ?? '').not.toMatch(/UBIA/)
   })
 
+  it('normalizes lowercase K-1 code rows when exporting workbook sheets', () => {
+    const workbook = buildTaxWorkbook({
+      year: 2025,
+      k1Docs: [{
+        entityName: 'Lowercase LP',
+        fields: {},
+        codes: { '11': [{ code: 's', value: '-100', character: 'short' }] },
+      }],
+    })
+
+    const k1Sheet = workbook.sheets.find(s => s.name === 'K-1 Lowercase LP')
+    expect(k1Sheet).toBeDefined()
+    const row = k1Sheet!.rows.find(r => r.line === '11S')
+    expect(row).toBeDefined()
+    expect(row!.note).toMatch(/Character: short-term/)
+    expect(row!.note).toMatch(/Sch D line 5/)
+  })
+
   it('emits only Schedule B when only scheduleB is populated', () => {
     const workbook = buildTaxWorkbook({
       year: 2025,

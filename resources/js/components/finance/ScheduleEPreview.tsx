@@ -147,9 +147,9 @@ export function computeScheduleELines(
     const box11ZZOtherIncome = sumK1CodeItems(data, '11', 'ZZ')
     // Box 13ZZ items are reported as positive magnitudes representing deductions.
     const box13ZZOtherDeductions = sumAbsK1CodeItems(data, '13', 'ZZ')
-    const box13HInvestmentInterestDeduction = form4952?.invIntSources
+    const box13HInvestmentInterestDeduction = (form4952?.invIntSources ?? [])
       .filter((source) => source.docId === doc.id && source.box === '13' && source.scheduleEDeductionEligible)
-      .reduce((acc, source) => acc.add(source.allowedAmount ?? 0), currency(0)).value ?? 0
+      .reduce((acc, source) => acc.add(source.allowedAmount ?? 0), currency(0)).value
 
     const netPassive = currency(box2NetRentalRealEstate).add(box3OtherNetRental).value
     const netNonpassive = currency(box1OrdinaryIncome)
