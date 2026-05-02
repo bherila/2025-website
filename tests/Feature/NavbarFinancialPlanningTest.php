@@ -21,7 +21,7 @@ class NavbarFinancialPlanningTest extends TestCase
         $this->assertSame('dropdown', $financialPlanning['type']);
         $this->assertSame([
             '/financial-planning',
-            '/financial-planning/solo-401k',
+            '/financial-planning/retirement-contribution-calculator',
             '/financial-planning/rent-vs-buy',
         ], array_column($financialPlanning['items'], 'href'));
     }

@@ -1,6 +1,13 @@
 'use client'
 
-import { Callout, FormBlock, FormLine, FormSubLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
+import {
+  Callout,
+  FormBlock,
+  FormLine,
+  FormSubLine,
+  FormTotalLine,
+  InfoTooltip,
+} from '@/components/finance/tax-preview-primitives'
 import type { Se401kInputs, Se401kLines } from '@/lib/planning/solo401k'
 import { computeSe401k } from '@/lib/planning/solo401k'
 
@@ -17,7 +24,7 @@ export default function SoloSE401kForm({ inputs, readOnly = false }: SoloSE401kF
     return (
       <Callout kind="info" title="No Schedule SE net earnings entered">
         <p>
-          Enter self-employment net earnings above to compute Solo 401(k) contribution room.
+          Enter self-employment net earnings above to compute self-employed 401(k) contribution room.
         </p>
       </Callout>
     )
@@ -26,7 +33,7 @@ export default function SoloSE401kForm({ inputs, readOnly = false }: SoloSE401kF
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">
-        IRS Pub 560 — Solo 401(k) for Schedule C / partnership self-employment earnings.
+        IRS Pub 560 — self-employed 401(k) for Schedule C / partnership self-employment earnings.
         Employer contribution uses the 20% rate (not 25%) because the base already excludes
         the employer&apos;s share. Age 50+ catch-up of ${lines.limits.catchUpAge50.toLocaleString()}{' '}
         is shown for reference but not added automatically.
@@ -40,7 +47,15 @@ export default function SoloSE401kForm({ inputs, readOnly = false }: SoloSE401kF
 
       <FormBlock title="Employee deferral — §402(g)">
         <FormLine
-          label={`${inputs.year} employee deferral limit`}
+          label={(
+            <>
+              {inputs.year} employee deferral limit
+              <InfoTooltip>
+                The 402(g) elective deferral limit is shared across 401(k), 403(b), SIMPLE, SARSEP,
+                and self-employed 401(k) employee deferrals for the year.
+              </InfoTooltip>
+            </>
+          )}
           value={lines.limits.employeeDeferral}
         />
         <FormLine label="Already deferred via W-2" value={-inputs.w2EmployeePretaxDeferred} />
@@ -53,13 +68,24 @@ export default function SoloSE401kForm({ inputs, readOnly = false }: SoloSE401kF
       </FormBlock>
 
       <FormBlock title="Overall §415(c) cap">
-        <FormLine label={`${inputs.year} overall annual additions cap`} value={lines.limits.overallCap} />
+        <FormLine
+          label={(
+            <>
+              {inputs.year} overall annual additions cap
+              <InfoTooltip>
+                Section 415(c) generally limits annual additions to a defined contribution plan,
+                excluding age-50 catch-up contributions.
+              </InfoTooltip>
+            </>
+          )}
+          value={lines.limits.overallCap}
+        />
         <FormLine label="Less: W-2 deferrals counted toward the cap" value={-inputs.w2EmployeePretaxDeferred} />
         <FormTotalLine label="Remaining §415(c) room" value={lines.overallCap} />
       </FormBlock>
 
       <FormTotalLine
-        label="Recommended Solo 401(k) contribution (→ Schedule 1 line 16)"
+        label="Recommended self-employed 401(k) contribution (→ Schedule 1 line 16)"
         value={lines.recommendedContribution}
         double
       />

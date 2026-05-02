@@ -13,9 +13,9 @@ interface CalculatorCard {
 
 const CALCULATORS: CalculatorCard[] = [
   {
-    title: 'Solo 401(k) Contributions',
-    description: 'Compute your Solo 401(k) employee deferral and employer contribution room using IRS Pub 560 rules.',
-    href: '/financial-planning/solo-401k',
+    title: 'Retirement Contributions',
+    description: 'Estimate W-2, self-employed 401(k), Traditional IRA, and Roth IRA contribution room.',
+    href: '/financial-planning/retirement-contribution-calculator',
     shipped: true,
   },
   {

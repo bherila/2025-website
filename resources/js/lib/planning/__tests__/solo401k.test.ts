@@ -1,8 +1,11 @@
 import currency from 'currency.js'
 
 import {
+  computeIraContribution,
+  computeRetirementContributions,
   computeSe401k,
   estimateDeductibleSeTax,
+  RETIREMENT_LIMITS,
   SE_401K_LIMITS,
   totalContributionWithCatchup,
 } from '../solo401k'
@@ -95,6 +98,15 @@ describe('computeSe401k', () => {
     })
     expect(result.employeeDeferralRoom).toBe(0)
   })
+
+  it('includes 2026 401(k) and Social Security wage-base limits', () => {
+    expect(SE_401K_LIMITS[2026]).toEqual({
+      employeeDeferral: 24_500,
+      catchUpAge50: 8_000,
+      overallCap: 72_000,
+      ssWageBase: 184_500,
+    })
+  })
 })
 
 describe('estimateDeductibleSeTax', () => {
@@ -157,5 +169,181 @@ describe('totalContributionWithCatchup', () => {
       w2EmployeePretaxDeferred: 0,
     })
     expect(totalContributionWithCatchup(lowLines, true)).toBe(lowLines.compensationBase)
+  })
+})
+
+describe('computeIraContribution', () => {
+  it('includes 2026 IRA limits', () => {
+    expect(RETIREMENT_LIMITS[2026]!.iraContribution).toBe(7_500)
+    expect(RETIREMENT_LIMITS[2026]!.iraCatchUpAge50).toBe(1_100)
+  })
+
+  it('caps combined traditional and Roth IRA contributions at the annual limit', () => {
+    const result = computeIraContribution({
+      year: 2025,
+      eligibleCompensation: 100_000,
+      filingStatus: 'single',
+      includeCatchup: false,
+      magi: 50_000,
+      taxpayerCoveredByWorkplacePlan: false,
+      spouseCoveredByWorkplacePlan: false,
+      traditionalIraContribution: 5_000,
+      rothIraContribution: 4_000,
+    })
+
+    expect(result.contributionLimit).toBe(7_000)
+    expect(result.excessContribution).toBe(2_000)
+  })
+
+  it('caps IRA contributions at eligible compensation when earnings are low', () => {
+    const result = computeIraContribution({
+      year: 2025,
+      eligibleCompensation: 3_000,
+      filingStatus: 'single',
+      includeCatchup: true,
+      magi: 50_000,
+      taxpayerCoveredByWorkplacePlan: false,
+      spouseCoveredByWorkplacePlan: false,
+      traditionalIraContribution: 7_000,
+      rothIraContribution: 0,
+    })
+
+    expect(result.annualLimit).toBe(8_000)
+    expect(result.contributionLimit).toBe(3_000)
+    expect(result.excessContribution).toBe(4_000)
+  })
+
+  it('phases out Roth IRA eligibility across the MAGI range', () => {
+    const result = computeIraContribution({
+      year: 2025,
+      eligibleCompensation: 100_000,
+      filingStatus: 'single',
+      includeCatchup: false,
+      magi: 157_500,
+      taxpayerCoveredByWorkplacePlan: false,
+      spouseCoveredByWorkplacePlan: false,
+      traditionalIraContribution: 0,
+      rothIraContribution: 7_000,
+    })
+
+    expect(result.rothAllowedContribution).toBe(3_500)
+    expect(result.rothExcessContribution).toBe(3_500)
+  })
+
+  it('disallows Roth IRA contributions above the MAGI phaseout range', () => {
+    const result = computeIraContribution({
+      year: 2025,
+      eligibleCompensation: 100_000,
+      filingStatus: 'marriedFilingSeparately',
+      includeCatchup: false,
+      magi: 10_000,
+      taxpayerCoveredByWorkplacePlan: false,
+      spouseCoveredByWorkplacePlan: false,
+      traditionalIraContribution: 0,
+      rothIraContribution: 7_000,
+    })
+
+    expect(result.rothAllowedContribution).toBe(0)
+    expect(result.rothExcessContribution).toBe(7_000)
+  })
+
+  it('phases out traditional IRA deductibility when the taxpayer is covered by a workplace plan', () => {
+    const result = computeIraContribution({
+      year: 2025,
+      eligibleCompensation: 100_000,
+      filingStatus: 'single',
+      includeCatchup: false,
+      magi: 84_000,
+      taxpayerCoveredByWorkplacePlan: true,
+      spouseCoveredByWorkplacePlan: false,
+      traditionalIraContribution: 7_000,
+      rothIraContribution: 0,
+    })
+
+    expect(result.traditionalDeductibleAmount).toBe(3_500)
+    expect(result.traditionalNondeductibleAmount).toBe(3_500)
+  })
+
+  it('uses the spouse-covered phaseout when the taxpayer is not covered', () => {
+    const result = computeIraContribution({
+      year: 2025,
+      eligibleCompensation: 100_000,
+      filingStatus: 'marriedFilingJointly',
+      includeCatchup: false,
+      magi: 241_000,
+      taxpayerCoveredByWorkplacePlan: false,
+      spouseCoveredByWorkplacePlan: true,
+      traditionalIraContribution: 7_000,
+      rothIraContribution: 0,
+    })
+
+    expect(result.traditionalDeductibleAmount).toBe(3_500)
+    expect(result.traditionalNondeductibleAmount).toBe(3_500)
+  })
+
+  it('keeps traditional IRA contributions fully deductible when neither spouse has workplace coverage', () => {
+    const result = computeIraContribution({
+      year: 2025,
+      eligibleCompensation: 100_000,
+      filingStatus: 'marriedFilingJointly',
+      includeCatchup: false,
+      magi: 500_000,
+      taxpayerCoveredByWorkplacePlan: false,
+      spouseCoveredByWorkplacePlan: false,
+      traditionalIraContribution: 7_000,
+      rothIraContribution: 0,
+    })
+
+    expect(result.traditionalDeductibleAmount).toBe(7_000)
+    expect(result.traditionalNondeductibleAmount).toBe(0)
+  })
+})
+
+describe('computeRetirementContributions', () => {
+  const baseInputs = {
+    year: 2025,
+    w2Income: 80_000,
+    w2EmployeePretaxDeferred: 10_000,
+    w2PretaxInPlanRothConversion: 4_000,
+    includeSelfEmploymentIncome: true,
+    includeCatchup: false,
+    netEarningsFromSE: 100_000,
+    deductibleSeTax: 7_065,
+    filingStatus: 'single' as const,
+    magi: 100_000,
+    taxpayerCoveredByWorkplacePlan: true,
+    spouseCoveredByWorkplacePlan: false,
+    traditionalIraContribution: 3_500,
+    rothIraContribution: 3_500,
+  }
+
+  it('adds W-2 compensation to self-employment compensation for IRA eligibility', () => {
+    const result = computeRetirementContributions(baseInputs)
+
+    expect(result.eligibleCompensation).toBe(172_935)
+    expect(result.ira.contributionLimit).toBe(7_000)
+  })
+
+  it('keeps W-2 in-plan Roth conversion informational only', () => {
+    const result = computeRetirementContributions(baseInputs)
+    const withoutConversion = computeRetirementContributions({
+      ...baseInputs,
+      w2PretaxInPlanRothConversion: 0,
+    })
+
+    expect(result.w2PretaxInPlanRothConversion).toBe(4_000)
+    expect(result.se401k.employeeDeferralRoom).toBe(withoutConversion.se401k.employeeDeferralRoom)
+    expect(result.se401k.overallCap).toBe(withoutConversion.se401k.overallCap)
+  })
+
+  it('ignores self-employment contribution math when SE income is disabled', () => {
+    const result = computeRetirementContributions({
+      ...baseInputs,
+      includeSelfEmploymentIncome: false,
+    })
+
+    expect(result.se401k.compensationBase).toBe(0)
+    expect(result.se401k.recommendedContribution).toBe(0)
+    expect(result.eligibleCompensation).toBe(80_000)
   })
 })

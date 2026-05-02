@@ -31,7 +31,7 @@ export default defineConfig({
         'resources/js/bingo/index.tsx',
         'resources/js/irsf461/irsf461.tsx',
         'resources/js/financial-planning/index.tsx',
-        'resources/js/financial-planning/solo-401k.tsx',
+        'resources/js/financial-planning/retirement-contribution-calculator.tsx',
         'resources/js/financial-planning/rent-vs-buy.tsx',
         'resources/js/license-manager.tsx',
         'resources/js/client-management/admin.tsx',
