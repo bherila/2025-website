@@ -2,10 +2,12 @@
 
 import currency from 'currency.js'
 import { Home, PiggyBank } from 'lucide-react'
-import { type ChangeEvent, type FocusEvent, type ReactElement, useEffect, useState } from 'react'
+import { type ChangeEvent, type FocusEvent, type ReactElement, useEffect, useId, useState } from 'react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
+import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@/components/ui/input-group'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -14,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { RentVsBuyInputs } from '@/lib/planning/rentVsBuy'
+import type { ClosingCostsType, ExpensePeriod, RentVsBuyInputs } from '@/lib/planning/rentVsBuy'
 import type { FilingStatus } from '@/lib/tax/standardDeductions'
 
 interface RentVsBuyFormProps {
@@ -25,7 +27,7 @@ interface RentVsBuyFormProps {
 interface NumberFieldProps {
   label: string
   value: number
-  step?: string
+  labelClassName?: string
   suffix?: string
   onChange: (next: number) => void
 }
@@ -33,7 +35,20 @@ interface NumberFieldProps {
 interface MoneyFieldProps {
   label: string
   value: number
+  labelClassName?: string
   onChange: (next: number) => void
+}
+
+interface PeriodMoneyFieldProps extends MoneyFieldProps {
+  period: ExpensePeriod
+  onPeriodChange: (next: ExpensePeriod) => void
+}
+
+interface ClosingCostsFieldProps {
+  value: number
+  type: ClosingCostsType
+  onValueChange: (next: number) => void
+  onTypeChange: (next: ClosingCostsType) => void
 }
 
 const filingStatuses: FilingStatus[] = [
@@ -42,6 +57,9 @@ const filingStatuses: FilingStatus[] = [
   'Married Filing Separately',
   'Head of Household',
 ]
+
+const expensePeriods: ExpensePeriod[] = ['monthly', 'annual']
+const closingCostTypes: ClosingCostsType[] = ['percent', 'amount']
 
 function parseMoney(raw: string): number {
   const parsed = currency(raw).value
@@ -52,28 +70,64 @@ function formatMoney(value: number): string {
   return currency(value).format()
 }
 
-function NumberField({ label, value, step = '0.01', suffix, onChange }: NumberFieldProps): ReactElement {
+function formatNumber(value: number): string {
+  return Number.isFinite(value) ? String(value) : '0'
+}
+
+function parseNumber(raw: string): number {
+  const parsed = Number.parseFloat(raw)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function NumberField({ label, value, labelClassName, suffix, onChange }: NumberFieldProps): ReactElement {
+  const inputId = useId()
+  const [rawValue, setRawValue] = useState(() => formatNumber(value))
+
+  useEffect(() => {
+    if (parseNumber(rawValue) !== value) {
+      setRawValue(formatNumber(value))
+    }
+  }, [rawValue, value])
+
   function handleChange(event: ChangeEvent<HTMLInputElement>): void {
-    const nextValue = Number.parseFloat(event.target.value)
-    onChange(Number.isFinite(nextValue) ? nextValue : 0)
+    const nextValue = event.target.value
+    setRawValue(nextValue)
+    onChange(parseNumber(nextValue))
+  }
+
+  function handleFocus(event: FocusEvent<HTMLInputElement>): void {
+    event.target.select()
+  }
+
+  function handleBlur(): void {
+    setRawValue(formatNumber(value))
   }
 
   return (
     <div className="grid gap-2">
-      <Label>{label}</Label>
-      <div className="relative">
-        <Input type="number" value={value} step={step} onChange={handleChange} />
+      <Label htmlFor={inputId} className={labelClassName}>{label}</Label>
+      <InputGroup>
+        <InputGroupInput
+          id={inputId}
+          type="text"
+          inputMode="decimal"
+          value={rawValue}
+          onChange={handleChange}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+        />
         {suffix ? (
-          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted-foreground">
-            {suffix}
-          </span>
+          <InputGroupAddon align="inline-end">
+            <InputGroupText>{suffix}</InputGroupText>
+          </InputGroupAddon>
         ) : null}
-      </div>
+      </InputGroup>
     </div>
   )
 }
 
-function MoneyField({ label, value, onChange }: MoneyFieldProps): ReactElement {
+function MoneyField({ label, value, labelClassName, onChange }: MoneyFieldProps): ReactElement {
+  const inputId = useId()
   const [rawValue, setRawValue] = useState(() => formatMoney(value))
 
   useEffect(() => {
@@ -98,8 +152,9 @@ function MoneyField({ label, value, onChange }: MoneyFieldProps): ReactElement {
 
   return (
     <div className="grid gap-2">
-      <Label>{label}</Label>
+      <Label htmlFor={inputId} className={labelClassName}>{label}</Label>
       <Input
+        id={inputId}
         type="text"
         inputMode="decimal"
         value={rawValue}
@@ -107,6 +162,95 @@ function MoneyField({ label, value, onChange }: MoneyFieldProps): ReactElement {
         onFocus={handleFocus}
         onBlur={handleBlur}
       />
+    </div>
+  )
+}
+
+function PeriodMoneyField({ label, value, period, onChange, onPeriodChange }: PeriodMoneyFieldProps): ReactElement {
+  const inputId = useId()
+  const [rawValue, setRawValue] = useState(() => formatMoney(value))
+
+  useEffect(() => {
+    if (parseMoney(rawValue) !== value) {
+      setRawValue(formatMoney(value))
+    }
+  }, [rawValue, value])
+
+  function handleChange(event: ChangeEvent<HTMLInputElement>): void {
+    const nextValue = event.target.value
+    setRawValue(nextValue)
+    onChange(parseMoney(nextValue))
+  }
+
+  function handleFocus(event: FocusEvent<HTMLInputElement>): void {
+    event.target.select()
+  }
+
+  function handleBlur(): void {
+    setRawValue(formatMoney(value))
+  }
+
+  return (
+    <div className="grid gap-2">
+      <Label htmlFor={inputId}>{label}</Label>
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_9rem]">
+        <Input
+          id={inputId}
+          type="text"
+          inputMode="decimal"
+          value={rawValue}
+          onChange={handleChange}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+        />
+        <Select value={period} onValueChange={(next) => onPeriodChange(next as ExpensePeriod)}>
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {expensePeriods.map((expensePeriod) => (
+              <SelectItem key={expensePeriod} value={expensePeriod}>
+                {expensePeriod === 'monthly' ? 'Monthly' : 'Annually'}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  )
+}
+
+function ClosingCostsField({
+  value,
+  type,
+  onValueChange,
+  onTypeChange,
+}: ClosingCostsFieldProps): ReactElement {
+  return (
+    <div className="grid gap-2">
+      <Label>Closing costs</Label>
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_9rem]">
+        {type === 'amount' ? (
+          <MoneyField label="Closing costs amount" labelClassName="sr-only" value={value} onChange={onValueChange} />
+        ) : (
+          <NumberField label="Closing costs percent" labelClassName="sr-only" value={value} suffix="%" onChange={onValueChange} />
+        )}
+        <div className="grid gap-2">
+          <Label className="sr-only">Closing costs type</Label>
+          <Select value={type} onValueChange={(next) => onTypeChange(next as ClosingCostsType)}>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {closingCostTypes.map((closingCostType) => (
+                <SelectItem key={closingCostType} value={closingCostType}>
+                  {closingCostType === 'percent' ? 'Percent' : 'Dollar amount'}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
     </div>
   )
 }
@@ -133,10 +277,30 @@ export default function RentVsBuyForm({ inputs, onChange }: RentVsBuyFormProps):
           <MoneyField label="Home price" value={inputs.homePrice} onChange={(value) => update('homePrice', value)} />
           <NumberField label="Down payment" value={inputs.downPaymentPercent} suffix="%" onChange={(value) => update('downPaymentPercent', value)} />
           <NumberField label="Mortgage rate" value={inputs.mortgageRatePercent} suffix="%" onChange={(value) => update('mortgageRatePercent', value)} />
-          <NumberField label="Mortgage term" value={inputs.mortgageTermYears} step="1" suffix="yrs" onChange={(value) => update('mortgageTermYears', value)} />
-          <NumberField label="Closing costs" value={inputs.closingCostsPercent} suffix="%" onChange={(value) => update('closingCostsPercent', value)} />
-          <NumberField label="Property tax rate" value={inputs.propertyTaxRatePercent} suffix="% / yr" onChange={(value) => update('propertyTaxRatePercent', value)} />
-          <MoneyField label="HOA / condo fees" value={inputs.hoaMonthly} onChange={(value) => update('hoaMonthly', value)} />
+          <NumberField label="Mortgage term" value={inputs.mortgageTermYears} suffix="yrs" onChange={(value) => update('mortgageTermYears', value)} />
+          <ClosingCostsField
+            value={inputs.closingCostsValue}
+            type={inputs.closingCostsType}
+            onValueChange={(value) => update('closingCostsValue', value)}
+            onTypeChange={(value) => update('closingCostsType', value)}
+          />
+          <div className="grid gap-2">
+            <NumberField label="Property tax rate" value={inputs.propertyTaxRatePercent} suffix="% / yr" onChange={(value) => update('propertyTaxRatePercent', value)} />
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Checkbox
+                checked={inputs.useCaliforniaProp13}
+                onCheckedChange={(checked) => update('useCaliforniaProp13', checked === true)}
+              />
+              CA Prop 13
+            </label>
+          </div>
+          <PeriodMoneyField
+            label="HOA / condo fees"
+            value={inputs.hoaAmount}
+            period={inputs.hoaPeriod}
+            onChange={(value) => update('hoaAmount', value)}
+            onPeriodChange={(value) => update('hoaPeriod', value)}
+          />
           <MoneyField label="Homeowners insurance" value={inputs.homeownersInsuranceAnnual} onChange={(value) => update('homeownersInsuranceAnnual', value)} />
           <NumberField label="Maintenance" value={inputs.maintenancePercent} suffix="% / yr" onChange={(value) => update('maintenancePercent', value)} />
           <NumberField label="Home appreciation" value={inputs.appreciationPercent} suffix="% / yr" onChange={(value) => update('appreciationPercent', value)} />
@@ -153,8 +317,14 @@ export default function RentVsBuyForm({ inputs, onChange }: RentVsBuyFormProps):
           <CardDescription>Baseline rent, renter insurance, and expected annual rent growth.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
-          <MoneyField label="Monthly rent" value={inputs.monthlyRent} onChange={(value) => update('monthlyRent', value)} />
-          <MoneyField label="Renter's insurance" value={inputs.rentersInsuranceAnnual} onChange={(value) => update('rentersInsuranceAnnual', value)} />
+          <MoneyField label="Starting monthly rent" value={inputs.monthlyRent} onChange={(value) => update('monthlyRent', value)} />
+          <PeriodMoneyField
+            label="Renter's insurance"
+            value={inputs.rentersInsuranceAmount}
+            period={inputs.rentersInsurancePeriod}
+            onChange={(value) => update('rentersInsuranceAmount', value)}
+            onPeriodChange={(value) => update('rentersInsurancePeriod', value)}
+          />
           <NumberField label="Rent increase" value={inputs.rentIncreasePercent} suffix="% / yr" onChange={(value) => update('rentIncreasePercent', value)} />
         </CardContent>
       </Card>
@@ -167,6 +337,7 @@ export default function RentVsBuyForm({ inputs, onChange }: RentVsBuyFormProps):
         <CardContent className="grid gap-4">
           <NumberField label="Investment return" value={inputs.investmentReturnPercent} suffix="% / yr" onChange={(value) => update('investmentReturnPercent', value)} />
           <NumberField label="Marginal tax rate" value={inputs.marginalTaxRatePercent} suffix="%" onChange={(value) => update('marginalTaxRatePercent', value)} />
+          <NumberField label="Capital gains tax rate" value={inputs.capitalGainsTaxRatePercent} suffix="%" onChange={(value) => update('capitalGainsTaxRatePercent', value)} />
 
           <div className="grid gap-2">
             <Label>Filing status</Label>
@@ -184,7 +355,7 @@ export default function RentVsBuyForm({ inputs, onChange }: RentVsBuyFormProps):
             </Select>
           </div>
 
-          <NumberField label="Time horizon" value={inputs.timeHorizonYears} step="1" suffix="yrs" onChange={(value) => update('timeHorizonYears', value)} />
+          <NumberField label="Time horizon" value={inputs.timeHorizonYears} suffix="yrs" onChange={(value) => update('timeHorizonYears', value)} />
           <NumberField label="Inflation" value={inputs.inflationRatePercent} suffix="% / yr" onChange={(value) => update('inflationRatePercent', value)} />
         </CardContent>
       </Card>

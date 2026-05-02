@@ -8,18 +8,23 @@ function makeInputs(overrides: Partial<RentVsBuyInputs> = {}): RentVsBuyInputs {
     downPaymentPercent: 20,
     mortgageRatePercent: 6.25,
     mortgageTermYears: 30,
-    closingCostsPercent: 3,
+    closingCostsValue: 3,
+    closingCostsType: 'percent',
     propertyTaxRatePercent: 1.1,
-    hoaMonthly: 0,
+    useCaliforniaProp13: false,
+    hoaAmount: 0,
+    hoaPeriod: 'monthly',
     homeownersInsuranceAnnual: 1_800,
     maintenancePercent: 1,
     appreciationPercent: 3,
     sellingCostsPercent: 6,
     monthlyRent: 2_700,
-    rentersInsuranceAnnual: 240,
+    rentersInsuranceAmount: 240,
+    rentersInsurancePeriod: 'annual',
     rentIncreasePercent: 3,
     investmentReturnPercent: 6,
     marginalTaxRatePercent: 30,
+    capitalGainsTaxRatePercent: 15,
     filingStatus: 'Single',
     timeHorizonYears: 10,
     inflationRatePercent: 2.5,
@@ -107,7 +112,7 @@ describe('computeRentVsBuy', () => {
       maintenancePercent: 0,
       homeownersInsuranceAnnual: 0,
       monthlyRent: 4_500,
-      rentersInsuranceAnnual: 0,
+      rentersInsuranceAmount: 0,
       timeHorizonYears: 1,
       inflationRatePercent: 0,
     }))
@@ -119,7 +124,7 @@ describe('computeRentVsBuy', () => {
       maintenancePercent: 0,
       homeownersInsuranceAnnual: 0,
       monthlyRent: 4_500,
-      rentersInsuranceAnnual: 0,
+      rentersInsuranceAmount: 0,
       timeHorizonYears: 1,
       inflationRatePercent: 0,
     }))
@@ -136,7 +141,7 @@ describe('computeRentVsBuy', () => {
       maintenancePercent: 0,
       homeownersInsuranceAnnual: 0,
       monthlyRent: 2_500,
-      rentersInsuranceAnnual: 0,
+      rentersInsuranceAmount: 0,
       timeHorizonYears: 1,
       inflationRatePercent: 0,
     }))
@@ -148,7 +153,7 @@ describe('computeRentVsBuy', () => {
       maintenancePercent: 0,
       homeownersInsuranceAnnual: 0,
       monthlyRent: 2_500,
-      rentersInsuranceAnnual: 0,
+      rentersInsuranceAmount: 0,
       timeHorizonYears: 1,
       inflationRatePercent: 0,
     }))
@@ -204,12 +209,120 @@ describe('computeRentVsBuy', () => {
       propertyTaxRatePercent: 0,
       homeownersInsuranceAnnual: 0,
       monthlyRent: 2_000,
-      rentersInsuranceAnnual: 0,
+      rentersInsuranceAmount: 0,
       timeHorizonYears: 1,
       inflationRatePercent: 0,
     }))
 
     expect(result.rows[0]?.homeEquity).toBeCloseTo(282_000, 2)
+  })
+
+  it('treats monthly and annual HOA and renter insurance periods equivalently', () => {
+    const monthlyInputs = makeInputs({
+      hoaAmount: 100,
+      hoaPeriod: 'monthly',
+      rentersInsuranceAmount: 20,
+      rentersInsurancePeriod: 'monthly',
+      timeHorizonYears: 2,
+      inflationRatePercent: 0,
+    })
+    const annualInputs = makeInputs({
+      hoaAmount: 1_200,
+      hoaPeriod: 'annual',
+      rentersInsuranceAmount: 240,
+      rentersInsurancePeriod: 'annual',
+      timeHorizonYears: 2,
+      inflationRatePercent: 0,
+    })
+
+    expect(computeRentVsBuy(monthlyInputs).rows).toEqual(computeRentVsBuy(annualInputs).rows)
+  })
+
+  it('supports closing costs as either a percent or dollar amount', () => {
+    const percentCosts = computeRentVsBuy(makeInputs({
+      homePrice: 500_000,
+      closingCostsValue: 1,
+      closingCostsType: 'percent',
+      timeHorizonYears: 1,
+      inflationRatePercent: 0,
+    }))
+    const amountCosts = computeRentVsBuy(makeInputs({
+      homePrice: 500_000,
+      closingCostsValue: 5_000,
+      closingCostsType: 'amount',
+      timeHorizonYears: 1,
+      inflationRatePercent: 0,
+    }))
+
+    expect(amountCosts.rows).toEqual(percentCosts.rows)
+  })
+
+  it('limits California Prop 13 assessed value growth for property tax', () => {
+    const uncapped = computeRentVsBuy(makeInputs({
+      homePrice: 500_000,
+      mortgageRatePercent: 0,
+      propertyTaxRatePercent: 1,
+      useCaliforniaProp13: false,
+      maintenancePercent: 0,
+      appreciationPercent: 10,
+      sellingCostsPercent: 0,
+      homeownersInsuranceAnnual: 0,
+      marginalTaxRatePercent: 0,
+      timeHorizonYears: 2,
+      inflationRatePercent: 0,
+    }))
+    const capped = computeRentVsBuy(makeInputs({
+      homePrice: 500_000,
+      mortgageRatePercent: 0,
+      propertyTaxRatePercent: 1,
+      useCaliforniaProp13: true,
+      maintenancePercent: 0,
+      appreciationPercent: 10,
+      sellingCostsPercent: 0,
+      homeownersInsuranceAnnual: 0,
+      marginalTaxRatePercent: 0,
+      timeHorizonYears: 2,
+      inflationRatePercent: 0,
+    }))
+
+    expect(annualCostIncrease(uncapped.rows, 1) - annualCostIncrease(capped.rows, 1)).toBeCloseTo(400, 0)
+  })
+
+  it('subtracts capital gains tax after the homeowner exclusion based on filing status', () => {
+    const single = computeRentVsBuy(makeInputs({
+      homePrice: 500_000,
+      mortgageRatePercent: 0,
+      closingCostsValue: 0,
+      closingCostsType: 'amount',
+      propertyTaxRatePercent: 0,
+      maintenancePercent: 0,
+      appreciationPercent: 100,
+      sellingCostsPercent: 0,
+      homeownersInsuranceAnnual: 0,
+      capitalGainsTaxRatePercent: 20,
+      filingStatus: 'Single',
+      timeHorizonYears: 1,
+      inflationRatePercent: 0,
+    }))
+    const married = computeRentVsBuy(makeInputs({
+      homePrice: 500_000,
+      mortgageRatePercent: 0,
+      closingCostsValue: 0,
+      closingCostsType: 'amount',
+      propertyTaxRatePercent: 0,
+      maintenancePercent: 0,
+      appreciationPercent: 100,
+      sellingCostsPercent: 0,
+      homeownersInsuranceAnnual: 0,
+      capitalGainsTaxRatePercent: 20,
+      filingStatus: 'Married Filing Jointly',
+      timeHorizonYears: 1,
+      inflationRatePercent: 0,
+    }))
+
+    expect(single.rows[0]?.capitalGainsTax).toBeCloseTo(50_000, 2)
+    expect(married.rows[0]?.capitalGainsTax).toBeCloseTo(0, 2)
+    expect((married.rows[0]?.homeEquity ?? 0) - (single.rows[0]?.homeEquity ?? 0)).toBeCloseTo(50_000, 2)
   })
 
   it('increases deductible mortgage interest once acquisition debt amortizes below the cap', () => {
@@ -221,7 +334,7 @@ describe('computeRentVsBuy', () => {
       maintenancePercent: 0,
       homeownersInsuranceAnnual: 0,
       monthlyRent: 10_000,
-      rentersInsuranceAnnual: 0,
+      rentersInsuranceAmount: 0,
       marginalTaxRatePercent: 35,
       timeHorizonYears: 3,
       inflationRatePercent: 0,
@@ -234,7 +347,7 @@ describe('computeRentVsBuy', () => {
       maintenancePercent: 0,
       homeownersInsuranceAnnual: 0,
       monthlyRent: 10_000,
-      rentersInsuranceAnnual: 0,
+      rentersInsuranceAmount: 0,
       marginalTaxRatePercent: 35,
       timeHorizonYears: 3,
       inflationRatePercent: 0,

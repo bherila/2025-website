@@ -11,18 +11,23 @@ function makeInputs(overrides: Partial<RentVsBuyInputs> = {}): RentVsBuyInputs {
     downPaymentPercent: 20,
     mortgageRatePercent: 7.25,
     mortgageTermYears: 30,
-    closingCostsPercent: 3,
+    closingCostsValue: 3,
+    closingCostsType: 'percent',
     propertyTaxRatePercent: 1.1,
-    hoaMonthly: 350,
+    useCaliforniaProp13: false,
+    hoaAmount: 350,
+    hoaPeriod: 'monthly',
     homeownersInsuranceAnnual: 2_000,
     maintenancePercent: 1,
     appreciationPercent: 3,
     sellingCostsPercent: 6,
     monthlyRent: 3_500,
-    rentersInsuranceAnnual: 240,
+    rentersInsuranceAmount: 240,
+    rentersInsurancePeriod: 'annual',
     rentIncreasePercent: 3,
     investmentReturnPercent: 6,
     marginalTaxRatePercent: 30,
+    capitalGainsTaxRatePercent: 15,
     filingStatus: 'Single',
     timeHorizonYears: 10,
     inflationRatePercent: 2.5,
@@ -43,6 +48,20 @@ describe('RentVsBuyForm', () => {
 
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
       homePrice: 1_234_567.89,
+    }))
+  })
+
+  it('clarifies starting rent and updates the Prop 13 checkbox', () => {
+    const onChange = jest.fn()
+
+    render(<RentVsBuyForm inputs={makeInputs()} onChange={onChange} />)
+
+    expect(screen.getByLabelText('Starting monthly rent')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'CA Prop 13' }))
+
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+      useCaliforniaProp13: true,
     }))
   })
 })

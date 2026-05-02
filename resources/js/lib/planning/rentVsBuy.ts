@@ -5,25 +5,36 @@ import { type FilingStatus, getLatestStandardDeductionYear, getStandardDeduction
 const MONTHS_PER_YEAR = 12
 const SALT_CAP = 10_000
 const MORTGAGE_INTEREST_DEDUCTION_CAP = 750_000
+const CAPITAL_GAINS_EXCLUSION_SINGLE = 250_000
+const CAPITAL_GAINS_EXCLUSION_MARRIED = 500_000
+const PROP_13_ASSESSMENT_GROWTH_CAP = 0.02
 const PRECISE = { precision: 6 }
+
+export type ExpensePeriod = 'monthly' | 'annual'
+export type ClosingCostsType = 'percent' | 'amount'
 
 export interface RentVsBuyInputs {
   homePrice: number
   downPaymentPercent: number
   mortgageRatePercent: number
   mortgageTermYears: number
-  closingCostsPercent: number
+  closingCostsValue: number
+  closingCostsType: ClosingCostsType
   propertyTaxRatePercent: number
-  hoaMonthly: number
+  useCaliforniaProp13: boolean
+  hoaAmount: number
+  hoaPeriod: ExpensePeriod
   homeownersInsuranceAnnual: number
   maintenancePercent: number
   appreciationPercent: number
   sellingCostsPercent: number
   monthlyRent: number
-  rentersInsuranceAnnual: number
+  rentersInsuranceAmount: number
+  rentersInsurancePeriod: ExpensePeriod
   rentIncreasePercent: number
   investmentReturnPercent: number
   marginalTaxRatePercent: number
+  capitalGainsTaxRatePercent: number
   filingStatus: FilingStatus
   timeHorizonYears: number
   inflationRatePercent: number
@@ -35,6 +46,7 @@ export interface RentVsBuyYearRow {
   rentCumulativeCost: number
   homeEquity: number
   investedPortfolio: number
+  capitalGainsTax: number
   netOwnPosition: number
   netRentPosition: number
 }
@@ -106,6 +118,51 @@ function discountMoney(amount: number, inflationRate: number, year: number): num
   return roundMoney(divideMoney(amount, discountFactor))
 }
 
+function getAnnualizedExpense(amount: number, period: ExpensePeriod): number {
+  return period === 'monthly'
+    ? roundMoney(multiplyMoney(amount, MONTHS_PER_YEAR))
+    : roundMoney(amount)
+}
+
+function getMonthlyExpense(amount: number, period: ExpensePeriod): number {
+  return period === 'monthly'
+    ? roundMoney(amount)
+    : divideMoney(amount, MONTHS_PER_YEAR)
+}
+
+function getClosingCosts(purchasePrice: number, inputs: RentVsBuyInputs): number {
+  if (inputs.closingCostsType === 'amount') {
+    return roundMoney(inputs.closingCostsValue)
+  }
+
+  return roundMoney(multiplyMoney(purchasePrice, toRate(inputs.closingCostsValue)))
+}
+
+function getCapitalGainsExclusion(filingStatus: FilingStatus): number {
+  return filingStatus === 'Married Filing Jointly'
+    ? CAPITAL_GAINS_EXCLUSION_MARRIED
+    : CAPITAL_GAINS_EXCLUSION_SINGLE
+}
+
+function getCapitalGainsTax(
+  homeValue: number,
+  purchasePrice: number,
+  closingCosts: number,
+  sellingCosts: number,
+  capitalGainsTaxRate: number,
+  filingStatus: FilingStatus,
+): number {
+  if (capitalGainsTaxRate <= 0) {
+    return 0
+  }
+
+  const saleProceedsBeforeDebt = subtractMoney(homeValue, sellingCosts)
+  const gainBeforeExclusion = subtractMoney(saleProceedsBeforeDebt, addMoney(purchasePrice, closingCosts))
+  const taxableGain = maxMoney(subtractMoney(gainBeforeExclusion, getCapitalGainsExclusion(filingStatus)), 0)
+
+  return roundMoney(multiplyMoney(taxableGain, capitalGainsTaxRate))
+}
+
 function getMonthlyMortgagePayment(principal: number, annualRate: number, termYears: number): number {
   const totalMonths = toWholeYears(termYears) * MONTHS_PER_YEAR
   if (principal <= 0 || annualRate <= 0 || totalMonths <= 0) {
@@ -153,6 +210,7 @@ export function computeRentVsBuy(inputs: RentVsBuyInputs): RentVsBuyResults {
   const rentIncreaseRate = toRate(inputs.rentIncreasePercent)
   const investmentReturnRate = toRate(inputs.investmentReturnPercent)
   const marginalTaxRate = toRate(inputs.marginalTaxRatePercent)
+  const capitalGainsTaxRate = toRate(inputs.capitalGainsTaxRatePercent)
   const inflationRate = toRate(inputs.inflationRatePercent)
   const termYears = toWholeYears(inputs.mortgageTermYears)
   const latestTaxYear = getLatestStandardDeductionYear()
@@ -160,7 +218,7 @@ export function computeRentVsBuy(inputs: RentVsBuyInputs): RentVsBuyResults {
   const usesMortgage = mortgageRate > 0 && termYears > 0
   const downPayment = usesMortgage ? roundMoney(multiplyMoney(purchasePrice, downPaymentRate)) : purchasePrice
   const loanPrincipal = usesMortgage ? roundMoney(subtractMoney(purchasePrice, downPayment)) : 0
-  const closingCosts = roundMoney(multiplyMoney(purchasePrice, toRate(inputs.closingCostsPercent)))
+  const closingCosts = getClosingCosts(purchasePrice, inputs)
   const monthlyMortgagePayment = usesMortgage ? getMonthlyMortgagePayment(loanPrincipal, mortgageRate, termYears) : 0
 
   const avoidedUpfrontInvestment = usesMortgage
@@ -168,11 +226,13 @@ export function computeRentVsBuy(inputs: RentVsBuyInputs): RentVsBuyResults {
     : roundMoney(addMoney(purchasePrice, closingCosts))
 
   const monthlyHomeownersInsurance = divideMoney(inputs.homeownersInsuranceAnnual, MONTHS_PER_YEAR)
-  const monthlyRentersInsurance = divideMoney(inputs.rentersInsuranceAnnual, MONTHS_PER_YEAR)
-  const monthlyHoa = roundMoney(inputs.hoaMonthly)
+  const monthlyRentersInsurance = getMonthlyExpense(inputs.rentersInsuranceAmount, inputs.rentersInsurancePeriod)
+  const monthlyHoa = getMonthlyExpense(inputs.hoaAmount, inputs.hoaPeriod)
+  const annualHoa = getAnnualizedExpense(inputs.hoaAmount, inputs.hoaPeriod)
 
   let remainingBalance = loanPrincipal
   let homeValue = purchasePrice
+  let prop13AssessedValue = purchasePrice
   let monthlyRent = roundMoney(inputs.monthlyRent)
   let investedPortfolio = avoidedUpfrontInvestment
   let ownCumulativeCost = closingCosts
@@ -181,7 +241,8 @@ export function computeRentVsBuy(inputs: RentVsBuyInputs): RentVsBuyResults {
   const rows: RentVsBuyYearRow[] = []
 
   for (let year = 1; year <= horizonYears; year += 1) {
-    const annualPropertyTax = roundMoney(multiplyMoney(homeValue, propertyTaxRate))
+    const propertyTaxBase = inputs.useCaliforniaProp13 ? prop13AssessedValue : homeValue
+    const annualPropertyTax = roundMoney(multiplyMoney(propertyTaxBase, propertyTaxRate))
     const annualMaintenance = roundMoney(multiplyMoney(homeValue, maintenanceRate))
     const monthlyPropertyTax = divideMoney(annualPropertyTax, MONTHS_PER_YEAR)
     const monthlyMaintenance = divideMoney(annualMaintenance, MONTHS_PER_YEAR)
@@ -239,7 +300,7 @@ export function computeRentVsBuy(inputs: RentVsBuyInputs): RentVsBuyResults {
       annualMortgageInterest,
       annualPropertyTax,
       annualMaintenance,
-      roundMoney(multiplyMoney(monthlyHoa, MONTHS_PER_YEAR)),
+      annualHoa,
       roundMoney(inputs.homeownersInsuranceAnnual),
     ])
     const annualOwnEconomicCost = roundMoney(subtractMoney(annualOwnEconomicCostBeforeTax, taxBenefit))
@@ -257,10 +318,24 @@ export function computeRentVsBuy(inputs: RentVsBuyInputs): RentVsBuyResults {
     ))
 
     homeValue = roundMoney(multiplyMoney(homeValue, 1 + appreciationRate))
+    if (inputs.useCaliforniaProp13) {
+      prop13AssessedValue = minMoney(
+        homeValue,
+        multiplyMoney(prop13AssessedValue, 1 + PROP_13_ASSESSMENT_GROWTH_CAP),
+      )
+    }
 
     const sellingCosts = roundMoney(multiplyMoney(homeValue, sellingCostsRate))
+    const capitalGainsTax = getCapitalGainsTax(
+      homeValue,
+      purchasePrice,
+      closingCosts,
+      sellingCosts,
+      capitalGainsTaxRate,
+      inputs.filingStatus,
+    )
     const sellableEquity = maxMoney(
-      subtractMoney(subtractMoney(homeValue, sellingCosts), remainingBalance),
+      subtractMoney(subtractMoney(subtractMoney(homeValue, sellingCosts), capitalGainsTax), remainingBalance),
       0,
     )
 
@@ -273,6 +348,7 @@ export function computeRentVsBuy(inputs: RentVsBuyInputs): RentVsBuyResults {
       rentCumulativeCost,
       homeEquity: discountedEquity,
       investedPortfolio: discountedPortfolio,
+      capitalGainsTax: discountMoney(capitalGainsTax, inflationRate, year),
       netOwnPosition: roundMoney(subtractMoney(discountedEquity, ownCumulativeCost)),
       netRentPosition: roundMoney(subtractMoney(discountedPortfolio, rentCumulativeCost)),
     })

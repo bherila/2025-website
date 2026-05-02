@@ -41,7 +41,7 @@ export default function RentVsBuyResults({ results }: RentVsBuyResultsProps): Re
 
   return (
     <div className="grid gap-6">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <SummaryTile title="Break-even horizon" kind={results.breakEvenYear === null ? 'yellow' : 'green'}>
           {results.breakEvenYear === null ? 'Renting stays cheaper' : `Year ${results.breakEvenYear}`}
         </SummaryTile>
@@ -54,6 +54,9 @@ export default function RentVsBuyResults({ results }: RentVsBuyResultsProps): Re
         </SummaryTile>
         <SummaryTile title="Invested rent portfolio">
           {formatMoney(finalRow?.investedPortfolio)}
+        </SummaryTile>
+        <SummaryTile title="Est. capital gains tax">
+          {formatMoney(finalRow?.capitalGainsTax)}
         </SummaryTile>
       </div>
 
@@ -108,6 +111,7 @@ export default function RentVsBuyResults({ results }: RentVsBuyResultsProps): Re
                     <TableHead className="text-right">Buy cost</TableHead>
                     <TableHead className="text-right">Rent cost</TableHead>
                     <TableHead className="text-right">Sellable equity</TableHead>
+                    <TableHead className="text-right">Cap. gains tax</TableHead>
                     <TableHead className="text-right">Portfolio</TableHead>
                     <TableHead className="text-right">Net own</TableHead>
                     <TableHead className="text-right">Net rent</TableHead>
@@ -120,6 +124,7 @@ export default function RentVsBuyResults({ results }: RentVsBuyResultsProps): Re
                       <TableCell className="text-right">{formatMoney(row.ownCumulativeCost)}</TableCell>
                       <TableCell className="text-right">{formatMoney(row.rentCumulativeCost)}</TableCell>
                       <TableCell className="text-right">{formatMoney(row.homeEquity)}</TableCell>
+                      <TableCell className="text-right">{formatMoney(row.capitalGainsTax)}</TableCell>
                       <TableCell className="text-right">{formatMoney(row.investedPortfolio)}</TableCell>
                       <TableCell className="text-right">{formatMoney(row.netOwnPosition)}</TableCell>
                       <TableCell className="text-right">{formatMoney(row.netRentPosition)}</TableCell>
