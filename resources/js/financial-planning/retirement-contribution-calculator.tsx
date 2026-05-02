@@ -141,7 +141,7 @@ function RetirementContributionPage(): React.ReactElement {
   const w2RothConversion = parseCurrencyInput(w2RothConversionRaw)
   const ne = parseCurrencyInput(neRaw)
   const seManual = parseCurrencyInput(seRaw)
-  const se = includeSe && autoSe ? estimateDeductibleSeTax(ne, year) : seManual
+  const se = includeSe && autoSe ? estimateDeductibleSeTax(ne, year, w2Income) : seManual
   const magi = parseCurrencyInput(magiRaw)
   const tradIra = parseCurrencyInput(tradIraRaw)
   const rothIra = parseCurrencyInput(rothIraRaw)
@@ -331,8 +331,8 @@ function RetirementContributionPage(): React.ReactElement {
                   <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
                     Estimated: {formatCurrency(se)}
                     <span className="ml-1 text-xs">
-                      SS 12.4% to {formatCurrency(limits.ssWageBase)} wage base + Medicare 2.9%,
-                      halved.
+                      SS 12.4% to remaining {formatCurrency(limits.ssWageBase)} wage base after
+                      W-2 wages + Medicare 2.9%, halved.
                     </span>
                   </p>
                 ) : (
@@ -459,8 +459,9 @@ function RetirementContributionPage(): React.ReactElement {
                 <>
                   Eligible compensation
                   <InfoTooltip>
-                    W-2 wages plus included self-employment compensation. IRA contributions cannot
-                    exceed eligible compensation.
+                    W-2 wages plus included self-employment compensation after the estimated
+                    self-employed 401(k) contribution. IRA contributions cannot exceed eligible
+                    compensation.
                   </InfoTooltip>
                 </>
               )}

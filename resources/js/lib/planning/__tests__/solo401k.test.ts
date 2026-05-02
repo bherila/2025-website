@@ -138,6 +138,12 @@ describe('estimateDeductibleSeTax', () => {
     expect(naive - result).toBeGreaterThan(6_000)
   })
 
+  it('reduces the SS portion by W-2 wages already subject to Social Security tax', () => {
+    const result = estimateDeductibleSeTax(100_000, 2025, 176_100)
+
+    expect(result).toBeCloseTo(1_339.08, 2)
+  })
+
   it('treats earnings under the SS wage base identically with or without a year', () => {
     const earnings = 50_000
     expect(estimateDeductibleSeTax(earnings)).toBeCloseTo(estimateDeductibleSeTax(earnings, 2025), 2)
@@ -193,6 +199,25 @@ describe('computeIraContribution', () => {
 
     expect(result.contributionLimit).toBe(7_000)
     expect(result.excessContribution).toBe(2_000)
+    expect(result.rothAllowedContribution).toBe(2_000)
+    expect(result.rothExcessContribution).toBe(2_000)
+  })
+
+  it('shows Roth IRA as excess when Traditional IRA already exhausts the shared limit', () => {
+    const result = computeIraContribution({
+      year: 2025,
+      eligibleCompensation: 100_000,
+      filingStatus: 'single',
+      includeCatchup: false,
+      magi: 50_000,
+      taxpayerCoveredByWorkplacePlan: false,
+      spouseCoveredByWorkplacePlan: false,
+      traditionalIraContribution: 7_000,
+      rothIraContribution: 1_000,
+    })
+
+    expect(result.rothAllowedContribution).toBe(0)
+    expect(result.rothExcessContribution).toBe(1_000)
   })
 
   it('caps IRA contributions at eligible compensation when earnings are low', () => {
@@ -317,10 +342,10 @@ describe('computeRetirementContributions', () => {
     rothIraContribution: 3_500,
   }
 
-  it('adds W-2 compensation to self-employment compensation for IRA eligibility', () => {
+  it('reduces self-employment IRA compensation by the self-employed 401(k) contribution', () => {
     const result = computeRetirementContributions(baseInputs)
 
-    expect(result.eligibleCompensation).toBe(172_935)
+    expect(result.eligibleCompensation).toBe(140_848)
     expect(result.ira.contributionLimit).toBe(7_000)
   })
 

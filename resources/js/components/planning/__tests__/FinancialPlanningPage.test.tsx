@@ -8,7 +8,7 @@ describe('FinancialPlanningPage', () => {
   it('links to the retirement contribution calculator', () => {
     render(<FinancialPlanningPage />)
 
-    const link = screen.getByRole('link', { name: /Retirement Contributions/i })
+    const link = screen.getByRole('link', { name: /Retirement Contribution Calculator/i })
 
     expect(link).toHaveAttribute('href', '/financial-planning/retirement-contribution-calculator')
   })

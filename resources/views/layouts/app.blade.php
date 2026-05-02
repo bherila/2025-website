@@ -27,7 +27,7 @@
       // Build Financial Planning submenu (public)
       $__financialPlanningItems = [
         ['type' => 'link', 'label' => 'Overview', 'href' => '/financial-planning'],
-        ['type' => 'link', 'label' => 'Retirement Contributions', 'href' => '/financial-planning/retirement-contribution-calculator'],
+        ['type' => 'link', 'label' => 'Retirement Contribution Calculator', 'href' => '/financial-planning/retirement-contribution-calculator'],
         ['type' => 'link', 'label' => 'Rent vs Buy', 'href' => '/financial-planning/rent-vs-buy'],
       ];
 

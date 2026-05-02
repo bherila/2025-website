@@ -112,20 +112,27 @@ const MEDICARE_RATE = 0.029
  * Estimates the deductible half of SE tax from net SE earnings, year-aware.
  *
  * Schedule SE math:
- *   ssEarnings = min(net × 92.35%, ssWageBase) × 12.4%
+ *   ssEarnings = min(net × 92.35%, remaining ssWageBase after W-2 wages) × 12.4%
  *   medicare   = (net × 92.35%) × 2.9%
  *   deductible = (ssEarnings + medicare) / 2
  *
  * Below the SS wage base this collapses to the familiar net × 92.35% × 15.3% / 2.
  * The 0.9% Additional Medicare Tax for high earners is **not** part of the deductible half.
  */
-export function estimateDeductibleSeTax(netEarningsFromSE: number, year?: number): number {
+export function estimateDeductibleSeTax(
+  netEarningsFromSE: number,
+  year?: number,
+  w2SocialSecurityWages = 0,
+): number {
   if (netEarningsFromSE <= 0) {
     return 0
   }
   const ssWageBase = year != null ? getLimitsForYear(year).ssWageBase : Infinity
   const seBase = currency(netEarningsFromSE).multiply(SE_WAGE_FACTOR).value
-  const ssTaxable = Math.min(seBase, ssWageBase)
+  const remainingSsWageBase = ssWageBase === Infinity
+    ? Infinity
+    : Math.max(0, currency(ssWageBase).subtract(w2SocialSecurityWages).value)
+  const ssTaxable = Math.min(seBase, remainingSsWageBase)
   const ssTax = currency(ssTaxable).multiply(SS_RATE).value
   const medicareTax = currency(seBase).multiply(MEDICARE_RATE).value
   return currency(ssTax).add(medicareTax).divide(2).value
@@ -360,9 +367,16 @@ export function computeIraContribution({
   )
 
   const rothPhaseoutRange = limits.rothIraPhaseout[filingStatus]
+  const rothRoomAfterTraditional = Math.max(
+    0,
+    currency(contributionLimit).subtract(traditionalIraContribution).value,
+  )
+  const rothPhaseoutContributionLimit = currency(contributionLimit)
+    .multiply(getPhaseoutMultiplier(magi, rothPhaseoutRange))
+    .value
   const rothAllowedContribution = Math.min(
-    contributionLimit,
-    currency(contributionLimit).multiply(getPhaseoutMultiplier(magi, rothPhaseoutRange)).value,
+    rothRoomAfterTraditional,
+    rothPhaseoutContributionLimit,
   )
   const rothExcessContribution = Math.max(
     0,
@@ -412,9 +426,13 @@ export function computeRetirementContributions(inputs: RetirementContributionInp
     w2EmployeePretaxDeferred: inputs.w2EmployeePretaxDeferred,
   })
   const se401kTotalWithCatchup = totalContributionWithCatchup(se401k, inputs.includeCatchup)
+  const seEligibleCompensationForIra = Math.max(
+    0,
+    currency(se401k.compensationBase).subtract(se401kTotalWithCatchup).value,
+  )
   const eligibleCompensation = Math.max(
     0,
-    currency(inputs.w2Income).add(se401k.compensationBase).value,
+    currency(inputs.w2Income).add(seEligibleCompensationForIra).value,
   )
   const ira = computeIraContribution({
     eligibleCompensation,

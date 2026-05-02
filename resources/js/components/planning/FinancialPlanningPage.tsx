@@ -13,7 +13,7 @@ interface CalculatorCard {
 
 const CALCULATORS: CalculatorCard[] = [
   {
-    title: 'Retirement Contributions',
+    title: 'Retirement Contribution Calculator',
     description: 'Estimate W-2, self-employed 401(k), Traditional IRA, and Roth IRA contribution room.',
     href: '/financial-planning/retirement-contribution-calculator',
     shipped: true,

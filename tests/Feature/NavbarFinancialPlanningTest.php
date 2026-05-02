@@ -24,6 +24,7 @@ class NavbarFinancialPlanningTest extends TestCase
             '/financial-planning/retirement-contribution-calculator',
             '/financial-planning/rent-vs-buy',
         ], array_column($financialPlanning['items'], 'href'));
+        $this->assertContains('Retirement Contribution Calculator', array_column($financialPlanning['items'], 'label'));
     }
 
     public function test_logged_in_nav_keeps_finance_and_financial_planning_separate(): void
