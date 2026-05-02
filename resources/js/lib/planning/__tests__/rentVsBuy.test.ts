@@ -14,13 +14,16 @@ function makeInputs(overrides: Partial<RentVsBuyInputs> = {}): RentVsBuyInputs {
     useCaliforniaProp13: false,
     hoaAmount: 0,
     hoaPeriod: 'monthly',
+    hoaGrowthPercent: 0,
     homeownersInsuranceAnnual: 1_800,
+    homeownersInsuranceGrowthPercent: 0,
     maintenancePercent: 1,
     appreciationPercent: 3,
     sellingCostsPercent: 6,
     monthlyRent: 2_700,
     rentersInsuranceAmount: 240,
     rentersInsurancePeriod: 'annual',
+    rentersInsuranceGrowthPercent: 0,
     rentIncreasePercent: 3,
     investmentReturnPercent: 6,
     marginalTaxRatePercent: 30,
@@ -236,6 +239,53 @@ describe('computeRentVsBuy', () => {
     })
 
     expect(computeRentVsBuy(monthlyInputs).rows).toEqual(computeRentVsBuy(annualInputs).rows)
+  })
+
+  it('applies annual HOA and insurance growth after the first modeled year', () => {
+    const flatCosts = computeRentVsBuy(makeInputs({
+      homePrice: 300_000,
+      mortgageRatePercent: 0,
+      closingCostsValue: 0,
+      closingCostsType: 'amount',
+      propertyTaxRatePercent: 0,
+      hoaAmount: 100,
+      hoaPeriod: 'monthly',
+      homeownersInsuranceAnnual: 1_200,
+      maintenancePercent: 0,
+      appreciationPercent: 0,
+      sellingCostsPercent: 0,
+      monthlyRent: 0,
+      rentersInsuranceAmount: 120,
+      rentersInsurancePeriod: 'annual',
+      rentIncreasePercent: 0,
+      timeHorizonYears: 2,
+      inflationRatePercent: 0,
+    }))
+    const growingCosts = computeRentVsBuy(makeInputs({
+      homePrice: 300_000,
+      mortgageRatePercent: 0,
+      closingCostsValue: 0,
+      closingCostsType: 'amount',
+      propertyTaxRatePercent: 0,
+      hoaAmount: 100,
+      hoaPeriod: 'monthly',
+      hoaGrowthPercent: 10,
+      homeownersInsuranceAnnual: 1_200,
+      homeownersInsuranceGrowthPercent: 20,
+      maintenancePercent: 0,
+      appreciationPercent: 0,
+      sellingCostsPercent: 0,
+      monthlyRent: 0,
+      rentersInsuranceAmount: 120,
+      rentersInsurancePeriod: 'annual',
+      rentersInsuranceGrowthPercent: 50,
+      rentIncreasePercent: 0,
+      timeHorizonYears: 2,
+      inflationRatePercent: 0,
+    }))
+
+    expect(annualCostIncrease(growingCosts.rows, 1) - annualCostIncrease(flatCosts.rows, 1)).toBeCloseTo(360, 2)
+    expect((growingCosts.rows[1]?.rentCumulativeCost ?? 0) - (flatCosts.rows[1]?.rentCumulativeCost ?? 0)).toBeCloseTo(60, 2)
   })
 
   it('supports closing costs as either a percent or dollar amount', () => {

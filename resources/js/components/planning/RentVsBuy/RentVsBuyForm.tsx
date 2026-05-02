@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/select'
 import type { ClosingCostsType, ExpensePeriod, RentVsBuyInputs } from '@/lib/planning/rentVsBuy'
 import type { FilingStatus } from '@/lib/tax/standardDeductions'
+import { cn } from '@/lib/utils'
 
 interface RentVsBuyFormProps {
   inputs: RentVsBuyInputs
@@ -27,6 +28,7 @@ interface RentVsBuyFormProps {
 interface NumberFieldProps {
   label: string
   value: number
+  className?: string
   labelClassName?: string
   suffix?: string
   onChange: (next: number) => void
@@ -35,6 +37,7 @@ interface NumberFieldProps {
 interface MoneyFieldProps {
   label: string
   value: number
+  className?: string
   labelClassName?: string
   onChange: (next: number) => void
 }
@@ -47,6 +50,7 @@ interface PeriodMoneyFieldProps extends MoneyFieldProps {
 interface ClosingCostsFieldProps {
   value: number
   type: ClosingCostsType
+  className?: string
   onValueChange: (next: number) => void
   onTypeChange: (next: ClosingCostsType) => void
 }
@@ -79,7 +83,7 @@ function parseNumber(raw: string): number {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
-function NumberField({ label, value, labelClassName, suffix, onChange }: NumberFieldProps): ReactElement {
+function NumberField({ label, value, className, labelClassName, suffix, onChange }: NumberFieldProps): ReactElement {
   const inputId = useId()
   const [rawValue, setRawValue] = useState(() => formatNumber(value))
 
@@ -104,7 +108,7 @@ function NumberField({ label, value, labelClassName, suffix, onChange }: NumberF
   }
 
   return (
-    <div className="grid gap-2">
+    <div className={cn('grid gap-2', className)}>
       <Label htmlFor={inputId} className={labelClassName}>{label}</Label>
       <InputGroup>
         <InputGroupInput
@@ -126,7 +130,7 @@ function NumberField({ label, value, labelClassName, suffix, onChange }: NumberF
   )
 }
 
-function MoneyField({ label, value, labelClassName, onChange }: MoneyFieldProps): ReactElement {
+function MoneyField({ label, value, className, labelClassName, onChange }: MoneyFieldProps): ReactElement {
   const inputId = useId()
   const [rawValue, setRawValue] = useState(() => formatMoney(value))
 
@@ -151,7 +155,7 @@ function MoneyField({ label, value, labelClassName, onChange }: MoneyFieldProps)
   }
 
   return (
-    <div className="grid gap-2">
+    <div className={cn('grid gap-2', className)}>
       <Label htmlFor={inputId} className={labelClassName}>{label}</Label>
       <Input
         id={inputId}
@@ -166,7 +170,7 @@ function MoneyField({ label, value, labelClassName, onChange }: MoneyFieldProps)
   )
 }
 
-function PeriodMoneyField({ label, value, period, onChange, onPeriodChange }: PeriodMoneyFieldProps): ReactElement {
+function PeriodMoneyField({ label, value, className, period, onChange, onPeriodChange }: PeriodMoneyFieldProps): ReactElement {
   const inputId = useId()
   const [rawValue, setRawValue] = useState(() => formatMoney(value))
 
@@ -191,7 +195,7 @@ function PeriodMoneyField({ label, value, period, onChange, onPeriodChange }: Pe
   }
 
   return (
-    <div className="grid gap-2">
+    <div className={cn('grid gap-2', className)}>
       <Label htmlFor={inputId}>{label}</Label>
       <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_9rem]">
         <Input
@@ -223,11 +227,12 @@ function PeriodMoneyField({ label, value, period, onChange, onPeriodChange }: Pe
 function ClosingCostsField({
   value,
   type,
+  className,
   onValueChange,
   onTypeChange,
 }: ClosingCostsFieldProps): ReactElement {
   return (
-    <div className="grid gap-2">
+    <div className={cn('grid gap-2', className)}>
       <Label>Closing costs</Label>
       <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_9rem]">
         {type === 'amount' ? (
@@ -279,14 +284,15 @@ export default function RentVsBuyForm({ inputs, onChange }: RentVsBuyFormProps):
           <NumberField label="Mortgage rate" value={inputs.mortgageRatePercent} suffix="%" onChange={(value) => update('mortgageRatePercent', value)} />
           <NumberField label="Mortgage term" value={inputs.mortgageTermYears} suffix="yrs" onChange={(value) => update('mortgageTermYears', value)} />
           <ClosingCostsField
+            className="sm:col-span-2"
             value={inputs.closingCostsValue}
             type={inputs.closingCostsType}
             onValueChange={(value) => update('closingCostsValue', value)}
             onTypeChange={(value) => update('closingCostsType', value)}
           />
-          <div className="grid gap-2">
+          <div className="grid gap-3 sm:col-span-2 sm:grid-cols-[minmax(0,1fr)_12rem] sm:items-end">
             <NumberField label="Property tax rate" value={inputs.propertyTaxRatePercent} suffix="% / yr" onChange={(value) => update('propertyTaxRatePercent', value)} />
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <label className="flex h-9 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm text-muted-foreground shadow-sm">
               <Checkbox
                 checked={inputs.useCaliforniaProp13}
                 onCheckedChange={(checked) => update('useCaliforniaProp13', checked === true)}
@@ -294,14 +300,25 @@ export default function RentVsBuyForm({ inputs, onChange }: RentVsBuyFormProps):
               CA Prop 13
             </label>
           </div>
-          <PeriodMoneyField
-            label="HOA / condo fees"
-            value={inputs.hoaAmount}
-            period={inputs.hoaPeriod}
-            onChange={(value) => update('hoaAmount', value)}
-            onPeriodChange={(value) => update('hoaPeriod', value)}
-          />
-          <MoneyField label="Homeowners insurance" value={inputs.homeownersInsuranceAnnual} onChange={(value) => update('homeownersInsuranceAnnual', value)} />
+          <div className="grid gap-4 sm:col-span-2 lg:grid-cols-[minmax(0,1fr)_10rem]">
+            <PeriodMoneyField
+              label="HOA / condo fees"
+              value={inputs.hoaAmount}
+              period={inputs.hoaPeriod}
+              onChange={(value) => update('hoaAmount', value)}
+              onPeriodChange={(value) => update('hoaPeriod', value)}
+            />
+            <NumberField label="HOA growth" value={inputs.hoaGrowthPercent} suffix="% / yr" onChange={(value) => update('hoaGrowthPercent', value)} />
+          </div>
+          <div className="grid gap-4 sm:col-span-2 lg:grid-cols-[minmax(0,1fr)_10rem]">
+            <MoneyField label="Homeowners insurance" value={inputs.homeownersInsuranceAnnual} onChange={(value) => update('homeownersInsuranceAnnual', value)} />
+            <NumberField
+              label="Insurance growth"
+              value={inputs.homeownersInsuranceGrowthPercent}
+              suffix="% / yr"
+              onChange={(value) => update('homeownersInsuranceGrowthPercent', value)}
+            />
+          </div>
           <NumberField label="Maintenance" value={inputs.maintenancePercent} suffix="% / yr" onChange={(value) => update('maintenancePercent', value)} />
           <NumberField label="Home appreciation" value={inputs.appreciationPercent} suffix="% / yr" onChange={(value) => update('appreciationPercent', value)} />
           <NumberField label="Selling costs" value={inputs.sellingCostsPercent} suffix="%" onChange={(value) => update('sellingCostsPercent', value)} />
@@ -324,6 +341,12 @@ export default function RentVsBuyForm({ inputs, onChange }: RentVsBuyFormProps):
             period={inputs.rentersInsurancePeriod}
             onChange={(value) => update('rentersInsuranceAmount', value)}
             onPeriodChange={(value) => update('rentersInsurancePeriod', value)}
+          />
+          <NumberField
+            label="Renter's insurance growth"
+            value={inputs.rentersInsuranceGrowthPercent}
+            suffix="% / yr"
+            onChange={(value) => update('rentersInsuranceGrowthPercent', value)}
           />
           <NumberField label="Rent increase" value={inputs.rentIncreasePercent} suffix="% / yr" onChange={(value) => update('rentIncreasePercent', value)} />
         </CardContent>

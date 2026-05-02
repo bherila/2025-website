@@ -17,13 +17,16 @@ function makeInputs(overrides: Partial<RentVsBuyInputs> = {}): RentVsBuyInputs {
     useCaliforniaProp13: false,
     hoaAmount: 350,
     hoaPeriod: 'monthly',
+    hoaGrowthPercent: 3,
     homeownersInsuranceAnnual: 2_000,
+    homeownersInsuranceGrowthPercent: 3,
     maintenancePercent: 1,
     appreciationPercent: 3,
     sellingCostsPercent: 6,
     monthlyRent: 3_500,
     rentersInsuranceAmount: 240,
     rentersInsurancePeriod: 'annual',
+    rentersInsuranceGrowthPercent: 3,
     rentIncreasePercent: 3,
     investmentReturnPercent: 6,
     marginalTaxRatePercent: 30,
@@ -57,6 +60,9 @@ describe('RentVsBuyForm', () => {
     render(<RentVsBuyForm inputs={makeInputs()} onChange={onChange} />)
 
     expect(screen.getByLabelText('Starting monthly rent')).toBeInTheDocument()
+    expect(screen.getByLabelText('HOA growth')).toBeInTheDocument()
+    expect(screen.getByLabelText('Insurance growth')).toBeInTheDocument()
+    expect(screen.getByLabelText("Renter's insurance growth")).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'CA Prop 13' }))
 
