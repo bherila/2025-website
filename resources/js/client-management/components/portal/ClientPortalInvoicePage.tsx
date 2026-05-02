@@ -414,6 +414,16 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                                                 <td className="py-0.5 pr-4 text-right tabular-nums whitespace-nowrap">
                                                     {formatHours(p.hours)}
                                                 </td>
+                                                <td className="py-0.5 pr-4 text-right whitespace-nowrap text-muted-foreground/70">
+                                                    {p.billed_invoice ? (
+                                                        <a
+                                                            className="underline underline-offset-2 hover:text-foreground"
+                                                            href={`/client/portal/${slug}/invoice/${p.billed_invoice.id}`}
+                                                        >
+                                                            {p.billed_invoice.invoice_number ?? `Invoice ${p.billed_invoice.id}`}
+                                                        </a>
+                                                    ) : '—'}
+                                                </td>
                                                 <td className="py-0.5 text-right whitespace-nowrap text-muted-foreground/70">
                                                     {format(new Date(p.date_worked), 'MMM d, yyyy')}
                                                 </td>

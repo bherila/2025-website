@@ -425,8 +425,8 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
         <Callout kind="warn" title="⚠ Box 11S — Confirm S/T vs. L/T character">
           <p>
             One or more K-1 Box 11S lines could not be classified as short-term or long-term from their notes.
-            Those amounts are not included in Schedule D totals until the K-1 code row is set to Short-term
-            or Long-term. Open the K-1 review modal and confirm the holding-period character from the supplemental statement.
+            Those amounts are not included in Schedule D totals until you open the K-1 review modal and pick
+            Short-term or Long-term in the new S/T or L/T column.
           </p>
         </Callout>
       )}
@@ -440,8 +440,8 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
                   <span className="inline-flex items-center gap-1">
                     {line.label}
                     <InfoTooltip>
-                      This line is intentionally excluded from Schedule D until the K-1 code row is marked short-term
-                      or long-term in the review modal.
+                      This line is intentionally excluded from Schedule D until you open the K-1 review modal and pick
+                      Short-term or Long-term in the new S/T or L/T column.
                     </InfoTooltip>
                   </span>
                 )}

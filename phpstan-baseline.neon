@@ -247,12 +247,6 @@ parameters:
 			path: app/Http/Controllers/ClientManagement/ClientPortalAgreementController.php
 
 		-
-			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientTimeEntry\:\:\$invoiceLine\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/ClientManagement/ClientPortalApiController.php
-
-		-
 			message: '#^Left side of && is always true\.$#'
 			identifier: booleanAnd.leftAlwaysTrue
 			count: 1
@@ -295,22 +289,10 @@ parameters:
 			path: app/Http/Controllers/ClientManagement/ClientPortalApiController.php
 
 		-
-			message: '#^Relation ''invoiceLine'' is not found in App\\Models\\ClientManagement\\ClientTimeEntry model\.$#'
-			identifier: larastan.relationExistence
-			count: 1
-			path: app/Http/Controllers/ClientManagement/ClientPortalApiController.php
-
-		-
 			message: '#^Using nullsafe method call on non\-nullable type Carbon\\Carbon\. Use \-\> instead\.$#'
 			identifier: nullsafe.neverNull
 			count: 1
 			path: app/Http/Controllers/ClientManagement/ClientPortalApiController.php
-
-		-
-			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientTimeEntry\:\:\$invoiceLine\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/ClientManagement/ClientPortalController.php
 
 		-
 			message: '#^Relation ''assignee'' is not found in App\\Models\\ClientManagement\\ClientTask model\.$#'
@@ -320,12 +302,6 @@ parameters:
 
 		-
 			message: '#^Relation ''creator'' is not found in App\\Models\\ClientManagement\\ClientTask model\.$#'
-			identifier: larastan.relationExistence
-			count: 1
-			path: app/Http/Controllers/ClientManagement/ClientPortalController.php
-
-		-
-			message: '#^Relation ''invoiceLine'' is not found in App\\Models\\ClientManagement\\ClientTimeEntry model\.$#'
 			identifier: larastan.relationExistence
 			count: 1
 			path: app/Http/Controllers/ClientManagement/ClientPortalController.php
@@ -1063,12 +1039,6 @@ parameters:
 			path: app/Models/ClientManagement/ClientInvoiceLine.php
 
 		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientInvoiceLine\:\:invoice\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/ClientManagement/ClientInvoiceLine.php
-
-		-
 			message: '#^Method App\\Models\\ClientManagement\\ClientInvoiceLine\:\:tasks\(\) has no return type specified\.$#'
 			identifier: missingType.return
 			count: 1
@@ -1159,12 +1129,6 @@ parameters:
 			path: app/Models/ClientManagement/ClientTask.php
 
 		-
-			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientTimeEntry\:\:\$invoiceLine\.$#'
-			identifier: property.notFound
-			count: 2
-			path: app/Models/ClientManagement/ClientTimeEntry.php
-
-		-
 			message: '#^Class App\\Models\\ClientManagement\\ClientTimeEntry uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
 			identifier: missingType.generics
 			count: 1
@@ -1184,12 +1148,6 @@ parameters:
 
 		-
 			message: '#^Method App\\Models\\ClientManagement\\ClientTimeEntry\:\:getClientInvoiceAttribute\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/ClientManagement/ClientTimeEntry.php
-
-		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientTimeEntry\:\:invoiceLine\(\) has no return type specified\.$#'
 			identifier: missingType.return
 			count: 1
 			path: app/Models/ClientManagement/ClientTimeEntry.php

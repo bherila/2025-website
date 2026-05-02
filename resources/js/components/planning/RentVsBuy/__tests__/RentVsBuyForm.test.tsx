@@ -2,7 +2,7 @@ import '@testing-library/jest-dom'
 
 import { fireEvent, render, screen } from '@testing-library/react'
 
-import RentVsBuyForm from '@/components/planning/RentVsBuy/RentVsBuyForm'
+import RentVsBuyForm, { getConvertedClosingCostsValue } from '@/components/planning/RentVsBuy/RentVsBuyForm'
 import type { RentVsBuyInputs } from '@/lib/planning/rentVsBuy'
 
 function makeInputs(overrides: Partial<RentVsBuyInputs> = {}): RentVsBuyInputs {
@@ -62,12 +62,28 @@ describe('RentVsBuyForm', () => {
     expect(screen.getByLabelText('Starting monthly rent')).toBeInTheDocument()
     expect(screen.getByLabelText('HOA growth')).toBeInTheDocument()
     expect(screen.getByLabelText('Insurance growth')).toBeInTheDocument()
+    expect(screen.getByLabelText('Homeowners insurance (annual)')).toBeInTheDocument()
     expect(screen.getByLabelText("Renter's insurance growth")).toBeInTheDocument()
+    expect(screen.getByText('Caps assessed value growth at 2% / yr')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'CA Prop 13' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /CA Prop 13/ }))
 
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
       useCaliforniaProp13: true,
     }))
+  })
+
+  it('converts closing costs when switching between percent and amount modes', () => {
+    expect(getConvertedClosingCostsValue(makeInputs({
+      homePrice: 800_000,
+      closingCostsValue: 3,
+      closingCostsType: 'percent',
+    }), 'amount')).toBe(24_000)
+
+    expect(getConvertedClosingCostsValue(makeInputs({
+      homePrice: 800_000,
+      closingCostsValue: 24_000,
+      closingCostsType: 'amount',
+    }), 'percent')).toBe(3)
   })
 })

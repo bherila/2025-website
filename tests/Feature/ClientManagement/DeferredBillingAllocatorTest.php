@@ -150,6 +150,11 @@ class DeferredBillingAllocatorTest extends TestCase
         $this->assertCount(1, $payload['deferred_pending']);
         $this->assertEquals($deferred->id, $payload['deferred_pending'][0]['id']);
         $this->assertEquals(2.0, $payload['deferred_pending'][0]['hours']);
+        $this->assertSame(
+            ['id', 'hours', 'date_worked', 'name'],
+            array_keys($payload['deferred_pending'][0]),
+            'Deferred portal rows should not expose billing-sensitive fields.',
+        );
     }
 
     public function test_issued_invoice_keeps_original_period_deferred_entries_after_future_billing(): void
@@ -184,6 +189,16 @@ class DeferredBillingAllocatorTest extends TestCase
         $this->assertCount(1, $payload['deferred_pending']);
         $this->assertEquals($deferred->id, $payload['deferred_pending'][0]['id']);
         $this->assertEquals(2.0, $payload['deferred_pending'][0]['hours']);
+        $this->assertSame([
+            'id' => $februaryInvoice->client_invoice_id,
+            'invoice_number' => $februaryInvoice->invoice_number,
+            'issue_date' => null,
+        ], $payload['deferred_pending'][0]['billed_invoice']);
+        $this->assertSame(
+            ['id', 'hours', 'date_worked', 'name', 'billed_invoice'],
+            array_keys($payload['deferred_pending'][0]),
+            'Deferred portal rows should only expose the future invoice reference, not billing-sensitive fields.',
+        );
     }
 
     public function test_regeneration_re_evaluates_deferred(): void
