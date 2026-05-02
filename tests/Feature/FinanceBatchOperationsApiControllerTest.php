@@ -98,7 +98,6 @@ class FinanceBatchOperationsApiControllerTest extends TestCase
         $this->assertDatabaseCount('fin_account_line_items', 2);
     }
 
-
     public function test_batch_delete_does_not_unlink_other_users_lots(): void
     {
         $owner = $this->createUser();

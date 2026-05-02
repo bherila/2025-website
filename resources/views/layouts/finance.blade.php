@@ -46,9 +46,7 @@
       @yield('content')
     </main>
 
-    <footer class="border-t border-gray-200 dark:border-[#3E3E3A] py-6 text-sm text-center text-gray-600 dark:text-[#A1A09A]">
-      © {{ date('Y') }} Ben Herila
-    </footer>
+    @include('layouts.footer')
 
     <div id="back-to-top"></div>
 
