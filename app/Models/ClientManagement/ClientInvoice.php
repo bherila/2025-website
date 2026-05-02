@@ -346,22 +346,33 @@ class ClientInvoice extends Model
     }
 
     /**
-     * Build the "deferred to future invoice" list surfaced in the invoice
-     * detail UI. These are billable, unbilled, deferred time entries dated
-     * on or before this invoice's period_end that did not fit the available
-     * retainer capacity (and are therefore not linked to any line item here).
+     * Build the deferred-work list surfaced in the invoice detail UI.
      *
-     * For issued/paid/void invoices this returns an empty list — the list
-     * only carries meaning in the context of current draft state.
+     * Draft invoices show all outstanding deferred work through this period so
+     * admins can see what is rolling forward. Issued and paid invoices show
+     * deferred work from their own work period that was not billed on this
+     * invoice, even if it has since been linked to a future invoice.
      *
      * @return list<array{id: int, hours: float, date_worked: string, name: string|null}>
      */
     protected function buildDeferredPendingList(): array
     {
-        if ($this->status !== 'draft') {
+        if ($this->status === 'draft') {
+            return $this->buildOutstandingDeferredList();
+        }
+
+        if (! in_array((string) $this->status, ['issued', 'paid'], true)) {
             return [];
         }
 
+        return $this->buildOriginalPeriodDeferredList();
+    }
+
+    /**
+     * @return list<array{id: int, hours: float, date_worked: string, name: string|null}>
+     */
+    protected function buildOutstandingDeferredList(): array
+    {
         // Delegate to the allocator in "skipped" mode: use a capacity of 0
         // so every outstanding deferred entry is reported (for UI only; this
         // does not mutate any data).
@@ -372,5 +383,49 @@ class ClientInvoice extends Model
         );
 
         return $result->skipped;
+    }
+
+    /**
+     * @return list<array{id: int, hours: float, date_worked: string, name: string|null}>
+     */
+    protected function buildOriginalPeriodDeferredList(): array
+    {
+        if (! $this->period_start || ! $this->period_end) {
+            return [];
+        }
+
+        $invoiceLineIds = $this->lineItems->pluck('client_invoice_line_id')->all();
+
+        return ClientTimeEntry::query()
+            ->where('client_company_id', $this->client_company_id)
+            ->where('is_billable', true)
+            ->where('is_deferred_billing', true)
+            ->whereBetween('date_worked', [$this->period_start, $this->period_end])
+            ->when($invoiceLineIds !== [], function ($query) use ($invoiceLineIds) {
+                $query->where(function ($subQuery) use ($invoiceLineIds) {
+                    $subQuery
+                        ->whereNull('client_invoice_line_id')
+                        ->orWhereNotIn('client_invoice_line_id', $invoiceLineIds);
+                });
+            })
+            ->orderBy('date_worked', 'asc')
+            ->orderBy('id', 'asc')
+            ->get()
+            ->map(fn (ClientTimeEntry $entry) => $this->summariseDeferredEntry($entry))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array{id: int, hours: float, date_worked: string, name: string|null}
+     */
+    protected function summariseDeferredEntry(ClientTimeEntry $entry): array
+    {
+        return [
+            'id' => (int) $entry->id,
+            'hours' => round(((int) $entry->minutes_worked) / 60, 4),
+            'date_worked' => $entry->date_worked->format('Y-m-d'),
+            'name' => $entry->name,
+        ];
     }
 }
