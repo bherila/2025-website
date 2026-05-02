@@ -91,7 +91,7 @@ class UserAiModelsController extends Controller
     private function listModels(string $provider, string $apiKey, string $region, string $sessionToken): array
     {
         $client = $this->makeClient($provider, $apiKey, $region, $sessionToken);
-        if (method_exists($client, 'listModels')) {
+        if (in_array('listModels', get_class_methods($client), true)) {
             /** @var mixed $modelInfos */
             $modelInfos = call_user_func([$client, 'listModels']);
 
