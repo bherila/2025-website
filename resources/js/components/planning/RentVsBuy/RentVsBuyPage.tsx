@@ -125,7 +125,7 @@ function parseClosingCostsType(searchParams: URLSearchParams): 'percent' | 'amou
     : DEFAULT_INPUTS.closingCostsType
 }
 
-function parseInputs(search: string): RentVsBuyInputs {
+export function parseInputs(search: string): RentVsBuyInputs {
   const searchParams = new URLSearchParams(search)
   const filingStatus = searchParams.get(QUERY_KEYS.filingStatus)
 
@@ -162,7 +162,7 @@ function parseInputs(search: string): RentVsBuyInputs {
   }
 }
 
-function serializeInputs(inputs: RentVsBuyInputs): string {
+export function serializeInputs(inputs: RentVsBuyInputs): string {
   const searchParams = new URLSearchParams()
 
   for (const key of Object.keys(QUERY_KEYS) as (keyof RentVsBuyInputs)[]) {

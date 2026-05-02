@@ -317,6 +317,12 @@ describe('computeRentVsBuy', () => {
 
     expect(annualCostIncrease(growingCosts.rows, 1) - annualCostIncrease(flatCosts.rows, 1)).toBeCloseTo(360, 2)
     expect((growingCosts.rows[1]?.rentCumulativeCost ?? 0) - (flatCosts.rows[1]?.rentCumulativeCost ?? 0)).toBeCloseTo(60, 2)
+
+    // Year 1 must not include growth — growth is applied at year-end and first
+    // shows up in year 2. This guards against the year-2 row being accidentally
+    // fed pre-growth amounts: any drift would change year 1's cost too because
+    // the same accumulator is reused across years.
+    expect(annualCostIncrease(growingCosts.rows, 0)).toBeCloseTo(annualCostIncrease(flatCosts.rows, 0), 2)
   })
 
   it('supports closing costs as either a percent or dollar amount', () => {

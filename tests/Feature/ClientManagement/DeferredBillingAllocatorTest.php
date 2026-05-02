@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\ClientManagement\ClientInvoicingService;
 use App\Services\ClientManagement\DeferredBillingAllocator;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
@@ -271,6 +272,67 @@ class DeferredBillingAllocatorTest extends TestCase
             ->where('line_type', 'prior_month_retainer')
             ->first(fn ($l) => str_contains((string) $l->description, 'Deferred'));
         $this->assertNull($deferredLine, 'Non-billable entries are never billed even if flagged deferred');
+    }
+
+    /**
+     * Watch for an N+1 regression in the issued-invoice deferred-pending payload.
+     *
+     * Issued invoices surface deferred entries that were originally in their
+     * period but eventually billed on a later invoice. Each entry needs the
+     * future invoice's number for its portal link. Eager-loading
+     * `invoiceLine.invoice` inside `buildOriginalPeriodDeferredList` keeps
+     * query count constant regardless of how many deferred entries the
+     * invoice carries — this test fails fast if that ever drifts.
+     */
+    public function test_issued_invoice_detail_endpoint_does_not_n_plus_one_on_deferred_entries(): void
+    {
+        // Workload: 25 hours of small deferred entries against a 10h retainer
+        // forces 15h to spill into a future invoice via the deferred allocator.
+        for ($day = 1; $day <= 25; $day++) {
+            $this->entry(60, sprintf('2026-01-%02d', $day));
+        }
+
+        $januaryInvoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2026, 1, 1),
+            Carbon::create(2026, 1, 31),
+        );
+        $januaryInvoice->issue();
+
+        // Generating February links the deferred January entries to a future invoice line.
+        $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2026, 2, 1),
+            Carbon::create(2026, 2, 28),
+        );
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        $response = $this->actingAs($this->admin)->getJson(
+            "/api/client/portal/{$this->company->slug}/invoices/{$januaryInvoice->client_invoice_id}",
+        );
+
+        $response->assertOk();
+        $payload = $response->json();
+        $this->assertNotEmpty($payload['deferred_pending'] ?? [], 'Test setup must produce deferred_pending rows');
+        $this->assertNotEmpty(
+            $payload['deferred_pending'][0]['billed_invoice'] ?? null,
+            'Each deferred row must reference its billing invoice for this test to be meaningful',
+        );
+
+        $queryCount = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        // Bound is generous on purpose: the goal is to catch a regression
+        // where someone removes the eager load and the count scales linearly.
+        // Today this path runs ~14 queries; ~25 entries with a regression would
+        // balloon past 40 immediately.
+        $this->assertLessThan(
+            30,
+            $queryCount,
+            'Issued invoice detail endpoint should not run a per-entry query for billed_invoice references',
+        );
     }
 
     public function test_allocator_unit_skipped_summary_shape(): void
