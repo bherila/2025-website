@@ -1,9 +1,10 @@
 'use client'
 
 import currency from 'currency.js'
-import type { ReactElement } from 'react'
+import { type ReactElement, useState } from 'react'
 import { CartesianGrid, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import SummaryTile from '@/components/ui/summary-tile'
 import {
@@ -14,21 +15,47 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import type { RentVsBuyResults } from '@/lib/planning/rentVsBuy'
+import type { RentVsBuyDetailSection, RentVsBuyResults, RentVsBuyYearRow } from '@/lib/planning/rentVsBuy'
+
+import RentVsBuyDetailsModal from './RentVsBuyDetailsModal'
 
 interface RentVsBuyResultsProps {
   results: RentVsBuyResults
 }
 
+interface DetailButtonProps {
+  children: ReactElement | string
+  row: RentVsBuyYearRow
+  section: RentVsBuyDetailSection
+  onOpenDetails: (row: RentVsBuyYearRow, section: RentVsBuyDetailSection) => void
+}
+
+function DetailButton({ children, row, section, onOpenDetails }: DetailButtonProps): ReactElement {
+  return (
+    <Button
+      type="button"
+      variant="link"
+      className="h-auto min-h-0 p-0 text-right font-normal"
+      onClick={() => onOpenDetails(row, section)}
+    >
+      {children}
+    </Button>
+  )
+}
+
 export default function RentVsBuyResults({ results }: RentVsBuyResultsProps): ReactElement {
   const finalRow = results.rows.at(-1)
+  const [detailState, setDetailState] = useState<{
+    row: RentVsBuyYearRow
+    section: RentVsBuyDetailSection
+  } | null>(null)
 
   function formatMoney(value: number | string | undefined): string {
     if (value === undefined) {
-      return currency(0).format()
+      return currency(0, { precision: 0 }).format()
     }
 
-    return currency(value).format()
+    return currency(value, { precision: 0 }).format()
   }
 
   function absoluteMoney(value: number): number {
@@ -39,32 +66,40 @@ export default function RentVsBuyResults({ results }: RentVsBuyResultsProps): Re
     return formatMoney(value)
   }
 
+  function openDetails(row: RentVsBuyYearRow, section: RentVsBuyDetailSection): void {
+    setDetailState({ row, section })
+  }
+
+  function closeDetails(): void {
+    setDetailState(null)
+  }
+
   return (
     <div className="grid gap-6">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <SummaryTile title="Break-even horizon" kind={results.breakEvenYear === null ? 'yellow' : 'green'}>
-          {results.breakEvenYear === null ? 'Renting stays cheaper' : `Year ${results.breakEvenYear}`}
+          {results.breakEvenYear === null ? 'Renter wealth stays ahead' : `Year ${results.breakEvenYear}`}
         </SummaryTile>
         <SummaryTile title="Own vs. rent wealth delta" kind={results.finalWealthDelta >= 0 ? 'green' : 'red'}>
           {results.finalWealthDelta >= 0 ? '+' : '-'}
           {formatMoney(absoluteMoney(results.finalWealthDelta))}
         </SummaryTile>
-        <SummaryTile title="Sellable home equity">
-          {formatMoney(finalRow?.homeEquity)}
+        <SummaryTile title="Buyer total wealth">
+          {formatMoney(finalRow?.buyerTotalWealth)}
         </SummaryTile>
-        <SummaryTile title="Invested rent portfolio">
-          {formatMoney(finalRow?.investedPortfolio)}
+        <SummaryTile title="Renter portfolio">
+          {formatMoney(finalRow?.renterPortfolio.total)}
         </SummaryTile>
-        <SummaryTile title="Est. capital gains tax">
-          {formatMoney(finalRow?.capitalGainsTax)}
+        <SummaryTile title="Nonrecoverable costs">
+          Buy {formatMoney(finalRow?.buyNonrecoverableCosts.total)} / Rent {formatMoney(finalRow?.rentNonrecoverableCosts.total)}
         </SummaryTile>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Ownership vs. renting over time</CardTitle>
+          <CardTitle>Wealth over time</CardTitle>
           <CardDescription>
-            Cumulative economic cost — including operating costs, tax effects, and the foregone compound return on upfront purchase cash — is shown in today&apos;s dollars using the inflation assumption.
+            Break-even is based on total wealth: buyer portfolio plus cash received from selling the home, compared with the renter&apos;s invested portfolio. Amounts are shown in today&apos;s dollars.
           </CardDescription>
         </CardHeader>
         <CardContent className="h-[420px]">
@@ -86,8 +121,8 @@ export default function RentVsBuyResults({ results }: RentVsBuyResultsProps): Re
               {results.breakEvenYear !== null ? (
                 <ReferenceLine x={results.breakEvenYear} stroke="var(--color-success, #22c55e)" strokeDasharray="4 4" label="Break-even" />
               ) : null}
-              <Line type="monotone" dataKey="ownCumulativeCost" name="Buy cumulative cost" stroke="#2563eb" dot={false} strokeWidth={2} />
-              <Line type="monotone" dataKey="rentCumulativeCost" name="Rent cumulative cost" stroke="#f97316" dot={false} strokeWidth={2} />
+              <Line type="monotone" dataKey="buyerTotalWealth" name="Buyer total wealth" stroke="#2563eb" dot={false} strokeWidth={2} />
+              <Line type="monotone" dataKey="renterTotalWealth" name="Renter total wealth" stroke="#f97316" dot={false} strokeWidth={2} />
             </LineChart>
           </ResponsiveContainer>
         </CardContent>
@@ -96,7 +131,7 @@ export default function RentVsBuyResults({ results }: RentVsBuyResultsProps): Re
       <Card>
         <CardHeader>
           <CardTitle>Year-by-year comparison</CardTitle>
-          <CardDescription>Net positions combine discounted wealth with cumulative discounted cost through each year.</CardDescription>
+          <CardDescription>Click linked values for the supporting present-dollar components behind each scenario.</CardDescription>
         </CardHeader>
         <CardContent>
           <details open className="grid gap-4">
@@ -108,26 +143,39 @@ export default function RentVsBuyResults({ results }: RentVsBuyResultsProps): Re
                 <TableHeader>
                   <TableRow>
                     <TableHead>Year</TableHead>
-                    <TableHead className="text-right">Buy cost</TableHead>
-                    <TableHead className="text-right">Rent cost</TableHead>
-                    <TableHead className="text-right">Sellable equity</TableHead>
-                    <TableHead className="text-right">Tax if sold</TableHead>
-                    <TableHead className="text-right">Portfolio</TableHead>
-                    <TableHead className="text-right">Net own</TableHead>
-                    <TableHead className="text-right">Net rent</TableHead>
+                    <TableHead className="text-right">Buy nonrecoverable</TableHead>
+                    <TableHead className="text-right">Rent nonrecoverable</TableHead>
+                    <TableHead className="text-right">Buyer portfolio</TableHead>
+                    <TableHead className="text-right">Renter portfolio</TableHead>
+                    <TableHead className="text-right">Buyer total wealth</TableHead>
+                    <TableHead className="text-right">Renter total wealth</TableHead>
+                    <TableHead className="text-right">Wealth delta</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {results.rows.map((row) => (
                     <TableRow key={row.year} className={results.breakEvenYear === row.year ? 'bg-success/10' : undefined}>
                       <TableCell>{row.year}</TableCell>
-                      <TableCell className="text-right">{formatMoney(row.ownCumulativeCost)}</TableCell>
-                      <TableCell className="text-right">{formatMoney(row.rentCumulativeCost)}</TableCell>
-                      <TableCell className="text-right">{formatMoney(row.homeEquity)}</TableCell>
-                      <TableCell className="text-right">{formatMoney(row.capitalGainsTax)}</TableCell>
-                      <TableCell className="text-right">{formatMoney(row.investedPortfolio)}</TableCell>
-                      <TableCell className="text-right">{formatMoney(row.netOwnPosition)}</TableCell>
-                      <TableCell className="text-right">{formatMoney(row.netRentPosition)}</TableCell>
+                      <TableCell className="text-right">
+                        <DetailButton row={row} section="buy-costs" onOpenDetails={openDetails}>{formatMoney(row.buyNonrecoverableCosts.total)}</DetailButton>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DetailButton row={row} section="rent-costs" onOpenDetails={openDetails}>{formatMoney(row.rentNonrecoverableCosts.total)}</DetailButton>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DetailButton row={row} section="buyer-portfolio" onOpenDetails={openDetails}>{formatMoney(row.buyerPortfolio.total)}</DetailButton>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DetailButton row={row} section="renter-portfolio" onOpenDetails={openDetails}>{formatMoney(row.renterPortfolio.total)}</DetailButton>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DetailButton row={row} section="buyer-wealth" onOpenDetails={openDetails}>{formatMoney(row.buyerTotalWealth)}</DetailButton>
+                      </TableCell>
+                      <TableCell className="text-right">{formatMoney(row.renterTotalWealth)}</TableCell>
+                      <TableCell className="text-right">
+                        {row.wealthDelta >= 0 ? '+' : '-'}
+                        {formatMoney(absoluteMoney(row.wealthDelta))}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -136,6 +184,11 @@ export default function RentVsBuyResults({ results }: RentVsBuyResultsProps): Re
           </details>
         </CardContent>
       </Card>
+      <RentVsBuyDetailsModal
+        row={detailState?.row ?? null}
+        section={detailState?.section ?? null}
+        onClose={closeDetails}
+      />
     </div>
   )
 }
